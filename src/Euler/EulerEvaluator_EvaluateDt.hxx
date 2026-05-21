@@ -2348,6 +2348,9 @@ namespace DNDS::Euler
         }
         else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_IV_FAR) // Isentropic Vortex
         {
+            DNDS_assert_info(!settings.reactiveFlow.enabled,
+                             "BCSpecial IV: Isentropic Vortex BC does not support reactive flow. "
+                             "Species are zeroed and formation energy is not included.");
             real chi = 5;
             real T_iv = phys_.template temperature<dim>(ULxy);
             real gamma = phys_.template gammaEq<dim>(T_iv, ULxy);
@@ -2559,10 +2562,13 @@ namespace DNDS::Euler
             Gas::IdealGasThermalConservative2Primitive<dim>(URxy, URxyPrim, gamma,
                                                             phys_.mixtureFormationRhoE(URxy));
             DNDS_assert_info(URxyPrim(0) > 0 && URxyPrim(I4) > 0 && temp > 0, fmt::format("{}, {}, {}", URxyPrim(0), URxyPrim(I4), temp));
+            real oldDensity = URxy(0);
             real newDensity = URxyPrim(I4) / temp / phys_.Rgas(URxy);
             URxyPrim(0) = newDensity;
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(URxyPrim, URxy, gamma,
-                                                            phys_.mixtureFormationRhoE(URxy));
+            // Scale formation energy to match new density (mass fractions Y_k unchanged,
+            // so rhoH_form ∝ rho).
+            real rhoH_form_new = phys_.mixtureFormationRhoE(URxy) * newDensity / oldDensity;
+            Gas::IdealGasThermalPrimitive2Conservative<dim>(URxyPrim, URxy, gamma, rhoH_form_new);
         }
         if constexpr (Traits::hasSA)
         {
@@ -2728,7 +2734,6 @@ namespace DNDS::Euler
         ULxyPrimitive.resizeLike(ULxy);
         real T = phys_.template temperature<dim>(ULxyStatic);
         real gamma = phys_.template gammaEq<dim>(T, ULxyStatic);
-        real Cp = phys_.Cp(T, ULxyStatic);
         Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gamma,
                                                         phys_.mixtureFormationRhoE(ULxyStatic));
         TVec v = ULxyStatic(Seq123).array() / ULxyStatic(0);
@@ -2736,17 +2741,27 @@ namespace DNDS::Euler
         {
             TU farPrimitive = pBCHandler->GetValueFromID(btype); // primitive passive scalar components like Nu
 
+            // Build an approximate conservative state with inflow species so Cp and Rgas
+            // reflect the correct mixture (not just the interior composition).
+            TU inflowState;
+            inflowState.resizeLike(ULxyStatic);
+            farPrimitive(0) = ULxyStatic(0);      // placeholder density for species query
+            farPrimitive(I4) = ULxyPrimitive(I4); // placeholder pressure
+            Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, inflowState, gamma, 0);
+            real Cp = phys_.Cp(T, inflowState);
+            real Rgas = phys_.Rgas(inflowState);
+            real rhoH_form_inflow = phys_.mixtureFormationRhoE(inflowState);
+
             real pStag = pBCHandler->GetValueFromID(btype)(0);
             real tStag = pBCHandler->GetValueFromID(btype)(1);
             vSqr = std::min(vSqr, tStag * 2 * Cp * 0.95);
             real tStatic = tStag - 0.5 * vSqr / Cp;
             real pStatic = pStag * std::pow(tStatic / tStag, gamma / (gamma - 1));
-            real rStatic = pStatic / (phys_.Rgas(ULxyStatic) * tStatic);
+            real rStatic = pStatic / (Rgas * tStatic);
             farPrimitive(0) = rStatic;
             farPrimitive(Seq123) = pBCHandler->GetValueFromID(btype)(Seq234).normalized() * std::sqrt(vSqr);
             farPrimitive(I4) = pStatic;
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma,
-                                                            phys_.mixtureFormationRhoE(ULxyStatic));
+            Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma, rhoH_form_inflow);
         }
         if (pCLDriver)
             URxy(Seq123) = pCLDriver->GetAOARotation()(Seq012, Seq012) * URxy(Seq123);

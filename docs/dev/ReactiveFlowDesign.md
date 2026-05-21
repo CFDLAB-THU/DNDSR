@@ -2,8 +2,9 @@
 
 **Status:** Phases 1–4 complete. Full architecture refactor (per-thread pool, traits-typed
 contributors, stateless PhysicsProperties, sensible-ρE PP conventions) done.  
+**k2p6 audit:** All 56 findings resolved (18 SEVERE, 24 MEDIUM, 14 LOW) — 48 fixed, 8 accepted.  
 **Branch:** `dev/harry`.  
-**Last updated:** 2026-05-18.  
+**Last updated:** 2026-05-21.  
 **Target:** Extend DNDSR Euler solvers to support multi-species reactive flow
 with coupled fully-implicit time integration using full chemical Jacobian blocks.  
 **Solver:** `eulerEX` / `eulerEX3D` (extensible EulerModel variants with `Eigen::Dynamic` nVars)
@@ -25,6 +26,7 @@ with coupled fully-implicit time integration using full chemical Jacobian blocks
 | 3b | Analytic chemical Jacobian (T-coupling, last-species absorption, momentum columns, velScale) | Done |
 | 4 | Verification (0-D autoignition, FD Jacobian check, formation-enthalpy fixes, CFD ignition) | Done |
 | 4b | Per-thread ChemicalSource pool, traits-typed contributors, stateless PhysicsProperties, PP audit | Done |
+| 4c | k2p6 reactive-flow audit (18 SEVERE / 24 MEDIUM / 14 LOW): Roe asqrRoe, temperature offset, dead code, ideal-gas guards, 2-rhoH contract, linear-concave PP, invR0→R0, if constexpr fixes, doc updates | Done |
 | 5 | block_scalar Jacobian mode, point-implicit chemistry, GPU kinetics | Future |
 
 ### New files created
@@ -42,7 +44,10 @@ with coupled fully-implicit time integration using full chemical Jacobian blocks
 `std::shared_ptr<std::vector<ChemicalSource>>` indexed by `omp_get_thread_num()`. Each
 thread gets its own Cantera `Solution` objects + work buffers. No locks, no races.
 The pool is sized to `omp_get_max_threads()` at construction (1 when OMP disabled).
-`ChemicalContributor` additionally stores a copy of `IdealGasProperty` (scale factors:
+Uses `#ifdef DNDS_DIST_MT_USE_OMP` compile-time gate (not runtime `pool_->size()>1`)
+to prevent data races when OMP is inactive.
+
+**ChemicalContributor** additionally stores a copy of `IdealGasProperty` (scale factors:
 T0, rho0, U0, L0) so `evaluate()` needs no external configuration object.
 
 **Stateless PhysicsProperties:** `bufY_` and `bufHf_` moved into `ChemicalSource` (per-instance).
@@ -59,6 +64,57 @@ signatures using `Eigen::Vector<real, nVars>` etc. The `SourceTermVariant<model>
 are used as the single source of truth for all per-model Eigen types; the EulerP
 CUDA path will use the same traits.
 
+#### PhysicsProperties state-conversion & scaling API (Phase 4c)
+
+16 template methods convert between all state representations (conservative total,
+conservative sensible, primitive, prim-rhoT, prim-TP) in both code and physical
+units.  Operates on `TU` (Eigen vector) — marked *for I/O only, not tight loops*.
+
+**Conservative ↔ Sensible:**
+- `consSensibleToTotal<dim>(sens, total)`: adds formation to `U[I4]`
+- `consTotalToSensible<dim>(total, sens)`: subtracts formation from `U[I4]`
+
+**Primitive ↔ Conservative:**
+- `primToConservative<dim>(prim, cons)`: iterates `gammaEq` (cfg.gamma as initial guess)
+- `conservativeToPrimitive<dim>(cons, prim)`: uses `gammaEq` from cons state
+- `primRhoTToConservative<dim>(primRhoT, cons)`: via `p = rho·Rmix·T`
+- `conservativeToPrimRhoT<dim>(cons, primRhoT)`: replaces p with T
+- `primTPToConservative<dim>(primTP, cons)`: via `rho = p/(Rmix·T)`
+- `conservativeToPrimTP<dim>(cons, primTP)`: replaces rho with T
+
+**Code ↔ Physical (I/O only):**
+- `consCodeToPhys/consPhysToCode`, `primCodeToPhys/primPhysToCode`,
+  `primRhoTCodeToPhys/primRhoTPhysToCode`, `primTPCodeToPhys/primTPPhysToCode`
+
+All conversion methods that invoke the ideal-gas EOS (`p = rho·R·T` or
+`p = (γ−1)·rho·e_sensible`) assert `chem().isIdealGas()`.
+
+#### Scaling reference
+
+- `R0()` (= formerly `invR0`, renamed): `U0² / T0` — converts physical `R`/`cp`/`cv` to code
+- `p0()`: `rho0 · U0²`
+- `toCode(xPhys)` = `xPhys / R0()`; `toPhysP(pCode)` = `pCode · p0()`
+- `toPhysT(TCode)` = `TCode · T0`; `toCodeT(TPhys)` = `TPhys / T0`
+- `IdealGasProperty::Rgas` default changed from 1 (code) to 287 (physical J/(kg·K)),
+  consumed via `toCode()`; reactive path uses Cantera's `mixtureR()` instead
+
+#### State-conversion CLI: `eulerState`
+
+`app/eulerState.exe` converts a single Euler state between all representations
+using the PhysicsProperties API.  Supports all 8 Euler models, `--scaling code/phys`,
+`--mechanism` for reactive, and 5 input formats:
+
+```
+eulerState --model NS_EX --nVars 14 --from cons-sensible --scaling code \
+  --config "gamma=1.4,Rgas=287,U0=379,rho0=1" --mechanism h2o2.yaml \
+  --state "[1.0,0,0,0,6.0,0.028,0,0,0.222,0,0,0,0,0]"
+```
+
+Output includes: all state representations, reference scales with SI units,
+Cantera state diagnostics (intEnergy, enthalpy, cv, cp, `gamma(cp/cv)`,
+`gamma(eq)`, speed_of_sound), energy consistency check (`u_sent − u_cantera = 0`),
+and JSON array versions with full precision.
+
 ### PP (positivity-preserving) audit
 
 All PP functions (`EvaluateCellRHSAlpha`, `EvaluateURecBeta`, `CompressInc`,
@@ -68,25 +124,87 @@ is named for historical reasons but stores a sensible-energy floor.
 
 - `IdealGasUIncrement`: uncommented `dp −= (γ−1)·d(rhoH_form)` correction (BUG2)
 - `GradientCons2Prim`: corrected pressure gradient for `∇(rhoH_form)` via `pHf` species
-  enthalpies (BUG3), with `hfSpecies(k)` Eigen indexing
+  enthalpies (BUG3), with `hfSpecies(k)` Eigen indexing. Guard changed from
+  `hfSpecies.size() > 1` to `>= 1` (valid for single-species formation correction).
 - Species reconstruction increments and coefficients scaled with `theta1`/`uRecBeta`
   alongside the Euler part
+
+#### IdealGasGetCompressionRatioPressure — 2-rhoH contract
+
+The function previously accepted a single `rhoH_form` (default 0) and added it to
+the sensible-energy floor to form a total-energy target. This was inconsistent
+because the quadratic solves `ρE_total(u+α·inc) − KE = target + rhoH`, but
+`ρE_total(u+α·inc)` already includes `rhoH(α)` which varies with α. When formation
+decreases (common in H₂+O₂→H₂O combustion), ΔrhoH < 0 shifted the quadratic root
+toward larger α (unsafe).
+
+**Fix:** The function now accepts two required parameters: `rhoH_form_u` and
+`rhoH_form_uNew`. The quadratic coefficients get a ΔrhoH correction:
+
+```
+c₁ −= 2·ΔrhoH·u₀
+c₂ −= 2·ΔrhoH·inc₀
+```
+
+The linear estimate operates in pure sensible energy: `α = (rhoeOld − floor) /
+(rhoeOld − rhoeNew + ε)`.  This is safe because `rhoe_sensible(θ)` is concave
+(linear − convex KE − linear formation = concave) → secant is a lower bound.
+
+All three call sites now use `scheme=1` (linear path):
+- `EvaluateCellRHSAlpha`: passes `rhoH_form_u` + `rhoH_form_uNew`
+- `EvaluateURecBeta` reconstruction: passes `rhoH_form_B` + `rhoH_form_VR`
+- `CompressInc`: replaced 35-line inline quadratic with single call + iterative refinement
+
+#### CompressInc
+
+The inline quadratic solve was replaced with a call to
+`IdealGasGetCompressionRatioPressure<dim, 1, ...>` using the 2-rhoH contract.
+The iterative pull-up loop is retained (concave guarantee means `rhoe ≥` linear
+estimate, but refinement corrects conservatism).  The stale `rhoH_form_old` on
+the target-energy line was changed to `rhoH_form_new`.
+
+#### MeanValuePrim2Cons ↔ MeanValueCons2Prim round-trip
+
+`MeanValueCons2Prim` correctly subtracts `mixtureFormationRhoE(u[iCell])` when
+converting to primitive.  `MeanValuePrim2Cons` previously passed `rhoH_form=0`,
+losing formation in the round-trip.  Fixed with a two-pass approach:
+
+1. Pass 1: `Prim2Cons(w, u_approx, γ=1.4, rhoH=0)` → `u_approx` has correct
+   ρ and ρY_k (species densities from primitive mass fractions × density).
+2. `rhoH_form = mixtureFormationRhoE(u_approx)` — exact, depends only on ρ and ρY_k.
+3. Add `rhoH_form` to `u_approx(I4)` → temperature and `gammaEq` see correct total energy.
+4. Pass 2: `Prim2Cons(w, out, correct_gamma, rhoH_form)` — exact inverse of `Cons2Prim`.
 
 ### Species enthalpy API
 
 `PhysicsProperties::speciesEnthalpies(T, p, U, hView)` fills `hView` with **code-scaled**
-total specific enthalpies `h_k/U0²` where `h_k = e_sensible_k + h_f_k + p/ρ_k` (no KE).
+total specific enthalpies `h_k/U0²`.  For ideal-gas EOS: `h_k = e_sensible_k + h_f_k + R_k·T`
+(no KE); for non-ideal EOS, Cantera's `speciesEnthalpies` includes EOS-specific
+contributions outside this additive decomposition.
 Cantera's `getPartialMolarEnthalpies` returns `H_k(T)` [J/kmol] ≡ `h_f_k° + ∫ C_p,k dT`,
 which for an ideal gas decomposes as `e_f + e_sensible + RT/M_k`. The `(h_k − h_N)·J_k`
 form in the diffusion energy flux correctly handles the dependent-species flux
 (`J_N = −Σ J_k`), giving the standard multi-species N-S energy transport `Σ h_k·J_k`.
 
 - **PIMPL for Cantera**: `ChemicalSource.hpp` has zero Cantera includes — only buffer views (`SpeciesBufferView`, `JacobianBufferView`). The `.cpp` is a single translation unit with `cantera/core.h`. No Eigen/Cantera header conflict.
-- **Perfect gas with variable γ**: Multi-species mixture properties (γ_mix, cp_mix, R_mix) computed as mass-fraction-weighted averages. Existing Riemann solver and flux Jacobian code is unchanged — only the coefficient values are substituted through `PhysicsProperties`.
+- **Mixture thermodynamic properties (via Cantera EOS)**: Multi-species mixture properties (γ_mix, cp_mix, R_mix) computed through Cantera. Existing Riemann solver and flux Jacobian code is unchanged — only the coefficient values are substituted through `PhysicsProperties`.
 - **Full-block source Jacobian**: `JacobianDiagBlock` in matrix-block mode (Mode 1) stores nVars×nVars per cell. The `ChemicalContributor` fills the species rows with `M_k · ∂ω_k/∂U_j`. SGS and FGMRES solvers require zero changes.
 - **Species diffusion**: Fickian diffusion with constant Schmidt number (Sc=1) fallback; upgradable to Cantera mixture-averaged transport. Species diffusivity accessed through `PhysicsProperties::speciesDiffusivityK()`.
 - **State vector stores total ρE** (sensible + formation + kinetic): EOS functions subtract `rhoH_form` and `½ρv²` to recover sensible internal energy for pressure and temperature. Config/input vectors store sensible ρE; formed total at `InitializeUDOF` and BC assignment via `mixtureFormationRhoE(U)`.
 - **Analytic chemical Jacobian with full coupling** (§3.3.2 updated): species-species via `∂ω/∂C_k · 1/M_k`, last-species chain-rule (`-∂ω/∂C_last/M_last`), temperature coupling via per-species enthalpies, momentum coupling via kinetic-energy redistribution. Validated against finite differences: 10/140 entries mismatched at pre-ignition (0.053% of ||J||_F), 8/140 at post-ignition (0.009% of ||J||_F).
+
+#### ChemicalSource API refinements (k2p6 audit, Phase 4c)
+
+- `mixtureFormationEnergy` → `mixtureFormationEnthalpy`: the function returns
+  `Σ Y_k·h_{f,k}` (formation **enthalpy** per mass, not internal energy).
+- `mixtureCp`, `mixtureCv`, `mixtureGamma`, `mixtureIntEnergy`, `mixtureEnthalpy`,
+  `speedOfSound`: all now accept `double p = 101325` for non-ideal EOS support.
+  For ideal gases these are T-only.
+- `speedOfSound`: replaced manual `a = √(γRT)` with Cantera's `soundSpeed()`
+  which computes `a² = (dp/dρ)_s` correctly for any EOS.
+- `clone()`: added `DNDS_assert(I.sol != nullptr && I.solT != nullptr)`.
+- `temperature()`: debug `static int cnt` counter removed, invalid-state fallback
+  `p/(ρ·Rgas)` commented out (ideal-gas hack not valid for non-ideal EOS).
 
 ## 1. Problem Statement
 
@@ -385,11 +503,50 @@ conserves energy).
 
 | Context | Operation | Formula |
 |---------|-----------|---------|
-| `IdealGasThermal` | subtracts KE + formation | `p = (γ-1)(E − ½ρv² − ρH_form)` |
+| `IdealGasThermal` | subtracts KE + formation | `p = (γ−1)(E − ½ρv² − ρH_form)` |
 | `PhysicsProperties::temperature()` | subtracts KE → `u_internal`, then Cantera UV | `u_internal = ρE/ρ − ½v²` |
 | Cantera `setState_UV` | receives internal energy (no KE) | `u = u_internal * U0²` |
 | `CompressInc` (PP limiter) | uses sensible energy | `eInternalS = (ρE − ρH_form)/ρ − ½v²` |
 | `InitializeUDOF` / BCs | adds formation to config sensible ρE | `U[I4] += phys_.mixtureFormationRhoE(U)` |
+
+#### 11.1.1 Energy Convention: DNDSR ↔ Cantera Bridge
+
+DNDSR's calorically-perfect convention stores energy measured from **0 K**:
+`e_sensible(T) = cv_stored · T` where `cv_stored = R/(γ_stored − 1)`.  `cv_stored`
+is a **chord slope** — the straight line from (0, 0) to (T, e_sensible).  It is
+constant; it does not vary with temperature.
+
+Cantera's NASA-polynomial convention measures thermal energy from **T_ref = 298.15 K**.
+At T_ref the thermal part is zero by definition.  Cantera's `cv_mass(T)` is the
+**local slope** — `du/dT` at the given T.  It varies with T because rotational
+and vibrational modes activate at different temperatures.
+
+**Three-gamma distinction:**
+
+| Name | Formula | Source | Meaning |
+|------|---------|--------|---------|
+| `gamma_stored` (= `gammaEq`) | `1 + Rmix/cv_stored` | `IdealGasProperty.gamma` | Defines `e_sensible ↔ T` and `p ↔ e_sensible` in DNDSR state |
+| `gammaEq` | `1 + ρ·Rmix·T / (ρ·e_sensible)` | `PhysicsProperties::gammaEq` | Self-consistency check — equals `gamma_stored` because e_sensible was encoded with that γ |
+| `cp/cv` | `cp_mass(T,Y) / cv_mass(T,Y)` | Cantera NASA polynomials | Real thermodynamic ratio at T. Differs from `gammaEq` because `cv_mass(T) ≠ cv_stored`. |
+
+At 845 K for H₂/O₂/N₂: `cv_stored ≈ 1020`, `cv_local ≈ 1103` J/(kg·K),
+`gamma_stored = 1.4`, `cp/cv ≈ 1.359`.
+
+**Cantera temperature bridge:** `PhysicsProperties::temperature()` converts
+DNDSR's internal energy (0 K reference) to Cantera's convention (298.15 K reference)
+by subtracting two quantities before `setState_UV`:
+
+```
+u_sent = u_DNDSR_code · U0² − pVAtReference(Y) − e_sens_ref(Y)
+```
+
+- `pVAtReference(Y) = h(T_ref) − u(T_ref) = Rmix·T_ref` (ideal gas).  Converts
+  formation enthalpy → formation internal energy at T_ref.
+- `e_sens_ref(Y) = cv_mass(T_ref,Y)·T_ref`.  Subtracts the 0K→T_ref sensible
+  energy that DNDSR includes but Cantera starts counting after.
+
+After subtraction, `u_sent` matches Cantera's `intEnergy_mass(T)` for the same T.
+Guarded by `chem().isIdealGas()` — non-ideal phases crash with an assertion.
 
 **Naming:** `sensibleRhoE(U, I4) = U[I4] − mixtureFormationRhoE(U)` removes
 formation but **keeps kinetic energy**. It is "fluid energy", not "sensible
