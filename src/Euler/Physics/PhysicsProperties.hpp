@@ -627,10 +627,15 @@ namespace DNDS::Euler
         }
         if (vPhys < 1e-6 || !std::isfinite(vPhys) || !std::isfinite(uPhys))
         {
-            DNDS_assert_info(vPhys > 0 && std::isfinite(vPhys) && std::isfinite(uPhys),
-                             fmt::format("vPhys={:.3e} uPhys={:.3e} — using const gamma fallback", vPhys, uPhys));
-            real p = (igProp_->gamma - 1) * rho * uSensible;
-            return p * rhoInv / toCode(igProp_->Rgas);
+            DNDS_assert_info(false,
+                             fmt::format("temperature(): invalid state vPhys={:.3e} uPhys={:.3e} — "
+                                         "non-ideal EOS fallback not implemented",
+                                         vPhys, uPhys));
+            // Fallback removed: the ideal-gas p/(ρ·Rgas) formula is not valid for
+            // non-ideal EOS.  If a recovery path is ever needed, uncomment below:
+            // real p = (igProp_->gamma - 1) * rho * uSensible;
+            // return p * rhoInv / toCode(igProp_->Rgas);
+            return 0;
         }
         double Tphys = chem().temperatureFromUV(uPhys, vPhys, massFractions(U), T_guess);
         return toCodeT(Tphys);

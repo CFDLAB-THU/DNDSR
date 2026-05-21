@@ -49,8 +49,8 @@
 | 20 | 9 | `EulerEvaluator.hxx:1402,1406` | `MeanValuePrim2Cons` passes `rhoH_form=0` — round-trip drops formation | **DONE** — computes rhoH_form from species, passes to Prim2Cons |
 | 21 | 11 | `ChemicalSource.cpp:107,113,119` | `mixtureCp/Cv/Gamma` hardcode `p=101325` — real gases need actual pressure |
 | 22 | 11 | `ChemicalSource.cpp:125-128` | `speedOfSound` implements `a=√(γRT)` — dead ideal-gas code |
-| 23 | 11 | `PhysicsProperties.hpp:140-141` | `gammaEq` computes `p_exact = rho·Rmix·T` — ideal-gas assumption |
-| 24 | 11 | `PhysicsProperties.hpp:370-379` | `temperature()` invalid-state fallback returns `p/(ρ·Rgas)` (ideal-gas) |
+| 23 | 11 | `PhysicsProperties.hpp:140-141` | `gammaEq` computes `p_exact = rho·Rmix·T` — ideal-gas assumption | **DONE** — guarded by DNDS_assert_info(chem().isIdealGas(), ...) |
+| 24 | 11 | `PhysicsProperties.hpp:370-379` | `temperature()` invalid-state fallback returns `p/(ρ·Rgas)` (ideal-gas) | **DONE** — fallback commented out, replaced with DNDS_assert_info fail |
 
 ## LOW (14 findings)
 
