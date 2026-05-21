@@ -134,9 +134,12 @@ namespace DNDS::Euler::Chemistry
         return impl_->gas->enthalpy_mass();
     }
 
-    double ChemicalSource::speedOfSound(double T, ConstSpeciesBufferView Y) const
+    double ChemicalSource::speedOfSound(double T, ConstSpeciesBufferView Y, double p) const
     {
-        return std::sqrt(mixtureGamma(T, Y) * mixtureR(Y) * T);
+        // Use Cantera's soundSpeed() which computes a^2 = (dp/dρ)_s correctly
+        // for both ideal-gas and non-ideal EOS, rather than the manual a = √(γRT).
+        impl_->setTPY(T, p, Y);
+        return impl_->gas->soundSpeed();
     }
 
     double ChemicalSource::temperatureFromUV(double u, double v,

@@ -602,7 +602,7 @@ int main(int argc, char **argv)
         double h_ct = chem.mixtureEnthalpy(T_phys, Yv, p_phys);
         double cv_ct = chem.mixtureCv(T_phys, Yv, p_phys);
         double cp_ct = chem.mixtureCp(T_phys, Yv, p_phys);
-        double a_ct = chem.speedOfSound(T_phys, Yv);
+        double a_ct = chem.speedOfSound(T_phys, Yv, p_phys);
         double R_ct = chem.mixtureR(Yv);
 
         std::cout << "\n--- Cantera state at T_phys ---\n";
