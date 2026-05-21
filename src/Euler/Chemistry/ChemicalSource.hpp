@@ -89,7 +89,7 @@ namespace DNDS::Euler::Chemistry
         double mixtureCp(double T, ConstSpeciesBufferView Y, double p = 101325) const;
         double mixtureCv(double T, ConstSpeciesBufferView Y, double p = 101325) const;
         double mixtureGamma(double T, ConstSpeciesBufferView Y, double p = 101325) const;
-        double speedOfSound(double T, ConstSpeciesBufferView Y) const;
+        double speedOfSound(double T, ConstSpeciesBufferView Y, double p = 101325) const;
 
         /** Specific internal energy [J/kg] at (T, p, Y). */
         double mixtureIntEnergy(double T, ConstSpeciesBufferView Y, double p = 101325) const;
