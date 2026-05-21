@@ -54,22 +54,22 @@
 
 ## LOW (14 findings)
 
-| # | Audit | File:Line | Issue |
-|---|-------|-----------|-------|
-| 1 | 1 | `ChemicalSource.cpp:125` | `speedOfSound` dead code — offers no code-scaled variant |
-| 2 | 1 | `PhysicsProperties.hpp:84` | `invR0()` naming inverted — returns R0, not 1/R0 |
-| 3 | 1 | `SourceTermContributor.hpp:47-48` | `SourceCellAux::p=101325` labeled "code pressure" but is physical Pa |
-| 4 | 3 | `EvaluateRHS.hxx:406` | `gamma` computed before wall-fix overwrites ULxy/URxy |
-| 5 | 3 | `PhysicsProperties.hpp:138` | `e_sensible<=0` silently falls back to cp/cv gamma |
-| 6 | 5 | `EulerEvaluator.hxx:2204-2286` | Dead lambdas `cellIsHalfAlpha`/`cellAdjAlphaMin` never called |
-| 7 | 5 | `EulerEvaluator.hpp:1751-1753` | Dead exponential calculation in `CompressInc` |
-| 8 | 8 | `EvaluateDt.hxx:2774` | `outMap["RV"]` inserted twice — first is dead code |
-| 9 | 8 | `EvaluateDt.hxx:2815` | Runtime `if(model==NS_2EQ)` should be `if constexpr` |
-| 10 | 8 | `EvaluateDt.hxx:1023,1025,1044` | Hardcoded `Vector<real,5>`/`Vector<real,4>` in special-field initializers |
-| 11 | 8 | `SourceTermContributor.hpp:436` | `uM3 = (I4>=4) ? U[3] : 0` — hardcodes dim inference |
-| 12 | 10 | `ChemicalSource.cpp:247` | `dT_drho` omits KE term (masked by JAC_SKIP_FLUID) |
-| 13 | 11 | `ChemicalSource.hpp:86` | Docstring: "perfect gas, variable γ" — misleading; only mixtureR/speedOfSound assume perfect |
-| 14 | 11 | `PhysicsProperties.hpp:231` | Comment: `h_k = e_sensible + h_f + R·T` — ideal-gas decomposition of Cantera output |
+| # | Audit | File:Line | Issue | Status |
+|---|-------|-----------|-------|--------|
+| 1 | 1 | `ChemicalSource.cpp:125` | `speedOfSound` dead code — offers no code-scaled variant | **DONE** — refactored in MED #22 |
+| 2 | 1 | `PhysicsProperties.hpp:84` | `invR0()` naming inverted — returns R0, not 1/R0 | **DONE** — renamed to R0() |
+| 3 | 1 | `SourceTermContributor.hpp:47-48` | `SourceCellAux::p=101325` labeled "code pressure" but is physical Pa | **DONE** — comment clarified (code=phys with default scaling) |
+| 4 | 3 | `EvaluateRHS.hxx:406` | `gamma` computed before wall-fix overwrites ULxy/URxy | **DONE** — comment: gamma from UMeanXy, wall-fix doesn't affect it |
+| 5 | 3 | `PhysicsProperties.hpp:138` | `e_sensible<=0` silently falls back to cp/cv gamma | **DONE** — replaced with DNDS_assert_info |
+| 6 | 5 | `EulerEvaluator.hxx:2204-2286` | Dead lambdas `cellIsHalfAlpha`/`cellAdjAlphaMin` never called | **DONE** — marked with "Unused, kept for reference" |
+| 7 | 5 | `EulerEvaluator.hpp:1751-1753` | Dead exponential calculation in `CompressInc` | **DONE** — removed unused muRef assignments |
+| 8 | 8 | `EvaluateDt.hxx:2774` | `outMap["RV"]` inserted twice — first is dead code | **DONE** — removed dead first assignment |
+| 9 | 8 | `EvaluateDt.hxx:2815` | Runtime `if(model==NS_2EQ)` should be `if constexpr` | **DONE** — changed to if constexpr |
+| 10 | 8 | `EvaluateDt.hxx:1023,1025,1044` | Hardcoded `Vector<real,5>`/`Vector<real,4>` in special-field initializers | **DONE** — comment: NS-only, extended components come from farField |
+| 11 | 8 | `SourceTermContributor.hpp:436` | `uM3 = (I4>=4) ? U[3] : 0` — hardcodes dim inference | **DONE** — comments: I4=dim+1, guards interpretable as dim checks |
+| 12 | 10 | `ChemicalSource.cpp:247` | `dT_drho` omits KE term (masked by JAC_SKIP_FLUID) | **DONE** — comment noting KE omission masked by JAC_SKIP_FLUID |
+| 13 | 11 | `ChemicalSource.hpp:86` | Docstring: "perfect gas, variable γ" — misleading | **DONE** — updated to "Mixture thermodynamic properties (via Cantera EOS)" |
+| 14 | 11 | `PhysicsProperties.hpp:231` | Comment: `h_k = e_sensible + h_f + R·T` — ideal-gas decomposition | **DONE** — clarifies ideal-gas vs non-ideal EOS |
 
 ## CLEAN AUDITS (no bugs)
 

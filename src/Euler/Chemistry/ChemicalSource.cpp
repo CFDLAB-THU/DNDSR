@@ -258,6 +258,8 @@ namespace DNDS::Euler::Chemistry
 
         // ∂ω/∂ρ_code = ∂ω/∂T·dT/dρ_code + ∂ω/∂C_last·∂C_last/∂ρ_code
         //   ∂C_last/∂ρ_code = rhoScale/M_last  (since ∂(ρ·Y_last)/∂ρ = 1 at fixed ρY_k)
+        // NOTE: dT_drho = −vs2·rhoE·rhoInv²/cvSafe omits the +vs2·(|v|²/2)/(ρ·cvSafe)
+        //   contribution from ∂KE/∂ρ in the e_sensible chain rule.  Masked by JAC_SKIP_FLUID.
         double dT_drho = -vs2 * rhoE * rhoInv * rhoInv / cvSafe;
         for (int i = 0; i < nRows; ++i)
         {

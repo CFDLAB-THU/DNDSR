@@ -2253,6 +2253,9 @@ namespace DNDS::Euler
 
         if (btype == Geom::BC_ID_DEFAULT_SPECIAL_DMR_FAR) // DMR
         {
+            // Shock-tube BC: overwrites fluid components (dim+1) only.
+            // Hardcoded Vector<real,5/4> sizes assume NS models; extended-model
+            // components (SA, 2EQ, species) preserve farFieldStaticValue defaults.
             DNDS_assert(dim > 1);
             URxy = settings.farFieldStaticValue;
             real uShock = 10;
@@ -2779,8 +2782,6 @@ namespace DNDS::Euler
         outMap["RU"] = [&](index iCell)
         { return u[iCell](1); };
         outMap["RV"] = [&](index iCell)
-        { return u[iCell](2); };
-        outMap["RV"] = [&](index iCell)
         { return u[iCell](I4 - 1); };
         outMap["RE"] = [&](index iCell)
         { return u[iCell](I4); };
@@ -2821,7 +2822,7 @@ namespace DNDS::Euler
         outMap["mut"] = [&](index iCell)
         {
             real mut = 0;
-            if (model == NS_2EQ || model == NS_2EQ_3D)
+            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
             {
                 TU Uxy = u[iCell];
                 TDiffU GradU;

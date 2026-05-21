@@ -2248,6 +2248,9 @@ namespace DNDS::Euler
             pEps = std::min(pEps, minRatio * rhoEiMin);
         }
 
+        // Unused — kept for reference if alpha-expansion smoothing is ever re-enabled.
+        // The calling loop at line ~2283 was commented out; see SEVERE #8-10 fixes
+        // which replaced this expansion strategy with the current direct-limiting approach.
         auto cellIsHalfAlpha = [&](index iCell) -> bool // iCell should be internal
         {
             bool ret = false;
@@ -2265,7 +2268,7 @@ namespace DNDS::Euler
             return ret;
         };
 
-        auto cellAdjAlphaMin = [&](index iCell) -> real // iCell should be internal
+        auto cellAdjAlphaMin = [&](index iCell) -> real // iCell should be internal (unused, same reason as cellIsHalfAlpha above)
         {
             real ret = 1;
             auto c2f = mesh->cell2face[iCell];
