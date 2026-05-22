@@ -97,13 +97,21 @@ namespace DNDS::Euler::Chemistry
         /** Specific enthalpy [J/kg] at (T, p, Y). */
         double mixtureEnthalpy(double T, ConstSpeciesBufferView Y, double p = 101325) const;
 
+        /** Specific entropy [J/(kg*K)] at (T, p, Y). */
+        double mixtureEntropy(double T, ConstSpeciesBufferView Y, double p = 101325) const;
+
+        /** Lower valid thermodynamic temperature bound [K] reported by Cantera. */
+        double minTemperature() const;
+
         /**
          * Solve T from specific internal energy u [J/kg] and specific volume v [m³/kg].
          * Uses Cantera setState_UV (Newton). Optional T_guess [K] as warm-start.
+         * rtol is forwarded to Cantera's internal UV solve.
          */
         double temperatureFromUV(double u, double v,
                                  ConstSpeciesBufferView Y,
-                                 double T_guess = 0) const;
+                                 double T_guess = 0,
+                                 double rtol = 1e-12) const;
 
         // ---- Kinetics ----
 

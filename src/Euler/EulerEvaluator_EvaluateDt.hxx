@@ -2797,42 +2797,14 @@ namespace DNDS::Euler
         TU ULxyStatic = ULxy;
         if (settings.frameConstRotation.enabled)
             TransformURotatingFrame(ULxyStatic, pPhysics, 1);
-        TU ULxyPrimitive;
-        ULxyPrimitive.resizeLike(ULxy);
-        real T = phys_.template temperature<dim>(ULxyStatic);
-        real gamma = phys_.template gammaEq<dim>(T, ULxyStatic);
-        Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gamma,
-                                                        phys_.mixtureFormationRhoE(ULxyStatic));
         TVec v = ULxyStatic(Seq123).array() / ULxyStatic(0);
         real vSqr = v.squaredNorm();
         {
-            TU farPrimitive = pBCHandler->GetValueFromID(btype); // primitive passive scalar components like Nu
-
-            // Build an approximate conservative state with inflow species so Cp and Rgas
-            // reflect the correct mixture (not just the interior composition).
-            // TODO(reactive-BCInPsTs): this total-condition inflow still uses a
-            // one-shot static-state estimate.  A reactive-consistent treatment
-            // should iterate stagnation T/p -> static T/p/rho with the inflow
-            // composition, velocity magnitude, gammaEq, and formation energy.
-            TU inflowState;
-            inflowState.resizeLike(ULxyStatic);
-            farPrimitive(0) = ULxyStatic(0);      // placeholder density for species query
-            farPrimitive(I4) = ULxyPrimitive(I4); // placeholder pressure
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, inflowState, gamma, 0);
-            real Cp = phys_.Cp(T, inflowState);
-            real Rgas = phys_.Rgas(inflowState);
-            real rhoH_form_inflow = phys_.mixtureFormationRhoE(inflowState);
-
-            real pStag = pBCHandler->GetValueFromID(btype)(0);
-            real tStag = pBCHandler->GetValueFromID(btype)(1);
-            vSqr = std::min(vSqr, tStag * 2 * Cp * 0.95);
-            real tStatic = tStag - 0.5 * vSqr / Cp;
-            real pStatic = pStag * std::pow(tStatic / tStag, gamma / (gamma - 1));
-            real rStatic = pStatic / (Rgas * tStatic);
-            farPrimitive(0) = rStatic;
-            farPrimitive(Seq123) = pBCHandler->GetValueFromID(btype)(Seq234).normalized() * std::sqrt(vSqr);
-            farPrimitive(I4) = pStatic;
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma, rhoH_form_inflow);
+            TU bcValue = pBCHandler->GetValueFromID(btype);
+            TU farPrimitive = bcValue; // primitive passive scalar components like species/RANS variables
+            farPrimitive(Seq123) = bcValue(Seq234).normalized() * std::sqrt(vSqr);
+            phys_.template totalToStaticPrimitive<dim>(bcValue(0), bcValue(1), farPrimitive);
+            phys_.template primToConservative<dim>(farPrimitive, URxy);
         }
         if (pCLDriver)
             URxy(Seq123) = pCLDriver->GetAOARotation()(Seq012, Seq012) * URxy(Seq123);

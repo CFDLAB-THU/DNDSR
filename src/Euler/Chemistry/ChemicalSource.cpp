@@ -134,6 +134,17 @@ namespace DNDS::Euler::Chemistry
         return impl_->gas->enthalpy_mass();
     }
 
+    double ChemicalSource::mixtureEntropy(double T, ConstSpeciesBufferView Y, double p) const
+    {
+        impl_->setTPY(T, p, Y);
+        return impl_->gas->entropy_mass();
+    }
+
+    double ChemicalSource::minTemperature() const
+    {
+        return impl_->gas->minTemp();
+    }
+
     double ChemicalSource::speedOfSound(double T, ConstSpeciesBufferView Y, double p) const
     {
         // Use Cantera's soundSpeed() which computes a^2 = (dp/dρ)_s correctly
@@ -144,13 +155,14 @@ namespace DNDS::Euler::Chemistry
 
     double ChemicalSource::temperatureFromUV(double u, double v,
                                              ConstSpeciesBufferView Y,
-                                             double T_guess) const
+                                             double T_guess,
+                                             double rtol) const
     {
         impl_->gasT->setMassFractions_NoNorm(Y.data);
         double Tinit = T_guess > 300 ? T_guess : 300;
         double p_init = mixtureR(Y) * Tinit / v;
         impl_->gasT->setState_TP(Tinit, p_init);
-        impl_->gasT->setState_UV(u, v, 1e-12);
+        impl_->gasT->setState_UV(u, v, rtol);
         return impl_->gasT->temperature();
     }
 
