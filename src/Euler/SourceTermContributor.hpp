@@ -431,8 +431,10 @@ namespace DNDS::Euler
                 double uM1 = (I4 >= 2) ? U[1] : 0; // ρu (I4=dim+1≥3, guard always true)
                 double uM2 = (I4 >= 3) ? U[2] : 0; // ρv (I4≥3 always for dim≥2)
                 double uM3 = (I4 >= 4) ? U[3] : 0; // ρw (present only for 3D, 0 for 2D)
-                // TODO(#audit MED16): determine if JAC_SKIP_FLUID should be removed.
-                // Currently zeroes energy→species coupling in the source Jacobian.
+                // TODO(reactive-jacobian): this test-mode approximation drops all
+                // fluid-column coupling (rho, momentum, and rhoE -> T -> omega).
+                // Remove JAC_SKIP_FLUID once the full-block chemistry Jacobian is
+                // selected as the production path.
                 c.productionRatesAndJacobian(Tcantera, aux.pPhys, rho, U[I4],
                                              uM1, uM2, uM3, I4, igProp_.U0, igProp_.rho0, Yv, omegav, Jv,
                                              Chemistry::ChemicalSource::JAC_SKIP_FLUID);

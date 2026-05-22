@@ -358,7 +358,7 @@ function(euler_add_unit_test TEST_NAME SRC_FILE LIBS)
     add_test(NAME euler_${TEST_NAME} COMMAND ${TARGET_NAME})
     set_tests_properties(euler_${TEST_NAME} PROPERTIES
         TIMEOUT 120
-        ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
+        ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS};DNDS_MECH_PATH=${DNDS_CANTERA_DATA_DIR};CANTERA_DATA=${DNDS_CANTERA_DATA_DIR}")
 endfunction()
 
 # --- helper: add an MPI unit test executable (Euler) ---
@@ -385,7 +385,7 @@ function(euler_add_mpi_test TEST_NAME SRC_FILE LIBS)
         set_tests_properties(euler_${TEST_NAME}_np${NP} PROPERTIES
             TIMEOUT ${_TIMEOUT}
             PROCESSORS ${NP}
-            ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
+            ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS};DNDS_MECH_PATH=${DNDS_CANTERA_DATA_DIR};CANTERA_DATA=${DNDS_CANTERA_DATA_DIR}")
     endforeach()
 endfunction()
 

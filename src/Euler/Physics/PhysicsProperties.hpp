@@ -617,6 +617,11 @@ namespace DNDS::Euler
                 // DNDSR stores e_sensible measured from 0 K (ideal-gas convention).
                 // Cantera measures thermal energy from T_ref = 298.15 K.
                 // For ideal gas: e_sensible(298) = cv(298)·T_ref.
+                // TODO(reactive-PP-lower-bound): PP still limits against a
+                // sensible-energy floor near zero, but Cantera NASA polynomials
+                // are only valid above their lower-T bound (typically 200 K).
+                // Defer replacing the 0 K-style PP lower bound with a mechanism
+                // and EOS-aware minimum internal energy.
             }
             else
                 DNDS_assert_info(false, "temperature(): non-ideal-gas EOS conversion not yet implemented");

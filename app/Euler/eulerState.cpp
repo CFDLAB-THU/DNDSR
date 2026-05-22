@@ -167,8 +167,16 @@ namespace
             }
             else
             {
-                phys = v[i];
-                unit = "-";
+                if (isPrim)
+                {
+                    phys = v[i];
+                    unit = "-";
+                }
+                else
+                {
+                    phys = v[i] * cfg.rho0;
+                    unit = unitRho;
+                }
             }
             std::cout << fmt::format("  {:12s} {:12.4g} {:12.4g}  {}\n", nm, v[i], phys, unit);
         }
@@ -178,6 +186,9 @@ namespace
         for (int j = 1; j <= dim; ++j)
             vPhys[j] = v[j] * (isPrim ? cfg.U0 : cfg.rho0 * cfg.U0);
         vPhys[I4] = v[I4] * cfg.rho0 * cfg.U0 * cfg.U0;
+        if (!isPrim)
+            for (int k = I4 + 1; k < (int)vPhys.size(); ++k)
+                vPhys[k] = v[k] * cfg.rho0;
         printJsonVec(vPhys, jsonLabel + "-phys");
     }
 
@@ -415,9 +426,21 @@ int main(int argc, char **argv)
     }
     else
     {
-        // Non-reactive prim→cons: use cfg.gamma directly
+        // Non-reactive primitive-family inputs: use cfg.gamma directly.
         TU prim(nVars);
         prim = inputState;
+        if (fromStr == "prim-rhoT")
+        {
+            real rho = prim[0];
+            real T = prim[dim + 1];
+            prim[dim + 1] = rho * R_code * T;
+        }
+        else if (fromStr == "prim-TP")
+        {
+            real T = prim[0];
+            real p = prim[dim + 1];
+            prim[0] = p / std::max(R_code * T, real(1e-60));
+        }
         if (dim == 3)
             Gas::IdealGasThermalPrimitive2Conservative<3>(prim, consTotal, cfg.gamma, 0);
         else
@@ -555,7 +578,7 @@ int main(int argc, char **argv)
         vel2 /= (consTotal[0] * consTotal[0]);
         real e_sensible = consTotal[dim + 1] / consTotal[0] - 0.5 * vel2 - rhoH_form_cons / consTotal[0];
         std::cout << fmt::format("  p_eos      = {:12.4g} (code, via gamma_eq)\n",
-                                 gammaEq * consTotal[0] * e_sensible);
+                                 (gammaEq - 1.0) * consTotal[0] * e_sensible);
     }
     std::cout << fmt::format("  Rmix_phys  = {:12.4g} J/(kg.K)\n",
                              Rmix_code * cfg.U0 * cfg.U0 / cfg.T0);

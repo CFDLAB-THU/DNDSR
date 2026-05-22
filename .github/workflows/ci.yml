@@ -350,6 +350,9 @@ jobs:
       # ------------------------------------------------------------------
       - name: Run C++ tests
         run: ctest --test-dir build --output-on-failure --timeout 300
+        env:
+          DNDS_MECH_PATH: ${{ github.workspace }}/external/cfd_externals/install/data
+          CANTERA_DATA: ${{ github.workspace }}/external/cfd_externals/install/data
 
       # ------------------------------------------------------------------
       # 12. Run Python tests
