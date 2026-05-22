@@ -397,6 +397,7 @@ euler_add_unit_test(riemann_solvers "Euler/test_RiemannSolvers.cpp" "cfv;geom;dn
 euler_add_unit_test(rans "Euler/test_RANS.cpp" "cfv;geom;dnds")
 euler_add_unit_test(source_chemical "Euler/test_SourceChemical.cpp" "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds")
 euler_add_unit_test(uv "Euler/test_UV.cpp" "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds")
+euler_add_unit_test(physics_properties "Euler/test_PhysicsProperties.cpp" "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds")
 euler_add_unit_test(chem_ode "Euler/test_ChemODE.cpp" "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds")
 
 # EulerEvaluator pipeline test: needs full Euler libraries for NS, NS_SA, NS_3D
@@ -414,6 +415,7 @@ set(EULER_TEST_TARGETS
     euler_test_rans
     euler_test_source_chemical
     euler_test_uv
+    euler_test_physics_properties
     euler_test_chem_ode
     euler_test_evaluator_pipeline
 )
