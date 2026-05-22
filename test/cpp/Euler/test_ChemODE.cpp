@@ -672,7 +672,7 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
     }
     int nBadS200 = compareJacobian(U, T, "s200");
 
-    // ── Momentum-column check (inject non-zero velocity) ──
+    // ── Fluid-column check (inject non-zero velocity) ──
     {
         Eigen::VectorXd Umom = U;
         Umom[1] = 0.1;
@@ -689,14 +689,14 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
                                          SpeciesBufferView{omegM.data(), Ns},
                                          JacobianBufferView{jbufM.data(), Ns, nVars, Ns});
 
-        for (int jj = 1; jj <= 2; jj++)
+        for (int jj = 0; jj <= 2; jj++)
         {
             double h = 1e-6 * std::max(std::abs(Umom[jj]), 1.0);
             Eigen::VectorXd Up = Umom, Um = Umom;
             Up[jj] += h;
             Um[jj] -= h;
             auto omP = sourceAtU(Up), omM = sourceAtU(Um);
-            int nMomBad = 0;
+            int nFluidBad = 0;
             for (int i = 0; i < Ns; i++)
             {
                 double fd = (omP[i] - omM[i]) / (2.0 * h);
@@ -705,21 +705,20 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
                 double rel = std::abs(fd - an) / denom;
                 if (std::abs(fd - an) > 1e-7 && rel > 1e-3 && std::abs(an) > 1e-14)
                 {
-                    printf("[FD-mom] J(%d,%d) fd=%.4e an=%.4e (rel %.1f%%)\n",
+                    printf("[FD-fluid] J(%d,%d) fd=%.4e an=%.4e (rel %.1f%%)\n",
                            i, jj, fd, an, rel * 100);
-                    nMomBad++;
+                    nFluidBad++;
                 }
             }
-            printf("[FD-mom] col %d: %d mismatches\n", jj, nMomBad);
+            printf("[FD-fluid] col %d: %d mismatches\n", jj, nFluidBad);
+            CHECK(nFluidBad == 0);
         }
     }
 
     // FD-vs-analytical Jacobian quality across ignition stages (dt=1e-6, const-V):
     // the FD path intentionally calls PhysicsProperties::temperature(), so the
     // DNDSR-to-Cantera reference-energy bridge is tested in one place.  Fluid
-    // columns remain diagnostic while production uses JAC_SKIP_FLUID; rho-column
-    // differences are expected until the full fluid-coupled chemistry Jacobian
-    // becomes the selected production path.  The global Frobenius-scaled error
-    // remains O(1e-2 %) at the final checkpoint.
+    // columns remain diagnostic while production uses JAC_SKIP_FLUID.  The
+    // global Frobenius-scaled error remains O(1e-2 %) at the final checkpoint.
     CHECK(nBadS200 <= 25);
 }
