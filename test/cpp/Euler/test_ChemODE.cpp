@@ -4,14 +4,18 @@
 #include "Euler/Chemistry/ChemicalSource.hpp"
 #include "Euler/Euler.hpp"
 #include "Euler/Physics/PhysicsProperties.hpp"
+#include "cantera/zerodim.h"
+#include <nlohmann/json.hpp>
 #include <Eigen/Dense>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <vector>
 
 using namespace DNDS::Euler;
 using namespace DNDS::Euler::Chemistry;
+using json = nlohmann::ordered_json;
 
 static std::string mechFile()
 {
@@ -45,6 +49,91 @@ static auto makeTestFixture()
         std::unique_ptr<PhysicsProperties<NS_EX>> phys;
     };
     return Fixture{std::move(pool), std::move(phys)};
+}
+
+struct TrajectoryPoint
+{
+    double tCode = 0;
+    double tPhys = 0;
+    double T = 0;
+    double p = 0;
+    std::vector<double> Y;
+};
+
+static std::vector<double> massFractionsFromU(ChemicalSource &chem, const Eigen::VectorXd &U)
+{
+    int Ns = chem.nSpecies();
+    int Ns1 = Ns - 1;
+    int Isp = static_cast<int>(U.size()) - Ns1;
+    auto Yv = chem.massFractions(U[0], U.data() + Isp, Ns1);
+    std::vector<double> Y(Ns);
+    for (int k = 0; k < Ns; ++k)
+        Y[k] = Yv[k];
+    return Y;
+}
+
+static TrajectoryPoint sampleState(PhysicsProperties<NS_EX> &phys, ChemicalSource &chem,
+                                   const Eigen::VectorXd &U, double U0, double rho0,
+                                   double tCode)
+{
+    auto Y = massFractionsFromU(chem, U);
+    double T = phys.template temperature<3>(U);
+    double p = U[0] * rho0 * chem.mixtureR(ConstSpeciesBufferView{Y.data(), static_cast<int>(Y.size())}) * T;
+    return {tCode, tCode / U0, T, p, std::move(Y)};
+}
+
+static void stepImplicitDNDSR0D(PhysicsProperties<NS_EX> &phys, ChemicalSource &chem,
+                                Eigen::VectorXd &U, double dtCode, double U0, double rho0)
+{
+    int Ns = chem.nSpecies();
+    int Ns1 = Ns - 1;
+    int nVars = static_cast<int>(U.size());
+    int Isp = nVars - Ns1;
+    int I4 = Isp - 1;
+    auto MW = chem.molecularWeights();
+    double invS0 = 1.0 / (rho0 * U0);
+
+    Eigen::VectorXd Uk = U;
+    for (int iter = 0; iter < 80; ++iter)
+    {
+        auto Y = massFractionsFromU(chem, Uk);
+        ConstSpeciesBufferView Yv{Y.data(), Ns};
+        double T = phys.template temperature<3>(Uk);
+        double p = Uk[0] * rho0 * chem.mixtureR(Yv) * T;
+
+        std::vector<double> omega(Ns);
+        chem.productionRates(std::max(T, 200.0), p, Yv, SpeciesBufferView{omega.data(), Ns});
+
+        Eigen::VectorXd ret = Eigen::VectorXd::Zero(nVars);
+        for (int k = 0; k < Ns1; ++k)
+            ret[Isp + k] = omega[k] * MW[k] * invS0;
+
+        std::vector<double> jbuf(Ns * nVars, 0.0);
+        chem.productionRatesAndJacobian(std::max(T, 200.0), p, Uk[0], Uk[I4], 0., 0., 0., I4, U0, rho0, Yv,
+                                        SpeciesBufferView{omega.data(), Ns},
+                                        JacobianBufferView{jbuf.data(), Ns, nVars, Ns});
+
+        Eigen::MatrixXd jac = Eigen::MatrixXd::Zero(nVars, nVars);
+        for (int k = 0; k < Ns1; ++k)
+            for (int j = 0; j < nVars; ++j)
+                jac(Isp + k, j) = MW[k] * jbuf[k + j * Ns] * invS0;
+
+        Eigen::VectorXd F = Uk - U - dtCode * ret;
+        Eigen::MatrixXd Jn = Eigen::MatrixXd::Identity(nVars, nVars) - dtCode * jac;
+        for (int r = 0; r <= I4; ++r)
+        {
+            Jn.row(r) = Eigen::VectorXd::Unit(nVars, r);
+            F[r] = 0;
+        }
+
+        Eigen::VectorXd dU = Jn.partialPivLu().solve(-F);
+        Uk += dU;
+        for (int k = Isp; k < nVars; ++k)
+            Uk[k] = std::max(Uk[k], 1e-30);
+        if (dU.lpNorm<Eigen::Infinity>() < 1e-12)
+            break;
+    }
+    U = Uk;
 }
 
 TEST_CASE("0D const-vol — implicit Euler, species-only Newton, T via PhysicsProperties")
@@ -191,6 +280,119 @@ TEST_CASE("0D const-vol — implicit Euler, species-only Newton, T via PhysicsPr
 
     CHECK(Y_H2_end < 0.025);
     CHECK(Y_H2O_end > 0.001);
+}
+
+TEST_CASE("0D const-vol — react_test history tracks Cantera reactor")
+{
+    std::ifstream fin;
+    for (const char *path : {"cases/eulerEX/react_test.json", "../cases/eulerEX/react_test.json",
+                             "../../cases/eulerEX/react_test.json", "../../../cases/eulerEX/react_test.json"})
+    {
+        fin.open(path);
+        if (fin.good())
+            break;
+        fin.clear();
+    }
+    REQUIRE(fin.good());
+    auto cfg = json::parse(fin, nullptr, true, true);
+
+    auto fx = makeTestFixture();
+    auto &phys = *fx.phys;
+    auto &chem = (*fx.pool)[0];
+    int Ns = chem.nSpecies();
+    int Ns1 = Ns - 1;
+    REQUIRE(Ns == 10);
+
+    double dtCode = cfg.at("timeMarchControl").at("dtImplicit").get<double>();
+    int nSteps = cfg.at("timeMarchControl").at("nTimeStep").get<int>();
+    int outputEvery = std::max(1, cfg.at("outputControl").value("nDataOut", 10));
+    auto state = cfg.at("eulerSettings").at("farFieldStaticValue").get<std::vector<double>>();
+    double U0 = cfg.at("eulerSettings").at("idealGasProperty").value("U0", 379.0);
+    double rho0 = cfg.at("eulerSettings").at("idealGasProperty").value("rho0", 1.0);
+
+    Eigen::VectorXd U(static_cast<int>(state.size()));
+    for (int i = 0; i < U.size(); ++i)
+        U[i] = state[static_cast<size_t>(i)];
+    REQUIRE(U.size() == 5 + Ns1);
+
+    std::vector<TrajectoryPoint> dnds;
+    dnds.push_back(sampleState(phys, chem, U, U0, rho0, 0.0));
+    for (int step = 1; step <= nSteps; ++step)
+    {
+        stepImplicitDNDSR0D(phys, chem, U, dtCode, U0, rho0);
+        if (step % outputEvery == 0 || step == nSteps)
+            dnds.push_back(sampleState(phys, chem, U, U0, rho0, step * dtCode));
+    }
+
+    auto sol = Cantera::newSolution(mechFile(), "", "none");
+    auto gas = sol->thermo();
+    gas->setMassFractions_NoNorm(dnds.front().Y.data());
+    gas->setState_TD(dnds.front().T, rho0 * state[0]);
+    auto reactor = Cantera::newReactorBase("IdealGasReactor", sol);
+    Cantera::ReactorNet net(reactor);
+
+    std::vector<TrajectoryPoint> ct;
+    ct.reserve(dnds.size());
+    double maxRelT = 0, maxRelP = 0, maxAbsY = 0;
+    double maxSettledRelT = 0, maxSettledRelP = 0, maxSettledAbsY = 0;
+    for (const auto &ref : dnds)
+    {
+        if (ref.tPhys > 0)
+            net.advance(ref.tPhys);
+        auto &ctGas = *reactor->phase()->thermo();
+        std::vector<double> Yct(Ns);
+        ctGas.getMassFractions(Yct.data());
+        ct.push_back({ref.tCode, ref.tPhys, ctGas.temperature(), ctGas.pressure(), Yct});
+
+        maxRelT = std::max(maxRelT, std::abs(ref.T - ctGas.temperature()) / std::max(std::abs(ctGas.temperature()), 1.0));
+        maxRelP = std::max(maxRelP, std::abs(ref.p - ctGas.pressure()) / std::max(std::abs(ctGas.pressure()), 1.0));
+        for (int k = 0; k < Ns; ++k)
+            maxAbsY = std::max(maxAbsY, std::abs(ref.Y[k] - Yct[k]));
+        if (ref.tPhys > 3.0e-5)
+        {
+            maxSettledRelT = std::max(maxSettledRelT, std::abs(ref.T - ctGas.temperature()) / std::max(std::abs(ctGas.temperature()), 1.0));
+            maxSettledRelP = std::max(maxSettledRelP, std::abs(ref.p - ctGas.pressure()) / std::max(std::abs(ctGas.pressure()), 1.0));
+            for (int k = 0; k < Ns; ++k)
+                maxSettledAbsY = std::max(maxSettledAbsY, std::abs(ref.Y[k] - Yct[k]));
+        }
+    }
+
+    const auto &last = dnds.back();
+    const auto &lastCt = ct.back();
+    auto ignitionTime = [](const std::vector<TrajectoryPoint> &hist, double threshold)
+    {
+        for (size_t i = 1; i < hist.size(); ++i)
+        {
+            if (hist[i - 1].T <= threshold && hist[i].T >= threshold)
+            {
+                double a = (threshold - hist[i - 1].T) / std::max(hist[i].T - hist[i - 1].T, 1e-300);
+                return hist[i - 1].tPhys + a * (hist[i].tPhys - hist[i - 1].tPhys);
+            }
+        }
+        return hist.back().tPhys;
+    };
+    double threshold = dnds.front().T + 0.5 * (lastCt.T - dnds.front().T);
+    double tauDNDS = ignitionTime(dnds, threshold);
+    double tauCT = ignitionTime(ct, threshold);
+    double finalRelT = std::abs(last.T - lastCt.T) / lastCt.T;
+    double finalRelP = std::abs(last.p - lastCt.p) / lastCt.p;
+    double finalAbsY = 0;
+    for (int k = 0; k < Ns; ++k)
+        finalAbsY = std::max(finalAbsY, std::abs(last.Y[k] - lastCt.Y[k]));
+
+    printf("[react_test-vs-cantera] samples=%zu tPhys=%.6e T[dnds,ct]=[%.6f,%.6f] p[dnds,ct]=[%.6f,%.6f]\n"
+           "    rawMax[relT,relP,absY]=[%.3e,%.3e,%.3e] settledMax=[%.3e,%.3e,%.3e] final=[%.3e,%.3e,%.3e] tau[dnds,ct]=[%.6e,%.6e]\n",
+           dnds.size(), last.tPhys, last.T, lastCt.T, last.p, lastCt.p,
+           maxRelT, maxRelP, maxAbsY, maxSettledRelT, maxSettledRelP, maxSettledAbsY,
+           finalRelT, finalRelP, finalAbsY, tauDNDS, tauCT);
+
+    CHECK(std::abs(tauDNDS - tauCT) < 3.0e-6);
+    CHECK(maxSettledRelT < 5e-3);
+    CHECK(maxSettledRelP < 5e-3);
+    CHECK(maxSettledAbsY < 1.5e-3);
+    CHECK(finalRelT < 5e-3);
+    CHECK(finalRelP < 5e-3);
+    CHECK(finalAbsY < 1.5e-3);
 }
 
 TEST_CASE("Finite-difference Jacobian check at non-initial state")

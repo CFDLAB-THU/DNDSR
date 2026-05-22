@@ -153,3 +153,8 @@ foreach(item IN LISTS DNDS_Euler_Models_List)
 endforeach()
 
 ADD_EXE_APP("eulerState" "app/Euler" "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds;" ON cpp)
+ADD_EXE_APP("canteraConstVolTrajectory" "app/Euler" "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds;" ON cpp)
+target_compile_definitions(canteraConstVolTrajectory PRIVATE CT_USE_SYSTEM_FMT=1)
+if(DNDS_CANTERA_DATA_DIR)
+    target_compile_definitions(canteraConstVolTrajectory PRIVATE DNDS_CANTERA_DATA_DIR="${DNDS_CANTERA_DATA_DIR}")
+endif()

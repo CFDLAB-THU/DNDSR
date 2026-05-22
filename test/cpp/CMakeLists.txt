@@ -399,6 +399,7 @@ euler_add_unit_test(source_chemical "Euler/test_SourceChemical.cpp" "euler_libra
 euler_add_unit_test(uv "Euler/test_UV.cpp" "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds")
 euler_add_unit_test(physics_properties "Euler/test_PhysicsProperties.cpp" "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds")
 euler_add_unit_test(chem_ode "Euler/test_ChemODE.cpp" "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds")
+target_compile_definitions(euler_test_chem_ode PRIVATE CT_USE_SYSTEM_FMT=1)
 
 # EulerEvaluator pipeline test: needs full Euler libraries for NS, NS_SA, NS_3D
 euler_add_mpi_test(evaluator_pipeline "Euler/test_EulerEvaluator.cpp"
