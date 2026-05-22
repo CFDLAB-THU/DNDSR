@@ -1815,10 +1815,16 @@ namespace DNDS::Euler
                     int nV = static_cast<int>(cx[iCell].size());
                     int Isp = nV - Ns1;               // first transported species index
                     constexpr real rhoYFloor = 1e-30; // tiny positive floor (matches 0D ODE)
+                    real rhoHBeforeClip = phys_.mixtureFormationRhoE(cx[iCell]);
+                    bool speciesClipped = false;
 
                     // (1) Clip each rhoY_k >= rhoYFloor
                     for (int k = 0; k < Ns1; ++k)
-                        cx[iCell](Isp + k) = std::max(cx[iCell](Isp + k), rhoYFloor);
+                    {
+                        real rhoYOld = cx[iCell](Isp + k);
+                        cx[iCell](Isp + k) = std::max(rhoYOld, rhoYFloor);
+                        speciesClipped = speciesClipped || (cx[iCell](Isp + k) != rhoYOld);
+                    }
 
                     // (2) Enforce rho - sum(rhoY_k) > 0  (dependent species > 0)
                     real sumRhoY = 0;
@@ -1831,6 +1837,16 @@ namespace DNDS::Euler
                         real scale = rho / sumRhoY * (1.0 - 1e-14);
                         for (int k = 0; k < Ns1; ++k)
                             cx[iCell](Isp + k) *= scale;
+                        speciesClipped = true;
+                    }
+
+                    if (speciesClipped)
+                    {
+                        // Preserve the sensible part of rhoE across species repair.
+                        // The clipping changes rhoH_form through rhoY_k; total rhoE
+                        // must move by the same amount so rhoE - rhoH_form stays fixed.
+                        real rhoHAfterClip = phys_.mixtureFormationRhoE(cx[iCell]);
+                        cx[iCell](I4) += rhoHAfterClip - rhoHBeforeClip;
                     }
                 }
 

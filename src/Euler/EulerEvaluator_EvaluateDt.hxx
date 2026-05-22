@@ -1282,15 +1282,53 @@ namespace DNDS::Euler
         lam123V.resize(nB);
         lam4V.resize(nB);
 
+        real T_Lm_rs = phys_.template temperature<dim>(ULMeanXy);
+        real gammaLm_rs = phys_.template gammaEq<dim>(T_Lm_rs, ULMeanXy);
+        real T_Rm_rs = phys_.template temperature<dim>(URMeanXy);
+        real gammaRm_rs = phys_.template gammaEq<dim>(T_Rm_rs, URMeanXy);
+        real gamma_rs = gammaLm_rs;
+
+        TU gammaLV, gammaRV, rhoHLV, rhoHRV;
+        if (phys_.hasChemicalSource())
+        {
+            gammaLV.resize(nB);
+            gammaRV.resize(nB);
+            rhoHLV.resize(nB);
+            rhoHRV.resize(nB);
+            for (int iB = 0; iB < nB; ++iB)
+            {
+                TU uL = ULxy(EigenAll, iB);
+                TU uR = URxy(EigenAll, iB);
+                real TL = phys_.template temperature<dim>(uL);
+                real TR = phys_.template temperature<dim>(uR);
+                gammaLV(iB) = phys_.template gammaEq<dim>(TL, uL);
+                gammaRV(iB) = phys_.template gammaEq<dim>(TR, uR);
+                rhoHLV(iB) = phys_.mixtureFormationRhoE(uL);
+                rhoHRV(iB) = phys_.mixtureFormationRhoE(uR);
+            }
+        }
+
         auto RSWrapper_XY =
             [&](Gas::RiemannSolverType rsType,
                 auto &&UL, auto &&UR, auto &&ULm, auto &&URm, auto &&vg, auto &&n,
                 real gamma, auto &&finc, real dLambda, real fixScale, real incFScale,
                 real &lam0, real &lam123, real &lam4)
         {
-            Gas::InviscidFlux_IdealGas_Dispatcher<dim>(rsType, UL, UR, ULm, URm, vg, n, gamma, finc, dLambda, fixScale,  incFScale,exitFun, lam0, lam123, lam4,
-                phys_.mixtureFormationRhoE(UL), phys_.mixtureFormationRhoE(UR),
-                phys_.mixtureFormationRhoE(ULm), phys_.mixtureFormationRhoE(URm));
+            if (phys_.hasChemicalSource())
+            {
+                real TL = phys_.template temperature<dim>(UL);
+                real TR = phys_.template temperature<dim>(UR);
+                real gammaL = phys_.template gammaEq<dim>(TL, UL);
+                real gammaR = phys_.template gammaEq<dim>(TR, UR);
+                Gas::InviscidFlux_IdealGas_Dispatcher<dim, true>(rsType, UL, UR, ULm, URm, vg, n, gamma, finc, dLambda, fixScale, incFScale, exitFun, lam0, lam123, lam4,
+                    phys_.mixtureFormationRhoE(UL), phys_.mixtureFormationRhoE(UR),
+                    phys_.mixtureFormationRhoE(ULm), phys_.mixtureFormationRhoE(URm),
+                    gammaL, gammaR, gammaLm_rs, gammaRm_rs);
+            }
+            else
+                Gas::InviscidFlux_IdealGas_Dispatcher<dim>(rsType, UL, UR, ULm, URm, vg, n, gamma, finc, dLambda, fixScale, incFScale, exitFun, lam0, lam123, lam4,
+                    phys_.mixtureFormationRhoE(UL), phys_.mixtureFormationRhoE(UR),
+                    phys_.mixtureFormationRhoE(ULm), phys_.mixtureFormationRhoE(URm));
         };
 
         // TU_Batch finc1;
@@ -1302,21 +1340,28 @@ namespace DNDS::Euler
             rsType = settings.rsTypeWall;
         }
 
-        real T_rs = phys_.template temperature<dim>(ULMeanXy);
-        real gamma_rs = phys_.template gammaEq<dim>(T_rs, ULMeanXy);
-
         auto runRsOnNorm = [&]()
         {
             if (settings.rsMeanValueEig != 0 &&
                 (rsType >= Gas::Roe_M1 && rsType <= Gas::Roe_M5))
             {
                 real lam0{0}, lam123{0}, lam4{0};
-                Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
-                    rsType,
-                    ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, unitNorm, unitNormC,
-                    gamma_rs, finc, dLambda, fixScale, incFScale,
-                    exitFun, lam0, lam123, lam4,
-                    phys_.mixtureFormationRhoE(ULMeanXy), phys_.mixtureFormationRhoE(URMeanXy));
+                if (phys_.hasChemicalSource())
+                    Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim, true, true>(
+                        rsType,
+                        ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, unitNorm, unitNormC,
+                        gamma_rs, finc, dLambda, fixScale, incFScale,
+                        exitFun, lam0, lam123, lam4,
+                        phys_.mixtureFormationRhoE(ULMeanXy), phys_.mixtureFormationRhoE(URMeanXy),
+                        rhoHLV, rhoHRV, gammaLV, gammaRV, gammaLm_rs, gammaRm_rs);
+                else
+                    Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
+                        rsType,
+                        ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, unitNorm, unitNormC,
+                        gamma_rs, finc, dLambda, fixScale, incFScale,
+                        exitFun, lam0, lam123, lam4,
+                        phys_.mixtureFormationRhoE(ULMeanXy), phys_.mixtureFormationRhoE(URMeanXy),
+                        nullptr, nullptr, nullptr, nullptr);
                 lam0V.setConstant(lam0);
                 lam123V.setConstant(lam123);
                 lam4V.setConstant(lam4);
@@ -1400,12 +1445,22 @@ namespace DNDS::Euler
                     (rsTypeAux >= Gas::Roe_M1 && rsTypeAux <= Gas::Roe_M5))
                 {
                     real lam0{0}, lam123{0}, lam4{0};
-                    Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
-                        rsTypeAux,
-                        ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, N1B, N1,
-                        gamma_rs, F1, dLambda, fixScale, incFScale,
-                        exitFun, lam0, lam123, lam4,
-                        phys_.mixtureFormationRhoE(ULMeanXy), phys_.mixtureFormationRhoE(URMeanXy));
+                    if (phys_.hasChemicalSource())
+                        Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim, true, true>(
+                            rsTypeAux,
+                            ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, N1B, N1,
+                            gamma_rs, F1, dLambda, fixScale, incFScale,
+                            exitFun, lam0, lam123, lam4,
+                            phys_.mixtureFormationRhoE(ULMeanXy), phys_.mixtureFormationRhoE(URMeanXy),
+                            rhoHLV, rhoHRV, gammaLV, gammaRV, gammaLm_rs, gammaRm_rs);
+                    else
+                        Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
+                            rsTypeAux,
+                            ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, N1B, N1,
+                            gamma_rs, F1, dLambda, fixScale, incFScale,
+                            exitFun, lam0, lam123, lam4,
+                            phys_.mixtureFormationRhoE(ULMeanXy), phys_.mixtureFormationRhoE(URMeanXy),
+                            nullptr, nullptr, nullptr, nullptr);
                     lam0V1.setConstant(lam0);
                     lam123V1.setConstant(lam123);
                     lam4V1.setConstant(lam4);
@@ -1423,12 +1478,22 @@ namespace DNDS::Euler
                     (rsType >= Gas::Roe_M1 && rsType <= Gas::Roe_M5))
                 {
                     real lam0{0}, lam123{0}, lam4{0};
-                    Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
-                        rsType,
-                        ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, N2, N2C,
-                        gamma_rs, finc, dLambda, fixScale, incFScale,
-                        exitFun, lam0, lam123, lam4,
-                        phys_.mixtureFormationRhoE(ULMeanXy), phys_.mixtureFormationRhoE(URMeanXy));
+                    if (phys_.hasChemicalSource())
+                        Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim, true, true>(
+                            rsType,
+                            ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, N2, N2C,
+                            gamma_rs, finc, dLambda, fixScale, incFScale,
+                            exitFun, lam0, lam123, lam4,
+                            phys_.mixtureFormationRhoE(ULMeanXy), phys_.mixtureFormationRhoE(URMeanXy),
+                            rhoHLV, rhoHRV, gammaLV, gammaRV, gammaLm_rs, gammaRm_rs);
+                    else
+                        Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
+                            rsType,
+                            ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, N2, N2C,
+                            gamma_rs, finc, dLambda, fixScale, incFScale,
+                            exitFun, lam0, lam123, lam4,
+                            phys_.mixtureFormationRhoE(ULMeanXy), phys_.mixtureFormationRhoE(URMeanXy),
+                            nullptr, nullptr, nullptr, nullptr);
                     lam0V.setConstant(lam0);
                     lam123V.setConstant(lam123);
                     lam4V.setConstant(lam4);
@@ -2248,6 +2313,9 @@ namespace DNDS::Euler
         Geom::t_index btype)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+        DNDS_check_throw_info(!settings.reactiveFlow.enabled,
+                              "Reactive flow does not support built-in special far-field BCs; "
+                              "use explicit reactive farfield/inflow/outflow BCs instead.");
         TU URxy;
         URxy.resizeLike(ULxy);
 
@@ -2562,13 +2630,12 @@ namespace DNDS::Euler
             Gas::IdealGasThermalConservative2Primitive<dim>(URxy, URxyPrim, gamma,
                                                             phys_.mixtureFormationRhoE(URxy));
             DNDS_assert_info(URxyPrim(0) > 0 && URxyPrim(I4) > 0 && temp > 0, fmt::format("{}, {}, {}", URxyPrim(0), URxyPrim(I4), temp));
-            real oldDensity = URxy(0);
             real newDensity = URxyPrim(I4) / temp / phys_.Rgas(URxy);
             URxyPrim(0) = newDensity;
-            // Scale formation energy to match new density (mass fractions Y_k unchanged,
-            // so rhoH_form ∝ rho).
-            real rhoH_form_new = phys_.mixtureFormationRhoE(URxy) * newDensity / oldDensity;
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(URxyPrim, URxy, gamma, rhoH_form_new);
+            if (phys_.hasChemicalSource())
+                phys_.template primToConservative<dim>(URxyPrim, URxy);
+            else
+                Gas::IdealGasThermalPrimitive2Conservative<dim>(URxyPrim, URxy, gamma, 0);
         }
         if constexpr (Traits::hasSA)
         {
@@ -2743,6 +2810,10 @@ namespace DNDS::Euler
 
             // Build an approximate conservative state with inflow species so Cp and Rgas
             // reflect the correct mixture (not just the interior composition).
+            // TODO(reactive-BCInPsTs): this total-condition inflow still uses a
+            // one-shot static-state estimate.  A reactive-consistent treatment
+            // should iterate stagnation T/p -> static T/p/rho with the inflow
+            // composition, velocity magnitude, gammaEq, and formation energy.
             TU inflowState;
             inflowState.resizeLike(ULxyStatic);
             farPrimitive(0) = ULxyStatic(0);      // placeholder density for species query

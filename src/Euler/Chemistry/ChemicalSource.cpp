@@ -193,11 +193,33 @@ namespace DNDS::Euler::Chemistry
         std::vector<double> uBar(I.Ns);
         I.gas->getPartialMolarIntEnergies(uBar.data());
 
+        // DNDSR recovers Cantera temperature from a shifted internal-energy
+        // convention: u_cantera = u_DNDSR - pV_ref(Y) - e_sens_ref(Y).  At fixed
+        // conservative rhoE, species perturbations therefore change the energy
+        // sent to Cantera by the derivative of this reference offset.  For the
+        // currently supported ideal-gas bridge, pV_ref + e_sens_ref equals
+        // cp_k(T_ref) * T_ref per species mass.
+        // TODO(reactive-PP-lower-bound): this bridge is ideal-gas/reference-
+        // convention specific.  PP currently assumes a near-zero sensible-energy
+        // lower bound, while Cantera mechanisms have a finite valid T range; a
+        // general EOS path needs an EOS-aware minimum-energy definition.
+        int Ns1 = I.Ns - 1;
+        std::vector<double> refOffsetSpecies(I.Ns, 0.0);
+        if (I.gas->isIdeal())
+        {
+            std::vector<double> cpBarRef(I.Ns);
+            I.gasT->setMassFractions_NoNorm(Y.data);
+            I.gasT->setState_TP(298.15, 101325);
+            I.gasT->getPartialMolarCp(cpBarRef.data());
+            for (int k = 0; k < I.Ns; ++k)
+                refOffsetSpecies[k] = cpBarRef[k] * 298.15 / std::max(I.mw[k], 1e-30);
+        }
+        std::vector<double> compositionEnergyDiff(Ns1, 0.0);
+
         // zero Jacobian
         for (int idx = 0; idx < J.rows * J.cols; ++idx)
             J.data[idx] = 0;
 
-        int Ns1 = I.Ns - 1;
         int speciesCol0 = iEnergy + 1;
 
         double cv = I.gas->cv_mass();
@@ -223,7 +245,13 @@ namespace DNDS::Euler::Chemistry
             double invMk = 1.0 / std::max(I.mw[k], 1e-30);
             double du = uBar[k] * invMk; // specific internal energy [J/kg], EOS-agnostic
             if (!skipAbsorb)
+            {
                 du -= uBar[Ns1] * invMlast;
+                du += refOffsetSpecies[k] - refOffsetSpecies[Ns1];
+            }
+            else
+                du += refOffsetSpecies[k];
+            compositionEnergyDiff[k] = du;
             double dT_drY = dT_pre * du;
             for (int i = 0; i < nRows; ++i)
             {
@@ -258,9 +286,17 @@ namespace DNDS::Euler::Chemistry
 
         // ∂ω/∂ρ_code = ∂ω/∂T·dT/dρ_code + ∂ω/∂C_last·∂C_last/∂ρ_code
         //   ∂C_last/∂ρ_code = rhoScale/M_last  (since ∂(ρ·Y_last)/∂ρ = 1 at fixed ρY_k)
-        // NOTE: dT_drho = −vs2·rhoE·rhoInv²/cvSafe omits the +vs2·(|v|²/2)/(ρ·cvSafe)
-        //   contribution from ∂KE/∂ρ in the e_sensible chain rule.  Masked by JAC_SKIP_FLUID.
-        double dT_drho = -vs2 * rhoE * rhoInv * rhoInv / cvSafe;
+        // At fixed conservative rhoE and transported rhoY_k, changing rho also
+        // changes composition: dY_k/dρ = -Y_k/ρ, dY_last/dρ = ΣY_k/ρ.  Because
+        // PhysicsProperties sends u_DNDSR - offset(Y) to Cantera, dT/dρ needs
+        // the matching -d(offset)/dρ contribution in addition to -rhoE/rho².
+        // NOTE: the kinetic-energy +|v|²/(2ρcv) term is still omitted here and
+        // remains masked by JAC_SKIP_FLUID in production paths.
+        double dComposition_drho = 0.0;
+        if (!skipAbsorb)
+            for (int k = 0; k < Ns1; ++k)
+                dComposition_drho += Y[k] * compositionEnergyDiff[k] * rhoInv;
+        double dT_drho = (-vs2 * rhoE * rhoInv * rhoInv + dComposition_drho) / cvSafe;
         for (int i = 0; i < nRows; ++i)
         {
             double d = I.bufDwdt[i] * dT_drho;

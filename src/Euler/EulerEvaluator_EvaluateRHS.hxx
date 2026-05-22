@@ -482,7 +482,10 @@ namespace DNDS::Euler
                             DNDS_assert_info(ULcPrim(0) > 0 && ULcPrim(I4) > 0 && temp > 0, fmt::format("{}, {}, {}", ULcPrim(0), ULcPrim(I4), temp));
                             real newDensity = ULcPrim(I4) / temp / phys_.Rgas(ULc);
                             ULcPrim(0) = newDensity;
-                            Gas::IdealGasThermalPrimitive2Conservative<dim>(ULcPrim, ULc, phys_.template gammaEq<dim>(T_noRS, ULc), phys_.mixtureFormationRhoE(ULc));
+                            if (phys_.hasChemicalSource())
+                                phys_.template primToConservative<dim>(ULcPrim, ULc);
+                            else
+                                Gas::IdealGasThermalPrimitive2Conservative<dim>(ULcPrim, ULc, phys_.template gammaEq<dim>(T_noRS, ULc), 0);
                         }
                         ULxy = ULc;
                         URxy = ULc;
