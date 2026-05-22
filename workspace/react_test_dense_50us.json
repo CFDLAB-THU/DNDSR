@@ -1,0 +1,123 @@
+{
+    "$schema": "../cases/eulerSA_schema.json",
+    "timeMarchControl": {
+        "dtImplicit": 1e-4,
+        "nTimeStep": 190,
+        "steadyQuit": false,
+        "tEnd": 1e100,
+        "odeCode": 103,
+        "odeSetting1": 0.5,
+        "rhsFPPMode": 0,
+        "rhsFPPScale": 1,
+        "useDtPPLimit": false,
+        "dtPPLimitScale": 1
+    },
+    "outputControl": {
+        "nConsoleCheck": 20,
+        "nConsoleCheckInternal": 1000,
+        "nDataOutC": 1,
+        "nDataOut": 1,
+        "tDataOut": 3e200,
+        "dataOutAtInit": true,
+        "consoleMainOutputFormat": [
+            "=== Step {termBold}[{step:4d}]   ",
+            "res {termBold}{termRed}{resRel:.3e}{termReset}   ",
+            "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc}), betaRec({nLimBeta},{minBeta}), alphaRes({nLimAlpha},{minBeta})]]{termReset}   ",
+            "Time[{telapsed:.3f}]"
+        ],
+        "consoleMainOutputFormatInternal": [
+            ""
+        ]
+    },
+    "implicitCFLControl": {
+        "CFL": 1,
+        "useLocalDt": false
+    },
+    "convergenceControl": {
+        "nTimeStepInternal": 10,
+        "nTimeStepInternalMin": 5,
+        "rhsThresholdInternal": 0.0001,
+        "res_base": 0,
+        "useVolWiseResidual": true
+    },
+    "dataIOControl": {
+        "uniqueStamps": true,
+        "meshFile": "../data/mesh/IV10_10.cgns",
+        "outPltName": "../workspace/eulerEX_dense_50us/react_",
+        "outPltMode": 0,
+        "readMeshMode": 0,
+        "outPltTecplotFormat": false,
+        "outPltVTKFormat": true,
+        "outAtPointData": true,
+        "outAtCellData": true,
+        "outCellScalarNames": ["RE"]
+    },
+    "boundaryDefinition": {
+        "PeriodicTranslation1": [10.0, 0.0, 0.0],
+        "PeriodicTranslation2": [0.0, 10.0, 0.0]
+    },
+    "limiterControl": {
+        "useLimiter": true,
+        "usePPRecLimiter": false,
+        "nPartialLimiterStart": 1000000
+    },
+    "linearSolverControl": {
+        "jacobiCode": 0,
+        "sgsIter": 5,
+        "gmresCode": 0,
+        "nSgsConsoleCheck": 100,
+        "sourceTauSplitting": 0
+    },
+    "implicitReconstructionControl": {
+        "nInternalRecStep": 1,
+        "recLinearScheme": 0
+    },
+    "vfvSettings": {
+        "maxOrder": 1,
+        "intOrder": 1,
+        "jacobiRelax": 0,
+        "SORInstead": true,
+        "smoothThreshold": 0.001,
+        "WBAP_nStd": 10.0,
+        "subs2ndOrder": 0
+    },
+    "eulerSettings": {
+        "ignoreSourceTerm": false,
+        "useScalarJacobian": false,
+        "riemannSolverType": "Roe_M2",
+        "rsMeanValueEig": 1,
+        "uRecAlphaCompressPower": 1.0,
+        "uRecBetaCompressPower": 1.0,
+        "ppEpsIsRelaxed": true,
+        "ransModel": "RANS_None",
+        "reactiveFlow": {
+            "enabled": true,
+            "mechanismFile": "h2o2.yaml"
+        },
+        "farFieldStaticValue": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            8.833548636547896,
+            0.028,
+            0.0,
+            0.0,
+            0.222,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+        ],
+        "constMassForce": [0.0, 0.0, 0.0],
+        "idealGasProperty": {
+            "gamma": 1.4,
+            "Rgas": 287,
+            "muGas": 1e-200,
+            "prGas": 0.72,
+            "U0": 379
+        }
+    },
+    "bcSettings": []
+}
