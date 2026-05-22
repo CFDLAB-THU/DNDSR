@@ -298,17 +298,20 @@ namespace DNDS::Euler::Chemistry
 
         // ∂ω/∂ρ_code = ∂ω/∂T·dT/dρ_code + ∂ω/∂C_last·∂C_last/∂ρ_code
         //   ∂C_last/∂ρ_code = rhoScale/M_last  (since ∂(ρ·Y_last)/∂ρ = 1 at fixed ρY_k)
-        // At fixed conservative rhoE and transported rhoY_k, changing rho also
-        // changes composition: dY_k/dρ = -Y_k/ρ, dY_last/dρ = ΣY_k/ρ.  Because
-        // PhysicsProperties sends u_DNDSR - offset(Y) to Cantera, dT/dρ needs
-        // the matching -d(offset)/dρ contribution in addition to -rhoE/rho².
-        // NOTE: the kinetic-energy +|v|²/(2ρcv) term is still omitted here and
-        // remains masked by JAC_SKIP_FLUID in production paths.
+        // At fixed conservative rhoE, momentum, and transported rhoY_k:
+        //   u = U0²·(ρE/ρ - |ρu|²/(2ρ²)) - offset(Y)
+        // so dT/dρ includes both the total-energy term -U0²·ρE/ρ² and the
+        // kinetic correction +U0²·|ρu|²/ρ³, plus the composition/reference-
+        // offset contribution from dY_k/dρ = -Y_k/ρ, dY_last/dρ = ΣY_k/ρ.
         double dComposition_drho = 0.0;
         if (!skipAbsorb)
             for (int k = 0; k < Ns1; ++k)
                 dComposition_drho += Y[k] * compositionEnergyDiff[k] * rhoInv;
-        double dT_drho = (-vs2 * rhoE * rhoInv * rhoInv + dComposition_drho) / cvSafe;
+        double rhoMomentum2 = rhoU * rhoU + rhoV * rhoV + rhoW * rhoW;
+        double dT_drho = (-vs2 * rhoE * rhoInv * rhoInv +
+                          vs2 * rhoMomentum2 * rhoInv * rhoInv * rhoInv +
+                          dComposition_drho) /
+                         cvSafe;
         for (int i = 0; i < nRows; ++i)
         {
             double d = I.bufDwdt[i] * dT_drho;
