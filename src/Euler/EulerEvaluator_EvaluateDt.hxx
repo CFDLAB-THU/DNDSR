@@ -2802,7 +2802,14 @@ namespace DNDS::Euler
         {
             TU bcValue = pBCHandler->GetValueFromID(btype);
             TU farPrimitive = bcValue; // primitive passive scalar components like species/RANS variables
-            farPrimitive(Seq123) = bcValue(Seq234).normalized() * std::sqrt(vSqr);
+            real dirNorm = bcValue(Seq234).norm();
+            DNDS_check_throw_info(std::isfinite(dirNorm) && dirNorm > 1e-14,
+                                  fmt::format("BCInPsTs requires a finite nonzero direction vector for boundary id {}", btype));
+            real dirDotNormal = bcValue(Seq234).dot(uNorm);
+            DNDS_check_throw_info(std::isfinite(dirDotNormal) && dirDotNormal < -1e-14 * dirNorm,
+                                  fmt::format("BCInPsTs direction must point into the domain for boundary id {}; direction dot outward normal = {:.3e}",
+                                              btype, dirDotNormal));
+            farPrimitive(Seq123) = bcValue(Seq234) * (std::sqrt(vSqr) / dirNorm);
             phys_.template totalToStaticPrimitive<dim>(bcValue(0), bcValue(1), farPrimitive);
             phys_.template primToConservative<dim>(farPrimitive, URxy);
         }

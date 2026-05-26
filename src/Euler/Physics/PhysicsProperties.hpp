@@ -31,6 +31,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #ifdef DNDS_DIST_MT_USE_OMP
 #    include <omp.h>
 #endif
@@ -53,7 +54,7 @@ namespace DNDS::Euler
             real gammaTolerance = 1e-8;          ///< primToConservative gamma fixed-point tolerance.
             int gammaMaxIterations = 10;         ///< primToConservative gamma fixed-point cap.
             real totalToStaticTolerance = 1e-10; ///< total-condition static-state fixed-point tolerance.
-            int totalToStaticMaxIterations = 20; ///< total-condition fixed-point cap.
+            int totalToStaticMaxIterations = 60; ///< total-condition bisection cap.
         };
 
         explicit PhysicsProperties(const IdealGas &ig) : igProp_(std::make_unique<const IdealGas>(ig)) {}
@@ -389,6 +390,9 @@ namespace DNDS::Euler
 
             DNDS_assert_info(chem().isIdealGas(),
                              "totalToStaticPrimitive(): reactive total-condition conversion requires ideal-gas EOS");
+            DNDS_check_throw_info(std::isfinite(options.totalToStaticTolerance) && options.totalToStaticTolerance > 0,
+                                  fmt::format("totalToStaticPrimitive(): invalid tolerance {:.3e}",
+                                              options.totalToStaticTolerance));
 
             auto &c = chem();
             int Ns1 = c.nSpecies() - 1;
@@ -414,18 +418,27 @@ namespace DNDS::Euler
             double THi = TTotalPhys;
             double TStaticPhys = THi;
             int maxIterations = std::max(options.totalToStaticMaxIterations, 1);
+            double finalErr = std::numeric_limits<double>::infinity();
+            bool converged = false;
             for (int iter = 0; iter < maxIterations; ++iter)
             {
                 TStaticPhys = 0.5 * (TLo + THi);
                 double hMid = c.mixtureEnthalpy(TStaticPhys, Y, pTotalPhys);
-                double err = std::abs(hMid - hTarget) / std::max(std::abs(hTarget), 1.0);
-                if (err < options.totalToStaticTolerance)
+                finalErr = std::abs(hMid - hTarget) / std::max(std::abs(hTarget), 1.0);
+                if (finalErr < options.totalToStaticTolerance)
+                {
+                    converged = true;
                     break;
+                }
                 if (hMid < hTarget)
                     TLo = TStaticPhys;
                 else
                     THi = TStaticPhys;
             }
+            DNDS_check_throw_info(converged,
+                                  fmt::format("totalToStaticPrimitive(): failed to converge after {} bisections; residual={:.3e}, tolerance={:.3e}, Ttotal={:.6e} K, ptotal={:.6e} Pa",
+                                              maxIterations, finalErr, options.totalToStaticTolerance,
+                                              TTotalPhys, pTotalPhys));
 
             real Rgas = toCode(c.mixtureR(Y));
             double sAtPtotal = c.mixtureEntropy(TStaticPhys, Y, pTotalPhys);

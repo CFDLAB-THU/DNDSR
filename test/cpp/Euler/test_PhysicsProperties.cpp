@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -232,4 +233,36 @@ TEST_CASE("PhysicsProperties reactive total-to-static conversion iterates mixtur
     CHECK(primStatic(0) == doctest::Approx(rhoExpected).epsilon(1e-11));
     CHECK(TStatic < TTotal);
     CHECK(primStatic(4) < pTotal);
+}
+
+TEST_CASE("PhysicsProperties reactive total-to-static default options converge or throw")
+{
+    auto fx = makeReactiveFixture();
+    auto &phys = *fx.phys;
+    auto &chem = (*fx.pool)[0];
+    int Ns = chem.nSpecies();
+    int Ns1 = Ns - 1;
+    REQUIRE(Ns == 10);
+
+    using TU = typename PhysicsProperties<NS_EX>::TU;
+    TU primStatic(5 + Ns1);
+    primStatic.setZero();
+    primStatic(1) = 150.0 / 379.0;
+    primStatic(2) = -30.0 / 379.0;
+    primStatic(3) = 15.0 / 379.0;
+    primStatic(5 + 0) = 0.028;
+    primStatic(5 + 3) = 0.222;
+
+    real pTotal = 101325.0 / (379.0 * 379.0);
+    real TTotal = 1200.0;
+
+    TU primDefault = primStatic;
+    phys.template totalToStaticPrimitive<3>(pTotal, TTotal, primDefault);
+    CHECK(primDefault(0) > 0);
+    CHECK(primDefault(4) > 0);
+
+    auto tooFewIterations = strictReactiveOptions();
+    tooFewIterations.totalToStaticMaxIterations = 1;
+    TU primFail = primStatic;
+    CHECK_THROWS_AS(phys.template totalToStaticPrimitive<3>(pTotal, TTotal, primFail, tooFewIterations), std::runtime_error);
 }

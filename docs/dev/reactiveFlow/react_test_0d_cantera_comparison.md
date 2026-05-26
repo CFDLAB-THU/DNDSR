@@ -1,6 +1,8 @@
 # `react_test.json` 0D Reactive Trajectory Comparison
 
-Code commit used for the results: `d2df97c32db7866a49ca13b7fa385806763126c0`
+Numerical code commit used for the recorded results: `d2df97c32db7866a49ca13b7fa385806763126c0`.
+The report, dense case, and plotting script were committed later, so reproduce
+from a checkout that contains those artifacts.
 
 This note records how the 0D reactive trajectory in `cases/eulerEX/react_test.json`
 was compared against a direct Cantera constant-volume reactor and an actual
@@ -25,6 +27,8 @@ The standalone app `canteraConstVolTrajectory` reads the case, reconstructs the
 initial physical state, and runs Cantera directly:
 
 ```bash
+DNDS_MECH_PATH=external/cfd_externals/install/data \
+CANTERA_DATA=external/cfd_externals/install/data \
 build/app/canteraConstVolTrajectory.exe \
   workspace/react_test_dense_50us.json \
   workspace/react_test_dense_50us_cantera_phys_history.csv
@@ -65,12 +69,15 @@ The actual solver comparison used a dense variant of `react_test.json` with:
 The solver was run from `build/`:
 
 ```bash
-DNDS_MECH_PATH=../external/cfd_externals/install/data \
-CANTERA_DATA=../external/cfd_externals/install/data \
-./app/eulerEX.exe 14 ../workspace/react_test_dense_50us.json
+(cd build && \
+  DNDS_MECH_PATH=../external/cfd_externals/install/data \
+  CANTERA_DATA=../external/cfd_externals/install/data \
+  ./app/eulerEX.exe 14 ../workspace/react_test_dense_50us.json)
 ```
 
-The parser reads the newest `workspace/eulerEX_dense_50us/react__*.vtu` series.
+The parser reads the `workspace/eulerEX_dense_50us/react__*.vtu` series selected
+by explicit output prefix. If the output directory contains exactly one run, the
+prefix can be inferred; otherwise pass `--prefix react__...`.
 For each file it extracts and cell-averages:
 
 - `FieldData/TIME` as code time
@@ -90,7 +97,7 @@ The figure shows the first `50 us` of physical time. The line styles are:
 
 - Blue dashed: direct Cantera `IdealGasReactor` / `ReactorNet`
 - Orange solid: DNDSR Physics/0D reproduction
-- Black dot-dash with open markers: actual `eulerEX` run using the dense case
+- Green solid line with dot markers: actual `eulerEX` run using the dense case
 
 ## Results
 
@@ -130,6 +137,8 @@ cmake --build build -t eulerEX canteraConstVolTrajectory -j32
 Generate the dense Cantera/Physics trajectory:
 
 ```bash
+DNDS_MECH_PATH=external/cfd_externals/install/data \
+CANTERA_DATA=external/cfd_externals/install/data \
 build/app/canteraConstVolTrajectory.exe \
   workspace/react_test_dense_50us.json \
   workspace/react_test_dense_50us_cantera_phys_history.csv
@@ -138,14 +147,19 @@ build/app/canteraConstVolTrajectory.exe \
 Run the dense solver case:
 
 ```bash
-cd build
-DNDS_MECH_PATH=../external/cfd_externals/install/data \
-CANTERA_DATA=../external/cfd_externals/install/data \
-./app/eulerEX.exe 14 ../workspace/react_test_dense_50us.json
+(cd build && \
+  DNDS_MECH_PATH=../external/cfd_externals/install/data \
+  CANTERA_DATA=../external/cfd_externals/install/data \
+  ./app/eulerEX.exe 14 ../workspace/react_test_dense_50us.json)
 ```
 
 Regenerate the plot:
 
 ```bash
-python workspace/plot_react_test_dense_50us_three.py
+python workspace/plot_react_test_dense_50us_three.py --prefix react__YYYYMMDD_HHMMSS
 ```
+
+Omit `--prefix` only when `workspace/eulerEX_dense_50us/` contains exactly one
+`react__*.log` run. The script writes the regenerated plot to
+`workspace/react_test_dense_50us_compare.png`; it does not overwrite the
+committed figure under `docs/dev/reactiveFlow/`.
