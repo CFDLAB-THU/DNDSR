@@ -1079,18 +1079,7 @@ namespace DNDS::Geom
                 if (v.ref.son)
                     bytes += v.ref.son->FullSizeBytes();
             };
-            for_each_member_list(
-                this->device_array_list_primary(),
-                acuumulate_bytes_arr);
-            for_each_member_list(
-                this->device_array_list_facial(),
-                acuumulate_bytes_arr);
-            for_each_member_list(
-                this->device_array_list_C2F(),
-                acuumulate_bytes_arr);
-            for_each_member_list(
-                this->device_array_list_N2CB(),
-                acuumulate_bytes_arr);
+            op_on_device_arrays(acuumulate_bytes_arr);
             MPI::AllreduceOneIndex(bytes, MPI_SUM, mpi);
             return bytes;
         }

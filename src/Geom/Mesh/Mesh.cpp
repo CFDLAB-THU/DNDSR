@@ -1246,6 +1246,8 @@ namespace DNDS::Geom
         if (isPeriodic)
             face2nodePbi.father = globalResult.entity2nodePbi.father;
         cell2facePbi.father = globalResult.parent2entityPbi.father;
+        if (isPeriodic)
+            cell2facePbi.father->Compress();
 
         // Populate cell2face from parent2entity (global face IDs).
         for (index iCell = 0; iCell < nCellAll; iCell++)
