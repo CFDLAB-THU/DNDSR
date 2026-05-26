@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import base64
 import csv
 import re
@@ -15,6 +16,21 @@ OUT_PATH = ROOT / "react_test_dense_50us_compare.png"
 OUT_DIR = ROOT / "eulerEX_dense_50us"
 U0 = 379.0
 P0 = U0 * U0
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Plot dense react_test comparison from explicit eulerEX output prefix."
+    )
+    parser.add_argument(
+        "--prefix",
+        help="Solver output prefix, for example react__20260522_153012. Required if multiple logs exist.",
+    )
+    parser.add_argument("--solver-dir", type=Path, default=OUT_DIR)
+    parser.add_argument("--ref-csv", type=Path, default=REF_CSV)
+    parser.add_argument("--solver-csv", type=Path, default=SOLVER_CSV)
+    parser.add_argument("--out", type=Path, default=OUT_PATH)
+    return parser.parse_args()
 
 
 def decode_vtk_binary_doubles(text):
@@ -58,16 +74,27 @@ def parse_vtu(path):
     return row
 
 
-def latest_prefix():
-    logs = sorted(OUT_DIR.glob("react__*.log"),
-                  key=lambda p: p.stat().st_mtime, reverse=True)
+def select_prefix(out_dir, requested):
+    logs = sorted(out_dir.glob("react__*.log"))
     if not logs:
-        raise FileNotFoundError(f"no logs under {OUT_DIR}")
-    return logs[0].name[:-4]
+        raise FileNotFoundError(f"no logs under {out_dir}")
+    prefixes = [p.name[:-4] for p in logs]
+    if requested:
+        if requested not in prefixes:
+            raise FileNotFoundError(
+                f"requested prefix {requested!r} not found under {out_dir}; available: {', '.join(prefixes)}"
+            )
+        return requested
+    if len(prefixes) == 1:
+        return prefixes[0]
+    raise RuntimeError(
+        "multiple solver runs found; rerun with --prefix set to one of: " +
+        ", ".join(prefixes)
+    )
 
 
-def load_reference():
-    with REF_CSV.open(newline="") as f:
+def load_reference(path):
+    with path.open(newline="") as f:
         return [{k: float(v) for k, v in row.items()} for row in csv.DictReader(f)]
 
 
@@ -79,20 +106,24 @@ def ignition_time(rows, key, threshold):
     return rows[-1]["t_phys"]
 
 
-prefix = latest_prefix()
+args = parse_args()
+prefix = select_prefix(args.solver_dir, args.prefix)
 vtu_files = sorted(
-    [p for p in OUT_DIR.glob(prefix + "_*.vtu")
+    [p for p in args.solver_dir.glob(prefix + "_*.vtu")
      if re.search(r"_(?:0+|\d+)\.vtu$", p.name)],
     key=lambda p: int(re.search(r"_(\d+)\.vtu$", p.name).group(1)),
 )
+if not vtu_files:
+    raise FileNotFoundError(
+        f"no VTU files for prefix {prefix!r} under {args.solver_dir}")
 solver_rows = [parse_vtu(p) for p in vtu_files]
 
-with SOLVER_CSV.open("w", newline="") as f:
+with args.solver_csv.open("w", newline="") as f:
     writer = csv.DictWriter(f, fieldnames=list(solver_rows[0].keys()))
     writer.writeheader()
     writer.writerows(solver_rows)
 
-ref = load_reference()
+ref = load_reference(args.ref_csv)
 ref = [r for r in ref if r["t_phys"] <= 50e-6]
 solver_rows = [r for r in solver_rows if r["t_phys"] <= 50e-6]
 t_ref_us = [r["t_phys"] * 1e6 for r in ref]
@@ -169,9 +200,10 @@ fig.suptitle(
     f"react_test dense comparison: tau Cantera={tau_cantera*1e6:.3f} us, 0D={tau_phys*1e6:.3f} us, eulerEX={tau_euler*1e6:.3f} us",
     fontsize=13,
 )
-fig.savefig(OUT_PATH, dpi=200)
-print(f"solver_csv={SOLVER_CSV}")
-print(f"plot={OUT_PATH}")
+fig.savefig(args.out, dpi=200)
+print(f"prefix={prefix}")
+print(f"solver_csv={args.solver_csv}")
+print(f"plot={args.out}")
 print(f"samples ref={len(ref)} eulerEX={len(solver_rows)}")
 print(
     f"ignition_us cantera={tau_cantera*1e6:.9f} phys0d={tau_phys*1e6:.9f} eulerEX={tau_euler*1e6:.9f}")
