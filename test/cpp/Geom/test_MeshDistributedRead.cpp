@@ -81,12 +81,19 @@
  *      All np variants wrote H5 files to the same temp directory. When ctest
  *      ran them in parallel, file corruption occurred. Fixed by including
  *      np in the temp directory name.
+ *
+ *   10. **Node partition derivation under cross-np redistribution**:
+ *       even-split H5 reads partition nodes and cells independently. A node's
+ *       temporary owner may not own any adjacent cells, so node ownership must
+ *       be derived from cell partition candidates communicated back to the
+ *       temporary node owner.
  */
 
 #define DOCTEST_CONFIG_IMPLEMENT
 #include "doctest.h"
 
 #include "Geom/Mesh/Mesh.hpp"
+#include "Geom/Mesh/Mesh_Helpers.hpp"
 #include "DNDS/Serializer/SerializerH5.hpp"
 #include <string>
 #include <filesystem>
@@ -111,14 +118,10 @@ struct MeshConfig
 };
 
 static const MeshConfig g_configs[] = {
-    {"UniformSquare_10", "UniformSquare_10.cgns", 2, false,
-     {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, 100, 40},
-    {"IV10_10", "IV10_10.cgns", 2, true,
-     {10, 0, 0}, {0, 10, 0}, {0, 0, 10}, 100, -1},
-    {"IV10U_10", "IV10U_10.cgns", 2, true,
-     {10, 0, 0}, {0, 10, 0}, {0, 0, 10}, 322, -1},
-    {"NACA0012_H2", "NACA0012_H2.cgns", 2, false,
-     {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, 20816, 484},
+    {"UniformSquare_10", "UniformSquare_10.cgns", 2, false, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, 100, 40},
+    {"IV10_10", "IV10_10.cgns", 2, true, {10, 0, 0}, {0, 10, 0}, {0, 0, 10}, 100, -1},
+    {"IV10U_10", "IV10U_10.cgns", 2, true, {10, 0, 0}, {0, 10, 0}, {0, 0, 10}, 322, -1},
+    {"NACA0012_H2", "NACA0012_H2.cgns", 2, false, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, 20816, 484},
 };
 static constexpr int N_CONFIGS = sizeof(g_configs) / sizeof(g_configs[0]);
 
@@ -139,6 +142,8 @@ static ssp<UnstructuredMesh> g_sameNpMesh[N_CONFIGS];
 /// Meshes rebuilt from cross-np distributed read (only if np >= 3)
 static ssp<UnstructuredMesh> g_crossNpMesh[N_CONFIGS];
 static bool g_crossNpAvailable = false;
+static ssp<UnstructuredMesh> g_helperPathMesh;
+static bool g_helperPathAvailable = false;
 
 // H5 file paths
 static std::string g_h5Same[N_CONFIGS];
@@ -299,6 +304,36 @@ static ssp<UnstructuredMesh> distributedRead(
     return mesh;
 }
 
+/// Read through the public helper path used by Euler solvers:
+/// ReadMeshFromH5 -> PrepareMesh. This catches stricter helper invariants.
+static ssp<UnstructuredMesh> distributedReadPrepareViaHelpers(
+    const MeshConfig &cfg, const std::string &h5Path)
+{
+    auto mesh = std::make_shared<UnstructuredMesh>(g_mpi, cfg.dim);
+    auto reader = std::make_shared<UnstructuredMeshSerialRW>(mesh, 0);
+    setPeriodicIfNeeded(mesh, cfg);
+
+    PartitionOptions pOpt;
+    pOpt.metisType = "KWAY";
+    pOpt.metisUfactor = 5;
+    pOpt.metisSeed = 999;
+    pOpt.metisNcuts = 1;
+
+    std::string h5Base = h5Path;
+    const std::string suffix = ".dnds.h5";
+    if (h5Base.size() >= suffix.size() &&
+        h5Base.compare(h5Base.size() - suffix.size(), suffix.size(), suffix) == 0)
+        h5Base.resize(h5Base.size() - suffix.size());
+
+    Geom::ReadMeshFromH5(*mesh, Serializer::SerializerFactory("H5"), h5Base, pOpt);
+
+    Geom::PrepareMeshOptions prepOpts;
+    prepOpts.buildSerialOut = false;
+    Geom::PrepareMesh(*mesh, *reader, prepOpts);
+
+    return mesh;
+}
+
 // ---------------------------------------------------------------------------
 // Verification helpers
 // ---------------------------------------------------------------------------
@@ -389,6 +424,11 @@ int main(int argc, char **argv)
                 log() << "[setup] cross-np: distributed read " << g_configs[ic].name << std::endl;
             g_crossNpMesh[ic] = distributedRead(g_configs[ic], g_h5Cross[ic]);
         }
+
+        if (g_mpi.rank == 0)
+            log() << "[setup] cross-np: helper read+prepare " << g_configs[0].name << std::endl;
+        g_helperPathMesh = distributedReadPrepareViaHelpers(g_configs[0], g_h5Cross[0]);
+        g_helperPathAvailable = true;
     }
 
     // Run tests
@@ -401,6 +441,7 @@ int main(int argc, char **argv)
         m.reset();
     for (auto &m : g_crossNpMesh)
         m.reset();
+    g_helperPathMesh.reset();
     MPI::Barrier(g_mpi.comm);
     if (g_mpi.rank == 0)
         std::filesystem::remove_all(tmpDir());
@@ -421,55 +462,42 @@ int main(int argc, char **argv)
         body                               \
     }
 
-TEST_CASE("SameNp: global cell count")
-{
+TEST_CASE("SameNp: global cell count"){
     FOR_EACH_CONFIG({
         CHECK(g_sameNpMesh[ic]->NumCellGlobal() == g_refCounts[ic].nCellGlobal);
-    })
-}
+    })}
 
-TEST_CASE("SameNp: global node count")
-{
+TEST_CASE("SameNp: global node count"){
     FOR_EACH_CONFIG({
         CHECK(g_sameNpMesh[ic]->NumNodeGlobal() == g_refCounts[ic].nNodeGlobal);
-    })
-}
+    })}
 
-TEST_CASE("SameNp: global bnd count")
-{
+TEST_CASE("SameNp: global bnd count"){
     FOR_EACH_CONFIG({
         CHECK(g_sameNpMesh[ic]->NumBndGlobal() == g_refCounts[ic].nBndGlobal);
-    })
-}
+    })}
 
-TEST_CASE("SameNp: global face count")
-{
+TEST_CASE("SameNp: global face count"){
     FOR_EACH_CONFIG({
         CHECK(g_sameNpMesh[ic]->NumFaceGlobal() == g_refCounts[ic].nFaceGlobal);
-    })
-}
+    })}
 
-TEST_CASE("SameNp: expected counts from config")
-{
+TEST_CASE("SameNp: expected counts from config"){
     FOR_EACH_CONFIG({
         if (g_configs[ic].expectedCells >= 0)
             CHECK(g_refCounts[ic].nCellGlobal == g_configs[ic].expectedCells);
         if (g_configs[ic].expectedBnds >= 0)
             CHECK(g_refCounts[ic].nBndGlobal == g_configs[ic].expectedBnds);
-    })
-}
+    })}
 
-TEST_CASE("SameNp: every rank has cells")
-{
+TEST_CASE("SameNp: every rank has cells"){
     FOR_EACH_CONFIG({
         CHECK(g_sameNpMesh[ic]->NumCell() > 0);
         // NumNode() can be 0 if all cell2node entries point to ghost nodes
         CHECK(g_sameNpMesh[ic]->NumNode() >= 0);
-    })
-}
+    })}
 
-TEST_CASE("SameNp: face2cell valid")
-{
+TEST_CASE("SameNp: face2cell valid"){
     FOR_EACH_CONFIG({
         auto &mesh = *g_sameNpMesh[ic];
         for (DNDS::index iF = 0; iF < mesh.NumFace(); iF++)
@@ -484,24 +512,19 @@ TEST_CASE("SameNp: face2cell valid")
                 REQUIRE(iCR < mesh.NumCellProc());
             }
         }
-    })
-}
+    })}
 
-TEST_CASE("SameNp: node2cell non-empty")
-{
+TEST_CASE("SameNp: node2cell non-empty"){
     FOR_EACH_CONFIG({
         auto &mesh = *g_sameNpMesh[ic];
         for (DNDS::index iN = 0; iN < mesh.NumNode(); iN++)
             CHECK(mesh.node2cell.RowSize(iN) > 0);
-    })
-}
+    })}
 
-TEST_CASE("SameNp: cell2cellOrig globally unique")
-{
+TEST_CASE("SameNp: cell2cellOrig globally unique"){
     FOR_EACH_CONFIG({
         checkOrigUnique(*g_sameNpMesh[ic], g_refCounts[ic].nCellGlobal, g_mpi);
-    })
-}
+    })}
 
 TEST_CASE("SameNp: coordinate bounding box is sane")
 {
@@ -516,54 +539,43 @@ TEST_CASE("SameNp: coordinate bounding box is sane")
 // Cross-np tests (write with fewer ranks, read with all)
 // ===========================================================================
 
-#define FOR_EACH_CROSS_CONFIG(body)            \
-    if (!g_crossNpAvailable)                   \
-        return;                                \
-    for (int ic = 0; ic < N_CONFIGS; ic++)     \
-    {                                          \
-        CAPTURE(ic);                           \
-        CAPTURE(g_configs[ic].name);           \
-        body                                   \
+#define FOR_EACH_CROSS_CONFIG(body)        \
+    if (!g_crossNpAvailable)               \
+        return;                            \
+    for (int ic = 0; ic < N_CONFIGS; ic++) \
+    {                                      \
+        CAPTURE(ic);                       \
+        CAPTURE(g_configs[ic].name);       \
+        body                               \
     }
 
-TEST_CASE("CrossNp: global cell count")
-{
+TEST_CASE("CrossNp: global cell count"){
     FOR_EACH_CROSS_CONFIG({
         CHECK(g_crossNpMesh[ic]->NumCellGlobal() == g_refCounts[ic].nCellGlobal);
-    })
-}
+    })}
 
-TEST_CASE("CrossNp: global node count")
-{
+TEST_CASE("CrossNp: global node count"){
     FOR_EACH_CROSS_CONFIG({
         CHECK(g_crossNpMesh[ic]->NumNodeGlobal() == g_refCounts[ic].nNodeGlobal);
-    })
-}
+    })}
 
-TEST_CASE("CrossNp: global bnd count")
-{
+TEST_CASE("CrossNp: global bnd count"){
     FOR_EACH_CROSS_CONFIG({
         CHECK(g_crossNpMesh[ic]->NumBndGlobal() == g_refCounts[ic].nBndGlobal);
-    })
-}
+    })}
 
-TEST_CASE("CrossNp: global face count")
-{
+TEST_CASE("CrossNp: global face count"){
     FOR_EACH_CROSS_CONFIG({
         CHECK(g_crossNpMesh[ic]->NumFaceGlobal() == g_refCounts[ic].nFaceGlobal);
-    })
-}
+    })}
 
-TEST_CASE("CrossNp: every rank has cells")
-{
+TEST_CASE("CrossNp: every rank has cells"){
     FOR_EACH_CROSS_CONFIG({
         CHECK(g_crossNpMesh[ic]->NumCell() > 0);
         CHECK(g_crossNpMesh[ic]->NumNode() >= 0);
-    })
-}
+    })}
 
-TEST_CASE("CrossNp: face2cell valid")
-{
+TEST_CASE("CrossNp: face2cell valid"){
     FOR_EACH_CROSS_CONFIG({
         auto &mesh = *g_crossNpMesh[ic];
         for (DNDS::index iF = 0; iF < mesh.NumFace(); iF++)
@@ -578,21 +590,32 @@ TEST_CASE("CrossNp: face2cell valid")
                 REQUIRE(iCR < mesh.NumCellProc());
             }
         }
-    })
-}
+    })}
 
-TEST_CASE("CrossNp: cell2cellOrig globally unique")
-{
+TEST_CASE("CrossNp: cell2cellOrig globally unique"){
     FOR_EACH_CROSS_CONFIG({
         checkOrigUnique(*g_crossNpMesh[ic], g_refCounts[ic].nCellGlobal, g_mpi);
-    })
-}
+    })}
 
-TEST_CASE("CrossNp: node2cell non-empty")
-{
+TEST_CASE("CrossNp: node2cell non-empty"){
     FOR_EACH_CROSS_CONFIG({
         auto &mesh = *g_crossNpMesh[ic];
         for (DNDS::index iN = 0; iN < mesh.NumNode(); iN++)
             CHECK(mesh.node2cell.RowSize(iN) > 0);
-    })
+    })}
+
+TEST_CASE("CrossNp: helper path PrepareMesh resolves owned node2cell")
+{
+    if (!g_helperPathAvailable)
+        return;
+
+    auto &mesh = *g_helperPathMesh;
+    CHECK(mesh.NumCellGlobal() == g_refCounts[0].nCellGlobal);
+    CHECK(mesh.NumNodeGlobal() == g_refCounts[0].nNodeGlobal);
+    CHECK(mesh.NumBndGlobal() == g_refCounts[0].nBndGlobal);
+    CHECK(mesh.NumFaceGlobal() == g_refCounts[0].nFaceGlobal);
+
+    for (DNDS::index iNode = 0; iNode < mesh.NumNode(); iNode++)
+        for (DNDS::index iCell : mesh.node2cell.father->operator[](iNode))
+            CHECK(iCell >= 0);
 }
