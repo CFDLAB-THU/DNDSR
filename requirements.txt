@@ -31,6 +31,13 @@ auditwheel
 pybind11-stubgen
 typing_extensions
 compdb
+ninja
+
+# For building Cantera in cfd_externals
+scons
+packaging
+ruamel.yaml
+patchelf
 
 # Testing
 pytest
