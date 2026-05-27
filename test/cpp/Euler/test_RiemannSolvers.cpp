@@ -73,7 +73,7 @@ static Eigen::Vector<real, 5> callDispatcher(
     F.setZero();
     real lam0, lam123, lam4;
     InviscidFlux_IdealGas_Dispatcher<3>(
-        rsType, UL, UR, UL, UR, vg, n, g_gamma, F,
+        rsType, UL, UR, UL, UR, vg, n, g_gamma, g_gamma, F,
         0.0, 0.0, 0.0, noDump, lam0, lam123, lam4);
     return F;
 }
@@ -201,12 +201,9 @@ static auto g_sodUR = prim2cons(0.125, 0.0, 0.0, 0.0, 0.1);
 static const Eigen::Vector3d g_sodN = Eigen::Vector3d(1.0, 0.0, 0.0);
 
 static SodTestCase g_sodTests[] = {
-    {"Roe", Roe,
-     {0.0, 0.0, 0.0, 0.0, 0.0}},  // placeholder -- will acquire
-    {"HLLC", HLLC,
-     {0.0, 0.0, 0.0, 0.0, 0.0}},
-    {"HLLEP", HLLEP,
-     {0.0, 0.0, 0.0, 0.0, 0.0}},
+    {"Roe", Roe, {0.0, 0.0, 0.0, 0.0, 0.0}}, // placeholder -- will acquire
+    {"HLLC", HLLC, {0.0, 0.0, 0.0, 0.0, 0.0}},
+    {"HLLEP", HLLEP, {0.0, 0.0, 0.0, 0.0, 0.0}},
 };
 
 TEST_CASE("Sod shock tube: flux is finite and bounded")
@@ -255,15 +252,9 @@ static const auto g_goldenUR = prim2cons(0.8, 200.0, 0.0, 0.0, 80000.0);
 static const Eigen::Vector3d g_goldenN = Eigen::Vector3d(0.6, 0.8, 0.0).normalized();
 
 static GoldenFluxCase g_goldenTests[] = {
-    {"Roe", Roe,
-     {8.1162345145e+01, 5.8813861917e+04, 5.8759839011e+04,
-      5.9539454795e+02, 2.7251925995e+07}},
-    {"HLLC", HLLC,
-     {9.3486183606e+01, 5.5647501399e+04, 5.7057534871e+04,
-      2.3371545902e+03, 2.5454872499e+07}},
-    {"HLLEP", HLLEP,
-     {9.2861523292e+01, 5.1385111929e+04, 6.2875774679e+04,
-      5.7376094955e+03, 2.6719441912e+07}},
+    {"Roe", Roe, {8.1162345145e+01, 5.8813861917e+04, 5.8759839011e+04, 5.9539454795e+02, 2.7251925995e+07}},
+    {"HLLC", HLLC, {9.3486183606e+01, 5.5647501399e+04, 5.7057534871e+04, 2.3371545902e+03, 2.5454872499e+07}},
+    {"HLLEP", HLLEP, {9.2861523292e+01, 5.1385111929e+04, 6.2875774679e+04, 5.7376094955e+03, 2.6719441912e+07}},
 };
 
 TEST_CASE("Golden flux values for mixed-state test vector")
@@ -325,7 +316,7 @@ TEST_CASE("Roe eigenvalue output: lam0 < lam123 < lam4 for subsonic")
     Eigen::Vector<real, 5> F;
     real lam0, lam123, lam4;
     InviscidFlux_IdealGas_Dispatcher<3>(
-        Roe, UL, UR, UL, UR, vg, n, g_gamma, F,
+        Roe, UL, UR, UL, UR, vg, n, g_gamma, g_gamma, F,
         0.0, 0.0, 0.0, noDump, lam0, lam123, lam4);
 
     // |u-a| < |u| < |u+a| for subsonic flow where u > 0

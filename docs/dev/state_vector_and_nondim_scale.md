@@ -138,9 +138,9 @@ vibrational modes become active at different temperatures (notably H2 near
 
 | Name | Formula | Source | Meaning |
 |------|---------|--------|---------|
-| `gamma_stored` | `1 + R / cv_stored` | User config `IdealGasProperty.gamma` | Defines `e_sensible ↔ T` and `p ↔ e_sensible` in the DNDSR state |
-| `gammaEq` | `1 + rho*Rmix*T / (rho*e_sensible)` | PhysicsProperties | Self-consistency check — always equals gamma_stored because `e_sensible` was encoded with that gamma. Uses `Rmix` from Cantera. |
-| `cp/cv` | `cp_mass(T,Y) / cv_mass(T,Y)` | Cantera NASA polynomials | Real thermodynamic ratio at temperature T.  Differs from gamma_stored because cv_mass(T) ≠ cv_stored. |
+| `gamma_stored` | `1 + R / cv_stored` | User config `IdealGasProperty.gamma` | Non-reactive constant-gamma closure coefficient |
+| `gammaEq` | `1 + rho*Rmix*T / (rho*e_sensible)` | `PhysicsProperties::gammaEq` | Pressure/energy closure coefficient used by primitive/conservative conversion and pressure gradients |
+| `cp/cv` | `cp_mass(T,Y) / cv_mass(T,Y)` | `PhysicsProperties::gamma`, Cantera NASA polynomials | Frozen-composition acoustic coefficient used by wave speeds and Mach number |
 
 **Why `gammaEq` ≠ `cp/cv`**: DNDSR's energy convention `e_sensible = c_v_stored * T`
 uses a constant (chord) cv, while Cantera's `cv_mass(T)` varies with T. The
@@ -154,7 +154,7 @@ gammaEq    = (cv_stored + R) / cv_stored       (stored ratio = gamma_stored)
 ```
 
 At 845 K for H2/O2/N2, `cv_stored ≈ 1020`, `cv_local ≈ 1103` J/(kg·K),
-`gamma_stored = 1.4`, `cp/cv ≈ 1.359`.
+`gammaEq ≈ 1.4`, and `cp/cv ≈ 1.359`.
 
 ### Cantera temperature bridge
 
@@ -214,9 +214,23 @@ gamma (prim → cons) are marked *for I/O only, not tight loops*.
 ### Ideal-gas guard
 
 Every conversion method that invokes the ideal-gas EOS
-(`p = rho*R*T` or `p = (gamma−1)*rho*e_sensible`) asserts
+(`p = rho*R*T` or `p = (gammaEq−1)*rho*e_sensible`) asserts
 `chem().isIdealGas()` before proceeding.  Non-ideal Cantera phases
 crash with a clear message.
+
+## Acoustic-Speed Convention
+
+`gammaEq` is not used as the acoustic coefficient for reactive mixtures. The
+Euler module computes pressure with `gammaEq` and frozen-composition sound speed
+with `cp/cv`:
+
+```
+p  = (gammaEq - 1) * rho * e_sensible
+a² = (cp/cv) * p / rho
+```
+
+Roe averages carry both values. `gammaEqRoe` appears in the pressure-wave
+strength decomposition; `gammaRoe = cp/cv` appears in `aRoe`.
 
 ## IdealGasProperty::Rgas Convention
 
@@ -245,7 +259,7 @@ eulerState --model NS_EX --nVars 14 --from cons-sensible --scaling code \
 
 **Output**: prints all state representations (conservative total+sensible,
 primitive, prim-rhoT, prim-TP), derived quantities (T, p, gamma_stored,
-gammaEq, Rmix, rhoH_form), reference scales with SI units, Cantera state
+gammaEq, cp/cv, Rmix, rhoH_form), reference scales with SI units, Cantera state
 (intEnergy, enthalpy, cv, cp, speed_of_sound), and energy-consistency
 check (u_sent − u_cantera = 0).  All arrays include JSON versions with
 full precision.

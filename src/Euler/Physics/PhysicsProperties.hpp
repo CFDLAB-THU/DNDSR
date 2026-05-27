@@ -119,6 +119,7 @@ namespace DNDS::Euler
         template <int dim>
         real temperature(const TU &U, real TGuess = 0, real uvTolerance = 1e-12) const;
 
+        /// Thermodynamic gamma cp/cv used for frozen-composition acoustic speeds.
         real gamma(real T, const TU &U) const;
 
         /** Equivalent gamma so that p = (gamma_eq - 1) * rho * e_sensible = rho * Rmix * T.
@@ -158,6 +159,23 @@ namespace DNDS::Euler
         real Rgas(const TU &U) const;
         real Cp(real T, const TU &U) const;
         real Cv(real T, const TU &U) const;
+
+        template <int dim>
+        void conservativeThermal(const TU &U, real T, real &p, real &asqr, real &H,
+                                 real *gammaEqOut = nullptr, real *gammaOut = nullptr) const
+        {
+            static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
+            static const auto I4 = dim + 1;
+            real gammaEqUse = gammaEq<dim>(T, U);
+            real gammaUse = gamma(T, U); // cp/cv, used for frozen acoustic speed
+            Gas::IdealGasThermal(U(I4), U(0), (U(Seq123) / U(0)).squaredNorm(),
+                                 gammaEqUse, gammaUse, p, asqr, H,
+                                 mixtureFormationRhoE(U));
+            if (gammaEqOut)
+                *gammaEqOut = gammaEqUse;
+            if (gammaOut)
+                *gammaOut = gammaUse;
+        }
 
         /// Code-scaled volumetric formation enthalpy ρ·Σ Y_k·h_f_k.  0 when no chemistry.
         real mixtureFormationRhoE(const TU &U) const
@@ -261,22 +279,22 @@ namespace DNDS::Euler
                                  "primToConservative(): requires ideal-gas EOS");
 
             real rhoH_form = formationFromPrimitive<dim>(prim);
-            real gammaUse = igProp_->gamma;
+            real gammaEqUse = igProp_->gamma;
             if (!hasChemicalSource())
             {
-                Gas::IdealGasThermalPrimitive2Conservative<dim>(prim, cons, gammaUse, rhoH_form);
+                Gas::IdealGasThermalPrimitive2Conservative<dim>(prim, cons, gammaEqUse, rhoH_form);
                 return;
             }
 
             int maxIterations = std::max(options.gammaMaxIterations, 1);
             for (int iter = 0; iter < maxIterations; ++iter)
             {
-                Gas::IdealGasThermalPrimitive2Conservative<dim>(prim, cons, gammaUse, rhoH_form);
+                Gas::IdealGasThermalPrimitive2Conservative<dim>(prim, cons, gammaEqUse, rhoH_form);
                 real T_iter = temperature<dim>(cons, 0, options.temperatureUVTolerance);
-                real gamma_iter = gammaEq<dim>(T_iter, cons);
-                if (std::abs(gamma_iter - gammaUse) < options.gammaTolerance)
+                real gammaEqIter = gammaEq<dim>(T_iter, cons);
+                if (std::abs(gammaEqIter - gammaEqUse) < options.gammaTolerance)
                     break;
-                gammaUse = gamma_iter;
+                gammaEqUse = gammaEqIter;
             }
         }
 
@@ -294,9 +312,9 @@ namespace DNDS::Euler
                                  "conservativeToPrimitive(): requires ideal-gas EOS");
 
             real T = temperature<dim>(cons, 0, options.temperatureUVTolerance);
-            real gamma = gammaEq<dim>(T, cons);
+            real gammaEqUse = gammaEq<dim>(T, cons);
             real rhoH_form = mixtureFormationRhoE(cons);
-            Gas::IdealGasThermalConservative2Primitive<dim>(cons, prim, gamma, rhoH_form);
+            Gas::IdealGasThermalConservative2Primitive<dim>(cons, prim, gammaEqUse, rhoH_form);
         }
 
         /**
@@ -448,6 +466,85 @@ namespace DNDS::Euler
             primStatic(0) = pStatic / std::max(Rgas * TStatic, 1e-60);
             primStatic(I4) = pStatic;
             applyVelocityLimit(vSqrUse);
+        }
+
+        template <int dim>
+        std::tuple<real, real> primitiveStaticToTotalPT(const TU &primStatic,
+                                                        const StateConversionOptions &options = StateConversionOptions{}) const
+        {
+            static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
+            static const auto I4 = dim + 1;
+
+            real pStatic = primStatic(I4);
+            real vSqr = primStatic(Seq123).squaredNorm();
+            DNDS_assert_info(primStatic(0) > 0 && pStatic > 0,
+                             fmt::format("primitiveStaticToTotalPT(): invalid rho/p [{:.3e}, {:.3e}]",
+                                         primStatic(0), pStatic));
+
+            if (!hasChemicalSource())
+            {
+                real gammaUse = igProp_->gamma;
+                real Rgas = toCode(igProp_->Rgas);
+                real TStatic = pStatic / std::max(primStatic(0) * Rgas, 1e-60);
+                real asqr = gammaUse * pStatic / primStatic(0);
+                real Msqr = vSqr / std::max(asqr, 1e-60);
+                real factor = 1 + (gammaUse - 1) * 0.5 * Msqr;
+                return {std::pow(factor, gammaUse / (gammaUse - 1)) * pStatic,
+                        factor * TStatic};
+            }
+
+            DNDS_assert_info(chem().isIdealGas(),
+                             "primitiveStaticToTotalPT(): reactive total-condition conversion requires ideal-gas EOS");
+            DNDS_check_throw_info(std::isfinite(options.totalToStaticTolerance) && options.totalToStaticTolerance > 0,
+                                  fmt::format("primitiveStaticToTotalPT(): invalid tolerance {:.3e}",
+                                              options.totalToStaticTolerance));
+
+            auto &c = chem();
+            int Ns1 = c.nSpecies() - 1;
+            int nVars = static_cast<int>(primStatic.size());
+            int Isp = nVars - Ns1;
+            auto Yview = c.massFractions(1.0, primStatic.data() + Isp, Ns1);
+            std::vector<double> Ybuf(c.nSpecies());
+            for (int k = 0; k < c.nSpecies(); ++k)
+                Ybuf[k] = Yview[k];
+            Chemistry::ConstSpeciesBufferView Y{Ybuf.data(), c.nSpecies()};
+
+            double TStaticPhys = toPhysT(pStatic / std::max(primStatic(0) * toCode(c.mixtureR(Y)), 1e-60));
+            double pStaticPhys = toPhysP(pStatic);
+            double hTarget = c.mixtureEnthalpy(TStaticPhys, Y, pStaticPhys) + 0.5 * vSqr * igProp_->U0 * igProp_->U0;
+            double sStatic = c.mixtureEntropy(TStaticPhys, Y, pStaticPhys);
+            double TLo = std::max(c.minTemperature(), 1.0);
+            double THi = std::max(TStaticPhys * 1.01, TStaticPhys + 1.0);
+            while (c.mixtureEnthalpy(THi, Y, pStaticPhys) < hTarget)
+                THi *= 1.5;
+
+            double TTotalPhys = THi;
+            int maxIterations = std::max(options.totalToStaticMaxIterations, 1);
+            double finalErr = std::numeric_limits<double>::infinity();
+            bool converged = false;
+            for (int iter = 0; iter < maxIterations; ++iter)
+            {
+                TTotalPhys = 0.5 * (TLo + THi);
+                double hMid = c.mixtureEnthalpy(TTotalPhys, Y, pStaticPhys);
+                finalErr = std::abs(hMid - hTarget) / std::max(std::abs(hTarget), 1.0);
+                if (finalErr < options.totalToStaticTolerance)
+                {
+                    converged = true;
+                    break;
+                }
+                if (hMid < hTarget)
+                    TLo = TTotalPhys;
+                else
+                    THi = TTotalPhys;
+            }
+            DNDS_check_throw_info(converged,
+                                  fmt::format("primitiveStaticToTotalPT(): failed to converge after {} bisections; residual={:.3e}, tolerance={:.3e}",
+                                              maxIterations, finalErr, options.totalToStaticTolerance));
+
+            double Rmix = c.mixtureR(Y);
+            double sAtStaticP = c.mixtureEntropy(TTotalPhys, Y, pStaticPhys);
+            double pTotalPhys = pStaticPhys * std::exp((sAtStaticP - sStatic) / std::max(Rmix, 1e-30));
+            return {pTotalPhys / p0(), toCodeT(TTotalPhys)};
         }
 
         /**

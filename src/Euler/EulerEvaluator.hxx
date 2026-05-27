@@ -982,10 +982,7 @@ namespace DNDS::Euler
                     {
                         real pMean, asqrMean, Hmean;
                         real T = phys_.template temperature<dim>(u[iCell]);
-                        real gamma = phys_.template gammaEq<dim>(T, u[iCell]);
-                        Gas::IdealGasThermal(u[iCell](I4), u[iCell](0), (u[iCell](Seq123) / u[iCell](0)).squaredNorm(),
-                                             gamma, pMean, asqrMean, Hmean,
-                                             phys_.mixtureFormationRhoE(u[iCell]));
+                        phys_.template conservativeThermal<dim>(u[iCell], T, pMean, asqrMean, Hmean);
                         real muRef = phys_.muRef();
                         real mufPhy1 = muEff(u[iCell], T);
                         real rhoOmegaaaWall = mufPhy1 / sqr(d) * RANS::kWallOmegaCoeff * 0.1;
@@ -1010,7 +1007,8 @@ namespace DNDS::Euler
                 {
                     Geom::tPoint pos = vfv->GetCellBary(iCell);
                     real T = phys_.template temperature<dim>(u[iCell]);
-                    real gamma = phys_.template gammaEq<dim>(T, u[iCell]);
+                    real gammaEq = phys_.template gammaEq<dim>(T, u[iCell]);
+                    real gamma = phys_.gamma(T, u[iCell]);
                     real rho = 2;
                     real p = 1 + 2 * pos(1);
                     if (pos(1) >= 0.5)
@@ -1020,9 +1018,9 @@ namespace DNDS::Euler
                     }
                     real v = -0.025 * sqrt(gamma * p / rho) * std::cos(8 * pi * pos(0));
                     if constexpr (dim == 3)
-                        u[iCell] = Eigen::Vector<real, 5>{rho, 0, rho * v, 0, 0.5 * rho * sqr(v) + p / (gamma - 1)};
+                        u[iCell] = Eigen::Vector<real, 5>{rho, 0, rho * v, 0, 0.5 * rho * sqr(v) + p / (gammaEq - 1)};
                     else
-                        u[iCell] = Eigen::Vector<real, 4>{rho, 0, rho * v, 0.5 * rho * sqr(v) + p / (gamma - 1)};
+                        u[iCell] = Eigen::Vector<real, 4>{rho, 0, rho * v, 0.5 * rho * sqr(v) + p / (gammaEq - 1)};
                 }
             else if constexpr (model == NS_3D)
 #if defined(DNDS_DIST_MT_USE_OMP)
@@ -1032,7 +1030,8 @@ namespace DNDS::Euler
                 {
                     Geom::tPoint pos = vfv->GetCellBary(iCell);
                     real T = phys_.template temperature<dim>(u[iCell]);
-                    real gamma = phys_.template gammaEq<dim>(T, u[iCell]);
+                    real gammaEq = phys_.template gammaEq<dim>(T, u[iCell]);
+                    real gamma = phys_.gamma(T, u[iCell]);
                     real rho = 2;
                     real p = 1 + 2 * pos(1);
                     if (pos(1) >= 0.5)
@@ -1041,7 +1040,7 @@ namespace DNDS::Euler
                         p = 1.5 + pos(1);
                     }
                     real v = -0.025 * sqrt(gamma * p / rho) * std::cos(8 * pi * pos(0)) * std::cos(8 * pi * pos(2));
-                    u[iCell] = Eigen::Vector<real, 5>{rho, 0, rho * v, 0, 0.5 * rho * sqr(v) + p / (gamma - 1)};
+                    u[iCell] = Eigen::Vector<real, 5>{rho, 0, rho * v, 0, 0.5 * rho * sqr(v) + p / (gammaEq - 1)};
                 }
             break;
         case 2:   // for IV10 problem
@@ -1115,7 +1114,8 @@ namespace DNDS::Euler
                     Geom::tPoint pos = vfv->GetCellBary(iCell);
                     real M0 = 0.1;
                     real T_cell = phys_.template temperature<dim>(u[iCell]);
-                    real gamma = phys_.template gammaEq<dim>(T_cell, u[iCell]);
+                    real gammaEq = phys_.template gammaEq<dim>(T_cell, u[iCell]);
+                    real gamma = phys_.gamma(T_cell, u[iCell]);
                     auto c2n = mesh->cell2node[iCell];
                     auto gCell = vfv->GetCellQuad(iCell);
                     TU um;
@@ -1135,7 +1135,7 @@ namespace DNDS::Euler
                             real uy = -std::cos(x) * std::sin(y) * std::cos(z);
                             real p = 1. / (gamma * sqr(M0)) + 1. / 16 * ((std::cos(2 * x) + std::cos(2 * y)) * (2 + std::cos(2 * z)));
                             real rho = gamma * sqr(M0) * p;
-                            real E = 0.5 * (sqr(ux) + sqr(uy)) * rho + p / (gamma - 1);
+                            real E = 0.5 * (sqr(ux) + sqr(uy)) * rho + p / (gammaEq - 1);
 
                             // std::cout << T << " " << rho << std::endl;
                             inc.setZero();
@@ -1376,9 +1376,9 @@ namespace DNDS::Euler
         for (index iCell = 0; iCell < u.Size(); iCell++)
         {
             real T_cell = phys_.template temperature<dim>(u[iCell]);
-            real gamma = phys_.template gammaEq<dim>(T_cell, u[iCell]);
+            real gammaEq = phys_.template gammaEq<dim>(T_cell, u[iCell]);
             TU out;
-            Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], out, gamma,
+            Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], out, gammaEq,
                                                             phys_.mixtureFormationRhoE(u[iCell]));
             w[iCell] = out;
         }
@@ -1416,9 +1416,9 @@ namespace DNDS::Euler
             real rhoH_form = phys_.mixtureFormationRhoE(u_approx);
             u_approx(I4) += rhoH_form;
             real T_cell = phys_.template temperature<dim>(u_approx);
-            real gamma = phys_.template gammaEq<dim>(T_cell, u_approx);
+            real gammaEq = phys_.template gammaEq<dim>(T_cell, u_approx);
             TU out;
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(w[iCell], out, gamma, rhoH_form);
+            Gas::IdealGasThermalPrimitive2Conservative<dim>(w[iCell], out, gammaEq, rhoH_form);
             u[iCell] = out;
         }
     }

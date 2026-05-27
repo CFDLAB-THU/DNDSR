@@ -17,8 +17,9 @@ where `h_f = Σ Y_k · h_{f,k}` is the specific formation enthalpy, and
 The Roe Jacobian `A = ∂F/∂U` of the Euler equations has the same form
 regardless of whether `E` includes `h_f` — the formation energy is a
 constant offset per cell that does not affect the flux derivatives. The
-eigenvalues `{u−a, u, u+a}` depend only on `a² = γp/ρ`, which is
-determined by sensible internal energy alone.
+eigenvalues `{u−a, u, u+a}` depend only on the frozen-composition acoustic speed.
+For reactive ideal-gas mixtures DNDSR computes it as `a² = γ_cp/cv·p/ρ`, while
+pressure still comes from the closure `p = (γ_eq−1)·ρe_sensible`.
 
 The eigenvectors, however, include the specific enthalpy `H` in their
 energy component:
@@ -46,13 +47,22 @@ decomposition and the recombination**.
 
 ## Consistency conditions
 
-Let `a² = (γ−1)(H_sensible − ½|u|²)` be the Roe-averaged speed of sound
-squared. All quantities below are Roe-averaged unless subscripted L or R.
+Let `Γ = γ_eq−1` be the pressure-energy derivative and let `γ = cp/cv` be the
+thermodynamic acoustic coefficient. For a Roe-averaged state,
+
+```
+p/ρ = Γ/γ_eq · (H_sensible − ½|u|²)
+a²  = γ · Γ/γ_eq · (H_sensible − ½|u|²)
+```
+
+This reduces to the standard perfect-gas formula `a² = (γ−1)(H−½|u|²)` when
+`γ_eq == γ` and both are constant. All quantities below are Roe-averaged unless
+subscripted L or R.
 
 ### α decomposition
 
 ```
-α1 = (γ−1)/a² · [Δρ·(H − u_n²)  +  u_n·Δ(ρu_n)  −  incU₄^b]
+α1 = Γ/a² · [Δρ·(H − u_n²)  +  u_n·Δ(ρu_n)  −  incU₄^b]
 
 α0 = [Δρ·(u_n + a)  −  Δ(ρu_n)  −  a·α1] / (2a)
 
@@ -79,11 +89,12 @@ identity `a·(α4 − α0) = Δ(ρu_n) − u_n·Δρ`:
       = Δρ·(H − u_n²) + u_n·Δ(ρu_n) + α1(½|u|² − H) + α₂₃^VT·u
 ```
 
-Solving for α1 using `a² = (γ−1)(H − ½|u|²)`:
+Solving for α1 using `a² = γ·Γ/γ_eq·(H − ½|u|²)` and the pressure-energy
+closure coefficient `Γ = γ_eq−1`:
 
 ```
-α1 = (γ−1)/a² · [Δρ·(H − u_n²) + u_n·Δ(ρu_n) − (Δ(ρE) − α₂₃^VT·u)]
-   = (γ−1)/a² · [Δρ·(H − u_n²) + u_n·Δ(ρu_n) − incU₄^b]
+α1 = Γ/a² · [Δρ·(H − u_n²) + u_n·Δ(ρu_n) − (Δ(ρE) − α₂₃^VT·u)]
+   = Γ/a² · [Δρ·(H − u_n²) + u_n·Δ(ρu_n) − incU₄^b]
 ```
 
 This matches the code exactly and holds for any H convention.
@@ -103,11 +114,14 @@ The final Roe flux is `F = ½(F_L + F_R) − ½·Σ |λ_k|·α_k·r_k`.
 ## Sound-speed formula
 
 ```
-a² = (γ−1)(H_sensible − ½|u|²)     // valid only for ideal/perfect gas
+a² = γ_cp/cv · p/ρ
+p/ρ = (γ_eq−1)/γ_eq · (H_sensible − ½|u|²)
+a² = γ_cp/cv · (γ_eq−1)/γ_eq · (H_sensible − ½|u|²)
 a  = √(a²)
 ```
 
-This is correct for `H_sensible` because:
+For a calorically perfect gas, `γ_eq = γ_cp/cv = γ`, so this becomes the usual
+Roe expression:
 
 ```
 H_sensible = e_sensible + ½|u|² + p/ρ
@@ -115,24 +129,24 @@ H_sensible − ½|u|² = e_sensible + p/ρ = γ·e_sensible
 a² = (γ−1)·γ·e_sensible = γp/ρ        ✓
 ```
 
-Using `H_total = H_sensible + h_f` would give `a² = γp/ρ + (γ−1)h_f`,
-which is incorrect.
+For a perfect gas, using `H_total = H_sensible + h_f` would add the spurious
+term `(γ−1)h_f`; this is incorrect.
 
 ## Code trace
 
 | Step | File | Function | What happens |
 |------|------|----------|--------------|
-| 1 | `Gas.hpp:241` | `ComputeRoePreamble` | `IdealGasThermal(E,ρ,½v²,γ, p,asqr,H, rhoH_form)` → H = (E−ρh_f+p)/ρ = sensible |
-| 2 | `Gas.hpp:249` | `ComputeRoePreamble` | `HRoe = (√ρL·HLm + √ρR·HRm)/(√ρL+√ρR)` → sensible |
-| 3 | `Gas.hpp:257` | `ComputeRoePreamble` | `asqrRoe = (γ−1)(HRoe − ½v²)` → correct sound speed |
-| 4 | `Gas.hpp:662` | `RoeFlux_HartenYee` | α1 uses HRoe (sensible) in `(HRoe − u_n²)` |
-| 5 | `Gas.hpp:718` | `RoeFlux_HartenYee` | Energy flux uses HRoe (sensible) in eigenvector components |
+| 1 | `Gas.hpp` | `ComputeRoePreamble` | `IdealGasThermal(E,ρ,v²,gammaEq,gammaCpCv, p,asqr,H, rhoH_form)` → pressure from `gammaEq`, sound speed from `gammaCpCv`, H sensible |
+| 2 | `Gas.hpp` | `ComputeRoePreamble` | `HRoe = (√ρL·HLm + √ρR·HRm)/(√ρL+√ρR)` → sensible |
+| 3 | `Gas.hpp` | `ComputeRoePreamble` | `gammaEqRoe` and `gammaRoe` are √ρ-weighted separately |
+| 4 | `Gas.hpp` | `ComputeRoePreamble` | `asqrRoe = gammaRoe·(gammaEqRoe−1)/gammaEqRoe·(HRoe − ½v²)` |
+| 5 | `Gas.hpp` | `RoeFlux_*` / `RoeFluxIncFDiff` | α1 uses `(gammaEqRoe−1)/asqrRoe`; eigenvalues use `sqrt(asqrRoe)` |
+| 6 | `Gas.hpp` | `RoeFlux_*` | Energy flux uses HRoe (sensible) in eigenvector components |
 
 All consumption sites use the same sensible H convention derived at step 1.
 The standalone eigenvector extractors `IdealGas_EulerGasRightEigenVector` /
-`IdealGas_EulerGasLeftEigenVector` (Gas.hpp:540,567) also pass `rhoH_form=0`
-to compute sensible H — intentionally, for diagnostic use and consistency
-with the Roe eigensystem convention.
+`IdealGas_EulerGasLeftEigenVector` take both `gammaEq` and `gammaCpCv`; callers
+must pass `rhoH_form` for states that include formation energy.
 
 ## EulerP note
 
