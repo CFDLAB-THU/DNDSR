@@ -264,9 +264,13 @@ namespace DNDS::Geom
     // SerializeMesh
     // -----------------------------------------------------------------------
 
-    /** @brief Write a partitioned mesh to H5 for later distributed read.
+    /** @brief Write a partitioned mesh to H5 for later same-partition or redistributed read.
      *
-     *  The Python equivalent of the C++ ``partitionMeshOnly`` path.
+     *  The Python equivalent of the C++ ``partitionMeshOnly`` path.  The
+     *  caller controls where this occurs in the pipeline; in Euler solvers it
+     *  occurs before coordinate transforms, boundary mesh extraction, and solver
+     *  setup.  Redistribution is supported by the collective H5 serializer, not
+     *  by per-rank serializers.
      */
     inline void SerializeMesh(
         UnstructuredMesh &mesh,

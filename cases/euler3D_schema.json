@@ -99,7 +99,7 @@
                 "partitionMeshOnly": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Only partition mesh, then exit"
+                    "description": "Build and write partitioned mesh, then exit before coordinate transforms and solver setup"
                 },
                 "dtIncreaseLimit": {
                     "type": "number",
@@ -651,6 +651,11 @@
                     "default": "data/mesh/NACA0012_WIDE_H3.cgns",
                     "description": "Input mesh file path"
                 },
+                "meshFilePartitionedInput": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Explicit partitioned mesh input path for readMeshMode 1/2; empty uses meshFile_part_<current MPI size>; serializer suffix optional"
+                },
                 "outPltName": {
                     "type": "string",
                     "default": "data/out/debugData_",
@@ -674,7 +679,7 @@
                 "readMeshMode": {
                     "type": "integer",
                     "default": 0,
-                    "description": "Read mesh mode: 0=serial CGNS, 1=distributed JSON"
+                    "description": "Read mesh mode: 0=source mesh and partition, 1=pre-partitioned mesh (same MPI size), 2=H5 pre-partitioned mesh with repartition"
                 },
                 "outPltTecplotFormat": {
                     "type": "boolean",

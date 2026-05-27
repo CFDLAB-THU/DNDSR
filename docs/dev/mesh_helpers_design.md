@@ -49,8 +49,9 @@ read_mesh  -->  prepare_mesh  -->  build_bnd_mesh
 ```
 
 All helpers live in `python/DNDSR/Geom/utils.py` (Python side). The C++
-solver (`EulerSolver_Init.hxx`) keeps its own pipeline but should converge
-on the same structure over time.
+helpers live in `src/Geom/Mesh/Mesh_Helpers.hpp`; the Euler solver uses them
+for CGNS/H5 paths, while the OpenFOAM branch and several C++ tests/examples
+still contain explicit step-by-step pipeline code.
 
 ### 1. `read_mesh` -- any source to distributed mesh
 
@@ -266,6 +267,20 @@ result = read_mesh("wing.cgns_part_4_elevated.dnds.h5", mpi, dim=3)
 prepare_mesh(result.mesh, result.reader)
 ```
 
+The C++ Euler solver has two partitioned-mesh read modes. `readMeshMode=1`
+uses a direct pre-partitioned read and requires the file to have been written
+with the same MPI size. `readMeshMode=2` uses H5 even-split read plus ParMetis
+repartitioning and can read a mesh written with a different MPI size. Set
+`meshFilePartitionedInput` to the existing H5 file for cross-np reads; the
+`.dnds.h5` suffix is optional because the serializer appends it internally. If
+this field is empty, Euler falls back to the conventional current-MPI-size
+filename from `MeshH5Path(meshFile, mpi.size, elevation, bisect)`.
+
+`partitionMeshOnly` writes from the Euler pipeline before coordinate rotation,
+scaling, rectification, boundary-mesh extraction, VTK connectivity, and solver
+setup. It should therefore be treated as a partitioned copy of the built mesh,
+not as a transformed/output-ready solver mesh.
+
 ### Minimal test (no wall dist, no transforms)
 
 ```python
@@ -308,8 +323,8 @@ fv = build_fv(mpi, result.mesh)
    None:
    - `.cgns` -> CGNS serial read
    - `.dnds.h5` -> H5 distributed read (even-split + ParMetis). This is
-     the safest default: works with any MPI size regardless of how the
-     file was written.
+      the safest default: works with any MPI size regardless of how the
+      file was written.
    - Explicit `read_mode` override is still available.
 
    For the H5 path naming convention used by `serialize_mesh`, a utility

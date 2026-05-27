@@ -1009,6 +1009,11 @@ namespace DNDS::Geom
             hdf5OutSetting.coll_on_meta = coll_on_meta;
         }
 
+        /// @brief Parallel CGNS mesh export utility.
+        ///
+        /// This uses CGNS parallel write calls and is intended for diagnostics / mesh
+        /// interchange. Solver partitioned-mesh workflows use SerializeMesh + H5
+        /// instead, because that path supports same-partition and redistributed reads.
         void PrintMeshCGNS(std::string fname, const t_FBCID_2_Name &fbcid2name, const std::vector<std::string> &allNames);
 
         struct WallDistOptions

@@ -217,7 +217,7 @@ namespace DNDS::Euler
                     DNDS_FIELD(odeSetting3,         "ODE parameter 3");
                     DNDS_FIELD(odeSetting4,         "ODE parameter 4");
                     config.field_json(&T::odeSettingsExtra, "odeSettingsExtra", "Extra ODE integrator settings (opaque JSON)");
-                    DNDS_FIELD(partitionMeshOnly,   "Only partition mesh, then exit");
+                    DNDS_FIELD(partitionMeshOnly,   "Build and write partitioned mesh, then exit before coordinate transforms and solver setup");
                     DNDS_FIELD(dtIncreaseLimit,     "Max factor for dt increase per step",
                                DNDS::Config::range(1.0));
                     DNDS_FIELD(dtIncreaseAfterCount,"Steps before dt increase allowed",
@@ -498,12 +498,13 @@ namespace DNDS::Euler
                 int meshFormat = 0;
                 Geom::UnstructuredMeshSerialRW::PartitionOptions meshPartitionOptions;
                 std::string meshFile = "data/mesh/NACA0012_WIDE_H3.cgns";
+                std::string meshFilePartitionedInput = "";
                 std::string outPltName = "data/out/debugData_";
                 std::string outLogName = "";
                 std::string outRestartName = "";
 
                 int outPltMode = 0;   // 0 = serial, 1 = dist plt
-                int readMeshMode = 0; // 0 = serial cgns, 1 = dist json
+                int readMeshMode = 0; // 0 = source mesh, 1 = pre-partitioned, 2 = H5 repartitioned
                 bool outPltTecplotFormat = true;
                 bool outPltVTKFormat = false;
                 bool outPltVTKHDFFormat = false;
@@ -569,11 +570,12 @@ namespace DNDS::Euler
                     DNDS_FIELD(meshFormat,                  "Mesh format code");
                     DNDS_FIELD(meshPartitionOptions,        "Mesh partitioning options");
                     DNDS_FIELD(meshFile,                    "Input mesh file path");
+                    DNDS_FIELD(meshFilePartitionedInput,    "Explicit partitioned mesh input path for readMeshMode 1/2; empty uses meshFile_part_<current MPI size>; serializer suffix optional");
                     DNDS_FIELD(outPltName,                  "Output plot file base name");
                     DNDS_FIELD(outLogName,                  "Output log file base name (empty=use outPltName)");
                     DNDS_FIELD(outRestartName,              "Output restart file base name (empty=use outPltName)");
                     DNDS_FIELD(outPltMode,                  "Output mode: 0=serial, 1=distributed");
-                    DNDS_FIELD(readMeshMode,                "Read mesh mode: 0=serial CGNS, 1=distributed JSON");
+                    DNDS_FIELD(readMeshMode,                "Read mesh mode: 0=source mesh and partition, 1=pre-partitioned mesh (same MPI size), 2=H5 pre-partitioned mesh with repartition");
                     DNDS_FIELD(outPltTecplotFormat,         "Output in Tecplot format");
                     DNDS_FIELD(outPltVTKFormat,             "Output in VTK XML format");
                     DNDS_FIELD(outPltVTKHDFFormat,          "Output in VTK HDF format");
