@@ -78,7 +78,7 @@ namespace DNDS::Euler
         {
             if (mpi.rank == 0)
             {
-                log() << "Mesh Is not altered; partitioning done" << std::endl;
+                log() << "Partitioned mesh write complete; solver setup skipped" << std::endl;
             }
             return;
         }

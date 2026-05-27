@@ -34,12 +34,14 @@ B--D add the CFV layer.
 
 ### C++ Pipeline (Phase A)
 
-Each step is explained with *why* it is needed.
-(Source: `Geom/Mesh/Mesh.hpp` for declarations;
-`Geom/Mesh/Mesh_Serial_ReadFromCGNS.cpp` for the CGNS reader implementation.)
+Use the helpers in `Geom/Mesh/Mesh_Helpers.hpp` for new C++ code. They keep
+the CGNS/H5 read paths, ghost-building sequence, and solver-preparation steps
+in one place.
+
+The common source-CGNS path is:
 
 ```cpp
-#include "Geom/Mesh/Mesh.hpp"
+#include "Geom/Mesh/Mesh_Helpers.hpp"
 using namespace DNDS;
 using namespace DNDS::Geom;
 
@@ -48,58 +50,27 @@ mpi.setWorld();
 
 int dim = 2;
 auto mesh = std::make_shared<UnstructuredMesh>(mpi, dim);
-UnstructuredMeshSerialRW reader(mesh, 0);
+auto reader = std::make_shared<UnstructuredMeshSerialRW>(mesh, 0);
 
-// --- Step 1: Read CGNS on rank 0 ---
-// Populates serial arrays: cell2node, coords, cellElemInfo, etc.
-// Only rank 0 does actual I/O; other ranks wait at the barrier.
-reader.ReadFromCGNSSerial("mesh.cgns");
-
-// --- Step 2 (optional): Periodic boundary deduplication ---
-// Merges coincident periodic nodes so that the mesh connectivity
-// treats periodic boundaries as internal faces with a transform.
-reader.Deduplicate1to1Periodic(/*eps=*/1e-9);
-
-// --- Step 3: Build cell-to-cell adjacency ---
-// Two cells are neighbors if they share at least one node.
-// This is the graph that METIS will partition.
-reader.BuildCell2Cell();
-
-// --- Step 4: Partition with METIS ---
-// Splits cells across MPI ranks, minimizing edge cuts.
 UnstructuredMeshSerialRW::PartitionOptions opts;
 opts.metisSeed = 42;   // deterministic for testing
-reader.MeshPartitionCell2Cell(opts);
 
-// --- Step 5: Distribute to all ranks ---
-// Scatters serial arrays into distributed father arrays.
-// After this, each rank owns a slice of the cells and nodes.
-reader.PartitionReorderToMeshCell2Cell();
+ReadMeshFromCGNS(mesh, reader, "mesh.cgns", opts,
+                 /*periodicTol=*/1e-9,
+                 /*elevation=*/0,
+                 /*bisect=*/0);
 
-// --- Step 6: Build inverse relations ---
-// node2cell, node2bnd are needed by Step 7.
-mesh->RecoverNode2CellAndNode2Bnd();
-mesh->RecoverCell2CellAndBnd2Cell();
-
-// --- Step 7: Build ghost layers ---
-// For each local cell, its cell2cell neighbors on other ranks
-// become ghosts.  AdjGlobal2LocalPrimary converts global indices
-// to local father+son indices.
-mesh->BuildGhostPrimary();
-mesh->AdjGlobal2LocalPrimary();
-
-// --- Step 8: Build face arrays ---
-// InterpolateFace creates face2node, face2cell, cell2face, bnd2face
-// from cell-to-node and boundary connectivity.  Needed by any
-// finite-volume scheme that loops over faces.
-mesh->InterpolateFace();
-mesh->AssertOnFaces();
+PrepareMesh(*mesh, *reader);
 ```
 
-After these 8 steps the mesh is ready.  Optional steps
-(order elevation, h-bisection) can be inserted between steps 7 and 8;
-see `Mesh/Mesh.hpp` for `BuildO2FromO1Elevation` and
-`BuildBisectO1FormO2`.
+`ReadMeshFromCGNS` performs serial CGNS read, optional periodic
+deduplication, cell graph construction, METIS partitioning, distribution,
+primary ghost construction, optional O1-to-O2 elevation, and optional
+bisection. `PrepareMesh` then performs optional cell reorder, face
+interpolation, ghost N2CB construction, and optional serial-output setup.
+
+For pre-partitioned H5 meshes, use `ReadMeshFromH5Parallel` for exact MPI-size
+matches and `ReadMeshFromH5` for even-split read plus ParMetis repartition.
 
 ### Python Pipeline
 

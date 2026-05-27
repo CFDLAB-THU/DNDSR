@@ -2,11 +2,11 @@
  *  @brief Template implementation of EulerSolver::ReadMeshAndInitialize, the full
  *         solver initialization pipeline from mesh reading to evaluator setup.
  *
- *  Covers CGNS/OpenFOAM mesh reading, periodic boundary deduplication, mesh
- *  partitioning (ParMetis), O1-to-O2 elevation, h-refinement bisection, boundary
- *  mesh extraction for wall distance, VFV (VariationalReconstruction) construction,
- *  BC handler configuration, wall distance computation, evaluator initialization,
- *  restart loading, and initial VTK output.
+ *  Covers source-mesh reading, periodic boundary deduplication, partitioning,
+ *  optional O1-to-O2 elevation and h-refinement bisection, optional partitioned
+ *  mesh serialization, boundary mesh extraction, coordinate transforms,
+ *  VFV (VariationalReconstruction) construction, wall distance computation,
+ *  evaluator initialization, restart loading, and initial output.
  */
 #pragma once
 
@@ -22,18 +22,18 @@ namespace DNDS::Euler
     /** @brief Read the mesh, partition it, build solver data structures, and initialize the evaluator.
      *
      *  Complete initialization pipeline:
-     *  1. Read mesh from CGNS or OpenFOAM format (serial, parallel, or distributed mode).
-     *  2. Handle periodic boundary deduplication and mesh topology (cell2cell, node2cell).
-     *  3. Optionally elevate mesh order (O1 to O2) and apply h-refinement bisection.
-     *  4. Partition with ParMetis and redistribute across MPI ranks.
-     *  5. Build ghost layers, adjacency, and coordinate structures.
-     *  6. Extract boundary mesh for wall distance computation.
-     *  7. Construct VFV (VariationalReconstruction) with configured settings.
-     *  8. Configure BC handlers from JSON settings.
-     *  9. Compute wall distance (CGAL or Poisson).
-     *  10. Initialize the EulerEvaluator (arrays, face data, etc.).
-     *  11. Load restart if configured.
-     *  12. Write initial VTK output.
+     *  1. Read the source mesh and partition it, or read a pre-partitioned mesh.
+     *     Mode 1 requires the same MPI size; mode 2 repartitions H5 input.
+     *  2. For source reads, optionally elevate mesh order (O1 to O2) and apply
+     *     h-refinement bisection before solver preparation.
+     *  3. Build primary ghost layers, faces, ghost N2CB, and optional serial output.
+     *  4. Optionally smooth elevated nodes and build wall distance.
+     *  5. If partitionMeshOnly is set, write the partitioned mesh and return
+     *     before coordinate transforms, boundary mesh extraction, and solver setup.
+     *  6. Extract boundary mesh, apply coordinate transforms/rectification, and
+     *     build periodic/VTK connectivity.
+     *  7. Construct VFV, initialize the EulerEvaluator, allocate arrays, and
+     *     prepare restart/output state.
      */
     void EulerSolver<model>::ReadMeshAndInitialize()
     {
@@ -56,6 +56,30 @@ namespace DNDS::Euler
         DNDS_MAKE_SSP(readerBnd, meshBnd, 0);
         DNDS_assert(config.dataIOControl.readMeshMode == 0 || config.dataIOControl.readMeshMode == 1 || config.dataIOControl.readMeshMode == 2);
         DNDS_assert(config.dataIOControl.outPltMode == 0 || config.dataIOControl.outPltMode == 1);
+        auto getPartitionedMeshInput = [&]() -> std::string
+        {
+            std::string meshInput = config.dataIOControl.meshFilePartitionedInput.empty()
+                                        ? Geom::MeshH5Path(
+                                              config.dataIOControl.meshFile, mpi.size,
+                                              config.dataIOControl.meshElevation,
+                                              config.dataIOControl.meshDirectBisect)
+                                        : config.dataIOControl.meshFilePartitionedInput;
+            if (config.dataIOControl.meshPartitionedReaderType == "H5")
+            {
+                const std::string suffix = ".dnds.h5";
+                if (meshInput.size() >= suffix.size() &&
+                    meshInput.compare(meshInput.size() - suffix.size(), suffix.size(), suffix) == 0)
+                    meshInput.resize(meshInput.size() - suffix.size());
+            }
+            else if (config.dataIOControl.meshPartitionedReaderType == "JSON")
+            {
+                const std::string suffix = ".dir";
+                if (meshInput.size() >= suffix.size() &&
+                    meshInput.compare(meshInput.size() - suffix.size(), suffix.size(), suffix) == 0)
+                    meshInput.resize(meshInput.size() - suffix.size());
+            }
+            return meshInput;
+        };
         mesh->periodicInfo.translation[1].map() = config.boundaryDefinition.PeriodicTranslation1;
         mesh->periodicInfo.translation[2].map() = config.boundaryDefinition.PeriodicTranslation2;
         mesh->periodicInfo.translation[3].map() = config.boundaryDefinition.PeriodicTranslation3;
@@ -153,10 +177,7 @@ namespace DNDS::Euler
         }
         else if (config.dataIOControl.readMeshMode == 1)
         {
-            std::string meshOutName = Geom::MeshH5Path(
-                config.dataIOControl.meshFile, mpi.size,
-                config.dataIOControl.meshElevation,
-                config.dataIOControl.meshDirectBisect);
+            std::string meshOutName = getPartitionedMeshInput();
             Geom::ReadMeshFromH5Parallel(
                 *mesh,
                 Serializer::SerializerFactory(config.dataIOControl.meshPartitionedReaderType),
@@ -164,10 +185,7 @@ namespace DNDS::Euler
         }
         else if (config.dataIOControl.readMeshMode == 2)
         {
-            std::string meshOutName = Geom::MeshH5Path(
-                config.dataIOControl.meshFile, mpi.size,
-                config.dataIOControl.meshElevation,
-                config.dataIOControl.meshDirectBisect);
+            std::string meshOutName = getPartitionedMeshInput();
             Geom::ReadMeshFromH5(
                 *mesh,
                 Serializer::SerializerFactory(config.dataIOControl.meshPartitionedReaderType),
@@ -245,7 +263,7 @@ namespace DNDS::Euler
                 config.dataIOControl.meshElevation,
                 config.dataIOControl.meshDirectBisect);
             Geom::SerializeMesh(*mesh, meshOutName, config.dataIOControl.meshPartitionedWriter);
-            return; //** mesh preprocess only (without transformation)
+            return; // Partition-only output intentionally skips coordinate transforms and solver setup.
         }
 
         Geom::BuildBndMesh(*mesh, *meshBnd, *readerBnd,
