@@ -1625,8 +1625,8 @@ namespace DNDS::Euler
             uFaceInc.setZero(nVars, c2f.size() * 2); // j < c2f.size(): faceInc; j > c2f.size(): baryInc
             TU uOtherMin = u[iCell];
             TU uOtherMax = u[iCell];
-            auto fEInternal = [](const TU &u) -> real
-            { return u(I4) - 0.5 * u(Seq123).squaredNorm() / (u(0) + verySmallReal); };
+            auto fEInternal = [this](const TU &u) -> real
+            { return u(I4) - 0.5 * u(Seq123).squaredNorm() / (u(0) + verySmallReal) - phys_.mixtureFormationRhoE(u); };
             real eOtherMin, eOtherMax;
             eOtherMin = eOtherMax = fEInternal(u[iCell]);
             for (rowsize ic2f = 0; ic2f < c2f.size(); ic2f++)
@@ -1675,10 +1675,9 @@ namespace DNDS::Euler
             TU_Batch uFaceAlpha0 = uFaceInc.colwise() + u[iCell];
             for (int j = 0; j < uFaceAlpha0.cols(); j++)
                 DNDS_assert(uFaceAlpha0(0, j) > 0);
-            real minEFace =
-                (uFaceAlpha0(I4, EigenAll).array() -
-                 0.5 * uFaceAlpha0(Seq123, EigenAll).colwise().squaredNorm().array() / (uFaceAlpha0(0, EigenAll).array() + verySmallReal))
-                    .minCoeff();
+            real minEFace = veryLargeReal;
+            for (int j = 0; j < uFaceAlpha0.cols(); j++)
+                minEFace = std::min(minEFace, fEInternal(uFaceAlpha0(EigenAll, j)));
             real eC = fEInternal(u[iCell]);
             real deltaEFaceMin = minEFace - eC;
             real alphaPP_E = 1.0;

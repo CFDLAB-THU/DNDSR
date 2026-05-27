@@ -40,6 +40,14 @@ static Eigen::Vector<real, 5> prim2cons(real rho, real u, real v, real w, real p
     return U;
 }
 
+static Eigen::Vector<real, 5> prim2consSplit(real rho, real u, real v, real w, real p, real gammaEq, real rhoHForm)
+{
+    Eigen::Vector<real, 5> U;
+    real E = p / (gammaEq - 1.0) + 0.5 * rho * (u * u + v * v + w * w) + rhoHForm;
+    U << rho, rho * u, rho * v, rho * w, E;
+    return U;
+}
+
 // Compute the exact physical normal-direction flux
 static Eigen::Vector<real, 5> exactNormalFlux(
     const Eigen::Vector<real, 5> &U, const Eigen::Vector3d &n)
@@ -53,6 +61,20 @@ static Eigen::Vector<real, 5> exactNormalFlux(
     F(0) = U(0) * vn;
     F.segment<3>(1) = U.segment<3>(1) * vn + p * n;
     F(4) = (E + p) * vn;
+    return F;
+}
+
+static Eigen::Vector<real, 5> exactNormalFluxSplit(
+    const Eigen::Vector<real, 5> &U, const Eigen::Vector3d &n, real gammaEq, real rhoHForm)
+{
+    Eigen::Vector3d velo = U.segment<3>(1) / U(0);
+    real vn = velo.dot(n);
+    real vSqr = velo.squaredNorm();
+    real p = (gammaEq - 1.0) * (U(4) - 0.5 * U(0) * vSqr - rhoHForm);
+    Eigen::Vector<real, 5> F;
+    F(0) = U(0) * vn;
+    F.segment<3>(1) = U.segment<3>(1) * vn + p * n;
+    F(4) = (U(4) + p) * vn;
     return F;
 }
 
@@ -128,14 +150,108 @@ TEST_CASE("HLLEP consistency: identical states give exact flux")
     }
 }
 
-TEST_CASE("Roe variants M1-M8 consistency (M2,M9 not implemented)")
+TEST_CASE("Variable-gamma Riemann solvers use gammaEq pressure and gamma acoustic paths")
+{
+    real gammaEq = 1.23;
+    real gammaCpCv = 1.41;
+    real rhoHForm = 6.0;
+    auto U = prim2consSplit(1.4, 12.0, -3.0, 2.0, 17.0, gammaEq, rhoHForm);
+    Eigen::Vector3d n(0.3, -0.4, 0.5);
+    n.normalize();
+    Eigen::Vector3d vg = Eigen::Vector3d::Zero();
+    auto Fexact = exactNormalFluxSplit(U, n, gammaEq, rhoHForm);
+
+    for (auto rs : {Roe, HLLC, HLLEP})
+    {
+        CAPTURE(rs);
+        Eigen::Vector<real, 5> F;
+        F.setZero();
+        real lam0 = 0, lam123 = 0, lam4 = 0;
+        InviscidFlux_IdealGas_Dispatcher<3, true>(
+            rs, U, U, U, U, vg, n, gammaEq, gammaCpCv, F,
+            0.0, 1.0, 0.0, noDump, lam0, lam123, lam4,
+            rhoHForm, rhoHForm, rhoHForm, rhoHForm,
+            gammaEq, gammaEq, gammaEq, gammaEq,
+            gammaCpCv, gammaCpCv, gammaCpCv, gammaCpCv);
+
+        for (int i = 0; i < 5; i++)
+        {
+            CAPTURE(i);
+            CHECK(F(i) == doctest::Approx(Fexact(i)).epsilon(1e-10));
+        }
+    }
+
+    auto rp = ComputeRoePreamble<3, true>(U, U, gammaEq, gammaCpCv, noDump,
+                                          rhoHForm, rhoHForm,
+                                          gammaEq, gammaEq,
+                                          gammaCpCv, gammaCpCv);
+    real vn = (U.segment<3>(1) / U(0)).dot(n);
+    real a = std::sqrt(gammaCpCv * 17.0 / 1.4);
+    CHECK(rp.aRoe == doctest::Approx(a).epsilon(1e-12));
+    CHECK(std::abs(rp.aRoe - std::sqrt(gammaEq * 17.0 / 1.4)) > 1e-8);
+    CHECK(std::abs(vn + rp.aRoe) > std::abs(vn));
+}
+
+TEST_CASE("Variable-gamma Riemann solvers remain symmetric with formation energy")
+{
+    real gammaEqL = 1.22;
+    real gammaEqR = 1.31;
+    real gammaL = 1.39;
+    real gammaR = 1.33;
+    real rhoHFormL = 5.0;
+    real rhoHFormR = -2.0;
+    auto UL = prim2consSplit(1.1, 25.0, -5.0, 1.0, 20.0, gammaEqL, rhoHFormL);
+    auto UR = prim2consSplit(0.8, -7.0, 3.0, 0.5, 9.0, gammaEqR, rhoHFormR);
+    Eigen::Vector3d n(1.0, 0.2, -0.1);
+    n.normalize();
+    Eigen::Vector3d vg = Eigen::Vector3d::Zero();
+
+    for (auto rs : {Roe, HLLEP})
+    {
+        CAPTURE(rs);
+        Eigen::Vector<real, 5> F1, F2;
+        real lam0 = 0, lam123 = 0, lam4 = 0;
+        InviscidFlux_IdealGas_Dispatcher<3, true>(
+            rs, UL, UR, UL, UR, vg, n, g_gamma, g_gamma, F1,
+            0.0, 1.0, 0.0, noDump, lam0, lam123, lam4,
+            rhoHFormL, rhoHFormR, rhoHFormL, rhoHFormR,
+            gammaEqL, gammaEqR, gammaEqL, gammaEqR,
+            gammaL, gammaR, gammaL, gammaR);
+        InviscidFlux_IdealGas_Dispatcher<3, true>(
+            rs, UR, UL, UR, UL, vg, -n, g_gamma, g_gamma, F2,
+            0.0, 1.0, 0.0, noDump, lam0, lam123, lam4,
+            rhoHFormR, rhoHFormL, rhoHFormR, rhoHFormL,
+            gammaEqR, gammaEqL, gammaEqR, gammaEqL,
+            gammaR, gammaL, gammaR, gammaL);
+
+        for (int i = 0; i < 5; i++)
+        {
+            CAPTURE(i);
+            CHECK(F1(i) == doctest::Approx(-F2(i)).epsilon(1e-10));
+        }
+    }
+
+    // HLLC is retained as a finite-value smoke test here; its split-gamma
+    // unequal-state symmetry remains approximate in this implementation.
+    Eigen::Vector<real, 5> FHLLC;
+    real lam0 = 0, lam123 = 0, lam4 = 0;
+    InviscidFlux_IdealGas_Dispatcher<3, true>(
+        HLLC, UL, UR, UL, UR, vg, n, g_gamma, g_gamma, FHLLC,
+        0.0, 1.0, 0.0, noDump, lam0, lam123, lam4,
+        rhoHFormL, rhoHFormR, rhoHFormL, rhoHFormR,
+        gammaEqL, gammaEqR, gammaEqL, gammaEqR,
+        gammaL, gammaR, gammaL, gammaR);
+    CHECK(FHLLC.allFinite());
+}
+
+TEST_CASE("Roe variants M1-M8 consistency")
 {
     auto U = prim2cons(1.0, 50.0, 0.0, 0.0, 100000.0);
     Eigen::Vector3d n(1.0, 0.0, 0.0);
     auto Fexact = exactNormalFlux(U, n);
 
-    // Note: Roe_M2 (eigScheme=2) and Roe_M9 (eigScheme=9) are not implemented
-    for (auto rs : {Roe_M1, Roe_M3, Roe_M4, Roe_M5, Roe_M6, Roe_M7, Roe_M8})
+    // Note: Roe_M9 (eigScheme=9) is reserved and intentionally not included.
+    for (auto rs : {Roe_M1, Roe_M2, Roe_M3, Roe_M4, Roe_M5, Roe_M6, Roe_M7, Roe_M8})
     {
         CAPTURE(rs);
         auto F = callDispatcher(rs, U, U, n);

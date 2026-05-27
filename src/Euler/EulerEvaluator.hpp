@@ -1630,7 +1630,7 @@ namespace DNDS::Euler
             }
 
             real eK = ret(Seq123).squaredNorm() * 0.5 / (verySmallReal + ret(0));
-            real e = ret(I4) - eK;
+            real e = ret(I4) - eK - phys_.mixtureFormationRhoE(ret);
             if (e < 0)
             {
                 // eFixed = true;
