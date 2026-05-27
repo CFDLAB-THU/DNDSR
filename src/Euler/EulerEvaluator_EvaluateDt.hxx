@@ -892,10 +892,7 @@ namespace DNDS::Euler
             TVec vL = UL(Seq123) / UL(0);
             TVec vR = vL;
             real T_L = phys_.template temperature<dim>(UL);
-            Gas::IdealGasThermal(UL(I4), UL(0), vL.squaredNorm(),
-                                 phys_.template gammaEq<dim>(T_L, UL),
-                                 pL, asqrL, HL,
-                                 phys_.mixtureFormationRhoE(UL));
+            phys_.template conservativeThermal<dim>(UL, T_L, pL, asqrL, HL);
             pR = pL, HR = HL, asqrR = asqrL;
             if (f2c[1] != UnInitIndex)
             {
@@ -904,10 +901,7 @@ namespace DNDS::Euler
                 uMean = (uMean + UR) * 0.5;
                 vR = UR(Seq123) / UR(0);
                 real T_R = phys_.template temperature<dim>(UR);
-                Gas::IdealGasThermal(UR(I4), UR(0), vR.squaredNorm(),
-                                     phys_.template gammaEq<dim>(T_R, UR),
-                                     pR, asqrR, HR,
-                                     phys_.mixtureFormationRhoE(UR));
+                phys_.template conservativeThermal<dim>(UR, T_R, pR, asqrR, HR);
             }
             TDiffU GradULxy, GradURxy;
             GradULxy.resize(Eigen::NoChange, nVars);
@@ -961,11 +955,9 @@ namespace DNDS::Euler
 
             real pMean, asqrMean, HMean;
             real T = phys_.template temperature<dim>(uMean);
-            real gamma = phys_.template gammaEq<dim>(T, uMean);
-            Gas::IdealGasThermal(uMean(I4), uMean(0), veloMean.squaredNorm(),
-                                 gamma,
-                                 pMean, asqrMean, HMean,
-                                 phys_.mixtureFormationRhoE(uMean));
+            real gammaEq = 0;
+            real gamma = 0;
+            phys_.template conservativeThermal<dim>(uMean, T, pMean, asqrMean, HMean, &gammaEq, &gamma);
 
             pMean = (pL + pR) * 0.5;
             real aMean = sqrt(gamma * pMean / uMean(0)); // paper
@@ -1185,10 +1177,9 @@ namespace DNDS::Euler
             TDiffU DiffUxyPrimC = DiffUxyPrim(seqC, EigenAll);
             TVec uNormC = unitNorm(EigenAll, iB);
             real T = phys_.template temperature<dim>(UMeanXYC);
-            real gamma = phys_.template gammaEq<dim>(T, UMeanXYC);
-            Gas::IdealGasThermal(UMeanXYC(I4), UMeanXYC(0), (UMeanXYC(Seq123) / UMeanXYC(0)).squaredNorm(),
-                                    gamma, pMean, asqrMean, Hmean,
-                                    phys_.mixtureFormationRhoE(UMeanXYC));
+            real gammaEq = 0;
+            real gamma = 0;
+            phys_.template conservativeThermal<dim>(UMeanXYC, T, pMean, asqrMean, Hmean, &gammaEq, &gamma);
             DNDS_assert_info(pMean > 0, fmt::format("{}, {}, {}", UMeanXYC(I4), UMeanXYC(0), (UMeanXYC(Seq123) / UMeanXYC(0)).squaredNorm()));
             real mufPhy, muf;
             muf = muEff(UMeanXYC, T);
@@ -1207,7 +1198,7 @@ namespace DNDS::Euler
                 VisFlux.setZero();
                 Gas::ViscousFlux_IdealGas<dim>(
                     UMeanXYC, DiffUxyPrimC, uNormC, pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall,
-                    gamma,
+                    gammaEq, gamma,
                     muf, muTurb / (muf + verySmallReal), settings.ransUseQCR,
                     k,
                     phys_.Cp(T, UMeanXYC),
@@ -1283,14 +1274,19 @@ namespace DNDS::Euler
         lam4V.resize(nB);
 
         real T_Lm_rs = phys_.template temperature<dim>(ULMeanXy);
-        real gammaLm_rs = phys_.template gammaEq<dim>(T_Lm_rs, ULMeanXy);
+        real gammaEqLm_rs = phys_.template gammaEq<dim>(T_Lm_rs, ULMeanXy);
+        real gammaLm_rs = phys_.gamma(T_Lm_rs, ULMeanXy);
         real T_Rm_rs = phys_.template temperature<dim>(URMeanXy);
-        real gammaRm_rs = phys_.template gammaEq<dim>(T_Rm_rs, URMeanXy);
+        real gammaEqRm_rs = phys_.template gammaEq<dim>(T_Rm_rs, URMeanXy);
+        real gammaRm_rs = phys_.gamma(T_Rm_rs, URMeanXy);
+        real gammaEq_rs = gammaEqLm_rs;
         real gamma_rs = gammaLm_rs;
 
-        TU gammaLV, gammaRV, rhoHLV, rhoHRV;
+        TU gammaEqLV, gammaEqRV, gammaLV, gammaRV, rhoHLV, rhoHRV;
         if (phys_.hasChemicalSource())
         {
+            gammaEqLV.resize(nB);
+            gammaEqRV.resize(nB);
             gammaLV.resize(nB);
             gammaRV.resize(nB);
             rhoHLV.resize(nB);
@@ -1301,8 +1297,10 @@ namespace DNDS::Euler
                 TU uR = URxy(EigenAll, iB);
                 real TL = phys_.template temperature<dim>(uL);
                 real TR = phys_.template temperature<dim>(uR);
-                gammaLV(iB) = phys_.template gammaEq<dim>(TL, uL);
-                gammaRV(iB) = phys_.template gammaEq<dim>(TR, uR);
+                gammaEqLV(iB) = phys_.template gammaEq<dim>(TL, uL);
+                gammaEqRV(iB) = phys_.template gammaEq<dim>(TR, uR);
+                gammaLV(iB) = phys_.gamma(TL, uL);
+                gammaRV(iB) = phys_.gamma(TR, uR);
                 rhoHLV(iB) = phys_.mixtureFormationRhoE(uL);
                 rhoHRV(iB) = phys_.mixtureFormationRhoE(uR);
             }
@@ -1311,22 +1309,25 @@ namespace DNDS::Euler
         auto RSWrapper_XY =
             [&](Gas::RiemannSolverType rsType,
                 auto &&UL, auto &&UR, auto &&ULm, auto &&URm, auto &&vg, auto &&n,
-                real gamma, auto &&finc, real dLambda, real fixScale, real incFScale,
+                real gammaEq, real gamma, auto &&finc, real dLambda, real fixScale, real incFScale,
                 real &lam0, real &lam123, real &lam4)
         {
             if (phys_.hasChemicalSource())
             {
                 real TL = phys_.template temperature<dim>(UL);
                 real TR = phys_.template temperature<dim>(UR);
-                real gammaL = phys_.template gammaEq<dim>(TL, UL);
-                real gammaR = phys_.template gammaEq<dim>(TR, UR);
-                Gas::InviscidFlux_IdealGas_Dispatcher<dim, true>(rsType, UL, UR, ULm, URm, vg, n, gamma, finc, dLambda, fixScale, incFScale, exitFun, lam0, lam123, lam4,
+                real gammaEqL = phys_.template gammaEq<dim>(TL, UL);
+                real gammaEqR = phys_.template gammaEq<dim>(TR, UR);
+                real gammaL = phys_.gamma(TL, UL);
+                real gammaR = phys_.gamma(TR, UR);
+                Gas::InviscidFlux_IdealGas_Dispatcher<dim, true>(rsType, UL, UR, ULm, URm, vg, n, gammaEq, gamma, finc, dLambda, fixScale, incFScale, exitFun, lam0, lam123, lam4,
                     phys_.mixtureFormationRhoE(UL), phys_.mixtureFormationRhoE(UR),
                     phys_.mixtureFormationRhoE(ULm), phys_.mixtureFormationRhoE(URm),
+                    gammaEqL, gammaEqR, gammaEqLm_rs, gammaEqRm_rs,
                     gammaL, gammaR, gammaLm_rs, gammaRm_rs);
             }
             else
-                Gas::InviscidFlux_IdealGas_Dispatcher<dim>(rsType, UL, UR, ULm, URm, vg, n, gamma, finc, dLambda, fixScale, incFScale, exitFun, lam0, lam123, lam4,
+                Gas::InviscidFlux_IdealGas_Dispatcher<dim>(rsType, UL, UR, ULm, URm, vg, n, gammaEq, gamma, finc, dLambda, fixScale, incFScale, exitFun, lam0, lam123, lam4,
                     phys_.mixtureFormationRhoE(UL), phys_.mixtureFormationRhoE(UR),
                     phys_.mixtureFormationRhoE(ULm), phys_.mixtureFormationRhoE(URm));
         };
@@ -1350,15 +1351,16 @@ namespace DNDS::Euler
                     Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim, true, true>(
                         rsType,
                         ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, unitNorm, unitNormC,
-                        gamma_rs, finc, dLambda, fixScale, incFScale,
+                        gammaEq_rs, gamma_rs, finc, dLambda, fixScale, incFScale,
                         exitFun, lam0, lam123, lam4,
                         phys_.mixtureFormationRhoE(ULMeanXy), phys_.mixtureFormationRhoE(URMeanXy),
-                        rhoHLV, rhoHRV, gammaLV, gammaRV, gammaLm_rs, gammaRm_rs);
+                        rhoHLV, rhoHRV, gammaEqLV, gammaEqRV, gammaEqLm_rs, gammaEqRm_rs,
+                        gammaLV, gammaRV, gammaLm_rs, gammaRm_rs);
                 else
                     Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
                         rsType,
                         ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, unitNorm, unitNormC,
-                        gamma_rs, finc, dLambda, fixScale, incFScale,
+                        gammaEq_rs, gamma_rs, finc, dLambda, fixScale, incFScale,
                         exitFun, lam0, lam123, lam4,
                         phys_.mixtureFormationRhoE(ULMeanXy), phys_.mixtureFormationRhoE(URMeanXy),
                         nullptr, nullptr, nullptr, nullptr);
@@ -1371,7 +1373,7 @@ namespace DNDS::Euler
                 {
                     RSWrapper_XY(rsType, ULxy(EigenAll, iB), URxy(EigenAll, iB), ULMeanXy, URMeanXy,
                                  vgXY(EigenAll, iB), unitNorm(EigenAll, iB),
-                                 gamma_rs, finc(EigenAll, iB), dLambda, fixScale, incFScale,
+                                 gammaEq_rs, gamma_rs, finc(EigenAll, iB), dLambda, fixScale, incFScale,
                                  lam0V(iB), lam123V(iB), lam4V(iB));
                 }
         };
@@ -1449,15 +1451,16 @@ namespace DNDS::Euler
                         Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim, true, true>(
                             rsTypeAux,
                             ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, N1B, N1,
-                            gamma_rs, F1, dLambda, fixScale, incFScale,
+                            gammaEq_rs, gamma_rs, F1, dLambda, fixScale, incFScale,
                             exitFun, lam0, lam123, lam4,
                             phys_.mixtureFormationRhoE(ULMeanXy), phys_.mixtureFormationRhoE(URMeanXy),
-                            rhoHLV, rhoHRV, gammaLV, gammaRV, gammaLm_rs, gammaRm_rs);
+                            rhoHLV, rhoHRV, gammaEqLV, gammaEqRV, gammaEqLm_rs, gammaEqRm_rs,
+                            gammaLV, gammaRV, gammaLm_rs, gammaRm_rs);
                     else
                         Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
                             rsTypeAux,
                             ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, N1B, N1,
-                            gamma_rs, F1, dLambda, fixScale, incFScale,
+                            gammaEq_rs, gamma_rs, F1, dLambda, fixScale, incFScale,
                             exitFun, lam0, lam123, lam4,
                             phys_.mixtureFormationRhoE(ULMeanXy), phys_.mixtureFormationRhoE(URMeanXy),
                             nullptr, nullptr, nullptr, nullptr);
@@ -1470,7 +1473,7 @@ namespace DNDS::Euler
                     {
                         RSWrapper_XY(rsTypeAux, ULxy(EigenAll, iB), URxy(EigenAll, iB), ULMeanXy, URMeanXy,
                                      vgXY(EigenAll, iB), N1,
-                                     gamma_rs, F1(EigenAll, iB), dLambda, fixScale, incFScale,
+                                     gammaEq_rs, gamma_rs, F1(EigenAll, iB), dLambda, fixScale, incFScale,
                                      lam0V1(iB), lam123V1(iB), lam4V1(iB));
                     }
 
@@ -1482,15 +1485,16 @@ namespace DNDS::Euler
                         Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim, true, true>(
                             rsType,
                             ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, N2, N2C,
-                            gamma_rs, finc, dLambda, fixScale, incFScale,
+                            gammaEq_rs, gamma_rs, finc, dLambda, fixScale, incFScale,
                             exitFun, lam0, lam123, lam4,
                             phys_.mixtureFormationRhoE(ULMeanXy), phys_.mixtureFormationRhoE(URMeanXy),
-                            rhoHLV, rhoHRV, gammaLV, gammaRV, gammaLm_rs, gammaRm_rs);
+                            rhoHLV, rhoHRV, gammaEqLV, gammaEqRV, gammaEqLm_rs, gammaEqRm_rs,
+                            gammaLV, gammaRV, gammaLm_rs, gammaRm_rs);
                     else
                         Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
                             rsType,
                             ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, N2, N2C,
-                            gamma_rs, finc, dLambda, fixScale, incFScale,
+                            gammaEq_rs, gamma_rs, finc, dLambda, fixScale, incFScale,
                             exitFun, lam0, lam123, lam4,
                             phys_.mixtureFormationRhoE(ULMeanXy), phys_.mixtureFormationRhoE(URMeanXy),
                             nullptr, nullptr, nullptr, nullptr);
@@ -1503,7 +1507,7 @@ namespace DNDS::Euler
                     {
                         RSWrapper_XY(rsType, ULxy(EigenAll, iB), URxy(EigenAll, iB), ULMeanXy, URMeanXy,
                                      vgXY(EigenAll, iB), N2(EigenAll, iB),
-                                     gamma_rs, finc(EigenAll, iB), dLambda, fixScale, incFScale,
+                                     gammaEq_rs, gamma_rs, finc(EigenAll, iB), dLambda, fixScale, incFScale,
                                      lam0V(iB), lam123V(iB), lam4V(iB));
                     }
 
@@ -1693,14 +1697,12 @@ namespace DNDS::Euler
 
             real pMean, asqrMean, Hmean;
             real T = phys_.template temperature<dim>(UMeanXy);
-            real gamma = phys_.template gammaEq<dim>(T, UMeanXy);
-            Gas::IdealGasThermal(UMeanXy(I4), UMeanXy(0),
-                                 (UMeanXy(Seq123) / UMeanXy(0)).squaredNorm(),
-                                 gamma, pMean, asqrMean, Hmean,
-                                 phys_.mixtureFormationRhoE(UMeanXy));
+            real gammaEq = 0;
+            real gamma = 0;
+            phys_.template conservativeThermal<dim>(UMeanXy, T, pMean, asqrMean, Hmean, &gammaEq, &gamma);
 
             aux.T = T;
-            aux.gamma = gamma;
+            aux.gammaEq = gammaEq;
             aux.p = pMean;
             aux.pPhys = phys_.toPhysP(pMean);
             aux.muf = muEff(UMeanXy, aux.T);
@@ -1775,10 +1777,9 @@ namespace DNDS::Euler
 
             real pMean, asqrMean, Hmean;
             real T = phys_.template temperature<dim>(UMeanXy);
-            real gamma = phys_.template gammaEq<dim>(T, UMeanXy);
-            Gas::IdealGasThermal(UMeanXy(I4), UMeanXy(0), (UMeanXy(Seq123) / UMeanXy(0)).squaredNorm(),
-                                 gamma, pMean, asqrMean, Hmean,
-                                 phys_.mixtureFormationRhoE(UMeanXy));
+            real gammaEq = 0;
+            real gamma = 0;
+            phys_.template conservativeThermal<dim>(UMeanXy, T, pMean, asqrMean, Hmean, &gammaEq, &gamma);
             // ! refvalue:
             real muRef = phys_.muRef();
 
@@ -1824,10 +1825,9 @@ namespace DNDS::Euler
         {
             real pMean, asqrMean, Hmean;
             real T = phys_.template temperature<dim>(UMeanXy);
-            real gamma = phys_.template gammaEq<dim>(T, UMeanXy);
-            Gas::IdealGasThermal(UMeanXy(I4), UMeanXy(0), (UMeanXy(Seq123) / UMeanXy(0)).squaredNorm(),
-                                 gamma, pMean, asqrMean, Hmean,
-                                 phys_.mixtureFormationRhoE(UMeanXy));
+            real gammaEq = 0;
+            real gamma = 0;
+            phys_.template conservativeThermal<dim>(UMeanXy, T, pMean, asqrMean, Hmean, &gammaEq, &gamma);
             // ! refvalue:
             real muRef = phys_.muRef();
 
@@ -2213,10 +2213,21 @@ namespace DNDS::Euler
 
         real un = ULxy(Seq123).dot(uNorm) / ULxy(0); // using relative velo for in/out judgement
         real T = phys_.template temperature<dim>(ULxyStatic);
-        real gamma = phys_.template gammaEq<dim>(T, ULxyStatic);
+        real gammaEq = 0;
+        real gamma = 0;
         real asqr, H, p;
-        Gas::IdealGasThermal(ULxyStatic(I4), ULxyStatic(0), (ULxyStatic(Seq123) / ULxyStatic(0)).squaredNorm(), gamma, p, asqr, H,
-                             phys_.mixtureFormationRhoE(ULxyStatic));
+        phys_.template conservativeThermal<dim>(ULxyStatic, T, p, asqr, H, &gammaEq, &gamma);
+        auto gammaEqFromTotal = [&](const TU &U)
+        {
+            real TState = phys_.template temperature<dim>(U);
+            return phys_.template gammaEq<dim>(TState, U);
+        };
+        auto gammaEqFromSensibleConfig = [&](TU U)
+        {
+            if (settings.reactiveFlow.enabled)
+                U(I4) += phys_.mixtureFormationRhoE(U);
+            return gammaEqFromTotal(U);
+        };
 
         DNDS_assert(asqr >= 0);
         real a = std::sqrt(asqr);
@@ -2233,8 +2244,9 @@ namespace DNDS::Euler
             TU farPrimitive, ULxyPrimitive;
             farPrimitive.resizeLike(ULxyStatic);
             ULxyPrimitive.resizeLike(URxy);
-            Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gamma, 0 /* config, sensible ρE */);
-            Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gamma,
+            real gammaEqFar = gammaEqFromSensibleConfig(far);
+            Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gammaEqFar, 0 /* config, sensible ρE */);
+            Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gammaEq,
                                                             phys_.mixtureFormationRhoE(ULxyStatic));
             if (bTypeEuler == EulerBCType::BCOutP && pBCHandler->GetFlagFromID(btype, "anchorOpt") == 1)
             {
@@ -2243,7 +2255,7 @@ namespace DNDS::Euler
                     if (anchorRecorders.count(btype)) // if doesn't have anchor value yet, use UL as anchor
                         anchorPointRel = anchorRecorders.at(btype).val;
                     TU anchorPointRelPrimitive = anchorPointRel;
-                    Gas::IdealGasThermalConservative2Primitive<dim>(anchorPointRel, anchorPointRelPrimitive, gamma,
+                    Gas::IdealGasThermalConservative2Primitive<dim>(anchorPointRel, anchorPointRelPrimitive, gammaEqFromTotal(anchorPointRel),
                                                                     phys_.mixtureFormationRhoE(anchorPointRel));
                     farPrimitive(I4) += std::max(ULxyPrimitive(I4) - anchorPointRelPrimitive(I4), -0.95 * farPrimitive(I4));
                 }
@@ -2256,20 +2268,25 @@ namespace DNDS::Euler
                 farPrimitive(I4) += std::max(pInc, -0.95 * farPrimitive(I4));
             }
             ULxyPrimitive(I4) = farPrimitive(I4); // using far pressure
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(ULxyPrimitive, URxy, gamma,
-                                                            phys_.mixtureFormationRhoE(ULxyStatic));
+            if (settings.reactiveFlow.enabled)
+                phys_.template primToConservative<dim>(ULxyPrimitive, URxy);
+            else
+                Gas::IdealGasThermalPrimitive2Conservative<dim>(ULxyPrimitive, URxy, gammaEq, 0);
         }
         else if (un - vgN + a > 0) //  subsonic in
         {
             TU farPrimitive, ULxyPrimitive;
             farPrimitive.resizeLike(ULxyStatic);
             ULxyPrimitive.resizeLike(URxy);
-            Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gamma, 0 /* config, sensible ρE */);
-            Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gamma,
+            real gammaEqFar = gammaEqFromSensibleConfig(far);
+            Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gammaEqFar, 0 /* config, sensible ρE */);
+            Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gammaEq,
                                                             phys_.mixtureFormationRhoE(ULxyStatic));
             farPrimitive(I4) = ULxyPrimitive(I4); // using inner pressure
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma,
-                                                            phys_.mixtureFormationRhoE(far));
+            if (settings.reactiveFlow.enabled)
+                phys_.template primToConservative<dim>(farPrimitive, URxy);
+            else
+                Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gammaEqFar, 0);
         }
         else // full inflow
         {
@@ -2351,12 +2368,11 @@ namespace DNDS::Euler
             DNDS_assert(dim > 1);
             Eigen::VectorXd far = settings.farFieldStaticValue;
             real T = phys_.template temperature<dim>(ULxy);
-            real gamma = phys_.template gammaEq<dim>(T, ULxy);
+            real gammaEq = 0;
+            real gamma = 0;
             real un = ULxy(Seq123).dot(uNorm) / ULxy(0);
-            real vsqr = (ULxy(Seq123) / ULxy(0)).squaredNorm();
             real asqr, H, p;
-            Gas::IdealGasThermal(ULxy(I4), ULxy(0), vsqr, gamma, p, asqr, H,
-                                 phys_.mixtureFormationRhoE(ULxy));
+            phys_.template conservativeThermal<dim>(ULxy, T, p, asqr, H, &gammaEq, &gamma);
 
             DNDS_assert(asqr >= 0);
             real a = std::sqrt(asqr);
@@ -2369,7 +2385,7 @@ namespace DNDS::Euler
                 far(0) = rho;
                 far(1) = 0;
                 far(2) = rho * v;
-                far(I4) = 0.5 * rho * sqr(v) + p / (gamma - 1);
+                far(I4) = 0.5 * rho * sqr(v) + p / (gammaEq - 1);
             }
             else
             {
@@ -2378,7 +2394,7 @@ namespace DNDS::Euler
                 far(0) = rho;
                 far(1) = 0;
                 far(2) = rho * v;
-                far(I4) = 0.5 * rho * sqr(v) + p / (gamma - 1);
+                far(I4) = 0.5 * rho * sqr(v) + p / (gammaEq - 1);
             }
 
             if (un - a > 0)
@@ -2388,11 +2404,11 @@ namespace DNDS::Euler
                 TU farPrimitive, ULxyPrimitive;
                 farPrimitive.resizeLike(ULxy);
                 ULxyPrimitive.resizeLike(URxy);
-                Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gamma, 0 /* config, sensible ρE */);
-                Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrimitive, gamma,
+                Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gammaEq, 0 /* config, sensible ρE */);
+                Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrimitive, gammaEq,
                                                                 phys_.mixtureFormationRhoE(ULxy));
                 ULxyPrimitive(I4) = farPrimitive(I4);
-                Gas::IdealGasThermalPrimitive2Conservative<dim>(ULxyPrimitive, URxy, gamma,
+                Gas::IdealGasThermalPrimitive2Conservative<dim>(ULxyPrimitive, URxy, gammaEq,
                                                                 phys_.mixtureFormationRhoE(ULxy));
             }
             else if (un + a > 0)
@@ -2400,11 +2416,11 @@ namespace DNDS::Euler
                 TU farPrimitive, ULxyPrimitive;
                 farPrimitive.resizeLike(ULxy);
                 ULxyPrimitive.resizeLike(URxy);
-                Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gamma, 0 /* config, sensible ρE */);
-                Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrimitive, gamma,
+                Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gammaEq, 0 /* config, sensible ρE */);
+                Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrimitive, gammaEq,
                                                                 phys_.mixtureFormationRhoE(ULxy));
                 farPrimitive(I4) = ULxyPrimitive(I4);
-                Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma,
+                Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gammaEq,
                                                                 phys_.mixtureFormationRhoE(far));
             }
             else
@@ -2421,7 +2437,8 @@ namespace DNDS::Euler
                              "Species are zeroed and formation energy is not included.");
             real chi = 5;
             real T_iv = phys_.template temperature<dim>(ULxy);
-            real gamma = phys_.template gammaEq<dim>(T_iv, ULxy);
+            real gammaEq = phys_.template gammaEq<dim>(T_iv, ULxy);
+            real gamma = phys_.gamma(T_iv, ULxy);
             real xc = 5 + t;
             real yc = 5 + t;
             real r = std::sqrt(sqr(pPhysics(0) - xc) + sqr(pPhysics(1) - yc));
@@ -2434,7 +2451,7 @@ namespace DNDS::Euler
             real S = 1;
             real rho = std::pow(T / S, 1 / (gamma - 1));
             real pVal = T * rho;
-            real E = 0.5 * (sqr(ux) + sqr(uy)) * rho + pVal / (gamma - 1);
+            real E = 0.5 * (sqr(ux) + sqr(uy)) * rho + pVal / (gammaEq - 1);
 
             URxy.setZero();
             URxy(0) = rho;
@@ -2445,7 +2462,7 @@ namespace DNDS::Euler
         else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_2DRiemann_FAR) // 2D Riemann
         {
             real T = phys_.template temperature<dim>(ULxy);
-            real gamma = phys_.template gammaEq<dim>(T, ULxy);
+            real gammaEq = phys_.template gammaEq<dim>(T, ULxy);
             real bdL = 0.0, bdR = 1.0, bdD = 0.0, bdU = 1.0;
 
             real phi1 = -0.663324958071080;
@@ -2457,7 +2474,7 @@ namespace DNDS::Euler
             TU ULxyPrimitive;
             ULxyPrimitive.resizeLike(ULxy);
 
-            Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrimitive, gamma,
+            Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrimitive, gammaEq,
                                                             phys_.mixtureFormationRhoE(ULxy));
             real rhoL = ULxyPrimitive(0);
             real uL = ULxyPrimitive(1);
@@ -2502,7 +2519,7 @@ namespace DNDS::Euler
             farPrimitive(0) = rho;
             farPrimitive(1) = u, farPrimitive(2) = v;
             farPrimitive(I4) = pre;
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma,
+            Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gammaEq,
                                                             phys_.mixtureFormationRhoE(ULxy));
         }
         else if (pBCHandler->GetFlagFromID(btype, "specialOpt") == 3001) // Noh
@@ -2626,8 +2643,8 @@ namespace DNDS::Euler
             TU URxyPrim;
             URxyPrim.resizeLike(ULxy);
             real T = phys_.template temperature<dim>(URxy);
-            real gamma = phys_.template gammaEq<dim>(T, URxy);
-            Gas::IdealGasThermalConservative2Primitive<dim>(URxy, URxyPrim, gamma,
+            real gammaEq = phys_.template gammaEq<dim>(T, URxy);
+            Gas::IdealGasThermalConservative2Primitive<dim>(URxy, URxyPrim, gammaEq,
                                                             phys_.mixtureFormationRhoE(URxy));
             DNDS_assert_info(URxyPrim(0) > 0 && URxyPrim(I4) > 0 && temp > 0, fmt::format("{}, {}, {}", URxyPrim(0), URxyPrim(I4), temp));
             real newDensity = URxyPrim(I4) / temp / phys_.Rgas(URxy);
@@ -2635,7 +2652,7 @@ namespace DNDS::Euler
             if (phys_.hasChemicalSource())
                 phys_.template primToConservative<dim>(URxyPrim, URxy);
             else
-                Gas::IdealGasThermalPrimitive2Conservative<dim>(URxyPrim, URxy, gamma, 0);
+                Gas::IdealGasThermalPrimitive2Conservative<dim>(URxyPrim, URxy, gammaEq, 0);
         }
         if constexpr (Traits::hasSA)
         {
@@ -2659,10 +2676,7 @@ namespace DNDS::Euler
 
                 real pMean, asqrMean, Hmean;
                 real T = phys_.template temperature<dim>(ULMeanXy);
-                real gamma = phys_.template gammaEq<dim>(T, ULMeanXy);
-                Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
-                                     gamma, pMean, asqrMean, Hmean,
-                                     phys_.mixtureFormationRhoE(ULMeanXy));
+                phys_.template conservativeThermal<dim>(ULMeanXy, T, pMean, asqrMean, Hmean);
                 real mufPhy1 = muEff(ULMeanXy, T);
                 real epsWall = 2 * mufPhy1 / ULMeanXy(0) * k1 / sqr(d1);
                 URxy(I4 + 2) = 2 * epsWall * ULxy(0) - ULxy(I4 + 2);
@@ -2673,10 +2687,7 @@ namespace DNDS::Euler
                 real d1 = dWall[iCell].mean();
                 real pMean, asqrMean, Hmean;
                 real T = phys_.template temperature<dim>(ULMeanXy);
-                real gamma = phys_.template gammaEq<dim>(T, ULMeanXy);
-                Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
-                                     gamma, pMean, asqrMean, Hmean,
-                                     phys_.mixtureFormationRhoE(ULMeanXy));
+                phys_.template conservativeThermal<dim>(ULMeanXy, T, pMean, asqrMean, Hmean);
                 real mufPhy1 = muEff(ULMeanXy, T);
 
                 real rhoOmegaaaWall = mufPhy1 / sqr(d1) * RANS::kWallOmegaCoeff;
@@ -2904,10 +2915,7 @@ namespace DNDS::Euler
                 real pMean, asqrMean, Hmean;
                 auto ULMeanXy = Uxy;
                 real T = phys_.template temperature<dim>(ULMeanXy);
-                real gamma = phys_.template gammaEq<dim>(T, ULMeanXy);
-                Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
-                                     gamma, pMean, asqrMean, Hmean,
-                                     phys_.mixtureFormationRhoE(ULMeanXy));
+                phys_.template conservativeThermal<dim>(ULMeanXy, T, pMean, asqrMean, Hmean);
                 // ! refvalue:
                 real muRef = phys_.muRef();
                 real mufPhy = muEff(ULMeanXy, T);

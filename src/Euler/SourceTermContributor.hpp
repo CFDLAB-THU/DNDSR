@@ -44,7 +44,7 @@ namespace DNDS::Euler
         real T = 300;
         real p = 101325;     // default pressure (code=phys when scaling defaults are 1)
         real pPhys = 101325; // physical pressure [Pa] for Cantera (same as p with default scaling)
-        real gamma = 1.4;    // EOS gamma at this point (from phys_)
+        real gammaEq = 1.4;  // pressure/energy closure gammaEq at this point
         real rhoH_form = 0;  // volumetric formation enthalpy (0 when no chemistry)
     };
 
@@ -110,7 +110,7 @@ namespace DNDS::Euler
     }
 
     template <EulerModel model>
-    inline void evalSourceAxisymmetric(real gamma, const Geom::tPoint &pPhy,
+    inline void evalSourceAxisymmetric(real gammaEq, const Geom::tPoint &pPhy,
                                        typename EulerModelTraits<model>::TU &ret,
                                        const typename EulerModelTraits<model>::TU &U, int Mode,
                                        real rhoH_form = 0)
@@ -120,7 +120,7 @@ namespace DNDS::Euler
         {
             typename EulerModelTraits<model>::TU uPrim;
             uPrim.resizeLike(U);
-            Gas::IdealGasThermalConservative2Primitive(U, uPrim, gamma, rhoH_form);
+            Gas::IdealGasThermalConservative2Primitive(U, uPrim, gammaEq, rhoH_form);
             ret(2) += uPrim(I4) / std::max(verySmallReal, pPhy(1));
         }
     }
@@ -195,7 +195,7 @@ namespace DNDS::Euler
         {
             if (!active)
                 return;
-            evalSourceAxisymmetric<model>(aux.gamma, pPhy, ret, U, Mode, aux.rhoH_form);
+            evalSourceAxisymmetric<model>(aux.gammaEq, pPhy, ret, U, Mode, aux.rhoH_form);
         }
     };
 
@@ -225,7 +225,7 @@ namespace DNDS::Euler
             lLES = std::min(lLES, std::max({d * cWall, aux.hMax * cWall}));
             auto call = [&](int mode)
             {
-                RANS::GetSource_SA<Traits::dim>(U, GradU, muGas, aux.muf, aux.gamma,
+                RANS::GetSource_SA<Traits::dim>(U, GradU, muGas, aux.muf, aux.gammaEq,
                                                 d, lLES, aux.hMax, SADESMode,
                                                 retInc, ransSARotCorrection, mode, SAVersion);
             };

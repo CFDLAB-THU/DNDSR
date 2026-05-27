@@ -33,7 +33,7 @@ ctest --test-dir build -R euler_gas_thermo --output-on-failure
 @see test_GasThermo.cpp
 
 Serial tests for ideal-gas thermodynamics and Euler eigenvector routines
-in `Gas.hpp`.  22 test cases.  No MPI or mesh; all
+in `Gas.hpp`.  24 test cases.  No MPI or mesh; all
 functions are pure.
 
 ### IdealGasThermal
@@ -42,6 +42,8 @@ functions are pure.
 |---|---|
 | `standard quiescent air` | rho=1, p=1/gamma: checks a=1, H=gamma/(gamma-1), internal energy. |
 | `Mach 2 flow` | Supersonic state: verifies p, a, H, total energy. |
+| `gammaEq controls pressure and gamma controls acoustic speed` | Split-gamma regression for `IdealGasThermal`. |
+| `Shared enthalpy helper does not double-count formation energy` | Verifies `IdealGas::Enthalpy` with nonzero formation input. |
 
 ### Conservative / Primitive Round-Trip
 
@@ -50,13 +52,6 @@ functions are pure.
 | `Cons2Prim and Prim2Cons round-trip: 3D` | 5-component state round-trips to 1e-14. |
 | `Cons2Prim and Prim2Cons round-trip: 2D` | 4-component state round-trips to 1e-14. |
 | `Prim2Cons: known state verification` | Manually computed state matches exactly. |
-
-### Stagnation Quantities
-
-| Test case | Description |
-|---|---|
-| `PrimitiveGetP0T0: quiescent gas` | At rest: p0 = p, T0 = T. |
-| `PrimitiveGetP0T0: p0 > p for moving gas` | Stagnation pressure exceeds static pressure. |
 
 ### Eigenvectors
 
@@ -89,7 +84,9 @@ eigenvectors.
 | Test case | Description |
 |---|---|
 | `GetRoeAverage: identical states give same state` | Roe(U,U) = U. |
+| `GetRoeAverage: split gamma keeps pressure closure separate from acoustic gamma` | Verifies `gammaEqRoe`/`gammaRoe` separation. |
 | `GetRoeAverage: density is geometric mean` | rho_Roe = sqrt(rhoL * rhoR). |
+| `RoeFluxIncFDiff: entropy wave strength uses gammaEq, not acoustic gamma` | Verifies Roe alpha decomposition uses pressure closure gamma. |
 
 ### Gradient Transformation
 

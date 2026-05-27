@@ -139,6 +139,28 @@ TEST_CASE("PhysicsProperties non-reactive total-to-static conversion is closed f
     CHECK(phys.template temperature<3>(cons) == doctest::Approx(TStaticExpected).epsilon(1e-12));
 }
 
+TEST_CASE("PhysicsProperties non-reactive static-to-total conversion is closed form")
+{
+    using Phys = PhysicsProperties<NS>;
+    using TU = typename Phys::TU;
+
+    auto igProp = makeIdealGasProperty<NS>();
+    Phys phys(igProp);
+
+    TU prim;
+    prim << 1.225, 0.30, 0.0, 0.0, 0.90;
+
+    auto [pTotal, TTotal] = phys.template primitiveStaticToTotalPT<3>(prim);
+    real Rgas = phys.toCode(igProp.Rgas);
+    real TStatic = prim(4) / (prim(0) * Rgas);
+    real asqr = igProp.gamma * prim(4) / prim(0);
+    real Msqr = prim(Eigen::seq(Eigen::fix<1>, Eigen::fix<3>)).squaredNorm() / asqr;
+    real factor = 1 + 0.5 * (igProp.gamma - 1) * Msqr;
+
+    CHECK(pTotal == doctest::Approx(prim(4) * std::pow(factor, igProp.gamma / (igProp.gamma - 1))).epsilon(1e-12));
+    CHECK(TTotal == doctest::Approx(TStatic * factor).epsilon(1e-12));
+}
+
 TEST_CASE("PhysicsProperties reactive state conversions")
 {
     auto fx = makeReactiveFixture();

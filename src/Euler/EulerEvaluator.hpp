@@ -293,8 +293,9 @@ namespace DNDS::Euler
             {
                 TU farPrim = settings.farFieldStaticValue;
                 real T = phys_.template temperature<dim>(settings.farFieldStaticValue);
-                real gamma = phys_.template gammaEq<dim>(T, settings.farFieldStaticValue);
-                Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrim, gamma, 0 /* config, sensible ρE */);
+                real gammaEq = phys_.template gammaEq<dim>(T, settings.farFieldStaticValue);
+                real gamma = phys_.gamma(T, settings.farFieldStaticValue);
+                Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrim, gammaEq, 0 /* config, sensible ρE */);
                 T = farPrim(I4) / ((gamma - 1) / gamma * phys_.Cp(T, settings.farFieldStaticValue) * farPrim(0));
                 // auto [rhs0, rhs] = RANS::SolveZeroGradEquilibrium<dim>(settings.farFieldStaticValue, this->muEff(settings.farFieldStaticValue, T));
                 // if(mesh->getMPI().rank == 0)
@@ -1117,14 +1118,15 @@ namespace DNDS::Euler
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
             real T = phys_.template temperature<dim>(U);
-            real gamma = phys_.template gammaEq<dim>(T, U);
+            real gammaEq = phys_.template gammaEq<dim>(T, U);
+            real gamma = phys_.gamma(T, U);
             TVec velo = U(Seq123) / U(0);
             real p, H, asqr;
-            Gas::IdealGasThermal(U(I4), U(0), velo.squaredNorm(), gamma, p, asqr, H,
+            Gas::IdealGasThermal(U(I4), U(0), velo.squaredNorm(), gammaEq, gamma, p, asqr, H,
                                  phys_.mixtureFormationRhoE(U));
             TVec dVelo;
             real dp;
-            Gas::IdealGasUIncrement<dim>(U, dU, velo, gamma, dVelo, dp,
+            Gas::IdealGasUIncrement<dim>(U, dU, velo, gammaEq, dVelo, dp,
                                          phys_.mixtureFormationRhoEIncrement(dU));
             TU dF(U.size());
             if (omitF == 0)
@@ -1142,9 +1144,22 @@ namespace DNDS::Euler
             {
                 TVec veloRoe;
                 real vsqrRoe{0}, aRoe{0}, asqrRoe{0}, HRoe{0};
+                real gammaEqRoe = gammaEq;
                 TU uMean(U.size());
-                Gas::GetRoeAverage<dim>(U, UOther, gamma, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe, uMean,
-                                        phys_.mixtureFormationRhoE(U), phys_.mixtureFormationRhoE(UOther));
+                if (phys_.hasChemicalSource())
+                {
+                    real TOther = phys_.template temperature<dim>(UOther);
+                    real gammaEqOther = phys_.template gammaEq<dim>(TOther, UOther);
+                    real sqrtRhoL = std::sqrt(U(0));
+                    real sqrtRhoR = std::sqrt(UOther(0));
+                    gammaEqRoe = (sqrtRhoL * gammaEq + sqrtRhoR * gammaEqOther) / (sqrtRhoL + sqrtRhoR);
+                    Gas::GetRoeAverage<dim, true>(U, UOther, gammaEq, gamma, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe, uMean,
+                                                  phys_.mixtureFormationRhoE(U), phys_.mixtureFormationRhoE(UOther),
+                                                  gammaEq, gammaEqOther,
+                                                  gamma, phys_.gamma(TOther, UOther));
+                }
+                else
+                    Gas::GetRoeAverage<dim>(U, UOther, gammaEq, gamma, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe, uMean);
                 {
                     // TVec dVeloRoe;
                     // real dpRoe;
@@ -1158,7 +1173,7 @@ namespace DNDS::Euler
                 }
                 // lambda0 = lambda123 = lambda4 = aRoe + std::abs(veloRoe.dot(n));
                 Gas::RoeFluxIncFDiff<dim>(dU, n, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe,
-                                          incFsign * lambda0, incFsign * lambda123, incFsign * lambda4, gamma,
+                                          incFsign * lambda0, incFsign * lambda123, incFsign * lambda4, gammaEqRoe,
                                           dF);
                 dF += incFsign * lambdaVis * dU;
             }
@@ -1199,14 +1214,15 @@ namespace DNDS::Euler
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
             real T = phys_.template temperature<dim>(U);
-            real gamma = phys_.template gammaEq<dim>(T, U);
+            real gammaEq = phys_.template gammaEq<dim>(T, U);
+            real gamma = phys_.gamma(T, U);
             TVec velo = U(Seq123) / U(0);
             real p, H, asqr;
-            Gas::IdealGasThermal(U(I4), U(0), velo.squaredNorm(), gamma, p, asqr, H,
+            Gas::IdealGasThermal(U(I4), U(0), velo.squaredNorm(), gammaEq, gamma, p, asqr, H,
                                  phys_.mixtureFormationRhoE(U));
             TVec dVelo;
             real dp;
-            Gas::IdealGasUIncrement<dim>(U, dU, velo, gamma, dVelo, dp,
+            Gas::IdealGasUIncrement<dim>(U, dU, velo, gammaEq, dVelo, dp,
                                          phys_.mixtureFormationRhoEIncrement(dU));
             TU dF(U.size());
             Gas::GasInviscidFluxFacialIncrement<dim>(

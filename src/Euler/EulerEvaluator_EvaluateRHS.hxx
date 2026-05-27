@@ -402,15 +402,16 @@ namespace DNDS::Euler
                         GradUMeanXy *= 0.;
 
                     TDiffU GradUMeanXyPrim;
-                    real T = phys_.template temperature<dim>(UMeanXy);
-                    // γ from face-mean state, computed before wall-fix (below) modifies
-                    // ULxy/URxy.  Valid because wall-fix alters velocity/pressure but
-                    // γ varies weakly with those — and UMeanXy itself is unchanged.
-                    real gamma = phys_.template gammaEq<dim>(T, UMeanXy);
                     auto hfSpecies = phys_.mixtureFormationRhoESpecies();
+                    auto gammaEqFor = [&](const TU &U)
+                    {
+                        real T = phys_.template temperature<dim>(U);
+                        return phys_.template gammaEq<dim>(T, U);
+                    };
                     auto gradCons2Prim = [&](auto &U, auto &GradU, auto &GradUPrim)
                     {
-                        Gas::GradientCons2Prim_IdealGas<dim>(U, GradU, GradUPrim, gamma,
+                        real gammaEq = gammaEqFor(U);
+                        Gas::GradientCons2Prim_IdealGas<dim>(U, GradU, GradUPrim, gammaEq,
                                                              hfSpecies);
                     };
                     if (settings.usePrimGradInVisFlux)
@@ -420,8 +421,8 @@ namespace DNDS::Euler
                         gradCons2Prim(ULxy, GradULxy, GradULxyPrim);
                         gradCons2Prim(URxy, GradURxy, GradURxyPrim);
                         TU URxyPrim(cnvars), ULxyPrim(cnvars);
-                        Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrim, gamma, phys_.mixtureFormationRhoE(ULxy));
-                        Gas::IdealGasThermalConservative2Primitive<dim>(URxy, URxyPrim, gamma, phys_.mixtureFormationRhoE(URxy));
+                        Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrim, gammaEqFor(ULxy), phys_.mixtureFormationRhoE(ULxy));
+                        Gas::IdealGasThermalConservative2Primitive<dim>(URxy, URxyPrim, gammaEqFor(URxy), phys_.mixtureFormationRhoE(URxy));
 
                         GradUMeanXyPrim = (GradURxyPrim + GradULxyPrim) * 0.5 +
                                           (1.0 / distGRP) *
@@ -642,13 +643,13 @@ namespace DNDS::Euler
                         this->TransformURotatingFrame(uL, vfv->GetFaceQuadraturePPhys(iFace, -1), 1);
                     TU uLPrim = uL;
                     real T_int = phys_.template temperature<dim>(uL);
-                    auto gamma = phys_.template gammaEq<dim>(T_int, uL);
-                    Gas::IdealGasThermalConservative2Primitive<dim>(uL, uLPrim, gamma, phys_.mixtureFormationRhoE(uL));
+                    auto gammaEq = phys_.template gammaEq<dim>(T_int, uL);
+                    Gas::IdealGasThermalConservative2Primitive<dim>(uL, uLPrim, gammaEq, phys_.mixtureFormationRhoE(uL));
                     Eigen::Vector<real, Eigen::Dynamic> vInt;
                     vInt.resize(nVars + 2);
                     vInt(Eigen::seq(0, nVars - 1)) = uL;
 
-                    auto [p0, T0] = Gas::IdealGasThermalPrimitiveGetP0T0<dim>(uLPrim, gamma, phys_.Rgas(uL));
+                    auto [p0, T0] = phys_.template primitiveStaticToTotalPT<dim>(uLPrim);
                     vInt(nVars) = p0, vInt(nVars + 1) = T0;
                     vInt(0) = 1;
                     bndIntegrations.at(mesh->GetFaceZone(iFace)).Add(vInt * fluxEs(0, 0), fluxEs(0, 0));

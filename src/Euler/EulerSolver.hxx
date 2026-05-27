@@ -469,13 +469,15 @@ namespace DNDS::Euler
                                const Eigen::Ref<tLimitBatch> &data) -> tLimitBatch
                 {
                     Timer().StartTimer(PerformanceTimer::LimiterA);
-                    Eigen::Vector<real, I4 + 1> UC = (UL + UR)(Seq01234) * 0.5;
+                    TU UMean = (UL + UR) * 0.5;
                     Eigen::Matrix<real, dim, dim> normBase = Geom::NormBuildLocalBaseV<dim>(n(Seq012));
-                    UC(Seq123) = normBase.transpose() * UC(Seq123);
+                    UMean(Seq123) = normBase.transpose() * UMean(Seq123);
+                    Eigen::Vector<real, I4 + 1> UC = UMean(Seq01234);
 
-                    // TODO: use cell-wise cached mixture gamma when available
-                    auto gamma_val = eval.phys().gammaConst();
-                    auto M = Gas::IdealGas_EulerGasLeftEigenVector<dim>(UC, gamma_val, 0);
+                    real T = eval.phys().template temperature<dim>(UMean);
+                    real gammaEq = eval.phys().template gammaEq<dim>(T, UMean);
+                    real gamma = eval.phys().gamma(T, UMean);
+                    auto M = Gas::IdealGas_EulerGasLeftEigenVector<dim>(UC, gammaEq, gamma, eval.phys().mixtureFormationRhoE(UMean));
                     M(EigenAll, Seq123) *= normBase.transpose();
 
                     Eigen::Matrix<real, nVarsFixed, nVarsFixed> ret(nVars, nVars);
@@ -489,13 +491,15 @@ namespace DNDS::Euler
                                const Eigen::Ref<tLimitBatch> &data) -> tLimitBatch
                 {
                     Timer().StartTimer(PerformanceTimer::LimiterA);
-                    Eigen::Vector<real, I4 + 1> UC = (UL + UR)(Seq01234) * 0.5;
+                    TU UMean = (UL + UR) * 0.5;
                     Eigen::Matrix<real, dim, dim> normBase = Geom::NormBuildLocalBaseV<dim>(n(Seq012));
-                    UC(Seq123) = normBase.transpose() * UC(Seq123);
+                    UMean(Seq123) = normBase.transpose() * UMean(Seq123);
+                    Eigen::Vector<real, I4 + 1> UC = UMean(Seq01234);
 
-                    // TODO: use cell-wise cached mixture gamma when available
-                    auto gamma_val = eval.phys().gammaConst();
-                    auto M = Gas::IdealGas_EulerGasRightEigenVector<dim>(UC, gamma_val, 0);
+                    real T = eval.phys().template temperature<dim>(UMean);
+                    real gammaEq = eval.phys().template gammaEq<dim>(T, UMean);
+                    real gamma = eval.phys().gamma(T, UMean);
+                    auto M = Gas::IdealGas_EulerGasRightEigenVector<dim>(UC, gammaEq, gamma, eval.phys().mixtureFormationRhoE(UMean));
                     M(Seq123, EigenAll) = normBase * M(Seq123, EigenAll);
 
                     Eigen::Matrix<real, nVarsFixed, nVarsFixed> ret(nVars, nVars);
@@ -524,8 +528,9 @@ namespace DNDS::Euler
                                 v.setConstant(-veryLargeReal * v(I4));
                                 return;
                             }
-                            // TODO: use cell-wise cached mixture gamma when available
-                            Gas::IdealGasThermalConservative2Primitive<dim>(cons, prim, eval.phys().gammaConst(), 0 /* fluid-only (WBAP), no chemistry */);
+                            real T = eval.phys().template temperature<dim>(cons);
+                            real gammaEq = eval.phys().template gammaEq<dim>(T, cons);
+                            Gas::IdealGasThermalConservative2Primitive<dim>(cons, prim, gammaEq, eval.phys().mixtureFormationRhoE(cons));
                             v.setConstant(prim(I4));
                             return;
                         });

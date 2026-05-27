@@ -62,7 +62,7 @@ TEST_CASE("IdealGasThermal: standard quiescent air")
     real vSqr = 0.0;
 
     real p, asqr, H;
-    IdealGasThermal(E, rho, vSqr, g_gamma, p, asqr, H);
+    IdealGasThermal(E, rho, vSqr, g_gamma, g_gamma, p, asqr, H);
 
     CHECK(p == doctest::Approx(p_expected).epsilon(1e-14));
     CHECK(asqr == doctest::Approx(1.0).epsilon(1e-14));
@@ -76,12 +76,40 @@ TEST_CASE("IdealGasThermal: Mach 2 flow")
     real E = p_expected / (g_gamma - 1.0) + rho * 0.5 * vSqr;
 
     real p, asqr, H;
-    IdealGasThermal(E, rho, vSqr, g_gamma, p, asqr, H);
+    IdealGasThermal(E, rho, vSqr, g_gamma, g_gamma, p, asqr, H);
 
     CHECK(p == doctest::Approx(p_expected).epsilon(1e-14));
     CHECK(asqr == doctest::Approx(g_gamma * p_expected / rho).epsilon(1e-14));
     real H_expected = (E + p_expected) / rho;
     CHECK(H == doctest::Approx(H_expected).epsilon(1e-14));
+}
+
+TEST_CASE("IdealGasThermal: gammaEq controls pressure and gamma controls acoustic speed")
+{
+    real rho = 2.0;
+    real pExpected = 11.0;
+    real gammaEq = 1.25;
+    real gammaCpCv = 1.40;
+    real vSqr = 9.0;
+    real E = pExpected / (gammaEq - 1.0) + 0.5 * rho * vSqr;
+
+    real p, asqr, H;
+    IdealGasThermal(E, rho, vSqr, gammaEq, gammaCpCv, p, asqr, H);
+
+    CHECK(p == doctest::Approx(pExpected).epsilon(1e-14));
+    CHECK(asqr == doctest::Approx(gammaCpCv * pExpected / rho).epsilon(1e-14));
+    CHECK(std::abs(asqr - gammaEq * pExpected / rho) > 1e-8);
+}
+
+TEST_CASE("Shared enthalpy helper does not double-count formation energy")
+{
+    real rho = 2.0;
+    real p = 5.0;
+    real rhoHForm = 7.0;
+    real sensibleRhoE = 23.0;
+    real totalRhoE = sensibleRhoE + rhoHForm;
+
+    CHECK(DNDS::IdealGas::Enthalpy(totalRhoE, rho, p, rhoHForm) == doctest::Approx((totalRhoE + p) / rho).epsilon(1e-14));
 }
 
 // ===================================================================
@@ -134,37 +162,6 @@ TEST_CASE("Prim2Cons: known state verification")
     CHECK(U(2) == doctest::Approx(0.0));  // rho*v
     CHECK(U(3) == doctest::Approx(0.0));  // rho*w
     CHECK(U(4) == doctest::Approx(34.0)); // rho*E
-}
-
-// ===================================================================
-// PrimitiveGetP0T0: stagnation quantities
-// ===================================================================
-
-TEST_CASE("PrimitiveGetP0T0: quiescent gas")
-{
-    // At rest: p0 = p, T0 = T
-    Eigen::Vector<real, 5> prim;
-    prim << 1.0, 0.0, 0.0, 0.0, 100000.0;
-    real Rgas = 287.0;
-
-    auto [p0, T0] = IdealGasThermalPrimitiveGetP0T0<3>(prim, g_gamma, Rgas);
-    real T = prim(4) / (prim(0) * Rgas);
-
-    CHECK(p0 == doctest::Approx(100000.0).epsilon(1e-10));
-    CHECK(T0 == doctest::Approx(T).epsilon(1e-10));
-}
-
-TEST_CASE("PrimitiveGetP0T0: p0 > p for moving gas")
-{
-    Eigen::Vector<real, 5> prim;
-    prim << 1.225, 300.0, 0.0, 0.0, 101325.0;
-    real Rgas = 287.0;
-
-    auto [p0, T0] = IdealGasThermalPrimitiveGetP0T0<3>(prim, g_gamma, Rgas);
-    real T = prim(4) / (prim(0) * Rgas);
-
-    CHECK(p0 > prim(4));
-    CHECK(T0 > T);
 }
 
 // ===================================================================
@@ -225,11 +222,31 @@ TEST_CASE("IdealGas convenience eigenvector wrappers produce L*R=I")
 {
     auto U = primToCons3D(1.225, 100.0, -50.0, 25.0, 101325.0);
 
-    auto R = IdealGas_EulerGasRightEigenVector<3>(U, g_gamma);
-    auto L = IdealGas_EulerGasLeftEigenVector<3>(U, g_gamma);
+    auto R = IdealGas_EulerGasRightEigenVector<3>(U, g_gamma, g_gamma);
+    auto L = IdealGas_EulerGasLeftEigenVector<3>(U, g_gamma, g_gamma);
 
     auto LR = L * R;
     real maxErr = (LR - Eigen::Matrix<real, 5, 5>::Identity()).cwiseAbs().maxCoeff();
+    CHECK(maxErr < 1e-10);
+}
+
+TEST_CASE("EulerGas left eigenvector inverse uses H/a consistency for split gamma")
+{
+    Eigen::Vector3d velo(30.0, -12.0, 7.0);
+    real Vsqr = velo.squaredNorm();
+    real rho = 1.4;
+    real p = 80000.0;
+    real gammaEq = 1.25;
+    real gammaCpCv = 1.37;
+    real E = p / (gammaEq - 1.0) + 0.5 * rho * Vsqr;
+    real H = (E + p) / rho;
+    real a = std::sqrt(gammaCpCv * p / rho);
+
+    Eigen::Matrix<real, 5, 5> R, L;
+    EulerGasRightEigenVector<3>(velo, Vsqr, H, a, R);
+    EulerGasLeftEigenVector<3>(velo, Vsqr, H, a, gammaCpCv, L);
+
+    real maxErr = (L * R - Eigen::Matrix<real, 5, 5>::Identity()).cwiseAbs().maxCoeff();
     CHECK(maxErr < 1e-10);
 }
 
@@ -284,7 +301,7 @@ TEST_CASE("GasInviscidFlux_XY: n=(1,0,0) equals GasInviscidFlux")
     real p_val;
     {
         real asqr, H;
-        IdealGasThermal(U(4), U(0), velo.squaredNorm(), g_gamma, p_val, asqr, H);
+        IdealGasThermal(U(4), U(0), velo.squaredNorm(), g_gamma, g_gamma, p_val, asqr, H);
     }
 
     Eigen::Vector<real, 5> Fx, Fn;
@@ -363,11 +380,11 @@ TEST_CASE("GetRoeAverage: identical states give same state")
     real vsqrRoe, aRoe, asqrRoe, HRoe;
     Eigen::Vector<real, 5> URoe;
 
-    GetRoeAverage<3>(U, U, g_gamma, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe, URoe);
+    GetRoeAverage<3>(U, U, g_gamma, g_gamma, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe, URoe);
 
     Eigen::Vector3d velo = U.segment<3>(1) / U(0);
     real p_val, asqr_val, H_val;
-    IdealGasThermal(U(4), U(0), velo.squaredNorm(), g_gamma, p_val, asqr_val, H_val);
+    IdealGasThermal(U(4), U(0), velo.squaredNorm(), g_gamma, g_gamma, p_val, asqr_val, H_val);
 
     for (int i = 0; i < 3; i++)
     {
@@ -376,6 +393,27 @@ TEST_CASE("GetRoeAverage: identical states give same state")
     }
     CHECK(HRoe == doctest::Approx(H_val).epsilon(1e-10));
     CHECK(aRoe == doctest::Approx(std::sqrt(asqr_val)).epsilon(1e-10));
+}
+
+TEST_CASE("GetRoeAverage: split gamma keeps pressure closure separate from acoustic gamma")
+{
+    real rho = 1.7;
+    real p = 90000.0;
+    real gammaEq = 1.25;
+    real gammaCpCv = 1.37;
+    Eigen::Vector<real, 5> prim;
+    prim << rho, 20.0, -10.0, 5.0, p;
+    Eigen::Vector<real, 5> U;
+    IdealGasThermalPrimitive2Conservative<3>(prim, U, gammaEq);
+
+    Eigen::Vector3d veloRoe;
+    real vsqrRoe, aRoe, asqrRoe, HRoe;
+    Eigen::Vector<real, 5> URoe;
+
+    GetRoeAverage<3>(U, U, gammaEq, gammaCpCv, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe, URoe);
+
+    CHECK(asqrRoe == doctest::Approx(gammaCpCv * p / rho).epsilon(1e-12));
+    CHECK(std::abs(asqrRoe - gammaEq * p / rho) > 1e-8);
 }
 
 TEST_CASE("GetRoeAverage: density is geometric mean")
@@ -387,10 +425,32 @@ TEST_CASE("GetRoeAverage: density is geometric mean")
     real vsqrRoe, aRoe, asqrRoe, HRoe;
     Eigen::Vector<real, 5> URoe;
 
-    GetRoeAverage<3>(UL, UR, g_gamma, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe, URoe);
+    GetRoeAverage<3>(UL, UR, g_gamma, g_gamma, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe, URoe);
 
     // Roe-averaged rho = sqrt(rhoL * rhoR) = sqrt(1*4) = 2
     CHECK(URoe(0) == doctest::Approx(2.0).epsilon(1e-10));
+}
+
+TEST_CASE("RoeFluxIncFDiff: entropy wave strength uses gammaEq, not acoustic gamma")
+{
+    Eigen::Vector<real, 5> incU = Eigen::Vector<real, 5>::Zero();
+    incU(4) = 10.0;
+    Eigen::Vector3d n(1.0, 0.0, 0.0);
+    Eigen::Vector3d veloRoe = Eigen::Vector3d::Zero();
+    real gammaEqRoe = 1.25;
+    real gammaCpCvRoe = 1.40;
+    real pOverRho = 8.0;
+    real asqrRoe = gammaCpCvRoe * pOverRho;
+    real aRoe = std::sqrt(asqrRoe);
+    real HRoe = pOverRho * gammaEqRoe / (gammaEqRoe - 1.0);
+    Eigen::Vector<real, 5> incF = Eigen::Vector<real, 5>::Zero();
+
+    RoeFluxIncFDiff<3>(incU, n, veloRoe, 0.0, aRoe, asqrRoe, HRoe,
+                       0.0, 1.0, 0.0, gammaEqRoe, incF);
+
+    real alphaEntropyExpected = -(gammaEqRoe - 1.0) / asqrRoe * incU(4);
+    CHECK(incF(0) == doctest::Approx(alphaEntropyExpected).epsilon(1e-14));
+    CHECK(std::abs(incF(0) + (gammaCpCvRoe - 1.0) / asqrRoe * incU(4)) > 1e-8);
 }
 
 // ===================================================================
@@ -483,7 +543,7 @@ TEST_CASE("ViscousFlux: zero gradient produces zero flux")
     real mu = 1.8e-5, k = 0.025, Cp = 1005.0;
 
     Eigen::Vector<real, 5> Flux;
-    ViscousFlux_IdealGas<3>(U, GradPrim, norm, false, g_gamma, mu, 0.0, false, k, Cp, Flux);
+    ViscousFlux_IdealGas<3>(U, GradPrim, norm, false, g_gamma, g_gamma, mu, 0.0, false, k, Cp, Flux);
 
     for (int i = 0; i < 5; i++)
     {

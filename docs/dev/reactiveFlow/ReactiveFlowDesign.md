@@ -1,10 +1,10 @@
 # Reactive Flow Fully-Implicit Solver Design
 
 **Status:** Phases 1–4 complete. Full architecture refactor (per-thread pool, traits-typed
-contributors, stateless PhysicsProperties, sensible-ρE PP conventions) done.  
+contributors, stateless PhysicsProperties, sensible-ρE PP conventions, split-gamma acoustics) done.
 **k2p6 audit:** All 56 findings resolved (18 SEVERE, 24 MEDIUM, 14 LOW) — 48 fixed, 8 accepted.  
 **Branch:** `dev/harry`.  
-**Last updated:** 2026-05-21.  
+**Last updated:** 2026-05-27.
 **Target:** Extend DNDSR Euler solvers to support multi-species reactive flow
 with coupled fully-implicit time integration using full chemical Jacobian blocks.  
 **Solver:** `eulerEX` / `eulerEX3D` (extensible EulerModel variants with `Eigen::Dynamic` nVars)
@@ -27,6 +27,7 @@ with coupled fully-implicit time integration using full chemical Jacobian blocks
 | 4 | Verification (0-D autoignition, FD Jacobian check, formation-enthalpy fixes, CFD ignition) | Done |
 | 4b | Per-thread ChemicalSource pool, traits-typed contributors, stateless PhysicsProperties, PP audit | Done |
 | 4c | k2p6 reactive-flow audit (18 SEVERE / 24 MEDIUM / 14 LOW): Roe asqrRoe, temperature offset, dead code, ideal-gas guards, 2-rhoH contract, linear-concave PP, invR0→R0, if constexpr fixes, doc updates | Done |
+| 4d | Split `gammaEq` pressure closure from `cp/cv` acoustic speed; update Roe averages/eigen decomposition, CFL, BC wave decisions, Mach output, and total-condition helpers | Done |
 | 5 | block_scalar Jacobian mode, point-implicit chemistry, GPU kinetics | Future |
 
 ### New files created
@@ -87,7 +88,26 @@ units.  Operates on `TU` (Eigen vector) — marked *for I/O only, not tight loop
   `primRhoTCodeToPhys/primRhoTPhysToCode`, `primTPCodeToPhys/primTPPhysToCode`
 
 All conversion methods that invoke the ideal-gas EOS (`p = rho·R·T` or
-`p = (γ−1)·rho·e_sensible`) assert `chem().isIdealGas()`.
+`p = (gammaEq−1)·rho·e_sensible`) assert `chem().isIdealGas()`.
+
+#### Split-gamma thermodynamics and acoustics (Phase 4d)
+
+Reactive ideal-gas states use two different gamma-like coefficients:
+
+- `gammaEq`: pressure/energy closure, `p = (gammaEq - 1)·rho·e_sensible`.
+- `gamma` or `gammaCpCv`: thermodynamic ratio `cp/cv`, used for frozen-composition acoustic speed.
+
+These are equal for calorically perfect gas and generally differ for NASA-polynomial mixtures.
+The solver now keeps them separate:
+
+- `IdealGasThermal(E, rho, v², gammaEq, gammaCpCv, ...)` computes pressure with `gammaEq` and `a² = gammaCpCv·p/rho`.
+- Conservative/primitive pressure conversions use `gammaEq` only.
+- `PhysicsProperties::conservativeThermal()` is the main helper for `(p, a², H)` from a conservative state.
+- Riemann solvers receive both coefficients. Roe averages use `gammaEqRoe` for pressure-wave strengths and `gammaRoe = cp/cv` for acoustic speed.
+- CFL estimates, farfield wave classification, and Mach output use `cp/cv` acoustic speed.
+- `IdealGasThermalPrimitiveGetP0T0()` was removed. Total/static pressure-temperature conversion lives in `PhysicsProperties::{totalToStaticPrimitive, primitiveStaticToTotalPT}`.
+
+The Roe approximation remains a frozen-composition ideal-gas approximation, but it now reduces to the standard perfect-gas Roe formula when `gammaEq == gamma` and avoids using `gammaEq` as a sound-speed coefficient.
 
 #### Scaling reference
 
@@ -173,7 +193,7 @@ losing formation in the round-trip.  Fixed with a two-pass approach:
    ρ and ρY_k (species densities from primitive mass fractions × density).
 2. `rhoH_form = mixtureFormationRhoE(u_approx)` — exact, depends only on ρ and ρY_k.
 3. Add `rhoH_form` to `u_approx(I4)` → temperature and `gammaEq` see correct total energy.
-4. Pass 2: `Prim2Cons(w, out, correct_gamma, rhoH_form)` — exact inverse of `Cons2Prim`.
+4. Pass 2: `Prim2Cons(w, out, gammaEq, rhoH_form)` — exact inverse of `Cons2Prim`.
 
 ### Species enthalpy API
 
@@ -187,7 +207,7 @@ form in the diffusion energy flux correctly handles the dependent-species flux
 (`J_N = −Σ J_k`), giving the standard multi-species N-S energy transport `Σ h_k·J_k`.
 
 - **PIMPL for Cantera**: `ChemicalSource.hpp` has zero Cantera includes — only buffer views (`SpeciesBufferView`, `JacobianBufferView`). The `.cpp` is a single translation unit with `cantera/core.h`. No Eigen/Cantera header conflict.
-- **Mixture thermodynamic properties (via Cantera EOS)**: Multi-species mixture properties (γ_mix, cp_mix, R_mix) computed through Cantera. Existing Riemann solver and flux Jacobian code is unchanged — only the coefficient values are substituted through `PhysicsProperties`.
+- **Mixture thermodynamic properties (via Cantera EOS)**: Multi-species mixture properties (`gammaEq`, `cp/cv`, cp, cv, Rmix) are routed through `PhysicsProperties`. Riemann, CFL, BC, and Mach paths use `cp/cv` for acoustics and `gammaEq` for pressure/energy conversion.
 - **Full-block source Jacobian**: `JacobianDiagBlock` in matrix-block mode (Mode 1) stores nVars×nVars per cell. The `ChemicalContributor` fills the species rows with `M_k · ∂ω_k/∂U_j`. SGS and FGMRES solvers require zero changes.
 - **Species diffusion**: Fickian diffusion with constant Schmidt number (Sc=1) fallback; upgradable to Cantera mixture-averaged transport. Species diffusivity accessed through `PhysicsProperties::speciesDiffusivityK()`.
 - **State vector stores total ρE** (sensible + formation + kinetic): EOS functions subtract `rhoH_form` and `½ρv²` to recover sensible internal energy for pressure and temperature. Config/input vectors store sensible ρE; formed total at `InitializeUDOF` and BC assignment via `mixtureFormationRhoE(U)`.
@@ -503,7 +523,7 @@ conserves energy).
 
 | Context | Operation | Formula |
 |---------|-----------|---------|
-| `IdealGasThermal` | subtracts KE + formation | `p = (γ−1)(E − ½ρv² − ρH_form)` |
+| `IdealGasThermal` | subtracts KE + formation | `p = (gammaEq−1)(E − ½ρv² − ρH_form)`, `a² = (cp/cv)·p/ρ` |
 | `PhysicsProperties::temperature()` | subtracts KE → `u_internal`, then Cantera UV | `u_internal = ρE/ρ − ½v²` |
 | Cantera `setState_UV` | receives internal energy (no KE) | `u = u_internal * U0²` |
 | `CompressInc` (PP limiter) | uses sensible energy | `eInternalS = (ρE − ρH_form)/ρ − ½v²` |
@@ -525,12 +545,12 @@ and vibrational modes activate at different temperatures.
 
 | Name | Formula | Source | Meaning |
 |------|---------|--------|---------|
-| `gamma_stored` (= `gammaEq`) | `1 + Rmix/cv_stored` | `IdealGasProperty.gamma` | Defines `e_sensible ↔ T` and `p ↔ e_sensible` in DNDSR state |
-| `gammaEq` | `1 + ρ·Rmix·T / (ρ·e_sensible)` | `PhysicsProperties::gammaEq` | Self-consistency check — equals `gamma_stored` because e_sensible was encoded with that γ |
-| `cp/cv` | `cp_mass(T,Y) / cv_mass(T,Y)` | Cantera NASA polynomials | Real thermodynamic ratio at T. Differs from `gammaEq` because `cv_mass(T) ≠ cv_stored`. |
+| `gamma_stored` | `1 + Rmix/cv_stored` | `IdealGasProperty.gamma` | Non-reactive constant-gamma closure coefficient |
+| `gammaEq` | `1 + ρ·Rmix·T / (ρ·e_sensible)` | `PhysicsProperties::gammaEq` | Pressure/energy closure coefficient used by C2P/P2C and pressure gradients |
+| `cp/cv` | `cp_mass(T,Y) / cv_mass(T,Y)` | `PhysicsProperties::gamma`, Cantera NASA polynomials | Frozen-composition acoustic coefficient used by wave speeds and Mach number |
 
-At 845 K for H₂/O₂/N₂: `cv_stored ≈ 1020`, `cv_local ≈ 1103` J/(kg·K),
-`gamma_stored = 1.4`, `cp/cv ≈ 1.359`.
+At 845 K for H₂/O₂/N₂, `cv_stored ≈ 1020`, `cv_local ≈ 1103` J/(kg·K),
+`gammaEq ≈ 1.4`, and `cp/cv ≈ 1.359`.
 
 **Cantera temperature bridge:** `PhysicsProperties::temperature()` converts
 DNDSR's internal energy (0 K reference) to Cantera's convention (298.15 K reference)
@@ -1024,7 +1044,8 @@ For each implicit time step (pseudo-time iteration):
       diffusion and are used in the chemical source Jacobian.
 
 2. EvaluateDt
-   └─ Spectral radii account for multi-species speed of sound c_mix.
+   └─ Spectral radii account for multi-species frozen acoustic speed
+      `a² = (cp/cv)·p/ρ`.
       Chemical timescale constraint (optional):
            Δτ_chem = min_i( |Y_i / ω_i| ) × safety_factor
       Enforced via additional dTau clamping.
@@ -1211,7 +1232,7 @@ expensive (nVars+1 RHS evaluations) and noisy near equilibrium.
 | Direct LU preconditioner | Already factorizes nVars×nVars blocks — unchanged |
 | ODE integrators (`ODE/`) | Time integration is callback-based, unaware of nVars — unchanged |
 | Variational reconstruction (CFV/) | Treats all variables identically — unchanged |
-| Riemann solver (`Gas.hpp`) | Takes gamma as a parameter — caller provides our `phys_.gamma()` — unchanged |
+| Riemann solver (`Gas.hpp`) | Takes both `gammaEq` and `cp/cv`; callers provide both from `PhysicsProperties` |
 | Mesh I/O (`Geom/Mesh/`) | Mesh is field-agnostic — unchanged |
 | MPI distribution | `ArrayDof`/`ArrayPair` already handle DynamicSize distributions — unchanged |
 | VTK/HDF5/Tecplot output | Already supports arbitrary field names via `outCellScalarNames` |
