@@ -785,6 +785,8 @@ namespace DNDS::Euler::Gas
         real gammaEqRUse = gammaEq;
         real gammaLUse = gamma;
         real gammaRUse = gamma;
+        real gammaEqLmUse = gammaEq;
+        real gammaEqRmUse = gammaEq;
         real gammaLmUse = gamma;
         real gammaRmUse = gamma;
         if constexpr (variableGamma)
@@ -793,6 +795,8 @@ namespace DNDS::Euler::Gas
             gammaEqRUse = gammaEqR;
             gammaLUse = gammaL;
             gammaRUse = gammaR;
+            gammaEqLmUse = gammaEqLm;
+            gammaEqRmUse = gammaEqRm;
             gammaLmUse = gammaLm;
             gammaRmUse = gammaRm;
         }
@@ -836,8 +840,8 @@ namespace DNDS::Euler::Gas
         };
         real pS = 0.5 * (rp.pLm + rp.pRm) - 0.5 * (veloLm0 - veloRm0) * rp.rhoRoe * rp.aRoe;
         pS = std::max(0.0, pS);
-        real SL = veloLm0 - std::sqrt(rp.asqrLm) * HLLCq(gammaLmUse, rp.pLm, pS);
-        real SR = veloRm0 + std::sqrt(rp.asqrRm) * HLLCq(gammaRmUse, rp.pRm, pS);
+        real SL = veloLm0 - std::sqrt(rp.asqrLm) * HLLCq(gammaEqLmUse, rp.pLm, pS);
+        real SR = veloRm0 + std::sqrt(rp.asqrRm) * HLLCq(gammaEqRmUse, rp.pRm, pS);
 
         dLambda += verySmallReal;
         dLambda *= 2.0;

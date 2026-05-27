@@ -108,6 +108,30 @@ TEST_CASE("PhysicsProperties non-reactive state conversions")
     }
 }
 
+TEST_CASE("PhysicsProperties non-reactive conservativeThermal returns closure and acoustic gamma")
+{
+    using Phys = PhysicsProperties<NS>;
+    using TU = typename Phys::TU;
+
+    auto igProp = makeIdealGasProperty<NS>();
+    Phys phys(igProp);
+
+    TU prim;
+    prim << 1.4, 0.18, -0.05, 0.03, 0.67;
+    TU cons;
+    phys.template primToConservative<3>(prim, cons);
+
+    real p = 0, asqr = 0, H = 0, gammaEq = 0, gamma = 0;
+    real T = phys.template temperature<3>(cons);
+    phys.template conservativeThermal<3>(cons, T, p, asqr, H, &gammaEq, &gamma);
+
+    CHECK(gammaEq == doctest::Approx(igProp.gamma).epsilon(1e-14));
+    CHECK(gamma == doctest::Approx(igProp.gamma).epsilon(1e-14));
+    CHECK(p == doctest::Approx(prim(4)).epsilon(1e-12));
+    CHECK(asqr == doctest::Approx(igProp.gamma * prim(4) / prim(0)).epsilon(1e-12));
+    CHECK(H == doctest::Approx((cons(4) + prim(4)) / cons(0)).epsilon(1e-12));
+}
+
 TEST_CASE("PhysicsProperties non-reactive total-to-static conversion is closed form")
 {
     using Phys = PhysicsProperties<NS>;
@@ -204,6 +228,61 @@ TEST_CASE("PhysicsProperties reactive state conversions")
         CAPTURE(i);
         CHECK(primTPOut(i) == doctest::Approx(primTP(i)).epsilon(1e-11));
     }
+
+    TU primRhoT(5 + Ns1);
+    TU primRhoTOut(5 + Ns1);
+    primRhoT = prim;
+    primRhoT(0) = 0.92;
+    primRhoT(4) = 1050.0;
+    phys.template primRhoTToConservative<3>(primRhoT, cons, options);
+    phys.template conservativeToPrimRhoT<3>(cons, primRhoTOut, options);
+    for (int i = 0; i < primRhoT.size(); ++i)
+    {
+        CAPTURE(i);
+        CHECK(primRhoTOut(i) == doctest::Approx(primRhoT(i)).epsilon(1e-11));
+    }
+}
+
+TEST_CASE("PhysicsProperties reactive conservativeThermal separates gammaEq from acoustic gamma")
+{
+    auto fx = makeReactiveFixture();
+    auto &phys = *fx.phys;
+    auto &chem = (*fx.pool)[0];
+    auto options = strictReactiveOptions();
+    int Ns = chem.nSpecies();
+    int Ns1 = Ns - 1;
+    REQUIRE(Ns == 10);
+
+    using TU = typename PhysicsProperties<NS_EX>::TU;
+    TU primTP(5 + Ns1);
+    TU cons(5 + Ns1);
+    primTP.setZero();
+    primTP(0) = 1400.0;
+    primTP(1) = 0.16;
+    primTP(2) = -0.03;
+    primTP(3) = 0.01;
+    primTP(4) = 0.62;
+    primTP(5 + 0) = 0.030;
+    primTP(5 + 3) = 0.220;
+    phys.template primTPToConservative<3>(primTP, cons, options);
+
+    real T = phys.template temperature<3>(cons, primTP(0), options.temperatureUVTolerance);
+    real p = 0, asqr = 0, H = 0, gammaEq = 0, gamma = 0;
+    phys.template conservativeThermal<3>(cons, T, p, asqr, H, &gammaEq, &gamma);
+
+    real rho = cons(0);
+    real vSqr = (cons(Eigen::seq(Eigen::fix<1>, Eigen::fix<3>)) / rho).squaredNorm();
+    real rhoHForm = phys.mixtureFormationRhoE(cons);
+    real sensibleRhoE = cons(4) - 0.5 * rho * vSqr - rhoHForm;
+    real gammaCantera = phys.gamma(T, cons);
+
+    CHECK(T == doctest::Approx(primTP(0)).epsilon(1e-11));
+    CHECK(p == doctest::Approx(primTP(4)).epsilon(1e-11));
+    CHECK(gamma == doctest::Approx(gammaCantera).epsilon(1e-12));
+    CHECK(gammaEq == doctest::Approx(1.0 + p / sensibleRhoE).epsilon(1e-12));
+    CHECK(asqr == doctest::Approx(gammaCantera * p / rho).epsilon(1e-12));
+    CHECK(H == doctest::Approx((cons(4) + p - rhoHForm) / rho).epsilon(1e-12));
+    CHECK(std::abs(gammaEq - gamma) > 1e-4);
 }
 
 TEST_CASE("PhysicsProperties reactive total-to-static conversion iterates mixture thermodynamics")
@@ -255,6 +334,34 @@ TEST_CASE("PhysicsProperties reactive total-to-static conversion iterates mixtur
     CHECK(primStatic(0) == doctest::Approx(rhoExpected).epsilon(1e-11));
     CHECK(TStatic < TTotal);
     CHECK(primStatic(4) < pTotal);
+}
+
+TEST_CASE("PhysicsProperties reactive static-to-total inverts total-to-static")
+{
+    auto fx = makeReactiveFixture();
+    auto &phys = *fx.phys;
+    auto &chem = (*fx.pool)[0];
+    auto options = strictReactiveOptions();
+    int Ns = chem.nSpecies();
+    int Ns1 = Ns - 1;
+    REQUIRE(Ns == 10);
+
+    using TU = typename PhysicsProperties<NS_EX>::TU;
+    TU primStatic(5 + Ns1);
+    primStatic.setZero();
+    primStatic(1) = 120.0 / 379.0;
+    primStatic(2) = 25.0 / 379.0;
+    primStatic(3) = -10.0 / 379.0;
+    primStatic(5 + 0) = 0.028;
+    primStatic(5 + 3) = 0.222;
+
+    real pTotalIn = 101325.0 / (379.0 * 379.0);
+    real TTotalIn = 1250.0;
+    phys.template totalToStaticPrimitive<3>(pTotalIn, TTotalIn, primStatic, options);
+
+    auto [pTotalOut, TTotalOut] = phys.template primitiveStaticToTotalPT<3>(primStatic, options);
+    CHECK(pTotalOut == doctest::Approx(pTotalIn).epsilon(2e-11));
+    CHECK(TTotalOut == doctest::Approx(TTotalIn).epsilon(2e-11));
 }
 
 TEST_CASE("PhysicsProperties reactive total-to-static default options converge or throw")
