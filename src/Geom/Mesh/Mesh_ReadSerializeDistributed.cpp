@@ -41,6 +41,34 @@ namespace DNDS::Geom
         father->ReadSerializer(serializerP, name, offset);
     }
 
+    static std::vector<index> AlltoallvIndexPayloads(
+        const MPIInfo &mpi,
+        const std::vector<std::vector<index>> &sendPayloads)
+    {
+        DNDS_assert(index(sendPayloads.size()) == mpi.size);
+
+        std::vector<MPI_int> sendCounts(mpi.size), recvCounts(mpi.size);
+        for (MPI_int r = 0; r < mpi.size; r++)
+            sendCounts[r] = static_cast<MPI_int>(sendPayloads[r].size());
+        MPI::Alltoall(sendCounts.data(), 1, MPI_INT,
+                      recvCounts.data(), 1, MPI_INT, mpi.comm);
+
+        std::vector<MPI_int> sendDispls, recvDispls;
+        AccumulateRowSize(sendCounts, sendDispls);
+        AccumulateRowSize(recvCounts, recvDispls);
+
+        std::vector<index> sendBuf(sendDispls.back());
+        for (MPI_int r = 0; r < mpi.size; r++)
+            std::copy(sendPayloads[r].begin(), sendPayloads[r].end(),
+                      sendBuf.begin() + sendDispls[r]);
+
+        std::vector<index> recvBuf(recvDispls.back());
+        MPI::Alltoallv(sendBuf.data(), sendCounts.data(), sendDispls.data(), DNDS_MPI_INDEX,
+                       recvBuf.data(), recvCounts.data(), recvDispls.data(), DNDS_MPI_INDEX,
+                       mpi.comm);
+        return recvBuf;
+    }
+
     // =================================================================
     // Top-level orchestrator
     // =================================================================
@@ -370,7 +398,12 @@ namespace DNDS::Geom
         result.cellPartition = std::move(cellPartition);
 
         // Node partition: each node goes to the min cell partition that claims it.
+        // The even-split read partitions nodes and cells independently, so the
+        // temporary owner of a node may not own any cells referencing it. Send
+        // candidate cell partitions back to the temporary node owner before
+        // taking the minimum.
         result.nodePartition.assign(coords.father->Size(), static_cast<MPI_int>(INT32_MAX));
+        std::vector<std::vector<index>> nodePartSend(mpi.size);
         for (index iCell = 0; iCell < cell2node.father->Size(); iCell++)
         {
             for (rowsize ic2n = 0; ic2n < cell2node.father->RowSize(iCell); ic2n++)
@@ -383,8 +416,24 @@ namespace DNDS::Geom
                 if (rank == mpi.rank)
                     result.nodePartition[val] = std::min(result.nodePartition[val],
                                                          result.cellPartition.at(iCell));
+                else
+                {
+                    nodePartSend.at(rank).push_back(val);
+                    nodePartSend.at(rank).push_back(static_cast<index>(result.cellPartition.at(iCell)));
+                }
             }
         }
+
+        auto recvBuf = AlltoallvIndexPayloads(mpi, nodePartSend);
+        DNDS_assert(recvBuf.size() % 2 == 0);
+        for (size_t i = 0; i < recvBuf.size(); i += 2)
+        {
+            index iNodeLocal = recvBuf[i];
+            auto candidatePart = static_cast<MPI_int>(recvBuf[i + 1]);
+            DNDS_assert(iNodeLocal >= 0 && iNodeLocal < index(result.nodePartition.size()));
+            result.nodePartition[iNodeLocal] = std::min(result.nodePartition[iNodeLocal], candidatePart);
+        }
+
         for (auto &p : result.nodePartition)
             if (p == static_cast<MPI_int>(INT32_MAX))
                 p = 0;
