@@ -285,6 +285,50 @@ TEST_CASE("PhysicsProperties reactive conservativeThermal separates gammaEq from
     CHECK(std::abs(gammaEq - gamma) > 1e-4);
 }
 
+TEST_CASE("PhysicsProperties reactive transport uses Cantera mixture coefficients in code units")
+{
+    auto fx = makeReactiveFixture();
+    auto &phys = *fx.phys;
+    auto &chem = (*fx.pool)[0];
+    auto options = strictReactiveOptions();
+    int Ns = chem.nSpecies();
+    int Ns1 = Ns - 1;
+    REQUIRE(Ns == 10);
+
+    using TU = typename PhysicsProperties<NS_EX>::TU;
+    TU primTP(5 + Ns1);
+    TU cons(5 + Ns1);
+    primTP.setZero();
+    primTP(0) = 1300.0;
+    primTP(1) = 0.08;
+    primTP(2) = -0.02;
+    primTP(3) = 0.01;
+    primTP(4) = 0.66;
+    primTP(5 + 0) = 0.026;
+    primTP(5 + 3) = 0.224;
+    phys.template primTPToConservative<3>(primTP, cons, options);
+
+    real T = phys.template temperature<3>(cons, primTP(0), options.temperatureUVTolerance);
+    real p = 0, asqr = 0, H = 0;
+    phys.template conservativeThermal<3>(cons, T, p, asqr, H);
+    auto Y = chem.massFractions(cons(0), cons.data() + 5, Ns1);
+
+    real muCode = phys.mixtureViscosity(T, p, cons);
+    real kCode = phys.mixtureConductivity(T, p, cons);
+    real DCode = phys.speciesDiffusivityK(T, p, cons, 0);
+    double TPhys = phys.toPhysT(T);
+    double pPhys = phys.toPhysP(p);
+
+    CHECK(muCode == doctest::Approx(chem.viscosity(TPhys, pPhys, Y) / phys.mu0()).epsilon(1e-12));
+    CHECK(kCode == doctest::Approx(chem.thermalConductivity(TPhys, pPhys, Y) / phys.k0()).epsilon(1e-12));
+
+    std::vector<double> Dbuf(Ns);
+    SpeciesBufferView Dv{Dbuf.data(), Ns};
+    chem.speciesDiffusivity(TPhys, pPhys, Y, Dv);
+    CHECK(DCode == doctest::Approx(Dbuf[0] / phys.D0()).epsilon(1e-12));
+    CHECK(std::abs(kCode - phys.Cp(T, cons) * muCode / phys.Pr()) > 1e-12);
+}
+
 TEST_CASE("PhysicsProperties reactive total-to-static conversion iterates mixture thermodynamics")
 {
     auto fx = makeReactiveFixture();

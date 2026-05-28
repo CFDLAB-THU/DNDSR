@@ -975,13 +975,20 @@ namespace DNDS::Euler
             // ! refvalue:
             real muRef = phys_.muRef();
 
-            real muf = muEff(uMean, T);
-            real muPhy = muf;
+            real muf = phys_.mixtureViscosity(T, pMean, uMean);
             real muTurb = this->getMuTur(uMean, GradUMeanXY, muRef, muf, iFace);
             muf += muTurb;
-
-            real lamVis = muf / uMean(0) *
-                          std::max(4. / 3., gamma / phys_.Pr());
+            real lamVis = muf / uMean(0) * std::max(4. / 3., gamma / phys_.Pr());
+            if (phys_.hasChemicalSource())
+            {
+                // Reactive scalar includes mixture molecular transport, mu_t, and
+                // k_t = Cp*mu_t/Pr_t, matching the face viscous flux closure.
+                // TODO(reactive-turbulence): make Pr_t configurable and add the
+                // missing turbulent species-diffusion/Schmidt contribution to the
+                // implicit spectral radius if reactive RANS needs it.
+                real k = phys_.mixtureConductivity(T, pMean, uMean) + phys_.Cp(T, uMean) * muTurb / 0.9;
+                lamVis = std::max(4. / 3. * muf / uMean(0), k / (uMean(0) * phys_.Cv(T, uMean)));
+            }
 
             real lamFace = lambdaConvection * vfv->GetFaceArea(iFace);
 
@@ -1182,7 +1189,7 @@ namespace DNDS::Euler
             phys_.template conservativeThermal<dim>(UMeanXYC, T, pMean, asqrMean, Hmean, &gammaEq, &gamma);
             DNDS_assert_info(pMean > 0, fmt::format("{}, {}, {}", UMeanXYC(I4), UMeanXYC(0), (UMeanXYC(Seq123) / UMeanXYC(0)).squaredNorm()));
             real mufPhy, muf;
-            muf = muEff(UMeanXYC, T);
+            muf = phys_.mixtureViscosity(T, pMean, UMeanXYC);
             mufPhy = muf;
             // PerformanceTimer::Instance().StopTimer(PerformanceTimer::LimiterB);
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
@@ -1191,8 +1198,11 @@ namespace DNDS::Euler
                 real muTurb = this->getMuTur(UMeanXYC, DiffUxyC, muRef, muf, iFace); // TODO: make this accept primitive gradients instead
                 muf += muTurb;
 
-                real k = phys_.Cp(T, UMeanXYC) * muTurb / 0.9 +
-                            phys_.Cp(T, UMeanXYC) * mufPhy / phys_.Pr();
+                // Reactive RHS face flux uses Cantera mixture molecular k plus
+                // turbulent heat conductivity k_t=Cp*mu_t/Pr_t.
+                // TODO(reactive-turbulence): make the fixed Pr_t=0.9 configurable.
+                real k = phys_.mixtureConductivity(T, pMean, UMeanXYC) +
+                            phys_.Cp(T, UMeanXYC) * muTurb / 0.9;
                 TU VisFlux;
                 VisFlux.resizeLike(ULMeanXy);
                 VisFlux.setZero();
@@ -1210,6 +1220,10 @@ namespace DNDS::Euler
                 {
                     if (phys_.hasChemicalSource())
                     {
+                        // TODO(reactive-turbulence): this is the remaining RANS+reaction
+                        // viscous-transport gap. Species diffusion is molecular
+                        // mixture-averaged only; add modeled turbulent species
+                        // diffusivity/Schmidt transport if production cases require it.
                         int Ns = phys_.nSpecies();
                         int Ns1 = Ns - 1;
                         int nV = static_cast<int>(UMeanXYC.size());
@@ -1705,7 +1719,7 @@ namespace DNDS::Euler
             aux.gammaEq = gammaEq;
             aux.p = pMean;
             aux.pPhys = phys_.toPhysP(pMean);
-            aux.muf = muEff(UMeanXy, aux.T);
+            aux.muf = phys_.mixtureViscosity(aux.T, pMean, UMeanXy);
             aux.rhoH_form = phys_.mixtureFormationRhoE(UMeanXy);
 
             SourceTermVisitor<model> visitor{ret, jacobian, UMeanXy, DiffUxy, pPhy, aux,
