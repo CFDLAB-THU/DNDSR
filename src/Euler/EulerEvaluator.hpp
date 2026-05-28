@@ -289,14 +289,53 @@ namespace DNDS::Euler
 
             this->GetWallDist();
 
+            if constexpr (Traits::isExtended)
+                sourceContributors = buildSourceContributors(settings, axisSymmetric);
+
+            // Wire ChemicalSource into physics module (extract from contributor list)
+            for (auto &c : sourceContributors)
+                if (auto *chem = std::get_if<ChemicalContributor<model>>(&c))
+                    if (chem->pool_)
+                        phys_.setChemicalSourcePool(chem->pool_);
+            if (settings.reactiveFlow.enabled && phys_.hasChemicalSource())
+            {
+                int expectedNVars = dim + 2 + phys_.nSpecies() - 1;
+                DNDS_check_throw_info(nVars == expectedNVars,
+                                      fmt::format("reactive flow nVars {} does not match mechanism species count {}; expected {} (= dim + 2 + Ns - 1)",
+                                                  nVars, phys_.nSpecies(), expectedNVars));
+            }
+
+            std::ostream *stateLog = mesh->getMPI().rank == 0 ? &DNDS::log() : nullptr;
+            phys_.template resolveStateValue<dim>(settings.farFieldStaticValue, nVars, stateLog, "eulerSettings/farFieldStaticValue");
+            for (auto i = 0u; i < settings.boxInitializers.size(); ++i)
+                phys_.template resolveStateValue<dim>(settings.boxInitializers[i].v, nVars, stateLog,
+                                                      fmt::format("eulerSettings/boxInitializers[{}]/v", i));
+            for (auto i = 0u; i < settings.planeInitializers.size(); ++i)
+                phys_.template resolveStateValue<dim>(settings.planeInitializers[i].v, nVars, stateLog,
+                                                      fmt::format("eulerSettings/planeInitializers[{}]/v", i));
+            pBCHandler->template ResolveStateValues<dim>(phys_, stateLog);
+            settings.refU = settings.farFieldStaticValue.cons;
+            {
+                TU refCons = settings.refU;
+                TU refPrim(nVars);
+                phys_.template conservativeToPrimitive<dim>(refCons, refPrim);
+                settings.refUPrim = refPrim;
+                real TRefState = phys_.template temperature<dim>(refCons);
+                real pRef, asqrRef, HRef;
+                phys_.template conservativeThermal<dim>(refCons, TRefState, pRef, asqrRef, HRef);
+                settings.refU(Seq123).setConstant(settings.refU(Seq123).norm() + std::sqrt(std::max(asqrRef, real(0))));
+                settings.refUPrim(Seq123).setConstant(settings.refUPrim(Seq123).norm());
+            }
+
             if (model == NS_2EQ || model == NS_2EQ_3D)
             {
-                TU farPrim = settings.farFieldStaticValue;
-                real T = phys_.template temperature<dim>(settings.farFieldStaticValue);
-                real gammaEq = phys_.template gammaEq<dim>(T, settings.farFieldStaticValue);
-                real gamma = phys_.gamma(T, settings.farFieldStaticValue);
-                Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrim, gammaEq, 0 /* config, sensible ρE */);
-                T = farPrim(I4) / ((gamma - 1) / gamma * phys_.Cp(T, settings.farFieldStaticValue) * farPrim(0));
+                TU farPrim = settings.farFieldStaticValue.cons;
+                real T = phys_.template temperature<dim>(settings.farFieldStaticValue.cons);
+                real gammaEq = phys_.template gammaEq<dim>(T, settings.farFieldStaticValue.cons);
+                real gamma = phys_.gamma(T, settings.farFieldStaticValue.cons);
+                Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue.cons, farPrim, gammaEq,
+                                                                phys_.mixtureFormationRhoE(settings.farFieldStaticValue.cons));
+                T = farPrim(I4) / ((gamma - 1) / gamma * phys_.Cp(T, settings.farFieldStaticValue.cons) * farPrim(0));
                 // auto [rhs0, rhs] = RANS::SolveZeroGradEquilibrium<dim>(settings.farFieldStaticValue, this->muEff(settings.farFieldStaticValue, T));
                 // if(mesh->getMPI().rank == 0)
                 //     log()
@@ -319,15 +358,6 @@ namespace DNDS::Euler
             }
             if (cLDriverBndIDs.size())
                 pCLDriver = std::make_unique<CLDriver>(settings.cLDriverSettings);
-
-            if constexpr (Traits::isExtended)
-                sourceContributors = buildSourceContributors(settings, axisSymmetric);
-
-            // Wire ChemicalSource into physics module (extract from contributor list)
-            for (auto &c : sourceContributors)
-                if (auto *chem = std::get_if<ChemicalContributor<model>>(&c))
-                    if (chem->pool_)
-                        phys_.setChemicalSourcePool(chem->pool_);
         }
 
         /**
@@ -1630,7 +1660,7 @@ namespace DNDS::Euler
             }
 
             real eK = ret(Seq123).squaredNorm() * 0.5 / (verySmallReal + ret(0));
-            real e = ret(I4) - eK - phys_.mixtureFormationRhoE(ret);
+            real e = ret(I4) - eK - phys_.mixtureFormationRhoERaw(ret);
             if (e < 0)
             {
                 // eFixed = true;
@@ -1694,12 +1724,12 @@ namespace DNDS::Euler
                 newrho = rhoEps;
                 ret *= (newrho - u(0)) / (ret(0) - verySmallReal);
             }
-            real rhoH_form_old = phys_.mixtureFormationRhoE(u);
+            real rhoH_form_old = phys_.mixtureFormationRhoERaw(u);
             real ekOld = 0.5 * u(Seq123).squaredNorm() / (u(0) + verySmallReal);
             real rhoEinternal_sensible = u(I4) - ekOld - rhoH_form_old;
             DNDS_assert(rhoEinternal_sensible > 0);
             real ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
-            real rhoH_form_new = phys_.mixtureFormationRhoE(TU(u + ret));
+            real rhoH_form_new = phys_.mixtureFormationRhoERaw(TU(u + ret));
             real rhoEinternalNew_sensible = u(I4) + ret(I4) - ek - rhoH_form_new;
             if (rhoEinternalNew_sensible <= pEps)
             {
@@ -1714,7 +1744,7 @@ namespace DNDS::Euler
                 for (int iter = 0; iter < 1000; iter++)
                 {
                     real ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
-                    real rhoH_ret = phys_.mixtureFormationRhoE(TU(u + ret));
+                    real rhoH_ret = phys_.mixtureFormationRhoERaw(TU(u + ret));
                     if (u(I4) + ret(I4) - ek - rhoH_ret < pEps)
                         ret *= decay, alpha *= decay;
                     else
@@ -1722,7 +1752,7 @@ namespace DNDS::Euler
                 }
 
                 real ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
-                real rhoH_ret = phys_.mixtureFormationRhoE(TU(u + ret));
+                real rhoH_ret = phys_.mixtureFormationRhoERaw(TU(u + ret));
 
                 if (u(I4) + ret(I4) - ek - rhoH_ret < pEps * 0.5)
                 {
@@ -1831,7 +1861,7 @@ namespace DNDS::Euler
                     int nV = static_cast<int>(cx[iCell].size());
                     int Isp = nV - Ns1;               // first transported species index
                     constexpr real rhoYFloor = 1e-30; // tiny positive floor (matches 0D ODE)
-                    real rhoHBeforeClip = phys_.mixtureFormationRhoE(cx[iCell]);
+                    real rhoHBeforeClip = phys_.mixtureFormationRhoERaw(cx[iCell]);
                     bool speciesClipped = false;
 
                     // (1) Clip each rhoY_k >= rhoYFloor
@@ -1861,7 +1891,7 @@ namespace DNDS::Euler
                         // Preserve the sensible part of rhoE across species repair.
                         // The clipping changes rhoH_form through rhoY_k; total rhoE
                         // must move by the same amount so rhoE - rhoH_form stays fixed.
-                        real rhoHAfterClip = phys_.mixtureFormationRhoE(cx[iCell]);
+                        real rhoHAfterClip = phys_.mixtureFormationRhoERaw(cx[iCell]);
                         cx[iCell](I4) += rhoHAfterClip - rhoHBeforeClip;
                     }
                 }
@@ -1898,7 +1928,7 @@ namespace DNDS::Euler
                 { // for SST or KOWilcox
                     if (settings.ransModel == RANSModel::RANS_KOSST ||
                         settings.ransModel == RANSModel::RANS_KOWilcox)
-                        cx[iCell](I4 + 2) = std::max(cx[iCell](I4 + 2), settings.RANSBottomLimit * settings.farFieldStaticValue(I4 + 2));
+                        cx[iCell](I4 + 2) = std::max(cx[iCell](I4 + 2), settings.RANSBottomLimit * settings.farFieldStaticValue.cons(I4 + 2));
                 }
             }
             real alpha_fix_min_c = alpha_fix_min;

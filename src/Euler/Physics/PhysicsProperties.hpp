@@ -32,6 +32,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <ostream>
 #ifdef DNDS_DIST_MT_USE_OMP
 #    include <omp.h>
 #endif
@@ -52,12 +53,15 @@ namespace DNDS::Euler
         {
             real temperatureUVTolerance = 1e-12; ///< Cantera setState_UV relative tolerance.
             real gammaTolerance = 1e-8;          ///< primToConservative gamma fixed-point tolerance.
-            int gammaMaxIterations = 10;         ///< primToConservative gamma fixed-point cap.
+            int gammaMaxIterations = 50;         ///< primToConservative gamma fixed-point cap.
             real totalToStaticTolerance = 1e-10; ///< total-condition static-state fixed-point tolerance.
             int totalToStaticMaxIterations = 60; ///< total-condition bisection cap.
         };
 
-        explicit PhysicsProperties(const IdealGas &ig) : igProp_(std::make_unique<const IdealGas>(ig)) {}
+        explicit PhysicsProperties(const IdealGas &ig) : igProp_(std::make_unique<const IdealGas>(ig))
+        {
+            validateReferenceScales(*igProp_);
+        }
 
         void setChemicalSourcePool(ChemPtr pool) { pool_ = std::move(pool); }
         bool hasChemicalSource() const { return pool_ && pool_->size() > 0; }
@@ -69,19 +73,32 @@ namespace DNDS::Euler
         {
             DNDS_assert(pool_);
 #ifdef DNDS_DIST_MT_USE_OMP
-            return omp_get_thread_num() % static_cast<int>(pool_->size());
+            int tid = omp_get_thread_num();
 #else
-            return 0;
+            int tid = 0;
 #endif
+            DNDS_check_throw_info(tid < static_cast<int>(pool_->size()),
+                                  fmt::format("ChemicalSource pool has {} entries but OpenMP thread {} requested chemistry",
+                                              pool_->size(), tid));
+            return tid;
         }
         Chemistry::ChemicalSource &chem() const
         {
             int tid = threadIdx();
-            DNDS_assert(tid < static_cast<int>(pool_->size()));
             return (*pool_)[tid];
         }
 
     public:
+        static void validateReferenceScales(const IdealGas &ig)
+        {
+            DNDS_check_throw_info(std::isfinite(ig.T0) && ig.T0 > 0, "idealGasProperty.T0 must be finite and > 0");
+            DNDS_check_throw_info(std::isfinite(ig.rho0) && ig.rho0 > 0, "idealGasProperty.rho0 must be finite and > 0");
+            DNDS_check_throw_info(std::isfinite(ig.U0) && ig.U0 > 0, "idealGasProperty.U0 must be finite and > 0");
+            DNDS_check_throw_info(std::isfinite(ig.L0) && ig.L0 > 0, "idealGasProperty.L0 must be finite and > 0");
+            DNDS_check_throw_info(std::isfinite(ig.gamma) && ig.gamma > 1, "idealGasProperty.gamma must be finite and > 1");
+            DNDS_check_throw_info(std::isfinite(ig.Rgas) && ig.Rgas > 0, "idealGasProperty.Rgas must be finite and > 0");
+        }
+
         // ---- scale helpers --------------------------------------------------
 
         /// Reference pressure p0 = rho0 · U0².
@@ -113,6 +130,11 @@ namespace DNDS::Euler
         real toPhysT(real TCode) const { return igProp_->T0 > 0 ? TCode * igProp_->T0 : TCode; }
         /// Convert physical temperature to code-scaled.
         real toCodeT(real TPhys) const { return igProp_->T0 > 0 ? TPhys / igProp_->T0 : TPhys; }
+
+        template <int dim>
+        void resolveStateValue(StateValue &value, int nVars,
+                               std::ostream *os = nullptr,
+                               const std::string &label = "state") const;
 
         // ---- EOS coefficients (per-point — uses state T and U vectors) ----
 
@@ -186,9 +208,33 @@ namespace DNDS::Euler
             int Ns1 = c.nSpecies() - 1;
             int nVars = static_cast<int>(U.size());
             int Isp = nVars - Ns1;
+            DNDS_check_throw_info(Isp >= 1, "mixtureFormationRhoE(): state vector too small for mechanism species count");
             auto Y = c.massFractions(U[0], &U[Isp], Ns1);
             real invU0sq = 1.0 / (igProp_->U0 * igProp_->U0);
             return c.mixtureFormationRhoE(U[0], Y, invU0sq);
+        }
+
+        /// Raw linear formation enthalpy from rho/rhoY without clipping or renormalizing species.
+        /// Use only in positivity-preserving limiter/compression algebra where exact linearity is required.
+        real mixtureFormationRhoERaw(const TU &U) const
+        {
+            if (!hasChemicalSource())
+                return 0;
+            auto &c = chem();
+            int Ns1 = c.nSpecies() - 1;
+            int nVars = static_cast<int>(U.size());
+            int Isp = nVars - Ns1;
+            DNDS_check_throw_info(Isp >= 1, "mixtureFormationRhoERaw(): state vector too small for mechanism species count");
+            auto hfView = c.mixtureFormationRhoESpecies(1.0 / (igProp_->U0 * igProp_->U0));
+            real rhoH = 0;
+            real sumRhoY = 0;
+            for (int k = 0; k < Ns1; ++k)
+            {
+                rhoH += U[Isp + k] * hfView[k];
+                sumRhoY += U[Isp + k];
+            }
+            rhoH += (U[0] - sumRhoY) * hfView[Ns1];
+            return rhoH;
         }
 
         /** Sensible ρE = total ρE − ρ·Σ Y_k·h_f_k. Returns U[I4] when no chemistry.
@@ -214,6 +260,7 @@ namespace DNDS::Euler
             int Ns1 = c.nSpecies() - 1;
             int nVars = static_cast<int>(dU.size());
             int Isp = nVars - Ns1;
+            DNDS_check_throw_info(Isp >= 1, "mixtureFormationRhoEIncrement(): state vector too small for mechanism species count");
             double invU0sq = 1.0 / (igProp_->U0 * igProp_->U0);
             c.mixtureFormationRhoESpecies(invU0sq);
             return c.mixtureFormationRhoEIncrement(dU[0], dU.data() + Isp, Ns1);
@@ -278,24 +325,32 @@ namespace DNDS::Euler
                 DNDS_assert_info(chem().isIdealGas(),
                                  "primToConservative(): requires ideal-gas EOS");
 
-            real rhoH_form = formationFromPrimitive<dim>(prim);
+            TU primUse = sanitizePrimitiveSpecies<dim>(prim);
+            validatePrimitiveRhoP<dim>(primUse, "primToConservative");
+            real rhoH_form = formationFromPrimitive<dim>(primUse);
             real gammaEqUse = igProp_->gamma;
             if (!hasChemicalSource())
             {
-                Gas::IdealGasThermalPrimitive2Conservative<dim>(prim, cons, gammaEqUse, rhoH_form);
+                Gas::IdealGasThermalPrimitive2Conservative<dim>(primUse, cons, gammaEqUse, rhoH_form);
                 return;
             }
 
             int maxIterations = std::max(options.gammaMaxIterations, 1);
+            bool converged = false;
             for (int iter = 0; iter < maxIterations; ++iter)
             {
-                Gas::IdealGasThermalPrimitive2Conservative<dim>(prim, cons, gammaEqUse, rhoH_form);
+                Gas::IdealGasThermalPrimitive2Conservative<dim>(primUse, cons, gammaEqUse, rhoH_form);
                 real T_iter = temperature<dim>(cons, 0, options.temperatureUVTolerance);
                 real gammaEqIter = gammaEq<dim>(T_iter, cons);
                 if (std::abs(gammaEqIter - gammaEqUse) < options.gammaTolerance)
+                {
+                    converged = true;
                     break;
+                }
                 gammaEqUse = gammaEqIter;
             }
+            DNDS_check_throw_info(converged,
+                                  fmt::format("primToConservative(): gamma fixed-point failed to converge after {} iterations", maxIterations));
         }
 
         /**
@@ -325,9 +380,11 @@ namespace DNDS::Euler
         void primRhoTToConservative(const TU &primRhoT, TU &cons,
                                     const StateConversionOptions &options = StateConversionOptions{}) const
         {
-            auto prim = primRhoT;
+            auto prim = sanitizePrimitiveSpecies<dim>(primRhoT);
             int I4 = dim + 1;
             real T_code = prim[I4];
+            DNDS_check_throw_info(prim[0] > 0 && T_code > 0,
+                                  "primRhoTToConservative(): rho and T must be positive");
             real Rmix = mixtureRfromPrimitive(prim);
             prim[I4] = prim[0] * Rmix * T_code;
             primToConservative<dim>(prim, cons, options);
@@ -353,12 +410,15 @@ namespace DNDS::Euler
         void primTPToConservative(const TU &primTP, TU &cons,
                                   const StateConversionOptions &options = StateConversionOptions{}) const
         {
-            auto prim = primTP;
+            auto prim = sanitizePrimitiveSpecies<dim>(primTP);
             int I4 = dim + 1;
             real T_code = prim[0];
             real p_code = prim[I4];
+            DNDS_check_throw_info(T_code > 0 && p_code > 0,
+                                  "primTPToConservative(): T and p must be positive");
             real Rmix = mixtureRfromPrimitive(prim);
-            prim[0] = p_code / std::max(Rmix * T_code, 1e-60);
+            DNDS_check_throw_info(Rmix > 0, "primTPToConservative(): mixture gas constant must be positive");
+            prim[0] = p_code / (Rmix * T_code);
             primToConservative<dim>(prim, cons, options);
         }
 
@@ -394,7 +454,7 @@ namespace DNDS::Euler
 
             if (!hasChemicalSource())
             {
-                real Cp = toCode(igProp_->CpGas);
+                real Cp = toCode(igProp_->CpGas());
                 real Rgas = toCode(igProp_->Rgas);
                 real gamma = igProp_->gamma;
                 real vSqrUse = std::min(vSqrRequest, TTotal * 2 * Cp * 0.95);
@@ -612,7 +672,7 @@ namespace DNDS::Euler
             phys[0] *= igProp_->rho0;
             for (int j = 1; j <= dim; ++j)
                 phys[j] *= igProp_->U0;
-            phys[dim + 1] *= igProp_->T0;
+            phys[dim + 1] = toPhysT(code[dim + 1]);
         }
 
         template <int dim>
@@ -622,14 +682,14 @@ namespace DNDS::Euler
             code[0] /= igProp_->rho0;
             for (int j = 1; j <= dim; ++j)
                 code[j] /= igProp_->U0;
-            code[dim + 1] /= igProp_->T0;
+            code[dim + 1] = toCodeT(phys[dim + 1]);
         }
 
         template <int dim>
         void primTPCodeToPhys(const TU &code, TU &phys) const
         {
             phys = code;
-            phys[0] *= igProp_->T0;
+            phys[0] = toPhysT(code[0]);
             for (int j = 1; j <= dim; ++j)
                 phys[j] *= igProp_->U0;
             phys[dim + 1] *= (igProp_->rho0 * igProp_->U0 * igProp_->U0);
@@ -639,13 +699,129 @@ namespace DNDS::Euler
         void primTPPhysToCode(const TU &phys, TU &code) const
         {
             code = phys;
-            code[0] /= igProp_->T0;
+            code[0] = toCodeT(phys[0]);
             for (int j = 1; j <= dim; ++j)
                 code[j] /= igProp_->U0;
             code[dim + 1] /= (igProp_->rho0 * igProp_->U0 * igProp_->U0);
         }
 
+        template <int dim>
+        void conservativeToStateValueOrigin(const TU &cons, TU &state, StateValueOrigin origin) const
+        {
+            TU tmp(cons.size());
+            switch (origin)
+            {
+            case StateValueOrigin::Cons:
+                state = cons;
+                break;
+            case StateValueOrigin::ConsSensible:
+                consTotalToSensible<dim>(cons, state);
+                break;
+            case StateValueOrigin::PrimRhoP:
+                conservativeToPrimitive<dim>(cons, state);
+                break;
+            case StateValueOrigin::PrimRhoT:
+                conservativeToPrimRhoT<dim>(cons, state);
+                break;
+            case StateValueOrigin::PrimTP:
+                conservativeToPrimTP<dim>(cons, state);
+                break;
+            case StateValueOrigin::ConsPhy:
+                consCodeToPhys<dim>(cons, state);
+                break;
+            case StateValueOrigin::ConsSensiblePhy:
+                consTotalToSensible<dim>(cons, tmp);
+                consCodeToPhys<dim>(tmp, state);
+                break;
+            case StateValueOrigin::PrimRhoPPhy:
+                conservativeToPrimitive<dim>(cons, tmp);
+                primCodeToPhys<dim>(tmp, state);
+                break;
+            case StateValueOrigin::PrimRhoTPhy:
+                conservativeToPrimRhoT<dim>(cons, tmp);
+                primRhoTCodeToPhys<dim>(tmp, state);
+                break;
+            case StateValueOrigin::PrimTPPhy:
+                conservativeToPrimTP<dim>(cons, tmp);
+                primTPCodeToPhys<dim>(tmp, state);
+                break;
+            default:
+                DNDS_check_throw_info(false, fmt::format("unsupported StateValueOrigin [{}]", StateValueOriginName(origin)));
+            }
+        }
+
+        template <int dim>
+        void stateValueOriginToConservative(const TU &state, TU &cons, StateValueOrigin origin) const
+        {
+            TU tmp(state.size());
+            switch (origin)
+            {
+            case StateValueOrigin::Cons:
+                cons = state;
+                break;
+            case StateValueOrigin::ConsSensible:
+                consSensibleToTotal<dim>(state, cons);
+                break;
+            case StateValueOrigin::PrimRhoP:
+                primToConservative<dim>(state, cons);
+                break;
+            case StateValueOrigin::PrimRhoT:
+                primRhoTToConservative<dim>(state, cons);
+                break;
+            case StateValueOrigin::PrimTP:
+                primTPToConservative<dim>(state, cons);
+                break;
+            case StateValueOrigin::ConsPhy:
+                consPhysToCode<dim>(state, cons);
+                break;
+            case StateValueOrigin::ConsSensiblePhy:
+                consPhysToCode<dim>(state, tmp);
+                consSensibleToTotal<dim>(tmp, cons);
+                break;
+            case StateValueOrigin::PrimRhoPPhy:
+                primPhysToCode<dim>(state, tmp);
+                primToConservative<dim>(tmp, cons);
+                break;
+            case StateValueOrigin::PrimRhoTPhy:
+                primRhoTPhysToCode<dim>(state, tmp);
+                primRhoTToConservative<dim>(tmp, cons);
+                break;
+            case StateValueOrigin::PrimTPPhy:
+                primTPPhysToCode<dim>(state, tmp);
+                primTPToConservative<dim>(tmp, cons);
+                break;
+            default:
+                DNDS_check_throw_info(false, fmt::format("unsupported StateValueOrigin [{}]", StateValueOriginName(origin)));
+            }
+        }
+
     private:
+        template <int dim>
+        void validatePrimitiveRhoP(const TU &prim, const char *label) const
+        {
+            static const int I4 = dim + 1;
+            DNDS_check_throw_info(prim[0] > 0 && prim[I4] > 0,
+                                  fmt::format("{}: rho and p must be positive", label));
+        }
+
+        template <int dim>
+        TU sanitizePrimitiveSpecies(const TU &prim) const
+        {
+            TU ret = prim;
+            if (!hasChemicalSource())
+                return ret;
+            auto &c = chem();
+            int Ns1 = c.nSpecies() - 1;
+            int nVars = static_cast<int>(ret.size());
+            int Isp = nVars - Ns1;
+            DNDS_check_throw_info(Isp >= dim + 2,
+                                  "sanitizePrimitiveSpecies(): state vector too small for mechanism species count");
+            auto Y = c.massFractions(1.0, ret.data() + Isp, Ns1);
+            for (int k = 0; k < Ns1; ++k)
+                ret[Isp + k] = Y[k];
+            return ret;
+        }
+
         /// Compute rhoH_form from a primitive vector [rho, u, v, (w), p/T, Y_k].
         template <int dim>
         real formationFromPrimitive(const TU &prim) const
@@ -657,17 +833,8 @@ namespace DNDS::Euler
             int nVars = static_cast<int>(prim.size());
             int Isp = nVars - Ns1;
             double invU0sq = 1.0 / (igProp_->U0 * igProp_->U0);
-            auto hfView = c.mixtureFormationRhoESpecies(invU0sq);
-            real rhoH = 0;
-            real sumY = 0;
-            for (int k = 0; k < Ns1; ++k)
-            {
-                rhoH += prim[Isp + k] * prim[0] * hfView[k];
-                sumY += prim[Isp + k];
-            }
-            real lastY = 1.0 - sumY;
-            rhoH += lastY * prim[0] * hfView[Ns1];
-            return rhoH;
+            auto Y = c.massFractions(1.0, prim.data() + Isp, Ns1);
+            return c.mixtureFormationRhoE(prim[0], Y, invU0sq);
         }
 
         /// Compute code-scaled mixture Rgas from a primitive vector (uses mass fractions directly).
@@ -747,6 +914,204 @@ namespace DNDS::Euler
     // ========================================================================
     // Out-of-line template implementations
     // ========================================================================
+
+    template <EulerModel model>
+    template <int dim>
+    void PhysicsProperties<model>::resolveStateValue(StateValue &value, int nVars,
+                                                     std::ostream *os,
+                                                     const std::string &label) const
+    {
+        static const int I4 = dim + 1;
+        value.checkSize(nVars, label);
+        value.keepOnlyOrigin();
+        DNDS_check_throw_info(value.originType != StateValueOrigin::None &&
+                                  value.originType != StateValueOrigin::NonState &&
+                                  value.originType != StateValueOrigin::Invalid,
+                              fmt::format("{} has unsupported state type [{}]", label, StateValueOriginName(value.originType)));
+        DNDS_check_throw_info(StateValue::filled(value.originVector()),
+                              fmt::format("{} has an empty or non-finite state value", label));
+        value.fillMissingWithNaN(nVars);
+
+        auto consPhysToCode = [&](const Eigen::Vector<real, -1> &v)
+        {
+            Eigen::Vector<real, -1> o = v;
+            o[0] /= igProp_->rho0;
+            for (int j = 1; j <= dim; ++j)
+                o[j] /= (igProp_->rho0 * igProp_->U0);
+            o[I4] /= p0();
+            for (int k = I4 + 1; k < o.size(); ++k)
+                o[k] /= igProp_->rho0;
+            return o;
+        };
+        auto consCodeToPhys = [&](const Eigen::Vector<real, -1> &v)
+        {
+            Eigen::Vector<real, -1> o = v;
+            o[0] *= igProp_->rho0;
+            for (int j = 1; j <= dim; ++j)
+                o[j] *= (igProp_->rho0 * igProp_->U0);
+            o[I4] *= p0();
+            for (int k = I4 + 1; k < o.size(); ++k)
+                o[k] *= igProp_->rho0;
+            return o;
+        };
+        auto primRhoPPhysToCode = [&](const Eigen::Vector<real, -1> &v)
+        {
+            Eigen::Vector<real, -1> o = v;
+            o[0] /= igProp_->rho0;
+            for (int j = 1; j <= dim; ++j)
+                o[j] /= igProp_->U0;
+            o[I4] /= p0();
+            return o;
+        };
+        auto primRhoPCodeToPhys = [&](const Eigen::Vector<real, -1> &v)
+        {
+            Eigen::Vector<real, -1> o = v;
+            o[0] *= igProp_->rho0;
+            for (int j = 1; j <= dim; ++j)
+                o[j] *= igProp_->U0;
+            o[I4] *= p0();
+            return o;
+        };
+        auto primRhoTPhysToCode = [&](const Eigen::Vector<real, -1> &v)
+        {
+            Eigen::Vector<real, -1> o = primRhoPPhysToCode(v);
+            o[I4] = toCodeT(v[I4]);
+            return o;
+        };
+        auto primRhoTCodeToPhys = [&](const Eigen::Vector<real, -1> &v)
+        {
+            Eigen::Vector<real, -1> o = primRhoPCodeToPhys(v);
+            o[I4] = toPhysT(v[I4]);
+            return o;
+        };
+        auto primTPPhysToCode = [&](const Eigen::Vector<real, -1> &v)
+        {
+            Eigen::Vector<real, -1> o = v;
+            o[0] = toCodeT(v[0]);
+            for (int j = 1; j <= dim; ++j)
+                o[j] /= igProp_->U0;
+            o[I4] /= p0();
+            return o;
+        };
+        auto primTPCodeToPhys = [&](const Eigen::Vector<real, -1> &v)
+        {
+            Eigen::Vector<real, -1> o = v;
+            o[0] = toPhysT(v[0]);
+            for (int j = 1; j <= dim; ++j)
+                o[j] *= igProp_->U0;
+            o[I4] *= p0();
+            return o;
+        };
+
+        auto toTU = [&](const Eigen::Vector<real, -1> &v)
+        {
+            TU out(v.size());
+            out = v;
+            return out;
+        };
+        auto fromTU = [](const TU &v)
+        {
+            Eigen::Vector<real, -1> out(v.size());
+            out = v;
+            return out;
+        };
+
+        switch (value.originType)
+        {
+        case StateValueOrigin::Cons:
+            break;
+        case StateValueOrigin::ConsSensible:
+        {
+            TU in = toTU(value.consSensible), out(nVars);
+            consSensibleToTotal<dim>(in, out);
+            value.cons = fromTU(out);
+            break;
+        }
+        case StateValueOrigin::PrimRhoP:
+        {
+            TU in = toTU(value.primRhoP), out(nVars);
+            primToConservative<dim>(in, out);
+            value.cons = fromTU(out);
+            break;
+        }
+        case StateValueOrigin::PrimRhoT:
+        {
+            TU in = toTU(value.primRhoT), out(nVars);
+            primRhoTToConservative<dim>(in, out);
+            value.cons = fromTU(out);
+            break;
+        }
+        case StateValueOrigin::PrimTP:
+        {
+            TU in = toTU(value.primTP), out(nVars);
+            primTPToConservative<dim>(in, out);
+            value.cons = fromTU(out);
+            break;
+        }
+        case StateValueOrigin::ConsPhy:
+            value.cons = consPhysToCode(value.cons_phy);
+            break;
+        case StateValueOrigin::ConsSensiblePhy:
+        {
+            value.consSensible = consPhysToCode(value.consSensible_phy);
+            TU in = toTU(value.consSensible), out(nVars);
+            consSensibleToTotal<dim>(in, out);
+            value.cons = fromTU(out);
+            break;
+        }
+        case StateValueOrigin::PrimRhoPPhy:
+        {
+            value.primRhoP = primRhoPPhysToCode(value.primRhoP_phy);
+            TU in = toTU(value.primRhoP), out(nVars);
+            primToConservative<dim>(in, out);
+            value.cons = fromTU(out);
+            break;
+        }
+        case StateValueOrigin::PrimRhoTPhy:
+        {
+            value.primRhoT = primRhoTPhysToCode(value.primRhoT_phy);
+            TU in = toTU(value.primRhoT), out(nVars);
+            primRhoTToConservative<dim>(in, out);
+            value.cons = fromTU(out);
+            break;
+        }
+        case StateValueOrigin::PrimTPPhy:
+        {
+            value.primTP = primTPPhysToCode(value.primTP_phy);
+            TU in = toTU(value.primTP), out(nVars);
+            primTPToConservative<dim>(in, out);
+            value.cons = fromTU(out);
+            break;
+        }
+        default:
+            DNDS_assert_info(false, "StateValue has no originType");
+        }
+
+        DNDS_assert_info(StateValue::filled(value.cons), label + " did not resolve to cons");
+        {
+            TU in = toTU(value.cons), out(nVars);
+            consTotalToSensible<dim>(in, out);
+            value.consSensible = fromTU(out);
+            conservativeToPrimitive<dim>(in, out);
+            value.primRhoP = fromTU(out);
+            conservativeToPrimRhoT<dim>(in, out);
+            value.primRhoT = fromTU(out);
+            conservativeToPrimTP<dim>(in, out);
+            value.primTP = fromTU(out);
+        }
+        value.cons_phy = consCodeToPhys(value.cons);
+        value.consSensible_phy = consCodeToPhys(value.consSensible);
+        value.primRhoP_phy = primRhoPCodeToPhys(value.primRhoP);
+        value.primRhoT_phy = primRhoTCodeToPhys(value.primRhoT);
+        value.primTP_phy = primTPCodeToPhys(value.primTP);
+
+        if (os)
+        {
+            nlohmann::ordered_json j = value;
+            *os << fmt::format("Resolved state [{}] origin [{}]:\n{}\n",
+                               label, StateValueOriginName(value.originType), j.dump(2));
+        }
+    }
 
     template <EulerModel model>
     real PhysicsProperties<model>::mixtureViscosity(real T, real p, const TU &U) const
@@ -896,7 +1261,7 @@ namespace DNDS::Euler
     real PhysicsProperties<model>::Cp(real T, const TU &U) const
     {
         if (!hasChemicalSource())
-            return toCode(igProp_->CpGas);
+            return toCode(igProp_->CpGas());
         double pPhys = U(0) * igProp_->rho0 * chem().mixtureR(massFractions(U)) * toPhysT(T);
         return toCode(chem().mixtureCp(toPhysT(T), massFractions(U), pPhys));
     }

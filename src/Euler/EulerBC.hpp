@@ -13,6 +13,7 @@
  */
 #pragma once
 #include "Euler.hpp"
+#include "EulerEvaluatorSettings.hpp"
 #include "Geom/BoundaryCondition.hpp"
 #include "Geom/Grid.hpp"
 
@@ -34,17 +35,17 @@ namespace DNDS::Euler
      */
     enum EulerBCType
     {
-        BCUnknown = 0,          ///< Uninitialized / invalid sentinel.
-        BCFar,                  ///< Far-field (characteristic-based) boundary.
-        BCWall,                 ///< No-slip viscous wall boundary.
-        BCWallInvis,            ///< Inviscid slip wall boundary.
-        BCWallIsothermal,       ///< Isothermal wall; requires wall temperature in the BC value vector.
-        BCOut,                  ///< Supersonic outflow (extrapolation) boundary.
-        BCOutP,                 ///< Back-pressure (subsonic) outflow boundary.
-        BCIn,                   ///< Supersonic inflow (fully prescribed state) boundary.
-        BCInPsTs,               ///< Subsonic inflow with prescribed total pressure and temperature.
-        BCSym,                  ///< Symmetry plane boundary.
-        BCSpecial,              ///< Test-case-specific boundary (Riemann, DMR, isentropic vortex, RT).
+        BCUnknown = 0,    ///< Uninitialized / invalid sentinel.
+        BCFar,            ///< Far-field (characteristic-based) boundary.
+        BCWall,           ///< No-slip viscous wall boundary.
+        BCWallInvis,      ///< Inviscid slip wall boundary.
+        BCWallIsothermal, ///< Isothermal wall; requires wall temperature in the BC value vector.
+        BCOut,            ///< Supersonic outflow (extrapolation) boundary.
+        BCOutP,           ///< Back-pressure (subsonic) outflow boundary.
+        BCIn,             ///< Supersonic inflow (fully prescribed state) boundary.
+        BCInPsTs,         ///< Subsonic inflow with prescribed total pressure and temperature.
+        BCSym,            ///< Symmetry plane boundary.
+        BCSpecial,        ///< Test-case-specific boundary (Riemann, DMR, isentropic vortex, RT).
     };
 
     DNDS_DEFINE_ENUM_JSON(
@@ -104,6 +105,23 @@ namespace DNDS::Euler
             s["items"] = json{{"type", "number"}};
             return s;
         };
+        auto stateValue = [&](const std::string &desc) -> json
+        {
+            return StateValueSchema(desc);
+        };
+        auto rawValue = [&](const std::string &desc) -> json
+        {
+            json tagged;
+            tagged["type"] = "object";
+            tagged["required"] = json::array({"type", "state"});
+            tagged["additionalProperties"] = false;
+            tagged["properties"] = json::object();
+            tagged["properties"]["type"] = json{{"const", "nonState"}};
+            tagged["properties"]["state"] = numArray();
+            json legacy = numArray();
+            legacy["description"] = "Legacy raw payload array; size must be nVars.";
+            return json{{"description", desc}, {"oneOf", json::array({legacy, tagged})}};
+        };
         auto intProp = [](const char *desc) -> json
         {
             return json{{"type", "integer"}, {"description", desc}, {"default", 0}};
@@ -129,19 +147,20 @@ namespace DNDS::Euler
             json props;
             props["type"] = typeSchema;
             props["name"] = json{{"type", "string"}, {"description", "Boundary zone name"}};
+            props["__bcId"] = json{{"type", "integer"}, {"description", "Internal emitted BC id; ignored on read"}};
             for (auto &[k, v] : extraProps.items())
                 props[k] = v;
 
             s["properties"] = props;
             s["required"] = required;
+            s["additionalProperties"] = false;
             return s;
         };
 
         // --- Flow BCs: BCFar, BCOut, BCOutP, BCIn, BCInPsTs ---
-        auto flowTypes = std::vector<std::string>{"BCFar", "BCOut", "BCOutP", "BCIn", "BCInPsTs"};
+        auto fullStateFlowTypes = std::vector<std::string>{"BCFar", "BCOut", "BCOutP", "BCIn"};
         json flowProps;
-        flowProps["value"] = numArray();
-        flowProps["value"]["description"] = "BC state vector (size = nVars)";
+        flowProps["value"] = stateValue("Full BC state; canonical object is {type, state}");
         flowProps["frameOption"] = intProp("Reference frame option");
         flowProps["anchorOption"] = intProp("Anchor point option");
         flowProps["integrationOption"] = intProp("Integration option");
@@ -149,17 +168,21 @@ namespace DNDS::Euler
         flowProps["valueExtra"]["description"] = "Extra BC values (e.g. anchor coordinates)";
         // Emit one variant per type for best IDE discrimination.
         json oneOf = json::array();
-        for (auto &t : flowTypes)
+        for (auto &t : fullStateFlowTypes)
         {
             oneOf.push_back(makeVariant({t}, ("Flow BC: " + t).c_str(),
                                         flowProps,
                                         {"type", "name", "value"}));
         }
+        json totalConditionProps = flowProps;
+        totalConditionProps["value"] = rawValue("Raw BCInPsTs payload with size = nVars: [pTotal, TTotal, direction..., passive/species...]");
+        oneOf.push_back(makeVariant({"BCInPsTs"}, "Flow BC: BCInPsTs",
+                                    totalConditionProps,
+                                    {"type", "name", "value"}));
 
         // --- Wall BCs: BCWall, BCWallInvis, BCWallIsothermal, BCSpecial ---
         json wallProps;
-        wallProps["value"] = numArray();
-        wallProps["value"]["description"] = "BC state vector (optional except for BCWallIsothermal)";
+        wallProps["value"] = rawValue("Raw wall/special payload with size = nVars; BCWallIsothermal uses state[0] as wall temperature");
         wallProps["frameOption"] = intProp("Reference frame option");
         wallProps["integrationOption"] = intProp("Integration option");
         wallProps["specialOption"] = intProp("Special BC sub-type option");
@@ -219,10 +242,10 @@ namespace DNDS::Euler
         using TFlags = std::map<std::string, uint32_t>;     ///< Per-zone option flag map (key → integer flag).
 
     private:
-        std::vector<TU> BCValues;                                        ///< State vectors for each BC zone.
-        std::vector<EulerBCType> BCTypes;                                ///< BC type for each zone.
-        std::vector<TFlags> BCFlags;                                     ///< Option flags for each zone.
-        std::vector<Eigen::Vector<real, Eigen::Dynamic>> BCValuesExtra;  ///< Extra BC data (e.g. anchor coordinates).
+        std::vector<StateValue> BCValues;                               ///< State vectors for each BC zone.
+        std::vector<EulerBCType> BCTypes;                               ///< BC type for each zone.
+        std::vector<TFlags> BCFlags;                                    ///< Option flags for each zone.
+        std::vector<Eigen::Vector<real, Eigen::Dynamic>> BCValuesExtra; ///< Extra BC data (e.g. anchor coordinates).
         std::unordered_map<std::string, Geom::t_index> name2ID;         ///< Zone name → internal BC index.
         std::unordered_map<Geom::t_index, std::string> ID2name;         ///< Internal BC index → zone name (reverse map).
 
@@ -239,8 +262,6 @@ namespace DNDS::Euler
         BoundaryHandler(int _nVars) : nVars(_nVars)
         {
             BCValues.resize(Geom::BC_ID_DEFAULT_MAX);
-            for (auto &v : BCValues)
-                v.setConstant(UnInitReal);
             BCValuesExtra.resize(Geom::BC_ID_DEFAULT_MAX);
             for (auto &v : BCValuesExtra)
                 v.setConstant(UnInitReal);
@@ -307,6 +328,29 @@ namespace DNDS::Euler
         friend void from_json(const json &j, BoundaryHandler<model> &bc)
         {
             DNDS_assert(j.is_array());
+            auto parseRawValue = [](const json &item)
+            {
+                StateValue ret;
+                if (item.is_array())
+                {
+                    ret.nonState = item.get<Eigen::VectorXd>();
+                    ret.originType = StateValueOrigin::NonState;
+                }
+                else if (item.is_object())
+                {
+                    ret = item.get<StateValue>();
+                    DNDS_check_throw_info(ret.originType == StateValueOrigin::NonState,
+                                          "raw BC object value must use {\"type\": \"nonState\", \"state\": [...]}");
+                }
+                else
+                    DNDS_check_throw_info(false, "raw BC value must be an array or {\"type\": \"nonState\", \"state\": [...]}");
+                return ret;
+            };
+            auto validateRawFinite = [](const StateValue &value, const std::string &label)
+            {
+                DNDS_check_throw_info(value.nonState.size() > 0 && value.nonState.allFinite(),
+                                      label + " raw value must be non-empty and finite");
+            };
             for (auto &item : j)
             {
                 EulerBCType bcType = item["type"].get<EulerBCType>();
@@ -332,8 +376,24 @@ namespace DNDS::Euler
                         integrationOption = item["integrationOption"];
                     if (item.count("valueExtra"))
                         bcValueExtra = item["valueExtra"];
-                    Eigen::VectorXd bcValue = item["value"];
-                    DNDS_assert_info(bcValue.size() == bc.nVars, fmt::format("[{}] bc value dim not right", bcName));
+                    StateValue bcValue;
+                    if (bcType == EulerBCType::BCInPsTs)
+                    {
+                        bcValue = parseRawValue(item["value"]);
+                        validateRawFinite(bcValue, fmt::format("[{}] BCInPsTs", bcName));
+                        DNDS_check_throw_info(bcValue.nonState.size() == bc.nVars,
+                                              fmt::format("[{}] BCInPsTs raw value dim {} != {}", bcName, bcValue.nonState.size(), bc.nVars));
+                        DNDS_check_throw_info(bcValue.nonState(0) > 0 && bcValue.nonState(1) > 0,
+                                              fmt::format("[{}] BCInPsTs total pressure and total temperature must be positive", bcName));
+                        int dirEnd = std::min(bc.nVars - 1, getDim_Fixed(model) + 1);
+                        DNDS_check_throw_info(dirEnd >= 2 && bcValue.nonState(Eigen::seq(Eigen::fix<2>, dirEnd)).norm() > 1e-14,
+                                              fmt::format("[{}] BCInPsTs direction vector must be nonzero", bcName));
+                    }
+                    else
+                    {
+                        bcValue = item["value"];
+                        bcValue.checkSize(bc.nVars, fmt::format("[{}] bc value", bcName));
+                    }
                     bc.BCValues.push_back(bcValue);
                     bc.BCFlags.back()["frameOpt"] = frameOption;
                     bc.BCFlags.back()["anchorOpt"] = anchorOption;
@@ -351,7 +411,7 @@ namespace DNDS::Euler
                     uint32_t integrationOption = 0;
                     uint32_t specialOption = 0;
                     Eigen::VectorXd bcValueExtra;
-                    Eigen::VectorXd bcValue;
+                    StateValue bcValue;
                     if (item.count("frameOption"))
                         frameOption = item["frameOption"];
                     if (item.count("integrationOption"))
@@ -360,15 +420,22 @@ namespace DNDS::Euler
                         bcValueExtra = item["valueExtra"];
                     if (item.count("value"))
                     {
-                        bcValue = item["value"];
-                        // std::cout << bcValue.transpose() << std::endl;
-                        DNDS_assert_info(bcValue.size() == bc.nVars, fmt::format("[{}] bc value dim not right", bcName));
+                        bcValue = parseRawValue(item["value"]);
+                        DNDS_check_throw_info(bcValue.nonState.size() == bc.nVars,
+                                              fmt::format("[{}] raw bc value dim {} != {}", bcName, bcValue.nonState.size(), bc.nVars));
+                        if (bcType == EulerBCType::BCWallIsothermal)
+                        {
+                            validateRawFinite(bcValue, fmt::format("[{}] BCWallIsothermal", bcName));
+                            DNDS_check_throw_info(bcValue.nonState(0) > 0,
+                                                  fmt::format("[{}] BCWallIsothermal temperature must be positive", bcName));
+                        }
                     }
                     else
                     {
-                        bcValue.setZero(bc.nVars);
+                        bcValue.nonState.setZero(bc.nVars);
+                        bcValue.originType = StateValueOrigin::NonState;
                         if (bcType == EulerBCType::BCWallIsothermal)
-                            DNDS_assert_info(false, "missing bc value for BCWallIsothermal");
+                            DNDS_check_throw_info(false, "missing bc value for BCWallIsothermal");
                     }
                     if (item.count("specialOption"))
                         specialOption = item["specialOption"];
@@ -392,7 +459,10 @@ namespace DNDS::Euler
                         integrationOption = item["integrationOption"];
                     if (item.count("valueExtra"))
                         bcValueExtra = item["valueExtra"];
-                    bc.BCValues.push_back(TU::Zero(bc.nVars));
+                    StateValue bcValue;
+                    bcValue.cons.setZero(bc.nVars);
+                    bcValue.originType = StateValueOrigin::Cons;
+                    bc.BCValues.push_back(bcValue);
                     bc.BCFlags.back()["rectifyOpt"] = rectifyOption;
                     bc.BCFlags.back()["integrationOpt"] = integrationOption;
                     bc.BCValuesExtra.push_back(bcValueExtra);
@@ -443,9 +513,10 @@ namespace DNDS::Euler
                 case EulerBCType::BCIn:
                 case EulerBCType::BCInPsTs:
                 {
-                    item["value"] = static_cast<TU_R>(bc.BCValues.at(i)); // force begin() and end() to be exposed
+                    item["value"] = bc.BCValues.at(i);
                     item["frameOption"] = bc.BCFlags.at(i).at("frameOpt");
                     item["anchorOption"] = bc.BCFlags.at(i).at("anchorOpt");
+                    item["integrationOption"] = bc.BCFlags.at(i).at("integrationOpt");
                     item["valueExtra"] = bc.BCValuesExtra.at(i);
                 }
                 break;
@@ -459,13 +530,14 @@ namespace DNDS::Euler
                     item["integrationOption"] = bc.BCFlags.at(i).at("integrationOpt");
                     item["specialOption"] = bc.BCFlags.at(i).at("specialOpt");
                     item["valueExtra"] = bc.BCValuesExtra.at(i);
-                    item["value"] = static_cast<TU_R>(bc.BCValues.at(i));
+                    item["value"] = bc.BCValues.at(i);
                 }
                 break;
 
                 case EulerBCType::BCSym:
                 {
                     item["rectifyOption"] = bc.BCFlags.at(i).at("rectifyOpt");
+                    item["integrationOption"] = bc.BCFlags.at(i).at("integrationOpt");
                     item["valueExtra"] = bc.BCValuesExtra.at(i);
                 }
                 break;
@@ -527,8 +599,30 @@ namespace DNDS::Euler
         TU GetValueFromID(Geom::t_index id)
         {
             if (!Geom::FaceIDIsExternalBC(id))
-                return BCValues.at(0);
-            return BCValues.at(id);
+                return BCValues.at(0).originType == StateValueOrigin::NonState ? BCValues.at(0).nonState : BCValues.at(0).cons;
+            return BCValues.at(id).originType == StateValueOrigin::NonState ? BCValues.at(id).nonState : BCValues.at(id).cons;
+        }
+
+        template <int dim, class TPhys>
+        void ResolveStateValues(const TPhys &phys, std::ostream *os = nullptr)
+        {
+            for (Geom::t_index i = Geom::BC_ID_DEFAULT_MAX; i < static_cast<Geom::t_index>(BCValues.size()); ++i)
+            {
+                auto type = BCTypes.at(i);
+                bool isFullState = type == EulerBCType::BCFar || type == EulerBCType::BCOut ||
+                                   type == EulerBCType::BCOutP || type == EulerBCType::BCIn;
+                if (!isFullState)
+                    continue;
+                DNDS_check_throw_info(BCValues[i].originType != StateValueOrigin::NonState,
+                                      fmt::format("BC [{}] requires a full state value, not nonState", ID2name.at(i)));
+                DNDS_check_throw_info(BCValues[i].originVector().size() == nVars,
+                                      fmt::format("BC [{}] state value dim {} != {}", ID2name.at(i),
+                                                  BCValues[i].originVector().size(), nVars));
+                DNDS_check_throw_info(StateValue::filled(BCValues[i].originVector()),
+                                      fmt::format("BC [{}] has an empty or non-finite state value", ID2name.at(i)));
+                if (StateValue::filled(BCValues[i].originVector()))
+                    phys.template resolveStateValue<dim>(BCValues[i], nVars, os, "bcSettings/" + ID2name.at(i));
+            }
         }
 
         /**
@@ -587,8 +681,8 @@ namespace DNDS::Euler
     struct IntegrationRecorder
     {
         Eigen::Vector<real, Eigen::Dynamic> v; ///< Accumulated integral vector.
-        real div;                               ///< Accumulated divisor (area weight).
-        MPIInfo mpi;                            ///< MPI communicator info.
+        real div;                              ///< Accumulated divisor (area weight).
+        MPIInfo mpi;                           ///< MPI communicator info.
 
         /**
          * @brief Construct and zero-initialize the integration recorder.
@@ -766,10 +860,10 @@ namespace DNDS::Euler
     template <int nVarsFixed>
     struct OneDimProfile
     {
-        MPIInfo mpi;                                           ///< MPI communicator info.
-        Eigen::Vector<real, Eigen::Dynamic> nodes;             ///< Node coordinates (size = nCells + 1).
-        Eigen::Matrix<real, nVarsFixed, Eigen::Dynamic> v;     ///< Accumulated cell values (nVars × nCells).
-        Eigen::RowVector<real, Eigen::Dynamic> div;            ///< Per-cell divisor (area weight).
+        MPIInfo mpi;                                       ///< MPI communicator info.
+        Eigen::Vector<real, Eigen::Dynamic> nodes;         ///< Node coordinates (size = nCells + 1).
+        Eigen::Matrix<real, nVarsFixed, Eigen::Dynamic> v; ///< Accumulated cell values (nVars × nCells).
+        Eigen::RowVector<real, Eigen::Dynamic> div;        ///< Per-cell divisor (area weight).
 
         /// @brief Construct with MPI communicator (no allocation yet).
         /// @param _mpi  MPI communicator wrapper.

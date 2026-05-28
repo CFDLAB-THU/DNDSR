@@ -358,10 +358,14 @@ namespace DNDS::Euler
         {
             DNDS_assert(pool_);
 #ifdef DNDS_DIST_MT_USE_OMP
-            return omp_get_thread_num() % static_cast<int>(pool_->size());
+            int tid = omp_get_thread_num();
 #else
-            return 0;
+            int tid = 0;
 #endif
+            DNDS_check_throw_info(tid < static_cast<int>(pool_->size()),
+                                  fmt::format("ChemicalSource pool has {} entries but OpenMP thread {} requested chemistry source evaluation",
+                                              pool_->size(), tid));
+            return tid;
         }
 
         ChemicalContributor() = default;
@@ -391,7 +395,6 @@ namespace DNDS::Euler
             if (!pool_)
                 return;
             int tid = threadIdx();
-            DNDS_assert(tid < static_cast<int>(pool_->size()));
             auto &c = (*pool_)[tid];
             int Ns = c.nSpecies();
             int Ns1 = Ns - 1;

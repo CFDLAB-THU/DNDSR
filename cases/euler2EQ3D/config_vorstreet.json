@@ -231,7 +231,7 @@
                     "var rmax := 2; ",
                     "if(r <= rmax) ",
                     "   inRegion := 1; ",
-                    "UPrim[1] += cos(x[2] / 4.0 * pi * 2 ) * 0.05; ",
+                    "UExprtk[1] += cos(x[2] / 4.0 * pi * 2 ) * 0.05; ",
                     "0"
                 ]
             }
@@ -242,7 +242,7 @@
             //         "var rmax := 2; ",
             //         "if(r <= rmax) ",
             //         "   inRegion := 1; ",
-            //         "UPrim[2] += cos(x[0] / 0.5 * 2 * pi) * cos(x[1] / 0.5 * 2 * pi) * 0.05; ",
+            //         "UExprtk[2] += cos(x[0] / 0.5 * 2 * pi) * cos(x[1] / 0.5 * 2 * pi) * 0.05; ",
             //         "0"
             //     ]
             // }

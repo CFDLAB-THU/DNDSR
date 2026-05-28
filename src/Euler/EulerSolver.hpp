@@ -1051,6 +1051,8 @@ namespace DNDS::Euler
                     }
                 }
                 config.ReadWriteJson(gSetting, nVars, read);
+                for (const auto &failure : config.validate())
+                    DNDS_check_throw_info(failure.passed, failure.message);
                 // create from json the pBCHandler
                 pBCHandler = std::make_shared<BoundaryHandler<model>>(nVars);
                 from_json(config.bcSettings, *pBCHandler);

@@ -181,6 +181,9 @@ namespace DNDS
         /// For array fields, includes `"items": {...}`.
         std::function<nlohmann::ordered_json()> schemaEntry;
 
+        /// @brief Validate nested config sections contained by this field, if any.
+        std::function<std::vector<CheckResult>(const void *obj)> validateField;
+
         /// @brief Allowed string values for enum fields.  Empty for non-enum fields.
         std::vector<std::string> enumValues;
 
@@ -289,7 +292,7 @@ namespace DNDS
         }
 
         /// @brief Register a post-read hook called after all fields are deserialized.
-        /// Useful for recomputing derived quantities (e.g. CpGas from gamma and Rgas).
+        /// Useful for recomputing derived quantities after deserialization.
         static void registerPostReadHook(std::function<void(T &)> hook)
         {
             postReadHookMut() = std::move(hook);
@@ -399,6 +402,14 @@ namespace DNDS
         static std::vector<CheckResult> validate(const T &obj)
         {
             std::vector<CheckResult> failures;
+            for (const auto &f : fields())
+            {
+                if (!f.validateField)
+                    continue;
+                auto nestedFailures = f.validateField(static_cast<const void *>(&obj));
+                for (auto &failure : nestedFailures)
+                    failures.push_back(std::move(failure));
+            }
             for (const auto &check : checks())
             {
                 auto r = check(static_cast<const void *>(&obj));

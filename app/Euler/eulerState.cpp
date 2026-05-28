@@ -12,6 +12,7 @@
 #include <vector>
 #include <sstream>
 #include <memory>
+#include <cmath>
 
 using namespace DNDS::Euler;
 using namespace DNDS::Euler::Chemistry;
@@ -111,6 +112,43 @@ namespace
         return RgasPhys * T0 / (U0 * U0);
     }
 
+    bool validPositive(real v)
+    {
+        return std::isfinite(v) && v > 0;
+    }
+
+    std::string canonicalFrom(std::string from, bool &inputPhys)
+    {
+        if (from == "cons_phy")
+            inputPhys = true, from = "cons";
+        else if (from == "consSensible_phy")
+            inputPhys = true, from = "consSensible";
+        else if (from == "primRhoP_phy")
+            inputPhys = true, from = "primRhoP";
+        else if (from == "primRhoT_phy")
+            inputPhys = true, from = "primRhoT";
+        else if (from == "primTP_phy")
+            inputPhys = true, from = "primTP";
+
+        if (from == "cons-total")
+            return "cons";
+        if (from == "cons-sensible")
+            return "consSensible";
+        if (from == "prim")
+            return "primRhoP";
+        if (from == "prim-rhoT")
+            return "primRhoT";
+        if (from == "prim-TP")
+            return "primTP";
+        return from;
+    }
+
+    bool validFrom(const std::string &from)
+    {
+        return from == "cons" || from == "consSensible" ||
+               from == "primRhoP" || from == "primRhoT" || from == "primTP";
+    }
+
     void printVec(const Eigen::VectorXd &v, const std::string &prefix, int nPerLine = 4)
     {
         std::cout << prefix;
@@ -189,7 +227,7 @@ namespace
         if (!isPrim)
             for (int k = I4 + 1; k < (int)vPhys.size(); ++k)
                 vPhys[k] = v[k] * cfg.rho0;
-        printJsonVec(vPhys, jsonLabel + "-phys");
+        printJsonVec(vPhys, jsonLabel + "_phy");
     }
 
 } // anonymous namespace
@@ -206,7 +244,7 @@ int main(int argc, char **argv)
         .help("Number of conservative variables (for dynamic models)");
     program.add_argument("--from")
         .required()
-        .help("Input format: cons-total, cons-sensible, prim, prim-rhoT, prim-TP");
+        .help("Input format: cons, consSensible, primRhoP, primRhoT, primTP, or *_phy variants");
     program.add_argument("--scaling")
         .default_value(std::string("code"))
         .help("Input scaling: code, phys");
@@ -249,9 +287,30 @@ int main(int argc, char **argv)
     }
 
     auto cfg = parseConfig(configStr);
+    if (!validPositive(cfg.T0) || !validPositive(cfg.rho0) || !validPositive(cfg.U0) || !validPositive(cfg.L0))
+    {
+        std::cerr << "Error: T0, rho0, U0, and L0 must be finite and > 0\n";
+        return 1;
+    }
+    if (!std::isfinite(cfg.gamma) || cfg.gamma <= 1 || !validPositive(cfg.Rgas))
+    {
+        std::cerr << "Error: gamma must be finite and > 1, and Rgas must be finite and > 0\n";
+        return 1;
+    }
     real R_code = computeRgasCode(cfg.Rgas, cfg.U0, cfg.T0);
     bool isReactive = !mechStr.empty();
     bool inputPhys = (scalingStr == "phys");
+    fromStr = canonicalFrom(fromStr, inputPhys);
+    if (scalingStr != "code" && scalingStr != "phys")
+    {
+        std::cerr << "Error: --scaling must be code or phys\n";
+        return 1;
+    }
+    if (!validFrom(fromStr))
+    {
+        std::cerr << "Error: --from must be one of cons, consSensible, primRhoP, primRhoT, primTP, or *_phy variants\n";
+        return 1;
+    }
 
     Eigen::VectorXd inputState = parseState(stateStr);
     if ((int)inputState.size() != nVars)
@@ -278,6 +337,14 @@ int main(int argc, char **argv)
         pool->emplace_back(mechStr);
         nSpecies = (*pool)[0].nSpecies();
         speciesNames = (*pool)[0].speciesNames();
+        int expectedNVars = dim + 2 + nSpecies - 1;
+        if (nVars != expectedNVars)
+        {
+            std::cerr << "Error: reactive --state has nVars=" << nVars
+                      << ", but mechanism has " << nSpecies
+                      << " species; expected nVars=" << expectedNVars << "\n";
+            return 1;
+        }
 
         typename EulerEvaluatorSettings<NS_EX>::IdealGasProperty igProp;
         igProp.gamma = cfg.gamma;
@@ -285,6 +352,7 @@ int main(int argc, char **argv)
         igProp.U0 = cfg.U0;
         igProp.rho0 = cfg.rho0;
         igProp.T0 = cfg.T0;
+        igProp.L0 = cfg.L0;
         igProp.muGas = 1e-200;
         igProp.prGas = 0.72;
 
@@ -304,16 +372,16 @@ int main(int argc, char **argv)
             TU o(u.size());
             auto callSc = [&](auto fn)
             { fn(u, o); inputState = o; };
-            bool isPrim = (fromStr == "prim" || fromStr == "prim-rhoT" || fromStr == "prim-TP");
+            bool isPrim = (fromStr == "primRhoP" || fromStr == "primRhoT" || fromStr == "primTP");
             if (dim == 3)
             {
                 if (!isPrim)
                     callSc([&](auto &a, auto &b)
                            { phys->consPhysToCode<3>(a, b); });
-                else if (fromStr == "prim-rhoT")
+                else if (fromStr == "primRhoT")
                     callSc([&](auto &a, auto &b)
                            { phys->primRhoTPhysToCode<3>(a, b); });
-                else if (fromStr == "prim-TP")
+                else if (fromStr == "primTP")
                     callSc([&](auto &a, auto &b)
                            { phys->primTPPhysToCode<3>(a, b); });
                 else
@@ -325,10 +393,10 @@ int main(int argc, char **argv)
                 if (!isPrim)
                     callSc([&](auto &a, auto &b)
                            { phys->consPhysToCode<2>(a, b); });
-                else if (fromStr == "prim-rhoT")
+                else if (fromStr == "primRhoT")
                     callSc([&](auto &a, auto &b)
                            { phys->primRhoTPhysToCode<2>(a, b); });
-                else if (fromStr == "prim-TP")
+                else if (fromStr == "primTP")
                     callSc([&](auto &a, auto &b)
                            { phys->primTPPhysToCode<2>(a, b); });
                 else
@@ -340,16 +408,16 @@ int main(int argc, char **argv)
         {
             // Non-reactive phys→code: use local scaling
             auto U = inputState;
-            bool isPrim = (fromStr == "prim" || fromStr == "prim-rhoT" || fromStr == "prim-TP");
+            bool isPrim = (fromStr == "primRhoP" || fromStr == "primRhoT" || fromStr == "primTP");
             if (isPrim)
             {
-                if (fromStr == "prim-TP")
+                if (fromStr == "primTP")
                     U[0] /= cfg.T0;
                 else
                     U[0] /= cfg.rho0;
                 for (int j = 1; j <= dim; ++j)
                     U[j] /= cfg.U0;
-                if (fromStr == "prim-rhoT")
+                if (fromStr == "primRhoT")
                     U[dim + 1] /= cfg.T0;
                 else
                     U[dim + 1] /= (cfg.rho0 * cfg.U0 * cfg.U0);
@@ -375,13 +443,29 @@ int main(int argc, char **argv)
     std::cout << "\n";
     printVec(inputState, "  input = [", 4);
 
+    if (fromStr == "primRhoP" && (inputState[0] <= 0 || inputState[dim + 1] <= 0))
+    {
+        std::cerr << "Error: primRhoP input requires positive rho and p\n";
+        return 1;
+    }
+    if (fromStr == "primRhoT" && (inputState[0] <= 0 || inputState[dim + 1] <= 0))
+    {
+        std::cerr << "Error: primRhoT input requires positive rho and T\n";
+        return 1;
+    }
+    if (fromStr == "primTP" && (inputState[0] <= 0 || inputState[dim + 1] <= 0))
+    {
+        std::cerr << "Error: primTP input requires positive T and p\n";
+        return 1;
+    }
+
     // --- State conversion --- using PhysicsProperties API
     TU consTotal(nVars);
-    if (fromStr == "cons-total")
+    if (fromStr == "cons")
     {
         consTotal = inputState;
     }
-    else if (fromStr == "cons-sensible")
+    else if (fromStr == "consSensible")
     {
         TU u(nVars);
         u = inputState;
@@ -397,7 +481,7 @@ int main(int argc, char **argv)
             consTotal = u;
         }
     }
-    else if (fromStr == "prim" && isReactive)
+    else if (fromStr == "primRhoP" && isReactive)
     {
         TU u(nVars);
         u = inputState;
@@ -406,7 +490,7 @@ int main(int argc, char **argv)
         else
             phys->primToConservative<2>(u, consTotal);
     }
-    else if (fromStr == "prim-rhoT" && isReactive)
+    else if (fromStr == "primRhoT" && isReactive)
     {
         TU u(nVars);
         u = inputState;
@@ -415,7 +499,7 @@ int main(int argc, char **argv)
         else
             phys->primRhoTToConservative<2>(u, consTotal);
     }
-    else if (fromStr == "prim-TP" && isReactive)
+    else if (fromStr == "primTP" && isReactive)
     {
         TU u(nVars);
         u = inputState;
@@ -429,13 +513,13 @@ int main(int argc, char **argv)
         // Non-reactive primitive-family inputs: use cfg.gamma directly.
         TU prim(nVars);
         prim = inputState;
-        if (fromStr == "prim-rhoT")
+        if (fromStr == "primRhoT")
         {
             real rho = prim[0];
             real T = prim[dim + 1];
             prim[dim + 1] = rho * R_code * T;
         }
-        else if (fromStr == "prim-TP")
+        else if (fromStr == "primTP")
         {
             real T = prim[0];
             real p = prim[dim + 1];
@@ -555,11 +639,11 @@ int main(int argc, char **argv)
 
     // --- Print all representations ---
     printSection(consTotal, consNames, nVars, dim,
-                 "Conservative (total rhoE, code)", "cons-total", cfg, false);
+                 "Conservative (total rhoE, code)", "cons", cfg, false);
     printSection(consSensible, consNames, nVars, dim,
-                 "Conservative (sensible rhoE, code)", "cons-sensible", cfg, false);
+                 "Conservative (sensible rhoE, code)", "consSensible", cfg, false);
     printSection(primCode, primNames, nVars, dim,
-                 "Primitive (code)", "prim", cfg, true);
+                 "Primitive rho/u/p/Y (code)", "primRhoP", cfg, true);
 
     real T_phys = T_code * cfg.T0;
     real p_phys = primCode[dim + 1] * cfg.rho0 * cfg.U0 * cfg.U0;
@@ -607,20 +691,15 @@ int main(int argc, char **argv)
     {
         int Ns = nSpecies;
         std::vector<double> Ybuf(Ns);
+        int Ns1 = Ns - 1;
+        int Isp = dim + 2;
+        auto &chem = (*pool)[0];
+        auto YvSanitized = chem.massFractions(1.0, primCode.data() + Isp, Ns1);
         for (int k = 0; k < Ns; ++k)
         {
-            if (k < Ns - 1)
-                Ybuf[k] = primCode[dim + 2 + k];
-            else
-            {
-                real sumY = 0;
-                for (int j = 0; j < Ns - 1; ++j)
-                    sumY += primCode[dim + 2 + j];
-                Ybuf[k] = 1.0 - sumY;
-            }
+            Ybuf[k] = YvSanitized[k];
         }
         ConstSpeciesBufferView Yv{Ybuf.data(), Ns};
-        auto &chem = (*pool)[0];
         double u_ct = chem.mixtureIntEnergy(T_phys, Yv, p_phys);
         double h_ct = chem.mixtureEnthalpy(T_phys, Yv, p_phys);
         double cv_ct = chem.mixtureCv(T_phys, Yv, p_phys);

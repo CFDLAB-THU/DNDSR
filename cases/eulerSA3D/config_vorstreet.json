@@ -242,7 +242,7 @@
                     "for (var j := 0; j < As[]; j += 1)   {",
                     "for (var k := 0; k < As[]; k += 1)   {",
                     "   var ampC := amp * pow(As[i] * As[j] * As[k], 1.0/3.0);",
-                    "   UPrim[2] += cos(x[2] / lam * (k+1) * pi * 2 ",
+                    "   UExprtk[2] += cos(x[2] / lam * (k+1) * pi * 2 ",
                     "             + x[1] / lam * (j+1) * pi * 2  ",
                     "             + x[0] / lam * (i+1) * pi * 2 + phis[iPsi]) * ampC; ",
                     "   iPsi += 1;",
@@ -257,7 +257,7 @@
             //         "var rmax := 2; ",
             //         "if(r <= rmax) ",
             //         "   inRegion := 1; ",
-            //         "UPrim[1] += cos(x[2] / 4.0 * pi * 2 ) * 0.05; ",
+            //         "UExprtk[1] += cos(x[2] / 4.0 * pi * 2 ) * 0.05; ",
             //         "0"
             //     ]
             // }
@@ -268,7 +268,7 @@
             //         "var rmax := 2; ",
             //         "if(r <= rmax) ",
             //         "   inRegion := 1; ",
-            //         "UPrim[2] += cos(x[0] / 0.5 * 2 * pi) * cos(x[1] / 0.5 * 2 * pi) * 0.05; ",
+            //         "UExprtk[2] += cos(x[0] / 0.5 * 2 * pi) * cos(x[1] / 0.5 * 2 * pi) * 0.05; ",
             //         "0"
             //     ]
             // }
