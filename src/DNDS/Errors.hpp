@@ -6,17 +6,20 @@
 /// Three distinct families of checks are provided; choose based on how the
 /// failure should surface:
 ///
-/// | Macro                     | Release behaviour            | Failure mode              |
-/// |---------------------------|------------------------------|---------------------------|
-/// | @ref DNDS_assert               | Always active (MAX level)    | `std::abort()`            |
-/// | @ref DNDS_assert_info          | Always active (MAX level)    | `std::abort()` + message  |
-/// | @ref DNDS_assert_infof         | Always active (MAX level)    | `std::abort()` + fmtprintf|
-/// | @ref DNDS_assert_l             | Level-dependent (see below)  | `std::abort()`            |
-/// | @ref DNDS_assert_info_l        | Level-dependent (see below)  | `std::abort()` + message  |
-/// | @ref DNDS_assert_infof_l       | Level-dependent (see below)  | `std::abort()` + fmtprintf|
-/// | @ref DNDS_check_throw          | Always active                | `throw std::runtime_error`|
-/// | @ref DNDS_check_throw_info     | Always active                | `throw` + message         |
-/// | @ref DNDS_HD_assert            | Compiled out in NDEBUG       | host: `abort`, device: `trap` |
+/// | Macro                     | Release behaviour                 | Failure mode              |
+/// |---------------------------|-----------------------------------|---------------------------|
+/// | @ref DNDS_assert               | Always active (MAX level, unless NDEBUG) | `std::abort()`       |
+/// | @ref DNDS_assert_info          | Always active (MAX level, unless NDEBUG) | `std::abort()` + msg |
+/// | @ref DNDS_assert_infof         | Always active (MAX level, unless NDEBUG) | `std::abort()` + fmt |
+/// | @ref DNDS_assert_l             | Level-dependent (see below)       | `std::abort()`            |
+/// | @ref DNDS_assert_info_l        | Level-dependent (see below)       | `std::abort()` + message  |
+/// | @ref DNDS_assert_infof_l       | Level-dependent (see below)       | `std::abort()` + fmtprintf|
+/// | @ref DNDS_check_throw          | Always active                     | `throw std::runtime_error`|
+/// | @ref DNDS_check_throw_info     | Always active                     | `throw` + message         |
+/// | @ref DNDS_HD_assert            | MAX level; disabled by NDEBUG / NDEBUG_DEVICE | abort / trap |
+/// | @ref DNDS_HD_assert_infof      | MAX level; disabled by NDEBUG / NDEBUG_DEVICE | abort / trap + fmt |
+/// | @ref DNDS_HD_assert_l          | Level-dependent (see below)       | abort / trap              |
+/// | @ref DNDS_HD_assert_infof_l    | Level-dependent (see below)       | abort / trap + fmt        |
 ///
 /// Prefer @ref DNDS_assert for hard invariants that must never fail; use
 /// the leveled `_l` variants (levels 0..DNDS_ASSERT_LEVEL_MAX-1) for checks
@@ -137,7 +140,7 @@ namespace DNDS
 /// @name Level-0 macros (legacy default verbosity)
 /// @{
 
-#if 0 >= DNDS_ASSERT_LEVEL || 0 >= DNDS_ASSERT_LEVEL_MAX
+#if !defined(DNDS_NDEBUG) && (0 >= DNDS_ASSERT_LEVEL || 0 >= DNDS_ASSERT_LEVEL_MAX)
 #    define DNDS__ASSERT_L0(expr) ((static_cast<bool>(expr)) ? void(0) : ::DNDS::assert_false(#expr, __FILE__, __LINE__))
 #    define DNDS__ASSERT_INFO_L0(expr, info) \
         ((static_cast<bool>(expr)) ? void(0) : ::DNDS::assert_false_info(#expr, __FILE__, __LINE__, info))
@@ -150,7 +153,7 @@ namespace DNDS
 #endif
 /// @}
 
-#if 1 >= DNDS_ASSERT_LEVEL || 1 >= DNDS_ASSERT_LEVEL_MAX
+#if !defined(DNDS_NDEBUG) && (1 >= DNDS_ASSERT_LEVEL || 1 >= DNDS_ASSERT_LEVEL_MAX)
 #    define DNDS__ASSERT_L1(expr) ((static_cast<bool>(expr)) ? void(0) : ::DNDS::assert_false(#expr, __FILE__, __LINE__))
 #    define DNDS__ASSERT_INFO_L1(expr, info) \
         ((static_cast<bool>(expr)) ? void(0) : ::DNDS::assert_false_info(#expr, __FILE__, __LINE__, info))
@@ -162,7 +165,7 @@ namespace DNDS
 #    define DNDS__ASSERT_INFOF_L1(expr, info, ...) (void(0))
 #endif
 
-#if 2 >= DNDS_ASSERT_LEVEL || 2 >= DNDS_ASSERT_LEVEL_MAX
+#if !defined(DNDS_NDEBUG) && (2 >= DNDS_ASSERT_LEVEL || 2 >= DNDS_ASSERT_LEVEL_MAX)
 #    define DNDS__ASSERT_L2(expr) ((static_cast<bool>(expr)) ? void(0) : ::DNDS::assert_false(#expr, __FILE__, __LINE__))
 #    define DNDS__ASSERT_INFO_L2(expr, info) \
         ((static_cast<bool>(expr)) ? void(0) : ::DNDS::assert_false_info(#expr, __FILE__, __LINE__, info))
@@ -174,7 +177,7 @@ namespace DNDS
 #    define DNDS__ASSERT_INFOF_L2(expr, info, ...) (void(0))
 #endif
 
-#if 3 >= DNDS_ASSERT_LEVEL || 3 >= DNDS_ASSERT_LEVEL_MAX
+#if !defined(DNDS_NDEBUG) && (3 >= DNDS_ASSERT_LEVEL || 3 >= DNDS_ASSERT_LEVEL_MAX)
 #    define DNDS__ASSERT_L3(expr) ((static_cast<bool>(expr)) ? void(0) : ::DNDS::assert_false(#expr, __FILE__, __LINE__))
 #    define DNDS__ASSERT_INFO_L3(expr, info) \
         ((static_cast<bool>(expr)) ? void(0) : ::DNDS::assert_false_info(#expr, __FILE__, __LINE__, info))
@@ -203,13 +206,32 @@ namespace DNDS
     DNDS__CAT(DNDS__ASSERT_INFOF_L, level)          \
     (expr, info, ##__VA_ARGS__)
 
-/// @brief MAX-level assertion — ALWAYS compiled in regardless of DNDS_NDEBUG or
-/// DNDS_ASSERT_LEVEL settings. Equivalent to @ref DNDS_assert_l(DNDS_ASSERT_LEVEL_MAX, expr).
+/// @brief MAX-level assertion — compiled in unless DNDS_NDEBUG is defined.
+/// DNDS_ASSERT_LEVEL cannot disable this level. Equivalent to @ref DNDS_assert_l(DNDS_ASSERT_LEVEL_MAX, expr).
 #define DNDS_assert(expr) DNDS_assert_l(DNDS_ASSERT_LEVEL_MAX, expr)
 /// @brief MAX-level assertion with an extra std::string `info` message.
 #define DNDS_assert_info(expr, info) DNDS_assert_info_l(DNDS_ASSERT_LEVEL_MAX, expr, info)
 /// @brief MAX-level assertion with a printf-style format message.
 #define DNDS_assert_infof(expr, info, ...) DNDS_assert_infof_l(DNDS_ASSERT_LEVEL_MAX, expr, info, ##__VA_ARGS__)
+
+// ---- Public HD leveled assertion macros ----
+//
+// Token-paste dispatch works on both host and device — the inner macros
+// DNDS__HD_ASSERT_L{level} are defined separately in each path below.
+
+/// @brief Leveled host/device assertion. Abort on host, PTX `trap` on CUDA device.
+#define DNDS_HD_assert_l(level, cond) DNDS__CAT(DNDS__HD_ASSERT_L, level)(cond)
+/// @brief Leveled host/device assertion with printf-format message.
+#define DNDS_HD_assert_infof_l(level, cond, info, ...) \
+    DNDS__CAT(DNDS__HD_ASSERT_INFOF_L, level)          \
+    (cond, info, ##__VA_ARGS__)
+
+/// @brief MAX-level host/device assertion — always compiled unless
+/// DNDS_NDEBUG (host) or DNDS_NDEBUG_DEVICE (device) override.
+#define DNDS_HD_assert(cond) DNDS_HD_assert_l(DNDS_ASSERT_LEVEL_MAX, cond)
+/// @brief MAX-level host/device assertion with printf-format message.
+#define DNDS_HD_assert_infof(cond, info, ...) \
+    DNDS_HD_assert_infof_l(DNDS_ASSERT_LEVEL_MAX, cond, info, ##__VA_ARGS__)
 
 #ifdef __CUDA_ARCH__
 
@@ -245,40 +267,111 @@ __device__ inline void device_assert_fail_infof(const char *expr, const char *fi
     }
 }
 
-#    if defined(DNDS_NDEBUG) || defined(DNDS_NDEBUG_DEVICE)
-#        define DNDS_HD_assert(cond) (void(0))
-#        define DNDS_HD_assert_infof(cond, info, ...) (void(0))
+// ---- Per-level HD inner macros for CUDA device ----
+
+#    if !defined(DNDS_NDEBUG) && !defined(DNDS_NDEBUG_DEVICE) && (0 >= DNDS_ASSERT_LEVEL || 0 >= DNDS_ASSERT_LEVEL_MAX)
+#        define DNDS__HD_ASSERT_L0(cond)                           \
+            do                                                     \
+            {                                                      \
+                if (!(cond))                                       \
+                {                                                  \
+                    device_assert_fail(#cond, __FILE__, __LINE__); \
+                }                                                  \
+            } while (0)
+#        define DNDS__HD_ASSERT_INFOF_L0(cond, info, ...)                                             \
+            do                                                                                        \
+            {                                                                                         \
+                if (!(cond))                                                                          \
+                {                                                                                     \
+                    device_assert_fail_infof(#cond, __FILE__, __LINE__, (char *)info, ##__VA_ARGS__); \
+                }                                                                                     \
+            } while (0)
 #    else
-/// @brief Host/device assertion: abort on host, PTX `trap` on CUDA device.
-/// @details Can be used inside `__host__ __device__` functions. Disabled when
-/// either @ref DNDS_NDEBUG (host+device) or @ref DNDS_NDEBUG_DEVICE (device-only) is set.
-#        define DNDS_HD_assert(cond)                               \
-            do                                                     \
-            {                                                      \
-                if (!(cond))                                       \
-                {                                                  \
-                    device_assert_fail(#cond, __FILE__, __LINE__); \
-                }                                                  \
-            } while (0)
-
-/// @brief Host/device assertion with a printf-format message.
-#        define DNDS_HD_assert_infof(cond, info, ...)              \
-            do                                                     \
-            {                                                      \
-                if (!(cond))                                       \
-                {                                                  \
-                    device_assert_fail(#cond, __FILE__, __LINE__); \
-                }                                                  \
-            } while (0)
-
+#        define DNDS__HD_ASSERT_L0(cond) (void(0))
+#        define DNDS__HD_ASSERT_INFOF_L0(cond, info, ...) (void(0))
 #    endif
-#else
 
-// HOST version
-/// @brief Host-only expansion of @ref DNDS_HD_assert (equivalent to @ref DNDS_assert).
-#    define DNDS_HD_assert(cond) DNDS_assert(cond)
-/// @brief Host-only expansion of @ref DNDS_HD_assert_infof.
-#    define DNDS_HD_assert_infof(cond, info, ...) DNDS_assert_infof(cond, info, ##__VA_ARGS__)
+#    if !defined(DNDS_NDEBUG) && !defined(DNDS_NDEBUG_DEVICE) && (1 >= DNDS_ASSERT_LEVEL || 1 >= DNDS_ASSERT_LEVEL_MAX)
+#        define DNDS__HD_ASSERT_L1(cond)                           \
+            do                                                     \
+            {                                                      \
+                if (!(cond))                                       \
+                {                                                  \
+                    device_assert_fail(#cond, __FILE__, __LINE__); \
+                }                                                  \
+            } while (0)
+#        define DNDS__HD_ASSERT_INFOF_L1(cond, info, ...)                                             \
+            do                                                                                        \
+            {                                                                                         \
+                if (!(cond))                                                                          \
+                {                                                                                     \
+                    device_assert_fail_infof(#cond, __FILE__, __LINE__, (char *)info, ##__VA_ARGS__); \
+                }                                                                                     \
+            } while (0)
+#    else
+#        define DNDS__HD_ASSERT_L1(cond) (void(0))
+#        define DNDS__HD_ASSERT_INFOF_L1(cond, info, ...) (void(0))
+#    endif
+
+#    if !defined(DNDS_NDEBUG) && !defined(DNDS_NDEBUG_DEVICE) && (2 >= DNDS_ASSERT_LEVEL || 2 >= DNDS_ASSERT_LEVEL_MAX)
+#        define DNDS__HD_ASSERT_L2(cond)                           \
+            do                                                     \
+            {                                                      \
+                if (!(cond))                                       \
+                {                                                  \
+                    device_assert_fail(#cond, __FILE__, __LINE__); \
+                }                                                  \
+            } while (0)
+#        define DNDS__HD_ASSERT_INFOF_L2(cond, info, ...)                                             \
+            do                                                                                        \
+            {                                                                                         \
+                if (!(cond))                                                                          \
+                {                                                                                     \
+                    device_assert_fail_infof(#cond, __FILE__, __LINE__, (char *)info, ##__VA_ARGS__); \
+                }                                                                                     \
+            } while (0)
+#    else
+#        define DNDS__HD_ASSERT_L2(cond) (void(0))
+#        define DNDS__HD_ASSERT_INFOF_L2(cond, info, ...) (void(0))
+#    endif
+
+#    if !defined(DNDS_NDEBUG) && !defined(DNDS_NDEBUG_DEVICE) && (3 >= DNDS_ASSERT_LEVEL || 3 >= DNDS_ASSERT_LEVEL_MAX)
+#        define DNDS__HD_ASSERT_L3(cond)                           \
+            do                                                     \
+            {                                                      \
+                if (!(cond))                                       \
+                {                                                  \
+                    device_assert_fail(#cond, __FILE__, __LINE__); \
+                }                                                  \
+            } while (0)
+#        define DNDS__HD_ASSERT_INFOF_L3(cond, info, ...)                                             \
+            do                                                                                        \
+            {                                                                                         \
+                if (!(cond))                                                                          \
+                {                                                                                     \
+                    device_assert_fail_infof(#cond, __FILE__, __LINE__, (char *)info, ##__VA_ARGS__); \
+                }                                                                                     \
+            } while (0)
+#    else
+#        define DNDS__HD_ASSERT_L3(cond) (void(0))
+#        define DNDS__HD_ASSERT_INFOF_L3(cond, info, ...) (void(0))
+#    endif
+
+#else // !__CUDA_ARCH__
+
+// ---- Per-level HD inner macros for host ----
+// On host, HD assertions delegate to regular DNDS_assert which already
+// enforces the level system. DNDS_NDEBUG is handled by DNDS__ASSERT_L{level}.
+
+#    define DNDS__HD_ASSERT_L0(cond) DNDS__ASSERT_L0(cond)
+#    define DNDS__HD_ASSERT_INFOF_L0(cond, info, ...) DNDS__ASSERT_INFOF_L0(cond, info, ##__VA_ARGS__)
+#    define DNDS__HD_ASSERT_L1(cond) DNDS__ASSERT_L1(cond)
+#    define DNDS__HD_ASSERT_INFOF_L1(cond, info, ...) DNDS__ASSERT_INFOF_L1(cond, info, ##__VA_ARGS__)
+#    define DNDS__HD_ASSERT_L2(cond) DNDS__ASSERT_L2(cond)
+#    define DNDS__HD_ASSERT_INFOF_L2(cond, info, ...) DNDS__ASSERT_INFOF_L2(cond, info, ##__VA_ARGS__)
+#    define DNDS__HD_ASSERT_L3(cond) DNDS__ASSERT_L3(cond)
+#    define DNDS__HD_ASSERT_INFOF_L3(cond, info, ...) DNDS__ASSERT_INFOF_L3(cond, info, ##__VA_ARGS__)
+
 #endif
 
 #ifdef __CUDA_ARCH__
