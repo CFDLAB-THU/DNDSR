@@ -427,6 +427,43 @@ namespace DNDS
             field(member, jsonKey, desc, std::forward<Tags>(tags)...);
         }
 
+        // ---- field_schema(): normal field with custom JSON schema ----
+
+        /// @brief Register a normal serializable field with a custom schema generator.
+        template <typename V, typename FSchema, typename... Tags>
+        void field_schema(V T::*member, const char *jsonKey, const char *desc,
+                          FSchema &&schemaFn, Tags &&...tags)
+        {
+            FieldMeta meta;
+            meta.name = jsonKey;
+            meta.description = desc;
+            meta.typeTag = ConfigTypeTagOf<V>::value;
+
+            detail::applyTags(meta, std::forward<Tags>(tags)...);
+            auto rangeChecker = detail::makeRangeChecker<T, V>(meta);
+
+            meta.readField = [member, jsonKey, rangeChecker](const nlohmann::ordered_json &j, void *obj)
+            {
+                const auto &val = j.at(jsonKey);
+                if (rangeChecker)
+                    rangeChecker(val, jsonKey);
+                static_cast<T *>(obj)->*member = val.template get<V>();
+            };
+            meta.writeField = [member, jsonKey](nlohmann::ordered_json &j, const void *obj)
+            {
+                j[jsonKey] = static_cast<const T *>(obj)->*member;
+            };
+            meta.schemaEntry = [member, desc, fn = std::forward<FSchema>(schemaFn)]() -> nlohmann::ordered_json
+            {
+                auto s = fn();
+                if (!s.contains("description"))
+                    s["description"] = desc;
+                return s;
+            };
+
+            ConfigRegistry<T>::registerField(std::move(meta));
+        }
+
         // ---- field_section(): nested config sub-section ----
 
         /// @brief Register a nested sub-section.  The sub-section type must
@@ -452,6 +489,13 @@ namespace DNDS
             {
                 S::_dnds_ensure_registered();
                 return ConfigRegistry<S>::emitSchema(desc);
+            };
+            meta.validateField = [member, jsonKey](const void *obj)
+            {
+                auto failures = ConfigRegistry<S>::validate(static_cast<const T *>(obj)->*member);
+                for (auto &failure : failures)
+                    failure.message = fmt::format("{}.{}", jsonKey, failure.message);
+                return failures;
             };
             detail::applyTags(meta, std::forward<Tags>(tags)...);
             ConfigRegistry<T>::registerField(std::move(meta));
@@ -484,6 +528,21 @@ namespace DNDS
                 s["items"] = ConfigRegistry<S>::emitSchema();
                 return s;
             };
+            meta.validateField = [member, jsonKey](const void *obj)
+            {
+                std::vector<CheckResult> failures;
+                const auto &items = static_cast<const T *>(obj)->*member;
+                for (std::size_t i = 0; i < items.size(); ++i)
+                {
+                    auto nestedFailures = ConfigRegistry<S>::validate(items[i]);
+                    for (auto &failure : nestedFailures)
+                    {
+                        failure.message = fmt::format("{}[{}].{}", jsonKey, i, failure.message);
+                        failures.push_back(std::move(failure));
+                    }
+                }
+                return failures;
+            };
             detail::applyTags(meta, std::forward<Tags>(tags)...);
             ConfigRegistry<T>::registerField(std::move(meta));
         }
@@ -515,6 +574,21 @@ namespace DNDS
                 S::_dnds_ensure_registered();
                 s["additionalProperties"] = ConfigRegistry<S>::emitSchema();
                 return s;
+            };
+            meta.validateField = [member, jsonKey](const void *obj)
+            {
+                std::vector<CheckResult> failures;
+                const auto &items = static_cast<const T *>(obj)->*member;
+                for (const auto &[key, item] : items)
+                {
+                    auto nestedFailures = ConfigRegistry<S>::validate(item);
+                    for (auto &failure : nestedFailures)
+                    {
+                        failure.message = fmt::format("{}[{}].{}", jsonKey, key, failure.message);
+                        failures.push_back(std::move(failure));
+                    }
+                }
+                return failures;
             };
             detail::applyTags(meta, std::forward<Tags>(tags)...);
             ConfigRegistry<T>::registerField(std::move(meta));

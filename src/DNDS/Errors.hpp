@@ -252,17 +252,14 @@ __device__ inline void device_assert_fail(const char *expr, const char *file, in
 
 /// @brief Printf-formatted variant of #device_assert_fail.
 __device__ inline void device_assert_fail_infof(const char *expr, const char *file, int line,
-                                                char *info, ...)
+                                                const char *info, ...)
 {
     __device__ __managed__ static int g_assert_printed = 0;
     if (atomicCAS(&g_assert_printed, 0, 1) == 0)
     {
-        va_list args;
-        va_start(args, info);
         printf("Device assert failed: %s at %s:%d (block %d thread %d)\n",
                expr, file, line, blockIdx.x, threadIdx.x);
-        vprintf(info, args);
-        va_end(args);
+        printf("%s\n", info);
         asm("trap;"); // force termination
     }
 }

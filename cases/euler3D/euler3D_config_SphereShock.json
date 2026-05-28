@@ -171,11 +171,11 @@
                     "var rmax := 1; ",
                     "if(r <= rmax) ",
                     "   inRegion := 1; ",
-                    "UPrim[0] := 1; ",
-                    "UPrim[1] := 0; ",
-                    "UPrim[2] := 0; ",
-                    "UPrim[3] := 0; ",
-                    "UPrim[4] := 1; ",
+                    "UExprtk[0] := 1; ",
+                    "UExprtk[1] := 0; ",
+                    "UExprtk[2] := 0; ",
+                    "UExprtk[3] := 0; ",
+                    "UExprtk[4] := 1; ",
                     "0"
                 ]
             },
@@ -204,7 +204,7 @@
                     "rmax += cos(32*phi) * cos(32*sin(phi)*theta) * 0.05; ",
                     "if(r <= rmax) ",
                     "   inRegion := 1; ",
-                    "UPrim[0] := 20; ",
+                    "UExprtk[0] := 20; ",
                     "0"
                 ]
             }

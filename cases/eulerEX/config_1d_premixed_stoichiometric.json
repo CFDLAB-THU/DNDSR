@@ -1,0 +1,213 @@
+{
+    "$schema": "../eulerEX_schema.json",
+    "timeMarchControl": {
+        "dtImplicit": 1e-4,
+        "nTimeStep": 1000,
+        "steadyQuit": false,
+        "tEnd": 1e100,
+        "odeCode": 0,
+        "odeSetting1": 0.5,
+        "rhsFPPMode": 0,
+        "rhsFPPScale": 1,
+        "useDtPPLimit": false,
+        "dtPPLimitScale": 1
+    },
+    "outputControl": {
+        "nConsoleCheck": 1,
+        "nConsoleCheckInternal": 1,
+        "nDataOutC": 1,
+        "nDataOut": 20,
+        "tDataOut": 3e+200,
+        "dataOutAtInit": true,
+        "consoleMainOutputFormat": [
+            "=== Step {termBold}[{step:4d}]   ",
+            "res {termBold}{termRed}{resRel:.3e}{termReset}   ",
+            "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc}), betaRec({nLimBeta},{minBeta}), alphaRes({nLimAlpha},{minAlpha})]]{termReset}   ",
+            "Time[{telapsed:.3f}] recTime[{trec:.3f}] rhsTime[{trhs:.3f}] commTime[{tcomm:.3f}] limTime[{tLim:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]",
+            "\nuMinMax {termCyan}{uMinMax}{termReset}"
+        ],
+        "consoleMainOutputFormatInternal": [
+            "\t Internal === Step [{step:4d},{iStep:2d},{iter:4d}]   ",
+            "res {termRed}{resRel:.3e}{termReset}   ",
+            "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc:.3g}), betaRec({nLimBeta},{minBeta:.3g}), alphaRes({nLimAlpha},{minAlpha:.3g})]]{termReset}   ",
+            "Time[{telapsedM:.3f}] recTime[{trecM:.3f}] rhsTime[{trhsM:.3f}] commTime[{tcommM:.3f}] limTime[{tLimM:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]",
+            "\nuMinMax {termCyan}{uMinMax}{termReset}"
+        ]
+    },
+    "implicitCFLControl": {
+        "CFL": 1,
+        "useLocalDt": false
+    },
+    "convergenceControl": {
+        "nTimeStepInternal": 10,
+        "nTimeStepInternalMin": 5,
+        "rhsThresholdInternal": 1e-4,
+        "res_base": 0,
+        "useVolWiseResidual": true
+    },
+    "dataIOControl": {
+        "uniqueStamps": true,
+        "meshScale": 0.02,
+        "meshFile": "../data/mesh/Uniform_01_400.cgns",
+        "outPltName": "../data/out/react_1d_premixed_stoichiometric/react_",
+        "outPltMode": 0,
+        "readMeshMode": 0,
+        "outPltTecplotFormat": true,
+        "outPltVTKFormat": true,
+        "outAtPointData": true,
+        "outAtCellData": true,
+        "outCellScalarNames": ["RE"]
+    },
+    "boundaryDefinition": {
+        "PeriodicTranslation1": [
+            0.0,
+            2.5e-3,
+            0.0
+        ]
+    },
+    "limiterControl": {
+        "useLimiter": true,
+        "usePPRecLimiter": false,
+        "nPartialLimiterStart": 1000000
+    },
+    "linearSolverControl": {
+        "jacobiCode": 0,
+        "sgsIter": 5,
+        "gmresCode": 0,
+        "nSgsConsoleCheck": 100,
+        "sourceTauSplitting": 0
+    },
+    "implicitReconstructionControl": {
+        "nInternalRecStep": 1,
+        "recLinearScheme": 0
+    },
+    "vfvSettings": {
+        "maxOrder": 1,
+        "intOrder": 1,
+        "jacobiRelax": 0,
+        "SORInstead": true,
+        "smoothThreshold": 0.001,
+        "WBAP_nStd": 10.0,
+        "subs2ndOrder": 0
+    },
+    "eulerSettings": {
+        "ignoreSourceTerm": false,
+        "useScalarJacobian": false,
+        "riemannSolverType": "Roe_M2",
+        "rsMeanValueEig": 1,
+        "uRecAlphaCompressPower": 1.0,
+        "uRecBetaCompressPower": 1.0,
+        "ppEpsIsRelaxed": true,
+        "ransModel": "RANS_None",
+        "reactiveFlow": {
+            "enabled": true,
+            "mechanismFile": "h2o2.yaml"
+        },
+        "farFieldStaticValue": {
+            "type": "primTP_phy",
+            "state": [
+                300.0,
+                0.0,
+                0.0,
+                0.0,
+                101325.0,
+                0.028,
+                0.0,
+                0.0,
+                0.222,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+            ]
+        },
+        "exprtkInitializers": [
+            {
+                "exprs": [
+                    "var s := 0.5 * (1.0 - tanh((x[0] - 0.004) / 0.0005));",
+                    "inRegion := 1;",
+                    "UExprtk[0] := 0.8534183357651934 + s * (0.12598978792104593 - 0.8534183357651934);",
+                    "UExprtk[1] := 0.0;",
+                    "UExprtk[2] := 0.0;",
+                    "UExprtk[3] := 0.0;",
+                    "UExprtk[4] := 0.7054044461460275 + s * (0.9494152318808794 - 0.7054044461460275);",
+                    "UExprtk[5] := 0.028 + s * (0.00104252059926818 - 0.028);",
+                    "UExprtk[6] := s * 0.00006646761498134932;",
+                    "UExprtk[7] := s * 0.00039926443023562515;",
+                    "UExprtk[8] := 0.222 + s * (0.008414251274629378 - 0.222);",
+                    "UExprtk[9] := s * 0.004935175504120477;",
+                    "UExprtk[10] := s * 0.23512227970013988;",
+                    "UExprtk[11] := s * 0.0000017935831252213648;",
+                    "UExprtk[12] := s * 0.00000018787335344213332;",
+                    "UExprtk[13] := 0.0;",
+                    "0"
+                ],
+                "stateType": "primRhoP"
+            }
+        ],
+        "constMassForce": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "idealGasProperty": {
+            "gamma": 1.4,
+            "Rgas": 287,
+            "muGas": 1e-200,
+            "prGas": 0.72,
+            "T0": 1.0,
+            "rho0": 1.0,
+            "U0": 379.0,
+            "L0": 1.0
+        }
+    },
+    "bcSettings": [
+        {
+            "type": "BCFar",
+            "name": "FAR_L",
+            "value": {
+                "type": "primTP_phy",
+                "state": [
+                    2360.016463669699,
+                    0.0,
+                    0.0,
+                    0.0,
+                    101325.0,
+                    0.00104252059926818,
+                    0.00006646761498134932,
+                    0.00039926443023562515,
+                    0.008414251274629378,
+                    0.004935175504120477,
+                    0.23512227970013988,
+                    0.0000017935831252213648,
+                    0.00000018787335344213332,
+                    0.0
+                ]
+            }
+        },
+        {
+            "type": "BCFar",
+            "name": "FAR_R",
+            "value": {
+                "type": "primTP_phy",
+                "state": [
+                    300.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    101325.0,
+                    0.028,
+                    0.0,
+                    0.0,
+                    0.222,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ]
+            }
+        }
+    ]
+}

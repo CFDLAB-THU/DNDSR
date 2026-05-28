@@ -1889,7 +1889,7 @@ namespace DNDS::Euler
         }
         else
         {
-            DNDS_assert(false);
+            DNDS_check_throw_info(false, fmt::format("Unsupported source evaluation mode [{}]", Mode));
         }
         // if (Mode == 1)
         //     std::cout << ret.transpose() << std::endl;
@@ -2161,7 +2161,8 @@ namespace DNDS::Euler
         }
         else
         {
-            DNDS_assert(false);
+            DNDS_check_throw_info(false, fmt::format("Unsupported boundary type [{}] for boundary id {}",
+                                                     to_string(bTypeEuler), btype));
         }
         return URxy;
     }
@@ -2211,7 +2212,7 @@ namespace DNDS::Euler
 
         TU far = btype >= Geom::BC_ID_DEFAULT_MAX
                      ? pBCHandler->GetValueFromID(btype)
-                     : TU(settings.farFieldStaticValue);
+                     : TU(settings.farFieldStaticValue.cons);
         if (pCLDriver)
             far(Seq123) = pCLDriver->GetAOARotation()(Seq012, Seq012) * far(Seq123);
 
@@ -2236,13 +2237,6 @@ namespace DNDS::Euler
             real TState = phys_.template temperature<dim>(U);
             return phys_.template gammaEq<dim>(TState, U);
         };
-        auto gammaEqFromSensibleConfig = [&](TU U)
-        {
-            if (settings.reactiveFlow.enabled)
-                U(I4) += phys_.mixtureFormationRhoE(U);
-            return gammaEqFromTotal(U);
-        };
-
         DNDS_assert(asqr >= 0);
         real a = std::sqrt(asqr);
 
@@ -2258,8 +2252,7 @@ namespace DNDS::Euler
             TU farPrimitive, ULxyPrimitive;
             farPrimitive.resizeLike(ULxyStatic);
             ULxyPrimitive.resizeLike(URxy);
-            real gammaEqFar = gammaEqFromSensibleConfig(far);
-            Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gammaEqFar, 0 /* config, sensible ρE */);
+            phys_.template conservativeToPrimitive<dim>(far, farPrimitive);
             Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gammaEq,
                                                             phys_.mixtureFormationRhoE(ULxyStatic));
             if (bTypeEuler == EulerBCType::BCOutP && pBCHandler->GetFlagFromID(btype, "anchorOpt") == 1)
@@ -2292,21 +2285,15 @@ namespace DNDS::Euler
             TU farPrimitive, ULxyPrimitive;
             farPrimitive.resizeLike(ULxyStatic);
             ULxyPrimitive.resizeLike(URxy);
-            real gammaEqFar = gammaEqFromSensibleConfig(far);
-            Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gammaEqFar, 0 /* config, sensible ρE */);
+            phys_.template conservativeToPrimitive<dim>(far, farPrimitive);
             Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gammaEq,
                                                             phys_.mixtureFormationRhoE(ULxyStatic));
             farPrimitive(I4) = ULxyPrimitive(I4); // using inner pressure
-            if (settings.reactiveFlow.enabled)
-                phys_.template primToConservative<dim>(farPrimitive, URxy);
-            else
-                Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gammaEqFar, 0);
+            phys_.template primToConservative<dim>(farPrimitive, URxy);
         }
         else // full inflow
         {
             URxy = far;
-            if (settings.reactiveFlow.enabled)
-                URxy(I4) += phys_.mixtureFormationRhoE(URxy);
         }
         if (settings.frameConstRotation.enabled) // to rotating frame velocity
             TransformURotatingFrame(URxy, pPhysics, -1);
@@ -2356,7 +2343,7 @@ namespace DNDS::Euler
             // Hardcoded Vector<real,5/4> sizes assume NS models; extended-model
             // components (SA, 2EQ, species) preserve farFieldStaticValue defaults.
             DNDS_assert(dim > 1);
-            URxy = settings.farFieldStaticValue;
+            URxy = settings.farFieldStaticValue.cons;
             real uShock = 10;
             if constexpr (dim == 3)
             {
@@ -2380,7 +2367,7 @@ namespace DNDS::Euler
         else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_RT_FAR) // Rayleigh-Taylor
         {
             DNDS_assert(dim > 1);
-            Eigen::VectorXd far = settings.farFieldStaticValue;
+            Eigen::VectorXd far = settings.farFieldStaticValue.cons;
             real T = phys_.template temperature<dim>(ULxy);
             real gammaEq = 0;
             real gamma = 0;
@@ -2539,9 +2526,10 @@ namespace DNDS::Euler
         else if (pBCHandler->GetFlagFromID(btype, "specialOpt") == 3001) // Noh
         {
             TU farPrimitive;
-            real T_noh = phys_.template temperature<dim>(settings.farFieldStaticValue);
-            real gamma_noh = phys_.template gammaEq<dim>(T_noh, settings.farFieldStaticValue);
-            Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrimitive, gamma_noh, 0 /* config, sensible ρE */);
+            real T_noh = phys_.template temperature<dim>(settings.farFieldStaticValue.cons);
+            real gamma_noh = phys_.template gammaEq<dim>(T_noh, settings.farFieldStaticValue.cons);
+            Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue.cons, farPrimitive, gamma_noh,
+                                                            phys_.mixtureFormationRhoE(settings.farFieldStaticValue.cons));
             real pInf = farPrimitive(I4);
             real r = pPhysics.norm();
             TVec velo = -pPhysics(Seq012) / (r + smallReal);
@@ -2550,7 +2538,7 @@ namespace DNDS::Euler
             farPrimitive(Seq123) = velo;
             farPrimitive(I4) = pInf;
             Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma_noh,
-                                                            phys_.mixtureFormationRhoE(settings.farFieldStaticValue));
+                                                            phys_.mixtureFormationRhoE(settings.farFieldStaticValue.cons));
         }
         else
             DNDS_assert_info(false, fmt::format(
@@ -2776,9 +2764,7 @@ namespace DNDS::Euler
         TU URxy = pBCHandler->GetValueFromID(btype);
         if (pCLDriver)
             URxy(Seq123) = pCLDriver->GetAOARotation()(Seq012, Seq012) * URxy(Seq123);
-        // Note: removed dead code that checked bTypeEuler == BCFar (unreachable in BCIn branch)
-        if (settings.reactiveFlow.enabled)
-            URxy(I4) += phys_.mixtureFormationRhoE(URxy);
+        // BCIn values are resolved conservative-total states.
         if (settings.frameConstRotation.enabled)
             TransformURotatingFrame(URxy, pPhysics, -1);
         return URxy;

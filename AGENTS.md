@@ -283,14 +283,22 @@ compatibility.
 Full style guide (naming, formatting, includes, error handling, Doxygen,
 Python conventions): **`docs/guides/style_guide.md`**
 
+When reporting audit or review findings to a human user, use numbered findings
+(`1.`, `2.`, `3.`) rather than bullets so each issue can be referenced
+unambiguously in follow-up discussion.
+
 Quick reference for C++:
 
 - **Braces:** Allman (opening brace on its own line)
 - **Naming:** `PascalCase` classes/methods, `_` prefix for private members,
   `DNDS_ALL_CAPS` macros, `t_` prefix type aliases
 - **Headers:** `#pragma once`, preserve include order (no auto-sort)
-- **Errors:** `DNDS_assert` (debug) / `DNDS_check_throw` (release) from
-  `DNDS/Errors.hpp`; never raw `assert()`
+- **Errors:** `DNDS_assert` / `DNDS_check_throw` from `DNDS/Errors.hpp`; never raw
+  `assert()`.
+- DNDS currently builds with `DNDS_assert*` active by default at the maximum
+  assertion level, including release-style builds. Still prefer
+  `DNDS_check_throw_info` for non-hot user config, file input, CLI, and runtime
+  validation that should report recoverable errors rather than aborting.
 - **Core types:** `real = double`, `index = int64_t`, `rowsize = int32_t`,
   `ssp<T> = std::shared_ptr<T>`
 

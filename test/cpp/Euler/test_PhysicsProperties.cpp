@@ -146,7 +146,7 @@ TEST_CASE("PhysicsProperties non-reactive total-to-static conversion is closed f
     real pTotal = 0.95;
     real TTotal = 320.0;
     real vSqr = primStatic(Eigen::seq(Eigen::fix<1>, Eigen::fix<3>)).squaredNorm();
-    real Cp = phys.toCode(igProp.CpGas);
+    real Cp = phys.toCode(igProp.CpGas());
     real Rgas = phys.toCode(igProp.Rgas);
 
     real TStaticExpected = TTotal - 0.5 * vSqr / Cp;

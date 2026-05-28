@@ -945,7 +945,7 @@ namespace DNDS::Euler
     void EulerEvaluator<model>::InitializeUDOF(ArrayDOFV<nVarsFixed> &u)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-        Eigen::VectorXd initConstVal = this->settings.farFieldStaticValue;
+        Eigen::VectorXd initConstVal = this->settings.farFieldStaticValue.cons;
         u.setConstant(initConstVal);
         if (model == EulerModel::NS_SA || model == NS_SA_3D)
         {
@@ -1159,8 +1159,8 @@ namespace DNDS::Euler
             {
                 Geom::tPoint pos = vfv->GetCellBary(iCell);
                 real M0 = 0.1;
-                real T_far = phys_.template temperature<dim>(settings.farFieldStaticValue);
-                real gamma_far = phys_.template gammaEq<dim>(T_far, settings.farFieldStaticValue);
+                real T_far = phys_.template temperature<dim>(settings.farFieldStaticValue.cons);
+                real gamma_far = phys_.template gammaEq<dim>(T_far, settings.farFieldStaticValue.cons);
                 auto c2n = mesh->cell2node[iCell];
                 auto gCell = vfv->GetCellQuad(iCell);
                 TU um;
@@ -1176,7 +1176,8 @@ namespace DNDS::Euler
                         // std::cout << DiNj << std::endl;
                         Geom::tPoint pPhysics = vfv->GetCellQuadraturePPhys(iCell, ig);
                         TU farPrimitive;
-                        Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrimitive, gamma_far, 0 /* config, sensible ρE */);
+                        Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue.cons, farPrimitive, gamma_far,
+                                                                        phys_.mixtureFormationRhoE(settings.farFieldStaticValue.cons));
                         real pInf = farPrimitive(I4);
                         real r = pPhysics.norm();
                         TVec velo = -pPhysics(Seq012) / (r + smallReal);
@@ -1224,7 +1225,7 @@ namespace DNDS::Euler
                     pos(1) > i.y0 && pos(1) < i.y1 &&
                     pos(2) > i.z0 && pos(2) < i.z1)
                 {
-                    u[iCell] = i.v;
+                    u[iCell] = i.v.cons;
                 }
             }
         }
@@ -1242,25 +1243,52 @@ namespace DNDS::Euler
                 {
                     // std::cout << pos << std::endl << i.a << i.b << std::endl << i.h <<std::endl;
                     // DNDS_assert(false);
-                    u[iCell] = i.v;
+                    u[iCell] = i.v.cons;
                 }
             }
         }
 
         for (auto &i : settings.exprtkInitializers)
         {
+            StateValueOrigin stateOrigin = StateValueOriginFromName(i.stateType);
+            DNDS_check_throw_info(stateOrigin != StateValueOrigin::None &&
+                                      stateOrigin != StateValueOrigin::NonState &&
+                                      stateOrigin != StateValueOrigin::Invalid,
+                                  fmt::format("unsupported exprtkInitializers stateType [{}]", i.stateType));
             auto exprStr = i.GetExpr();
-            ExprtkWrapperEvaluator exprtkEval;
-            exprtkEval.AddScalar("inRegion");
-            exprtkEval.AddScalar("iCell");
-            exprtkEval.AddVector("x", dim);
-            exprtkEval.AddVector("UPrim", nVars);
-            exprtkEval.Compile(exprStr);
+            auto makeExprtkEvaluator = [&]()
+            {
+                auto eval = std::make_unique<ExprtkWrapperEvaluator>();
+                eval->AddScalar("inRegion");
+                eval->AddScalar("iCell");
+                eval->AddVector("x", dim);
+                eval->AddVector("UExprtk", nVars);
+                eval->Compile(exprStr);
+                return eval;
+            };
+            auto exprtkEvalCheck = makeExprtkEvaluator();
+            int nExprtkEvaluators = 1;
+#if defined(DNDS_DIST_MT_USE_OMP)
+            nExprtkEvaluators = omp_get_max_threads();
+#endif
+            std::vector<std::unique_ptr<ExprtkWrapperEvaluator>> exprtkEvals;
+            exprtkEvals.reserve(nExprtkEvaluators);
+            for (int iEval = 0; iEval < nExprtkEvaluators; ++iEval)
+                exprtkEvals.push_back(makeExprtkEvaluator());
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(runtime)
 #endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
+                int exprtkTid = 0;
+#if defined(DNDS_DIST_MT_USE_OMP)
+                exprtkTid = omp_get_thread_num();
+#endif
+                DNDS_check_throw_info(exprtkTid < static_cast<int>(exprtkEvals.size()),
+                                      fmt::format("ExprTk evaluator pool has {} entries but OpenMP thread {} requested one",
+                                                  exprtkEvals.size(), exprtkTid));
+                auto &exprtkEval = *exprtkEvals[exprtkTid];
+
                 Geom::tPoint pos = vfv->GetCellBary(iCell);
                 auto c2n = mesh->cell2node[iCell];
                 auto gCell = vfv->GetCellQuad(iCell);
@@ -1283,12 +1311,10 @@ namespace DNDS::Euler
                             exprtkEval.VarVec("x", 2) = pPhysics(2);
 
                         TU uPrimitive;
-                        real T_cell = phys_.template temperature<dim>(u[iCell]);
-                        real gamma_cell = phys_.template gammaEq<dim>(T_cell, u[iCell]);
-                        Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], uPrimitive, gamma_cell,
-                                                                        phys_.mixtureFormationRhoE(u[iCell]));
+                        uPrimitive.resizeLike(u[iCell]);
+                        phys_.template conservativeToStateValueOrigin<dim>(u[iCell], uPrimitive, stateOrigin);
                         for (int i = 0; i < nVars; i++)
-                            exprtkEval.VarVec("UPrim", i) = uPrimitive(i);
+                            exprtkEval.VarVec("UExprtk", i) = uPrimitive(i);
 
                         real ret = exprtkEval.Evaluate();
 
@@ -1297,11 +1323,15 @@ namespace DNDS::Euler
                         someIn = someIn || exprtkEval.Var("inRegion");
 
                         if (exprtkEval.Var("inRegion"))
+                        {
                             for (int i = 0; i < nVars; i++)
-                                uPrimitive(i) = exprtkEval.VarVec("UPrim", i);
-                        Gas::IdealGasThermalPrimitive2Conservative<dim>(uPrimitive, inc, gamma_cell,
-                                                                        real(0)); // formation added below from
-                                                                                  // actual primitive species
+                                uPrimitive(i) = exprtkEval.VarVec("UExprtk", i);
+                            phys_.template stateValueOriginToConservative<dim>(uPrimitive, inc, stateOrigin);
+                        }
+                        else
+                        {
+                            inc = u[iCell];
+                        }
                         if (!inc.allFinite())
                         {
                             std::ostringstream oss0, oss1, oss2;
@@ -1320,14 +1350,8 @@ namespace DNDS::Euler
                     u[iCell] = um / vfv->GetCellVol(iCell); // mean value
             }
         }
-        if (settings.reactiveFlow.enabled)
-        {
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(runtime)
-#endif
-            for (index iCell = 0; iCell < u.Size(); iCell++)
-                u[iCell](I4) += phys_.mixtureFormationRhoE(u[iCell]);
-        }
+        // All configured state values and ExprTk products are resolved to
+        // conservative-total states before storage.
     }
 
     template <EulerModel model>
@@ -1397,28 +1421,8 @@ namespace DNDS::Euler
 #endif
         for (index iCell = 0; iCell < w.Size(); iCell++)
         {
-            // Two-pass: compute approximate U to get rhoH_form and gamma,
-            // then perform the real primitive-to-conservative conversion.
-            //
-            // Pass 1: convert w→u_approx using γ=1.4 and rhoH=0.  Density and
-            // species densities (ρY_k = ρ·Y_k from primitive) are exact — only
-            // ρE(I4) misses formation.  rhoH_form = phys_.mixtureFormationRhoE(u_approx)
-            // depends only on ρ and ρY_k, which are correct, so rhoH_form is exact.
-            //
-            // Add rhoH_form to u_approx(I4) so temperature and gammaEq see the
-            // correct total energy.  This gives the right T and γ for Pass 2.
-            //
-            // Pass 2: convert w→out using the correct γ (from u_approx with formation)
-            // and add rhoH_form to the energy slot.  Together with Cons2Prim which
-            // subtracts rhoH_form, the round-trip Prim2Cons ∘ Cons2Prim ≈ identity.
-            TU u_approx;
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(w[iCell], u_approx, real(1.4), 0);
-            real rhoH_form = phys_.mixtureFormationRhoE(u_approx);
-            u_approx(I4) += rhoH_form;
-            real T_cell = phys_.template temperature<dim>(u_approx);
-            real gammaEq = phys_.template gammaEq<dim>(T_cell, u_approx);
             TU out;
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(w[iCell], out, gammaEq, rhoH_form);
+            phys_.template primToConservative<dim>(w[iCell], out);
             u[iCell] = out;
         }
     }
@@ -1626,7 +1630,7 @@ namespace DNDS::Euler
             TU uOtherMin = u[iCell];
             TU uOtherMax = u[iCell];
             auto fEInternal = [this](const TU &u) -> real
-            { return u(I4) - 0.5 * u(Seq123).squaredNorm() / (u(0) + verySmallReal) - phys_.mixtureFormationRhoE(u); };
+            { return u(I4) - 0.5 * u(Seq123).squaredNorm() / (u(0) + verySmallReal) - phys_.mixtureFormationRhoERaw(u); };
             real eOtherMin, eOtherMax;
             eOtherMin = eOtherMax = fEInternal(u[iCell]);
             for (rowsize ic2f = 0; ic2f < c2f.size(); ic2f++)
@@ -1729,7 +1733,7 @@ namespace DNDS::Euler
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 rhoMin = std::min(rhoMin, u[iCell](0));
-                real rhoEi_cell = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureFormationRhoE(u[iCell]);
+                real rhoEi_cell = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureFormationRhoERaw(u[iCell]);
                 rhoEiMin = std::min(rhoEiMin, rhoEi_cell);
             }
             MPI::AllreduceOneReal(rhoMin, MPI_MIN, mesh->getMPI());
@@ -1771,7 +1775,7 @@ namespace DNDS::Euler
             DNDS_assert_info(u[iCell](0) >= rhoEps, fmt::format("rhoMean {}, {}", u[iCell](0), rhoEps));
             real T_cell = phys_.template temperature<dim>(u[iCell]);
             // real gamma = phys_.template gammaEq<dim>(T_cell, u[iCell]);
-            real rhoH_form_cell = phys_.mixtureFormationRhoE(u[iCell]);
+            real rhoH_form_cell = phys_.mixtureFormationRhoERaw(u[iCell]);
             // actually is rhoEi, not p
             real pCent = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - rhoH_form_cell;
             DNDS_assert_info(pCent >= pEps, fmt::format("pMean {}, {}", pCent, pEps));
@@ -1782,7 +1786,7 @@ namespace DNDS::Euler
                 for (int ig = 0; ig < rec.rows(); ++ig)
                 {
                     typename EulerEvaluator<model>::TU tmp = rec.row(ig);
-                    hf(ig) = phys_.mixtureFormationRhoE(tmp);
+                    hf(ig) = phys_.mixtureFormationRhoERaw(tmp);
                 }
                 return hf;
             };
@@ -1998,7 +2002,7 @@ namespace DNDS::Euler
 #endif
                 ret = false;
             }
-            real rhoEi = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureFormationRhoE(u[iCell]);
+            real rhoEi = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureFormationRhoERaw(u[iCell]);
             if (rhoEi < pEps) // pEps is rhoE_sensible floor
             {
                 if (panic)
@@ -2157,9 +2161,9 @@ namespace DNDS::Euler
             inc *= alphaRho;
 
             TU uNew = u[iCell] + inc;
-            real rhoH_form_new = phys_.mixtureFormationRhoE(uNew);
-            real pNew = uNew(I4) - 0.5 * uNew(Seq123).squaredNorm() / uNew(0) - rhoH_form_new;                                    // rhoE_sensible (not pressure)
-            real pOld = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureFormationRhoE(u[iCell]); // rhoE_sensible (not pressure)
+            real rhoH_form_new = phys_.mixtureFormationRhoERaw(uNew);
+            real pNew = uNew(I4) - 0.5 * uNew(Seq123).squaredNorm() / uNew(0) - rhoH_form_new;                                       // rhoE_sensible (not pressure)
+            real pOld = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureFormationRhoERaw(u[iCell]); // rhoE_sensible (not pressure)
             real relaxedP = pEps;
             if (pNew < pOld)
                 relaxedP = pEps + (pOld - pEps) * (1 - relax);
@@ -2169,7 +2173,7 @@ namespace DNDS::Euler
             {
                 // todo: use high order accurate (add control switch)
                 real alphaC = Gas::IdealGasGetCompressionRatioPressure<dim, 1, nVarsFixed>(
-                    u[iCell], inc, relaxedP, phys_.mixtureFormationRhoE(u[iCell]), rhoH_form_new);
+                    u[iCell], inc, relaxedP, phys_.mixtureFormationRhoERaw(u[iCell]), rhoH_form_new);
                 alphaP = std::min(alphaP, alphaC);
             }
             cellRHSAlpha[iCell](0) = alphaRho * alphaP;
@@ -2238,7 +2242,7 @@ namespace DNDS::Euler
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 rhoMin = std::min(rhoMin, u[iCell](0));
-                real rhoEi_cell = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureFormationRhoE(u[iCell]);
+                real rhoEi_cell = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureFormationRhoERaw(u[iCell]);
                 rhoEiMin = std::min(rhoEiMin, rhoEi_cell);
             }
             MPI::AllreduceOneReal(rhoMin, MPI_MIN, mesh->getMPI());
@@ -2297,7 +2301,7 @@ namespace DNDS::Euler
             TU inc = res[iCell];
 
             TU uNew = u[iCell] + inc;
-            real pNew = uNew(I4) - 0.5 * uNew(Seq123).squaredNorm() / uNew(0) - phys_.mixtureFormationRhoE(uNew); // rhoE_sensible (not pressure)
+            real pNew = uNew(I4) - 0.5 * uNew(Seq123).squaredNorm() / uNew(0) - phys_.mixtureFormationRhoERaw(uNew); // rhoE_sensible (not pressure)
 
             if (pNew < pEps || uNew(0) < rhoEps)
             {
