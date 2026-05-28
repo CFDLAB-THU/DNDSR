@@ -1303,13 +1303,13 @@ namespace DNDS::Euler
         if (config.outputControl.dataOutAtInit)
         {
             PrintData(
-                config.dataIOControl.outPltName + "_" + output_stamp + "_" + "00000",
+                config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + "00000",
                 "",
                 [&](index iCell)
                 { return ode->getLatestRHS()[iCell](0); },
                 addOutList,
                 eval, tSimu);
-            eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + "00000",
+            eval.PrintBCProfiles(config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + "00000",
                                  u, uRec);
         }
         if (config.outputControl.restartOutAtInit)

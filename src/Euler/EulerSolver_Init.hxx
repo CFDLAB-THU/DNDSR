@@ -376,7 +376,7 @@ namespace DNDS::Euler
         if (config.others.printRecMatrix)
         {
             auto serializerP = config.others.recMatrixWriter.BuildSerializer(mpi);
-            std::string fName = config.dataIOControl.outPltName + "_RecMatrix";
+            std::string fName = config.dataIOControl.getOutPltName() + "_RecMatrix";
             auto [fNameMod, partPath] = config.others.recMatrixWriter.ModifyFilePath(fName, mpi, "part_%d", true);
             serializerP->OpenFile(partPath, false);
             vfv->WriteSerializeRecMatrix(serializerP);
@@ -740,13 +740,13 @@ namespace DNDS::Euler
         {
             eval.FixUMaxFilter(u);
             PrintData(
-                config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step) + "_" + std::to_string(iter),
-                config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step), // internal series
+                config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + std::to_string(step) + "_" + std::to_string(iter),
+                config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + std::to_string(step), // internal series
                 [&](index iCell)
                 { return ode->getLatestRHS()[iCell](0); },
                 addOutList,
                 eval, tSimu);
-            eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step),
+            eval.PrintBCProfiles(config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + std::to_string(step),
                                  u, uRec);
         }
         if ((iter % config.outputControl.nDataOutCInternal == 0) &&
@@ -754,13 +754,13 @@ namespace DNDS::Euler
         {
             eval.FixUMaxFilter(u);
             PrintData(
-                config.dataIOControl.outPltName + "_" + output_stamp + "_" + "C",
+                config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + "C",
                 "",
                 [&](index iCell)
                 { return ode->getLatestRHS()[iCell](0); },
                 addOutList,
                 eval, tSimu);
-            eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + "C",
+            eval.PrintBCProfiles(config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + "C",
                                  u, uRec);
         }
         if (iter % config.outputControl.nRestartOutInternal == 0)
@@ -963,13 +963,13 @@ namespace DNDS::Euler
             {
                 eval.FixUMaxFilter(u);
                 PrintData(
-                    config.dataIOControl.outPltName + "_" + output_stamp + "_" + "C",
+                    config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + "C",
                     "",
                     [&](index iCell)
                     { return ode->getLatestRHS()[iCell](0); },
                     addOutList,
                     eval, tSimu);
-                eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + "C",
+                eval.PrintBCProfiles(config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + "C",
                                      u, uRec);
             }
             nextStepOutC += config.outputControl.nDataOutC;
@@ -978,13 +978,13 @@ namespace DNDS::Euler
         {
             eval.FixUMaxFilter(u);
             PrintData(
-                config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step),
-                config.dataIOControl.outPltName + "_" + output_stamp, // physical ts series
+                config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + std::to_string(step),
+                config.dataIOControl.getOutPltName() + "_" + output_stamp, // physical ts series
                 [&](index iCell)
                 { return ode->getLatestRHS()[iCell](0); },
                 addOutList,
                 eval, tSimu);
-            eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step),
+            eval.PrintBCProfiles(config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + std::to_string(step),
                                  u, uRec);
             nextStepOut += config.outputControl.nDataOut;
         }
@@ -996,7 +996,7 @@ namespace DNDS::Euler
                 eval.MeanValuePrim2Cons(wAveraged, uAveraged);
                 eval.FixUMaxFilter(uAveraged);
                 PrintData(
-                    config.dataIOControl.outPltName + "_TimeAveraged_" + output_stamp + "_" + "C",
+                    config.dataIOControl.getOutPltName() + "_TimeAveraged_" + output_stamp + "_" + "C",
                     "",
                     [&](index iCell)
                     { return ode->getLatestRHS()[iCell](0); },
@@ -1012,8 +1012,8 @@ namespace DNDS::Euler
             eval.MeanValuePrim2Cons(wAveraged, uAveraged);
             eval.FixUMaxFilter(uAveraged);
             PrintData(
-                config.dataIOControl.outPltName + "_TimeAveraged_" + output_stamp + "_" + std::to_string(step),
-                config.dataIOControl.outPltName + "_TimeAveraged_" + output_stamp, // time average series
+                config.dataIOControl.getOutPltName() + "_TimeAveraged_" + output_stamp + "_" + std::to_string(step),
+                config.dataIOControl.getOutPltName() + "_TimeAveraged_" + output_stamp, // time average series
                 [&](index iCell)
                 { return ode->getLatestRHS()[iCell](0); },
                 addOutList,
@@ -1042,13 +1042,13 @@ namespace DNDS::Euler
         {
             eval.FixUMaxFilter(u);
             PrintData(
-                config.dataIOControl.outPltName + "_" + output_stamp + "_" + "t_" + std::to_string(nextTout),
-                config.dataIOControl.outPltName + "_" + output_stamp, // physical ts series
+                config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + "t_" + std::to_string(nextTout),
+                config.dataIOControl.getOutPltName() + "_" + output_stamp, // physical ts series
                 [&](index iCell)
                 { return ode->getLatestRHS()[iCell](0); },
                 addOutList,
                 eval, tSimu);
-            eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + "t_" + std::to_string(nextTout),
+            eval.PrintBCProfiles(config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + "t_" + std::to_string(nextTout),
                                  u, uRec);
             nextTout += config.outputControl.tDataOut;
             if (nextTout >= config.timeMarchControl.tEnd)
