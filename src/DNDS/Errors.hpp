@@ -6,18 +6,23 @@
 /// Three distinct families of checks are provided; choose based on how the
 /// failure should surface:
 ///
-/// | Macro                  | Release behaviour       | Failure mode              |
-/// |------------------------|-------------------------|---------------------------|
-/// | @ref DNDS_assert            | Compiled out (NDEBUG)   | `std::abort()`            |
-/// | @ref DNDS_assert_info       | Compiled out (NDEBUG)   | `std::abort()` + message  |
-/// | @ref DNDS_assert_infof      | Compiled out (NDEBUG)   | `std::abort()` + fmtprintf|
-/// | @ref DNDS_check_throw       | Always active           | `throw std::runtime_error`|
-/// | @ref DNDS_check_throw_info  | Always active           | `throw` + message         |
-/// | @ref DNDS_HD_assert         | Compiled out in NDEBUG  | host: `abort`, device: `trap` |
+/// | Macro                     | Release behaviour            | Failure mode              |
+/// |---------------------------|------------------------------|---------------------------|
+/// | @ref DNDS_assert               | Always active (MAX level)    | `std::abort()`            |
+/// | @ref DNDS_assert_info          | Always active (MAX level)    | `std::abort()` + message  |
+/// | @ref DNDS_assert_infof         | Always active (MAX level)    | `std::abort()` + fmtprintf|
+/// | @ref DNDS_assert_l             | Level-dependent (see below)  | `std::abort()`            |
+/// | @ref DNDS_assert_info_l        | Level-dependent (see below)  | `std::abort()` + message  |
+/// | @ref DNDS_assert_infof_l       | Level-dependent (see below)  | `std::abort()` + fmtprintf|
+/// | @ref DNDS_check_throw          | Always active                | `throw std::runtime_error`|
+/// | @ref DNDS_check_throw_info     | Always active                | `throw` + message         |
+/// | @ref DNDS_HD_assert            | Compiled out in NDEBUG       | host: `abort`, device: `trap` |
 ///
-/// Prefer @ref DNDS_assert for internal invariants that are expensive to check or
-/// cannot fail in correct code; use @ref DNDS_check_throw for user-input / runtime
-/// validation that must remain active in release builds.
+/// Prefer @ref DNDS_assert for hard invariants that must never fail; use
+/// the leveled `_l` variants (levels 0..DNDS_ASSERT_LEVEL_MAX-1) for checks
+/// that can be stripped in release builds via `-DDNDS_ASSERT_LEVEL=N`.
+/// Use @ref DNDS_check_throw for user-input / runtime validation where a
+/// recoverable exception is preferred over abort.
 ///
 /// The device variants (`DNDS_HD_*`) expand to host asserts on the host and to
 /// atomic-guarded PTX `trap` on CUDA devices so only one thread prints.
@@ -102,28 +107,109 @@ namespace DNDS
          ? void(0)                        \
          : ::DNDS::assert_false_info_throw(#expr, __FILE__, __LINE__, info))
 
-#ifdef DNDS_NDEBUG
-#    define DNDS_assert(expr) (void(0))
-#    define DNDS_assert_info(expr, info) (void(0))
-#    define DNDS_assert_infof(expr, info, ...) (void(0))
-#else
-/// @brief Debug-only assertion (compiled out when @ref DNDS_NDEBUG is defined).
-/// Prints the expression + file/line + backtrace, then calls `std::abort()`.
-#    define DNDS_assert(expr)      \
-        ((static_cast<bool>(expr)) \
-             ? void(0)             \
-             : ::DNDS::assert_false(#expr, __FILE__, __LINE__))
-/// @brief Debug-only assertion with an extra std::string `info` message.
-#    define DNDS_assert_info(expr, info) \
-        ((static_cast<bool>(expr))       \
-             ? void(0)                   \
-             : ::DNDS::assert_false_info(#expr, __FILE__, __LINE__, info))
-/// @brief Debug-only assertion with a printf-style format message.
-#    define DNDS_assert_infof(expr, info, ...) \
-        ((static_cast<bool>(expr))             \
-             ? void(0)                         \
-             : ::DNDS::assert_false_infof(#expr, __FILE__, __LINE__, info, ##__VA_ARGS__))
+/// Maximum assertion level — assertions at this level are ALWAYS compiled in,
+/// regardless of DNDS_NDEBUG or DNDS_ASSERT_LEVEL settings.
+#define DNDS_ASSERT_LEVEL_MAX 3
+
+/// Assertion threshold: assertions with level < DNDS_ASSERT_LEVEL (and level < MAX)
+/// are compiled out. Default: 0 (all active) in debug, MAX+1 (only MAX active) under NDEBUG.
+/// Override at compile time with -DDNDS_ASSERT_LEVEL=N to keep levels N..MAX active.
+#ifndef DNDS_ASSERT_LEVEL
+#    ifdef DNDS_NDEBUG
+#        define DNDS_ASSERT_LEVEL (DNDS_ASSERT_LEVEL_MAX + 1)
+#    else
+#        define DNDS_ASSERT_LEVEL 0
+#    endif
 #endif
+
+// ---- Two-level token-paste helper (needed so level expands before pasting) ----
+
+#define DNDS__CAT_I(a, b) a##b
+#define DNDS__CAT(a, b) DNDS__CAT_I(a, b)
+
+// ---- Per-level preprocessor dispatch (levels 0..DNDS_ASSERT_LEVEL_MAX) ----
+//
+// For each level L, three inner macros are `#define`d to either the active
+// assertion body or `(void)(0)`. The public `_l` macros token-paste into
+// the corresponding inner macro so the entire decision is resolved by the
+// preprocessor — no compiler optimisations required.
+
+/// @name Level-0 macros (legacy default verbosity)
+/// @{
+
+#if 0 >= DNDS_ASSERT_LEVEL || 0 >= DNDS_ASSERT_LEVEL_MAX
+#    define DNDS__ASSERT_L0(expr) ((static_cast<bool>(expr)) ? void(0) : ::DNDS::assert_false(#expr, __FILE__, __LINE__))
+#    define DNDS__ASSERT_INFO_L0(expr, info) \
+        ((static_cast<bool>(expr)) ? void(0) : ::DNDS::assert_false_info(#expr, __FILE__, __LINE__, info))
+#    define DNDS__ASSERT_INFOF_L0(expr, info, ...) \
+        ((static_cast<bool>(expr)) ? void(0) : ::DNDS::assert_false_infof(#expr, __FILE__, __LINE__, info, ##__VA_ARGS__))
+#else
+#    define DNDS__ASSERT_L0(expr) (void(0))
+#    define DNDS__ASSERT_INFO_L0(expr, info) (void(0))
+#    define DNDS__ASSERT_INFOF_L0(expr, info, ...) (void(0))
+#endif
+/// @}
+
+#if 1 >= DNDS_ASSERT_LEVEL || 1 >= DNDS_ASSERT_LEVEL_MAX
+#    define DNDS__ASSERT_L1(expr) ((static_cast<bool>(expr)) ? void(0) : ::DNDS::assert_false(#expr, __FILE__, __LINE__))
+#    define DNDS__ASSERT_INFO_L1(expr, info) \
+        ((static_cast<bool>(expr)) ? void(0) : ::DNDS::assert_false_info(#expr, __FILE__, __LINE__, info))
+#    define DNDS__ASSERT_INFOF_L1(expr, info, ...) \
+        ((static_cast<bool>(expr)) ? void(0) : ::DNDS::assert_false_infof(#expr, __FILE__, __LINE__, info, ##__VA_ARGS__))
+#else
+#    define DNDS__ASSERT_L1(expr) (void(0))
+#    define DNDS__ASSERT_INFO_L1(expr, info) (void(0))
+#    define DNDS__ASSERT_INFOF_L1(expr, info, ...) (void(0))
+#endif
+
+#if 2 >= DNDS_ASSERT_LEVEL || 2 >= DNDS_ASSERT_LEVEL_MAX
+#    define DNDS__ASSERT_L2(expr) ((static_cast<bool>(expr)) ? void(0) : ::DNDS::assert_false(#expr, __FILE__, __LINE__))
+#    define DNDS__ASSERT_INFO_L2(expr, info) \
+        ((static_cast<bool>(expr)) ? void(0) : ::DNDS::assert_false_info(#expr, __FILE__, __LINE__, info))
+#    define DNDS__ASSERT_INFOF_L2(expr, info, ...) \
+        ((static_cast<bool>(expr)) ? void(0) : ::DNDS::assert_false_infof(#expr, __FILE__, __LINE__, info, ##__VA_ARGS__))
+#else
+#    define DNDS__ASSERT_L2(expr) (void(0))
+#    define DNDS__ASSERT_INFO_L2(expr, info) (void(0))
+#    define DNDS__ASSERT_INFOF_L2(expr, info, ...) (void(0))
+#endif
+
+#if 3 >= DNDS_ASSERT_LEVEL || 3 >= DNDS_ASSERT_LEVEL_MAX
+#    define DNDS__ASSERT_L3(expr) ((static_cast<bool>(expr)) ? void(0) : ::DNDS::assert_false(#expr, __FILE__, __LINE__))
+#    define DNDS__ASSERT_INFO_L3(expr, info) \
+        ((static_cast<bool>(expr)) ? void(0) : ::DNDS::assert_false_info(#expr, __FILE__, __LINE__, info))
+#    define DNDS__ASSERT_INFOF_L3(expr, info, ...) \
+        ((static_cast<bool>(expr)) ? void(0) : ::DNDS::assert_false_infof(#expr, __FILE__, __LINE__, info, ##__VA_ARGS__))
+#else
+#    define DNDS__ASSERT_L3(expr) (void(0))
+#    define DNDS__ASSERT_INFO_L3(expr, info) (void(0))
+#    define DNDS__ASSERT_INFOF_L3(expr, info, ...) (void(0))
+#endif
+
+// ---- Public leveled assertion macros ----
+//
+// Example usage: DNDS_assert_l(3, ptr != nullptr);
+// Token-pastes the level digit into the corresponding inner macro above,
+// which the preprocessor has already resolved to either an active body
+// or (void)(0).
+
+/// @brief Leveled assertion. Active when `level >= DNDS_ASSERT_LEVEL` or
+/// `level >= DNDS_ASSERT_LEVEL_MAX`. Otherwise preprocessor-resolved to `(void)(0)`.
+#define DNDS_assert_l(level, expr) DNDS__CAT(DNDS__ASSERT_L, level)(expr)
+/// @brief Leveled assertion with info message.
+#define DNDS_assert_info_l(level, expr, info) DNDS__CAT(DNDS__ASSERT_INFO_L, level)(expr, info)
+/// @brief Leveled assertion with printf-style format message.
+#define DNDS_assert_infof_l(level, expr, info, ...) \
+    DNDS__CAT(DNDS__ASSERT_INFOF_L, level)          \
+    (expr, info, ##__VA_ARGS__)
+
+/// @brief MAX-level assertion — ALWAYS compiled in regardless of DNDS_NDEBUG or
+/// DNDS_ASSERT_LEVEL settings. Equivalent to @ref DNDS_assert_l(DNDS_ASSERT_LEVEL_MAX, expr).
+#define DNDS_assert(expr) DNDS_assert_l(DNDS_ASSERT_LEVEL_MAX, expr)
+/// @brief MAX-level assertion with an extra std::string `info` message.
+#define DNDS_assert_info(expr, info) DNDS_assert_info_l(DNDS_ASSERT_LEVEL_MAX, expr, info)
+/// @brief MAX-level assertion with a printf-style format message.
+#define DNDS_assert_infof(expr, info, ...) DNDS_assert_infof_l(DNDS_ASSERT_LEVEL_MAX, expr, info, ##__VA_ARGS__)
 
 #ifdef __CUDA_ARCH__
 
