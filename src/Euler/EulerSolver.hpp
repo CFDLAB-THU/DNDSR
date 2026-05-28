@@ -37,6 +37,7 @@
 // #endif
 #include "DNDS/Serializer/JsonUtil.hpp"
 #include "DNDS/Config/ConfigParam.hpp"
+#include "DNDS/EnvReader.hpp"
 #include "DNDS/Serializer/SerializerFactory.hpp"
 #include "DNDS/CsvLog.hpp"
 #include "DNDS/ObjectPool.hpp"
@@ -532,14 +533,23 @@ namespace DNDS::Euler
                 Serializer::SerializerFactory meshPartitionedWriter;
                 std::string meshPartitionedReaderType = "JSON";
 
-                const std::string &getOutLogName()
+                std::string getOutPltName() const
                 {
-                    return outLogName.empty() ? outPltName : outLogName;
+                    return outPltName + DNDS::GetEnvString("DNDS_RUN_COMMENT");
                 }
 
-                const std::string &getOutRestartName()
+                std::string getOutLogName() const
                 {
-                    return outRestartName.empty() ? outPltName : outRestartName;
+                    if (outLogName.empty())
+                        return getOutPltName();
+                    return outLogName + DNDS::GetEnvString("DNDS_RUN_COMMENT");
+                }
+
+                std::string getOutRestartName() const
+                {
+                    if (outRestartName.empty())
+                        return getOutPltName();
+                    return outRestartName + DNDS::GetEnvString("DNDS_RUN_COMMENT");
                 }
 
                 DNDS_DECLARE_CONFIG(DataIOControl)
