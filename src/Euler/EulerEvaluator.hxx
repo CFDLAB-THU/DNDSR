@@ -1397,7 +1397,10 @@ namespace DNDS::Euler
         const int iVarBegPoint = reactiveSpeciesOnly ? nVars - Ns1Point : 0;
         const int nPointVars = reactiveSpeciesOnly ? Ns1Point : nVars;
         const int nPseudoSteps = std::max(nNewtonSteps, 8);
-        static constexpr int useCanteraAffineReactor = 1;
+        // Local experiment switch:
+        // 0: local pseudo-time linearized march; 1: Cantera affine reactor;
+        // 2: single linear source-Jacobian smoother, (I/dt + I/dtau + JS)^-1.
+        static constexpr int pointImplicitSourceUpdatePath = 2;
         const bool outputResidualRatio = settings.pointImplicitSourceUpdateOut == 1;
         std::vector<real> localRatioMin(std::max(nPseudoSteps, 0) * nVars, veryLargeReal);
         std::vector<real> localRatioMax(std::max(nPseudoSteps, 0) * nVars, 0.0);
@@ -1508,7 +1511,64 @@ namespace DNDS::Euler
                 else
                     res0Abs(iVar) = 1.0;
 
-            if constexpr (useCanteraAffineReactor)
+            if constexpr (pointImplicitSourceUpdatePath == 2)
+            {
+                // Recompute JS locally for now. This could be saved directly from
+                // the manual frhs/EvaluateRHS source-Jacobian assembly site, but
+                // doing so needs clearer control wiring for the split-source path.
+                TU sourceAtUNew;
+                sourceAtUNew.setZero(nVars);
+                sourceJac.setZero(nVars, nVars);
+                EvaluateCellSource(sourceAtUNew, sourceJac, uNew[iCell], zeroGrad,
+                                   iCell, 2, filter);
+
+                // This uses the real rebuilt residual to preserve the fixed point
+                // of the full dual-time system. Consequently, this split form is
+                // ill-formed in the S -> 0 limit: it does not recover identity even
+                // when reactiveSourceScale is zero.
+                TU residualLocal;
+                sourceResidual(residualLocal, uNew[iCell], sourceAtUNew);
+                real sourceJacScale = 0.0;
+                for (int iRow = iVarBegPoint; iRow < iVarBegPoint + nPointVars; iRow++)
+                    for (int iCol = iVarBegPoint; iCol < iVarBegPoint + nPointVars; iCol++)
+                        sourceJacScale = std::max(sourceJacScale, std::abs(alphaDiag * sourceJac(iRow, iCol)));
+                real pseudoDtau = 1.0 / (1.0 / dt + sourceJacScale + smallReal);
+
+                TU delta;
+                delta.setZero(nVars);
+                if (reactiveSpeciesOnly)
+                {
+                    Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> lhs =
+                        alphaDiag * sourceJac(Eigen::seq(iVarBegPoint, EigenLast), Eigen::seq(iVarBegPoint, EigenLast));
+                    lhs.diagonal().array() += 1.0 / dt + 1.0 / pseudoDtau;
+                    Eigen::Vector<real, Eigen::Dynamic> rhs = residualLocal(Eigen::seq(iVarBegPoint, EigenLast));
+                    delta(Eigen::seq(iVarBegPoint, EigenLast)) = lhs.partialPivLu().solve(rhs.eval());
+                }
+                else
+                {
+                    TJacobianU lhs = alphaDiag * sourceJac;
+                    lhs.diagonal().array() += 1.0 / dt + 1.0 / pseudoDtau;
+                    delta = lhs.partialPivLu().solve(residualLocal.eval());
+                }
+
+                TU candidate = uNew[iCell] + delta;
+                repairReactiveSpecies(candidate);
+                if (validPointSourceState(candidate))
+                {
+                    TU sourceAtCandidate;
+                    sourceAtCandidate.setZero(nVars);
+                    EvaluateCellSource(sourceAtCandidate, sourceJac, candidate, zeroGrad,
+                                       iCell, 0, filter);
+                    TU residualCandidate;
+                    sourceResidual(residualCandidate, candidate, sourceAtCandidate);
+                    uNew[iCell] = candidate;
+                    for (int iPseudo = 0; iPseudo < nPseudoSteps; iPseudo++)
+                        recordResidualRatio(iPseudo, residualCandidate, res0Abs);
+                    continue;
+                }
+            }
+
+            if constexpr (pointImplicitSourceUpdatePath == 1)
             {
                 if (reactiveSpeciesOnly)
                 {

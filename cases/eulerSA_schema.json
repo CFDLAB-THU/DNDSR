@@ -1575,6 +1575,11 @@
                     "default": 0,
                     "description": "Print point-implicit source-update Newton residual ratio min/max: 0=off, 1=on"
                 },
+                "reactiveSourceScale": {
+                    "type": "number",
+                    "default": 1.0,
+                    "description": "Scale reactive source RHS and Jacobian directly; use 0 for non-reactive debugging"
+                },
                 "constMassForce": {
                     "type": "array",
                     "default": [

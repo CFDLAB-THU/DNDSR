@@ -349,6 +349,7 @@ namespace DNDS::Euler
         using ChemPool = std::shared_ptr<std::vector<Chemistry::ChemicalSource>>;
         ChemPool pool_;
         typename EulerEvaluatorSettings<model>::IdealGasProperty igProp_;
+        real sourceScale_ = 1.0;
 
         // Per-thread work buffers (one set per OMP thread)
         mutable std::vector<std::vector<double>> bufOmega_;
@@ -369,8 +370,9 @@ namespace DNDS::Euler
         }
 
         ChemicalContributor() = default;
-        explicit ChemicalContributor(ChemPool pool, typename EulerEvaluatorSettings<model>::IdealGasProperty igProp)
-            : pool_(std::move(pool)), igProp_(std::move(igProp))
+        explicit ChemicalContributor(ChemPool pool, typename EulerEvaluatorSettings<model>::IdealGasProperty igProp,
+                                     real sourceScale)
+            : pool_(std::move(pool)), igProp_(std::move(igProp)), sourceScale_(sourceScale)
         {
             if (pool_ && pool_->size() > 0)
             {
@@ -393,6 +395,8 @@ namespace DNDS::Euler
                       index, index, int Mode) const
         {
             if (!pool_)
+                return;
+            if (sourceScale_ == 0.0)
                 return;
             int tid = threadIdx();
             auto &c = (*pool_)[tid];
@@ -425,7 +429,7 @@ namespace DNDS::Euler
             {
                 c.productionRates(Tcantera, aux.pPhys, Yv, omegav);
                 for (int k = 0; k < Ns1; ++k)
-                    ret[Isp + k] += bufOmega[k] * c.molecularWeights()[k] * invS0;
+                    ret[Isp + k] += sourceScale_ * bufOmega[k] * c.molecularWeights()[k] * invS0;
             }
             else if (Mode == 2)
             {
@@ -442,14 +446,14 @@ namespace DNDS::Euler
                                              uM1, uM2, uM3, I4, igProp_.U0, igProp_.rho0, Yv, omegav, Jv,
                                              Chemistry::ChemicalSource::JAC_SKIP_FLUID);
                 for (int k = 0; k < Ns1; ++k)
-                    ret[Isp + k] += bufOmega[k] * c.molecularWeights()[k] * invS0;
+                    ret[Isp + k] += sourceScale_ * bufOmega[k] * c.molecularWeights()[k] * invS0;
                 for (int k = 0; k < Ns1; ++k)
                 {
                     double Mk = c.molecularWeights()[k];
                     int iRow = Isp + k;
                     for (int j = 0; j < nVars; ++j)
                     {
-                        double val = Mk * Jv(k, j) * invS0;
+                        double val = sourceScale_ * Mk * Jv(k, j) * invS0;
                         if (!std::isfinite(val))
                         {
                             fprintf(stderr, "[chem-jac] NaN at row=%d col=%d Jv=%g Mk=%g T=%.1f\n",
@@ -527,7 +531,8 @@ namespace DNDS::Euler
             pool->emplace_back(settings.reactiveFlow.mechanismFile);
             for (int t = 1; t < nThreads; ++t)
                 pool->push_back(std::move(*pool->at(0).clone()));
-            contribs.push_back(ChemicalContributor<model>{std::move(pool), settings.idealGasProperty});
+            contribs.push_back(ChemicalContributor<model>{std::move(pool), settings.idealGasProperty,
+                                                          settings.reactiveSourceScale});
         }
         return contribs;
     }
