@@ -1383,9 +1383,9 @@ namespace DNDS::Euler
         DNDS_check_throw_info(dt > 0, "PointImplicitSourceUpdate requires positive dt");
         DNDS_check_throw_info(nNewtonSteps >= 0, "PointImplicitSourceUpdate requires non-negative nNewtonSteps");
 
-        // TODO(source-splitting): this guarded Newton update prevents invalid
-        // chemistry states, but convergence is still weak for stiff species rows.
-        // Replace with pseudo-time marching of C + alphaDiag*S(u) - u/dt.
+        // Pseudo-time march C + alphaDiag*S(u) - u/dt to steady state.
+        // The reactive split owns only transported rhoY equations; rho, momentum,
+        // and rhoE remain fixed during this point solve.
 
         TDiffU zeroGrad;
         zeroGrad.resize(Eigen::NoChange, nVars);
@@ -1396,9 +1396,10 @@ namespace DNDS::Euler
         const int Ns1Point = reactiveSpeciesOnly ? phys_.nSpecies() - 1 : nVars;
         const int iVarBegPoint = reactiveSpeciesOnly ? nVars - Ns1Point : 0;
         const int nPointVars = reactiveSpeciesOnly ? Ns1Point : nVars;
+        const int nPseudoSteps = std::max(nNewtonSteps, 8);
         const bool outputResidualRatio = settings.pointImplicitSourceUpdateOut == 1;
-        std::vector<real> localRatioMin(std::max(nNewtonSteps, 0) * nVars, veryLargeReal);
-        std::vector<real> localRatioMax(std::max(nNewtonSteps, 0) * nVars, 0.0);
+        std::vector<real> localRatioMin(std::max(nPseudoSteps, 0) * nVars, veryLargeReal);
+        std::vector<real> localRatioMax(std::max(nPseudoSteps, 0) * nVars, 0.0);
         auto repairReactiveSpecies = [&](TU &state)
         {
             if (!phys_.hasChemicalSource())
@@ -1462,17 +1463,24 @@ namespace DNDS::Euler
                 ret = std::max(ret, std::abs(residualIn(iVar)));
             return ret;
         };
-        auto activeResidualComponentsDecrease = [&](const TU &candidateResidual, const TU &oldResidual) -> bool
+        auto recordResidualRatio = [&](int iPseudo, const TU &residualIn, const TU &res0Abs)
         {
-            constexpr real absTol = 1e-12;
-            for (int iVar = iVarBegPoint; iVar < iVarBegPoint + nPointVars; iVar++)
+            if (!outputResidualRatio)
+                return;
+            TU ratio = residualIn.cwiseAbs().cwiseQuotient(res0Abs);
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp critical(DNDSPointImplicitSourceRatio)
+#endif
             {
-                real oldAbs = std::abs(oldResidual(iVar));
-                real candAbs = std::abs(candidateResidual(iVar));
-                if (candAbs > oldAbs + absTol && candAbs > oldAbs * (1.0 + 1e-10))
-                    return false;
+                for (int iVar = 0; iVar < nVars; iVar++)
+                {
+                    if (reactiveSpeciesOnly && iVar < iVarBegPoint)
+                        ratio(iVar) = 0.0;
+                    const index iOut = static_cast<index>(iPseudo) * nVars + iVar;
+                    localRatioMin[iOut] = std::min(localRatioMin[iOut], ratio(iVar));
+                    localRatioMax[iOut] = std::max(localRatioMax[iOut], ratio(iVar));
+                }
             }
-            return true;
         };
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(guided)
@@ -1499,7 +1507,8 @@ namespace DNDS::Euler
                 else
                     res0Abs(iVar) = 1.0;
 
-            for (int iNewton = 0; iNewton < nNewtonSteps; iNewton++)
+            real pseudoDtauScale = 1.0;
+            for (int iPseudo = 0; iPseudo < nPseudoSteps; iPseudo++)
             {
                 TU sourceAtUNew;
                 sourceAtUNew.setZero(nVars);
@@ -1511,37 +1520,50 @@ namespace DNDS::Euler
                 sourceResidual(residualLocal, uNew[iCell], sourceAtUNew);
                 const real oldResidualNorm = activeResidualNorm(residualLocal);
                 if (oldResidualNorm <= smallReal)
+                {
+                    recordResidualRatio(iPseudo, residualLocal, res0Abs);
                     break;
+                }
+
+                real sourceJacScale = 0.0;
+                for (int iRow = iVarBegPoint; iRow < iVarBegPoint + nPointVars; iRow++)
+                    for (int iCol = iVarBegPoint; iCol < iVarBegPoint + nPointVars; iCol++)
+                        sourceJacScale = std::max(sourceJacScale, std::abs(alphaDiag * sourceJac(iRow, iCol)));
+                real pseudoDtau = pseudoDtauScale / (1.0 / dt + sourceJacScale + smallReal);
 
                 // sourceJac stores -d(source)/dU. Therefore
-                // (I / dt + alphaDiag * sourceJac) * delta = residualLocal.
+                // (I / dtau + I / dt + alphaDiag * sourceJac) * delta = residualLocal.
                 TU delta;
                 delta.setZero(nVars);
                 if (reactiveSpeciesOnly)
                 {
                     Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> lhs =
                         alphaDiag * sourceJac(Eigen::seq(iVarBegPoint, EigenLast), Eigen::seq(iVarBegPoint, EigenLast));
-                    lhs.diagonal().array() += 1.0 / dt;
+                    lhs.diagonal().array() += 1.0 / dt + 1.0 / pseudoDtau;
                     Eigen::Vector<real, Eigen::Dynamic> rhs = residualLocal(Eigen::seq(iVarBegPoint, EigenLast));
                     delta(Eigen::seq(iVarBegPoint, EigenLast)) = lhs.partialPivLu().solve(rhs.eval());
                 }
                 else
                 {
                     TJacobianU lhs = alphaDiag * sourceJac;
-                    lhs.diagonal().array() += 1.0 / dt;
+                    lhs.diagonal().array() += 1.0 / dt + 1.0 / pseudoDtau;
                     delta = lhs.partialPivLu().solve(residualLocal.eval());
                 }
-                real alpha = 1.0;
                 TU accepted = uNew[iCell];
                 TU acceptedResidual = residualLocal;
+                real acceptedResidualNorm = oldResidualNorm;
                 bool acceptedValid = false;
-                for (int iRelax = 0; iRelax < 16; iRelax++, alpha *= 0.5)
+                for (int iRelax = 0; iRelax < 8; iRelax++)
                 {
-                    TU deltaTry = this->CompressInc(uNew[iCell], alpha * delta);
+                    TU deltaTry = this->CompressInc(uNew[iCell], delta);
                     TU candidate = uNew[iCell] + deltaTry;
                     repairReactiveSpecies(candidate);
                     if (!validPointSourceState(candidate))
+                    {
+                        pseudoDtau *= 0.5;
+                        delta *= 0.5;
                         continue;
+                    }
                     TU sourceAtCandidate;
                     sourceAtCandidate.setZero(nVars);
                     EvaluateCellSource(sourceAtCandidate, sourceJac, candidate, zeroGrad,
@@ -1549,39 +1571,30 @@ namespace DNDS::Euler
                     TU residualCandidate;
                     sourceResidual(residualCandidate, candidate, sourceAtCandidate);
                     real candidateResidualNorm = activeResidualNorm(residualCandidate);
-                    if (candidateResidualNorm <= oldResidualNorm &&
-                        activeResidualComponentsDecrease(residualCandidate, residualLocal))
+                    if (candidateResidualNorm <= oldResidualNorm)
                     {
                         accepted = candidate;
                         acceptedResidual = residualCandidate;
+                        acceptedResidualNorm = candidateResidualNorm;
                         acceptedValid = true;
                         break;
                     }
+                    pseudoDtau *= 0.5;
+                    delta *= 0.5;
                 }
                 if (!acceptedValid)
-                    break;
-                uNew[iCell] = accepted;
-
-                if (outputResidualRatio)
                 {
-                    TU ratio = acceptedResidual.cwiseAbs().cwiseQuotient(res0Abs);
-#if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp critical(DNDSPointImplicitSourceRatio)
-#endif
-                    {
-                        for (int iVar = 0; iVar < nVars; iVar++)
-                        {
-                            if (reactiveSpeciesOnly && iVar < iVarBegPoint)
-                                ratio(iVar) = 0.0;
-                            const index iOut = static_cast<index>(iNewton) * nVars + iVar;
-                            localRatioMin[iOut] = std::min(localRatioMin[iOut], ratio(iVar));
-                            localRatioMax[iOut] = std::max(localRatioMax[iOut], ratio(iVar));
-                        }
-                    }
+                    recordResidualRatio(iPseudo, residualLocal, res0Abs);
+                    break;
                 }
+                uNew[iCell] = accepted;
+                recordResidualRatio(iPseudo, acceptedResidual, res0Abs);
+                pseudoDtauScale = acceptedResidualNorm < oldResidualNorm * 0.8
+                                      ? std::min(pseudoDtauScale * 1.5, 100.0)
+                                      : std::max(pseudoDtauScale * 0.7, 1e-6);
             }
         }
-        if (outputResidualRatio && nNewtonSteps > 0)
+        if (outputResidualRatio && nPseudoSteps > 0)
         {
             std::vector<real> ratioMin(localRatioMin.size(), 0.0);
             std::vector<real> ratioMax(localRatioMax.size(), 0.0);
@@ -1590,14 +1603,14 @@ namespace DNDS::Euler
             if (u.father->getMPI().rank == 0)
             {
                 log() << std::scientific;
-                for (int iNewton = 0; iNewton < nNewtonSteps; iNewton++)
+                for (int iPseudo = 0; iPseudo < nPseudoSteps; iPseudo++)
                 {
-                    log() << "PointImplicitSourceUpdate Newton [" << iNewton + 1 << "] res/res0 min [";
+                    log() << "PointImplicitSourceUpdate pseudo [" << iPseudo + 1 << "] res/res0 min [";
                     for (int iVar = 0; iVar < nVars; iVar++)
-                        log() << (iVar ? "," : "") << ratioMin[static_cast<index>(iNewton) * nVars + iVar];
+                        log() << (iVar ? "," : "") << ratioMin[static_cast<index>(iPseudo) * nVars + iVar];
                     log() << "] max [";
                     for (int iVar = 0; iVar < nVars; iVar++)
-                        log() << (iVar ? "," : "") << ratioMax[static_cast<index>(iNewton) * nVars + iVar];
+                        log() << (iVar ? "," : "") << ratioMax[static_cast<index>(iPseudo) * nVars + iVar];
                     log() << "]" << std::endl;
                 }
             }
