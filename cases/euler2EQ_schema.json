@@ -1570,6 +1570,11 @@
                     "default": 0.5,
                     "description": "Central smoothing epsilon"
                 },
+                "pointImplicitSourceUpdateOut": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Print point-implicit source-update Newton residual ratio min/max: 0=off, 1=on"
+                },
                 "constMassForce": {
                     "type": "array",
                     "default": [

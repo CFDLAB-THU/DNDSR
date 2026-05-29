@@ -418,6 +418,7 @@ namespace DNDS::Euler
         int useSourceGradFixGG = 0;                                              ///< Apply Green-Gauss gradient fix for source terms.
         int nCentralSmoothStep = 0;                                              ///< Number of central-difference smoothing steps.
         real centralSmoothEps = 0.5;                                             ///< Epsilon for central smoothing.
+        int pointImplicitSourceUpdateOut = 0;                                    ///< Print point-implicit source-update Newton residual ratios.
         Eigen::Vector<real, 3> constMassForce = Eigen::Vector<real, 3>{0, 0, 0}; ///< Constant body force vector [fx, fy, fz].
         /// @}
         /**
@@ -738,6 +739,7 @@ namespace DNDS::Euler
             DNDS_FIELD(nCentralSmoothStep,      "Central smoothing steps",
                        DNDS::Config::range(0));
             DNDS_FIELD(centralSmoothEps,        "Central smoothing epsilon");
+            DNDS_FIELD(pointImplicitSourceUpdateOut, "Print point-implicit source-update Newton residual ratio min/max: 0=off, 1=on");
             DNDS_FIELD(constMassForce,          "Constant mass force vector (3D)");
             config.field_section(&T::frameConstRotation, "frameConstRotation",
                                  "Constant-rotation reference frame settings");
