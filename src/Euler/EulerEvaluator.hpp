@@ -725,7 +725,7 @@ namespace DNDS::Euler
          * @brief Evaluate the positivity-preserving reconstruction limiter (beta).
          *
          * For each cell, computes the maximum compression factor beta such that
-         * u_mean + beta * uRec remains physically realizable (positive density and pressure).
+         * u_mean + beta * uRec remains physically realizable (positive density and sensible internal energy).
          *
          * @param[in]  u          Cell-centered conservative DOFs.
          * @param[in]  uRec       Reconstruction coefficients.
@@ -742,7 +742,7 @@ namespace DNDS::Euler
         /**
          * @brief Assert that all cell-mean values are physically realizable.
          *
-         * Checks that density > 0 and internal energy > 0 for all cells.
+         * Checks that density > 0 and sensible internal energy > 0 for all cells.
          *
          * @param[in] u     Cell-centered conservative DOFs.
          * @param[in] panic If true, abort on first violation; otherwise just report.
@@ -1712,6 +1712,7 @@ namespace DNDS::Euler
             {
                 pEps *= verySmallReal, rhoEps *= verySmallReal;
             }
+            real rhoeSensibleEps = pEps;
 
             TU ret = uInc;
 
@@ -1731,12 +1732,12 @@ namespace DNDS::Euler
             real ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
             real rhoH_form_new = phys_.mixtureFormationRhoERaw(TU(u + ret));
             real rhoEinternalNew_sensible = u(I4) + ret(I4) - ek - rhoH_form_new;
-            if (rhoEinternalNew_sensible <= pEps)
+            if (rhoEinternalNew_sensible <= rhoeSensibleEps)
             {
                 // Use linear-concave compression ratio (scheme=1).
                 // rhoe_sensible(θ) is concave → secant ≤ function, linear estimate safe.
                 real alpha = Gas::IdealGasGetCompressionRatioPressure<dim, 1, nVarsFixed>(
-                    u, ret, pEps, rhoH_form_old, rhoH_form_new);
+                    u, ret, rhoeSensibleEps, rhoH_form_old, rhoH_form_new);
                 ret *= alpha * (0.99);
 
                 // Iterative pull-up: concave → rhoe(ret) ≥ linear estimate, may still overshoot.
@@ -1745,7 +1746,7 @@ namespace DNDS::Euler
                 {
                     real ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
                     real rhoH_ret = phys_.mixtureFormationRhoERaw(TU(u + ret));
-                    if (u(I4) + ret(I4) - ek - rhoH_ret < pEps)
+                    if (u(I4) + ret(I4) - ek - rhoH_ret < rhoeSensibleEps)
                         ret *= decay, alpha *= decay;
                     else
                         break;
@@ -1754,12 +1755,12 @@ namespace DNDS::Euler
                 real ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
                 real rhoH_ret = phys_.mixtureFormationRhoERaw(TU(u + ret));
 
-                if (u(I4) + ret(I4) - ek - rhoH_ret < pEps * 0.5)
+                if (u(I4) + ret(I4) - ek - rhoH_ret < rhoeSensibleEps * 0.5)
                 {
                     std::cout << std::scientific << std::setprecision(5);
                     std::cout << u(0) << " " << ret(0) << std::endl;
                     std::cout << rhoEinternalNew_sensible << " " << rhoEinternal_sensible << std::endl;
-                    std::cout << pEps << std::endl;
+                    std::cout << rhoeSensibleEps << std::endl;
                     std::cout << u(I4) + ret(I4) - ek - rhoH_ret << std::endl;
                     std::cout << alpha << std::endl;
                     DNDS_assert(false);

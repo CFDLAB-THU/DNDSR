@@ -1699,7 +1699,7 @@ namespace DNDS::Euler
      *
      *  Computes a scalar beta in [0,1] for each cell such that the reconstructed
      *  solution at all face and (optionally) volume quadrature points maintains
-     *  positive density and pressure. Uses bisection to find the maximum allowable beta.
+     *  positive density and sensible internal energy. Uses bisection to find the maximum allowable beta.
      *  Reports the total number of limited cells and the global minimum beta.
      *
      *  @param u         Conservative variable DOF array.
@@ -1741,6 +1741,7 @@ namespace DNDS::Euler
             rhoEps = std::min(rhoEps, minRatio * rhoMin);
             pEps = std::min(pEps, minRatio * rhoEiMin);
         }
+        real rhoeSensibleEps = pEps;
 
         index nLimLocal = 0;
         real minBetaLocal = 1;
@@ -1776,9 +1777,8 @@ namespace DNDS::Euler
             real T_cell = phys_.template temperature<dim>(u[iCell]);
             // real gamma = phys_.template gammaEq<dim>(T_cell, u[iCell]);
             real rhoH_form_cell = phys_.mixtureFormationRhoERaw(u[iCell]);
-            // actually is rhoEi, not p
-            real pCent = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - rhoH_form_cell;
-            DNDS_assert_info(pCent >= pEps, fmt::format("pMean {}, {}", pCent, pEps));
+            real rhoeSensibleCent = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - rhoH_form_cell;
+            DNDS_assert_info(rhoeSensibleCent >= rhoeSensibleEps, fmt::format("rhoeSensibleMean {}, {}", rhoeSensibleCent, rhoeSensibleEps));
 
             auto rhoH_form_perQ = [&](const Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> &rec)
             {
@@ -1810,7 +1810,7 @@ namespace DNDS::Euler
                     0.5 * (recBase(EigenAll, Seq123).array().square().rowwise().sum()) / recBase(EigenAll, 0).array();
                 Eigen::Vector<real, Eigen::Dynamic> rhoH_form_q = rhoH_form_perQ(recBase);
                 Eigen::Vector<real, Eigen::Dynamic> eInternalS = (recBase(EigenAll, I4) - ek - rhoH_form_q);
-                return eInternalS.minCoeff() >= pEps;
+                return eInternalS.minCoeff() >= rhoeSensibleEps;
             };
             if (checkRecBaseGood())
             {
@@ -1897,16 +1897,16 @@ namespace DNDS::Euler
             real thetaP = 1.0;
             Eigen::Vector<real, Eigen::Dynamic> rhoH_form_B = rhoH_form_perQ(recBase);
 
-            if (pCent <= 2 * pEps)
+            if (rhoeSensibleCent <= 2 * rhoeSensibleEps)
                 thetaP = 0;
             else
                 for (int iG = 0; iG < rhoS.size(); iG++)
                 {
-                    if (eInternalS(iG) < 2 * pEps) // pEps is rhoE_sensible floor (not pressure)
+                    if (eInternalS(iG) < 2 * rhoeSensibleEps)
                     {
                         real thetaThis = Gas::IdealGasGetCompressionRatioPressure<dim, 1, nVarsFixed>(
                             recBase(iG, EigenAll).transpose(), recInc(iG, EigenAll).transpose(),
-                            pEps, rhoH_form_B(iG), rhoH_form_VR(iG));
+                            rhoeSensibleEps, rhoH_form_B(iG), rhoH_form_VR(iG));
                         thetaP = std::min(thetaP, thetaThis);
                     }
                 }
@@ -1953,7 +1953,7 @@ namespace DNDS::Euler
             eInternalS = (recVRhoG(EigenAll, I4) - ek - rhoH_form_VR);
             for (int iG = 0; iG < eInternalS.size(); iG++)
             {
-                if (eInternalS(iG) < pEps)
+                if (eInternalS(iG) < rhoeSensibleEps)
                 {
                     std::cout << std::scientific;
                     std::cout << eInternalS.transpose() << std::endl;
@@ -1978,6 +1978,7 @@ namespace DNDS::Euler
         real pEps = smallReal * settings.refUPrim(I4) * 1e-1;
         if (settings.ppEpsIsRelaxed)
             rhoEps *= 0, pEps *= 0;
+        real rhoeSensibleEps = pEps;
         bool ret{true};
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(runtime)
@@ -2002,18 +2003,18 @@ namespace DNDS::Euler
 #endif
                 ret = false;
             }
-            real rhoEi = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureFormationRhoERaw(u[iCell]);
-            if (rhoEi < pEps) // pEps is rhoE_sensible floor
+            real rhoeSensible = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureFormationRhoERaw(u[iCell]);
+            if (rhoeSensible < rhoeSensibleEps)
             {
                 if (panic)
                     DNDS_assert_info(
                         false,
                         fmt::format(
-                            "AssertMeanValuePP Failed on cell {} rhoEi\n",
+                            "AssertMeanValuePP Failed on cell {} rhoeSensible\n",
                             iCell) +
                             fmt::format(
                                 " eps={}, value={}",
-                                pEps, rhoEi));
+                                rhoeSensibleEps, rhoeSensible));
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp critical
 #endif
@@ -2112,6 +2113,7 @@ namespace DNDS::Euler
             pEps *= 0, rhoEps *= 0;
             DNDS_assert_info(relax < 1, "Relaxed eps only for using relaxation in alpha");
         }
+        real rhoeSensibleEps = pEps;
 
         index nLimLocal = 0;
         real alphaMinLocal = 1;
@@ -2162,18 +2164,18 @@ namespace DNDS::Euler
 
             TU uNew = u[iCell] + inc;
             real rhoH_form_new = phys_.mixtureFormationRhoERaw(uNew);
-            real pNew = uNew(I4) - 0.5 * uNew(Seq123).squaredNorm() / uNew(0) - rhoH_form_new;                                       // rhoE_sensible (not pressure)
-            real pOld = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureFormationRhoERaw(u[iCell]); // rhoE_sensible (not pressure)
-            real relaxedP = pEps;
-            if (pNew < pOld)
-                relaxedP = pEps + (pOld - pEps) * (1 - relax);
+            real rhoeSensibleNew = uNew(I4) - 0.5 * uNew(Seq123).squaredNorm() / uNew(0) - rhoH_form_new;
+            real rhoeSensibleOld = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureFormationRhoERaw(u[iCell]);
+            real relaxedRhoeSensible = rhoeSensibleEps;
+            if (rhoeSensibleNew < rhoeSensibleOld)
+                relaxedRhoeSensible = rhoeSensibleEps + (rhoeSensibleOld - rhoeSensibleEps) * (1 - relax);
 
             real alphaP = 1;
-            if (pNew < relaxedP)
+            if (rhoeSensibleNew < relaxedRhoeSensible)
             {
                 // todo: use high order accurate (add control switch)
                 real alphaC = Gas::IdealGasGetCompressionRatioPressure<dim, 1, nVarsFixed>(
-                    u[iCell], inc, relaxedP, phys_.mixtureFormationRhoERaw(u[iCell]), rhoH_form_new);
+                    u[iCell], inc, relaxedRhoeSensible, phys_.mixtureFormationRhoERaw(u[iCell]), rhoH_form_new);
                 alphaP = std::min(alphaP, alphaC);
             }
             cellRHSAlpha[iCell](0) = alphaRho * alphaP;
@@ -2250,6 +2252,7 @@ namespace DNDS::Euler
             rhoEps = std::min(rhoEps, minRatio * rhoMin);
             pEps = std::min(pEps, minRatio * rhoEiMin);
         }
+        real rhoeSensibleEps = pEps;
 
         // Unused — kept for reference if alpha-expansion smoothing is ever re-enabled.
         // The calling loop at line ~2283 was commented out; see SEVERE #8-10 fixes
@@ -2301,9 +2304,9 @@ namespace DNDS::Euler
             TU inc = res[iCell];
 
             TU uNew = u[iCell] + inc;
-            real pNew = uNew(I4) - 0.5 * uNew(Seq123).squaredNorm() / uNew(0) - phys_.mixtureFormationRhoERaw(uNew); // rhoE_sensible (not pressure)
+            real rhoeSensibleNew = uNew(I4) - 0.5 * uNew(Seq123).squaredNorm() / uNew(0) - phys_.mixtureFormationRhoERaw(uNew);
 
-            if (pNew < pEps || uNew(0) < rhoEps)
+            if (rhoeSensibleNew < rhoeSensibleEps || uNew(0) < rhoEps)
             {
                 cellRHSAlpha[iCell](0) = alphaMin;
                 nLimLocal++;

@@ -1941,7 +1941,7 @@ namespace DNDS::Euler::Gas
      *
      * Given a state @p u and an increment @p uInc, finds the largest α such that
      * the sensible internal energy rho·e_sensible = ρE − ½ρ|v|² − rho·ΣY_k·h_f_k
-     * of (u + α·uInc) remains above @p newrhoEinteralNew.
+     * of (u + α·uInc) remains above @p rhoeSensibleFloorInput.
      *
      * Two schemes are available:
      *   - scheme 0: analytic quadratic solve with iterative safety fallback.
@@ -1958,13 +1958,13 @@ namespace DNDS::Euler::Gas
      * @tparam nVarsFixed  Compile-time size of the state vector.
      * @param  u            Current conservative state (ρE_total at dim+1).
      * @param  uInc         Proposed conservative state increment.
-     * @param  newrhoEinteralNew  Sensible rhoE floor ρ·e_sensible_min (= p_min/(γ−1)).
-     * @param  rhoH_form_u  Volumetric formation energy of u (= ρ·ΣY_k·h_f_k).
-     * @param  rhoH_form_uNew  Volumetric formation energy of u + uInc.
+     * @param  rhoeSensibleFloorInput  Sensible rhoE floor ρ·e_sensible_min (= p_min/(γ−1)).
+     * @param  rhoH_form_u  Raw volumetric formation energy of u (= ρ·ΣY_k·h_f_k), without species clipping.
+     * @param  rhoH_form_uNew  Raw volumetric formation energy of u + uInc, without species clipping.
      * @return The safe scaling factor α in [0, 1].
      */
     template <int dim = 3, int scheme = 0, int nVarsFixed, typename TU, typename TUInc>
-    real IdealGasGetCompressionRatioPressure(const TU &u, const TUInc &uInc, real newrhoEinteralNew,
+    real IdealGasGetCompressionRatioPressure(const TU &u, const TUInc &uInc, real rhoeSensibleFloorInput,
                                              real rhoH_form_u, real rhoH_form_uNew)
     {
         static const real safetyRatio = 1 - 1e-5;
@@ -1981,18 +1981,18 @@ namespace DNDS::Euler::Gas
         real rhoeOld = u(I4) - u(Seq123).squaredNorm() / (u(0) + verySmallReal) * 0.5 - rhoH_form_u;
         real rhoeNew = uNew(I4) - uNew(Seq123).squaredNorm() / (uNew(0) + verySmallReal) * 0.5 - rhoH_form_uNew;
 
-        // Convert sensible floor → total-energy floor using u's formation (for quadratic)
-        newrhoEinteralNew += rhoH_form_u;
-        real rhoEOld = rhoeOld + rhoH_form_u; // total rhoE − KE (for quadratic compatibility)
-        real rhoENew = uNew(I4) - uNew(Seq123).squaredNorm() / (uNew(0) + verySmallReal) * 0.5;
+        real floorSensible = std::max(rhoeSensibleFloorInput, smallReal * std::max(rhoeOld, real(0)));
 
-        newrhoEinteralNew = std::max(smallReal * rhoEOld, newrhoEinteralNew);
+        // Total internal-energy floor at alpha=0, used only by the quadratic coefficients.
+        real rhoEFloorAtU = floorSensible + rhoH_form_u;
 
         // Linear (concave) estimate: rhoe(θ) is concave, secant ≤ function.
         //  α = (rhoeOld − floorSensible) / (rhoeOld − rhoeNew + ε)
-        real alphaEst1 = (rhoeOld - (newrhoEinteralNew - rhoH_form_u)) /
-                         std::max(rhoeOld - rhoeNew, verySmallReal);
-        if (rhoeNew > rhoeOld)
+        real alphaEst1 = 1;
+        if (rhoeNew < floorSensible)
+            alphaEst1 = (rhoeOld - floorSensible) /
+                        std::max(rhoeOld - rhoeNew, verySmallReal);
+        if (rhoeNew >= floorSensible)
             alphaEst1 = 1;
         alphaEst1 = std::min(alphaEst1, 1.);
         alphaEst1 = std::max(alphaEst1, 0.);
@@ -2002,9 +2002,9 @@ namespace DNDS::Euler::Gas
         alphaL = alphaR = c0 = c1 = c2 = 0;
         if constexpr (scheme == 0)
         {
-            c0 = 2 * u(I4) * u(0) - u(Seq123).squaredNorm() - 2 * u(0) * newrhoEinteralNew;
-            c1 = 2 * u(I4) * ret(0) + 2 * u(0) * ret(I4) - 2 * u(Seq123).dot(ret(Seq123)) - 2 * ret(0) * newrhoEinteralNew - 2 * deltaRhoH * u(0); // ΔrhoH correction: extra α·ΔrhoH·u₀ term on RHS
-            c2 = 2 * ret(I4) * ret(0) - ret(Seq123).squaredNorm() - 2 * deltaRhoH * ret(0);                                                        // ΔrhoH correction: extra α·ΔrhoH·inc₀ term on RHS
+            c0 = 2 * u(I4) * u(0) - u(Seq123).squaredNorm() - 2 * u(0) * rhoEFloorAtU;
+            c1 = 2 * u(I4) * ret(0) + 2 * u(0) * ret(I4) - 2 * u(Seq123).dot(ret(Seq123)) - 2 * ret(0) * rhoEFloorAtU - 2 * deltaRhoH * u(0); // ΔrhoH correction: extra α·ΔrhoH·u₀ term on RHS
+            c2 = 2 * ret(I4) * ret(0) - ret(Seq123).squaredNorm() - 2 * deltaRhoH * ret(0);                                                   // ΔrhoH correction: extra α·ΔrhoH·inc₀ term on RHS
             c2 += signP(c2) * verySmallReal;
             real deltaC = sqr(c1) - 4 * c0 * c2;
             if (deltaC <= -sqr(c0) * smallReal)
@@ -2012,7 +2012,7 @@ namespace DNDS::Euler::Gas
                 std::cout << std::scientific << std::setprecision(5);
                 std::cout << u.transpose() << std::endl;
                 std::cout << uInc.transpose() << std::endl;
-                std::cout << newrhoEinteralNew << std::endl;
+                std::cout << floorSensible << std::endl;
                 std::cout << fmt::format("{} {} {}", c0, c1, c2) << std::endl;
 
                 DNDS_assert(false);
@@ -2065,8 +2065,9 @@ namespace DNDS::Euler::Gas
         for (iter = 0; iter < 1000; iter++)
         {
             real ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
-            // TODO: floor uses caller's rhoH_form; if rhoH_form changes significantly during iteration the check may be off by Δ(rhoH_form)
-            if (ret(I4) + u(I4) - ek < newrhoEinteralNew)
+            real rhoH_form_alpha = rhoH_form_u + alpha * deltaRhoH;
+            real rhoeSensibleAlpha = ret(I4) + u(I4) - ek - rhoH_form_alpha;
+            if (rhoeSensibleAlpha < floorSensible)
             {
 
                 ret *= decay, alpha *= decay;
@@ -2077,13 +2078,15 @@ namespace DNDS::Euler::Gas
         if (iter >= 1000)
         {
             real ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
+            real rhoH_form_alpha = rhoH_form_u + alpha * deltaRhoH;
+            real rhoeSensibleAlpha = ret(I4) + u(I4) - ek - rhoH_form_alpha;
             {
                 std::cout << std::scientific << std::setprecision(5);
                 std::cout << fmt::format("alphas: {}, {}, {}\n", alpha, alphaL, alphaR);
                 std::cout << fmt::format("ABC: {}, {}, {}\n", c2, c1, c0);
                 std::cout << u.transpose() << std::endl;
                 std::cout << uInc.transpose() << std::endl;
-                std::cout << fmt::format("eks: {} {}\n", ret(I4) + u(I4) - ek, newrhoEinteralNew);
+                std::cout << fmt::format("rhoes: {} {}\n", rhoeSensibleAlpha, floorSensible);
                 DNDS_assert(false);
             }
         }
