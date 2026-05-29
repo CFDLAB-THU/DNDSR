@@ -1383,14 +1383,97 @@ namespace DNDS::Euler
         DNDS_check_throw_info(dt > 0, "PointImplicitSourceUpdate requires positive dt");
         DNDS_check_throw_info(nNewtonSteps >= 0, "PointImplicitSourceUpdate requires non-negative nNewtonSteps");
 
+        // TODO(source-splitting): this guarded Newton update prevents invalid
+        // chemistry states, but convergence is still weak for stiff species rows.
+        // Replace with pseudo-time marching of C + alphaDiag*S(u) - u/dt.
+
         TDiffU zeroGrad;
         zeroGrad.resize(Eigen::NoChange, nVars);
         zeroGrad.setZero();
 
         uNew = u;
+        const bool reactiveSpeciesOnly = filter == SourceFilter::ReactiveOnly && phys_.hasChemicalSource();
+        const int Ns1Point = reactiveSpeciesOnly ? phys_.nSpecies() - 1 : nVars;
+        const int iVarBegPoint = reactiveSpeciesOnly ? nVars - Ns1Point : 0;
+        const int nPointVars = reactiveSpeciesOnly ? Ns1Point : nVars;
         const bool outputResidualRatio = settings.pointImplicitSourceUpdateOut == 1;
         std::vector<real> localRatioMin(std::max(nNewtonSteps, 0) * nVars, veryLargeReal);
         std::vector<real> localRatioMax(std::max(nNewtonSteps, 0) * nVars, 0.0);
+        auto repairReactiveSpecies = [&](TU &state)
+        {
+            if (!phys_.hasChemicalSource())
+                return;
+            int Ns = phys_.nSpecies();
+            int Ns1 = Ns - 1;
+            int nV = static_cast<int>(state.size());
+            int Isp = nV - Ns1;
+            constexpr real rhoYFloor = 1e-30;
+            real rhoHBeforeClip = phys_.mixtureFormationRhoERaw(state);
+            bool speciesClipped = false;
+            for (int k = 0; k < Ns1; ++k)
+            {
+                real rhoYOld = state(Isp + k);
+                state(Isp + k) = std::max(rhoYOld, rhoYFloor);
+                speciesClipped = speciesClipped || (state(Isp + k) != rhoYOld);
+            }
+            real sumRhoY = 0;
+            for (int k = 0; k < Ns1; ++k)
+                sumRhoY += state(Isp + k);
+            if (sumRhoY > state(0))
+            {
+                real scale = state(0) / sumRhoY * (1.0 - 1e-14);
+                for (int k = 0; k < Ns1; ++k)
+                    state(Isp + k) *= scale;
+                speciesClipped = true;
+            }
+            if (speciesClipped)
+            {
+                real rhoHAfterClip = phys_.mixtureFormationRhoERaw(state);
+                state(I4) += rhoHAfterClip - rhoHBeforeClip;
+            }
+        };
+        auto validPointSourceState = [&](const TU &state) -> bool
+        {
+            if (!state.allFinite() || state(0) <= 0)
+                return false;
+            real rhoInv = 1.0 / state(0);
+            real kinetic = 0;
+            for (int iDim = 1; iDim <= dim; iDim++)
+                kinetic += state(iDim) * state(iDim);
+            kinetic *= 0.5 * rhoInv;
+            real rhoESensible = state(I4) - kinetic - phys_.mixtureFormationRhoERaw(state);
+            if (!std::isfinite(rhoESensible) || rhoESensible <= 0)
+                return false;
+            try
+            {
+                real T = phys_.template temperature<dim>(state);
+                real p = state(0) * phys_.Rgas(state) * T;
+                return std::isfinite(T) && std::isfinite(p) && p > 0 && phys_.toPhysT(T) >= 200.0;
+            }
+            catch (const std::exception &)
+            {
+                return false;
+            }
+        };
+        auto activeResidualNorm = [&](const TU &residualIn) -> real
+        {
+            real ret = 0;
+            for (int iVar = iVarBegPoint; iVar < iVarBegPoint + nPointVars; iVar++)
+                ret = std::max(ret, std::abs(residualIn(iVar)));
+            return ret;
+        };
+        auto activeResidualComponentsDecrease = [&](const TU &candidateResidual, const TU &oldResidual) -> bool
+        {
+            constexpr real absTol = 1e-12;
+            for (int iVar = iVarBegPoint; iVar < iVarBegPoint + nPointVars; iVar++)
+            {
+                real oldAbs = std::abs(oldResidual(iVar));
+                real candAbs = std::abs(candidateResidual(iVar));
+                if (candAbs > oldAbs + absTol && candAbs > oldAbs * (1.0 + 1e-10))
+                    return false;
+            }
+            return true;
+        };
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(guided)
 #endif
@@ -1401,8 +1484,20 @@ namespace DNDS::Euler
             TJacobianU sourceJac;
             EvaluateCellSource(sourceAtU, sourceJac, u[iCell], zeroGrad,
                                iCell, 0, filter);
+            auto sourceResidual = [&](TU &residualOut, const TU &state, const TU &sourceAtState)
+            {
+                residualOut = res[iCell];
+                residualOut -= alphaDiag * sourceAtU;
+                residualOut += alphaDiag * sourceAtState;
+                residualOut += (1.0 / dt) * u[iCell];
+                residualOut -= (1.0 / dt) * state;
+            };
             TU res0Abs = res[iCell].cwiseAbs();
-            res0Abs.array() += smallReal;
+            for (int iVar = 0; iVar < nVars; iVar++)
+                if (!reactiveSpeciesOnly || iVar >= iVarBegPoint)
+                    res0Abs(iVar) += smallReal;
+                else
+                    res0Abs(iVar) = 1.0;
 
             for (int iNewton = 0; iNewton < nNewtonSteps; iNewton++)
             {
@@ -1412,36 +1507,72 @@ namespace DNDS::Euler
                 EvaluateCellSource(sourceAtUNew, sourceJac, uNew[iCell], zeroGrad,
                                    iCell, 2, filter);
 
-                TU residualLocal = res[iCell];
-                residualLocal -= alphaDiag * sourceAtU;
-                residualLocal += alphaDiag * sourceAtUNew;
-                residualLocal += (1.0 / dt) * u[iCell];
-                residualLocal -= (1.0 / dt) * uNew[iCell];
+                TU residualLocal;
+                sourceResidual(residualLocal, uNew[iCell], sourceAtUNew);
+                const real oldResidualNorm = activeResidualNorm(residualLocal);
+                if (oldResidualNorm <= smallReal)
+                    break;
 
                 // sourceJac stores -d(source)/dU. Therefore
                 // (I / dt + alphaDiag * sourceJac) * delta = residualLocal.
-                TJacobianU lhs = alphaDiag * sourceJac;
-                lhs.diagonal().array() += 1.0 / dt;
-                TU delta = lhs.partialPivLu().solve(residualLocal.eval());
-                uNew[iCell] += delta;
+                TU delta;
+                delta.setZero(nVars);
+                if (reactiveSpeciesOnly)
+                {
+                    Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> lhs =
+                        alphaDiag * sourceJac(Eigen::seq(iVarBegPoint, EigenLast), Eigen::seq(iVarBegPoint, EigenLast));
+                    lhs.diagonal().array() += 1.0 / dt;
+                    Eigen::Vector<real, Eigen::Dynamic> rhs = residualLocal(Eigen::seq(iVarBegPoint, EigenLast));
+                    delta(Eigen::seq(iVarBegPoint, EigenLast)) = lhs.partialPivLu().solve(rhs.eval());
+                }
+                else
+                {
+                    TJacobianU lhs = alphaDiag * sourceJac;
+                    lhs.diagonal().array() += 1.0 / dt;
+                    delta = lhs.partialPivLu().solve(residualLocal.eval());
+                }
+                real alpha = 1.0;
+                TU accepted = uNew[iCell];
+                TU acceptedResidual = residualLocal;
+                bool acceptedValid = false;
+                for (int iRelax = 0; iRelax < 16; iRelax++, alpha *= 0.5)
+                {
+                    TU deltaTry = this->CompressInc(uNew[iCell], alpha * delta);
+                    TU candidate = uNew[iCell] + deltaTry;
+                    repairReactiveSpecies(candidate);
+                    if (!validPointSourceState(candidate))
+                        continue;
+                    TU sourceAtCandidate;
+                    sourceAtCandidate.setZero(nVars);
+                    EvaluateCellSource(sourceAtCandidate, sourceJac, candidate, zeroGrad,
+                                       iCell, 0, filter);
+                    TU residualCandidate;
+                    sourceResidual(residualCandidate, candidate, sourceAtCandidate);
+                    real candidateResidualNorm = activeResidualNorm(residualCandidate);
+                    if (candidateResidualNorm <= oldResidualNorm &&
+                        activeResidualComponentsDecrease(residualCandidate, residualLocal))
+                    {
+                        accepted = candidate;
+                        acceptedResidual = residualCandidate;
+                        acceptedValid = true;
+                        break;
+                    }
+                }
+                if (!acceptedValid)
+                    break;
+                uNew[iCell] = accepted;
 
                 if (outputResidualRatio)
                 {
-                    sourceAtUNew.setZero(nVars);
-                    EvaluateCellSource(sourceAtUNew, sourceJac, uNew[iCell], zeroGrad,
-                                       iCell, 0, filter);
-                    residualLocal = res[iCell];
-                    residualLocal -= alphaDiag * sourceAtU;
-                    residualLocal += alphaDiag * sourceAtUNew;
-                    residualLocal += (1.0 / dt) * u[iCell];
-                    residualLocal -= (1.0 / dt) * uNew[iCell];
-                    TU ratio = residualLocal.cwiseAbs().cwiseQuotient(res0Abs);
+                    TU ratio = acceptedResidual.cwiseAbs().cwiseQuotient(res0Abs);
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp critical(DNDSPointImplicitSourceRatio)
 #endif
                     {
                         for (int iVar = 0; iVar < nVars; iVar++)
                         {
+                            if (reactiveSpeciesOnly && iVar < iVarBegPoint)
+                                ratio(iVar) = 0.0;
                             const index iOut = static_cast<index>(iNewton) * nVars + iVar;
                             localRatioMin[iOut] = std::min(localRatioMin[iOut], ratio(iVar));
                             localRatioMax[iOut] = std::max(localRatioMax[iOut], ratio(iVar));
