@@ -56,8 +56,10 @@ struct TestBlockLU : public tBase
             diag[i].setZero();
             lower[i].resize(s->lowerTriStructure[i].size());
             upper[i].resize(s->upperTriStructure[i].size());
-            for (auto &b : lower[i]) b.setZero();
-            for (auto &b : upper[i]) b.setZero();
+            for (auto &b : lower[i])
+                b.setZero();
+            for (auto &b : upper[i])
+                b.setZero();
         }
     }
 
@@ -150,6 +152,24 @@ TEST_CASE("Direct 2D periodic: symbolic factorization has fill-in")
     CHECK(maxLower > 2); // definitely more than the original 2 lower neighbors
 }
 
+TEST_CASE("Direct symbolic factorization ignores self edges")
+{
+    std::vector<std::vector<DNDS::index>> adj = {
+        {0, 1},
+        {0, 1},
+    };
+
+    auto symLU = std::make_shared<Direct::SerialSymLUStructure>(g_mpi, 2);
+    symLU->ObtainSymmetricSymbolicFactorization(adj, {0, 2}, 0);
+
+    CHECK(symLU->lowerTriStructure[0].empty());
+    CHECK(symLU->upperTriStructure[1].empty());
+    REQUIRE(symLU->cell2cellFaceVLocal2FullRowPos[0].size() == 2);
+    REQUIRE(symLU->cell2cellFaceVLocal2FullRowPos[1].size() == 2);
+    CHECK(symLU->cell2cellFaceVLocal2FullRowPos[0][0] == 0);
+    CHECK(symLU->cell2cellFaceVLocal2FullRowPos[1][1] == 0);
+}
+
 TEST_CASE("Direct 2D periodic: MatMul is correct")
 {
     auto symLU = std::make_shared<Direct::SerialSymLUStructure>(g_mpi, NCells);
@@ -176,7 +196,7 @@ TEST_CASE("Direct 2D periodic: MatMul is correct")
     BVec expected = lu.diag[0] * x[0];
     // 4 neighbors of cell 0 (periodic: left=G-1, right=1, up=(G-1)*G, down=G)
     DNDS::index neighbors[] = {cellIdx(r0 - 1, c0), cellIdx(r0 + 1, c0),
-                                cellIdx(r0, c0 - 1), cellIdx(r0, c0 + 1)};
+                               cellIdx(r0, c0 - 1), cellIdx(r0, c0 + 1)};
     for (auto nb : neighbors)
         expected -= x[nb]; // off-diag = -I
 
@@ -275,7 +295,7 @@ TEST_CASE("Direct 2D periodic: ILU(0) is approximate but reduces residual")
     std::cout << "[2D-ILU0] relResidual = " << std::scientific << relResidual << std::endl;
 
     // ILU(0) on a 2D periodic grid is NOT exact (has fill-in), but should reduce residual
-    CHECK(relResidual < 0.5); // significant reduction from initial residual of ~1
+    CHECK(relResidual < 0.5);   // significant reduction from initial residual of ~1
     CHECK(relResidual > 1e-14); // not exact
 }
 
@@ -371,7 +391,8 @@ struct TestBlockLDLT : public tLDLTBase
         {
             diag[i].setZero();
             lower[i].resize(s->lowerTriStructure[i].size());
-            for (auto &b : lower[i]) b.setZero();
+            for (auto &b : lower[i])
+                b.setZero();
         }
     }
 

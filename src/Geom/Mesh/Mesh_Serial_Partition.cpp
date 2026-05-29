@@ -196,7 +196,7 @@ namespace DNDS::Geom
                     for (auto iFace : cell2face[iCell])
                     {
                         index iCellOther = this->CellFaceOther(iCell, iFace);
-                        if (iCellOther != UnInitIndex && iCellOther < this->NumCell()) //! must be local not ghost ptrs
+                        if (iCellOther != UnInitIndex && iCellOther != iCell && iCellOther < this->NumCell()) //! must be local not ghost ptrs
                         {
                             if (onLocalPartition)
                                 if (iCellOther < this->LocalPartStart(iPart) || iCellOther >= this->LocalPartEnd(iPart))
@@ -217,6 +217,8 @@ namespace DNDS::Geom
                     std::sort(c2ni.begin(), c2ni.end());
                     for (index iCellOther : cell2cell[iCell])
                     {
+                        if (iCellOther == iCell)
+                            continue;
                         if (iCellOther >= this->NumCell())
                             continue;
                         if (onLocalPartition)
