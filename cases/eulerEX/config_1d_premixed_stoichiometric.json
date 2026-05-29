@@ -19,7 +19,7 @@
         "latestRun": {
             "commandContext": "Run from build/ with DNDS_MECH_PATH and CANTERA_DATA pointing to external/cfd_externals/repos/cantera/data; use mpirun -np 4 ./app/eulerEX.exe 14 ../cases/eulerEX/config_1d_premixed_stoichiometric.json.",
             "dtImplicitCode": 0.01,
-            "physicalSteps": 1000,
+            "physicalSteps": 10000,
             "internalPseudoSteps": 100,
             "outputEverySteps": 100,
             "outputDirectory": "../data/out/react_1d_premixed_dt1e2_np4_i100_1000/",
@@ -33,24 +33,25 @@
         }
     },
     "timeMarchControl": {
-        "dtImplicit": 1e-2,
+        "dtImplicit": 1e-3,
         "nTimeStep": 1000,
         "steadyQuit": false,
         "tEnd": 1e100,
-        "odeCode": 103,
+        "odeCode": 1,
         "odeSetting1": 0.5,
-        "rhsFPPMode": 0,
+        "rhsFPPMode": 2,
         "rhsFPPScale": 1,
         "useDtPPLimit": false,
         "dtPPLimitScale": 1
     },
     "outputControl": {
-        "nConsoleCheck": 100,
-        "nConsoleCheckInternal": 1000000,
+        "nConsoleCheck": 1,
+        "nConsoleCheckInternal": 1,
         "nDataOutC": 1,
         "nDataOut": 100,
         "tDataOut": 3e+200,
         "dataOutAtInit": true,
+        "consoleOutputEveryFix": 1,
         "consoleMainOutputFormat": [
             "=== Step {termBold}[{step:4d}]   ",
             "res {termBold}{termRed}{resRel:.3e}{termReset}   ",
@@ -68,12 +69,16 @@
     },
     "implicitCFLControl": {
         "CFL": 1,
-        "useLocalDt": false
+        "nSmoothDTau": 4,
+        "useLocalDt": true,
+        "nCFLRampStart": 20,
+        "nCFLRampLength": 40,
+        "CFLRampEnd": 1000
     },
     "convergenceControl": {
-        "nTimeStepInternal": 100,
+        "nTimeStepInternal": 400,
         "nTimeStepInternalMin": 20,
-        "rhsThresholdInternal": 1e-4,
+        "rhsThresholdInternal": 1e-3,
         "res_base": 0,
         "useVolWiseResidual": true
     },
@@ -81,7 +86,7 @@
         "uniqueStamps": true,
         "meshScale": 0.02,
         "meshFile": "../data/mesh/Uniform_01_400.cgns",
-        "outPltName": "../data/out/react_1d_premixed_dt1e2_np4_i100_1000/react_",
+        "outPltName": "../data/out/react_1d_premixed_dt1e2_np4_i400_10000/react_",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": false,
@@ -104,10 +109,17 @@
     },
     "linearSolverControl": {
         "jacobiCode": 0,
-        "sgsIter": 5,
+        "sgsIter": 10,
         "gmresCode": 0,
+        "nGmresIter": 1,
+        "nGmresSpace": 10,
         "nSgsConsoleCheck": 100,
-        "sourceTauSplitting": 0
+        "sourceTauSplitting": 0,
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": -1,
+            "orderingCode": 4
+        }
     },
     "implicitReconstructionControl": {
         "nInternalRecStep": 1,
@@ -123,13 +135,15 @@
         "subs2ndOrder": 1
     },
     "eulerSettings": {
+        "pointImplicitSourceUpdateOut": 1,
+        "reactiveSourceScale": 0,
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
         "riemannSolverType": "Roe_M2",
         "rsMeanValueEig": 1,
         "uRecAlphaCompressPower": 1.0,
         "uRecBetaCompressPower": 1.0,
-        "ppEpsIsRelaxed": true,
+        "ppEpsIsRelaxed": false,
         "ransModel": "RANS_None",
         "reactiveFlow": {
             "enabled": true,
