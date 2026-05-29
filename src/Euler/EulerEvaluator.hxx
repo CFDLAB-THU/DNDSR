@@ -1397,6 +1397,7 @@ namespace DNDS::Euler
         const int iVarBegPoint = reactiveSpeciesOnly ? nVars - Ns1Point : 0;
         const int nPointVars = reactiveSpeciesOnly ? Ns1Point : nVars;
         const int nPseudoSteps = std::max(nNewtonSteps, 8);
+        static constexpr int useCanteraAffineReactor = 1;
         const bool outputResidualRatio = settings.pointImplicitSourceUpdateOut == 1;
         std::vector<real> localRatioMin(std::max(nPseudoSteps, 0) * nVars, veryLargeReal);
         std::vector<real> localRatioMax(std::max(nPseudoSteps, 0) * nVars, 0.0);
@@ -1506,6 +1507,67 @@ namespace DNDS::Euler
                     res0Abs(iVar) += smallReal;
                 else
                     res0Abs(iVar) = 1.0;
+
+            if constexpr (useCanteraAffineReactor)
+            {
+                if (reactiveSpeciesOnly)
+                {
+                    try
+                    {
+                        std::vector<double> Y(static_cast<size_t>(phys_.nSpecies()), 0.0);
+                        real rhoInv = 1.0 / std::max(uNew[iCell](0), real(1e-60));
+                        real sumY = 0.0;
+                        for (int k = 0; k < Ns1Point; ++k)
+                        {
+                            Y[static_cast<size_t>(k)] = std::max(real(0), uNew[iCell](iVarBegPoint + k) * rhoInv);
+                            sumY += Y[static_cast<size_t>(k)];
+                        }
+                        Y[static_cast<size_t>(Ns1Point)] = std::max(real(0), 1.0 - sumY);
+
+                        std::vector<double> constantTerm(static_cast<size_t>(phys_.nSpecies()), 0.0);
+                        real sumC = 0.0;
+                        for (int k = 0; k < Ns1Point; ++k)
+                        {
+                            int iVar = iVarBegPoint + k;
+                            constantTerm[static_cast<size_t>(k)] =
+                                (res[iCell](iVar) - alphaDiag * sourceAtU(iVar) + u[iCell](iVar) / dt) * rhoInv;
+                            sumC += constantTerm[static_cast<size_t>(k)];
+                        }
+                        constantTerm[static_cast<size_t>(Ns1Point)] = 1.0 / dt - sumC;
+
+                        TU candidate = uNew[iCell];
+                        real T = phys_.template temperature<dim>(candidate);
+                        phys_.advanceAffineConstVolumeY(
+                            T, candidate(0),
+                            Chemistry::SpeciesBufferView{Y.data(), static_cast<int>(Y.size())},
+                            alphaDiag, dt,
+                            Chemistry::ConstSpeciesBufferView{constantTerm.data(), static_cast<int>(constantTerm.size())},
+                            1.0 * dt,
+                            1e-4, 1e-4, 0, 2000);
+                        for (int k = 0; k < Ns1Point; ++k)
+                            candidate(iVarBegPoint + k) = candidate(0) * Y[static_cast<size_t>(k)];
+                        repairReactiveSpecies(candidate);
+
+                        if (validPointSourceState(candidate))
+                        {
+                            TU sourceAtCandidate;
+                            sourceAtCandidate.setZero(nVars);
+                            EvaluateCellSource(sourceAtCandidate, sourceJac, candidate, zeroGrad,
+                                               iCell, 0, filter);
+                            TU residualCandidate;
+                            sourceResidual(residualCandidate, candidate, sourceAtCandidate);
+                            uNew[iCell] = candidate;
+                            for (int iPseudo = 0; iPseudo < nPseudoSteps; iPseudo++)
+                                recordResidualRatio(iPseudo, residualCandidate, res0Abs);
+                            continue;
+                        }
+                    }
+                    catch (const std::exception &)
+                    {
+                        // Fall through to the local pseudo-time linearized update.
+                    }
+                }
+            }
 
             real pseudoDtauScale = 1.0;
             for (int iPseudo = 0; iPseudo < nPseudoSteps; iPseudo++)

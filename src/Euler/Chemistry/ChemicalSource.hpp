@@ -145,6 +145,23 @@ namespace DNDS::Euler::Chemistry
                                         JacobianBufferView dOmegadU,
                                         int jacFlags = 0) const;
 
+        /**
+         * Advance a constant-volume ideal-gas reactor with an affine species RHS:
+         * dY/dtau = chemistryScale * chemistryYdot(Y) - Y / linearTime + constantTerm.
+         * Inputs and outputs are physical SI units. @p Y and @p constantTerm are full
+         * nSpecies vectors. The reactor uses Cantera's ReactorNet/CVODE internally.
+         */
+        void advanceAffineConstVolume(double &T, double rho,
+                                      SpeciesBufferView Y,
+                                      double chemistryScale,
+                                      double linearTime,
+                                      ConstSpeciesBufferView constantTerm,
+                                      double advanceTime,
+                                      double rtol = 1e-10,
+                                      double atol = 1e-18,
+                                      int maxOrder = 1,
+                                      int maxSteps = 10000000) const;
+
         // ---- Transport ----
 
         double viscosity(double T, double p, ConstSpeciesBufferView Y) const;

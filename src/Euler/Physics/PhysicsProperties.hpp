@@ -867,6 +867,30 @@ namespace DNDS::Euler
 
         int nSpecies() const { return hasChemicalSource() ? chem().nSpecies() : 0; }
 
+        void advanceAffineConstVolumeY(real &T, real rho,
+                                       Chemistry::SpeciesBufferView Y,
+                                       real chemistryScale,
+                                       real linearTime,
+                                       Chemistry::ConstSpeciesBufferView constantTerm,
+                                       real advanceTime,
+                                       real rtol = 1e-10,
+                                       real atol = 1e-18,
+                                       int maxOrder = 1,
+                                       int maxSteps = 2000) const
+        {
+            DNDS_assert(hasChemicalSource());
+            std::vector<double> cPhys(static_cast<size_t>(constantTerm.nSpecies));
+            for (int k = 0; k < constantTerm.nSpecies; ++k)
+                cPhys[static_cast<size_t>(k)] = constantTerm[k] / t0();
+            double TPhys = toPhysT(T);
+            chem().advanceAffineConstVolume(
+                TPhys, rho * igProp_->rho0, Y, chemistryScale,
+                linearTime * t0(),
+                Chemistry::ConstSpeciesBufferView{cPhys.data(), static_cast<int>(cPhys.size())},
+                advanceTime * t0(), rtol, atol, maxOrder, maxSteps);
+            T = toCodeT(TPhys);
+        }
+
         /// Per-species total specific enthalpies in code units (h_k/U0²).
         /// For ideal-gas EOS: h_k = e_sensible_k + h_f_k + R_k·T  (no KE term).
         /// For non-ideal EOS, Cantera's speciesEnthalpies includes EOS-specific
