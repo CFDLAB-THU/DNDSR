@@ -145,6 +145,13 @@ namespace DNDS::Euler
         /*                   DEFINE LAMBDAS                    */
         /*******************************************************/
 
+        const bool sourceTauSplittingEnabled = config.linearSolverControl.sourceTauSplitting &&
+                                               TEval::Traits::isExtended &&
+                                               eval.settings.reactiveFlow.enabled;
+        const uint64_t sourceTauSplittingRHSFlag = sourceTauSplittingEnabled
+                                                       ? TEval::RHS_Ignore_Reactive_Source_Jacobian
+                                                       : TEval::RHS_No_Flags;
+
         auto frhsOuter =
             [&](
                 ArrayDOFV<nVarsFixed> &crhs,
@@ -212,7 +219,7 @@ namespace DNDS::Euler
                 alphaPP_tmp.setConstant(1.0);
                 uRecNew.setConstant(0.0);
                 eval.EvaluateRHS(crhs, JSourceC, cx, uRecNew, uRecNew, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit,
-                                 TEval::RHS_Ignore_Viscosity); // TODO: test with viscosity // TODO: RHS_Direct_2nd_Rec_1st_Conv?
+                                 TEval::RHS_Ignore_Viscosity | sourceTauSplittingRHSFlag); // TODO: test with viscosity // TODO: RHS_Direct_2nd_Rec_1st_Conv?
                 // vfv->DoReconstruction2nd(uRecOld, cx, FBoundary, 1, std::vector<int>());
                 // eval.EvaluateRHS(crhs, JSourceC, cx, uRecOld, uRecNew, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit,
                 //                  0); // TEval::RHS_Ignore_Viscosity
@@ -631,13 +638,14 @@ namespace DNDS::Euler
             if (config.implicitReconstructionControl.useExplicit)
                 eval.EvaluateRHS(crhs, JSourceC, cx, uRecC /* dummy*/, uRecC /* dummy*/,
                                  betaPPC /* dummy*/, alphaPP_tmp /* dummy*/, false, tSimu + ct * curDtImplicit,
-                                 TEval::RHS_Direct_2nd_Rec | (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags));
+                                 TEval::RHS_Direct_2nd_Rec | (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags) |
+                                     sourceTauSplittingRHSFlag);
             else if (config.limiterControl.useLimiter || config.limiterControl.usePPRecLimiter) // todo: opt to using limited for uRecUnlim
                 eval.EvaluateRHS(crhs, JSourceC, cx, config.limiterControl.useViscousLimited ? uRecLimited : uRecC, uRecLimited,
-                                 betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit);
+                                 betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit, sourceTauSplittingRHSFlag);
             else
                 eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, uRecC,
-                                 betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit);
+                                 betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit, sourceTauSplittingRHSFlag);
 
             crhs.trans.startPersistentPull();
             crhs.trans.waitPersistentPull();
@@ -666,7 +674,8 @@ namespace DNDS::Euler
                 return eval.EvaluateRHS(crhs, JSource, cx, uRecNew, uRecNew, betaPP, alphaPP_tmp, false, tSimu + ct * curDtImplicit,
                                         TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration |
                                             TEval::RHS_Direct_2nd_Rec_already_have_uGradBufNoLim | //! uGradBufNoLim already existent in fdtau
-                                            (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags));
+                                            (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags) |
+                                            sourceTauSplittingRHSFlag);
                 //! note: in HM3 IV test for TPMG, this O1 version makes convergence slower compared to the O2 one, why?
                 // static const int use_1st_conv = 1;
                 // static const int use_1st_conv_ignore_vis = 0;
@@ -810,12 +819,6 @@ namespace DNDS::Euler
             auto &dTauC = config.timeMarchControl.rhsFPPMode == 2 ? dTauTmp : dTau;
             Timer().StopTimer(PerformanceTimer::Positivity);
 
-            // Source time splitting: zero out source Jacobian so the implicit
-            // linear solve only sees transport + pseudo-time terms.  The source
-            // contribution to the RHS residual is still present.
-            if (config.linearSolverControl.sourceTauSplitting)
-                JSourceC.clearValues();
-
             if (config.limiterControl.useLimiter) // uses urec value
                 eval.LUSGSMatrixInit(JDC, JSourceC,
                                      dTauC, dt, alphaDiag,
@@ -838,55 +841,34 @@ namespace DNDS::Euler
                               JDC, *gmres, !isTPMGLevel ? 0 : 1); //! here we borrow PMG's level1 setting into TPMG
 
             // ----------------------------------------------------------------
-            // Source time splitting: pointwise Newton correction for chemistry
+            // Source time splitting: rebuild residual, then apply pointwise source update
             // ----------------------------------------------------------------
-            if (config.linearSolverControl.sourceTauSplitting && !eval.settings.ignoreSourceTerm)
+            if (sourceTauSplittingEnabled && !eval.settings.ignoreSourceTerm)
             {
-                // 1. Apply compressed increment to get u* = cx + compressed(cxInc)
                 DNDS_EULER_SOLVER_GET_TEMP_UDOF(uStar)
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(rhsRebuilt)
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(resRebuilt)
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(uSourceUpdated)
+
+                // Apply the transport/pseudo-time linear increment first, so the
+                // source update sees the actual state used in the nonlinear residual.
                 uStar = cx;
                 fincrement(uStar, cxInc, 1.0, uPos);
 
-                // 2. Pointwise Newton iterations for reactive source correction.
-                //    At u*, the transport residual is approximately zero (solved
-                //    implicitly). The remaining residual is dominated by reactive
-                //    source terms. We do fixed Newton steps per cell using
-                //    EvaluateCellSource(ReactiveOnly).
-                //
-                //    WARNING: zero gradient is used for the pointwise source
-                //    evaluation. This is exact for chemical source (which depends
-                //    on state, not gradients) but will miss gradient-dependent
-                //    reactive terms if any are added in the future.
-                const int nSourceNewtonSteps = 3; // TODO: make configurable
-                TDiffU zeroGrad;
-                zeroGrad.resize(Eigen::NoChange, nVars);
-                zeroGrad.setZero();
+                fdtau(uStar, dTau, alphaDiag, uPos);
+                frhs(rhsRebuilt, uStar, dTau, iter, ct, uPos);
 
-                for (int iNewton = 0; iNewton < nSourceNewtonSteps; iNewton++)
-                {
-                    for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-                    {
-                        TU srcRHS;
-                        srcRHS.setZero(nVars);
-                        TJacobianU srcJac;
-                        TU uLocal = uStar[iCell];
-                        eval.EvaluateCellSource(srcRHS, srcJac, uLocal, zeroGrad,
-                                                iCell, 2, SourceFilter::ReactiveOnly);
+                resRebuilt = rhsRebuilt;
+                resRebuilt *= alphaDiag;
+                resRebuilt.addTo(uStar, -1.0 / dt);
+                resRebuilt += resOther;
 
-                        // Assemble: (1/dt + alphaDiag * (-dS/dU)) * delta = alphaDiag * S(u*)
-                        // srcJac stores -dS/dU (from jac(i,j) -= val convention)
-                        TJacobianU A = alphaDiag * srcJac;
-                        A.diagonal().array() += 1.0 / dt;
-                        TU rhs_local = alphaDiag * srcRHS;
-                        TU delta = A.partialPivLu().solve(rhs_local.eval());
-                        uStar[iCell] += delta;
-                    }
-                }
-                eval.FixUMaxFilter(uStar);
+                eval.PointImplicitSourceUpdate(uSourceUpdated, resRebuilt, uStar,
+                                               alphaDiag, dt, 3, SourceFilter::ReactiveOnly);
+                eval.FixUMaxFilter(uSourceUpdated);
 
-                // 3. cxInc = uStar - cx (so that fincrement(cx, cxInc) reproduces uStar)
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-                    cxInc[iCell] = uStar[iCell] - cx[iCell];
+                    cxInc[iCell] = uSourceUpdated[iCell] - cx[iCell];
             }
 
             // cxInc: in: full increment from previous level; out: full increment form current level
@@ -957,7 +939,8 @@ namespace DNDS::Euler
                                              TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration |
                                                  TEval::RHS_Direct_2nd_Rec_already_have_uGradBufNoLim | //! uGradBufNoLim already existent in fdtau
                                                  (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags) |
-                                                 TEval::RHS_Recover_IncFScale);
+                                                 TEval::RHS_Recover_IncFScale |
+                                                 sourceTauSplittingRHSFlag);
                         else if (mgLevel == 2)
                             eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
                                              config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
@@ -969,7 +952,8 @@ namespace DNDS::Euler
                                                  (TEval::RHS_Ignore_Viscosity * use_1st_conv_ignore_vis) |
                                                  TEval::RHS_Direct_2nd_Rec_already_have_uGradBufNoLim | //! uGradBufNoLim already existent in fdtau
                                                  (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags) |
-                                                 TEval::RHS_Recover_IncFScale);
+                                                 TEval::RHS_Recover_IncFScale |
+                                                 sourceTauSplittingRHSFlag);
                         else
                             DNDS_assert(false);
                     };
@@ -1239,10 +1223,10 @@ namespace DNDS::Euler
             alphaPPC = alphaPP_tmp;
             if (config.limiterControl.useLimiter || config.limiterControl.usePPRecLimiter)
                 eval.EvaluateRHS(crhs, JSourceC, cx, config.limiterControl.useViscousLimited ? uRecLimited : uRecC, uRecLimited,
-                                 betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
+                                 betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit, sourceTauSplittingRHSFlag);
             else
                 eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, uRecC,
-                                 betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
+                                 betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit, sourceTauSplittingRHSFlag);
             // rhs now last-fixed
             crhs.trans.startPersistentPull();
             crhs.trans.waitPersistentPull();
@@ -1267,10 +1251,10 @@ namespace DNDS::Euler
                 alphaPPC = alphaPP_tmp;
                 if (config.limiterControl.useLimiter || config.limiterControl.usePPRecLimiter)
                     eval.EvaluateRHS(crhs, JSourceC, cx, config.limiterControl.useViscousLimited ? uRecLimited : uRecC, uRecLimited,
-                                     betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
+                                     betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit, sourceTauSplittingRHSFlag);
                 else
                     eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, uRecC,
-                                     betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
+                                     betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit, sourceTauSplittingRHSFlag);
                 crhs.trans.startPersistentPull();
                 crhs.trans.waitPersistentPull();
             }

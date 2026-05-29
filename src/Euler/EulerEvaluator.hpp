@@ -430,6 +430,7 @@ namespace DNDS::Euler
         static const uint64_t RHS_Direct_2nd_Rec_use_limiter = 0x1ull << 10;                ///< Apply limiter when using direct 2nd rec.
         static const uint64_t RHS_Direct_2nd_Rec_already_have_uGradBufNoLim = 0x1ull << 11; ///< uGradBufNoLim is already computed.
         static const uint64_t RHS_Recover_IncFScale = 0x1ull << 12;                         ///< Recover incremental face scaling.
+        static const uint64_t RHS_Ignore_Reactive_Source_Jacobian = 0x1ull << 13;           ///< Evaluate reactive source RHS but omit its JSource part.
         /// @}
 
         /**
@@ -1129,6 +1130,23 @@ namespace DNDS::Euler
             ArrayRECV<nVarsFixed> *pURec = nullptr,
             bool direct2ndRec = true,
             real t = 0);
+
+        /**
+         * @brief Apply a cell-local implicit update for a selected source subset.
+         *
+         * Given the latest full residual evaluated at u, solves cell-by-cell for uNew:
+         * res - alphaDiag * source(u) + alphaDiag * source(uNew) + u / dt - uNew / dt = 0.
+         * The source is evaluated at cell means with zero gradient, so this is intended
+         * for pointwise sources such as chemistry.
+         */
+        void PointImplicitSourceUpdate(
+            ArrayDOFV<nVarsFixed> &uNew,
+            const ArrayDOFV<nVarsFixed> &res,
+            const ArrayDOFV<nVarsFixed> &u,
+            real alphaDiag,
+            real dt,
+            int nNewtonSteps = 3,
+            SourceFilter filter = SourceFilter::ReactiveOnly);
 
         /**
          * @brief inviscid flux approx jacobian (flux term not reconstructed / no riemann)
@@ -2093,6 +2111,14 @@ namespace DNDS::Euler
                                                                                                                           \
         ext template void EulerEvaluator<model>::FixUMaxFilter(                                                           \
             ArrayDOFV<nVarsFixed> &u);                                                                                    \
+        ext template void EulerEvaluator<model>::PointImplicitSourceUpdate(                                               \
+            ArrayDOFV<nVarsFixed> &uNew,                                                                                  \
+            const ArrayDOFV<nVarsFixed> &res,                                                                             \
+            const ArrayDOFV<nVarsFixed> &u,                                                                               \
+            real alphaDiag,                                                                                               \
+            real dt,                                                                                                      \
+            int nNewtonSteps,                                                                                             \
+            SourceFilter filter);                                                                                         \
                                                                                                                           \
         ext template void EulerEvaluator<model>::TimeAverageAddition(                                                     \
             ArrayDOFV<nVarsFixed> &w, ArrayDOFV<nVarsFixed> &wAveraged, real dt, real &tCur);                             \

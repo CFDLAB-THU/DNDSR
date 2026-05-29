@@ -1369,6 +1369,110 @@ namespace DNDS::Euler
         return; // ! nofix shortcut
     }
 
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>, )
+    void EulerEvaluator<model>::PointImplicitSourceUpdate(
+        ArrayDOFV<nVarsFixed> &uNew,
+        const ArrayDOFV<nVarsFixed> &res,
+        const ArrayDOFV<nVarsFixed> &u,
+        real alphaDiag,
+        real dt,
+        int nNewtonSteps,
+        SourceFilter filter)
+    {
+        DNDS_check_throw_info(dt > 0, "PointImplicitSourceUpdate requires positive dt");
+        DNDS_check_throw_info(nNewtonSteps >= 0, "PointImplicitSourceUpdate requires non-negative nNewtonSteps");
+
+        TDiffU zeroGrad;
+        zeroGrad.resize(Eigen::NoChange, nVars);
+        zeroGrad.setZero();
+
+        uNew = u;
+        const bool outputResidualRatio = settings.pointImplicitSourceUpdateOut == 1;
+        std::vector<real> localRatioMin(std::max(nNewtonSteps, 0) * nVars, veryLargeReal);
+        std::vector<real> localRatioMax(std::max(nNewtonSteps, 0) * nVars, 0.0);
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp parallel for schedule(guided)
+#endif
+        for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+        {
+            TU sourceAtU;
+            sourceAtU.setZero(nVars);
+            TJacobianU sourceJac;
+            EvaluateCellSource(sourceAtU, sourceJac, u[iCell], zeroGrad,
+                               iCell, 0, filter);
+            TU res0Abs = res[iCell].cwiseAbs();
+            res0Abs.array() += smallReal;
+
+            for (int iNewton = 0; iNewton < nNewtonSteps; iNewton++)
+            {
+                TU sourceAtUNew;
+                sourceAtUNew.setZero(nVars);
+                sourceJac.setZero(nVars, nVars);
+                EvaluateCellSource(sourceAtUNew, sourceJac, uNew[iCell], zeroGrad,
+                                   iCell, 2, filter);
+
+                TU residualLocal = res[iCell];
+                residualLocal -= alphaDiag * sourceAtU;
+                residualLocal += alphaDiag * sourceAtUNew;
+                residualLocal += (1.0 / dt) * u[iCell];
+                residualLocal -= (1.0 / dt) * uNew[iCell];
+
+                // sourceJac stores -d(source)/dU. Therefore
+                // (I / dt + alphaDiag * sourceJac) * delta = residualLocal.
+                TJacobianU lhs = alphaDiag * sourceJac;
+                lhs.diagonal().array() += 1.0 / dt;
+                TU delta = lhs.partialPivLu().solve(residualLocal.eval());
+                uNew[iCell] += delta;
+
+                if (outputResidualRatio)
+                {
+                    sourceAtUNew.setZero(nVars);
+                    EvaluateCellSource(sourceAtUNew, sourceJac, uNew[iCell], zeroGrad,
+                                       iCell, 0, filter);
+                    residualLocal = res[iCell];
+                    residualLocal -= alphaDiag * sourceAtU;
+                    residualLocal += alphaDiag * sourceAtUNew;
+                    residualLocal += (1.0 / dt) * u[iCell];
+                    residualLocal -= (1.0 / dt) * uNew[iCell];
+                    TU ratio = residualLocal.cwiseAbs().cwiseQuotient(res0Abs);
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp critical(DNDSPointImplicitSourceRatio)
+#endif
+                    {
+                        for (int iVar = 0; iVar < nVars; iVar++)
+                        {
+                            const index iOut = static_cast<index>(iNewton) * nVars + iVar;
+                            localRatioMin[iOut] = std::min(localRatioMin[iOut], ratio(iVar));
+                            localRatioMax[iOut] = std::max(localRatioMax[iOut], ratio(iVar));
+                        }
+                    }
+                }
+            }
+        }
+        if (outputResidualRatio && nNewtonSteps > 0)
+        {
+            std::vector<real> ratioMin(localRatioMin.size(), 0.0);
+            std::vector<real> ratioMax(localRatioMax.size(), 0.0);
+            MPI::Allreduce(localRatioMin.data(), ratioMin.data(), localRatioMin.size(), DNDS_MPI_REAL, MPI_MIN, u.father->getMPI().comm);
+            MPI::Allreduce(localRatioMax.data(), ratioMax.data(), localRatioMax.size(), DNDS_MPI_REAL, MPI_MAX, u.father->getMPI().comm);
+            if (u.father->getMPI().rank == 0)
+            {
+                log() << std::scientific;
+                for (int iNewton = 0; iNewton < nNewtonSteps; iNewton++)
+                {
+                    log() << "PointImplicitSourceUpdate Newton [" << iNewton + 1 << "] res/res0 min [";
+                    for (int iVar = 0; iVar < nVars; iVar++)
+                        log() << (iVar ? "," : "") << ratioMin[static_cast<index>(iNewton) * nVars + iVar];
+                    log() << "] max [";
+                    for (int iVar = 0; iVar < nVars; iVar++)
+                        log() << (iVar ? "," : "") << ratioMax[static_cast<index>(iNewton) * nVars + iVar];
+                    log() << "]" << std::endl;
+                }
+            }
+        }
+    }
+
     template <EulerModel model>
     /** @brief Accumulate time-averaged solution field using running weighted average.
      *

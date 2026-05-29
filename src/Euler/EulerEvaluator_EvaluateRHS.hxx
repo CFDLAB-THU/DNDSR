@@ -84,6 +84,7 @@ namespace DNDS::Euler
         const bool direct2ndUseLimiter = flags & RHS_Direct_2nd_Rec_use_limiter;
         const bool direct2ndRec_already_have_uGradBufNoLim = flags & RHS_Direct_2nd_Rec_already_have_uGradBufNoLim;
         const bool recoverIncFScale = flags & RHS_Recover_IncFScale;
+        const bool ignoreReactiveSourceJacobian = (flags & RHS_Ignore_Reactive_Source_Jacobian) && Traits::isExtended;
 
         DNDS_assert(direct2ndRec1stConv ? direct2ndRec : true);
         auto rsType = settings.rsType;
@@ -703,11 +704,25 @@ namespace DNDS::Euler
                 TU cellSrcRHS;
                 cellSrcRHS.setZero(cnvars);
                 int jacMode = JSource.isBlock() ? 2 : 1;
-                EvaluateCellSource(cellSrcRHS, cellJac, u[iCell], dummyGrad,
-                                   iCell, jacMode, SourceFilter::All,
-                                   cellRHSAlpha[iCell](0),
-                                   /*useRecArrays=*/true, &u, &uRecUnlim, &uRec,
-                                   direct2ndRec, t);
+                if (ignoreReactiveSourceJacobian)
+                {
+                    EvaluateCellSource(cellSrcRHS, cellJac, u[iCell], dummyGrad,
+                                       iCell, jacMode, SourceFilter::NonReactiveOnly,
+                                       cellRHSAlpha[iCell](0),
+                                       /*useRecArrays=*/true, &u, &uRecUnlim, &uRec,
+                                       direct2ndRec, t);
+                    EvaluateCellSource(cellSrcRHS, cellJac, u[iCell], dummyGrad,
+                                       iCell, 0, SourceFilter::ReactiveOnly,
+                                       cellRHSAlpha[iCell](0),
+                                       /*useRecArrays=*/true, &u, &uRecUnlim, &uRec,
+                                       direct2ndRec, t);
+                }
+                else
+                    EvaluateCellSource(cellSrcRHS, cellJac, u[iCell], dummyGrad,
+                                       iCell, jacMode, SourceFilter::All,
+                                       cellRHSAlpha[iCell](0),
+                                       /*useRecArrays=*/true, &u, &uRecUnlim, &uRec,
+                                       direct2ndRec, t);
                 rhs[iCell] += cellSrcRHS;
                 if (JSource.isBlock())
                     JSource.getBlock(iCell) = cellJac;
