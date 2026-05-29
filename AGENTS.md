@@ -362,6 +362,16 @@ Key concepts agents should know:
 
 ## GitHub CLI (`gh`) Policy
 
+## Git Commit Messages
+
+Prefer verbose commit messages for non-trivial changes. Keep the subject concise
+and conventional, then use the body to explain the problem, the root cause, the
+fix, and the verification performed. Mention subtle behavioral changes,
+edge-cases, and test coverage so future readers can understand why the change
+was made without reconstructing the investigation from the diff.
+
+For very small mechanical changes, a short message is acceptable.
+
 **Read-only by default.** You may use `gh` freely for read operations (viewing
 issues, PRs, checks, releases, diffs, comments). **Do NOT use `gh` for any
 write operation** (creating/closing issues, creating/merging PRs, posting

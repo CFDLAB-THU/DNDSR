@@ -33,7 +33,6 @@ static typename EulerEvaluatorSettings<model>::IdealGasProperty makeIdealGasProp
     igProp.T0 = 1.0;
     igProp.muGas = 1e-200;
     igProp.prGas = 0.72;
-    igProp.recomputeDerived();
     return igProp;
 }
 

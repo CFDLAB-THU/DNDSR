@@ -309,6 +309,7 @@ namespace DNDS::Euler
             for (index iScan = mesh->LocalPartStart(iPart); iScan < mesh->LocalPartEnd(iPart); iScan++)
             {
                 index iCell = iScan;
+                jacLU.GetDiag(iCell) = JDiag.getValue(iCell);
                 auto c2f = mesh->cell2face[iCell];
                 for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                 {
@@ -318,16 +319,11 @@ namespace DNDS::Euler
                     rowsize iCellAtFace = f2c[0] == iCell ? 0 : 1;
                     TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, iCellAtFace, -1)(Seq012) *
                                     (iCellAtFace ? -1 : 1); // faces out
-                    if (iCellOther != UnInitIndex && iCellOther != iCell &&
+                    if (iCellOther != UnInitIndex &&
                         iCellOther < mesh->LocalPartEnd(iPart) && iCellOther >= mesh->LocalPartStart(iPart))
                     {
                         TU uj = u[iCellOther];
                         this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
-                        int iC2CInLocal = -1;
-                        for (int ic2c = 0; ic2c < mesh->cell2cellFaceVLocalParts[iCell].size(); ic2c++)
-                            if (iCellOther == mesh->cell2cellFaceVLocalParts[iCell][ic2c])
-                                iC2CInLocal = ic2c; // TODO: pre-search this
-                        DNDS_assert(iC2CInLocal != -1);
                         TJacobianU jacIJ;
                         {
                             jacIJ = fluxJacobian0_Right_Times_du_AsMatrix( // unitnorm and uj are both respect with this cell
@@ -352,11 +348,22 @@ namespace DNDS::Euler
                                   mesh->periodicInfo.TransVector<dim, nVarsFixed>(
                                                         jacIJ(EigenAll, Seq123).transpose(), faceID)
                                       .transpose(); });
-                        jacLU.LDU(iCell, symLU->cell2cellFaceVLocal2FullRowPos[iCell][iC2CInLocal]) =
-                            (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * jacIJ;
+                        auto jacBlock = (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * jacIJ;
+                        if (iCellOther == iCell)
+                        {
+                            jacLU.GetDiag(iCell) += jacBlock;
+                        }
+                        else
+                        {
+                            int iC2CInLocal = -1;
+                            for (int ic2c = 0; ic2c < mesh->cell2cellFaceVLocalParts[iCell].size(); ic2c++)
+                                if (iCellOther == mesh->cell2cellFaceVLocalParts[iCell][ic2c])
+                                    iC2CInLocal = ic2c; // TODO: pre-search this
+                            DNDS_assert(iC2CInLocal != -1);
+                            jacLU.LDU(iCell, symLU->cell2cellFaceVLocal2FullRowPos[iCell][iC2CInLocal]) += jacBlock;
+                        }
                     }
                 }
-                jacLU.GetDiag(iCell) = JDiag.getValue(iCell);
             }
         // TODO: make below OMP-ed
         jacLU.InPlaceDecompose();

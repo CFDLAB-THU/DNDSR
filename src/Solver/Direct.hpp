@@ -119,7 +119,8 @@ namespace DNDS::Direct
                 cell2cellFaceVEnlarged.resize(this->Num());
                 for (index iCell = 0; iCell < this->Num(); iCell++)
                     for (auto iCO : cell2cellFaceV[iCell])
-                        cell2cellFaceVEnlarged[iCell].insert(iCO);
+                        if (iCO != iCell)
+                            cell2cellFaceVEnlarged[iCell].insert(iCO);
                 for (int iFill = 0; iFill < iluCode; iFill++)
                 {
                     for (index iCell = 0; iCell < this->Num(); iCell++)
@@ -150,10 +151,12 @@ namespace DNDS::Direct
                 midSymMatCols[iCellP].insert(iCellP);
                 for (auto iCellOther : cell2cellFaceV[iCell])
                 {
+                    if (iCellOther == iCell)
+                        continue;
                     index iCellOtherP = this->FillingReorderOld2New(iCellOther);
                     midSymMatCols[iCellP].insert(iCellOtherP); // assuming cell2cellFaceV is symmetric
+                    nnzOrig++;
                 }
-                nnzOrig += cell2cellFaceV[iCell].size();
             }
 
             for (index iCellP = 0; iCellP < this->Num(); iCellP++) // iterate over the columns
@@ -266,7 +269,11 @@ namespace DNDS::Direct
                 {
                     index j = cell2cellFaceV[i][ic2c];
                     index jP = this->FillingReorderOld2New(j);
-                    if (jP < iP)
+                    if (jP == iP)
+                    {
+                        cell2cellFaceVLocal2FullRowPos[i][ic2c] = 0;
+                    }
+                    else if (jP < iP)
                     {
                         auto &&row = lowerTriStructureNew[iP];
                         auto ret = std::lower_bound(row.begin(), row.end(), jP);
