@@ -1,11 +1,43 @@
 {
     "$schema": "../eulerEX_schema.json",
+    "caseNotes": {
+        "purpose": "One-dimensional stoichiometric premixed H2/air reactive-flow propagation test for eulerEX.",
+        "reference": {
+            "mechanism": "h2o2.yaml",
+            "canteraCase": "scripts/reaction/reference/react_test_stoich_air_profile.csv",
+            "canteraFreeFlameSpeed_m_per_s": 2.2539659771963283,
+            "unburnedState": "T=300 K, p=101325 Pa, Y_H2=0.028, Y_O2=0.222, derived Y_N2=0.75",
+            "burnedState": "Cantera FreeFlame outlet at T=2360.016463669699 K and p=101325 Pa"
+        },
+        "physics": [
+            "The initialized burned gas is on the left and the fresh unburned mixture is on the right.",
+            "A physically propagating premixed flame should move the thermal/reaction front rightward into the unburned mixture.",
+            "The ExprTk initializer uses primTP_phy: UExprtk[0] is temperature in K, UExprtk[4] is pressure in Pa, and species entries are mass fractions for transported species; N2 is derived by closure.",
+            "Reactive transport uses Cantera mixture-averaged viscosity, conductivity, and species diffusivity through h2o2.yaml; idealGasProperty.muGas is not used for reactive transport.",
+            "The current BCFar/BCFar setup is a robust propagation/relaxation test. It is not yet a quantitatively matched freely propagating flame calculation. A strict flame-speed case should use a better initialized Cantera flame profile and consistent inflow/outflow or flame-fixed boundary treatment."
+        ],
+        "latestRun": {
+            "commandContext": "Run from build/ with DNDS_MECH_PATH and CANTERA_DATA pointing to external/cfd_externals/repos/cantera/data; use mpirun -np 4 ./app/eulerEX.exe 14 ../cases/eulerEX/config_1d_premixed_stoichiometric.json.",
+            "dtImplicitCode": 0.01,
+            "physicalSteps": 1000,
+            "internalPseudoSteps": 100,
+            "outputEverySteps": 100,
+            "outputDirectory": "../data/out/react_1d_premixed_dt1e2_np4_i100_1000/",
+            "frontMarker": "T = 0.5 * (300 + 2360.016463669699) K",
+            "frontStart_m": 0.003999999992136576,
+            "frontEnd_m": 0.010109199247294373,
+            "frontDisplacement_m": 0.006109199255157798,
+            "frontSpeedFit_m_per_s": 0.22663946857747272,
+            "frontSpeedFitExcludingInitial_m_per_s": 0.230115,
+            "postProcessing": "See workspace/flame1d for plots and front-tracking summaries."
+        }
+    },
     "timeMarchControl": {
-        "dtImplicit": 1e-4,
+        "dtImplicit": 1e-2,
         "nTimeStep": 1000,
         "steadyQuit": false,
         "tEnd": 1e100,
-        "odeCode": 0,
+        "odeCode": 103,
         "odeSetting1": 0.5,
         "rhsFPPMode": 0,
         "rhsFPPScale": 1,
@@ -13,10 +45,10 @@
         "dtPPLimitScale": 1
     },
     "outputControl": {
-        "nConsoleCheck": 1,
-        "nConsoleCheckInternal": 1,
+        "nConsoleCheck": 100,
+        "nConsoleCheckInternal": 1000000,
         "nDataOutC": 1,
-        "nDataOut": 20,
+        "nDataOut": 100,
         "tDataOut": 3e+200,
         "dataOutAtInit": true,
         "consoleMainOutputFormat": [
@@ -39,8 +71,8 @@
         "useLocalDt": false
     },
     "convergenceControl": {
-        "nTimeStepInternal": 10,
-        "nTimeStepInternalMin": 5,
+        "nTimeStepInternal": 100,
+        "nTimeStepInternalMin": 20,
         "rhsThresholdInternal": 1e-4,
         "res_base": 0,
         "useVolWiseResidual": true
@@ -49,10 +81,10 @@
         "uniqueStamps": true,
         "meshScale": 0.02,
         "meshFile": "../data/mesh/Uniform_01_400.cgns",
-        "outPltName": "../data/out/react_1d_premixed_stoichiometric/react_",
+        "outPltName": "../data/out/react_1d_premixed_dt1e2_np4_i100_1000/react_",
         "outPltMode": 0,
         "readMeshMode": 0,
-        "outPltTecplotFormat": true,
+        "outPltTecplotFormat": false,
         "outPltVTKFormat": true,
         "outAtPointData": true,
         "outAtCellData": true,
@@ -88,7 +120,7 @@
         "SORInstead": true,
         "smoothThreshold": 0.001,
         "WBAP_nStd": 10.0,
-        "subs2ndOrder": 0
+        "subs2ndOrder": 1
     },
     "eulerSettings": {
         "ignoreSourceTerm": false,
@@ -127,11 +159,11 @@
                 "exprs": [
                     "var s := 0.5 * (1.0 - tanh((x[0] - 0.004) / 0.0005));",
                     "inRegion := 1;",
-                    "UExprtk[0] := 0.8534183357651934 + s * (0.12598978792104593 - 0.8534183357651934);",
+                    "UExprtk[0] := 300.0 + s * (2360.016463669699 - 300.0);",
                     "UExprtk[1] := 0.0;",
                     "UExprtk[2] := 0.0;",
                     "UExprtk[3] := 0.0;",
-                    "UExprtk[4] := 0.7054044461460275 + s * (0.9494152318808794 - 0.7054044461460275);",
+                    "UExprtk[4] := 101325.0;",
                     "UExprtk[5] := 0.028 + s * (0.00104252059926818 - 0.028);",
                     "UExprtk[6] := s * 0.00006646761498134932;",
                     "UExprtk[7] := s * 0.00039926443023562515;",
@@ -143,7 +175,7 @@
                     "UExprtk[13] := 0.0;",
                     "0"
                 ],
-                "stateType": "primRhoP"
+                "stateType": "primTP_phy"
             }
         ],
         "constMassForce": [
