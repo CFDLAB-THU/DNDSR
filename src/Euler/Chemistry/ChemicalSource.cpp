@@ -7,12 +7,65 @@
 #include "DNDS/Errors.hpp"
 
 #include "cantera/core.h"
+#include "cantera/numerics/Integrator.h"
+#include "cantera/zeroD/IdealGasReactor.h"
+#include "cantera/zeroD/ReactorNet.h"
 
 #include <cmath>
 #include <algorithm>
 
 namespace DNDS::Euler::Chemistry
 {
+
+    namespace
+    {
+        class AffineIdealGasConstVolReactor : public Cantera::IdealGasReactor
+        {
+        public:
+            using Cantera::IdealGasReactor::IdealGasReactor;
+
+            void setAffineSpeciesRHS(double chemistryScale, double linearTime,
+                                     std::vector<double> constantTerm)
+            {
+                chemistryScale_ = chemistryScale;
+                linearTime_ = linearTime;
+                constantTerm_ = std::move(constantTerm);
+            }
+
+            void eval(double t, double *LHS, double *RHS) override
+            {
+                Cantera::IdealGasReactor::eval(t, LHS, RHS);
+                DNDS_check_throw_info(constantTerm_.size() == m_nsp,
+                                      "AffineIdealGasConstVolReactor: constant term size mismatch");
+                DNDS_check_throw_info(linearTime_ > 0,
+                                      "AffineIdealGasConstVolReactor: linear time must be positive");
+
+                const double *Y = m_thermo->massFractions();
+                const auto &mw = m_thermo->molecularWeights();
+                double *mdYdt = RHS + 3;
+
+                double heatRelease = 0.0;
+                for (size_t k = 0; k < m_nsp; ++k)
+                {
+                    double ydotChem = mdYdt[k] / std::max(m_mass, 1e-300);
+                    double ydot = chemistryScale_ * ydotChem - Y[k] / linearTime_ + constantTerm_[k];
+                    mdYdt[k] = m_mass * ydot;
+                    heatRelease -= m_mass * ydot * (m_uk[k] / mw[k]);
+                    LHS[k + 3] = m_mass;
+                }
+
+                RHS[0] = 0.0;
+                RHS[1] = 0.0;
+                RHS[2] = heatRelease;
+                LHS[2] = m_mass * m_thermo->cv_mass();
+            }
+
+        private:
+            double chemistryScale_ = 1.0;
+            double linearTime_ = 1.0;
+            std::vector<double> constantTerm_;
+        };
+    }
 
     struct ChemicalSource::Impl
     {
@@ -319,6 +372,53 @@ namespace DNDS::Euler::Chemistry
                 d += dWdC.coeff(i, Ns1) * invMlast * rhoScale;
             J(i, 0) = d;
         }
+    }
+
+    void ChemicalSource::advanceAffineConstVolume(
+        double &T, double rho,
+        SpeciesBufferView Y,
+        double chemistryScale,
+        double linearTime,
+        ConstSpeciesBufferView constantTerm,
+        double advanceTime,
+        double rtol,
+        double atol,
+        int maxOrder,
+        int maxSteps) const
+    {
+        DNDS_check_throw_info(Y.nSpecies == impl_->Ns, "advanceAffineConstVolume(): Y size mismatch");
+        DNDS_check_throw_info(constantTerm.nSpecies == impl_->Ns, "advanceAffineConstVolume(): constant term size mismatch");
+        DNDS_check_throw_info(std::isfinite(T) && T > 0, "advanceAffineConstVolume(): T must be positive");
+        DNDS_check_throw_info(std::isfinite(rho) && rho > 0, "advanceAffineConstVolume(): rho must be positive");
+        DNDS_check_throw_info(std::isfinite(linearTime) && linearTime > 0, "advanceAffineConstVolume(): linearTime must be positive");
+        DNDS_check_throw_info(std::isfinite(advanceTime) && advanceTime >= 0, "advanceAffineConstVolume(): advanceTime must be non-negative");
+
+        auto sol = impl_->sol->clone({}, true, false);
+        auto gas = sol->thermo();
+        gas->setMassFractions_NoNorm(Y.data);
+        gas->setState_TD(T, rho);
+
+        std::vector<double> c(static_cast<size_t>(impl_->Ns));
+        for (int k = 0; k < impl_->Ns; ++k)
+            c[static_cast<size_t>(k)] = constantTerm[k];
+
+        auto reactor = std::make_shared<AffineIdealGasConstVolReactor>(sol, false, "affine_cv");
+        reactor->setInitialVolume(1.0 / rho);
+        reactor->setChemistryEnabled(true);
+        reactor->setEnergyEnabled(true);
+        reactor->setAffineSpeciesRHS(chemistryScale, linearTime, std::move(c));
+
+        Cantera::ReactorNet net(reactor);
+        net.setTolerances(rtol, atol);
+        net.setMaxSteps(maxSteps);
+        if (maxOrder > 0)
+            net.integrator().setMaxOrder(maxOrder);
+        net.advance(advanceTime);
+
+        T = reactor->temperature();
+        const double *YEnd = reactor->massFractions();
+        for (int k = 0; k < impl_->Ns; ++k)
+            Y[k] = YEnd[k];
     }
 
     // ---- transport -----------------------------------------------------------

@@ -52,6 +52,165 @@ static auto makeTestFixture()
     return Fixture{std::move(pool), std::move(phys)};
 }
 
+TEST_CASE("Cantera custom const-volume affine species reactor")
+{
+    auto sol = Cantera::newSolution(mechFile(), "", "");
+    auto gas = sol->thermo();
+    ChemicalSource chem(mechFile());
+    auto iH2 = gas->speciesIndex("H2");
+    auto iO2 = gas->speciesIndex("O2");
+    auto iH2O = gas->speciesIndex("H2O");
+    auto iN2 = gas->speciesIndex("N2");
+    REQUIRE(iH2 != Cantera::npos);
+    REQUIRE(iO2 != Cantera::npos);
+    REQUIRE(iH2O != Cantera::npos);
+    REQUIRE(iN2 != Cantera::npos);
+
+    std::vector<double> y0(gas->nSpecies(), 0.0);
+    y0[iH2] = 0.028;
+    y0[iO2] = 0.222;
+    y0[iN2] = 0.75;
+    gas->setMassFractions_NoNorm(y0.data());
+    gas->setState_TP(1200.0, Cantera::OneAtm);
+
+    std::vector<double> yTarget(gas->nSpecies(), 0.0);
+    yTarget[iH2] = 0.010;
+    yTarget[iO2] = 0.120;
+    yTarget[iH2O] = 0.150;
+    yTarget[iN2] = 0.720;
+    double yTargetSum = 0.0;
+    for (double y : yTarget)
+        yTargetSum += y;
+    REQUIRE(yTargetSum == doctest::Approx(1.0).epsilon(1e-14));
+
+    const double tau = 1.0e-4;
+    std::vector<double> constantTerm(gas->nSpecies(), 0.0);
+    for (size_t k = 0; k < constantTerm.size(); ++k)
+        constantTerm[k] = yTarget[k] / tau;
+
+    double T = 1200.0;
+    double rho = 1.0;
+    std::vector<double> yEnd = y0;
+    chem.advanceAffineConstVolume(T, rho, SpeciesBufferView{yEnd.data(), static_cast<int>(yEnd.size())},
+                                  0.0, tau,
+                                  ConstSpeciesBufferView{constantTerm.data(), static_cast<int>(constantTerm.size())},
+                                  8.0 * tau);
+
+    double maxErr = 0.0;
+    double sumY = 0.0;
+    for (size_t k = 0; k < yTarget.size(); ++k)
+    {
+        maxErr = std::max(maxErr, std::abs(yEnd[k] - yTarget[k]));
+        sumY += yEnd[k];
+    }
+
+    printf("[affine-reactor] T=%.3f max|Y-target|=%.3e sumY=%.15f Y_H2=%.6f Y_H2O=%.6f\n",
+           T, maxErr, sumY, yEnd[iH2], yEnd[iH2O]);
+
+    CHECK(maxErr < 4.0e-4);
+    CHECK(sumY == doctest::Approx(1.0).epsilon(1e-10));
+    CHECK(yEnd[iH2] < y0[iH2]);
+    CHECK(yEnd[iH2O] > y0[iH2O]);
+}
+
+TEST_CASE("Cantera custom affine reactor reduces target residual")
+{
+    auto sol = Cantera::newSolution(mechFile(), "", "");
+    auto gas = sol->thermo();
+    auto kin = sol->kinetics();
+    ChemicalSource chem(mechFile());
+    auto iH2 = gas->speciesIndex("H2");
+    auto iO2 = gas->speciesIndex("O2");
+    auto iH2O = gas->speciesIndex("H2O");
+    auto iN2 = gas->speciesIndex("N2");
+    REQUIRE(iH2 != Cantera::npos);
+    REQUIRE(iO2 != Cantera::npos);
+    REQUIRE(iH2O != Cantera::npos);
+    REQUIRE(iN2 != Cantera::npos);
+
+    auto normalize = [](std::vector<double> &Y)
+    {
+        double sum = 0.0;
+        for (double &y : Y)
+        {
+            y = std::max(y, 0.0);
+            sum += y;
+        }
+        REQUIRE(sum > 0);
+        for (double &y : Y)
+            y /= sum;
+    };
+
+    std::vector<double> yTarget(gas->nSpecies(), 0.0);
+    yTarget[iH2] = 0.022;
+    yTarget[iO2] = 0.180;
+    yTarget[iH2O] = 0.030;
+    yTarget[iN2] = 0.768;
+    normalize(yTarget);
+
+    std::vector<double> yStart = yTarget;
+    yStart[iH2] += 0.006;
+    yStart[iO2] += 0.020;
+    yStart[iH2O] -= 0.025;
+    yStart[iN2] -= 0.001;
+    normalize(yStart);
+
+    std::vector<double> molecularWeights(gas->nSpecies());
+    gas->getMolecularWeights(molecularWeights.data());
+
+    auto chemistryYDot = [&](const std::vector<double> &Y, double T, double rho)
+    {
+        gas->setMassFractions_NoNorm(Y.data());
+        gas->setState_TD(T, rho);
+        std::vector<double> omega(gas->nSpecies(), 0.0);
+        kin->getNetProductionRates(omega.data());
+        std::vector<double> ydot(gas->nSpecies(), 0.0);
+        for (size_t k = 0; k < ydot.size(); ++k)
+            ydot[k] = omega[k] * molecularWeights[k] / rho;
+        return ydot;
+    };
+
+    auto affineResidualNorm = [&](const std::vector<double> &Y, double T, double rho,
+                                  double dt, const std::vector<double> &C)
+    {
+        auto ydot = chemistryYDot(Y, T, rho);
+        double norm = 0.0;
+        for (size_t k = 0; k < Y.size(); ++k)
+            norm = std::max(norm, std::abs(ydot[k] - Y[k] / dt + C[k]));
+        return norm;
+    };
+
+    const double T0 = 1200.0;
+    const double rho0 = 1.0;
+    const double dt = 2.0e-5;
+    auto ydotTarget = chemistryYDot(yTarget, T0, rho0);
+    std::vector<double> C(gas->nSpecies(), 0.0);
+    for (size_t k = 0; k < C.size(); ++k)
+        C[k] = yTarget[k] / dt - ydotTarget[k];
+
+    double residual0 = affineResidualNorm(yStart, T0, rho0, dt, C);
+    double TEnd = T0;
+    std::vector<double> yEnd = yStart;
+    chem.advanceAffineConstVolume(TEnd, rho0, SpeciesBufferView{yEnd.data(), static_cast<int>(yEnd.size())},
+                                  1.0, dt,
+                                  ConstSpeciesBufferView{C.data(), static_cast<int>(C.size())},
+                                  30.0 * dt);
+
+    double residualEnd = affineResidualNorm(yEnd, TEnd, rho0, dt, C);
+    double sumYEnd = 0.0;
+    for (double y : yEnd)
+        sumYEnd += y;
+
+    printf("[affine-residual] res0=%.3e resEnd=%.3e ratio=%.3e T=%.3f sumY=%.15f Y_H2=%.6f Y_H2O=%.6f\n",
+           residual0, residualEnd, residualEnd / residual0, TEnd, sumYEnd, yEnd[iH2], yEnd[iH2O]);
+
+    CHECK(residual0 > 1.0e2);
+    CHECK(residualEnd / residual0 < 1.0e-5);
+    CHECK(sumYEnd == doctest::Approx(1.0).epsilon(1e-10));
+    CHECK(yEnd[iH2] > 0.0);
+    CHECK(yEnd[iH2O] > yStart[iH2O]);
+}
+
 TEST_CASE("0D const-vol — implicit Euler, species-only Newton, T via PhysicsProperties")
 {
     auto fx = makeTestFixture();
@@ -308,7 +467,6 @@ TEST_CASE("0D const-vol helper uses physical Cantera scales")
     igProp.L0 = 2.0;
     igProp.muGas = 1e-200;
     igProp.prGas = 0.72;
-    igProp.recomputeDerived();
 
     PhysicsProperties<NS_EX> phys(igProp);
     phys.setChemicalSourcePool(pool);
