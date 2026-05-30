@@ -345,6 +345,9 @@ namespace DNDS
     /// @brief Redirect `log()` output to a user-supplied stream. Ownership is shared.
     void setLogStream(ssp<std::ostream> nstream);
 
+    /// @brief Redirect `log()` to a file at @p path while duplicating output to `std::cout`.
+    void setLogFile(const std::string &path);
+
     /// @brief Restore the default `std::cout` routing for `log()`.
     void setLogStreamCout();
 
