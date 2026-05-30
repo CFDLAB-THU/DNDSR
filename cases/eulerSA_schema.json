@@ -135,6 +135,11 @@
                     "default": 1.0,
                     "description": "PP dt limiter scale",
                     "minimum": 0.0
+                },
+                "sourceStrangSplitting": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Reactive physical-time Strang splitting: 0=off, 1=on. Latest/output RHS is flow-only while enabled."
                 }
             }
         },
@@ -1574,6 +1579,35 @@
                     "type": "integer",
                     "default": 0,
                     "description": "Print point-implicit source-update Newton residual ratio min/max: 0=off, 1=on"
+                },
+                "reactorStepSettings": {
+                    "type": "object",
+                    "description": "Cantera reactor settings for direct source substeps",
+                    "properties": {
+                        "rtol": {
+                            "type": "number",
+                            "default": 1e-10,
+                            "description": "Cantera reactor relative tolerance",
+                            "minimum": 0.0
+                        },
+                        "atol": {
+                            "type": "number",
+                            "default": 1e-18,
+                            "description": "Cantera reactor absolute tolerance",
+                            "minimum": 0.0
+                        },
+                        "maxOrder": {
+                            "type": "integer",
+                            "default": 0,
+                            "description": "Cantera reactor max order; <=0 leaves default"
+                        },
+                        "maxSteps": {
+                            "type": "integer",
+                            "default": 10000000,
+                            "description": "Cantera reactor max internal steps",
+                            "minimum": 1.0
+                        }
+                    }
                 },
                 "reactiveSourceScale": {
                     "type": "number",

@@ -413,12 +413,29 @@ namespace DNDS::Euler
 
         /// @name Viscous Flux and Source Options
         /// @{
-        int source2nd = 0;                                                       ///< Enable 2nd-order source term discretization.
-        int usePrimGradInVisFlux = 0;                                            ///< Use primitive-variable gradients in viscous flux.
-        int useSourceGradFixGG = 0;                                              ///< Apply Green-Gauss gradient fix for source terms.
-        int nCentralSmoothStep = 0;                                              ///< Number of central-difference smoothing steps.
-        real centralSmoothEps = 0.5;                                             ///< Epsilon for central smoothing.
-        int pointImplicitSourceUpdateOut = 0;                                    ///< Print point-implicit source-update Newton residual ratios.
+        int source2nd = 0;                    ///< Enable 2nd-order source term discretization.
+        int usePrimGradInVisFlux = 0;         ///< Use primitive-variable gradients in viscous flux.
+        int useSourceGradFixGG = 0;           ///< Apply Green-Gauss gradient fix for source terms.
+        int nCentralSmoothStep = 0;           ///< Number of central-difference smoothing steps.
+        real centralSmoothEps = 0.5;          ///< Epsilon for central smoothing.
+        int pointImplicitSourceUpdateOut = 0; ///< Print point-implicit source-update Newton residual ratios.
+        struct ReactorStepSettings
+        {
+            real rtol = 1e-10;       ///< Cantera reactor relative tolerance.
+            real atol = 1e-18;       ///< Cantera reactor absolute tolerance.
+            int maxOrder = 0;        ///< CVODE max order; <=0 leaves Cantera default.
+            int maxSteps = 10000000; ///< CVODE max internal steps.
+
+            DNDS_DECLARE_CONFIG(ReactorStepSettings)
+            {
+                // clang-format off
+                DNDS_FIELD(rtol,     "Cantera reactor relative tolerance", DNDS::Config::range(0.0));
+                DNDS_FIELD(atol,     "Cantera reactor absolute tolerance", DNDS::Config::range(0.0));
+                DNDS_FIELD(maxOrder, "Cantera reactor max order; <=0 leaves default");
+                DNDS_FIELD(maxSteps, "Cantera reactor max internal steps", DNDS::Config::range(1));
+                // clang-format on
+            }
+        } reactorStepSettings;                                                   ///< Settings for direct Cantera source substeps.
         real reactiveSourceScale = 1.0;                                          ///< Multiplier for reactive source RHS and Jacobian.
         Eigen::Vector<real, 3> constMassForce = Eigen::Vector<real, 3>{0, 0, 0}; ///< Constant body force vector [fx, fy, fz].
         /// @}
@@ -741,6 +758,8 @@ namespace DNDS::Euler
                        DNDS::Config::range(0));
             DNDS_FIELD(centralSmoothEps,        "Central smoothing epsilon");
             DNDS_FIELD(pointImplicitSourceUpdateOut, "Print point-implicit source-update Newton residual ratio min/max: 0=off, 1=on");
+            config.field_section(&T::reactorStepSettings, "reactorStepSettings",
+                                 "Cantera reactor settings for direct source substeps");
             DNDS_FIELD(reactiveSourceScale,     "Scale reactive source RHS and Jacobian directly; use 0 for non-reactive debugging");
             DNDS_FIELD(constMassForce,          "Constant mass force vector (3D)");
             config.field_section(&T::frameConstRotation, "frameConstRotation",
