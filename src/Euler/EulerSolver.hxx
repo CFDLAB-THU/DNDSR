@@ -148,7 +148,14 @@ namespace DNDS::Euler
         const bool sourceTauSplittingEnabled = config.linearSolverControl.sourceTauSplitting &&
                                                TEval::Traits::isExtended &&
                                                eval.settings.reactiveFlow.enabled;
-        const uint64_t sourceTauSplittingRHSFlag = sourceTauSplittingEnabled
+        const bool sourceStrangSplittingEnabled = config.timeMarchControl.sourceStrangSplitting &&
+                                                  TEval::Traits::isExtended &&
+                                                  eval.settings.reactiveFlow.enabled;
+        DNDS_check_throw_info(!(sourceTauSplittingEnabled && sourceStrangSplittingEnabled),
+                              "sourceTauSplitting and sourceStrangSplitting cannot both be enabled");
+        const uint64_t sourceTauSplittingRHSFlag = sourceStrangSplittingEnabled
+                                                       ? TEval::RHS_Ignore_Reactive_Source
+                                                   : sourceTauSplittingEnabled
                                                        ? TEval::RHS_Ignore_Reactive_Source_Jacobian
                                                        : TEval::RHS_No_Flags;
 
@@ -1347,6 +1354,12 @@ namespace DNDS::Euler
                 curDtImplicit = std::max(0.0, nextTout - tSimu);
             }
 
+            if (sourceStrangSplittingEnabled)
+            {
+                eval.ReactiveSourceConstVolumeStep(u, uRec, 0.5 * curDtImplicit, tSimu);
+                ode->ResetFreshStart();
+            }
+
             if (config.timeMarchControl.useImplicitPP)
             {
                 switch (config.timeMarchControl.odeCode)
@@ -1433,6 +1446,11 @@ namespace DNDS::Euler
                         config.convergenceControl.nTimeStepInternal,
                         fstop, fincrement,
                         curDtImplicit + verySmallReal);
+            if (sourceStrangSplittingEnabled)
+            {
+                eval.ReactiveSourceConstVolumeStep(u, uRec, 0.5 * curDtImplicit, tSimu + curDtImplicit);
+                ode->ResetFreshStart();
+            }
             curDtImplicitHistory.push_back(curDtImplicit);
             if (fmainloop())
                 break;
@@ -1869,6 +1887,17 @@ namespace DNDS::Euler
         if (config.timeMarchControl.useImplicitPP)
         {
             DNDS_assert(config.timeMarchControl.odeCode == 1 || config.timeMarchControl.odeCode == 102);
+        }
+        if (config.timeMarchControl.sourceStrangSplitting)
+        {
+            DNDS_check_throw_info(TEval::Traits::isExtended && eval.settings.reactiveFlow.enabled,
+                                  "sourceStrangSplitting requires reactive extended Euler physics");
+            DNDS_check_throw_info(!ode->IsMultistep(),
+                                  "sourceStrangSplitting only supports single-step ODE methods");
+            DNDS_check_throw_info(!config.timeMarchControl.useImplicitPP,
+                                  "sourceStrangSplitting is not supported with useImplicitPP");
+            if (mpi.rank == 0)
+                log() << "=== Source splitting: Strang reactive source; latest/output RHS is flow-only" << std::endl;
         }
 
         // std::cout << fmt::format("nVars {}, here100", nVars);

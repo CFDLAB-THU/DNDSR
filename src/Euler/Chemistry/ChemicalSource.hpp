@@ -162,6 +162,19 @@ namespace DNDS::Euler::Chemistry
                                       int maxOrder = 1,
                                       int maxSteps = 10000000) const;
 
+        /**
+         * Advance a constant-volume ideal-gas reactor with chemistry only.
+         * Inputs and outputs are physical SI units. @p Y is a full nSpecies vector.
+         */
+        void advanceConstVolume(double &T, double rho,
+                                SpeciesBufferView Y,
+                                double chemistryScale,
+                                double advanceTime,
+                                double rtol = 1e-10,
+                                double atol = 1e-18,
+                                int maxOrder = 0,
+                                int maxSteps = 10000000) const;
+
         // ---- Transport ----
 
         double viscosity(double T, double p, ConstSpeciesBufferView Y) const;

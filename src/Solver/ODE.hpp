@@ -21,11 +21,17 @@ namespace DNDS::ODE
                           int maxIter, const Fstop &fstop, const Fincrement &fincrement, real dt) = 0;
         virtual ~ImplicitDualTimeStep() = default;
 
+        // Returns the latest RHS evaluated by the time integrator. For operator
+        // split flows this is the flow-substep RHS, not the full coupled RHS.
         virtual TDATA &getLatestRHS() = 0;
 
         virtual TDATA &getRHS(int i) = 0;
 
         virtual TDATA &getRES(int i) = 0;
+
+        virtual bool IsMultistep() const { return false; }
+
+        virtual void ResetFreshStart() {}
 
         virtual void SetExtraParams(const nlohmann::ordered_json &j)
         {
@@ -357,6 +363,13 @@ namespace DNDS::ODE
         }
 
         virtual ~ImplicitSDIRK4DualTimeStep() = default;
+
+        bool IsMultistep() const override { return false; }
+
+        void ResetFreshStart() override
+        {
+            hasLastEndPointR = 0;
+        }
     };
 
     template <class TDATA, class TDTAU>
@@ -588,6 +601,8 @@ namespace DNDS::ODE
         }
 
         virtual ~ImplicitBDFDualTimeStep() = default;
+
+        bool IsMultistep() const override { return kBDF > 1; }
     };
 
     template <class TDATA, class TDTAU>
@@ -905,6 +920,8 @@ namespace DNDS::ODE
         }
 
         virtual ~ImplicitVBDFDualTimeStep() = default;
+
+        bool IsMultistep() const override { return kBDF > 1; }
     };
 
     /*******************************************************************************************/
@@ -1426,6 +1443,15 @@ namespace DNDS::ODE
         }
 
         virtual ~ImplicitHermite3SimpleJacobianDualStep() = default;
+
+        bool IsMultistep() const override { return maskHM3 == 2; }
+
+        void ResetFreshStart() override
+        {
+            hasLastEndPointR = 0;
+            prevSize = 0;
+            dtPrev = 0;
+        }
     };
 
     /*******************************************************************************************/

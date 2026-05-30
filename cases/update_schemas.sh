@@ -13,7 +13,7 @@ set -euo pipefail
 BUILD_DIR="${1:-build}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-VARIANTS=(euler euler3D eulerSA eulerSA3D euler2EQ euler2EQ3D)
+VARIANTS=(euler euler3D eulerSA eulerSA3D euler2EQ euler2EQ3D eulerEX eulerEX3D)
 
 for v in "${VARIANTS[@]}"; do
     exe="${BUILD_DIR}/app/${v}.exe"

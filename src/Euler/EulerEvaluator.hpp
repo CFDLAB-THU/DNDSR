@@ -431,6 +431,7 @@ namespace DNDS::Euler
         static const uint64_t RHS_Direct_2nd_Rec_already_have_uGradBufNoLim = 0x1ull << 11; ///< uGradBufNoLim is already computed.
         static const uint64_t RHS_Recover_IncFScale = 0x1ull << 12;                         ///< Recover incremental face scaling.
         static const uint64_t RHS_Ignore_Reactive_Source_Jacobian = 0x1ull << 13;           ///< Evaluate reactive source RHS but omit its JSource part.
+        static const uint64_t RHS_Ignore_Reactive_Source = 0x1ull << 14;                    ///< Omit reactive source RHS and Jacobian.
         /// @}
 
         /**
@@ -1143,6 +1144,12 @@ namespace DNDS::Euler
             real dt,
             int nNewtonSteps = 3,
             SourceFilter filter = SourceFilter::ReactiveOnly);
+
+        void ReactiveSourceConstVolumeStep(
+            ArrayDOFV<nVarsFixed> &u,
+            ArrayRECV<nVarsFixed> &uRec,
+            real dt,
+            real t);
 
         /**
          * @brief inviscid flux approx jacobian (flux term not reconstructed / no riemann)
@@ -2144,6 +2151,11 @@ namespace DNDS::Euler
             real dt,                                                                                                      \
             int nNewtonSteps,                                                                                             \
             SourceFilter filter);                                                                                         \
+        ext template void EulerEvaluator<model>::ReactiveSourceConstVolumeStep(                                           \
+            ArrayDOFV<nVarsFixed> &u,                                                                                     \
+            ArrayRECV<nVarsFixed> &uRec,                                                                                  \
+            real dt,                                                                                                      \
+            real t);                                                                                                      \
                                                                                                                           \
         ext template void EulerEvaluator<model>::TimeAverageAddition(                                                     \
             ArrayDOFV<nVarsFixed> &w, ArrayDOFV<nVarsFixed> &wAveraged, real dt, real &tCur);                             \

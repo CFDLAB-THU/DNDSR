@@ -84,6 +84,7 @@ namespace DNDS::Euler
         const bool direct2ndUseLimiter = flags & RHS_Direct_2nd_Rec_use_limiter;
         const bool direct2ndRec_already_have_uGradBufNoLim = flags & RHS_Direct_2nd_Rec_already_have_uGradBufNoLim;
         const bool recoverIncFScale = flags & RHS_Recover_IncFScale;
+        const bool ignoreReactiveSource = (flags & RHS_Ignore_Reactive_Source) && Traits::isExtended;
         const bool ignoreReactiveSourceJacobian = (flags & RHS_Ignore_Reactive_Source_Jacobian) && Traits::isExtended;
 
         DNDS_assert(direct2ndRec1stConv ? direct2ndRec : true);
@@ -704,7 +705,13 @@ namespace DNDS::Euler
                 TU cellSrcRHS;
                 cellSrcRHS.setZero(cnvars);
                 int jacMode = JSource.isBlock() ? 2 : 1;
-                if (ignoreReactiveSourceJacobian)
+                if (ignoreReactiveSource)
+                    EvaluateCellSource(cellSrcRHS, cellJac, u[iCell], dummyGrad,
+                                       iCell, jacMode, SourceFilter::NonReactiveOnly,
+                                       cellRHSAlpha[iCell](0),
+                                       /*useRecArrays=*/true, &u, &uRecUnlim, &uRec,
+                                       direct2ndRec, t);
+                else if (ignoreReactiveSourceJacobian)
                 {
                     EvaluateCellSource(cellSrcRHS, cellJac, u[iCell], dummyGrad,
                                        iCell, jacMode, SourceFilter::NonReactiveOnly,

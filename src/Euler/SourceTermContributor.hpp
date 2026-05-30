@@ -15,6 +15,7 @@
 #include "RANS_ke.hpp"
 #include "Chemistry/ChemicalSource.hpp"
 #include "EulerEvaluatorSettings.hpp"
+#include <Eigen/Eigenvalues>
 #ifdef DNDS_DIST_MT_USE_OMP
 #    include <omp.h>
 #endif
@@ -350,6 +351,7 @@ namespace DNDS::Euler
         ChemPool pool_;
         typename EulerEvaluatorSettings<model>::IdealGasProperty igProp_;
         real sourceScale_ = 1.0;
+        static constexpr bool filterReactiveJacobianSpectrum_ = true;
 
         // Per-thread work buffers (one set per OMP thread)
         mutable std::vector<std::vector<double>> bufOmega_;
@@ -444,9 +446,12 @@ namespace DNDS::Euler
                 // selected as the production path.
                 c.productionRatesAndJacobian(Tcantera, aux.pPhys, rho, U[I4],
                                              uM1, uM2, uM3, I4, igProp_.U0, igProp_.rho0, Yv, omegav, Jv,
-                                             Chemistry::ChemicalSource::JAC_SKIP_FLUID);
+                                             Chemistry::ChemicalSource::JAC_DEFAULT);
                 for (int k = 0; k < Ns1; ++k)
                     ret[Isp + k] += sourceScale_ * bufOmega[k] * c.molecularWeights()[k] * invS0;
+
+                Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> dSdu;
+                dSdu.setZero(nVars, nVars);
                 for (int k = 0; k < Ns1; ++k)
                 {
                     double Mk = c.molecularWeights()[k];
@@ -460,9 +465,23 @@ namespace DNDS::Euler
                                     iRow, j, Jv(k, j), Mk, (double)aux.T);
                             val = 0;
                         }
-                        jac(iRow, j) -= val;
+                        dSdu(iRow, j) = val;
                     }
                 }
+                if constexpr (filterReactiveJacobianSpectrum_)
+                {
+                    Eigen::ComplexEigenSolver<Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic>> eig(dSdu);
+                    if (eig.info() == Eigen::Success)
+                    {
+                        Eigen::Vector<std::complex<real>, Eigen::Dynamic> lambda = eig.eigenvalues();
+                        for (int i = 0; i < lambda.size(); ++i)
+                            lambda(i) = std::complex<real>(std::min(lambda(i).real(), real(0)), 0.0);
+                        Eigen::Matrix<std::complex<real>, Eigen::Dynamic, Eigen::Dynamic> dSduFiltered =
+                            eig.eigenvectors() * lambda.asDiagonal() * eig.eigenvectors().inverse();
+                        dSdu = dSduFiltered.real();
+                    }
+                }
+                jac -= dSdu;
             }
         }
     };

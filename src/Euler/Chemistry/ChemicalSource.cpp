@@ -65,6 +65,29 @@ namespace DNDS::Euler::Chemistry
             double linearTime_ = 1.0;
             std::vector<double> constantTerm_;
         };
+
+        class ScaledIdealGasConstVolReactor : public Cantera::IdealGasReactor
+        {
+        public:
+            using Cantera::IdealGasReactor::IdealGasReactor;
+
+            void setChemistryScale(double chemistryScale)
+            {
+                chemistryScale_ = chemistryScale;
+            }
+
+            void eval(double t, double *LHS, double *RHS) override
+            {
+                Cantera::IdealGasReactor::eval(t, LHS, RHS);
+                double *mdYdt = RHS + 3;
+                for (size_t k = 0; k < m_nsp; ++k)
+                    mdYdt[k] *= chemistryScale_;
+                RHS[2] *= chemistryScale_;
+            }
+
+        private:
+            double chemistryScale_ = 1.0;
+        };
     }
 
     struct ChemicalSource::Impl
@@ -76,6 +99,11 @@ namespace DNDS::Euler::Chemistry
 
         std::shared_ptr<Cantera::Solution> solT; // separate phase for temperatureFromUV
         Cantera::ThermoPhase *gasT = nullptr;
+
+        mutable std::shared_ptr<Cantera::Solution> solCV;
+        mutable Cantera::ThermoPhase *gasCV = nullptr;
+        mutable std::shared_ptr<ScaledIdealGasConstVolReactor> reactorCV;
+        mutable std::unique_ptr<Cantera::ReactorNet> netCV;
 
         int Ns = 0;
         std::vector<std::string> speciesNames;
@@ -92,6 +120,18 @@ namespace DNDS::Euler::Chemistry
         {
             gas->setMassFractions_NoNorm(Y.data);
             gas->setState_TP(T, p);
+        }
+
+        void ensureConstVolumeReactor() const
+        {
+            if (netCV)
+                return;
+            solCV = sol->clone({}, true, false);
+            gasCV = &(*solCV->thermo());
+            reactorCV = std::make_shared<ScaledIdealGasConstVolReactor>(solCV, false, "cv");
+            reactorCV->setChemistryEnabled(true);
+            reactorCV->setEnergyEnabled(true);
+            netCV = std::make_unique<Cantera::ReactorNet>(reactorCV);
         }
     };
 
@@ -417,6 +457,43 @@ namespace DNDS::Euler::Chemistry
 
         T = reactor->temperature();
         const double *YEnd = reactor->massFractions();
+        for (int k = 0; k < impl_->Ns; ++k)
+            Y[k] = YEnd[k];
+    }
+
+    void ChemicalSource::advanceConstVolume(
+        double &T, double rho,
+        SpeciesBufferView Y,
+        double chemistryScale,
+        double advanceTime,
+        double rtol,
+        double atol,
+        int maxOrder,
+        int maxSteps) const
+    {
+        DNDS_check_throw_info(Y.nSpecies == impl_->Ns, "advanceConstVolume(): Y size mismatch");
+        DNDS_check_throw_info(std::isfinite(T) && T > 0, "advanceConstVolume(): T must be positive");
+        DNDS_check_throw_info(std::isfinite(rho) && rho > 0, "advanceConstVolume(): rho must be positive");
+        DNDS_check_throw_info(std::isfinite(chemistryScale) && chemistryScale >= 0,
+                              "advanceConstVolume(): chemistryScale must be non-negative");
+        DNDS_check_throw_info(std::isfinite(advanceTime) && advanceTime >= 0, "advanceConstVolume(): advanceTime must be non-negative");
+
+        auto &I = *impl_;
+        I.ensureConstVolumeReactor();
+        I.gasCV->setMassFractions_NoNorm(Y.data);
+        I.gasCV->setState_TD(T, rho);
+        I.reactorCV->setInitialVolume(1.0 / rho);
+        I.reactorCV->setChemistryScale(chemistryScale);
+        I.reactorCV->syncState();
+        I.netCV->setInitialTime(0.0);
+        I.netCV->setTolerances(rtol, atol);
+        I.netCV->setMaxSteps(maxSteps);
+        if (maxOrder > 0)
+            I.netCV->integrator().setMaxOrder(maxOrder);
+        I.netCV->advance(advanceTime);
+
+        T = I.reactorCV->temperature();
+        const double *YEnd = I.reactorCV->massFractions();
         for (int k = 0; k < impl_->Ns; ++k)
             Y[k] = YEnd[k];
     }

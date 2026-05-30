@@ -1742,6 +1742,96 @@ namespace DNDS::Euler
         }
     }
 
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>, )
+    void EulerEvaluator<model>::ReactiveSourceConstVolumeStep(
+        ArrayDOFV<nVarsFixed> &u,
+        ArrayRECV<nVarsFixed> &uRec,
+        real dt,
+        real t)
+    {
+        (void)uRec;
+        (void)t;
+        DNDS_check_throw_info(dt >= 0, "ReactiveSourceConstVolumeStep requires non-negative dt");
+        if (dt == 0)
+            return;
+        DNDS_check_throw_info(Traits::isExtended && settings.reactiveFlow.enabled && phys_.hasChemicalSource(),
+                              "ReactiveSourceConstVolumeStep requires reactive extended Euler physics");
+        DNDS_check_throw_info(std::isfinite(settings.reactiveSourceScale) && settings.reactiveSourceScale >= 0,
+                              "ReactiveSourceConstVolumeStep requires non-negative finite reactiveSourceScale");
+        if (settings.reactiveSourceScale == 0.0)
+            return;
+
+        const int Ns = phys_.nSpecies();
+        const int Ns1 = Ns - 1;
+        const int Isp = nVars - Ns1;
+        DNDS_check_throw_info(Isp == I4 + 1,
+                              "ReactiveSourceConstVolumeStep expects species variables after energy");
+
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp parallel for schedule(guided)
+#endif
+        for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+        {
+            auto state = u[iCell];
+            DNDS_check_throw_info(std::isfinite(state(0)) && state(0) > 0,
+                                  fmt::format("ReactiveSourceConstVolumeStep invalid density at cell {}", iCell));
+            const real rho = state(0);
+            const real rhoInv = 1.0 / rho;
+
+            std::vector<double> Y(static_cast<size_t>(Ns), 0.0);
+            real sumY = 0.0;
+            for (int k = 0; k < Ns1; ++k)
+            {
+                Y[static_cast<size_t>(k)] = std::max(real(0), state(Isp + k) * rhoInv);
+                sumY += Y[static_cast<size_t>(k)];
+            }
+            Y[static_cast<size_t>(Ns1)] = std::max(real(0), 1.0 - sumY);
+            real yNorm = 0.0;
+            for (double y : Y)
+                yNorm += y;
+            DNDS_check_throw_info(yNorm > 0,
+                                  fmt::format("ReactiveSourceConstVolumeStep zero species mass at cell {}", iCell));
+            for (double &y : Y)
+                y /= yNorm;
+
+            real T = phys_.template temperature<dim>(state);
+            phys_.advanceConstVolumeY(
+                T, rho,
+                Chemistry::SpeciesBufferView{Y.data(), Ns},
+                settings.reactiveSourceScale,
+                dt,
+                settings.reactorStepSettings.rtol,
+                settings.reactorStepSettings.atol,
+                settings.reactorStepSettings.maxOrder,
+                settings.reactorStepSettings.maxSteps);
+
+            real sumYIndependent = 0.0;
+            for (int k = 0; k < Ns1; ++k)
+            {
+                real yk = std::max(real(0), static_cast<real>(Y[static_cast<size_t>(k)]));
+                sumYIndependent += yk;
+                state(Isp + k) = rho * yk;
+            }
+            if (sumYIndependent >= 1.0)
+            {
+                const real scale = (1.0 - 1e-14) / sumYIndependent;
+                for (int k = 0; k < Ns1; ++k)
+                    state(Isp + k) *= scale;
+            }
+
+            real TCheck = phys_.template temperature<dim>(state, T);
+            real pCheck = rho * phys_.Rgas(state) * TCheck;
+            DNDS_check_throw_info(std::isfinite(TCheck) && std::isfinite(pCheck) &&
+                                      phys_.toPhysT(TCheck) >= 200.0 && pCheck > 0,
+                                  fmt::format("ReactiveSourceConstVolumeStep invalid post-step state at cell {}: T={} K, p_code={}",
+                                              iCell, phys_.toPhysT(TCheck), pCheck));
+        }
+
+        u.trans.startPersistentPull();
+        u.trans.waitPersistentPull();
+    }
+
     template <EulerModel model>
     /** @brief Accumulate time-averaged solution field using running weighted average.
      *
