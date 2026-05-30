@@ -479,17 +479,17 @@ namespace DNDS::Euler
             for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
             {
                 index iFace = mesh->cell2face[iCell][ic2f];
-                index iCellOther = mesh->CellFaceOther(iCell, iFace);
-                int if2c = mesh->CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
+                int if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
                 Geom::tPoint uNormOut = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1) * (if2c ? -1 : 1);
                 auto faceBndID = mesh->GetFaceZone(iFace);
                 auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
                 Geom::tPoint baryOther = bary;
-                Geom::tPoint bFace = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1);
+                Geom::tPoint bFace = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1);
                 if (iCellOther != UnInitIndex)
                 {
                     baryOther = vfv->GetOtherCellPointFromCell(
-                        iCell, iCellOther, iFace,
+                        iCell, iCellOther, iFace, if2c,
                         vfv->GetCellQuadraturePPhys(iCellOther, -1));
                 }
                 else
@@ -526,19 +526,19 @@ namespace DNDS::Euler
                 for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
                 {
                     index iFace = mesh->cell2face[iCell][ic2f];
-                    index iCellOther = mesh->CellFaceOther(iCell, iFace);
-                    int if2c = mesh->CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                    index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
+                    int if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
                     Geom::tPoint uNormOut = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1) * (if2c ? -1 : 1);
                     auto faceBndID = mesh->GetFaceZone(iFace);
                     auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
                     real phiOther = phi[iCell](0);
                     Geom::tPoint baryOther = bary;
-                    Geom::tPoint bFace = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1);
+                    Geom::tPoint bFace = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1);
                     if (iCellOther != UnInitIndex)
                     {
                         phiOther = phi[iCellOther](0);
                         baryOther = vfv->GetOtherCellPointFromCell(
-                            iCell, iCellOther, iFace,
+                            iCell, iCellOther, iFace, if2c,
                             vfv->GetCellQuadraturePPhys(iCellOther, -1));
                     }
                     else
@@ -577,14 +577,14 @@ namespace DNDS::Euler
                 for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
                 {
                     index iFace = mesh->cell2face[iCell][ic2f];
-                    index iCellOther = mesh->CellFaceOther(iCell, iFace);
-                    int if2c = mesh->CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                    index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
+                    int if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
                     Geom::tPoint uNormOut = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1) * (if2c ? -1 : 1);
                     auto faceBndID = mesh->GetFaceZone(iFace);
                     auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
                     real phiOther = phi[iCell](0);
                     Geom::tPoint baryOther = bary;
-                    Geom::tPoint bFace = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1);
+                    Geom::tPoint bFace = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1);
                     real phiThisFace = phi[iCell](0) + (bFace - bary).dot(diffPhi[iCell]) * supressRec;
                     real phiOtherFace = phiThisFace;
                     real diffPhiNormThis = diffPhi[iCell].dot(uNormOut) * supressRec;
@@ -594,7 +594,7 @@ namespace DNDS::Euler
                     {
                         phiOther = phi[iCellOther](0);
                         baryOther = vfv->GetOtherCellPointFromCell(
-                            iCell, iCellOther, iFace,
+                            iCell, iCellOther, iFace, if2c,
                             vfv->GetCellQuadraturePPhys(iCellOther, -1));
                         phiOtherFace = phiOther + (bFace - baryOther).dot(diffPhi[iCellOther]) * supressRec;
                         diffPhiNormOther = diffPhi[iCellOther].dot(uNormOut) * supressRec; //! todo: periodic!!
@@ -642,7 +642,7 @@ namespace DNDS::Euler
                     for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
                     {
                         index iFace = mesh->cell2face[iCell][ic2f];
-                        index iCellOther = mesh->CellFaceOther(iCell, iFace);
+                        index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
                         if (iCellOther != UnInitIndex)
                             dphiNew[iCell] += coefs[iCell][ic2f + 1] * dphi[iCellOther];
                     }
@@ -761,7 +761,7 @@ namespace DNDS::Euler
                 for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
                 {
                     index iFace = mesh->cell2face[iCell][ic2f];
-                    index iCellOther = mesh->CellFaceOther(iCell, iFace);
+                    index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
                     if (iCellOther != UnInitIndex)
                     {
                         gradPhi += diffPhi[iCell];
@@ -1928,14 +1928,17 @@ namespace DNDS::Euler
             DNDS_assert(pU);
             cellGrad2nd.setZero(Eigen::NoChange, uCell.size());
             TU uC = uCell;
-            for (index iFace : mesh->cell2face[iCell])
+            auto c2f = mesh->cell2face[iCell];
+            for (rowsize ic2f = 0; ic2f < c2f.size(); ++ic2f)
             {
-                index iCellOther = mesh->CellFaceOther(iCell, iFace);
-                TVec uNorm = vfv->GetFaceNormFromCell(iFace, iCell, -1, -1)(Seq012) *
-                             (mesh->CellIsFaceBack(iCell, iFace) ? 1 : -1);
+                index iFace = c2f[ic2f];
+                index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
+                rowsize if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
+                TVec uNorm = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1)(Seq012) *
+                             (if2c ? -1 : 1);
                 TU uR;
                 if (iCellOther != UnInitIndex)
-                    uR = (*pU)[iCellOther], this->UFromOtherCell(uR, iFace, iCell, iCellOther, -1);
+                    uR = (*pU)[iCellOther], this->UFromOtherCell(uR, iFace, iCell, iCellOther, if2c);
                 else
                     uR = generateBoundaryValue(
                         uC, uC, iCell, iFace, -1,

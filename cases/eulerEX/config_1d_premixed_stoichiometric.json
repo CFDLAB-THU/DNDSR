@@ -16,10 +16,15 @@
             "Reactive transport uses Cantera mixture-averaged viscosity, conductivity, and species diffusivity through h2o2.yaml; idealGasProperty.muGas is not used for reactive transport.",
             "The current BCFar/BCFar setup is a robust propagation/relaxation test. It is not yet a quantitatively matched freely propagating flame calculation. A strict flame-speed case should use a better initialized Cantera flame profile and consistent inflow/outflow or flame-fixed boundary treatment."
         ],
+        "solverNotes": [
+            "With reactiveSourceScale=0 the species act as inert transported components, so the first implicit step should converge like a non-reactive problem.",
+            "The direct LU / ILU smoother path (linearSolverControl.jacobiCode=2), including full LU, has shown poor nonlinear convergence for this 1D periodic-y mesh at CFL=1: updates can drive states outside Cantera's valid UV/temperature range even though SGS/Jacobi eventually converges.",
+            "This appears to require a better positivity-preserving limiting procedure or nonlinear line search that is aware of Cantera-valid state bounds, rather than ad hoc fixes in CompressRecPart or direct-preconditioner damping."
+        ],
         "latestRun": {
             "commandContext": "Run from build/ with DNDS_MECH_PATH and CANTERA_DATA pointing to external/cfd_externals/repos/cantera/data; use mpirun -np 4 ./app/eulerEX.exe 14 ../cases/eulerEX/config_1d_premixed_stoichiometric.json.",
             "dtImplicitCode": 0.01,
-            "physicalSteps": 10000,
+            "physicalSteps": 1000,
             "internalPseudoSteps": 100,
             "outputEverySteps": 100,
             "outputDirectory": "../data/out/react_1d_premixed_dt1e2_np4_i100_1000/",
@@ -71,9 +76,9 @@
         "CFL": 1,
         "nSmoothDTau": 4,
         "useLocalDt": true,
-        "nCFLRampStart": 20,
+        "nCFLRampStart": 0,
         "nCFLRampLength": 40,
-        "CFLRampEnd": 1000
+        "CFLRampEnd": 10
     },
     "convergenceControl": {
         "nTimeStepInternal": 400,
@@ -103,13 +108,13 @@
         ]
     },
     "limiterControl": {
-        "useLimiter": true,
-        "usePPRecLimiter": false,
+        "useLimiter": false,
+        "usePPRecLimiter": true,
         "nPartialLimiterStart": 1000000
     },
     "linearSolverControl": {
-        "jacobiCode": 0,
-        "sgsIter": 10,
+        "jacobiCode": 2,
+        "sgsIter": 2,
         "gmresCode": 0,
         "nGmresIter": 1,
         "nGmresSpace": 10,
@@ -117,7 +122,7 @@
         "sourceTauSplitting": 0,
         "directPrecControl": {
             "useDirectPrec": true,
-            "iluCode": -1,
+            "iluCode": 2,
             "orderingCode": 4
         }
     },
@@ -136,7 +141,7 @@
     },
     "eulerSettings": {
         "pointImplicitSourceUpdateOut": 1,
-        "reactiveSourceScale": 0,
+        "reactiveSourceScale": 1,
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
         "riemannSolverType": "Roe_M2",

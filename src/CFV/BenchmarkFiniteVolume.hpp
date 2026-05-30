@@ -30,8 +30,8 @@ namespace DNDS::CFV
         for (rowsize ic2f = 0; ic2f < mesh.cell2face.RowSize(iCell); ic2f++)
         {
             index iFace = mesh.cell2face(iCell, ic2f);
-            index iCellOther = mesh.CellFaceOther(iCell, iFace);
-            rowsize if2c = mesh.CellIsFaceBack(iCell, iFace) ? 0 : 1;
+            index iCellOther = mesh.CellFaceOther(iCell, iFace, ic2f);
+            rowsize if2c = mesh.CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
             if (iCellOther == UnInitIndex)
                 continue; //! ignoreing BC here
             // face-out-area-norm
@@ -134,8 +134,8 @@ namespace DNDS::CFV
         for (rowsize ic2f = 0; ic2f < mesh.cell2face.RowSize(iCell); ic2f++)
         {
             index iFace = mesh.cell2face(iCell, ic2f);
-            index iCellOther = mesh.CellFaceOther(iCell, iFace);
-            rowsize if2c = mesh.CellIsFaceBack(iCell, iFace) ? 0 : 1;
+            index iCellOther = mesh.CellFaceOther(iCell, iFace, ic2f);
+            rowsize if2c = mesh.CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
             if (iCellOther == UnInitIndex)
                 continue; //! ignoreing BC here
             // face-out-area-norm
@@ -252,8 +252,8 @@ namespace DNDS::CFV
         for (rowsize ic2f = 0; ic2f < mesh.cell2face.RowSize(iCell); ic2f++)
         {
             index iFace = mesh.cell2face(iCell, ic2f);
-            index iCellOther = mesh.CellFaceOther(iCell, iFace);
-            rowsize if2c = mesh.CellIsFaceBack(iCell, iFace) ? 0 : 1;
+            index iCellOther = mesh.CellFaceOther(iCell, iFace, ic2f);
+            rowsize if2c = mesh.CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
             if (iCellOther == UnInitIndex)
                 continue; //! ignoring BC here
             // face-out-area-norm

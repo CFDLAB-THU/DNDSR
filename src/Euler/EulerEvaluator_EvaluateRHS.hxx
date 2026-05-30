@@ -329,10 +329,10 @@ namespace DNDS::Euler
                             GradURxy *= 0.;
 #endif
                         minVol = std::min(minVol, vfv->GetCellVol(f2c[1]));
-                        distBary = (vfv->GetOtherCellBaryFromCell(f2c[0], f2c[1], iFace) - vfv->GetCellBary(f2c[0])).norm();
+                        distBary = (vfv->GetOtherCellBaryFromCell(f2c[0], f2c[1], iFace, 0) - vfv->GetCellBary(f2c[0])).norm();
                         distBaryPerp =
                             std::abs(
-                                (vfv->GetOtherCellBaryFromCell(f2c[0], f2c[1], iFace) -
+                                (vfv->GetOtherCellBaryFromCell(f2c[0], f2c[1], iFace, 0) -
                                  vfv->GetCellBary(f2c[0]))(Seq012)
                                     .dot(unitNorm));
                     }
@@ -667,7 +667,7 @@ namespace DNDS::Euler
                 for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                 {
                     index iFace = c2f[ic2f];
-                    int if2c = mesh->CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                    int if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
                     TU fluxFaceC = faceFluxBuf[iFace] * (if2c ? -1 : 1);
                     this->UFromFace2Cell(fluxFaceC, iFace, iCell, if2c);
 

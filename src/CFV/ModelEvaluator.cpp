@@ -79,7 +79,7 @@ namespace DNDS::CFV
                             GradURxy(SeqG012, EigenAll) =
                                 vfv->GetIntPointDiffBaseValue(f2c[1], iFace, 1, iGQ, SeqG123, 3) *
                                 uRec[f2c[1]];
-                        distBary = (vfv->GetOtherCellBaryFromCell(f2c[0], f2c[1], iFace) - vfv->GetCellBary(f2c[0])).norm();
+                        distBary = (vfv->GetOtherCellBaryFromCell(f2c[0], f2c[1], iFace, 0) - vfv->GetCellBary(f2c[0])).norm();
                         minVol = std::min(minVol, vfv->GetCellVol(f2c[1]));
                     }
                     else

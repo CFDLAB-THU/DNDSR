@@ -1046,7 +1046,7 @@ namespace DNDS::Geom
             for (rowsize ic2f = 0; ic2f < cell2face[iCell].size(); ic2f++)
             {
                 index iFace = cell2face[iCell][ic2f];
-                index iCellOther = this->CellFaceOther(iCell, iFace);
+                index iCellOther = this->CellFaceOther(iCell, iFace, ic2f);
                 DNDS_assert(iCellOther < this->NumCellProc());
                 cell2cellFace[iCell][ic2f] = this->CellIndexLocal2Global(iCellOther);
             }

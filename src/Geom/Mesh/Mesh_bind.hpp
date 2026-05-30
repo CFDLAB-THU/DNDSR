@@ -161,9 +161,9 @@ namespace DNDS::Geom
 
         UnstructuredMesh_
             .def("CellFaceOther", &UnstructuredMesh::CellFaceOther,
-                 py::arg("iCell"), py::arg("iFace"))
+                 py::arg("iCell"), py::arg("iFace"), py::arg("ic2f"))
             .def("CellIsFaceBack", &UnstructuredMesh::CellIsFaceBack,
-                 py::arg("iCell"), py::arg("iFace"));
+                 py::arg("iCell"), py::arg("iFace"), py::arg("ic2f"));
 
         auto WallDistOptions_ = py_class_ssp<UnstructuredMesh::WallDistOptions>(UnstructuredMesh_, "WallDistOptions");
         WallDistOptions_.def(py::init());

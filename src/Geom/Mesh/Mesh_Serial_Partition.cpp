@@ -193,9 +193,10 @@ namespace DNDS::Geom
                 for (index iCell = this->LocalPartStart(iPart); iCell < this->LocalPartEnd(iPart); iCell++)
                 {
                     cell2cellFaceV[iCell].reserve(cell2face.RowSize(iCell)); // do not preserve the diagonal
-                    for (auto iFace : cell2face[iCell])
+                    for (rowsize ic2f = 0; ic2f < cell2face.RowSize(iCell); ++ic2f)
                     {
-                        index iCellOther = this->CellFaceOther(iCell, iFace);
+                        index iFace = cell2face(iCell, ic2f);
+                        index iCellOther = this->CellFaceOther(iCell, iFace, ic2f);
                         if (iCellOther != UnInitIndex && iCellOther != iCell && iCellOther < this->NumCell()) //! must be local not ghost ptrs
                         {
                             if (onLocalPartition)

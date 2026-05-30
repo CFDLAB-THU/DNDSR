@@ -15,6 +15,7 @@ namespace DNDS::CFV
     class FiniteVolume : public DeviceTransferable<FiniteVolume>
     {
         friend class DeviceTransferable<FiniteVolume>;
+
     public:
         MPI_int mRank{0};
         MPIInfo mpi;
@@ -238,14 +239,14 @@ namespace DNDS::CFV
 
         Geom::tPoint GetCellBary(index iCell) { return cellBary[iCell]; }
 
-        bool CellIsFaceBack(index iCell, index iFace) const
+        bool CellIsFaceBack(index iCell, index iFace, rowsize ic2f) const
         {
-            return mesh->CellIsFaceBack(iCell, iFace);
+            return mesh->CellIsFaceBack(iCell, iFace, ic2f);
         }
 
-        index CellFaceOther(index iCell, index iFace) const
+        index CellFaceOther(index iCell, index iFace, rowsize ic2f) const
         {
-            return mesh->CellFaceOther(iCell, iFace);
+            return mesh->CellFaceOther(iCell, iFace, ic2f);
         }
 
         Geom::tPoint GetFaceNorm(index iFace, int iG) const
@@ -263,8 +264,7 @@ namespace DNDS::CFV
             auto faceID = mesh->faceElemInfo[iFace]->zone;
             if (!Geom::FaceIDIsPeriodic(faceID))
                 return GetFaceNorm(iFace, iG);
-            if (if2c < 0)
-                if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
+            DNDS_assert(if2c >= 0);
             if (if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID))
                 return mesh->periodicInfo.TransVector(GetFaceNorm(iFace, iG), faceID);
             if (if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID))
@@ -287,8 +287,7 @@ namespace DNDS::CFV
             auto faceID = mesh->faceElemInfo[iFace]->zone;
             if (!Geom::FaceIDIsPeriodic(faceID))
                 return GetFaceQuadraturePPhys(iFace, iG);
-            if (if2c < 0)
-                if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
+            DNDS_assert(if2c >= 0);
             if (if2c == 1 && Geom ::FaceIDIsPeriodicMain(faceID)) // I am donor
             {
                 return mesh->periodicInfo.TransCoord(GetFaceQuadraturePPhys(iFace, iG), faceID);
@@ -305,8 +304,7 @@ namespace DNDS::CFV
             auto faceID = mesh->faceElemInfo[iFace]->zone;
             if (!Geom::FaceIDIsPeriodic(faceID))
                 return pnt;
-            if (if2c < 0)
-                if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
+            DNDS_assert(if2c >= 0);
             if (if2c == 1 && Geom ::FaceIDIsPeriodicMain(faceID)) // I am donor
             {
                 return mesh->periodicInfo.TransCoord(pnt, faceID);
@@ -318,7 +316,7 @@ namespace DNDS::CFV
 
         Geom::tPoint GetOtherCellBaryFromCell(
             index iCell, index iCellOther,
-            index iFace)
+            index iFace, rowsize if2c)
         {
             if (!mesh->isPeriodic)
                 return GetCellBary(iCellOther);
@@ -326,7 +324,7 @@ namespace DNDS::CFV
             auto faceID = mesh->faceElemInfo[iFace]->zone;
             if (!Geom::FaceIDIsPeriodic(faceID))
                 return GetCellBary(iCellOther);
-            rowsize if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
+            DNDS_assert(if2c >= 0);
             if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
                 (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
                 return mesh->periodicInfo.TransCoord(GetCellBary(iCellOther), faceID);
@@ -338,7 +336,7 @@ namespace DNDS::CFV
 
         Geom::tPoint GetOtherCellPointFromCell(
             index iCell, index iCellOther,
-            index iFace, const Geom::tPoint &pnt)
+            index iFace, rowsize if2c, const Geom::tPoint &pnt)
         {
             if (!mesh->isPeriodic)
                 return pnt;
@@ -346,7 +344,7 @@ namespace DNDS::CFV
             auto faceID = mesh->faceElemInfo[iFace]->zone;
             if (!Geom::FaceIDIsPeriodic(faceID))
                 return pnt;
-            rowsize if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
+            DNDS_assert(if2c >= 0);
             if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
                 (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
                 return mesh->periodicInfo.TransCoord(pnt, faceID);
@@ -358,7 +356,7 @@ namespace DNDS::CFV
 
         Geom::tGPoint GetOtherCellInertiaFromCell(
             index iCell, index iCellOther,
-            index iFace)
+            index iFace, rowsize if2c)
         { // structure copy of GetOtherCellBaryFromCell
             if (!mesh->isPeriodic)
                 return cellInertia[iCellOther];
@@ -366,7 +364,7 @@ namespace DNDS::CFV
             auto faceID = mesh->faceElemInfo[iFace]->zone;
             if (!Geom::FaceIDIsPeriodic(faceID))
                 return cellInertia[iCellOther];
-            rowsize if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
+            DNDS_assert(if2c >= 0);
             if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID)) ||
                 (if2c == 0 && Geom::FaceIDIsPeriodicDonor(faceID))) // I am donor
                 return mesh->periodicInfo.TransMat<3>(cellInertia[iCellOther], faceID);
