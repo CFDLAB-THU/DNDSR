@@ -9,6 +9,7 @@
 // #define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
 // #endif
 #include <codecvt>
+#include <fstream>
 #include <boost/stacktrace.hpp>
 #include <utility>
 // #include <cpptrace.hpp>
@@ -34,6 +35,45 @@ extern "C" void DNDS_signal_handler(int signal)
 
 namespace DNDS
 {
+    class TeeStreamBuf : public std::streambuf
+    {
+    public:
+        TeeStreamBuf(std::streambuf *a, std::streambuf *b) : _a(a), _b(b) {}
+
+    protected:
+        int_type overflow(int_type c) override
+        {
+            if (c == traits_type::eof())
+                return traits_type::not_eof(c);
+            auto ra = _a->sputc(traits_type::to_char_type(c));
+            auto rb = _b->sputc(traits_type::to_char_type(c));
+            return (ra == traits_type::eof() || rb == traits_type::eof())
+                       ? traits_type::eof()
+                       : c;
+        }
+
+        int sync() override
+        {
+            int ra = _a->pubsync();
+            int rb = _b->pubsync();
+            return (ra == 0 && rb == 0) ? 0 : -1;
+        }
+
+        std::streamsize xsputn(const char_type *s, std::streamsize n) override
+        {
+            auto wa = _a->sputn(s, n);
+            auto wb = _b->sputn(s, n);
+            return std::min(wa, wb);
+        }
+
+    private:
+        std::streambuf *_a;
+        std::streambuf *_b;
+    };
+
+    static ssp<std::ofstream> logFileStream;
+    static ssp<TeeStreamBuf> logTeeBuf;
+
     bool ostreamIsTTY(std::ostream &ostream)
     {
         if (&ostream == &std::cout)
@@ -49,11 +89,35 @@ namespace DNDS
 
     std::ostream &log() { return useCout ? std::cout : *logStream; }
 
-    bool logIsTTY() { return ostreamIsTTY(*logStream); }
+    bool logIsTTY() { return useCout ? ostreamIsTTY(std::cout) : ostreamIsTTY(*logStream); }
 
-    void setLogStream(ssp<std::ostream> nstream) { useCout = false, logStream = std::move(nstream); }
+    void setLogStream(ssp<std::ostream> nstream)
+    {
+        logTeeBuf.reset();
+        logFileStream.reset();
+        useCout = false;
+        logStream = std::move(nstream);
+    }
 
-    void setLogStreamCout() { useCout = true, logStream.reset(); }
+    void setLogFile(const std::string &path)
+    {
+        auto file = std::make_shared<std::ofstream>(path);
+        DNDS_check_throw_info(file->is_open(), "failed to open log file: " + path);
+        auto tee = std::make_shared<TeeStreamBuf>(std::cout.rdbuf(), file->rdbuf());
+        auto stream = std::make_shared<std::ostream>(tee.get());
+        logFileStream = std::move(file);
+        logTeeBuf = std::move(tee);
+        useCout = false;
+        logStream = std::move(stream);
+    }
+
+    void setLogStreamCout()
+    {
+        useCout = true;
+        logStream.reset();
+        logTeeBuf.reset();
+        logFileStream.reset();
+    }
 
     int get_terminal_width()
     {

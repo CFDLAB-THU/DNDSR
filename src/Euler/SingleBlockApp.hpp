@@ -175,6 +175,11 @@ namespace DNDS::Euler
             }
             solver.ConfigureFromJson(defaultConfJson, false);
             solver.ConfigureFromJson(defaultConfJson, true, confJson, overwriteKeys, overwriteValues);
+            {
+                std::string logFileName = solver.config.dataIOControl.getOutLogName() + ".logstr.txt";
+                std::filesystem::create_directories(std::filesystem::path(logFileName).parent_path() / ".");
+                DNDS::setLogFile(logFileName);
+            }
             solver.ReadMeshAndInitialize();
             solver.RunImplicitEuler();
         }
