@@ -15,7 +15,8 @@ namespace DNDS
             template <int nVarsFixed>
             ,
             template <>
-            template <>)
+            template <>
+        )
         auto VariationalReconstruction<dim>::GetBoundaryRHS(tURec<nVarsFixed> &uRec,
                                                             tUDof<nVarsFixed> &u,
                                                             index iCell, index iFace,
@@ -37,7 +38,7 @@ namespace DNDS
                     [&](auto &vInc, int iG)
                     {
                         RowVectorXR dbv =
-                            this->GetIntPointDiffBaseValue(iCell, iFace, -1, iG, std::array<int, 1>{0}, 1);
+                            this->GetIntPointDiffBaseValue(iCell, iFace, 0, iG, std::array<int, 1>{0}, 1);
                         Eigen::Vector<real, nVarsFixed> uBL =
                             (dbv *
                              uRec[iCell])
@@ -48,7 +49,7 @@ namespace DNDS
                                 uBL,
                                 u[iCell], iCell, iFace, iG,
                                 this->GetFaceNorm(iFace, iG),
-                                this->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, iG), faceID);
+                                this->GetFaceQuadraturePPhysFromCell(iFace, iCell, 0, iG), faceID);
                         Eigen::RowVector<real, nVarsFixed> uIncBV = (uBV - u[iCell]).transpose();
                         if (settings.intOrderVRBCIsSame())
                             vInc = this->FFaceFunctional(dbv, uIncBV, iFace, iCell, iCell);
@@ -86,7 +87,7 @@ namespace DNDS
                                 uBL,
                                 u[iCell], iCell, iFace, -2,
                                 np,
-                                this->GetFacePointFromCell(iFace, iCell, -1, pPhy), faceID);
+                                this->GetFacePointFromCell(iFace, iCell, 0, pPhy), faceID);
                         Eigen::RowVector<real, nVarsFixed> uIncBV = (uBV - u[iCell]).transpose();
                         vInc = this->FFaceFunctional(dbv, uIncBV, iFace, iCell, iCell);
                         vInc *= JDet;
@@ -119,7 +120,7 @@ namespace DNDS
                     [&](auto &vInc, int iG)
                     {
                         RowVectorXR dbv =
-                            this->GetIntPointDiffBaseValue(iCell, iFace, -1, iG, std::array<int, 1>{0}, 1);
+                            this->GetIntPointDiffBaseValue(iCell, iFace, 0, iG, std::array<int, 1>{0}, 1);
                         Eigen::Vector<real, nVarsFixed> uBL = (dbv * uRec[iCell]).transpose();
                         uBL += u[iCell]; //! need fixing?
                         Eigen::Vector<real, nVarsFixed> uBLDiff = (dbv * uRecDiff[iCell]).transpose();
@@ -128,7 +129,7 @@ namespace DNDS
                                 uBL, uBLDiff,
                                 u[iCell], iCell, iFace, iG,
                                 this->GetFaceNorm(iFace, iG),
-                                this->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, iG), faceID);
+                                this->GetFaceQuadraturePPhysFromCell(iFace, iCell, 0, iG), faceID);
                         Eigen::RowVector<real, nVarsFixed> uIncBV = uBV.transpose();
                         if (settings.intOrderVRBCIsSame())
                             vInc = this->FFaceFunctional(dbv, uIncBV, iFace, iCell, iCell);
@@ -166,7 +167,7 @@ namespace DNDS
                                 uBL, uBLDiff,
                                 u[iCell], iCell, iFace, -2,
                                 np,
-                                this->GetFacePointFromCell(iFace, iCell, -1, pPhy), faceID);
+                                this->GetFacePointFromCell(iFace, iCell, 0, pPhy), faceID);
                         Eigen::RowVector<real, nVarsFixed> uIncBV = uBV.transpose();
                         vInc = this->FFaceFunctional(dbv, uIncBV, iFace, iCell, iCell);
                         vInc *= JDet;
@@ -180,7 +181,8 @@ namespace DNDS
             template <int nVarsFixed>
             ,
             template <>
-            template <>)
+            template <>
+        )
         void VariationalReconstruction<dim>::DoReconstruction2ndGrad(
             tUGrad<nVarsFixed, dim> &uRec,
             tUDof<nVarsFixed> &u,
@@ -218,9 +220,9 @@ namespace DNDS
                     for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                     {
                         index iFace = c2f[ic2f];
-                        index iCellOther = CellFaceOther(iCell, iFace);
+                        index iCellOther = CellFaceOther(iCell, iFace, ic2f);
                         auto faceID = mesh->GetFaceZone(iFace);
-                        int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                        int if2c = CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
                         auto faceCent = this->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1);
                         real lThis = (faceCent - this->GetCellBary(iCell)).norm();
                         if (settings.subs2ndOrderGGScheme == 0)
@@ -228,12 +230,12 @@ namespace DNDS
                         real lThat = lThis;
                         if (iCellOther != UnInitIndex)
                         {
-                            lThat = (this->GetOtherCellBaryFromCell(iCell, iCellOther, iFace) - faceCent).norm();
+                            lThat = (this->GetOtherCellBaryFromCell(iCell, iCellOther, iFace, if2c) - faceCent).norm();
                             if (settings.subs2ndOrderGGScheme == 0)
                                 lThat = 1;
                             Eigen::RowVector<real, nVarsFixed> uOther = u[iCellOther].transpose();
                             this->ApplyPeriodicTransform(if2c, faceID, uOther);
-                            Eigen::Vector<real, dim> uNorm = this->GetFaceNormFromCell(iFace, iCell, -1, -1)(Seq012) * (CellIsFaceBack(iCell, iFace) ? 1. : -1.);
+                            Eigen::Vector<real, dim> uNorm = this->GetFaceNormFromCell(iFace, iCell, if2c, -1)(Seq012) * (if2c ? -1. : 1.);
                             Eigen::Matrix<real, nVarsFixed, dim> gradInc =
                                 (uOther.transpose() - u[iCell]) *
                                 lThis / (lThis + lThat + verySmallReal) * this->GetFaceArea(iFace) * uNorm.transpose();
@@ -242,7 +244,7 @@ namespace DNDS
                             {
                                 mGG(Seq012, dim + ic2f) = -this->GetFaceArea(iFace) / (this->GetCellVol(iCell) + verySmallReal) * uNorm;
                                 mGG(dim + ic2f, Seq012) =
-                                    (this->GetCellBary(iCell)(Seq012) + this->GetOtherCellBaryFromCell(iCell, iCellOther, iFace)(Seq012) -
+                                    (this->GetCellBary(iCell)(Seq012) + this->GetOtherCellBaryFromCell(iCell, iCellOther, iFace, if2c)(Seq012) -
                                      2 * faceCent(Seq012))
                                         .transpose();
                                 mGG(dim + ic2f, dim + ic2f) = 2;
@@ -336,11 +338,12 @@ namespace DNDS
                     for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                     {
                         index iFace = c2f[ic2f];
-                        index iCellOther = CellFaceOther(iCell, iFace);
+                        index iCellOther = CellFaceOther(iCell, iFace, ic2f);
+                        int if2c = CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
 
                         if (iCellOther != UnInitIndex)
                         {
-                            dcs(ic2f, EigenAll) = (GetOtherCellBaryFromCell(iCell, iCellOther, iFace) - GetCellBary(iCell))(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>))
+                            dcs(ic2f, EigenAll) = (GetOtherCellBaryFromCell(iCell, iCellOther, iFace, if2c) - GetCellBary(iCell))(Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>))
                                                       .transpose();
                             dus(ic2f, EigenAll) = (u[iCellOther] - u[iCell]).transpose();
                         }
@@ -357,7 +360,7 @@ namespace DNDS
                                     uBL,
                                     u[iCell], iCell, iFace, -1,
                                     this->GetFaceNorm(iFace, -1),
-                                    this->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1), faceID);
+                                    this->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1), faceID);
                             dus(ic2f, EigenAll) = (uBV - u[iCell]).transpose();
 
                             dcs(ic2f, EigenAll) =
@@ -384,7 +387,8 @@ namespace DNDS
             template <int nVarsFixed>
             ,
             template <>
-            template <>)
+            template <>
+        )
         void VariationalReconstruction<dim>::DoReconstruction2nd(
             tURec<nVarsFixed> &uRec,
             tUDof<nVarsFixed> &u,
@@ -478,7 +482,6 @@ namespace DNDS
                     uRec[iCell](EigenAll, mask).setZero();
                     uRec[iCell](Seq012, mask) = lud1bv.solve(grad.transpose())(EigenAll, mask);
                 }
-
             }
         }
 
@@ -542,9 +545,9 @@ namespace DNDS
                     for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                     {
                         index iFace = c2f[ic2f];
-                        index iCellOther = CellFaceOther(iCell, iFace);
+                        index iCellOther = CellFaceOther(iCell, iFace, ic2f);
                         auto faceID = mesh->GetFaceZone(iFace);
-                        int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                        int if2c = CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
                         if (iCellOther != UnInitIndex)
                         {
                             Eigen::RowVector<real, nVarsFixed> uOther = u[iCellOther];
@@ -650,9 +653,9 @@ namespace DNDS
                 for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                 {
                     index iFace = c2f[ic2f];
-                    index iCellOther = CellFaceOther(iCell, iFace);
+                    index iCellOther = CellFaceOther(iCell, iFace, ic2f);
                     auto faceID = mesh->GetFaceZone(iFace);
-                    int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                    int if2c = CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
                     if (iCellOther != UnInitIndex)
                     {
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> uRecOtherDiff = uRecDiff[iCellOther];
@@ -700,9 +703,9 @@ namespace DNDS
                 for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                 {
                     index iFace = c2f[ic2f];
-                    index iCellOther = CellFaceOther(iCell, iFace);
+                    index iCellOther = CellFaceOther(iCell, iFace, ic2f);
                     auto faceID = mesh->GetFaceZone(iFace);
-                    int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                    int if2c = CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
                     if (iCellOther != UnInitIndex)
                     {
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> uRecOtherNew = uRecNew[iCellOther];

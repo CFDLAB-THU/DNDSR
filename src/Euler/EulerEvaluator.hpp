@@ -948,8 +948,7 @@ namespace DNDS::Euler
             auto faceID = mesh->GetFaceZone(iFace);
             if (!Geom::FaceIDIsPeriodic(faceID))
                 return;
-            if (if2c < 0)
-                if2c = vfv->CellIsFaceBack(iCell, iFace) ? 0 : 1;
+            DNDS_assert(if2c >= 0);
             if (if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID))
                 u(Seq123) = mesh->periodicInfo.TransVectorBack(Eigen::Vector<real, dim>{u(Seq123)}, faceID);
             if (if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID))
@@ -965,8 +964,7 @@ namespace DNDS::Euler
             auto faceID = mesh->GetFaceZone(iFace);
             if (!Geom::FaceIDIsPeriodic(faceID))
                 return;
-            if (if2c < 0)
-                if2c = vfv->CellIsFaceBack(iCell, iFace) ? 0 : 1;
+            DNDS_assert(if2c >= 0);
             if (if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID))
                 u(Seq123) = mesh->periodicInfo.TransVector(Eigen::Vector<real, dim>{u(Seq123)}, faceID);
             if (if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID))
@@ -978,8 +976,7 @@ namespace DNDS::Euler
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
             auto faceID = mesh->GetFaceZone(iFace);
-            if (if2c < 0)
-                if2c = vfv->CellIsFaceBack(iCell, iFace) ? 0 : 1;
+            DNDS_assert(if2c >= 0);
             mesh->CellOtherCellPeriodicHandle(
                 iFace, if2c,
                 [&]()
@@ -997,8 +994,7 @@ namespace DNDS::Euler
             auto faceID = mesh->GetFaceZone(iFace);
             if (!Geom::FaceIDIsPeriodic(faceID))
                 return;
-            if (if2c < 0)
-                if2c = vfv->CellIsFaceBack(iCell, iFace) ? 0 : 1;
+            DNDS_assert(if2c >= 0);
             if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID) && !reverse) ||
                 (if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID) && reverse))
             {
@@ -1704,6 +1700,35 @@ namespace DNDS::Euler
                     ret(I4 + 2) = umean(I4 + 2), compressed = true;
             }
 
+            if (phys_.hasChemicalSource())
+            {
+                bool reactiveInvalid = false;
+                int Ns = phys_.nSpecies();
+                int Ns1 = Ns - 1;
+                int Isp = static_cast<int>(ret.size()) - Ns1;
+                real sumRhoY = 0;
+                for (int k = 0; k < Ns1; ++k)
+                {
+                    reactiveInvalid = reactiveInvalid || ret(Isp + k) < 0;
+                    sumRhoY += ret(Isp + k);
+                }
+                reactiveInvalid = reactiveInvalid || sumRhoY > ret(0);
+                if (!reactiveInvalid)
+                {
+                    try
+                    {
+                        real T = phys_.template temperature<dim>(ret);
+                        reactiveInvalid = !std::isfinite(T) || phys_.toPhysT(T) < 200.0;
+                    }
+                    catch (const std::exception &)
+                    {
+                        reactiveInvalid = true;
+                    }
+                }
+                if (reactiveInvalid)
+                    ret = umean, compressed = true;
+            }
+
             return ret;
         }
 
@@ -1984,7 +2009,7 @@ namespace DNDS::Euler
                     for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                     {
                         index iFace = c2f[ic2f];
-                        index iCellOther = vfv->CellFaceOther(iCell, iFace);
+                        index iCellOther = vfv->CellFaceOther(iCell, iFace, ic2f);
                         if (iCellOther != UnInitIndex)
                         {
                             div += epsC;

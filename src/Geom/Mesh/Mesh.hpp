@@ -864,15 +864,22 @@ namespace DNDS::Geom
             return periodicInfo.GetVectorByBits<3, 1>(nodeWallDist[face2node(iFace, if2n)], face2nodePbi(iFace, if2n));
         }
 
-        bool CellIsFaceBack(index iCell, index iFace) const
+        bool CellIsFaceBack(index iCell, index iFace, rowsize ic2f) const
         {
             DNDS_assert(face2cell(iFace, 0) == iCell || face2cell(iFace, 1) == iCell);
+            if (face2cell(iFace, 0) == iCell && face2cell(iFace, 1) == iCell)
+            {
+                DNDS_assert(ic2f >= 0);
+                DNDS_assert_info(isPeriodic,
+                                 "CellIsFaceBack(): self-periodic face with ic2f requires periodic mesh");
+                return !bool(cell2facePbi(iCell, ic2f));
+            }
             return face2cell(iFace, 0) == iCell;
         }
 
-        index CellFaceOther(index iCell, index iFace) const
+        index CellFaceOther(index iCell, index iFace, rowsize ic2f) const
         {
-            return CellIsFaceBack(iCell, iFace)
+            return CellIsFaceBack(iCell, iFace, ic2f)
                        ? face2cell(iFace, 1)
                        : face2cell(iFace, 0);
         }

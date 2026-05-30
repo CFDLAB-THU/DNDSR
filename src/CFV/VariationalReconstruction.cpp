@@ -258,7 +258,7 @@ namespace DNDS::CFV
             {
                 faceBaryDiffV =
                     this->GetOtherCellBaryFromCell(mesh->face2cell(iFace, 0),
-                                                   mesh->face2cell(iFace, 1), iFace) -
+                                                   mesh->face2cell(iFace, 1), iFace, 0) -
                     this->GetCellBary(mesh->face2cell(iFace, 0));
             }
             else
@@ -288,7 +288,7 @@ namespace DNDS::CFV
                 volR = std::pow(GetCellVol(mesh->face2cell(iFace, 1)) + verySmallReal, settings.functionalSettings.inertiaWeightPower);
                 cellInertiaR = this->GetOtherCellInertiaFromCell(
                                    mesh->face2cell(iFace, 0),
-                                   mesh->face2cell(iFace, 1), iFace) *
+                                   mesh->face2cell(iFace, 1), iFace, 0) *
                                volR;
             }
             Geom::tGPoint faceInertiaC =
@@ -456,9 +456,9 @@ namespace DNDS::CFV
                 for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                 {
                     index iFace = c2f[ic2f];
-                    index iCellOther = CellFaceOther(iCell, iFace);
+                    index iCellOther = CellFaceOther(iCell, iFace, ic2f);
                     auto faceID = mesh->GetFaceZone(iFace);
-                    int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                    int if2c = CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
                     if (iCellOther == UnInitIndex)
                     {
                         DNDS_assert(FaceIDIsExternalBC(faceID));
@@ -478,7 +478,7 @@ namespace DNDS::CFV
                                 tPoint np = FacialJacobianToNormVec<dim>(J);
                                 RowVectorXR dbv, dbvD;
                                 dbvD.resize(1, GetCellAtr(iCell).NDOF);
-                                this->FDiffBaseValue(dbvD, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
+                                this->FDiffBaseValue(dbvD, this->GetFacePointFromCell(iFace, iCell, if2c, pPhy), iCell, iFace, -2, 0);
                                 dbv = dbvD(0, Eigen::seq(Eigen::fix<1>, EigenLast));
                                 BndVRPointCache cacheEntry;
                                 cacheEntry.D0Bj = dbv;
@@ -548,7 +548,8 @@ namespace DNDS::CFV
             for (int ic2f = 0; ic2f < mesh->cell2face.RowSize(iCell); ic2f++)
             {
                 index iFace = mesh->cell2face(iCell, ic2f);
-                index iCellOther = CellFaceOther(iCell, iFace);
+                index iCellOther = CellFaceOther(iCell, iFace, ic2f);
+                auto if2c = CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
                 auto qFace = this->GetFaceQuad(iFace);
                 auto qFaceVR = Quadrature(mesh->GetFaceElement(iFace), iCellOther == UnInitIndex ? settings.intOrderVRBCValue()
                                                                                                  : settings.intOrderVRValue());
@@ -564,7 +565,7 @@ namespace DNDS::CFV
                         real JDet{0};
                         if (cur_face_intOrderVRIsSame)
                         {
-                            DiffI = this->GetIntPointDiffBaseValue(iCell, iFace, -1, iG, EigenAll);
+                            DiffI = this->GetIntPointDiffBaseValue(iCell, iFace, if2c, iG, EigenAll);
                             JDet = this->GetFaceJacobiDet(iFace, iG);
                         }
                         else
@@ -573,7 +574,7 @@ namespace DNDS::CFV
                             JDet = FaceJacobianDet(dim, coords, DiNj) * (axisSymmetric ? pPhy(1) : 1.);
                             MatrixXR dbv;
                             dbv.resize(GetFaceAtr(iFace).NDIFF, GetCellAtr(iCell).NDOF);
-                            this->FDiffBaseValue(dbv, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
+                            this->FDiffBaseValue(dbv, this->GetFacePointFromCell(iFace, iCell, if2c, pPhy), iCell, iFace, -2, 0);
                             DiffI = dbv(EigenAll, Eigen::seq(Eigen::fix<1>, EigenLast));
                         }
                         vInc = this->FFaceFunctional(DiffI, DiffI, iFace, iCell, iCell);
@@ -601,9 +602,9 @@ namespace DNDS::CFV
                 for (int ic2f = 0; ic2f < mesh->cell2face.RowSize(iCell); ic2f++)
                 {
                     index iFace = mesh->cell2face(iCell, ic2f);
-                    index iCellOther = this->CellFaceOther(iCell, iFace);
+                    index iCellOther = this->CellFaceOther(iCell, iFace, ic2f);
                     auto qFace = this->GetFaceQuad(iFace);
-                    int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                    int if2c = CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
                     qFace.IntegrationSimple(
                         AHalf_GG,
                         [&](decltype(AHalf_GG) &inc, int iG)
@@ -612,15 +613,15 @@ namespace DNDS::CFV
                                              (if2c ? -1 : 1);
                             inc = normOut(Seq012) *
                                   this->GetIntPointDiffBaseValue(
-                                      iCell, iFace, -1, iG,
+                                      iCell, iFace, if2c, iG,
                                       0, 1);
                             inc *= (1 - settings.functionalSettings.greenGauss1Bias);
                             if (iCellOther != UnInitIndex)
                             {
-                                real dLR = (GetOtherCellBaryFromCell(iCell, iCellOther, iFace) - GetCellBary(iCell)).norm();
+                                real dLR = (GetOtherCellBaryFromCell(iCell, iCellOther, iFace, if2c) - GetCellBary(iCell)).norm();
                                 inc -= normOut(Seq012) *
                                        (normOut(Seq012).transpose() *
-                                        this->GetIntPointDiffBaseValue(iCell, iFace, -1, iG, Seq123, dim + 1)) *
+                                        this->GetIntPointDiffBaseValue(iCell, iFace, if2c, iG, Seq123, dim + 1)) *
                                        dLR *
                                        settings.functionalSettings.greenGauss1Penalty;
                             }
@@ -636,7 +637,7 @@ namespace DNDS::CFV
             for (int ic2f = 0; ic2f < mesh->cell2face.RowSize(iCell); ic2f++)
             {
                 index iFace = mesh->cell2face(iCell, ic2f);
-                index iCellOther = this->CellFaceOther(iCell, iFace);
+                index iCellOther = this->CellFaceOther(iCell, iFace, ic2f);
                 auto qFace = this->GetFaceQuad(iFace);
                 auto qFaceVR = Quadrature(mesh->GetFaceElement(iFace),
                                           iCellOther == UnInitIndex ? settings.intOrderVRBCValue()
@@ -645,7 +646,7 @@ namespace DNDS::CFV
                 tSmallCoords coords;
                 if (!cur_face_intOrderVRIsSame)
                     mesh->GetCoordsOnFace(iFace, coords);
-                int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                int if2c = CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
                 auto faceID = mesh->GetFaceZone(iFace);
                 if (FaceIDIsExternalBC(mesh->GetFaceZone(iFace)))
                 {
@@ -666,8 +667,8 @@ namespace DNDS::CFV
                         if (cur_face_intOrderVRIsSame)
                         {
                             JDet = this->GetFaceJacobiDet(iFace, iG);
-                            DiffI = this->GetIntPointDiffBaseValue(iCell, iFace, -1, iG, EigenAll);
-                            DiffJ = this->GetIntPointDiffBaseValue(iCellOther, iFace, -1, iG, EigenAll);
+                            DiffI = this->GetIntPointDiffBaseValue(iCell, iFace, if2c, iG, EigenAll);
+                            DiffJ = this->GetIntPointDiffBaseValue(iCellOther, iFace, 1 - if2c, iG, EigenAll);
                         }
                         else
                         {
@@ -676,8 +677,8 @@ namespace DNDS::CFV
                             MatrixXR dbvI, dbvJ;
                             dbvI.resize(GetFaceAtr(iFace).NDIFF, GetCellAtr(iCell).NDOF);
                             dbvJ.resize(GetFaceAtr(iFace).NDIFF, GetCellAtr(iCellOther).NDOF);
-                            this->FDiffBaseValue(dbvI, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
-                            this->FDiffBaseValue(dbvJ, this->GetFacePointFromCell(iFace, iCellOther, -1, pPhy), iCellOther, iFace, -2, 0);
+                            this->FDiffBaseValue(dbvI, this->GetFacePointFromCell(iFace, iCell, if2c, pPhy), iCell, iFace, -2, 0);
+                            this->FDiffBaseValue(dbvJ, this->GetFacePointFromCell(iFace, iCellOther, 1 - if2c, pPhy), iCellOther, iFace, -2, 0);
 
                             DiffI = dbvI(EigenAll, Eigen::seq(Eigen::fix<1>, EigenLast));
                             DiffJ = dbvJ(EigenAll, Eigen::seq(Eigen::fix<1>, EigenLast));
@@ -713,7 +714,7 @@ namespace DNDS::CFV
                             inc = normOut(Seq012) *
                                   this->GetIntPointDiffBaseValue(iCellOther, iFace, 1 - if2c, iG, 0, 1); // need 1-if2c!!if2c is for iCell!
                             inc *= settings.functionalSettings.greenGauss1Bias;
-                            real dLR = (GetOtherCellBaryFromCell(iCell, iCellOther, iFace) - GetCellBary(iCell)).norm();
+                            real dLR = (GetOtherCellBaryFromCell(iCell, iCellOther, iFace, if2c) - GetCellBary(iCell)).norm();
                             inc += normOut(Seq012) *
                                    (normOut(Seq012).transpose() *
                                     this->GetIntPointDiffBaseValue(iCellOther, iFace, 1 - if2c, iG, Seq123, dim + 1)) *
@@ -734,8 +735,8 @@ namespace DNDS::CFV
             for (int ic2f = 0; ic2f < mesh->cell2face.RowSize(iCell); ic2f++)
             {
                 index iFace = mesh->cell2face(iCell, ic2f);
-                index iCellOther = this->CellFaceOther(iCell, iFace);
-                int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                index iCellOther = this->CellFaceOther(iCell, iFace, ic2f);
+                int if2c = CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
                 auto qFace = this->GetFaceQuad(iFace);
                 auto qFaceVR = Quadrature(mesh->GetFaceElement(iFace),
                                           iCellOther == UnInitIndex ? settings.intOrderVRBCValue()
@@ -755,7 +756,7 @@ namespace DNDS::CFV
                         if (cur_face_intOrderVRIsSame)
                         {
                             JDet = this->GetFaceJacobiDet(iFace, iG);
-                            DiffI = this->GetIntPointDiffBaseValue(iCell, iFace, -1, iG, std::array<int, 1>{0}, 1);
+                            DiffI = this->GetIntPointDiffBaseValue(iCell, iFace, if2c, iG, std::array<int, 1>{0}, 1);
                         }
                         else
                         {
@@ -763,7 +764,7 @@ namespace DNDS::CFV
                             JDet = FaceJacobianDet(dim, coords, DiNj) * (axisSymmetric ? pPhy(1) : 1.);
                             MatrixXR dbv;
                             dbv.resize(1, GetCellAtr(iCell).NDOF);
-                            this->FDiffBaseValue(dbv, this->GetFacePointFromCell(iFace, iCell, -1, pPhy), iCell, iFace, -2, 0);
+                            this->FDiffBaseValue(dbv, this->GetFacePointFromCell(iFace, iCell, if2c, pPhy), iCell, iFace, -2, 0);
                             DiffI = dbv(EigenAll, Eigen::seq(Eigen::fix<1>, EigenLast));
                         }
                         vInc = this->FFaceFunctional(DiffI, Eigen::MatrixXd::Ones(1, 1), iFace, iCell, iCell);
@@ -777,7 +778,7 @@ namespace DNDS::CFV
                         bHalf_GG,
                         [&](auto &inc, int iG)
                         {
-                            inc = this->GetFaceNormFromCell(iFace, iCell, -1, iG)(Seq012) *
+                            inc = this->GetFaceNormFromCell(iFace, iCell, if2c, iG)(Seq012) *
                                   (if2c ? -1 : 1);
                             inc *= settings.functionalSettings.greenGauss1Bias * this->GetFaceJacobiDet(iFace, iG);
                         });
@@ -811,8 +812,8 @@ namespace DNDS::CFV
             {
                 index iFace = mesh->cell2face(iCell, ic2f);
                 auto qFace = this->GetFaceQuad(iFace);
-                index iCellOther = CellFaceOther(iCell, iFace);
-                int if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                index iCellOther = CellFaceOther(iCell, iFace, ic2f);
+                int if2c = CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
                 auto faceID = mesh->GetFaceZone(iFace);
                 if (FaceIDIsExternalBC(mesh->GetFaceZone(iFace)))
                 {

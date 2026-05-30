@@ -582,7 +582,7 @@ namespace DNDS::CFV
             /// ! if the faces and f2c are created right, and not distorting too much
             if (!settings.ignoreMeshGeometryDeficiency)
                 DNDS_assert_info(
-                    (this->GetFaceQuadraturePPhysFromCell(iFace, mesh->face2cell(iFace, 0), -1, -1) -
+                    (this->GetFaceQuadraturePPhysFromCell(iFace, mesh->face2cell(iFace, 0), 0, -1) -
                      this->GetCellQuadraturePPhys(mesh->face2cell(iFace, 0), -1))
                             .dot(faceMeanNorm[iFace]) >= 0,
                     "face mean norm is not the same side as faceCenter - cellCenter");
@@ -593,7 +593,7 @@ namespace DNDS::CFV
     {
         DNDS_assert_info(volumeLocal.father->Size() == mesh->NumCell(), "need to do ConstructCellVolume() first");
         DNDS_assert_info(faceArea.father->Size() == mesh->NumFace(), "need to do ConstructFaceArea() first");
-        
+
         this->MakePairDefaultOnCell(cellSmoothScale, "FV::cellSmoothScale");
         cellSmoothScale.TransAttach();
         cellSmoothScale.trans.BorrowGGIndexing(mesh->cell2cell.trans);
@@ -616,9 +616,11 @@ namespace DNDS::CFV
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 real nAdj{0}, sum{0};
-                for (index iFace : mesh->cell2face[iCell])
+                auto c2f = mesh->cell2face[iCell];
+                for (rowsize ic2f = 0; ic2f < c2f.size(); ++ic2f)
                 {
-                    index iCellOther = this->CellFaceOther(iCell, iFace);
+                    index iFace = c2f[ic2f];
+                    index iCellOther = this->CellFaceOther(iCell, iFace, ic2f);
                     if (iCellOther != UnInitIndex)
                     {
                         nAdj += 1.;

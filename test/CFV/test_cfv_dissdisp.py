@@ -142,7 +142,8 @@ class WaveTester:
             translation1=transform @ np.array([5, 0, 0]),
             translation2=transform @ np.array([0, 5, 0]),
         )
-        coord_father = np.array(mesh.coords.father.data(), copy=False).reshape(-1, 3)
+        coord_father = np.array(mesh.coords.father.data(),
+                                copy=False).reshape(-1, 3)
         coord_son = np.array(mesh.coords.son.data(), copy=False).reshape(-1, 3)
 
         coord_father[:] = coord_father @ transform.transpose()
@@ -274,12 +275,14 @@ class WaveTester:
         self.set_uFree(u_free.real, u_free.imag)
         self.uSync(kx, ky)
 
-        self.DoReconstruction(kx, ky, n_iter, tol, n_print, n_iter_min=n_iter_min)
+        self.DoReconstruction(kx, ky, n_iter, tol,
+                              n_print, n_iter_min=n_iter_min)
 
         eval.EvaluateRHS(rhs_real, u_real, uRec_real, 0.0, options=rhsOptions)
         eval.EvaluateRHS(rhs_imag, u_imag, uRec_imag, 0.0, options=rhsOptions)
         return (
-            np.array(rhs_real[self.iCellFree]) + 1j * np.array(rhs_imag[self.iCellFree])
+            np.array(rhs_real[self.iCellFree]) + 1j *
+            np.array(rhs_imag[self.iCellFree])
         ).flatten()
 
     def test_conv_rate(
@@ -304,7 +307,7 @@ class WaveTester:
 
         kx = kx.flatten()
         ky = ky.flatten()
-        
+
         vfv = self.vfv
         mesh = self.mesh
         eval = self.eval
@@ -332,10 +335,11 @@ class WaveTester:
         xcC = vfv.GetCellBary(self.iCellFree)
 
         for ic2f, iFace in enumerate(c2f):
-            iCellOther = mesh.CellFaceOther(self.iCellFree, iFace)
+            iCellOther = mesh.CellFaceOther(self.iCellFree, iFace, ic2f)
             assert iCellOther != DNDS.UnInitIndex
-            normOut = vfv.GetFaceNormFromCell(iFace, self.iCellFree, -1, -1)
-            if not mesh.CellIsFaceBack(self.iCellFree, iFace):
+            if2c = 0 if mesh.CellIsFaceBack(self.iCellFree, iFace, ic2f) else 1
+            normOut = vfv.GetFaceNormFromCell(iFace, self.iCellFree, if2c, -1)
+            if if2c != 0:
                 normOut *= -1.0
             a_out = normOut[0] * self.ax + normOut[1] * self.ay
 
@@ -350,7 +354,8 @@ class WaveTester:
 
             xcr = vfv.GetCellBary(iCellOther) - xcC
             wave_val = np.exp(1j * (kx * xcr[0] + ky * xcr[1])).reshape(-1, 1)
-            dFdu = (1 + wave_val) * 0.5 * a_out - 0.5 * np.abs(a_out) * (wave_val - 1)
+            dFdu = (1 + wave_val) * 0.5 * a_out - \
+                0.5 * np.abs(a_out) * (wave_val - 1)
             dFdu += -0.5 * a_vis * (wave_val - 1)
 
             J -= dFdu * vfv.GetFaceArea(iFace) / vfv.GetCellVol(self.iCellFree)
@@ -381,7 +386,8 @@ class WaveTester:
             options.direct2ndRec = True
             options.direct2ndRec1stConv = False
             J_p1 = (
-                self.test_one_wave(kx, ky, rhsOptions=options, **rhsParamsGeneral)
+                self.test_one_wave(
+                    kx, ky, rhsOptions=options, **rhsParamsGeneral)
                 - self.test_one_wave(
                     kx, ky, u_free=0j + 1 - eps, rhsOptions=options, **rhsParamsGeneral
                 )
@@ -393,12 +399,15 @@ class WaveTester:
         np.array(u_imag[self.iCellFree], copy=False)[:] = 0
         self.uSync(kx, ky)
 
-        ################# OTop
+        # OTop
 
         for iter in range(singlegrid_niter):
-            self.DoReconstruction(kx, ky, n_iter, tol, n_print, n_iter_min=n_iter_min)
-            eval.EvaluateRHS(rhs_real, u_real, uRec_real, 0.0, options=rhsOptionsTop)
-            eval.EvaluateRHS(rhs_imag, u_imag, uRec_imag, 0.0, options=rhsOptionsTop)
+            self.DoReconstruction(kx, ky, n_iter, tol,
+                                  n_print, n_iter_min=n_iter_min)
+            eval.EvaluateRHS(rhs_real, u_real, uRec_real,
+                             0.0, options=rhsOptionsTop)
+            eval.EvaluateRHS(rhs_imag, u_imag, uRec_imag,
+                             0.0, options=rhsOptionsTop)
 
             uFreeNew = self.get_uFreeComplex() + (
                 self.get_rhsFreeComplex() - self.get_uFreeComplex() / dT
@@ -406,12 +415,15 @@ class WaveTester:
             self.set_uFree(np.real(uFreeNew), np.imag(uFreeNew))
             self.uSync(kx, ky)
 
-        self.DoReconstruction(kx, ky, n_iter, tol, n_print, n_iter_min=n_iter_min)
-        eval.EvaluateRHS(rhs_real, u_real, uRec_real, 0.0, options=rhsOptionsTop)
-        eval.EvaluateRHS(rhs_imag, u_imag, uRec_imag, 0.0, options=rhsOptionsTop)
+        self.DoReconstruction(kx, ky, n_iter, tol,
+                              n_print, n_iter_min=n_iter_min)
+        eval.EvaluateRHS(rhs_real, u_real, uRec_real,
+                         0.0, options=rhsOptionsTop)
+        eval.EvaluateRHS(rhs_imag, u_imag, uRec_imag,
+                         0.0, options=rhsOptionsTop)
         rhs_top = self.get_rhsFreeComplex() - self.get_uFreeComplex() / dT
 
-        ################# O1
+        # O1
 
         options1 = eval.EvaluateRHSOptions()
         options1.direct2ndRec = True
@@ -431,8 +443,10 @@ class WaveTester:
             ) / (-J_p1 + 1.0 / (dTau * multigrid_dtau_fact[0]) + 1.0 / dT)
             self.set_uFree(np.real(uFreeNew), np.imag(uFreeNew))
             self.uSync(kx, ky)
-            eval.EvaluateRHS(rhs_real, u_real, uRec_real, 0.0, options=options1)
-            eval.EvaluateRHS(rhs_imag, u_imag, uRec_imag, 0.0, options=options1)
+            eval.EvaluateRHS(rhs_real, u_real, uRec_real,
+                             0.0, options=options1)
+            eval.EvaluateRHS(rhs_imag, u_imag, uRec_imag,
+                             0.0, options=options1)
         rhs_1 = (
             self.get_rhsFreeComplex()
             - self.get_uFreeComplex() / dT
@@ -440,7 +454,7 @@ class WaveTester:
             + rhs_top * multigrid_res_fact[0]
         )
 
-        ################# O0
+        # O0
 
         options0 = eval.EvaluateRHSOptions()
         options0.direct2ndRec = True
@@ -460,8 +474,10 @@ class WaveTester:
             ) / (-J + 1.0 / (dTau * multigrid_dtau_fact[1]) + 1.0 / dT)
             self.set_uFree(np.real(uFreeNew), np.imag(uFreeNew))
             self.uSync(kx, ky)
-            eval.EvaluateRHS(rhs_real, u_real, uRec_real, 0.0, options=options0)
-            eval.EvaluateRHS(rhs_imag, u_imag, uRec_imag, 0.0, options=options0)
+            eval.EvaluateRHS(rhs_real, u_real, uRec_real,
+                             0.0, options=options0)
+            eval.EvaluateRHS(rhs_imag, u_imag, uRec_imag,
+                             0.0, options=options0)
 
         return self.get_uFreeComplex().flatten()
 
@@ -531,7 +547,7 @@ class WaveTester:
             )
 
             for ic2f, iFace in enumerate(c2f):
-                iCellOther = mesh.CellFaceOther(self.iCellFree, iFace)
+                iCellOther = mesh.CellFaceOther(self.iCellFree, iFace, ic2f)
                 xcr = vfv.GetCellBary(iCellOther) - xcC
                 wave_val = np.exp(1j * (kx * xcr[0] + ky * xcr[1]))
                 # print(np.array(matrixAAInvB[self.iCellFree, ic2f + 2], copy=False))
@@ -572,8 +588,10 @@ class WaveTester:
                     np.array(uRec_imag[self.iCellFree]),
                 )
             )
-            eval.DoReconstructionIter(uRec_real, uRecNew_real, u_real, 0.0, False)
-            eval.DoReconstructionIter(uRec_imag, uRecNew_imag, u_imag, 0.0, False)
+            eval.DoReconstructionIter(
+                uRec_real, uRecNew_real, u_real, 0.0, False)
+            eval.DoReconstructionIter(
+                uRec_imag, uRecNew_imag, u_imag, 0.0, False)
             self.uRecSync(kx, ky)
             uRecNewFree = np.array(
                 (
@@ -582,7 +600,8 @@ class WaveTester:
                 )
             )
             # print((uRecPrevFree - uRecNewFree).reshape((2, 9)))
-            incNorm = np.linalg.norm((uRecPrevFree - uRecNewFree).flatten(), ord=1)
+            incNorm = np.linalg.norm(
+                (uRecPrevFree - uRecNewFree).flatten(), ord=1)
 
             if iter >= n_iter_min and n_print > 0 and iter % n_print == 0:
                 print(f"iter {iter} [{incNorm}]")

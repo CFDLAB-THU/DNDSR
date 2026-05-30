@@ -88,9 +88,9 @@ namespace DNDS::CFV
             .def("GetCellBary", &T::GetCellBary, py::arg("iCell"));
 
         FiniteVolume_
-            .def("CellIsFaceBack", &T::CellIsFaceBack, py::arg("iCell"), py::arg("iFace"));
+            .def("CellIsFaceBack", &T::CellIsFaceBack, py::arg("iCell"), py::arg("iFace"), py::arg("ic2f"));
         FiniteVolume_
-            .def("CellFaceOther", &T::CellFaceOther, py::arg("iCell"), py::arg("iFace"));
+            .def("CellFaceOther", &T::CellFaceOther, py::arg("iCell"), py::arg("iFace"), py::arg("ic2f"));
 
         FiniteVolume_
             .def("GetFaceNorm", &T::GetFaceNorm, py::arg("iFace"), py::arg("iG"));
@@ -105,11 +105,11 @@ namespace DNDS::CFV
             .def("GetFacePointFromCell", &T::GetFacePointFromCell, py::arg("iFace"), py::arg("iCell"), py::arg("if2c"), py::arg("pnt"));
 
         FiniteVolume_
-            .def("GetOtherCellBaryFromCell", &T::GetOtherCellBaryFromCell, py::arg("iCell"), py::arg("iCellOther"), py::arg("iFace"));
+            .def("GetOtherCellBaryFromCell", &T::GetOtherCellBaryFromCell, py::arg("iCell"), py::arg("iCellOther"), py::arg("iFace"), py::arg("if2c"));
         FiniteVolume_
-            .def("GetOtherCellPointFromCell", &T::GetOtherCellPointFromCell, py::arg("iCell"), py::arg("iCellOther"), py::arg("iFace"), py::arg("pnt"));
+            .def("GetOtherCellPointFromCell", &T::GetOtherCellPointFromCell, py::arg("iCell"), py::arg("iCellOther"), py::arg("iFace"), py::arg("if2c"), py::arg("pnt"));
         FiniteVolume_
-            .def("GetOtherCellInertiaFromCell", &T::GetOtherCellInertiaFromCell, py::arg("iCell"), py::arg("iCellOther"), py::arg("iFace"));
+            .def("GetOtherCellInertiaFromCell", &T::GetOtherCellInertiaFromCell, py::arg("iCell"), py::arg("iCellOther"), py::arg("iFace"), py::arg("if2c"));
         FiniteVolume_
             .def("GetCellQuadraturePPhys", &T::GetCellQuadraturePPhys, py::arg("iCell"), py::arg("iG"));
         FiniteVolume_
@@ -126,7 +126,7 @@ namespace DNDS::CFV
     FiniteVolume_.def(                                                                                     \
         ("BuildUDof_" + RowSize_To_PySnippet(nVarsFixed)).c_str(),                                         \
         [](T &self, tUDof<nVarsFixed> &u, int nVars, bool buildSon, bool buildTrans, Geom::MeshLoc varloc) \
-        { self.BuildUDof(u, nVars, buildSon, buildTrans, varloc); },                                               \
+        { self.BuildUDof(u, nVars, buildSon, buildTrans, varloc); },                                       \
         py::arg("u"), py::arg("nVars"), py::arg("buildSon") = true,                                        \
         py::arg("buildTrans") = true, py::arg("varloc") = Geom::MeshLoc::Cell,                             \
         DNDS_PYBIND11_OSTREAM_GUARD)

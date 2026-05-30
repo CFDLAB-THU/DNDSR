@@ -59,7 +59,8 @@ namespace DNDS::CFV
             for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
             {
                 index iFace = c2f[ic2f];
-                index iCellOther = this->CellFaceOther(iCell, iFace);
+                rowsize if2c = this->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
+                index iCellOther = this->CellFaceOther(iCell, iFace, ic2f);
                 auto gFace = this->GetFaceQuadO1(iFace);
                 decltype(IJIISIsum) IJIISI;
                 IJIISI.setZero(nVarsSee, 2);
@@ -74,13 +75,13 @@ namespace DNDS::CFV
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsSee, Eigen::DontAlign, maxNDiff, nVarsSee>
                             uRecVal(nDiff, nVarsSee), uRecValL(nDiff, nVarsSee), uRecValR(nDiff, nVarsSee), uRecValJump(nDiff, nVarsSee);
                         uRecVal.setZero(), uRecValJump.setZero();
-                        uRecValL = this->GetIntPointDiffBaseValue(iCell, iFace, -1, -1, Eigen::seq(0, nDiff - 1)) *
+                        uRecValL = this->GetIntPointDiffBaseValue(iCell, iFace, if2c, -1, Eigen::seq(0, nDiff - 1)) *
                                    uRec[iCell](EigenAll, varsSee);
                         uRecValL(0, EigenAll) += u[iCell](varsSee).transpose();
 
                         if (iCellOther != UnInitIndex)
                         {
-                            uRecValR = this->GetIntPointDiffBaseValue(iCellOther, iFace, -1, -1, Eigen::seq(0, nDiff - 1)) *
+                            uRecValR = this->GetIntPointDiffBaseValue(iCellOther, iFace, 1 - if2c, -1, Eigen::seq(0, nDiff - 1)) *
                                        uRec[iCellOther](EigenAll, varsSee);
                             uRecValR(0, EigenAll) += u[iCellOther](varsSee).transpose();
                             uRecVal = (uRecValL + uRecValR) * 0.5;
@@ -131,7 +132,8 @@ namespace DNDS::CFV
             for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
             {
                 index iFace = c2f[ic2f];
-                index iCellOther = this->CellFaceOther(iCell, iFace);
+                rowsize if2c = this->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
+                index iCellOther = this->CellFaceOther(iCell, iFace, ic2f);
                 auto gFace = this->GetFaceQuadO1(iFace);
                 decltype(IJIISIsum) IJIISI;
                 // if (iCellOther != UnInitIndex)
@@ -151,14 +153,14 @@ namespace DNDS::CFV
                         Eigen::Matrix<real, 1, nVarsFixed>
                             uRecVal(1, nVarsFixed), uRecValL(1, nVarsFixed), uRecValR(1, nVarsFixed), uRecValJump(1, nVarsFixed);
                         uRecVal.setZero(1, nVars), uRecValJump.setZero(1, nVars);
-                        uRecValL = this->GetIntPointDiffBaseValue(iCell, iFace, -1, -1, std::array<int, 1>{0}, 1) *
+                        uRecValL = this->GetIntPointDiffBaseValue(iCell, iFace, if2c, -1, std::array<int, 1>{0}, 1) *
                                    uRec[iCell];
                         uRecValL(0, EigenAll) += u[iCell].transpose();
                         FPost(uRecValL);
 
                         if (iCellOther != UnInitIndex)
                         {
-                            uRecValR = this->GetIntPointDiffBaseValue(iCellOther, iFace, -1, -1, std::array<int, 1>{0}, 1) *
+                            uRecValR = this->GetIntPointDiffBaseValue(iCellOther, iFace, 1 - if2c, -1, std::array<int, 1>{0}, 1) *
                                        uRec[iCellOther];
                             uRecValR(0, EigenAll) += u[iCellOther].transpose();
                             FPost(uRecValR);
@@ -217,7 +219,8 @@ namespace DNDS::CFV
             {
                 // * safety initialization
                 index iFace = c2f[ic2f];
-                index iCellOther = this->CellFaceOther(iCell, iFace);
+                rowsize if2c = this->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
+                index iCellOther = this->CellFaceOther(iCell, iFace, ic2f);
                 if (iCellOther != UnInitIndex)
                 {
                     uFaces[ic2f].resizeLike(uRec[iCellOther]);
@@ -243,9 +246,9 @@ namespace DNDS::CFV
                 for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                 {
                     index iFace = c2f[ic2f];
-                    auto f2c = mesh->face2cell[iFace];
-                    index iCellOther = this->CellFaceOther(iCell, iFace);
-                    index iCellAtFace = f2c[0] == iCell ? 0 : 1;
+                    rowsize if2c = this->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
+                    index iCellOther = this->CellFaceOther(iCell, iFace, ic2f);
+                    index iCellAtFace = if2c;
 
                     if (iCellOther != UnInitIndex)
                     {
@@ -259,10 +262,10 @@ namespace DNDS::CFV
                         tPoint unitNorm = faceMeanNorm[iFace];
 
                         const auto &matrixSecondaryThis =
-                            this->GetMatrixSecondary(iCell, iFace, -1);
+                            this->GetMatrixSecondary(iCell, iFace, if2c);
 
                         const auto &matrixSecondaryOther =
-                            this->GetMatrixSecondary(iCellOther, iFace, -1);
+                            this->GetMatrixSecondary(iCellOther, iFace, 1 - if2c);
 
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOF>
                             uOtherOther = uRec[iCellOther](Eigen::seq(0, NRecDOFLim - 1), EigenAll);
@@ -379,7 +382,8 @@ namespace DNDS::CFV
                 {
                     // * safety initialization
                     index iFace = c2f[ic2f];
-                    index iCellOther = this->CellFaceOther(iCell, iFace);
+                    rowsize if2c = this->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
+                    index iCellOther = this->CellFaceOther(iCell, iFace, ic2f);
                     if (iCellOther != UnInitIndex)
                     {
                         // uFaces[ic2f].resizeLike(uRec[iCellOther]);
@@ -400,9 +404,9 @@ namespace DNDS::CFV
                 for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                 {
                     index iFace = c2f[ic2f];
-                    auto f2c = mesh->face2cell[iFace];
-                    index iCellOther = this->CellFaceOther(iCell, iFace);
-                    index iCellAtFace = f2c[0] == iCell ? 0 : 1;
+                    rowsize if2c = this->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
+                    index iCellOther = this->CellFaceOther(iCell, iFace, ic2f);
+                    index iCellAtFace = if2c;
 
                     if (iCellOther != UnInitIndex)
                     {
@@ -416,10 +420,10 @@ namespace DNDS::CFV
                         tPoint unitNorm = faceMeanNorm[iFace];
 
                         const auto &matrixSecondaryThis =
-                            this->GetMatrixSecondary(iCell, iFace, -1);
+                            this->GetMatrixSecondary(iCell, iFace, if2c);
 
                         const auto &matrixSecondaryOther =
-                            this->GetMatrixSecondary(iCellOther, iFace, -1);
+                            this->GetMatrixSecondary(iCellOther, iFace, 1 - if2c);
 
                         Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed, 0, maxRecDOF>
                             uOtherOther = uRecBuf[iCellOther](Eigen::seq(0, NRecDOFLim - 1), EigenAll);

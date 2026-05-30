@@ -249,6 +249,7 @@ namespace DNDS::Geom
         // std::vector<index> bnd2faceV; // no device
         // std::unordered_map<index, index> face2bndM; // no device
         /// periodic only, after interpolated
+        tPbiPair::t_deviceView<B> cell2facePbi;
         tPbiPair::t_deviceView<B> face2nodePbi;
 
         DNDS_HOST auto device_array_list_facial()
@@ -256,6 +257,7 @@ namespace DNDS::Geom
             return std::make_tuple(
                 DNDS_MAKE_1_MEMBER_REF(face2cell),
                 DNDS_MAKE_1_MEMBER_REF(face2node),
+                DNDS_MAKE_1_MEMBER_REF(cell2facePbi),
                 DNDS_MAKE_1_MEMBER_REF(face2nodePbi),
                 DNDS_MAKE_1_MEMBER_REF(faceElemInfo),
                 DNDS_MAKE_1_MEMBER_REF(face2bnd));
@@ -267,7 +269,10 @@ namespace DNDS::Geom
             DNDS_COPY_MEMBER_VIEW(m_obj, face2cell);
             DNDS_COPY_MEMBER_VIEW(m_obj, face2node);
             if (isPeriodic)
+            {
+                DNDS_COPY_MEMBER_VIEW(m_obj, cell2facePbi);
                 DNDS_COPY_MEMBER_VIEW(m_obj, face2nodePbi);
+            }
             DNDS_COPY_MEMBER_VIEW(m_obj, faceElemInfo);
             DNDS_COPY_MEMBER_VIEW(m_obj, face2bnd);
         }
@@ -474,15 +479,21 @@ namespace DNDS::Geom
         //     return periodicInfo.GetVectorByBits<3, 1>(nodeWallDist[face2node(iFace, if2n)], face2nodePbi(iFace, if2n));
         // }
 
-        DNDS_DEVICE_CALLABLE [[nodiscard]] bool CellIsFaceBack(index iCell, index iFace) const
+        DNDS_DEVICE_CALLABLE [[nodiscard]] bool CellIsFaceBack(index iCell, index iFace, rowsize ic2f) const
         {
             DNDS_assert(face2cell(iFace, 0) == iCell || face2cell(iFace, 1) == iCell);
+            if (face2cell(iFace, 0) == iCell && face2cell(iFace, 1) == iCell)
+            {
+                DNDS_assert(ic2f >= 0);
+                DNDS_assert(isPeriodic);
+                return !bool(cell2facePbi(iCell, ic2f));
+            }
             return face2cell(iFace, 0) == iCell;
         }
 
-        DNDS_DEVICE_CALLABLE [[nodiscard]] index CellFaceOther(index iCell, index iFace) const
+        DNDS_DEVICE_CALLABLE [[nodiscard]] index CellFaceOther(index iCell, index iFace, rowsize ic2f) const
         {
-            return CellIsFaceBack(iCell, iFace)
+            return CellIsFaceBack(iCell, iFace, ic2f)
                        ? face2cell(iFace, 1)
                        : face2cell(iFace, 0);
         }
