@@ -1216,9 +1216,10 @@ namespace DNDS::Euler
                     phys_.mixtureFormationRhoE(UMeanXYC));
 
                 // Fickian species diffusion + enthalpy transport (reactive flow)
+                static constexpr bool enableReactiveSpeciesDiffusion = true;
                 if constexpr (Traits::isExtended)
                 {
-                    if (phys_.hasChemicalSource())
+                    if (enableReactiveSpeciesDiffusion && phys_.hasChemicalSource())
                     {
                         // TODO(reactive-turbulence): this is the remaining RANS+reaction
                         // viscous-transport gap. Species diffusion is molecular
@@ -1233,19 +1234,45 @@ namespace DNDS::Euler
                         std::vector<double> hBuf(Ns);
                         Chemistry::SpeciesBufferView hv{hBuf.data(), Ns};
                         phys_.speciesEnthalpies(T, pMean, UMeanXYC, hv);
-                        real hLast_code = hBuf[Ns - 1];
 
                         real rhoFace = UMeanXYC(0);
+                        real rhoInvFace = 1.0 / std::max(rhoFace, verySmallReal);
+                        std::vector<real> YBuf(Ns, 0.0);
+                        std::vector<real> JRawN(Ns, 0.0);
+                        real sumY = 0.0;
+                        real sumGradYDotN = 0.0;
+                        real sumJRawN = 0.0;
                         for (int kk = 0; kk < Ns1; ++kk)
                         {
+                            YBuf[kk] = UMeanXYC(Isp + kk) * rhoInvFace;
+                            sumY += YBuf[kk];
                             real Dk = phys_.speciesDiffusivityK(T, pMean, UMeanXYC, kk);
                             // DiffUxyPrimC columns beyond I4 are ∇Y_k (from GradientCons2Prim)
                             real gradYk_dot_n = DiffUxyPrimC(Seq012, Isp + kk).dot(uNormC);
-                            // Outward species diffusion flux: J_k·n = -ρ D_k (∇Y_k·n)
-                            real Jk_n = -rhoFace * Dk * gradYk_dot_n;
-                            VisFlux(Isp + kk) += Jk_n;
-                            // Energy enthalpy transport: Σ h_k·J_k = Σ_{k<Ns1} (h_k − h_N)·J_k
-                            VisFlux(I4) += (hBuf[kk] - hLast_code) * Jk_n;
+                            JRawN[kk] = -rhoFace * Dk * gradYk_dot_n;
+                            sumGradYDotN += gradYk_dot_n;
+                            sumJRawN += JRawN[kk];
+                        }
+                        YBuf[Ns - 1] = real(1) - sumY;
+                        real DLast = phys_.speciesDiffusivityK(T, pMean, UMeanXYC, Ns - 1);
+                        JRawN[Ns - 1] = rhoFace * DLast * sumGradYDotN;
+                        sumJRawN += JRawN[Ns - 1];
+
+                        // Mixture-averaged correction velocity. It enforces
+                        // Σ_k J_k = 0 in the mass-averaged frame without adding
+                        // any diffusive mass flux to the rho equation.
+                        real vcN = -sumJRawN * rhoInvFace;
+                        for (int kk = 0; kk < Ns; ++kk)
+                        {
+                            real Jk_n = JRawN[kk] + rhoFace * YBuf[kk] * vcN;
+                            // The solver forms total flux as inviscid - viscous.
+                            // Species equations use inviscid + J_k, so the
+                            // viscous-flux slot stores -J_k.
+                            real FvSpeciesN = -Jk_n;
+                            if (kk < Ns1)
+                                VisFlux(Isp + kk) += FvSpeciesN;
+                            // Energy viscous flux is τu + k∇T - Σ h_k J_k.
+                            VisFlux(I4) += hBuf[kk] * FvSpeciesN;
                         }
                     }
                 }
