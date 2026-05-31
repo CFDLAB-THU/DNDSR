@@ -2,10 +2,11 @@
 
 **Date:** 2026-05-29
 **Branch:** upstream/main..HEAD (~90 commits, ~170 files, +26k/-4.7k lines)
-**Passes:** 4 — audited + false-positive validated + deep internals probed
+**Passes:** 4 — audited + false-positive validated + deep internals probed. 6 findings fixed.
 
-**Totals: 9 CRITICAL, 8 HIGH, 44 MEDIUM, 31 LOW (91 findings)**
-*(11 HIGH→MEDIUM/LOW re-ratings from false-positive pass)*
+**Unresolved: 3 CRITICAL (F3,F4,F7,F8), 8 HIGH, 44 MEDIUM, 31 LOW**
+
+**Resolved:** F1 (fmt ABI, `5db85e4`), F2 (Cantera opt-out, `101ce89`), F5 (JAC_SKIP re-rate, `101ce89`), F6 (recomputeDerived, `101ce89`), F14 (Roe_M7 eigenvalues, `5db85e4`), F98 (negative-species doc, `5db85e4`)
 
 ---
 
@@ -13,12 +14,12 @@
 
 | F# | Sev | Area | File(s) | Summary |
 |----|-----|------|---------|---------|
-| F1 | **CRIT** | Build | `DndsApps.cmake:157`, `Euler/CMakeLists.txt:24,29` | fmt ABI mismatch — Cantera v9.1.0 vs DNDSR v11.1.4; `CT_USE_SYSTEM_FMT=1` only on final exes, not on `euler_library_fast` |
-| F2 | **CRIT** | Build | `DndsExternalDeps.cmake:55-57,84-91,241` | Cantera unconditionally REQUIRED — no opt-out, all non-chemical targets link it |
+| F1 | **CRIT** ✓ | Build | `DndsApps.cmake:157`, `Euler/CMakeLists.txt:24,29` | fmt ABI mismatch — **FIXED: CT_USE_SYSTEM_FMT=1 PUBLIC on euler_library_fast; cantera_Test standalone** |
+| F2 | **CRIT** ✓ | Build | `DndsExternalDeps.cmake:55-57,84-91,241` | Cantera unconditionally REQUIRED — **FIXED: DNDS_USE_CANTERA option, ChemicalSource guarded** |
 | F3 | **CRIT** | Scaling | `EulerBC.hpp:380-385`, `PhysicsProperties.hpp:489`, `EvaluateDt.hxx:2803` | `BCInPsTs` expects code units; JSON raw values have no phys→code path |
 | F4 | **CRIT** | Reactive | `EulerSolver.hxx:860-883` | Tau-splitting Newton: no convergence check, no damping, no NaN guard |
-| F5 | **CRIT** | Jacobian | `SourceTermContributor.hpp:441-443`, `ChemicalSource.cpp:276-277` | JAC_SKIP_FLUID — chemical Jacobian has zero fluid-column coupling |
-| F6 | **CRIT** | EOS | `test_PhysicsProperties.cpp:36`, `test_ChemODE.cpp:311` | `recomputeDerived()` removed — 2 test files + 1 app fail to compile |
+| F5 | **LOW** ✓ | Jacobian | `SourceTermContributor.hpp:441-443`, `ChemicalSource.cpp:276-277` | JAC_SKIP_FLUID — **explicit Jacobian approximation; both with/without need empirical comparison** **[C→L: user]** |
+| F6 | **CRIT** ✓ | EOS | `test_PhysicsProperties.cpp:36`, `test_ChemODE.cpp:311` | `recomputeDerived()` removed — **FIXED: test files cleaned; canteraConstVolTrajectory fixed** |
 | F7 | **CRIT** | Config | `AGENTS.md:143-150` vs `SourceTermContributor.hpp:527` | `DNDS_MECH_PATH` documented but never used in solver |
 | F8 | **CRIT** | Thread | `SourceTermContributor.hpp:521-528`, `PhysicsProperties.hpp:72-88` | Per-thread pool sized at init — abort if thread count increases later |
 | F9 | **MED** | Scaling | `EvaluateDt.hxx:2642-2658`, `EulerBC.hpp:405-448` | `BCWallIsothermal` T in code units; no phys→code conversion (default T0=1 works) **[H→M: FP pass]** |
@@ -26,7 +27,7 @@
 | F11 | **MED** | Reactive | `SourceTermContributor.hpp:416`, `PhysicsProperties.hpp:1219` | T floor clamped to 200K — standard engineering practice; rates ~0 below 200K **[H→M: FP pass]** |
 | F12 | **LOW** | Reactive | `ChemicalSource.cpp:453-465,472-487` | `mixtureFormationRhoESpecies` lazy-init — invU0sq static invariant, enforced at caller **[H→L: FP pass]** |
 | F13 | **HIGH** | Reactive | `EulerSolver.hxx:813-817` | Source Jacobian zeroed — chemistry stiffness explicit in transport step (Lie splitting) |
-| F14 | **HIGH** | EOS | `Gas.hpp:1027-1041` | EigScheme==7 (Roe_M7) uses `*=` instead of `=` — squares Roe eigenvalues |
+| F14 | **HIGH** ✓ | EOS | `Gas.hpp:1027-1041` | EigScheme==7 (Roe_M7) uses `*=` instead of `=` — **FIXED: *= → =** |
 | F15 | **MED** | Jacobian | `ChemicalSource.cpp:219-228` | Reference offset uses `cp(298)*298` instead of `h_k(T_ref)` — valid NASA7 approximation; biases Jacobian only **[H→M: FP pass]** |
 | F16 | **HIGH** | Jacobian | `SourceTermContributor.hpp:437-459` | Zero energy-row Jacobian but RHS has non-zero chemical source (byproduct of F5) |
 | F17 | **HIGH** | Config | `ConfigRegistry.hpp:452`, `EulerSolver.hpp:990-1059` | `validateKeys()` defined but never called — config typos silently ignored |
@@ -110,7 +111,7 @@
 | F95 | **LOW** | Transport | `PhysicsProperties.hpp:1166-1169` | Non-reactive speciesDiffusivityK inconsistent for muModel=0 (dead code) |
 | F96 | **LOW** | Config | `ConfigParam.hpp:456` | Unused `member` capture in `field_schema` lambda |
 | F97 | **LOW** | Config | `ConfigParam.hpp:99-103` | `ConfigTypeTagOf<StateValue>` resolves to Object — misleading |
-| F98 | **CRIT** | Reactive | `PhysicsProperties.hpp:219-238`, `EulerEvaluator.hpp:1663,1732`, `EulerEvaluator.hxx:1799-1814` | `mixtureFormationRhoERaw` no guard for negative dependent-species; corrupts limiter sensible-energy checks |
+| F98 | **CRIT** ✓ | Reactive | `PhysicsProperties.hpp:219-238` | `mixtureFormationRhoERaw` no guard for negative dependent-species — **docstring clarified: intentional linearity** |
 | F99 | **HIGH** | Reactive | `EulerEvaluator.hxx:1799-1814` | `checkRecBaseGood` ignores species positivity; theta1/thetaP bypassed for species violations |
 | F100 | **HIGH** | Jacobian | `ChemicalSource.cpp:35,79,199,255-321` | Jacobian omits `(∂ω/∂p)_T·(∂p/∂U)` term — pressure-dependent reactions incomplete |
 | F101 | **HIGH** | Config | `ConfigRegistry.hpp:329-346,382-392` | JSON Schema omits `"required"` list; schema validates but runtime rejects on missing keys |

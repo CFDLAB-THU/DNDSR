@@ -94,7 +94,6 @@ namespace
         ig.rho0 = c.rho0;
         ig.T0 = c.T0;
         ig.L0 = c.L0;
-        ig.recomputeDerived();
         PhysicsProperties<NS_EX> phys(ig);
         phys.setChemicalSourcePool(std::move(pool));
         return phys;

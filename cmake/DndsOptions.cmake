@@ -16,6 +16,7 @@ set(DNDS_USE_NDEBUG_MACRO OFF CACHE BOOL "use NDEBUG macro for eigen output and 
 set(DNDS_USE_PARALLEL_MACRO OFF CACHE BOOL "for auto multi-thread?")
 set(DNDS_USE_OMP ON CACHE BOOL "enables openmp functionality")
 set(DNDS_USE_CUDA OFF CACHE BOOL "enables cuda functionality")
+set(DNDS_USE_CANTERA ON CACHE BOOL "enable Cantera chemistry for reactive flow")
 set(DNDS_DIST_MT_USE_OMP OFF CACHE BOOL "use openmp in purely distributed code for multi-treading")
 set(DNDS_FAST_BUILD_FAST ON CACHE BOOL "don't -g on basic modules")
 set(DNDS_BUILD_TESTS OFF CACHE BOOL "build C++ unit tests (doctest)")

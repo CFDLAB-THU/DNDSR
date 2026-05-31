@@ -6,10 +6,15 @@
 #include "ChemicalSource.hpp"
 #include "DNDS/Errors.hpp"
 
-#include "cantera/core.h"
-#include "cantera/numerics/Integrator.h"
-#include "cantera/zeroD/IdealGasReactor.h"
-#include "cantera/zeroD/ReactorNet.h"
+// #undef DNDS_USE_CANTERA
+#ifdef DNDS_USE_CANTERA
+#    include "cantera/core.h"
+#    include "cantera/numerics/Integrator.h"
+#    include "cantera/zeroD/IdealGasReactor.h"
+#    include "cantera/zeroD/ReactorNet.h"
+#else
+#    include <Eigen/SparseCore>
+#endif
 
 #include <cmath>
 #include <algorithm>
@@ -17,6 +22,7 @@
 namespace DNDS::Euler::Chemistry
 {
 
+#ifdef DNDS_USE_CANTERA
     namespace
     {
         class AffineIdealGasConstVolReactor : public Cantera::IdealGasReactor
@@ -89,22 +95,22 @@ namespace DNDS::Euler::Chemistry
             double chemistryScale_ = 1.0;
         };
     }
+#endif // DNDS_USE_CANTERA
 
     struct ChemicalSource::Impl
     {
+    private:
+#ifdef DNDS_USE_CANTERA
         std::shared_ptr<Cantera::Solution> sol;
-        Cantera::ThermoPhase *gas = nullptr;
-        Cantera::Kinetics *kin = nullptr;
-        Cantera::Transport *trn = nullptr;
 
         std::shared_ptr<Cantera::Solution> solT; // separate phase for temperatureFromUV
-        Cantera::ThermoPhase *gasT = nullptr;
 
         mutable std::shared_ptr<Cantera::Solution> solCV;
-        mutable Cantera::ThermoPhase *gasCV = nullptr;
         mutable std::shared_ptr<ScaledIdealGasConstVolReactor> reactorCV;
         mutable std::unique_ptr<Cantera::ReactorNet> netCV;
+#endif
 
+    public:
         int Ns = 0;
         std::vector<std::string> speciesNames;
         std::vector<double> mw;
@@ -116,62 +122,400 @@ namespace DNDS::Euler::Chemistry
         mutable std::vector<double> bufDwdt, bufDwdp, bufDwdc;
         mutable std::vector<double> bufD;
 
-        void setTPY(double T, double p, ConstSpeciesBufferView Y)
+        Impl(const std::string &mechanismFile, const std::string &phaseName)
         {
+            auto &I = *this;
+#ifdef DNDS_USE_CANTERA
+            I.sol = Cantera::newSolution(mechanismFile, phaseName, "default");
+            I.solT = Cantera::newSolution(mechanismFile, phaseName, "");
+            auto gas = I.sol->thermo();
+            I.Ns = static_cast<int>(gas->nSpecies());
+            I.speciesNames.resize(I.Ns);
+            I.mw.resize(I.Ns);
+            I.Rk.resize(I.Ns);
+            I.hf.resize(I.Ns);
+            gas->getMolecularWeights(I.mw.data());
+            for (int k = 0; k < I.Ns; ++k)
+            {
+                I.speciesNames[k] = gas->speciesName(k);
+                I.Rk[k] = Cantera::GasConstant / I.mw[k];
+                I.hf[k] = gas->Hf298SS(k) / I.mw[k];
+            }
+            I.bufOmega.resize(I.Ns);
+            I.bufDwdt.resize(I.Ns);
+            I.bufDwdp.resize(I.Ns);
+            I.bufDwdc.resize(I.Ns * I.Ns);
+            I.bufD.resize(I.Ns);
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+#endif
+        }
+
+        double gas_cp_mass() const
+        {
+#ifdef DNDS_USE_CANTERA
+            return sol->thermo()->cp_mass();
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+            return 0.0;
+#endif
+        }
+        double gas_cv_mass() const
+        {
+#ifdef DNDS_USE_CANTERA
+            return sol->thermo()->cv_mass();
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+            return 0.0;
+#endif
+        }
+        double gas_intEnergy_mass() const
+        {
+#ifdef DNDS_USE_CANTERA
+            return sol->thermo()->intEnergy_mass();
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+            return 0.0;
+#endif
+        }
+        double gas_enthalpy_mass() const
+        {
+#ifdef DNDS_USE_CANTERA
+            return sol->thermo()->enthalpy_mass();
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+            return 0.0;
+#endif
+        }
+        double gas_entropy_mass() const
+        {
+#ifdef DNDS_USE_CANTERA
+            return sol->thermo()->entropy_mass();
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+            return 0.0;
+#endif
+        }
+        double gas_soundSpeed() const
+        {
+#ifdef DNDS_USE_CANTERA
+            return sol->thermo()->soundSpeed();
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+            return 0.0;
+#endif
+        }
+        double gas_minTemp() const
+        {
+#ifdef DNDS_USE_CANTERA
+            return sol->thermo()->minTemp();
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+            return 0.0;
+#endif
+        }
+        int kin_nReactions() const
+        {
+#ifdef DNDS_USE_CANTERA
+            auto k = sol->kinetics();
+            return static_cast<int>(k->nReactions());
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+            return 0;
+#endif
+        }
+        bool gas_isIdeal() const
+        {
+#ifdef DNDS_USE_CANTERA
+            return sol->thermo()->isIdeal();
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+            return false;
+#endif
+        }
+        double trn_viscosity() const
+        {
+#ifdef DNDS_USE_CANTERA
+            return sol->transport()->viscosity();
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+            return 0.0;
+#endif
+        }
+        double trn_thermalConductivity() const
+        {
+#ifdef DNDS_USE_CANTERA
+            return sol->transport()->thermalConductivity();
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+            return 0.0;
+#endif
+        }
+        void kin_getNetProductionRates(double *omega) const
+        {
+#ifdef DNDS_USE_CANTERA
+            sol->kinetics()->getNetProductionRates(omega);
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+#endif
+        }
+        void kin_getNetProductionRates_ddT(double *dwdt) const
+        {
+#ifdef DNDS_USE_CANTERA
+            sol->kinetics()->getNetProductionRates_ddT(dwdt);
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+#endif
+        }
+        auto kin_netProductionRates_ddCi() const
+        {
+#ifdef DNDS_USE_CANTERA
+            return sol->kinetics()->netProductionRates_ddCi();
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+            return Eigen::SparseMatrix<double>();
+#endif
+        }
+        void gas_getPartialMolarEnthalpies(double *u) const
+        {
+#ifdef DNDS_USE_CANTERA
+            sol->thermo()->getPartialMolarEnthalpies(u);
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+#endif
+        }
+        void gas_getPartialMolarIntEnergies(double *u) const
+        {
+#ifdef DNDS_USE_CANTERA
+            sol->thermo()->getPartialMolarIntEnergies(u);
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+#endif
+        }
+        void gasT_setMassFractions(const double *Y) const
+        {
+#ifdef DNDS_USE_CANTERA
+            solT->thermo()->setMassFractions_NoNorm(Y);
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+#endif
+        }
+        void gasT_setState_TP(double T, double p) const
+        {
+#ifdef DNDS_USE_CANTERA
+            solT->thermo()->setState_TP(T, p);
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+#endif
+        }
+        void gasT_setState_UV(double u, double v, double rtol) const
+        {
+#ifdef DNDS_USE_CANTERA
+            solT->thermo()->setState_UV(u, v, rtol);
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+#endif
+        }
+        double gasT_temperature() const
+        {
+#ifdef DNDS_USE_CANTERA
+            return solT->thermo()->temperature();
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+            return 0.0;
+#endif
+        }
+        double gasT_cv_mass() const
+        {
+#ifdef DNDS_USE_CANTERA
+            return solT->thermo()->cv_mass();
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+            return 0.0;
+#endif
+        }
+        double gasT_enthalpy_mass() const
+        {
+#ifdef DNDS_USE_CANTERA
+            return solT->thermo()->enthalpy_mass();
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+            return 0.0;
+#endif
+        }
+        double gasT_intEnergy_mass() const
+        {
+#ifdef DNDS_USE_CANTERA
+            return solT->thermo()->intEnergy_mass();
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+            return 0.0;
+#endif
+        }
+        void gasT_getPartialMolarCp(double *cp) const
+        {
+#ifdef DNDS_USE_CANTERA
+            solT->thermo()->getPartialMolarCp(cp);
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+#endif
+        }
+        void trn_getMixDiffCoeffs(double *d) const
+        {
+#ifdef DNDS_USE_CANTERA
+            sol->transport()->getMixDiffCoeffs(d);
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+#endif
+        }
+
+        Impl(const Impl &R)
+        {
+            auto &c = *this;
+#ifdef DNDS_USE_CANTERA
+            c.sol = R.sol->clone({}, true, true);
+            c.solT = R.solT->clone({}, false, false);
+#endif
+            c.Ns = R.Ns;
+            c.speciesNames = R.speciesNames;
+            c.mw = R.mw;
+            c.Rk = R.Rk;
+            c.hf = R.hf;
+            c.bufOmega.resize(Ns);
+            c.bufDwdt.resize(Ns);
+            c.bufDwdp.resize(Ns);
+            c.bufDwdc.resize(Ns * Ns);
+            c.bufD.resize(Ns);
+        }
+
+        void advanceAffineConstVolume(
+            double &T, double rho,
+            SpeciesBufferView Y,
+            double chemistryScale,
+            double linearTime,
+            ConstSpeciesBufferView constantTerm,
+            double advanceTime,
+            double rtol,
+            double atol,
+            int maxOrder,
+            int maxSteps) const
+        {
+#ifdef DNDS_USE_CANTERA
+            DNDS_check_throw_info(Y.nSpecies == this->Ns, "advanceAffineConstVolume(): Y size mismatch");
+            DNDS_check_throw_info(constantTerm.nSpecies == this->Ns, "advanceAffineConstVolume(): constant term size mismatch");
+            DNDS_check_throw_info(std::isfinite(T) && T > 0, "advanceAffineConstVolume(): T must be positive");
+            DNDS_check_throw_info(std::isfinite(rho) && rho > 0, "advanceAffineConstVolume(): rho must be positive");
+            DNDS_check_throw_info(std::isfinite(linearTime) && linearTime > 0, "advanceAffineConstVolume(): linearTime must be positive");
+            DNDS_check_throw_info(std::isfinite(advanceTime) && advanceTime >= 0, "advanceAffineConstVolume(): advanceTime must be non-negative");
+
+            auto sol = this->sol->clone({}, true, false);
+            auto gas = sol->thermo();
             gas->setMassFractions_NoNorm(Y.data);
-            gas->setState_TP(T, p);
+            gas->setState_TD(T, rho);
+
+            std::vector<double> c(static_cast<size_t>(this->Ns));
+            for (int k = 0; k < this->Ns; ++k)
+                c[static_cast<size_t>(k)] = constantTerm[k];
+
+            auto reactor = std::make_shared<AffineIdealGasConstVolReactor>(sol, false, "affine_cv");
+            reactor->setInitialVolume(1.0 / rho);
+            reactor->setChemistryEnabled(true);
+            reactor->setEnergyEnabled(true);
+            reactor->setAffineSpeciesRHS(chemistryScale, linearTime, std::move(c));
+
+            Cantera::ReactorNet net(reactor);
+            net.setTolerances(rtol, atol);
+            net.setMaxSteps(maxSteps);
+            if (maxOrder > 0)
+                net.integrator().setMaxOrder(maxOrder);
+            net.advance(advanceTime);
+
+            T = reactor->temperature();
+            const double *YEnd = reactor->massFractions();
+            for (int k = 0; k < this->Ns; ++k)
+                Y[k] = YEnd[k];
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl::advanceAffineConstVolume: Cantera not available");
+#endif
+        }
+        void advanceConstVolume(
+            double &T, double rho,
+            SpeciesBufferView Y,
+            double chemistryScale,
+            double advanceTime,
+            double rtol,
+            double atol,
+            int maxOrder,
+            int maxSteps) const
+        {
+#ifdef DNDS_USE_CANTERA
+            DNDS_check_throw_info(Y.nSpecies == this->Ns, "advanceConstVolume(): Y size mismatch");
+            DNDS_check_throw_info(std::isfinite(T) && T > 0, "advanceConstVolume(): T must be positive");
+            DNDS_check_throw_info(std::isfinite(rho) && rho > 0, "advanceConstVolume(): rho must be positive");
+            DNDS_check_throw_info(std::isfinite(chemistryScale) && chemistryScale >= 0,
+                                  "advanceConstVolume(): chemistryScale must be non-negative");
+            DNDS_check_throw_info(std::isfinite(advanceTime) && advanceTime >= 0, "advanceConstVolume(): advanceTime must be non-negative");
+
+            auto &I = *this;
+            I.ensureConstVolumeReactor();
+            I.solCV->thermo()->setMassFractions_NoNorm(Y.data);
+            I.solCV->thermo()->setState_TD(T, rho);
+            I.reactorCV->setInitialVolume(1.0 / rho);
+            I.reactorCV->setChemistryScale(chemistryScale);
+            I.reactorCV->syncState();
+            I.netCV->setInitialTime(0.0);
+            I.netCV->setTolerances(rtol, atol);
+            I.netCV->setMaxSteps(maxSteps);
+            if (maxOrder > 0)
+                I.netCV->integrator().setMaxOrder(maxOrder);
+            I.netCV->advance(advanceTime);
+
+            T = I.reactorCV->temperature();
+            const double *YEnd = I.reactorCV->massFractions();
+            for (int k = 0; k < this->Ns; ++k)
+                Y[k] = YEnd[k];
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl::advanceConstVolume: Cantera not available");
+#endif
+        }
+
+        void setTPY(double T, double p, ConstSpeciesBufferView Y) const
+        {
+#ifdef DNDS_USE_CANTERA
+            auto g = sol->thermo();
+            g->setMassFractions_NoNorm(Y.data);
+            g->setState_TP(T, p);
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+#endif
         }
 
         void ensureConstVolumeReactor() const
         {
+#ifdef DNDS_USE_CANTERA
             if (netCV)
                 return;
             solCV = sol->clone({}, true, false);
-            gasCV = &(*solCV->thermo());
             reactorCV = std::make_shared<ScaledIdealGasConstVolReactor>(solCV, false, "cv");
             reactorCV->setChemistryEnabled(true);
             reactorCV->setEnergyEnabled(true);
             netCV = std::make_unique<Cantera::ReactorNet>(reactorCV);
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+#endif
         }
     };
 
     // ---- lifecycle ----------------------------------------------------------
 
-    ChemicalSource::ChemicalSource() : impl_(std::make_unique<Impl>()) {}
+    ChemicalSource::ChemicalSource() = default;
 
     ChemicalSource::ChemicalSource(const std::string &mechanismFile,
                                    const std::string &phaseName)
-        : impl_(std::make_unique<Impl>()),
+        : impl_(std::make_unique<Impl>(mechanismFile, phaseName)),
           mechanismFile_(mechanismFile), phaseName_(phaseName)
     {
-        auto &I = *impl_;
-        I.sol = Cantera::newSolution(mechanismFile, phaseName, "default");
-        I.gas = &(*I.sol->thermo());
-        I.kin = &(*I.sol->kinetics());
-        I.trn = &(*I.sol->transport());
-
-        // Dedicated phase for temperatureFromUV (avoids state corruption from shared phase)
-        I.solT = Cantera::newSolution(mechanismFile, phaseName, "");
-        I.gasT = &(*I.solT->thermo());
-
-        I.Ns = static_cast<int>(I.gas->nSpecies());
-        I.speciesNames.resize(I.Ns);
-        I.mw.resize(I.Ns);
-        I.Rk.resize(I.Ns);
-        I.hf.resize(I.Ns);
-        I.gas->getMolecularWeights(I.mw.data());
-        for (int k = 0; k < I.Ns; ++k)
-        {
-            I.speciesNames[k] = I.gas->speciesName(k);
-            I.Rk[k] = Cantera::GasConstant / I.mw[k];
-            I.hf[k] = I.gas->Hf298SS(k) / I.mw[k];
-        }
-
-        I.bufOmega.resize(I.Ns);
-        I.bufDwdt.resize(I.Ns);
-        I.bufDwdp.resize(I.Ns);
-        I.bufDwdc.resize(I.Ns * I.Ns);
-        I.bufD.resize(I.Ns);
+        DNDS_assert(impl_);
     }
 
     ChemicalSource::~ChemicalSource() = default;
@@ -179,15 +523,32 @@ namespace DNDS::Euler::Chemistry
     ChemicalSource::ChemicalSource(ChemicalSource &&) noexcept = default;
     ChemicalSource &ChemicalSource::operator=(ChemicalSource &&) noexcept = default;
 
-    int ChemicalSource::nSpecies() const { return impl_->Ns; }
-    int ChemicalSource::nReactions() const { return static_cast<int>(impl_->kin->nReactions()); }
-    const std::vector<std::string> &ChemicalSource::speciesNames() const { return impl_->speciesNames; }
-    const std::vector<double> &ChemicalSource::molecularWeights() const { return impl_->mw; }
+    int ChemicalSource::nSpecies() const
+    {
+        DNDS_assert(impl_);
+        return impl_->Ns;
+    }
+    int ChemicalSource::nReactions() const
+    {
+        DNDS_assert(impl_);
+        return static_cast<int>(impl_->kin_nReactions());
+    }
+    const std::vector<std::string> &ChemicalSource::speciesNames() const
+    {
+        DNDS_assert(impl_);
+        return impl_->speciesNames;
+    }
+    const std::vector<double> &ChemicalSource::molecularWeights() const
+    {
+        DNDS_assert(impl_);
+        return impl_->mw;
+    }
 
     // ---- mixture properties --------------------------------------------------
 
     double ChemicalSource::mixtureR(ConstSpeciesBufferView Y) const
     {
+        DNDS_assert(impl_);
         auto &I = *impl_;
         double R = 0;
         for (int k = 0; k < I.Ns; ++k)
@@ -197,53 +558,61 @@ namespace DNDS::Euler::Chemistry
 
     double ChemicalSource::mixtureCp(double T, ConstSpeciesBufferView Y, double p) const
     {
+        DNDS_assert(impl_);
         impl_->setTPY(T, p, Y);
-        return impl_->gas->cp_mass();
+        return impl_->gas_cp_mass();
     }
 
     double ChemicalSource::mixtureCv(double T, ConstSpeciesBufferView Y, double p) const
     {
+        DNDS_assert(impl_);
         impl_->setTPY(T, p, Y);
-        return impl_->gas->cv_mass();
+        return impl_->gas_cv_mass();
     }
 
     double ChemicalSource::mixtureGamma(double T, ConstSpeciesBufferView Y, double p) const
     {
+        DNDS_assert(impl_);
         impl_->setTPY(T, p, Y);
-        double cp = impl_->gas->cp_mass();
-        double cv = impl_->gas->cv_mass();
+        double cp = impl_->gas_cp_mass();
+        double cv = impl_->gas_cv_mass();
         return cp / std::max(cv, 1e-30);
     }
 
     double ChemicalSource::mixtureIntEnergy(double T, ConstSpeciesBufferView Y, double p) const
     {
+        DNDS_assert(impl_);
         impl_->setTPY(T, p, Y);
-        return impl_->gas->intEnergy_mass();
+        return impl_->gas_intEnergy_mass();
     }
 
     double ChemicalSource::mixtureEnthalpy(double T, ConstSpeciesBufferView Y, double p) const
     {
+        DNDS_assert(impl_);
         impl_->setTPY(T, p, Y);
-        return impl_->gas->enthalpy_mass();
+        return impl_->gas_enthalpy_mass();
     }
 
     double ChemicalSource::mixtureEntropy(double T, ConstSpeciesBufferView Y, double p) const
     {
+        DNDS_assert(impl_);
         impl_->setTPY(T, p, Y);
-        return impl_->gas->entropy_mass();
+        return impl_->gas_entropy_mass();
     }
 
     double ChemicalSource::minTemperature() const
     {
-        return impl_->gas->minTemp();
+        DNDS_assert(impl_);
+        return impl_->gas_minTemp();
     }
 
     double ChemicalSource::speedOfSound(double T, ConstSpeciesBufferView Y, double p) const
     {
+        DNDS_assert(impl_);
         // Use Cantera's soundSpeed() which computes a^2 = (dp/dρ)_s correctly
         // for both ideal-gas and non-ideal EOS, rather than the manual a = √(γRT).
         impl_->setTPY(T, p, Y);
-        return impl_->gas->soundSpeed();
+        return impl_->gas_soundSpeed();
     }
 
     double ChemicalSource::temperatureFromUV(double u, double v,
@@ -251,12 +620,13 @@ namespace DNDS::Euler::Chemistry
                                              double T_guess,
                                              double rtol) const
     {
-        impl_->gasT->setMassFractions_NoNorm(Y.data);
+        DNDS_assert(impl_);
+        impl_->gasT_setMassFractions(Y.data);
         double Tinit = T_guess > 300 ? T_guess : 300;
         double p_init = mixtureR(Y) * Tinit / v;
-        impl_->gasT->setState_TP(Tinit, p_init);
-        impl_->gasT->setState_UV(u, v, rtol);
-        return impl_->gasT->temperature();
+        impl_->gasT_setState_TP(Tinit, p_init);
+        impl_->gasT_setState_UV(u, v, rtol);
+        return impl_->gasT_temperature();
     }
 
     // ---- kinetics ------------------------------------------------------------
@@ -265,9 +635,10 @@ namespace DNDS::Euler::Chemistry
                                          ConstSpeciesBufferView Y,
                                          SpeciesBufferView omega) const
     {
+        DNDS_assert(impl_);
         auto &I = *impl_;
         I.setTPY(T, p, Y);
-        I.kin->getNetProductionRates(I.bufOmega.data());
+        I.kin_getNetProductionRates(I.bufOmega.data());
         for (int k = 0; k < I.Ns; ++k)
             omega[k] = I.bufOmega[k];
     }
@@ -281,22 +652,23 @@ namespace DNDS::Euler::Chemistry
         JacobianBufferView dOmegadU,
         int jacFlags) const
     {
+        DNDS_assert(impl_);
         auto &J = dOmegadU;
         auto &I = *impl_;
         I.setTPY(T, p, Y);
 
-        I.kin->getNetProductionRates(I.bufOmega.data());
+        I.kin_getNetProductionRates(I.bufOmega.data());
         for (int k = 0; k < I.Ns; ++k)
             omega[k] = I.bufOmega[k];
 
-        I.kin->getNetProductionRates_ddT(I.bufDwdt.data());
+        I.kin_getNetProductionRates_ddT(I.bufDwdt.data());
 
         // Per-species concentration Jacobian ∂ω_i/∂C_k (sparse Ns×Ns)
-        auto dWdC = I.kin->netProductionRates_ddCi();
+        auto dWdC = I.kin_netProductionRates_ddCi();
 
         // Per-species partial molar internal energies u_k [J/kmol] (EOS-agnostic)
         std::vector<double> uBar(I.Ns);
-        I.gas->getPartialMolarIntEnergies(uBar.data());
+        I.gas_getPartialMolarIntEnergies(uBar.data());
 
         // DNDSR recovers Cantera temperature from a shifted internal-energy
         // convention: u_cantera = u_DNDSR - pV_ref(Y) - e_sens_ref(Y).  At fixed
@@ -310,12 +682,12 @@ namespace DNDS::Euler::Chemistry
         // general EOS path needs an EOS-aware minimum-energy definition.
         int Ns1 = I.Ns - 1;
         std::vector<double> refOffsetSpecies(I.Ns, 0.0);
-        if (I.gas->isIdeal())
+        if (I.gas_isIdeal())
         {
             std::vector<double> cpBarRef(I.Ns);
-            I.gasT->setMassFractions_NoNorm(Y.data);
-            I.gasT->setState_TP(298.15, 101325);
-            I.gasT->getPartialMolarCp(cpBarRef.data());
+            I.gasT_setMassFractions(Y.data);
+            I.gasT_setState_TP(298.15, 101325);
+            I.gasT_getPartialMolarCp(cpBarRef.data());
             for (int k = 0; k < I.Ns; ++k)
                 refOffsetSpecies[k] = cpBarRef[k] * 298.15 / std::max(I.mw[k], 1e-30);
         }
@@ -327,7 +699,7 @@ namespace DNDS::Euler::Chemistry
 
         int speciesCol0 = iEnergy + 1;
 
-        double cv = I.gas->cv_mass();
+        double cv = I.gas_cv_mass();
         double vs2 = velScale * velScale;
         double cvSafe = std::max(cv, 1e-30);
         double rhoInv = 1.0 / std::max(rho, 1e-60);
@@ -417,108 +789,52 @@ namespace DNDS::Euler::Chemistry
     void ChemicalSource::advanceAffineConstVolume(
         double &T, double rho,
         SpeciesBufferView Y,
-        double chemistryScale,
-        double linearTime,
+        double chemistryScale, double linearTime,
         ConstSpeciesBufferView constantTerm,
-        double advanceTime,
-        double rtol,
-        double atol,
-        int maxOrder,
-        int maxSteps) const
+        double advanceTime, double rtol, double atol,
+        int maxOrder, int maxSteps) const
     {
-        DNDS_check_throw_info(Y.nSpecies == impl_->Ns, "advanceAffineConstVolume(): Y size mismatch");
-        DNDS_check_throw_info(constantTerm.nSpecies == impl_->Ns, "advanceAffineConstVolume(): constant term size mismatch");
-        DNDS_check_throw_info(std::isfinite(T) && T > 0, "advanceAffineConstVolume(): T must be positive");
-        DNDS_check_throw_info(std::isfinite(rho) && rho > 0, "advanceAffineConstVolume(): rho must be positive");
-        DNDS_check_throw_info(std::isfinite(linearTime) && linearTime > 0, "advanceAffineConstVolume(): linearTime must be positive");
-        DNDS_check_throw_info(std::isfinite(advanceTime) && advanceTime >= 0, "advanceAffineConstVolume(): advanceTime must be non-negative");
-
-        auto sol = impl_->sol->clone({}, true, false);
-        auto gas = sol->thermo();
-        gas->setMassFractions_NoNorm(Y.data);
-        gas->setState_TD(T, rho);
-
-        std::vector<double> c(static_cast<size_t>(impl_->Ns));
-        for (int k = 0; k < impl_->Ns; ++k)
-            c[static_cast<size_t>(k)] = constantTerm[k];
-
-        auto reactor = std::make_shared<AffineIdealGasConstVolReactor>(sol, false, "affine_cv");
-        reactor->setInitialVolume(1.0 / rho);
-        reactor->setChemistryEnabled(true);
-        reactor->setEnergyEnabled(true);
-        reactor->setAffineSpeciesRHS(chemistryScale, linearTime, std::move(c));
-
-        Cantera::ReactorNet net(reactor);
-        net.setTolerances(rtol, atol);
-        net.setMaxSteps(maxSteps);
-        if (maxOrder > 0)
-            net.integrator().setMaxOrder(maxOrder);
-        net.advance(advanceTime);
-
-        T = reactor->temperature();
-        const double *YEnd = reactor->massFractions();
-        for (int k = 0; k < impl_->Ns; ++k)
-            Y[k] = YEnd[k];
+        DNDS_assert(impl_);
+        impl_->advanceAffineConstVolume(T, rho, Y, chemistryScale, linearTime,
+                                        constantTerm, advanceTime, rtol, atol, maxOrder, maxSteps);
     }
 
     void ChemicalSource::advanceConstVolume(
         double &T, double rho,
         SpeciesBufferView Y,
-        double chemistryScale,
-        double advanceTime,
-        double rtol,
-        double atol,
-        int maxOrder,
-        int maxSteps) const
+        double chemistryScale, double advanceTime,
+        double rtol, double atol,
+        int maxOrder, int maxSteps) const
     {
-        DNDS_check_throw_info(Y.nSpecies == impl_->Ns, "advanceConstVolume(): Y size mismatch");
-        DNDS_check_throw_info(std::isfinite(T) && T > 0, "advanceConstVolume(): T must be positive");
-        DNDS_check_throw_info(std::isfinite(rho) && rho > 0, "advanceConstVolume(): rho must be positive");
-        DNDS_check_throw_info(std::isfinite(chemistryScale) && chemistryScale >= 0,
-                              "advanceConstVolume(): chemistryScale must be non-negative");
-        DNDS_check_throw_info(std::isfinite(advanceTime) && advanceTime >= 0, "advanceConstVolume(): advanceTime must be non-negative");
-
-        auto &I = *impl_;
-        I.ensureConstVolumeReactor();
-        I.gasCV->setMassFractions_NoNorm(Y.data);
-        I.gasCV->setState_TD(T, rho);
-        I.reactorCV->setInitialVolume(1.0 / rho);
-        I.reactorCV->setChemistryScale(chemistryScale);
-        I.reactorCV->syncState();
-        I.netCV->setInitialTime(0.0);
-        I.netCV->setTolerances(rtol, atol);
-        I.netCV->setMaxSteps(maxSteps);
-        if (maxOrder > 0)
-            I.netCV->integrator().setMaxOrder(maxOrder);
-        I.netCV->advance(advanceTime);
-
-        T = I.reactorCV->temperature();
-        const double *YEnd = I.reactorCV->massFractions();
-        for (int k = 0; k < impl_->Ns; ++k)
-            Y[k] = YEnd[k];
+        DNDS_assert(impl_);
+        impl_->advanceConstVolume(T, rho, Y, chemistryScale, advanceTime,
+                                  rtol, atol, maxOrder, maxSteps);
     }
 
     // ---- transport -----------------------------------------------------------
 
     double ChemicalSource::viscosity(double T, double p, ConstSpeciesBufferView Y) const
     {
+        DNDS_assert(impl_);
         impl_->setTPY(T, p, Y);
-        return impl_->trn->viscosity();
+        return impl_->trn_viscosity();
     }
 
     double ChemicalSource::thermalConductivity(double T, double p, ConstSpeciesBufferView Y) const
     {
+        DNDS_assert(impl_);
         impl_->setTPY(T, p, Y);
-        return impl_->trn->thermalConductivity();
+        return impl_->trn_thermalConductivity();
     }
 
     void ChemicalSource::speciesDiffusivity(double T, double p,
                                             ConstSpeciesBufferView Y,
                                             SpeciesBufferView D) const
     {
+        DNDS_assert(impl_);
         auto &I = *impl_;
         I.setTPY(T, p, Y);
-        I.trn->getMixDiffCoeffs(I.bufD.data());
+        I.trn_getMixDiffCoeffs(I.bufD.data());
         for (int k = 0; k < I.Ns; ++k)
             D[k] = I.bufD[k];
     }
@@ -527,20 +843,23 @@ namespace DNDS::Euler::Chemistry
                                            ConstSpeciesBufferView Y,
                                            SpeciesBufferView h) const
     {
+        DNDS_assert(impl_);
         impl_->setTPY(T, p, Y);
-        impl_->gas->getPartialMolarEnthalpies(impl_->bufOmega.data());
+        impl_->gas_getPartialMolarEnthalpies(impl_->bufOmega.data());
         for (int k = 0; k < impl_->Ns; ++k)
             h[k] = impl_->bufOmega[k] / std::max(impl_->mw[k], 1e-30);
     }
 
     void ChemicalSource::speciesFormationEnthalpies(SpeciesBufferView hf) const
     {
+        DNDS_assert(impl_);
         for (int k = 0; k < impl_->Ns; ++k)
             hf[k] = impl_->hf[k];
     }
 
     double ChemicalSource::mixtureFormationEnthalpy(ConstSpeciesBufferView Y) const
     {
+        DNDS_assert(impl_);
         double e = 0;
         for (int k = 0; k < impl_->Ns; ++k)
             e += Y[k] * impl_->hf[k];
@@ -549,55 +868,36 @@ namespace DNDS::Euler::Chemistry
 
     double ChemicalSource::pVAtReference(ConstSpeciesBufferView Y) const
     {
-        impl_->gasT->setMassFractions_NoNorm(Y.data);
-        impl_->gasT->setState_TP(298.15, 101325);
-        return impl_->gasT->enthalpy_mass() - impl_->gasT->intEnergy_mass();
+        DNDS_assert(impl_);
+        impl_->gasT_setMassFractions(Y.data);
+        impl_->gasT_setState_TP(298.15, 101325);
+        return impl_->gasT_enthalpy_mass() - impl_->gasT_intEnergy_mass();
     }
 
     double ChemicalSource::sensibleInternalEnergyAtReference(ConstSpeciesBufferView Y) const
     {
-        impl_->gasT->setMassFractions_NoNorm(Y.data);
-        impl_->gasT->setState_TP(298.15, 101325);
-        return impl_->gasT->cv_mass() * 298.15;
+        DNDS_assert(impl_);
+        impl_->gasT_setMassFractions(Y.data);
+        impl_->gasT_setState_TP(298.15, 101325);
+        return impl_->gasT_cv_mass() * 298.15;
     }
 
     bool ChemicalSource::isIdealGas() const
     {
-        DNDS_assert(impl_->gas);
-        return impl_->gas->isIdeal();
+        DNDS_assert(impl_);
+        return impl_->gas_isIdeal();
     }
 
     // ---- clone ---------------------------------------------------------------
 
     std::unique_ptr<ChemicalSource> ChemicalSource::clone() const
     {
-        // Use Cantera's Solution::clone() to deep-copy ThermoPhase, Kinetics,
-        // and Transport without re-parsing the YAML mechanism file.
-        auto &I = *impl_;
-        DNDS_assert(I.sol != nullptr);
-        DNDS_assert(I.solT != nullptr);
+        DNDS_assert(impl_);
         auto c = std::make_unique<ChemicalSource>();
         c->mechanismFile_ = mechanismFile_;
         c->phaseName_ = phaseName_;
-        auto &Ic = *c->impl_;
-        Ic.sol = I.sol->clone({}, true, true);
-        Ic.gas = &(*Ic.sol->thermo());
-        Ic.kin = &(*Ic.sol->kinetics());
-        Ic.trn = &(*Ic.sol->transport());
-        Ic.solT = I.solT->clone({}, false, false);
-        Ic.gasT = &(*Ic.solT->thermo());
-
-        Ic.Ns = I.Ns;
-        Ic.speciesNames = I.speciesNames;
-        Ic.mw = I.mw;
-        Ic.Rk = I.Rk;
-        Ic.hf = I.hf;
-
-        Ic.bufOmega.resize(Ic.Ns);
-        Ic.bufDwdt.resize(Ic.Ns);
-        Ic.bufDwdp.resize(Ic.Ns);
-        Ic.bufDwdc.resize(Ic.Ns * Ic.Ns);
-        Ic.bufD.resize(Ic.Ns);
+        if (impl_)
+            c->impl_ = std::make_unique<Impl>(*impl_);
         return c;
     }
 
@@ -605,6 +905,7 @@ namespace DNDS::Euler::Chemistry
 
     ConstSpeciesBufferView ChemicalSource::massFractions(double rho, const double *rhoYK, int nTransported) const
     {
+        DNDS_assert(impl_);
         int Ns = impl_->Ns;
         int Ns1 = Ns - 1;
         double rhoInv = 1.0 / std::max(rho, 1e-60);
@@ -629,6 +930,7 @@ namespace DNDS::Euler::Chemistry
 
     ConstSpeciesBufferView ChemicalSource::mixtureFormationRhoESpecies(double invU0sq) const
     {
+        DNDS_assert(impl_);
         int Ns = impl_->Ns;
         if (static_cast<int>(bufHf_.size()) < Ns)
         {
@@ -648,6 +950,7 @@ namespace DNDS::Euler::Chemistry
 
     double ChemicalSource::mixtureFormationRhoEIncrement(double rhoInc, const double *dRhoYK, int nTransported) const
     {
+        DNDS_assert(impl_);
         int Ns = impl_->Ns;
         int Ns1 = Ns - 1;
         // bufHf_ must already be populated with code-scaled values
