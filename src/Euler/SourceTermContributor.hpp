@@ -15,7 +15,9 @@
 #include "RANS_ke.hpp"
 #include "Chemistry/ChemicalSource.hpp"
 #include "EulerEvaluatorSettings.hpp"
+#include "DNDS/EnvReader.hpp"
 #include <Eigen/Eigenvalues>
+#include <filesystem>
 #ifdef DNDS_DIST_MT_USE_OMP
 #    include <omp.h>
 #endif
@@ -547,7 +549,14 @@ namespace DNDS::Euler
 #endif
             auto pool = std::make_shared<std::vector<Chemistry::ChemicalSource>>();
             pool->reserve(nThreads);
-            pool->emplace_back(settings.reactiveFlow.mechanismFile);
+            {
+                std::string mechPath = GetEnvString("DNDS_MECH_PATH", "");
+                const std::string &mechFile = settings.reactiveFlow.mechanismFile;
+                if (!mechPath.empty() && !mechFile.empty() && !std::filesystem::path(mechFile).is_absolute())
+                    pool->emplace_back(mechPath + "/" + mechFile);
+                else
+                    pool->emplace_back(mechFile);
+            }
             for (int t = 1; t < nThreads; ++t)
                 pool->push_back(std::move(*pool->at(0).clone()));
             contribs.push_back(ChemicalContributor<model>{std::move(pool), settings.idealGasProperty,
