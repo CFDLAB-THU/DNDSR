@@ -5,7 +5,10 @@
 #include "Euler/Euler.hpp"
 #include "Euler/Physics/ConstVolTrajectory.hpp"
 #include "Euler/Physics/PhysicsProperties.hpp"
-#include "cantera/zerodim.h"
+#ifdef DNDS_USE_CANTERA
+#    include "cantera/zerodim.h"
+#endif
+
 #include <nlohmann/json.hpp>
 #include <Eigen/Dense>
 #include <cmath>

@@ -15,8 +15,11 @@ STL_Test
 json_Test
 cgal_AABBTest
 mpi_test
-cantera_Test
 )
+
+if(DNDS_USE_CANTERA)
+  list(APPEND DNDS_APPS_EXTERNAL cantera_Test)
+endif()
 
 set(DNDS_APPS_EXTERNAL_CU
 cuda_test
