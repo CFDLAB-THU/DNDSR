@@ -742,9 +742,12 @@ namespace DNDS::Euler::Chemistry
                 du += refOffsetSpecies[k];
             compositionEnergyDiff[k] = du;
             double dT_drY = dT_pre * du;
+            // dP/d(rhoY_k) through temperature (p → rho*R*T, at constant ρ, R varies through Y)
             double dP_drY = PbyT * dT_drY;
+            // composition-pressure term: rho*T*dR/d(rhoY_k)
+            dP_drY += rhoScaleT * I.Rk[k];
             if (!skipAbsorb)
-                dP_drY += rhoScaleT * (I.Rk[k] - I.Rk[Ns1]);
+                dP_drY -= rhoScaleT * I.Rk[Ns1];
             for (int i = 0; i < nRows; ++i)
             {
                 J(i, speciesCol0 + k) = dWdC.coeff(i, k) * invMk * rhoScale + I.bufDwdt[i] * dT_drY;
@@ -758,9 +761,12 @@ namespace DNDS::Euler::Chemistry
             return;
 
         // ── Fluid columns (∂ω/∂(ρu_j), ∂ω/∂(ρE), ∂ω/∂ρ) ──
+        // Pressure chain rule: dP/dU = (p/T)·dT/dU for fluid columns at constant
+        // composition, since P = ρ·R·T and dT/dU is the sole driver.
+        // bufDwdt and bufDwdp are independent partial derivatives (∂ω/∂T at
+        // constant C vs ∂ω/∂P at constant T); both contribute additively.
 
-        // ∂ω/∂(ρE)_code = ∂ω/∂T · velScale² / (ρ_code·cv)
-        //               + ∂ω/∂P · (p/T) · dT_drhoe
+        // ∂ω/∂(ρE)_code = ∂ω/∂T · velScale² / (ρ_code·cv) + ∂ω/∂P · (p/T)·dT_drhoe
         double dT_drhoe = vs2 * rhoInv / cvSafe;
         for (int i = 0; i < nRows; ++i)
             J(i, iEnergy) = I.bufDwdt[i] * dT_drhoe + I.bufDwdp[i] * PbyT * dT_drhoe;
