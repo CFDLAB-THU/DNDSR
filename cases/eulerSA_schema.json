@@ -2720,7 +2720,7 @@
                                 "description": "Internal emitted BC id; ignored on read"
                             },
                             "value": {
-                                "description": "Raw BCInPsTs payload with size = nVars: [pTotal, TTotal, direction..., passive/species...]",
+                                "description": "BCInPsTs payload in physical units with size = nVars: [pTotal (Pa), TTotal (K), direction..., passive/species...]. Converted internally to code units; when U0=T0=L0=1, physical = code.",
                                 "oneOf": [
                                     {
                                         "type": "array",
