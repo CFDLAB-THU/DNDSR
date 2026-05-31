@@ -2003,7 +2003,7 @@ namespace DNDS::Euler
                 }
                 else if (direct2ndRec)
                 {
-                    GradU(SeqG012, EigenAll) = uGradBufNoLim[iCell];
+                    GradU(SeqG012, EigenAll) = uGradBuf[iCell];
                 }
                 else if (settings.source2nd)
                 {
@@ -2011,15 +2011,15 @@ namespace DNDS::Euler
                 }
                 else
                 {
-                    DNDS_assert(pURecUnlim);
+                    DNDS_assert(pURec);
                     if constexpr (gDim == 2)
                         GradU({0, 1}, EigenAll) =
                             vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iGQ, std::array<int, 2>{1, 2}, 3) *
-                            (*pURecUnlim)[iCell]; // IF_NOT_NOREC = 1
+                            (*pURec)[iCell]; // IF_NOT_NOREC = 1
                     else
                         GradU({0, 1, 2}, EigenAll) =
                             vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iGQ, std::array<int, 3>{1, 2, 3}, 4) *
-                            (*pURecUnlim)[iCell]; // IF_NOT_NOREC = 1
+                            (*pURec)[iCell]; // IF_NOT_NOREC = 1
                     if (settings.useSourceGradFixGG)
                         GradU += cellGradFix;
                     if (settings.ransSource2nd)
