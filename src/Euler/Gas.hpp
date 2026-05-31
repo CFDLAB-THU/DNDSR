@@ -1026,9 +1026,9 @@ namespace DNDS::Euler::Gas
         }
         else if constexpr (eigScheme == 7) // simply Harten-Yee-fix
         {
-            lam0 *= std::abs(uAve * incFScale - aAve * incFScaleA);
-            lam4 *= std::abs(uAve * incFScale + aAve * incFScaleA);
-            lam123 *= std::abs(uAve * incFScale);
+            lam0 = std::abs(uAve * incFScale - aAve * incFScaleA);
+            lam4 = std::abs(uAve * incFScale + aAve * incFScaleA);
+            lam123 = std::abs(uAve * incFScale);
             //*HY
             const real thresholdHartenYee = scaleHartenYee * (VAve + aAve);
             const real thresholdHartenYeeS = sqr(thresholdHartenYee);

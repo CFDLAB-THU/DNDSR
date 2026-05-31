@@ -215,7 +215,10 @@ namespace DNDS::Euler
         }
 
         /// Raw linear formation enthalpy from rho/rhoY without clipping or renormalizing species.
-        /// Use only in positivity-preserving limiter/compression algebra where exact linearity is required.
+        /// Intentionally permits negative independent/dependent species masses (e.g. sum(rhoY_k) > rho)
+        /// in order to preserve exact linearity through reconstruction and compression algebra.
+        /// Callers are responsible for downstream species-positivity enforcement
+        /// (checkRecBaseGood, CompressRecPart, CompressInc, AddFixedIncrement).
         real mixtureFormationRhoERaw(const TU &U) const
         {
             if (!hasChemicalSource())

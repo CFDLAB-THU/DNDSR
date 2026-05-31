@@ -123,6 +123,7 @@ endfunction(ADD_EXE_APP)
 ## Mind That the TOPOLOGICAL ORDER should be obeyed!
 ADD_EXE_APP("${DNDS_APPS_EXTERNAL}" "app/external" ";" ON cpp)
 if(DNDS_CANTERA_DATA_DIR)
+    target_compile_definitions(cantera_Test PRIVATE CT_USE_SYSTEM_FMT=1)
     target_compile_definitions(cantera_Test PRIVATE DNDS_CANTERA_DATA_DIR="${DNDS_CANTERA_DATA_DIR}")
 endif()
 ADD_EXE_APP("${DNDS_APPS_DNDS}" "app/DNDS" "dnds;" ON cpp)
