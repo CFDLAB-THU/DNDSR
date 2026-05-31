@@ -351,7 +351,7 @@ namespace DNDS::Euler
         ChemPool pool_;
         typename EulerEvaluatorSettings<model>::IdealGasProperty igProp_;
         real sourceScale_ = 1.0;
-        static constexpr bool filterReactiveJacobianSpectrum_ = true;
+        int filterReactiveJacobianSpectrum_ = 1;
 
         // Per-thread work buffers (one set per OMP thread)
         mutable std::vector<std::vector<double>> bufOmega_;
@@ -468,14 +468,14 @@ namespace DNDS::Euler
                         dSdu(iRow, j) = val;
                     }
                 }
-                if constexpr (filterReactiveJacobianSpectrum_)
+                if (filterReactiveJacobianSpectrum_ == 1)
                 {
                     Eigen::ComplexEigenSolver<Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic>> eig(dSdu);
                     if (eig.info() == Eigen::Success)
                     {
                         Eigen::Vector<std::complex<real>, Eigen::Dynamic> lambda = eig.eigenvalues();
                         for (int i = 0; i < lambda.size(); ++i)
-                            lambda(i) = std::complex<real>(std::min(lambda(i).real(), real(0)), 0.0);
+                            lambda(i) = std::complex<real>(std::min(lambda(i).real(), real(0)), lambda(i).imag());
                         Eigen::Matrix<std::complex<real>, Eigen::Dynamic, Eigen::Dynamic> dSduFiltered =
                             eig.eigenvectors() * lambda.asDiagonal() * eig.eigenvectors().inverse();
                         dSdu = dSduFiltered.real();
