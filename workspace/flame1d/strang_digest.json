@@ -1,0 +1,114 @@
+{
+  "final_log": {
+    "CFLNow": 10.0,
+    "curDtImplicit": 0.001,
+    "residual_max_abs": 3.2500516415e-06,
+    "step": 1000,
+    "tSimu": 1.0
+  },
+  "final_snapshot": {
+    "cell_data_minmax": {
+      "M": {
+        "max": 0.008508519489743427,
+        "min": 0.0001609097669609578
+      },
+      "P": {
+        "max": 0.7544477665975036,
+        "min": 0.7029858603612578
+      },
+      "R": {
+        "max": 0.7931252492648019,
+        "min": 0.12199942845439274
+      },
+      "RE": {
+        "max": 1.5970373733825645,
+        "min": -0.6500371180862059
+      },
+      "RHSr": {
+        "max": 118.84746033290831,
+        "min": -64.9553379383238
+      },
+      "T": {
+        "max": 2411.9384845083273,
+        "min": 322.393607864765
+      },
+      "V1": {
+        "max": 0.027674684133389547,
+        "min": 0.001069256692639464
+      },
+      "V2": {
+        "max": 0.0015212150496936743,
+        "min": 1.763943193365202e-08
+      },
+      "V3": {
+        "max": 0.0035700592403926246,
+        "min": 2.0774710919521947e-08
+      },
+      "V4": {
+        "max": 0.2201183658432225,
+        "min": 0.0005432837601466388
+      },
+      "V5": {
+        "max": 0.008701854178562623,
+        "min": 1.2973745837741669e-05
+      },
+      "V6": {
+        "max": 0.261000772562034,
+        "min": 0.0021287453491437938
+      },
+      "V7": {
+        "max": 0.0007566952152680324,
+        "min": 2.924956877552785e-07
+      },
+      "V8": {
+        "max": 7.943169886125643e-05,
+        "min": 6.031511554301051e-08
+      },
+      "V9": {
+        "max": 8.196759711655795e-30,
+        "min": 1.2608349071309524e-30
+      },
+      "Velo": {
+        "max": 0.011755465655350811,
+        "min": -0.021221541116263593
+      },
+      "iPart": {
+        "max": 7.0,
+        "min": 0.0
+      },
+      "ifUseLimiter": {
+        "max": 0.0,
+        "min": 0.0
+      }
+    },
+    "front_temperature": 1329.4452295382,
+    "front_x": 0.019693652448363515,
+    "time": 1.000000000000001
+  },
+  "log_file": "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460.log",
+  "log_rows": 61506,
+  "output_dir": "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8",
+  "plots": [
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/digest_react__2026-05-31_13-09-46_974460/profiles_thermo.png",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/digest_react__2026-05-31_13-09-46_974460/profiles_species.png",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/digest_react__2026-05-31_13-09-46_974460/profiles_diagnostics.png",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/digest_react__2026-05-31_13-09-46_974460/history_residuals.png",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/digest_react__2026-05-31_13-09-46_974460/history_state_limiters.png"
+  ],
+  "prefix": "react__2026-05-31_13-09-46_974460",
+  "step_final_rows": 1000,
+  "vtu_snapshots_used": [
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460_00000.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460_50.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460_150.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460_250.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460_350.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460_450.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460_500.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460_600.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460_700.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460_800.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460_900.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460_1000.vtu"
+  ]
+}

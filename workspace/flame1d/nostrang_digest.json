@@ -1,0 +1,114 @@
+{
+  "final_log": {
+    "CFLNow": 10.0,
+    "curDtImplicit": 0.001,
+    "residual_max_abs": 4.0591940041e-07,
+    "step": 1000,
+    "tSimu": 1.0
+  },
+  "final_snapshot": {
+    "cell_data_minmax": {
+      "M": {
+        "max": 0.00921567342542893,
+        "min": 0.0006484810041960655
+      },
+      "P": {
+        "max": 0.7131622761835508,
+        "min": 0.7107442123698948
+      },
+      "R": {
+        "max": 0.8010379775915983,
+        "min": 0.12214767070154108
+      },
+      "RE": {
+        "max": 1.6256203718504936,
+        "min": -0.6391968936132559
+      },
+      "RHSr": {
+        "max": 0.01715562463235898,
+        "min": -0.017748747128415232
+      },
+      "T": {
+        "max": 2410.5501431494686,
+        "min": 323.79231175425656
+      },
+      "V1": {
+        "max": 0.02768047077784509,
+        "min": 0.0010660481817359455
+      },
+      "V2": {
+        "max": 0.0013595953206418736,
+        "min": 1.24838026157836e-30
+      },
+      "V3": {
+        "max": 0.0030630629727551166,
+        "min": 1.24838026157836e-30
+      },
+      "V4": {
+        "max": 0.22014234057368187,
+        "min": 7.364725389442881e-30
+      },
+      "V5": {
+        "max": 0.008460549994411528,
+        "min": 5.409394132587377e-05
+      },
+      "V6": {
+        "max": 0.2560061418697726,
+        "min": 0.0020704768952352396
+      },
+      "V7": {
+        "max": 0.0005487751982066706,
+        "min": 2.3422110022893462e-07
+      },
+      "V8": {
+        "max": 5.227924880417567e-05,
+        "min": 5.1850223941508156e-08
+      },
+      "V9": {
+        "max": 8.186811866788906e-30,
+        "min": 1.24838026157836e-30
+      },
+      "Velo": {
+        "max": 0.00764537806635875,
+        "min": -0.02076092495702034
+      },
+      "iPart": {
+        "max": 7.0,
+        "min": 0.0
+      },
+      "ifUseLimiter": {
+        "max": 0.0,
+        "min": 0.0
+      }
+    },
+    "front_temperature": 1329.4452295382,
+    "front_x": 0.01968771631207388,
+    "time": 1.000000000000001
+  },
+  "log_file": "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8-nostrang/react__.log",
+  "log_rows": 84251,
+  "output_dir": "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8-nostrang",
+  "plots": [
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8-nostrang/digest_react__/profiles_thermo.png",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8-nostrang/digest_react__/profiles_species.png",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8-nostrang/digest_react__/profiles_diagnostics.png",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8-nostrang/digest_react__/history_residuals.png",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8-nostrang/digest_react__/history_state_limiters.png"
+  ],
+  "prefix": "react__",
+  "step_final_rows": 1000,
+  "vtu_snapshots_used": [
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8-nostrang/react___00000.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8-nostrang/react___50.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8-nostrang/react___150.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8-nostrang/react___250.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8-nostrang/react___350.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8-nostrang/react___450.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8-nostrang/react___500.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8-nostrang/react___600.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8-nostrang/react___700.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8-nostrang/react___800.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8-nostrang/react___900.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8-nostrang/react___1000.vtu"
+  ]
+}
