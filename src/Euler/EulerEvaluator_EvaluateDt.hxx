@@ -1629,6 +1629,10 @@ namespace DNDS::Euler
                 0.5;
         }
 
+        if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall ||
+             pBCHandler->GetTypeFromID(btype) == BCWallIsothermal)
+            finc(0, EigenAll) = 0.0; // no mass leak even using rs on wall
+
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
         if (!ignoreVis)
             finc -= visFluxV;
