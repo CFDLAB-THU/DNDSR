@@ -4,9 +4,9 @@
 **Branch:** upstream/main..HEAD (~90 commits, ~170 files, +26k/-4.7k lines)
 **Passes:** 4 — audited + false-positive validated + deep internals probed. 6 findings fixed.
 
-**Unresolved: 3 CRITICAL (F3,F4,F7,F8), 8 HIGH, 44 MEDIUM, 31 LOW**
+**Unresolved: 2 CRITICAL (F4, F8), 12 HIGH, 51 MEDIUM, 48 LOW**
 
-**Resolved:** F1 (fmt ABI, `5db85e4`), F2 (Cantera opt-out, `101ce89`), F5 (JAC_SKIP re-rate, `101ce89`), F6 (recomputeDerived, `101ce89`), F14 (Roe_M7 eigenvalues, `5db85e4`), F98 (negative-species doc, `5db85e4`)
+**Resolved:** F1 (fmt ABI, `5db85e4`), F2 (Cantera opt-out, `101ce89`), F3 (BCInPsTs p→c, this commit), F5 (JAC_SKIP re-rate, `101ce89`), F6 (recomputeDerived, `101ce89`), F7 (DNDS_MECH_PATH, this commit), F14 (Roe_M7 eigenvalues, `5db85e4`), F21 (CT_USE_SYSTEM_FMT lib, by F1), F98 (negative-species doc, `5db85e4`), F110 (validateWithContext, this commit)
 
 ---
 
@@ -16,11 +16,11 @@
 |----|-----|------|---------|---------|
 | F1 | **CRIT** ✓ | Build | `DndsApps.cmake:157`, `Euler/CMakeLists.txt:24,29` | fmt ABI mismatch — **FIXED: CT_USE_SYSTEM_FMT=1 PUBLIC on euler_library_fast; cantera_Test standalone** |
 | F2 | **CRIT** ✓ | Build | `DndsExternalDeps.cmake:55-57,84-91,241` | Cantera unconditionally REQUIRED — **FIXED: DNDS_USE_CANTERA option, ChemicalSource guarded** |
-| F3 | **CRIT** | Scaling | `EulerBC.hpp:380-385`, `PhysicsProperties.hpp:489`, `EvaluateDt.hxx:2803` | `BCInPsTs` expects code units; JSON raw values have no phys→code path |
+| F3 | **CRIT** ✓ | Scaling | `EulerBC.hpp:380-385,607-626,178` | BCInPsTs phys→code missing — **FIXED: convention = physical inputs, converted in ResolveStateValues; schema updated** |
 | F4 | **CRIT** | Reactive | `EulerSolver.hxx:860-883` | Tau-splitting Newton: no convergence check, no damping, no NaN guard |
 | F5 | **LOW** ✓ | Jacobian | `SourceTermContributor.hpp:441-443`, `ChemicalSource.cpp:276-277` | JAC_SKIP_FLUID — **explicit Jacobian approximation; both with/without need empirical comparison** **[C→L: user]** |
 | F6 | **CRIT** ✓ | EOS | `test_PhysicsProperties.cpp:36`, `test_ChemODE.cpp:311` | `recomputeDerived()` removed — **FIXED: test files cleaned; canteraConstVolTrajectory fixed** |
-| F7 | **CRIT** | Config | `AGENTS.md:143-150` vs `SourceTermContributor.hpp:527` | `DNDS_MECH_PATH` documented but never used in solver |
+| F7 | **CRIT** ✓ | Config | `AGENTS.md:143-150` vs `SourceTermContributor.hpp:527` | `DNDS_MECH_PATH` documented but unused — **FIXED: prepended when set and path not absolute** |
 | F8 | **CRIT** | Thread | `SourceTermContributor.hpp:521-528`, `PhysicsProperties.hpp:72-88` | Per-thread pool sized at init — abort if thread count increases later |
 | F9 | **MED** | Scaling | `EvaluateDt.hxx:2642-2658`, `EulerBC.hpp:405-448` | `BCWallIsothermal` T in code units; no phys→code conversion (default T0=1 works) **[H→M: FP pass]** |
 | F10 | **MED** | Scaling | `EulerEvaluatorSettings.hpp:591-592`, `PhysicsProperties.hpp:1127-1129` | Sutherland TRef/CSutherland doc says "(K)" but used with code-scaled T (only manifests at T0≠1) **[H→M: FP pass]** |
@@ -30,11 +30,11 @@
 | F14 | **HIGH** ✓ | EOS | `Gas.hpp:1027-1041` | EigScheme==7 (Roe_M7) uses `*=` instead of `=` — **FIXED: *= → =** |
 | F15 | **MED** | Jacobian | `ChemicalSource.cpp:219-228` | Reference offset uses `cp(298)*298` instead of `h_k(T_ref)` — valid NASA7 approximation; biases Jacobian only **[H→M: FP pass]** |
 | F16 | **HIGH** | Jacobian | `SourceTermContributor.hpp:437-459` | Zero energy-row Jacobian but RHS has non-zero chemical source (byproduct of F5) |
-| F17 | **HIGH** | Config | `ConfigRegistry.hpp:452`, `EulerSolver.hpp:990-1059` | `validateKeys()` defined but never called — config typos silently ignored |
+| F17 | **MED** | Config | `ConfigRegistry.hpp:452`, `EulerSolver.hpp:990-1059` | `validateKeys()` defined but never called — **validateWithContext added; validateKeys deferred (shallow; need recursive/warn behavior for loose configs)** |
 | F18 | **HIGH** | Config | `cases/eulerEX/react_test.json:2` | References wrong `$schema` (eulerSA instead of eulerEX) |
 | F19 | **HIGH** | Config | `EulerEvaluatorSettings.hpp:652,822-823` | No check that `mechanismFile` is non-empty when `reactiveFlow.enabled==true` |
 | F20 | **HIGH** | Build | `Euler/CMakeLists.txt:18-25` | All Euler model variants compile ChemicalSource.cpp — no model gating |
-| F21 | **HIGH** | Build | `Euler/CMakeLists.txt:29-30` | `CT_USE_SYSTEM_FMT` not propagated to library compiling ChemicalSource.cpp |
+| F21 | **HIGH** ✓ | Build | `Euler/CMakeLists.txt:29-30` | `CT_USE_SYSTEM_FMT` not propagated to library — **RESOLVED by F1** |
 | F22 | **LOW** | BC | `EvaluateRHS.hxx:358`, `EvaluateDt.hxx:1241-1248` | No explicit dY_k/dn=0 at non-catalytic walls — standard viscous-wall practice; error diminishes with mesh refinement **[H→L: FP pass]** |
 | F23 | **LOW** | BC | `EvaluateRHS.hxx:474-489` | `noRsOnWall` isothermal uses stale ULc for gammaEq — only affects non-reactive path where gammaEq is constant **[H→L: FP pass]** |
 | F24 | — | BC | Cross-ref F9 | *REMOVED — duplicate of F9* |
@@ -123,7 +123,7 @@
 | F107 | **MED** | Test | `SourceTermContributor.hpp:441-443`, `ChemicalSource.cpp:276-277` | JAC_SKIP_FLUID production path has zero test coverage (distinct from F5) |
 | F108 | **MED** | Config | `EulerEvaluatorSettings.hpp:798-801` | Constructor defaults species to ΣY_k>1; overridden by JSON but hazard for programmatic use |
 | F109 | **MED** | Config | `ConfigParam.hpp:456-462` | `field_schema` desc parameter silently dead when StateValueSchema provides own description |
-| F110 | **MED** | Config | `ConfigParam.hpp:692-704,797-801`, `ConfigRegistry.hpp:427-437` | `validateWithContext`/`check_ctx` generated but never called anywhere |
+| F110 | **MED** ✓ | Config | `ConfigParam.hpp:692-704,797-801`, `ConfigRegistry.hpp:427-437` | `validateWithContext`/`check_ctx` generated but never called — **FIXED: called in ConfigureFromJson** |
 | F111 | **LOW** | Reactive | `EulerEvaluator.hpp:1872` | `AddFixedIncrement` speciesClipped detection uses exact floating-point `!=` |
 | F112 | **LOW** | Chemistry | `ChemicalSource.hpp:122-124`, `ChemicalSource.cpp:243-319` | JAC_SKIP_ABSORPTION flag fully implemented but never OR'd — dead code |
 | F113 | **LOW** | React/Pref | `PhysicsProperties.hpp:1198` | Dead uSensible computation wastes mixtureFormationRhoE call per temperature() |
@@ -150,10 +150,11 @@ All `find_library`/`find_path` calls use `REQUIRED`. No `DNDS_USE_CANTERA` cache
 
 ---
 
-### F3 — CRITICAL — `BCInPsTs` expects code units, no phys→code conversion
-**Files:** `EulerBC.hpp:380-385`, `PhysicsProperties.hpp:489`, `EvaluateDt.hxx:2803`
+### F3 ✓ — CRITICAL — BCInPsTs: new convention = physical inputs, converted to code
 
-`totalToStaticPrimitive()` converts inputs from code→phys internally. JSON stores raw pTotal/TTotal as `nonState` without `resolveStateValue`. User specifying [101325, 300, ...] gets `p_total_code=101325`, `T_total_code=300` which `totalToStaticPrimitive` then treats as code values, converting to `p_phys = 101325 * rho0 * U0²` — wildly wrong.
+`totalToStaticPrimitive()` converts inputs from code→phys internally. JSON stores raw pTotal/TTotal as `nonState` without `resolveStateValue`. User specifying [101325, 300, ...] in SI units got code-unit treatment, producing wrong results when T0≠1 or rho0*U0²≠1.
+
+**Resolution:** Convention declared: BCInPsTs inputs are in physical SI units. `ResolveStateValues` now calls `phys.toCode()`/`phys.toCodeT()` on pTotal/TTotal. Schema description updated. When U0=T0=L0=1, physical=cod units (identity).
 
 ---
 
@@ -178,10 +179,12 @@ All `find_library`/`find_path` calls use `REQUIRED`. No `DNDS_USE_CANTERA` cache
 
 ---
 
-### F7 — CRITICAL — `DNDS_MECH_PATH` documented but unused in solver
+### F7 ✓ — CRITICAL — `DNDS_MECH_PATH` documented but unused in solver
 **Files:** `AGENTS.md:143-150` vs `SourceTermContributor.hpp:527`
 
 Solver passes `mechanismFile` directly to Cantera without prepending `DNDS_MECH_PATH`. Only test code reads this env var. Solver relies on `CANTERA_DATA` or CWD. Users following docs get obscure errors.
+
+**Resolution:** `SourceTermContributor.hpp` now reads `DNDS_MECH_PATH` via `GetEnvString` and prepends it when set and `mechanismFile` is not absolute (checked via `std::filesystem::path::is_absolute`).
 
 ---
 
@@ -248,10 +251,12 @@ Chemical source contributes to energy RHS via heat release, but energy Jacobian 
 
 ---
 
-### F17 — HIGH — `validateKeys()` defined but never called
+### F17 — MED — `validateKeys()` defined but never called (validateWithContext added instead)
 **Files:** `ConfigRegistry.hpp:452`, `EulerSolver.hpp:990-1059`
 
-JSON config typos silently ignored — misspelled keys simply don't take effect. Users waste time debugging why settings don't work.
+JSON config typos silently ignored — misspelled keys simply don't take effect. `validateKeys()` exists but is shallow (no recursion into nested config sections) and throws on unknown keys (undesirable for loose research configs).
+
+**Status:** `validateKeys()` intentionally deferred. `validateWithContext()` added in `ConfigureFromJson` with `{nVars, dim, gDim, modelCode}` context — harmless since no contextual checks are registered yet. Re-rated HIGH→MED.
 
 ---
 
@@ -539,8 +544,10 @@ Calls `speciesDiffusivityK(k)` per transported species — each call allocates h
 ### F109 — MEDIUM — `field_schema`'s `desc` parameter silently dead when `StateValueSchema` provides own description
 **File:** `ConfigParam.hpp:456-462`
 
-### F110 — MEDIUM — `validateWithContext` / `check_ctx` generated but never called
+### F110 ✓ — MEDIUM — `validateWithContext` / `check_ctx` generated but never called
 **Files:** `ConfigParam.hpp:692-704,797-801`, `ConfigRegistry.hpp:427-437`
+
+**Resolution:** `validateWithContext(ctx)` now called in `ConfigureFromJson` after `validate()`.
 
 ### F111 — LOW — `AddFixedIncrement` uses exact floating-point `!=` for speciesClipped detection
 **File:** `EulerEvaluator.hpp:1872`
@@ -578,11 +585,11 @@ Calls `speciesDiffusivityK(k)` per transported species — each call allocates h
 
 1. **Compilation errors:** F6 (`recomputeDerived`). Also 3 pre-existing stale files: `partitionMeshSerial.cpp`, `jacobiLUTest.cpp`, `examples/ex_geom_mesh.cpp`.
 
-2. **Test coverage gaps:** F5 `JAC_SKIP_FLUID` production path untested (F107). No BC test case. No StateValue config test. No species-diffusion transport tests. `validateKeys`/`validateWithContext` never called (F17, F110).
+2. **Test coverage gaps:** F5 `JAC_SKIP_FLUID` production path untested (F107). No BC test case. No StateValue config test. No species-diffusion transport tests. `validateWithContext` now called (F110 resolved); `validateKeys` deferred as shallow/throwing (F17 re-rated MED).
 
 3. **Documentation drift:** `AGENTS.md` says solver uses `DNDS_MECH_PATH` — it doesn't (F7).
 
-4. **Dead/placeholder code:** `EulerModelTraits::isReactive` always false; `thermoFile`/`transportModel`/`nSpeciesOverride` registered but unused; `JAC_SKIP_FLUID` (F5); `FixUMaxFilter` is no-op; `JAC_SKIP_ABSORPTION` (F112); `NonReactiveOnly` enum (F115); `validateWithContext` (F110).
+4. **Dead/placeholder code:** `EulerModelTraits::isReactive` always false; `thermoFile`/`transportModel`/`nSpeciesOverride` registered but unused; `JAC_SKIP_FLUID` (F5); `FixUMaxFilter` is no-op; `JAC_SKIP_ABSORPTION` (F112); `NonReactiveOnly` enum (F115).
 
 5. **Positivity gaps:** F98 (negative dependent species in limiter), F99 (species not checked in early-exit), F25 (Newton bypasses AddFixedIncrement), F102 (pseudo-time species unguarded).
 

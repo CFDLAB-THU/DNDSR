@@ -1055,6 +1055,15 @@ namespace DNDS::Euler
                 config.ReadWriteJson(gSetting, nVars, read);
                 for (const auto &failure : config.validate())
                     DNDS_check_throw_info(failure.passed, failure.message);
+                {
+                    DNDS::ConfigContext ctx;
+                    ctx.nVars = nVars;
+                    ctx.dim = dim;
+                    ctx.gDim = gDim;
+                    ctx.modelCode = static_cast<int>(model);
+                    for (const auto &failure : config.validateWithContext(ctx))
+                        DNDS_check_throw_info(failure.passed, failure.message);
+                }
                 // create from json the pBCHandler
                 pBCHandler = std::make_shared<BoundaryHandler<model>>(nVars);
                 from_json(config.bcSettings, *pBCHandler);

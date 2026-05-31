@@ -175,7 +175,7 @@ namespace DNDS::Euler
                                         {"type", "name", "value"}));
         }
         json totalConditionProps = flowProps;
-        totalConditionProps["value"] = rawValue("Raw BCInPsTs payload with size = nVars: [pTotal, TTotal, direction..., passive/species...]");
+        totalConditionProps["value"] = rawValue("BCInPsTs payload in physical units with size = nVars: [pTotal (Pa), TTotal (K), direction..., passive/species...]. Converted internally to code units; when U0=T0=L0=1, physical = code.");
         oneOf.push_back(makeVariant({"BCInPsTs"}, "Flow BC: BCInPsTs",
                                     totalConditionProps,
                                     {"type", "name", "value"}));
@@ -612,7 +612,14 @@ namespace DNDS::Euler
                 bool isFullState = type == EulerBCType::BCFar || type == EulerBCType::BCOut ||
                                    type == EulerBCType::BCOutP || type == EulerBCType::BCIn;
                 if (!isFullState)
+                {
+                    if (type == EulerBCType::BCInPsTs)
+                    {
+                        BCValues[i].nonState(0) = phys.toCode(BCValues[i].nonState(0));
+                        BCValues[i].nonState(1) = phys.toCodeT(BCValues[i].nonState(1));
+                    }
                     continue;
+                }
                 DNDS_check_throw_info(BCValues[i].originType != StateValueOrigin::NonState,
                                       fmt::format("BC [{}] requires a full state value, not nonState", ID2name.at(i)));
                 DNDS_check_throw_info(BCValues[i].originVector().size() == nVars,
