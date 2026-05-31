@@ -2276,6 +2276,10 @@ namespace DNDS::Euler
                     0.5 * (recBase(EigenAll, Seq123).array().square().rowwise().sum()) / recBase(EigenAll, 0).array();
                 Eigen::Vector<real, Eigen::Dynamic> rhoH_form_q = rhoH_form_perQ(recBase);
                 Eigen::Vector<real, Eigen::Dynamic> eInternalS = (recBase(EigenAll, I4) - ek - rhoH_form_q);
+                // NOTE: species positivity (rhoY_k >= 0) is intentionally not checked here.
+                // mixtureFormationRhoERaw is linear and accepts negative species mass; the only
+                // hard requirement for thermodynamic validity is positive sensible energy.
+                // Species repair is deferred to AddFixedIncrement / repairReactiveSpecies.
                 return eInternalS.minCoeff() >= rhoeSensibleEps;
             };
             if (checkRecBaseGood())

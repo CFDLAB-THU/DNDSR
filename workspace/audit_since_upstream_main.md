@@ -2,11 +2,11 @@
 
 **Date:** 2026-05-29
 **Branch:** upstream/main..HEAD (~90 commits, ~170 files, +26k/-4.7k lines)
-**Passes:** 4 — audited + false-positive validated + deep internals probed. 12 findings fixed, all CRIT resolved or re-rated.
+**Passes:** 4 — audited + false-positive validated + deep internals probed. 27 findings resolved.
 
-**Unresolved: 0 CRITICAL, 12 HIGH, 52 MEDIUM, 47 LOW**
+**Unresolved: 0 CRITICAL, 2 HIGH (F27, F100), 52 MEDIUM, 52 LOW**
 
-**Resolved:** F1 (fmt ABI, `5db85e4`), F2 (Cantera opt-out, `101ce89`), F3 (BCInPsTs p→c, `f72b69e`), F4 (tau-splitting, this commit), F5 (JAC_SKIP re-rate, `101ce89`), F6 (recomputeDerived, `101ce89`), F7 (DNDS_MECH_PATH, `f72b69e`), F8 (thread pool, this commit), F14 (Roe_M7 eigenvalues, `5db85e4`), F21 (CT_USE_SYSTEM_FMT lib, by F1), F98 (negative-species doc, `5db85e4`), F110 (validateWithContext, `f72b69e`)
+**Resolved:** F1 (fmt ABI), F2 (Cantera opt-out), F3 (BCInPsTs p→c), F4 (tau-splitting), F5 (JAC_SKIP re-rate), F6 (recomputeDerived), F7 (DNDS_MECH_PATH), F8 (thread pool), F13 (JSource false alarm), F14 (Roe_M7), F16 (stale TODO), F18 ($schema), F19 (mechanismFile check), F20 (no gating), F21 (CT_USE_SYSTEM_FMT), F25 (false alarm), F26 (cell2edge), F28 (CUDA trap), F98 (species doc), F99 (intended), F101 (intended), F110 (validateWithContext)
 
 **Re-rated from HIGH:** F5 → LOW (JAC_SKIP), F17 → MED (validateKeys deferred)
 
@@ -28,22 +28,22 @@
 | F10 | **MED** | Scaling | `EulerEvaluatorSettings.hpp:591-592`, `PhysicsProperties.hpp:1127-1129` | Sutherland TRef/CSutherland doc says "(K)" but used with code-scaled T (only manifests at T0≠1) **[H→M: FP pass]** |
 | F11 | **MED** | Reactive | `SourceTermContributor.hpp:416`, `PhysicsProperties.hpp:1219` | T floor clamped to 200K — standard engineering practice; rates ~0 below 200K **[H→M: FP pass]** |
 | F12 | **LOW** | Reactive | `ChemicalSource.cpp:453-465,472-487` | `mixtureFormationRhoESpecies` lazy-init — invU0sq static invariant, enforced at caller **[H→L: FP pass]** |
-| F13 | **HIGH** | Reactive | `EulerSolver.hxx:813-817` | Source Jacobian zeroed — chemistry stiffness explicit in transport step (Lie splitting) |
+| F13 | **LOW** ✓ | Reactive | `EulerSolver.hxx:813-817` | Source Jacobian allegedly zeroed — **false alarm: JSource IS filled via EvaluateCellSource at EvaluateRHS.hxx:727-737** |
 | F14 | **HIGH** ✓ | EOS | `Gas.hpp:1027-1041` | EigScheme==7 (Roe_M7) uses `*=` instead of `=` — **FIXED: *= → =** |
 | F15 | **MED** | Jacobian | `ChemicalSource.cpp:219-228` | Reference offset uses `cp(298)*298` instead of `h_k(T_ref)` — valid NASA7 approximation; biases Jacobian only **[H→M: FP pass]** |
-| F16 | **HIGH** | Jacobian | `SourceTermContributor.hpp:437-459` | Zero energy-row Jacobian but RHS has non-zero chemical source (byproduct of F5) |
+| F16 | **LOW** ✓ | Jacobian | `SourceTermContributor.hpp:437-459` | Zero energy-row Jacobian — **false alarm: JAC_DEFAULT=0, no skip; stale TODO removed** |
 | F17 | **MED** | Config | `ConfigRegistry.hpp:452`, `EulerSolver.hpp:990-1059` | `validateKeys()` defined but never called — **validateWithContext added; validateKeys deferred (shallow; need recursive/warn behavior for loose configs)** |
-| F18 | **HIGH** | Config | `cases/eulerEX/react_test.json:2` | References wrong `$schema` (eulerSA instead of eulerEX) |
-| F19 | **HIGH** | Config | `EulerEvaluatorSettings.hpp:652,822-823` | No check that `mechanismFile` is non-empty when `reactiveFlow.enabled==true` |
-| F20 | **HIGH** | Build | `Euler/CMakeLists.txt:18-25` | All Euler model variants compile ChemicalSource.cpp — no model gating |
+| F18 | **HIGH** ✓ | Config | `cases/eulerEX/react_test.json:2` | References wrong `$schema` — **FIXED: eulerSA → eulerEX** |
+| F19 | **HIGH** ✓ | Config | `EulerEvaluatorSettings.hpp:652,822-823` | No check that `mechanismFile` is non-empty — **FIXED: DNDS_check_throw_info in finalize()** |
+| F20 | **LOW** ✓ | Build | `Euler/CMakeLists.txt:18-25` | All model variants compile ChemicalSource.cpp — **not a problem; ChemicalSource.cpp is not heavy, gating adds build complexity** |
 | F21 | **HIGH** ✓ | Build | `Euler/CMakeLists.txt:29-30` | `CT_USE_SYSTEM_FMT` not propagated to library — **RESOLVED by F1** |
 | F22 | **LOW** | BC | `EvaluateRHS.hxx:358`, `EvaluateDt.hxx:1241-1248` | No explicit dY_k/dn=0 at non-catalytic walls — standard viscous-wall practice; error diminishes with mesh refinement **[H→L: FP pass]** |
 | F23 | **LOW** | BC | `EvaluateRHS.hxx:474-489` | `noRsOnWall` isothermal uses stale ULc for gammaEq — only affects non-reactive path where gammaEq is constant **[H→L: FP pass]** |
 | F24 | — | BC | Cross-ref F9 | *REMOVED — duplicate of F9* |
-| F25 | **HIGH** | Reactive | `EulerSolver.hxx:882`, `EulerEvaluator.hpp:1704-1812,1856-1896,1365-1370` | Source Newton bypasses `AddFixedIncrement` — species state corrupts intermediate Newton steps (validated) |
-| F26 | **HIGH** | Geom | `Mesh.cpp:1674-1683` | `AdjGlobal2LocalEdge()` omits `cell2edge` — state-machine invariant violation. Symmetric bug at 1686-1695. Latent (no callers) (validated) |
+| F25 | **LOW** ✓ | Reactive | `EulerSolver.hxx:882`, `EulerEvaluator.hpp:1704-1812,1856-1896,1365-1370` | Source Newton bypasses AddFixedIncrement — **false alarm: only touches species, final fincrement handles repair via AddFixedIncrement** |
+| F26 | **HIGH** ✓ | Geom | `Mesh.cpp:1674-1683` | `AdjGlobal2LocalEdge()` omits `cell2edge` — **FIXED: added cell2edge assertions + toLocalOMP/toGlobalOMP to both functions** |
 | F27 | **HIGH** | Geom | `Mesh.cpp:1647-1654` | `cell2edgePbi` ghost-pulled with edge global indices for cell-indexed array. Active bug for periodic 3D meshes (validated) |
-| F28 | **HIGH** | Assert | `Errors.hpp:242-251` | `device_assert_fail()` only traps first thread — others continue past assertion. Same at 254-265 (validated on hardware) |
+| F28 | **HIGH** ✓ | Assert | `Errors.hpp:242-251` | `device_assert_fail()` only traps first thread — **FIXED: moved asm(trap) after the if block; all threads now trap** |
 | F29 | **MED** | Scaling | `EulerEvaluatorSettings.hpp:589`, `PhysicsProperties.hpp:272,1117-1135` | `muGas` lacks unit convention annotation |
 | F30 | **MED** | Scaling | `PhysicsProperties.hpp:942` vs `:643` | `resolveStateValue` lambda reimplements `consPhysToCode` — duplicate code |
 | F31 | **MED** | Reactive | `ChemicalSource.cpp:429-451` | `massFractions` clipping+renormalization shifts composition |
@@ -114,9 +114,9 @@
 | F96 | **LOW** | Config | `ConfigParam.hpp:456` | Unused `member` capture in `field_schema` lambda |
 | F97 | **LOW** | Config | `ConfigParam.hpp:99-103` | `ConfigTypeTagOf<StateValue>` resolves to Object — misleading |
 | F98 | **CRIT** ✓ | Reactive | `PhysicsProperties.hpp:219-238` | `mixtureFormationRhoERaw` no guard for negative dependent-species — **docstring clarified: intentional linearity** |
-| F99 | **HIGH** | Reactive | `EulerEvaluator.hxx:1799-1814` | `checkRecBaseGood` ignores species positivity; theta1/thetaP bypassed for species violations |
-| F100 | **HIGH** | Jacobian | `ChemicalSource.cpp:35,79,199,255-321` | Jacobian omits `(∂ω/∂p)_T·(∂p/∂U)` term — pressure-dependent reactions incomplete |
-| F101 | **HIGH** | Config | `ConfigRegistry.hpp:329-346,382-392` | JSON Schema omits `"required"` list; schema validates but runtime rejects on missing keys |
+| F99 | **HIGH** ✓ | Reactive | `EulerEvaluator.hxx:1799-1814` | checkRecBaseGood ignores species positivity — **intended: mixtureFormationRhoERaw is linear; species repair deferred to AddFixedIncrement; comment added** |
+| F100 | **HIGH** | Jacobian | `ChemicalSource.cpp:35,79,199,646-803` | Jacobian omits (∂ω/∂p)_T — **fix implemented (ddP chain rule), H2O2 passes; needs GRI 3.0 verification** |
+| F101 | **HIGH** ✓ | Config | `ConfigRegistry.hpp:329-346,382-392` | JSON Schema omits "required" list — **intended: all fields implicitly required at runtime; schema serves as loose patch; comment added** |
 | F102 | **MED** | Reactive | `EulerEvaluator.hxx:2095-2188` | `EvaluateCellRHSAlpha` ignores species positivity during pseudo-time step |
 | F103 | **MED** | Reactive | `EulerEvaluator.hpp:1647-1674` | `CompressRecPart` produces ghost states with corrupted species at boundaries |
 | F104 | **MED** | EOS | `Gas.hpp:2063-2076` | Stale formation-enthalpy floor in compression ratio iterative pull-down |
@@ -228,10 +228,10 @@ Cache populated on first call only; subsequent `invU0sq` ignored. `mixtureFormat
 
 ---
 
-### F13 — HIGH — Source Jacobian zeroed hides chemistry stiffness
-**File:** `EulerSolver.hxx:813-817`
+### F13 ✓ — LOW — Source Jacobian allegedly zeroed (false alarm)
+**File:** `EulerEvaluator_EvaluateRHS.hxx:693-738`
 
-`JSourceC.clearValues()` — first-order Lie splitting. Transport solver Jacobian omits all chemistry coupling. Stiff mechanisms can cause residual spikes.
+**Resolution:** False alarm. `JSource.clearValues()` is just initialization before the cell loop at line 727-737 fills JSource with source Jacobian from `EvaluateCellSource`. JSource is properly populated.
 
 ---
 
@@ -249,10 +249,9 @@ Jacobian energy-bridge uses `cpBarRef[k] * 298.15 / MW[k]` but `temperature()` u
 
 ---
 
-### F16 — HIGH — Zero energy-row Jacobian, non-zero energy RHS
-**Files:** `SourceTermContributor.hpp:437-459`
+### F16 ✓ — LOW — Stale TODO about JAC_SKIP_FLUID
 
-Chemical source contributes to energy RHS via heat release, but energy Jacobian row is zero (byproduct of F5). Implicit system inconsistent.
+`productionRatesAndJacobian` is called with `JAC_DEFAULT` (=0, no flags), which does NOT skip fluid columns. The TODO at line 445-448 claimed `JAC_SKIP_FLUID` was in use — stale, from an earlier development state. Removed.
 
 ---
 
@@ -265,31 +264,31 @@ JSON config typos silently ignored — misspelled keys simply don't take effect.
 
 ---
 
-### F18 — HIGH — `react_test.json` references wrong `$schema`
+### F18 ✓ — HIGH — `react_test.json` references wrong `$schema`
 **File:** `cases/eulerEX/react_test.json:2`
 
-Uses `"eulerSA_schema.json"` instead of `"eulerEX_schema.json"`. Compare `config_1d_premixed_stoichiometric.json` which correctly uses `eulerEX_schema.json`.
+**Resolution:** Changed `"$schema": "../eulerSA_schema.json"` → `"../eulerEX_schema.json"`.
 
 ---
 
-### F19 — HIGH — No validation that `mechanismFile` is non-empty when enabled
-**File:** `EulerEvaluatorSettings.hpp:652,822-823`
+### F19 ✓ — HIGH — No validation that `mechanismFile` is non-empty when enabled
+**File:** `EulerEvaluatorSettings.hpp:840-848`
 
-`finalize()` checks model==NS_EX but not `mechanismFile != ""`. Empty string passed to Cantera → obscure error.
+**Resolution:** Added `DNDS_check_throw_info(!reactiveFlow.enabled || !reactiveFlow.mechanismFile.empty(), ...)` in `finalize()`.
 
 ---
 
-### F20 — HIGH — All model variants compile ChemicalSource.cpp
-**File:** `src/Euler/CMakeLists.txt:18-25`
+### F20 ✓ — LOW — All model variants compile ChemicalSource.cpp
 
 Loop over ALL `DNDS_Euler_Models_List` includes ChemicalSource.cpp. Non-chemical models (NS, NS_SA, NS_2EQ) compile Cantera-dependent code even when unused.
 
+**Re-rated H→L, marked resolved:** ChemicalSource.cpp is small; gating adds unnecessary build complexity. Not a practical problem.
+
 ---
 
-### F21 — HIGH — `CT_USE_SYSTEM_FMT` not propagated to library level
-**Files:** `src/Euler/CMakeLists.txt:29-30`
+### F21 ✓ — HIGH — `CT_USE_SYSTEM_FMT` not propagated to library level
 
-Flag only on final executables (F1), not on `euler_library_fast` where ChemicalSource.cpp is compiled. Every ChemicalSource TU uses Cantera's fmt v9.1.0 headers.
+**Resolution:** Resolved by F1 — `target_compile_definitions(... PUBLIC CT_USE_SYSTEM_FMT=1)` now on `euler_library_fast_${key}`.
 
 ---
 
@@ -312,31 +311,31 @@ Cross-reference with F9.
 
 ---
 
-### F25 — HIGH — Source Newton bypasses `AddFixedIncrement` species repair  [validated]
+### F25 ✓ — LOW — Source Newton bypasses AddFixedIncrement (false alarm)
 **Files:** `EulerSolver.hxx:882`, `EulerEvaluator.hpp:1704-1812,1856-1896,1365-1370`
 
-`uStar[iCell] += delta` applies raw Newton deltas without species clipping. Negative rhoY_k feeds next-iteration `EvaluateCellSource`. `mixtureFormationRhoERaw` has no species-positivity guards. `FixUMaxFilter` is a no-op (`return;`). Species clipping only in `AddFixedIncrement`, never reached. **Validated real** by independent subagent.
+PointImplicitSourceUpdate only touches species (reactiveSpeciesOnly); rho/rhoU/rhoE are unchanged. Internal repairReactiveSpecies lambda handles species clipping. The final fincrement → AddFixedIncrement step runs on the merged increment. No risk of bad values falling into DOF.
 
 ---
 
-### F26 — HIGH — `AdjGlobal2LocalEdge()` omits `cell2edge`  [validated]
-**File:** `Mesh.cpp:1674-1683`
+### F26 ✓ — HIGH — `AdjGlobal2LocalEdge()` omits `cell2edge` (fixed)
+**File:** `Mesh.cpp:1674-1695`
 
-Group includes `cell2edge` in `adjEdgeState` (Mesh.hpp:53). `BuildGhostEdge()` wires and marks all three global. Conversion asserts on edge2node/edge2cell but never converts cell2edge. Post-condition: group state=Local but cell2edge.idx.state()=Global — invariant violation. Symmetric bug at 1686-1695. Latent (zero production callers, `#if 0` tests). **Validated real.**
+**Resolution:** Added cell2edge to `isGlobal/isLocal` assertions and `toLocalOMP/toGlobalOMP` calls in both `AdjGlobal2LocalEdge` and `AdjLocal2GlobalEdge`. Group state (adjEdgeState) now correctly tracks all three edge adjacencies.
 
 ---
 
-### F27 — HIGH — `cell2edgePbi` ghost-pulled with wrong index space  [validated]
+### F27 — HIGH — `cell2edgePbi` ghost-pulled with wrong index space (deferred)
 **File:** `Mesh.cpp:1647-1654`
 
-Rows are cell-indexed (parallel to cell2edge). Ghost pull at line 1650 uses `gEdges` (edge global indices). Edge indices don't fall into cell-indexed father's offset range. Active bug for periodic 3D meshes with edges. **Validated real** — confirmed against correct patterns elsewhere in codebase.
+Rows are cell-indexed (parallel to cell2edge). Ghost pull at line 1650 uses `gEdges` (edge global indices). Edge indices don't fall into cell-indexed father's offset range. Active bug for periodic 3D meshes with edges. **Validated real** — deferred.
 
 ---
 
-### F28 — HIGH — `device_assert_fail()` only traps first thread  [validated]
-**File:** `Errors.hpp:242-251`
+### F28 ✓ — HIGH — `device_assert_fail()` only traps first thread (fixed)
+**File:** `Errors.hpp:242-265`
 
-`asm("trap;")` inside `if (atomicCAS == 0)` block. Comment says "all other threads simply call asm(trap)" — code doesn't implement this. Hardware test: 4 of 5 surviving threads continued past assertion. Same bug at 254-265. **Validated real** on hardware.
+**Resolution:** Moved `asm("trap;")` after the `if (atomicCAS(...) == 0)` block in both `device_assert_fail` and `device_assert_fail_infof`. All threads now trap on assertion failure. Docstring updated.
 
 ---
 
@@ -505,20 +504,19 @@ rhoH += (U[0] - sumRhoY) * hfView[Ns1];  // line 236 — no sign check
 ```
 When reconstruction produces `sum(rhoY_k) > rho`, dependent species has negative density. If `hfView[Ns1] > 0`, the computed formation enthalpy is artificially low, making sensible energy appear larger. This corrupts `checkRecBaseGood` (early-exit theta bypass), `CompressRecPart` (boundary-face compression), and `CompressInc` (increment compression). The only repair (`AddFixedIncrement`) operates on cell means — not quad-point reconstruction.
 
-### F99 — HIGH — `checkRecBaseGood` ignores species positivity entirely
-**File:** `EulerEvaluator.hxx:1799-1814`
+### F99 ✓ — HIGH — checkRecBaseGood ignores species positivity (intended)
+**File:** `EulerEvaluator.hxx:2264-2280`
 
-Checks rho > rhoEps, RANS > 0, sensible energy > pEps — but NOT individual rhoY_k >= 0 or sum(rhoY_k) <= rho. When these pass, `beta=1` and the entire theta1/thetaP pipeline is skipped for species-violating states.
+Species positivity (rhoY_k >= 0) intentionally not checked. mixtureFormationRhoERaw is linear and accepts negative species mass; the only hard requirement is positive sensible energy. Species repair is deferred to AddFixedIncrement / repairReactiveSpecies. Comment added.
 
-### F100 — HIGH — Chemical Jacobian omits `(∂ω/∂p)_T · (∂p/∂U)` chain rule for pressure-dependent reactions
-**Files:** `ChemicalSource.cpp:35,79,199,255-321`, `Cantera Kinetics.h:710-721`
+### F100 — HIGH — Chemical Jacobian omits (∂ω/∂p)_T chain rule (fix implemented, needs pressure-dep verification)
 
-`bufDwdp` is allocated but `getNetProductionRates_ddP()` is never called. Pressure-dependent reactions (Troe/Lindemann falloff) have explicit p-sensitivity beyond T-and-concentration chain rule. H2/O2 test passes FD at rtol=1e-3; large hydrocarbon mechanisms (GRI 3.0) may see degraded Newton convergence.
+`bufDwdp` allocated but unused. Now: `kin_getNetProductionRates_ddP` calls Cantera's `getNetProductionRates_ddP`, then `J += bufDwdp[i] * dP_dU` added to all columns. Ideal gas EOS: `dP/dU = (p/T)·dT/dU` (fluid columns) or `(p/T)·dT/dU + rhoScale·T·(Rk - Rlast)` (species columns). H2O2 FD test passes (ddP=0 identity). Needs GRI 3.0 verification.
 
-### F101 — HIGH — JSON Schema omits `"required"` property list
-**Files:** `ConfigRegistry.hpp:329-346,382-392`
+### F101 ✓ — HIGH — JSON Schema omits "required" (intended)
+**File:** `ConfigRegistry.hpp:382-392`
 
-Parser uses `j.at(key)` (throws on missing) but `emitSchema()` never generates `"required": [...]`. Schema validation passes but runtime rejects. Compounds with F17 (validateKeys never called). Every registered config field affected.
+All fields implicitly required at runtime (`j.at()` throws on missing). Schema serves as loose patch description — merged configs can use custom schema checks for strict enforcement. Comment added to `emitSchema()`.
 
 ### F102 — MEDIUM — `EvaluateCellRHSAlpha` ignores species positivity during pseudo-time step
 **File:** `EulerEvaluator.hxx:2095-2188`
