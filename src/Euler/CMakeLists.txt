@@ -28,6 +28,7 @@ foreach(item IN LISTS DNDS_Euler_Models_List)
     )
     dnds_add_lib(${LIBNAME}_fast_${key} "${CPPS_FAST}" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}"
         OFF ON ON) # SHARED,FAST, EXCLUDE
+    target_compile_definitions(${LIBNAME}_fast_${key} PUBLIC CT_USE_SYSTEM_FMT=1)
     dnds_add_lib(${LIBNAME}_${key}      "${CPPS}" "${LINKS};${LIBNAME}_fast_${key}" "${DNDS_PCH_TARGETS}"
         OFF OFF ON)  # SHARED,FAST, EXCLUDE
 endforeach()
