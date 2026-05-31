@@ -46,7 +46,7 @@ def dynamic_metadata(
                 stderr=subprocess.DEVNULL,
                 text=True,
             ).strip()
-            return f"{base}.dev0+g{short}"
+            return f"{base}.dev0+{short}"
         except (subprocess.CalledProcessError, FileNotFoundError):
             return base
 
@@ -62,7 +62,7 @@ def dynamic_metadata(
 
     if distance == 0:
         return base
-    return f"{base}.dev{distance}+g{commit}"
+    return f"{base}.dev{distance}+{commit}"
 
 
 def get_requires_for_dynamic_metadata(
