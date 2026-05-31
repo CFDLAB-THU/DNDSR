@@ -848,7 +848,12 @@ namespace DNDS::Euler
                               JDC, *gmres, !isTPMGLevel ? 0 : 1); //! here we borrow PMG's level1 setting into TPMG
 
             // ----------------------------------------------------------------
-            // Source time splitting: rebuild residual, then apply pointwise source update
+            // Source time splitting: rebuild residual, then apply pointwise source update.
+            // NOTE: tau-splitting is experimental. A single pass is performed per nonlinear
+            // iteration with no outer convergence check on the source update — correctness
+            // relies on the internal guards in PointImplicitSourceUpdate (species repair,
+            // validPointSourceState check, pseudo-time fallback). If the source update
+            // silently fails to converge, cxInc may be corrupted.
             // ----------------------------------------------------------------
             if (sourceTauSplittingEnabled && !eval.settings.ignoreSourceTerm)
             {

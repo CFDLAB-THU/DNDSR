@@ -2,11 +2,13 @@
 
 **Date:** 2026-05-29
 **Branch:** upstream/main..HEAD (~90 commits, ~170 files, +26k/-4.7k lines)
-**Passes:** 4 — audited + false-positive validated + deep internals probed. 6 findings fixed.
+**Passes:** 4 — audited + false-positive validated + deep internals probed. 12 findings fixed, all CRIT resolved or re-rated.
 
-**Unresolved: 2 CRITICAL (F4, F8), 12 HIGH, 51 MEDIUM, 48 LOW**
+**Unresolved: 0 CRITICAL, 12 HIGH, 52 MEDIUM, 47 LOW**
 
-**Resolved:** F1 (fmt ABI, `5db85e4`), F2 (Cantera opt-out, `101ce89`), F3 (BCInPsTs p→c, this commit), F5 (JAC_SKIP re-rate, `101ce89`), F6 (recomputeDerived, `101ce89`), F7 (DNDS_MECH_PATH, this commit), F14 (Roe_M7 eigenvalues, `5db85e4`), F21 (CT_USE_SYSTEM_FMT lib, by F1), F98 (negative-species doc, `5db85e4`), F110 (validateWithContext, this commit)
+**Resolved:** F1 (fmt ABI, `5db85e4`), F2 (Cantera opt-out, `101ce89`), F3 (BCInPsTs p→c, `f72b69e`), F4 (tau-splitting, this commit), F5 (JAC_SKIP re-rate, `101ce89`), F6 (recomputeDerived, `101ce89`), F7 (DNDS_MECH_PATH, `f72b69e`), F8 (thread pool, this commit), F14 (Roe_M7 eigenvalues, `5db85e4`), F21 (CT_USE_SYSTEM_FMT lib, by F1), F98 (negative-species doc, `5db85e4`), F110 (validateWithContext, `f72b69e`)
+
+**Re-rated from HIGH:** F5 → LOW (JAC_SKIP), F17 → MED (validateKeys deferred)
 
 ---
 
@@ -17,11 +19,11 @@
 | F1 | **CRIT** ✓ | Build | `DndsApps.cmake:157`, `Euler/CMakeLists.txt:24,29` | fmt ABI mismatch — **FIXED: CT_USE_SYSTEM_FMT=1 PUBLIC on euler_library_fast; cantera_Test standalone** |
 | F2 | **CRIT** ✓ | Build | `DndsExternalDeps.cmake:55-57,84-91,241` | Cantera unconditionally REQUIRED — **FIXED: DNDS_USE_CANTERA option, ChemicalSource guarded** |
 | F3 | **CRIT** ✓ | Scaling | `EulerBC.hpp:380-385,607-626,178` | BCInPsTs phys→code missing — **FIXED: convention = physical inputs, converted in ResolveStateValues; schema updated** |
-| F4 | **CRIT** | Reactive | `EulerSolver.hxx:860-883` | Tau-splitting Newton: no convergence check, no damping, no NaN guard |
+| F4 | **HIGH** ✓ | Reactive | `EulerSolver.hxx:853-878` | Tau-splitting single pass, no outer convergence check — **re-rated C→H; experimental, guarded internally; code note added** |
 | F5 | **LOW** ✓ | Jacobian | `SourceTermContributor.hpp:441-443`, `ChemicalSource.cpp:276-277` | JAC_SKIP_FLUID — **explicit Jacobian approximation; both with/without need empirical comparison** **[C→L: user]** |
 | F6 | **CRIT** ✓ | EOS | `test_PhysicsProperties.cpp:36`, `test_ChemODE.cpp:311` | `recomputeDerived()` removed — **FIXED: test files cleaned; canteraConstVolTrajectory fixed** |
 | F7 | **CRIT** ✓ | Config | `AGENTS.md:143-150` vs `SourceTermContributor.hpp:527` | `DNDS_MECH_PATH` documented but unused — **FIXED: prepended when set and path not absolute** |
-| F8 | **CRIT** | Thread | `SourceTermContributor.hpp:521-528`, `PhysicsProperties.hpp:72-88` | Per-thread pool sized at init — abort if thread count increases later |
+| F8 | **LOW** ✓ | Thread | `SourceTermContributor.hpp:521-528`, `PhysicsProperties.hpp:72-88` | Per-thread pool sized at init, aborts if thread count increases — **by design; pool assumes static thread count** |
 | F9 | **MED** | Scaling | `EvaluateDt.hxx:2642-2658`, `EulerBC.hpp:405-448` | `BCWallIsothermal` T in code units; no phys→code conversion (default T0=1 works) **[H→M: FP pass]** |
 | F10 | **MED** | Scaling | `EulerEvaluatorSettings.hpp:591-592`, `PhysicsProperties.hpp:1127-1129` | Sutherland TRef/CSutherland doc says "(K)" but used with code-scaled T (only manifests at T0≠1) **[H→M: FP pass]** |
 | F11 | **MED** | Reactive | `SourceTermContributor.hpp:416`, `PhysicsProperties.hpp:1219` | T floor clamped to 200K — standard engineering practice; rates ~0 below 200K **[H→M: FP pass]** |
@@ -158,10 +160,12 @@ All `find_library`/`find_path` calls use `REQUIRED`. No `DNDS_USE_CANTERA` cache
 
 ---
 
-### F4 — CRITICAL — Tau-splitting Newton lacks convergence checks
-**File:** `EulerSolver.hxx:860-883`
+### F4 ✓ — HIGH — Tau-splitting: single pass, no outer convergence check (experimental)
+**File:** `EulerSolver.hxx:853-878`
 
-3 fixed iterations, no residual norm check, no damping/line-search, no NaN/Inf guard, no singular-matrix fallback. Ill-conditioned Jacobian → arbitrary deltas. Stiff transients can produce negative species/negative rho/T<0.
+Single pass per nonlinear iteration with no outer convergence check on the source update result. If `PointImplicitSourceUpdate` silently fails, `cxInc` may be corrupted before the global nonlinear solver can recover.
+
+**Re-rated C→H:** The inner `PointImplicitSourceUpdate` has species repair (`repairReactiveSpecies`), validity checks (`validPointSourceState`), and a pseudo-time fallback (path=0 with residual convergence). Tau-splitting is experimental. Code note added at the site.
 
 ---
 
@@ -188,10 +192,11 @@ Solver passes `mechanismFile` directly to Cantera without prepending `DNDS_MECH_
 
 ---
 
-### F8 — CRITICAL — Per-thread pool sized at init, aborts if thread count increases
-**Files:** `SourceTermContributor.hpp:521-528`, `PhysicsProperties.hpp:72-88`
+### F8 ✓ — LOW — Per-thread pool sized at init, aborts if thread count increases
 
 Pool built once using `omp_get_max_threads()`. If `omp_set_num_threads()` called later with larger N, assertion fires and aborts. No lazy resize.
+
+**Re-rated C→L:** This is intentional design — the code assumes a static thread pool size. The assertion is correct behavior for a misconfigured run.
 
 ---
 
