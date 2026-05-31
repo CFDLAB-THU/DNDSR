@@ -388,6 +388,10 @@ namespace DNDS
             auto &props = schema["properties"] = nlohmann::ordered_json::object();
             for (const auto &f : fields())
                 props[f.name] = f.schemaEntry();
+            // NOTE: "required" is intentionally omitted from the generated schema.
+            // All fields are implicitly required at runtime (j.at() throws on missing keys).
+            // The schema serves as a loose patch description; a merged config can always be
+            // validated with a custom schema check if strict enforcement is desired.
             return schema;
         }
 

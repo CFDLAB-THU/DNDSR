@@ -846,6 +846,8 @@ namespace DNDS::Euler
                                   "reactiveFlow.enabled is only supported for eulerEX/eulerEX3D models");
             DNDS_check_throw_info(!reactiveFlow.enabled || specialBuiltinInitializer == 0,
                                   "reactiveFlow.enabled does not support specialBuiltinInitializer; use explicit StateValue/ExprTk initialization");
+            DNDS_check_throw_info(!reactiveFlow.enabled || !reactiveFlow.mechanismFile.empty(),
+                                  "reactiveFlow.mechanismFile must be non-empty when reactiveFlow.enabled is true");
             DNDS_assert(constMassForce.size() == 3);
             farFieldStaticValue.checkSize(nVars, "farFieldStaticValue");
             if (constMassForce.norm() || frameConstRotation.enabled ||

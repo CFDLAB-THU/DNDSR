@@ -1674,9 +1674,11 @@ namespace DNDS::Geom
         AdjGlobal2LocalEdge()
     {
         DNDS_assert(adjEdgeState == Adj_PointToGlobal);
-        DNDS_assert(edge2node.isGlobal() && edge2cell.isGlobal());
+        DNDS_assert(cell2edge.isGlobal() && edge2node.isGlobal() && edge2cell.isGlobal());
+        DNDS_assert_info(cell2edge.idx.isWired(), "cell2edge target mapping not wired");
         DNDS_assert_info(edge2node.idx.isWired(), "edge2node target mapping not wired");
         DNDS_assert_info(edge2cell.idx.isWired(), "edge2cell target mapping not wired");
+        cell2edge.toLocalOMP();
         edge2node.toLocalOMP();
         edge2cell.toLocalOMP();
         adjEdgeState = Adj_PointToLocal;
@@ -1686,9 +1688,11 @@ namespace DNDS::Geom
         AdjLocal2GlobalEdge()
     {
         DNDS_assert(adjEdgeState == Adj_PointToLocal);
-        DNDS_assert(edge2node.isLocal() && edge2cell.isLocal());
+        DNDS_assert(cell2edge.isLocal() && edge2node.isLocal() && edge2cell.isLocal());
+        DNDS_assert_info(cell2edge.idx.isWired(), "cell2edge target mapping not wired");
         DNDS_assert_info(edge2node.idx.isWired(), "edge2node target mapping not wired");
         DNDS_assert_info(edge2cell.idx.isWired(), "edge2cell target mapping not wired");
+        cell2edge.toGlobalOMP();
         edge2node.toGlobalOMP();
         edge2cell.toGlobalOMP();
         adjEdgeState = Adj_PointToGlobal;

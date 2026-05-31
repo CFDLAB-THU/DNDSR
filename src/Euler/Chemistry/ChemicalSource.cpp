@@ -267,6 +267,14 @@ namespace DNDS::Euler::Chemistry
             DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
 #endif
         }
+        void kin_getNetProductionRates_ddP(double *dwdP) const
+        {
+#ifdef DNDS_USE_CANTERA
+            sol->kinetics()->getNetProductionRates_ddP(dwdP);
+#else
+            DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
+#endif
+        }
         auto kin_netProductionRates_ddCi() const
         {
 #ifdef DNDS_USE_CANTERA
@@ -662,6 +670,7 @@ namespace DNDS::Euler::Chemistry
             omega[k] = I.bufOmega[k];
 
         I.kin_getNetProductionRates_ddT(I.bufDwdt.data());
+        I.kin_getNetProductionRates_ddP(I.bufDwdp.data());
 
         // Per-species concentration Jacobian ∂ω_i/∂C_k (sparse Ns×Ns)
         auto dWdC = I.kin_netProductionRates_ddCi();
@@ -716,7 +725,10 @@ namespace DNDS::Euler::Chemistry
         //   (rhoScale cancels: d(rhoY_k)_phys = rhoScale * d(rhoY_k)_code,
         //    but dT/d(rhoY_k)_phys has 1/rho_phys = 1/(rho_code*rhoScale),
         //    so dT/d(rhoY_k)_code = rhoScale * dT/d(rhoY_k)_phys = -du/(rho_code*cv))
+        // Pressure chain rule:      dP_phys/d(rhoY_k)_code = (p/T)*dT_drY + rhoScale*T*(Rk - Rlast)
+        double PbyT = p / std::max(T, 1e-60);
         double dT_pre = -rhoInv / cvSafe;
+        double rhoScaleT = rhoScale * T;
         for (int k = 0; k < Ns1; ++k)
         {
             double invMk = 1.0 / std::max(I.mw[k], 1e-30);
@@ -730,11 +742,15 @@ namespace DNDS::Euler::Chemistry
                 du += refOffsetSpecies[k];
             compositionEnergyDiff[k] = du;
             double dT_drY = dT_pre * du;
+            double dP_drY = PbyT * dT_drY;
+            if (!skipAbsorb)
+                dP_drY += rhoScaleT * (I.Rk[k] - I.Rk[Ns1]);
             for (int i = 0; i < nRows; ++i)
             {
                 J(i, speciesCol0 + k) = dWdC.coeff(i, k) * invMk * rhoScale + I.bufDwdt[i] * dT_drY;
                 if (!skipAbsorb)
                     J(i, speciesCol0 + k) -= dWdC.coeff(i, Ns1) * invMlast * rhoScale;
+                J(i, speciesCol0 + k) += I.bufDwdp[i] * dP_drY;
             }
         }
 
@@ -744,11 +760,12 @@ namespace DNDS::Euler::Chemistry
         // ── Fluid columns (∂ω/∂(ρu_j), ∂ω/∂(ρE), ∂ω/∂ρ) ──
 
         // ∂ω/∂(ρE)_code = ∂ω/∂T · velScale² / (ρ_code·cv)
+        //               + ∂ω/∂P · (p/T) · dT_drhoe
         double dT_drhoe = vs2 * rhoInv / cvSafe;
         for (int i = 0; i < nRows; ++i)
-            J(i, iEnergy) = I.bufDwdt[i] * dT_drhoe;
+            J(i, iEnergy) = I.bufDwdt[i] * dT_drhoe + I.bufDwdp[i] * PbyT * dT_drhoe;
 
-        // ∂ω/∂(ρu_j)_code = ∂ω/∂T · dT/d(ρu_j)_code
+        // ∂ω/∂(ρu_j)_code = ∂ω/∂T · dT/d(ρu_j)_code + ∂ω/∂P · (p/T)·dT_dm
         double dT_factor = -vs2 * rhoInv * rhoInv / cvSafe;
         for (int jd = 0; jd < iEnergy - 1; ++jd)
         {
@@ -758,7 +775,7 @@ namespace DNDS::Euler::Chemistry
                 continue;
             double dT_dm = dT_factor * rhoUk;
             for (int i = 0; i < nRows; ++i)
-                J(i, 1 + jd) = I.bufDwdt[i] * dT_dm;
+                J(i, 1 + jd) = I.bufDwdt[i] * dT_dm + I.bufDwdp[i] * PbyT * dT_dm;
         }
 
         // ∂ω/∂ρ_code = ∂ω/∂T·dT/dρ_code + ∂ω/∂C_last·∂C_last/∂ρ_code
@@ -782,6 +799,7 @@ namespace DNDS::Euler::Chemistry
             double d = I.bufDwdt[i] * dT_drho;
             if (!skipAbsorb)
                 d += dWdC.coeff(i, Ns1) * invMlast * rhoScale;
+            d += I.bufDwdp[i] * PbyT * dT_drho;
             J(i, 0) = d;
         }
     }

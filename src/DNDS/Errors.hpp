@@ -237,8 +237,9 @@ namespace DNDS
 
 /// @brief Device-side assertion failure: print once (atomic-guarded) and trap.
 /// @details Uses `atomicCAS` on a managed flag so only the first failing thread
-/// prints; all other threads simply call `asm("trap;")`. Avoids flooding the
-/// console when a kernel has one bug hit by thousands of threads.
+/// prints; all threads trap after the guarded block to ensure immediate
+/// kernel termination. Avoids flooding the console when a kernel has one
+/// bug hit by thousands of threads.
 __device__ inline void device_assert_fail(const char *expr, const char *file, int line)
 {
     __device__ __managed__ static int g_assert_printed = 0;
@@ -246,8 +247,8 @@ __device__ inline void device_assert_fail(const char *expr, const char *file, in
     {
         printf("Device assert failed: %s at %s:%d (block %d thread %d)\n",
                expr, file, line, blockIdx.x, threadIdx.x);
-        asm("trap;"); // force termination
     }
+    asm("trap;"); // force termination — all threads trap
 }
 
 /// @brief Printf-formatted variant of #device_assert_fail.
@@ -260,8 +261,8 @@ __device__ inline void device_assert_fail_infof(const char *expr, const char *fi
         printf("Device assert failed: %s at %s:%d (block %d thread %d)\n",
                expr, file, line, blockIdx.x, threadIdx.x);
         printf("%s\n", info);
-        asm("trap;"); // force termination
     }
+    asm("trap;"); // force termination — all threads trap
 }
 
 // ---- Per-level HD inner macros for CUDA device ----
