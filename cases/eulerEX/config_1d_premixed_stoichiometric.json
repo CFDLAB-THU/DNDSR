@@ -43,10 +43,10 @@
         }
     },
     "timeMarchControl": {
-        "dtImplicit": 1e-3,
+        "dtImplicit": 2e-3,
         "nTimeStep": 1000,
         "steadyQuit": false,
-        "tEnd": 1e+100,
+        "tEnd": 0.5,
         "odeCode": 204,
         "odeSetting1": 0.5,
         "sourceStrangSplitting": 0,
@@ -59,7 +59,7 @@
         "nConsoleCheck": 1,
         "nConsoleCheckInternal": 1,
         "nDataOutC": 1,
-        "nDataOut": 50,
+        "nDataOut": 10,
         "tDataOut": 3e+200,
         "dataOutAtInit": true,
         "consoleOutputEveryFix": 1,
@@ -97,7 +97,7 @@
         "uniqueStamps": false,
         "meshScale": 0.02,
         "meshFile": "../data/mesh/Uniform_01_400.cgns",
-        "outPltName": "../data/out/react_1d_premixed_freeflame_dt1e3_np8-nostrang/react_",
+        "outPltName": "../data/out/react_1d_premixed_dt2em3_np8-nostrang/react_",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": false,
@@ -184,7 +184,7 @@
         "exprtkInitializers": [
             {
                 "exprs": [
-                    "var s := 0.5 * (1.0 - tanh((x[0] - 0.01) / 0.001));",
+                    "var s := 0.5 * (1.0 - tanh((x[0] - 0.005) / 0.001));",
                     "inRegion := 1;",
                     "UExprtk[0] := 300.0 + s * (2358.8904590776 - 300.0);",
                     "UExprtk[1] := 0.0;",

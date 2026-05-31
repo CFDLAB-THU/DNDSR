@@ -2,75 +2,75 @@
   "final_log": {
     "CFLNow": 10.0,
     "curDtImplicit": 0.001,
-    "residual_max_abs": 3.2500516415e-06,
+    "residual_max_abs": 3.2282831903e-06,
     "step": 1000,
     "tSimu": 1.0
   },
   "final_snapshot": {
     "cell_data_minmax": {
       "M": {
-        "max": 0.008508519489743427,
-        "min": 0.0001609097669609578
+        "max": 0.008439473478856508,
+        "min": 0.00014810826505428113
       },
       "P": {
-        "max": 0.7544477665975036,
-        "min": 0.7029858603612578
+        "max": 0.7545344886099264,
+        "min": 0.7030303953360125
       },
       "R": {
-        "max": 0.7931252492648019,
-        "min": 0.12199942845439274
+        "max": 0.793062980601576,
+        "min": 0.1231483203507683
       },
       "RE": {
-        "max": 1.5970373733825645,
-        "min": -0.6500371180862059
+        "max": 1.596755132603853,
+        "min": -0.653707644003211
       },
       "RHSr": {
-        "max": 118.84746033290831,
-        "min": -64.9553379383238
+        "max": 118.81568966685393,
+        "min": -64.81814633972954
       },
       "T": {
-        "max": 2411.9384845083273,
-        "min": 322.393607864765
+        "max": 2395.1081487449655,
+        "min": 322.45852003542177
       },
       "V1": {
-        "max": 0.027674684133389547,
-        "min": 0.001069256692639464
+        "max": 0.02767384717758349,
+        "min": 0.0010697139472740425
       },
       "V2": {
-        "max": 0.0015212150496936743,
-        "min": 1.763943193365202e-08
+        "max": 0.0015174389819809348,
+        "min": 1.8109313362683958e-08
       },
       "V3": {
-        "max": 0.0035700592403926246,
-        "min": 2.0774710919521947e-08
+        "max": 0.003562522648969518,
+        "min": 2.1842674857429983e-08
       },
       "V4": {
-        "max": 0.2201183658432225,
-        "min": 0.0005432837601466388
+        "max": 0.22010951040644433,
+        "min": 0.001430475957070795
       },
       "V5": {
-        "max": 0.008701854178562623,
-        "min": 1.2973745837741669e-05
+        "max": 0.008729924033006679,
+        "min": 1.2990256100026009e-05
       },
       "V6": {
-        "max": 0.261000772562034,
-        "min": 0.0021287453491437938
+        "max": 0.25842060876763256,
+        "min": 0.0021356772803971667
       },
       "V7": {
-        "max": 0.0007566952152680324,
-        "min": 2.924956877552785e-07
+        "max": 0.0007559457565166459,
+        "min": 7.985578299721031e-07
       },
       "V8": {
-        "max": 7.943169886125643e-05,
-        "min": 6.031511554301051e-08
+        "max": 7.934629494079662e-05,
+        "min": 1.1719632736863142e-07
       },
       "V9": {
-        "max": 8.196759711655795e-30,
-        "min": 1.2608349071309524e-30
+        "max": 8.120289396978051e-30,
+        "min": 1.2609339036875139e-30
       },
       "Velo": {
-        "max": 0.011755465655350811,
-        "min": -0.021221541116263593
+        "max": 0.011785550230897102,
+        "min": -0.021381152162433904
       },
       "iPart": {
         "max": 7.0,
@@ -81,34 +81,34 @@
         "min": 0.0
       }
     },
-    "front_temperature": 1329.4452295382,
-    "front_x": 0.019693652448363515,
+    "front_temperature": null,
+    "front_x": null,
     "time": 1.000000000000001
   },
-  "log_file": "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460.log",
-  "log_rows": 61506,
-  "output_dir": "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8",
+  "log_file": "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt1e3_np8-strang/react__.log",
+  "log_rows": 62543,
+  "output_dir": "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt1e3_np8-strang",
   "plots": [
-    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/digest_react__2026-05-31_13-09-46_974460/profiles_thermo.png",
-    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/digest_react__2026-05-31_13-09-46_974460/profiles_species.png",
-    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/digest_react__2026-05-31_13-09-46_974460/profiles_diagnostics.png",
-    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/digest_react__2026-05-31_13-09-46_974460/history_residuals.png",
-    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/digest_react__2026-05-31_13-09-46_974460/history_state_limiters.png"
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt1e3_np8-strang/digest_react__/profiles_thermo.png",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt1e3_np8-strang/digest_react__/profiles_species.png",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt1e3_np8-strang/digest_react__/profiles_diagnostics.png",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt1e3_np8-strang/digest_react__/history_residuals.png",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt1e3_np8-strang/digest_react__/history_state_limiters.png"
   ],
-  "prefix": "react__2026-05-31_13-09-46_974460",
+  "prefix": "react__",
   "step_final_rows": 1000,
   "vtu_snapshots_used": [
-    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460_00000.vtu",
-    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460_50.vtu",
-    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460_150.vtu",
-    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460_250.vtu",
-    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460_350.vtu",
-    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460_450.vtu",
-    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460_500.vtu",
-    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460_600.vtu",
-    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460_700.vtu",
-    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460_800.vtu",
-    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460_900.vtu",
-    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_freeflame_dt1e3_np8/react__2026-05-31_13-09-46_974460_1000.vtu"
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt1e3_np8-strang/react___00000.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt1e3_np8-strang/react___90.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt1e3_np8-strang/react___180.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt1e3_np8-strang/react___270.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt1e3_np8-strang/react___360.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt1e3_np8-strang/react___450.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt1e3_np8-strang/react___540.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt1e3_np8-strang/react___630.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt1e3_np8-strang/react___720.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt1e3_np8-strang/react___810.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt1e3_np8-strang/react___900.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt1e3_np8-strang/react___1000.vtu"
   ]
 }
