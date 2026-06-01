@@ -257,20 +257,6 @@ __device__ inline void device_assert_fail(const char *expr, const char *file, in
     asm("trap;"); // force termination — all threads trap
 }
 
-/// @brief Printf-formatted variant of #device_assert_fail.
-__device__ inline void device_assert_fail_infof(const char *expr, const char *file, int line,
-                                                const char *info, ...)
-{
-    __device__ __managed__ static int g_assert_printed = 0;
-    if (atomicCAS(&g_assert_printed, 0, 1) == 0)
-    {
-        printf("Device assert failed: %s at %s:%d (block %d thread %d)\n",
-               expr, file, line, blockIdx.x, threadIdx.x);
-        printf("%s\n", info);
-    }
-    asm("trap;"); // force termination — all threads trap
-}
-
 // ---- Per-level HD inner macros for CUDA device ----
 
 #    if !defined(DNDS_NDEBUG) && !defined(DNDS_NDEBUG_DEVICE) && (0 >= DNDS_ASSERT_LEVEL || 0 >= DNDS_ASSERT_LEVEL_MAX)
@@ -282,13 +268,21 @@ __device__ inline void device_assert_fail_infof(const char *expr, const char *fi
                     device_assert_fail(#cond, __FILE__, __LINE__); \
                 }                                                  \
             } while (0)
-#        define DNDS__HD_ASSERT_INFOF_L0(cond, info, ...)                                             \
-            do                                                                                        \
-            {                                                                                         \
-                if (!(cond))                                                                          \
-                {                                                                                     \
-                    device_assert_fail_infof(#cond, __FILE__, __LINE__, (char *)info, ##__VA_ARGS__); \
-                }                                                                                     \
+#        define DNDS__HD_ASSERT_INFOF_L0(cond, info, ...)                     \
+            do                                                                \
+            {                                                                 \
+                if (!(cond))                                                  \
+                {                                                             \
+                    __device__ __managed__ static int _hd_assert_printed = 0; \
+                    if (atomicCAS(&_hd_assert_printed, 0, 1) == 0)            \
+                    {                                                         \
+                        printf("HD assert failed: %s (%s:%d) — ",             \
+                               #cond, __FILE__, __LINE__);                    \
+                        printf((const char *)(info), ##__VA_ARGS__);          \
+                        printf("\n");                                         \
+                    }                                                         \
+                    asm("trap;");                                             \
+                }                                                             \
             } while (0)
 #    else
 #        define DNDS__HD_ASSERT_L0(cond) (void(0))
@@ -304,13 +298,21 @@ __device__ inline void device_assert_fail_infof(const char *expr, const char *fi
                     device_assert_fail(#cond, __FILE__, __LINE__); \
                 }                                                  \
             } while (0)
-#        define DNDS__HD_ASSERT_INFOF_L1(cond, info, ...)                                             \
-            do                                                                                        \
-            {                                                                                         \
-                if (!(cond))                                                                          \
-                {                                                                                     \
-                    device_assert_fail_infof(#cond, __FILE__, __LINE__, (char *)info, ##__VA_ARGS__); \
-                }                                                                                     \
+#        define DNDS__HD_ASSERT_INFOF_L1(cond, info, ...)                     \
+            do                                                                \
+            {                                                                 \
+                if (!(cond))                                                  \
+                {                                                             \
+                    __device__ __managed__ static int _hd_assert_printed = 0; \
+                    if (atomicCAS(&_hd_assert_printed, 0, 1) == 0)            \
+                    {                                                         \
+                        printf("HD assert failed: %s (%s:%d) — ",             \
+                               #cond, __FILE__, __LINE__);                    \
+                        printf((const char *)(info), ##__VA_ARGS__);          \
+                        printf("\n");                                         \
+                    }                                                         \
+                    asm("trap;");                                             \
+                }                                                             \
             } while (0)
 #    else
 #        define DNDS__HD_ASSERT_L1(cond) (void(0))
@@ -326,13 +328,21 @@ __device__ inline void device_assert_fail_infof(const char *expr, const char *fi
                     device_assert_fail(#cond, __FILE__, __LINE__); \
                 }                                                  \
             } while (0)
-#        define DNDS__HD_ASSERT_INFOF_L2(cond, info, ...)                                             \
-            do                                                                                        \
-            {                                                                                         \
-                if (!(cond))                                                                          \
-                {                                                                                     \
-                    device_assert_fail_infof(#cond, __FILE__, __LINE__, (char *)info, ##__VA_ARGS__); \
-                }                                                                                     \
+#        define DNDS__HD_ASSERT_INFOF_L2(cond, info, ...)                     \
+            do                                                                \
+            {                                                                 \
+                if (!(cond))                                                  \
+                {                                                             \
+                    __device__ __managed__ static int _hd_assert_printed = 0; \
+                    if (atomicCAS(&_hd_assert_printed, 0, 1) == 0)            \
+                    {                                                         \
+                        printf("HD assert failed: %s (%s:%d) — ",             \
+                               #cond, __FILE__, __LINE__);                    \
+                        printf((const char *)(info), ##__VA_ARGS__);          \
+                        printf("\n");                                         \
+                    }                                                         \
+                    asm("trap;");                                             \
+                }                                                             \
             } while (0)
 #    else
 #        define DNDS__HD_ASSERT_L2(cond) (void(0))
@@ -348,13 +358,21 @@ __device__ inline void device_assert_fail_infof(const char *expr, const char *fi
                     device_assert_fail(#cond, __FILE__, __LINE__); \
                 }                                                  \
             } while (0)
-#        define DNDS__HD_ASSERT_INFOF_L3(cond, info, ...)                                             \
-            do                                                                                        \
-            {                                                                                         \
-                if (!(cond))                                                                          \
-                {                                                                                     \
-                    device_assert_fail_infof(#cond, __FILE__, __LINE__, (char *)info, ##__VA_ARGS__); \
-                }                                                                                     \
+#        define DNDS__HD_ASSERT_INFOF_L3(cond, info, ...)                     \
+            do                                                                \
+            {                                                                 \
+                if (!(cond))                                                  \
+                {                                                             \
+                    __device__ __managed__ static int _hd_assert_printed = 0; \
+                    if (atomicCAS(&_hd_assert_printed, 0, 1) == 0)            \
+                    {                                                         \
+                        printf("HD assert failed: %s (%s:%d) — ",             \
+                               #cond, __FILE__, __LINE__);                    \
+                        printf((const char *)(info), ##__VA_ARGS__);          \
+                        printf("\n");                                         \
+                    }                                                         \
+                    asm("trap;");                                             \
+                }                                                             \
             } while (0)
 #    else
 #        define DNDS__HD_ASSERT_L3(cond) (void(0))

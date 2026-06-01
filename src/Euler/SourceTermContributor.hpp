@@ -375,7 +375,7 @@ namespace DNDS::Euler
 
         ChemicalContributor() = default;
         explicit ChemicalContributor(ChemPool pool, typename EulerEvaluatorSettings<model>::IdealGasProperty igProp,
-                                     real sourceScale)
+                                     real sourceScale, int nVars)
             : pool_(std::move(pool)), igProp_(std::move(igProp)), sourceScale_(sourceScale)
         {
             if (pool_ && pool_->size() > 0)
@@ -383,7 +383,6 @@ namespace DNDS::Euler
                 int nT = static_cast<int>(pool_->size());
                 auto &c0 = (*pool_)[0];
                 int Ns = c0.nSpecies();
-                int nVars = static_cast<int>(EulerModelTraits<model>::dim) + 2 + Ns - 1;
                 bufOmega_.resize(nT);
                 bufJ_.resize(nT);
                 for (int t = 0; t < nT; ++t)
@@ -407,8 +406,8 @@ namespace DNDS::Euler
             int Ns = c.nSpecies();
             int Ns1 = Ns - 1;
             int nVars = static_cast<int>(ret.size());
-            int Isp = nVars - Ns1; // species start
-            int I4 = Isp - 1;      // energy index
+            int Isp = nVars - Ns1;                                       // species start
+            int I4 = static_cast<int>(EulerModelTraits<model>::dim) + 1; // energy index, not Isp-1 (wrong with RANS)
 
             double rho = U[0];
             double rhoInv = 1.0 / std::max(rho, 1e-60);
@@ -501,7 +500,7 @@ namespace DNDS::Euler
 
     template <EulerModel model>
     inline std::vector<SourceTermVariant<model>> buildSourceContributors(
-        const EulerEvaluatorSettings<model> &settings, int axisSymmetric)
+        const EulerEvaluatorSettings<model> &settings, int nVars, int axisSymmetric)
     {
         using Traits = EulerModelTraits<model>;
         if (!Traits::isExtended)
@@ -556,7 +555,7 @@ namespace DNDS::Euler
             for (int t = 1; t < nThreads; ++t)
                 pool->push_back(std::move(*pool->at(0).clone()));
             contribs.push_back(ChemicalContributor<model>{std::move(pool), settings.idealGasProperty,
-                                                          settings.reactiveSourceScale});
+                                                          settings.reactiveSourceScale, nVars});
         }
         return contribs;
     }

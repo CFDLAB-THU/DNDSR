@@ -170,10 +170,9 @@ namespace DNDS::Geom
         MeshAdjState adjPrimaryState{Adj_Unknown};
         // state of: face2cell, face2node, face2bnd
         MeshAdjState adjFacialState{Adj_Unknown};
-        // state of: cell2face, bnd2face
         MeshAdjState adjC2FState{Adj_Unknown};
-        // state of: node2cell, node2bnd
         MeshAdjState adjN2CBState{Adj_Unknown};
+        MeshAdjState adjEdgeState{Adj_Unknown};
         // state of: cell2cellFace
         // MeshAdjState adjC2CFaceState{Adj_Unknown};
 
@@ -252,6 +251,15 @@ namespace DNDS::Geom
         tPbiPair::t_deviceView<B> cell2facePbi;
         tPbiPair::t_deviceView<B> face2nodePbi;
 
+        /// Edge arrays (interpolated, after BuildGhostEdge / InterpolateEdge)
+        AdjPairTrackedDeviceView<B, tAdjPair::t_arr> cell2edge;
+        AdjPairTrackedDeviceView<B, tAdjPair::t_arr> edge2node;
+        AdjPairTrackedDeviceView<B, tAdjPair::t_arr> edge2cell;
+        tElemInfoArrayPair::t_deviceView<B> edgeElemInfo;
+        /// periodic only
+        tPbiPair::t_deviceView<B> cell2edgePbi;
+        tPbiPair::t_deviceView<B> edge2nodePbi;
+
         DNDS_HOST auto device_array_list_facial()
         {
             return std::make_tuple(
@@ -291,6 +299,31 @@ namespace DNDS::Geom
             DNDS_COPY_MEMBER_VIEW(m_obj, bnd2face);
         }
 
+        DNDS_HOST auto device_array_list_edge()
+        {
+            return std::make_tuple(
+                DNDS_MAKE_1_MEMBER_REF(cell2edge),
+                DNDS_MAKE_1_MEMBER_REF(edge2node),
+                DNDS_MAKE_1_MEMBER_REF(edge2cell),
+                DNDS_MAKE_1_MEMBER_REF(cell2edgePbi),
+                DNDS_MAKE_1_MEMBER_REF(edge2nodePbi),
+                DNDS_MAKE_1_MEMBER_REF(edgeElemInfo));
+        }
+
+        template <class TMain>
+        DNDS_HOST void create_view_edge(TMain &&m_obj)
+        {
+            DNDS_COPY_MEMBER_VIEW(m_obj, cell2edge);
+            DNDS_COPY_MEMBER_VIEW(m_obj, edge2node);
+            DNDS_COPY_MEMBER_VIEW(m_obj, edge2cell);
+            DNDS_COPY_MEMBER_VIEW(m_obj, edgeElemInfo);
+            if (isPeriodic)
+            {
+                DNDS_COPY_MEMBER_VIEW(m_obj, cell2edgePbi);
+                DNDS_COPY_MEMBER_VIEW(m_obj, edge2nodePbi);
+            }
+        }
+
         template <class TMain>
         DNDS_DEVICE_CALLABLE UnstructuredMeshDeviceView(TMain &mesh, index placeholder)
         {
@@ -302,6 +335,7 @@ namespace DNDS::Geom
             DNDS_COPY_MEMBER(mesh, adjFacialState);
             DNDS_COPY_MEMBER(mesh, adjC2FState);
             DNDS_COPY_MEMBER(mesh, adjN2CBState);
+            DNDS_COPY_MEMBER(mesh, adjEdgeState);
             // DNDS_COPY_MEMBER(mesh, adjC2CFaceState);
 
             if (adjPrimaryState && mesh.cell2node.isBuilt())
@@ -310,6 +344,8 @@ namespace DNDS::Geom
                 create_view_facial(mesh);
             if (adjC2FState && mesh.cell2face.isBuilt())
                 create_view_C2F(mesh);
+            if (adjEdgeState && mesh.cell2edge.isBuilt())
+                create_view_edge(mesh);
         }
 
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE_NO_EMPTY_CTOR(UnstructuredMeshDeviceView, UnstructuredMeshDeviceView)

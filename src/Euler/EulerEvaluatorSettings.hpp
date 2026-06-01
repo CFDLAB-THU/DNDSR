@@ -130,6 +130,7 @@ namespace DNDS::Euler
 
         json s;
         s["description"] = desc + std::string(" Canonical object form is {type, state}. Merge-patch warning: patch type and state together; changing only one reinterprets stale data.");
+        s["default"] = json{{"type", "consSensible"}, {"state", json::array()}};
         s["oneOf"] = json::array({legacy, tagged});
         return s;
     }

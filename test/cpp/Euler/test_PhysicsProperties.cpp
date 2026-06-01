@@ -39,7 +39,7 @@ static typename EulerEvaluatorSettings<model>::IdealGasProperty makeIdealGasProp
 static auto makeReactiveFixture()
 {
     auto pool = std::make_shared<std::vector<ChemicalSource>>();
-    pool->emplace_back(mechFile());
+    pool->emplace_back(mechFile(), "", 379.0, 1.0);
 
     auto phys = std::make_unique<PhysicsProperties<NS_EX>>(makeIdealGasProperty<NS_EX>());
     phys->setChemicalSourcePool(pool);

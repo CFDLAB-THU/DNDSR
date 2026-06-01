@@ -66,6 +66,43 @@ namespace DNDS::Euler
         void setChemicalSourcePool(ChemPtr pool) { pool_ = std::move(pool); }
         bool hasChemicalSource() const { return pool_ && pool_->size() > 0; }
 
+        /// Set the runtime RANS model and variable count (for NS_EX with dynamic RANS).
+        void setRANS(RANSModel rm)
+        {
+            ransModel_ = rm;
+            switch (rm)
+            {
+            case RANS_SA:
+                nRANS_ = 1;
+                break;
+            case RANS_KOWilcox:
+            case RANS_KOSST:
+            case RANS_RKE:
+                nRANS_ = 2;
+                break;
+            default:
+                nRANS_ = 0;
+                break;
+            }
+        }
+
+        static constexpr int nRANSVars_static()
+        {
+            if constexpr (EulerModelTraits<model>::hasSA)
+                return 1; // nuTilde
+            if constexpr (EulerModelTraits<model>::has2EQ)
+                return 2; // k, omega/epsilon
+            return 0;
+        }
+        /// Returns actual RANS variable count: static trait first, then dynamic nRANS_.
+        int nRANSVars() const
+        {
+            int s = nRANSVars_static();
+            if (s > 0 || (s == 0 && !EulerModelTraits<model>::isExtended))
+                return s;
+            return nRANS_;
+        }
+
         // ---- per-thread chemistry helpers -----------------------------------
 
     private:
@@ -624,6 +661,16 @@ namespace DNDS::Euler
         }
 
         // ---- Unit-scaling helpers (I/O only) ---------------------------------
+        // Conservative vector layout: [rho, rhoU, rhoV, (rhoW), rhoE, RANS..., rhoY_0...]
+        //   rho:       * rho0
+        //   rhoU_j:    * rho0 * U0
+        //   rhoE:      * rho0 * U0²
+        //   RANS:      per-variable (see below)
+        //   rhoY_k:    * rho0   (species only, trailing block)
+        // RANS conservative variable scaling (code↔phys):
+        //   nuTilde:   * rho0            (non-dimensional in code)
+        //   k:         * rho0 * U0²      (energy-like)
+        //   omega/eps: * rho0 / T0       (inverse-time-like)
 
         template <int dim, typename TVal>
         void consCodeToPhys(const TVal &code, TVal &phys) const
@@ -633,7 +680,10 @@ namespace DNDS::Euler
             for (int j = 1; j <= dim; ++j)
                 phys[j] *= (igProp_->rho0 * igProp_->U0);
             phys[dim + 1] *= (igProp_->rho0 * igProp_->U0 * igProp_->U0);
-            for (int k = dim + 2; k < (int)phys.size(); ++k)
+            this->template scaleRansConsCodeToPhys<dim>(phys);
+            int Ns1 = hasChemicalSource() ? chem().nSpecies() - 1 : 0;
+            int Isp = static_cast<int>(phys.size()) - Ns1;
+            for (int k = Isp; k < (int)phys.size(); ++k)
                 phys[k] *= igProp_->rho0;
         }
 
@@ -645,8 +695,88 @@ namespace DNDS::Euler
             for (int j = 1; j <= dim; ++j)
                 code[j] /= (igProp_->rho0 * igProp_->U0);
             code[dim + 1] /= (igProp_->rho0 * igProp_->U0 * igProp_->U0);
-            for (int k = dim + 2; k < (int)code.size(); ++k)
+            this->template scaleRansConsPhysToCode<dim>(code);
+            int Ns1 = hasChemicalSource() ? chem().nSpecies() - 1 : 0;
+            int Isp = static_cast<int>(code.size()) - Ns1;
+            for (int k = Isp; k < (int)code.size(); ++k)
                 code[k] /= igProp_->rho0;
+        }
+
+        // --- RANS model query (static trait first, then runtime set by setRANS) -
+        RANSModel ransModel() const
+        {
+            if constexpr (EulerModelTraits<model>::hasSA)
+                return RANS_SA;
+            if constexpr (EulerModelTraits<model>::has2EQ)
+            {
+                if (ransModel_ == RANS_KOWilcox || ransModel_ == RANS_KOSST || ransModel_ == RANS_RKE)
+                    return ransModel_;
+                return RANS_KOWilcox; // default 2EQ
+            }
+            // dynamic (NS_EX): use ransModel_ (defaults to RANS_None)
+            DNDS_assert(ransModel_ != RANS_Unknown);
+            return ransModel_;
+        }
+
+        // --- RANS scaling provider (switches on RANS model) --------------------
+        // Primitive / conservative scaling factors per variable position.
+        //   pos = 0: always first RANS variable (nuTilde or k)
+        //   pos = 1: second RANS variable (omega or epsilon), if 2EQ
+        real ransPrimScaleCodeToPhys(int pos) const
+        {
+            switch (ransModel())
+            {
+            case RANS_SA:
+                return real(1.0); // nuTilde: non-dimensional
+            case RANS_KOWilcox:
+            case RANS_KOSST:
+                if (pos == 0)
+                    return igProp_->U0 * igProp_->U0; // k: U0²
+                if (pos == 1)
+                    return real(1.0) / igProp_->T0; // omega: 1/T0
+                break;
+            case RANS_RKE:
+                if (pos == 0)
+                    return igProp_->U0 * igProp_->U0; // k: U0²
+                if (pos == 1)
+                    return igProp_->U0 * igProp_->U0 * igProp_->U0 / (igProp_->L0 * igProp_->L0); // epsilon: U0³/L0²
+                break;
+            default:
+                break;
+            }
+            return real(1.0);
+        }
+        real ransPrimScalePhysToCode(int pos) const { return real(1.0) / std::max(ransPrimScaleCodeToPhys(pos), real(1e-60)); }
+        real ransConsScaleCodeToPhys(int pos) const { return igProp_->rho0 * ransPrimScaleCodeToPhys(pos); }
+        real ransConsScalePhysToCode(int pos) const { return real(1.0) / std::max(ransConsScaleCodeToPhys(pos), real(1e-60)); }
+
+        template <int dim, typename TVal>
+        void scaleRansConsCodeToPhys(TVal &vec) const
+        {
+            int n = nRANSVars();
+            for (int j = 0; j < n; ++j)
+                vec[dim + 2 + j] *= ransConsScaleCodeToPhys(j);
+        }
+        template <int dim, typename TVal>
+        void scaleRansConsPhysToCode(TVal &vec) const
+        {
+            int n = nRANSVars();
+            for (int j = 0; j < n; ++j)
+                vec[dim + 2 + j] *= ransConsScalePhysToCode(j);
+        }
+        template <int dim, typename TVal>
+        void scaleRansPrimCodeToPhys(TVal &vec) const
+        {
+            int n = nRANSVars();
+            for (int j = 0; j < n; ++j)
+                vec[dim + 2 + j] *= ransPrimScaleCodeToPhys(j);
+        }
+        template <int dim, typename TVal>
+        void scaleRansPrimPhysToCode(TVal &vec) const
+        {
+            int n = nRANSVars();
+            for (int j = 0; j < n; ++j)
+                vec[dim + 2 + j] *= ransPrimScalePhysToCode(j);
         }
 
         template <int dim>
@@ -869,6 +999,11 @@ namespace DNDS::Euler
         // ---- Kinetics accessor ----------------------------------------------
 
         int nSpecies() const { return hasChemicalSource() ? chem().nSpecies() : 0; }
+        const std::string &speciesName(int k) const
+        {
+            DNDS_assert(hasChemicalSource());
+            return chem().speciesNames()[static_cast<size_t>(k)];
+        }
 
         void advanceAffineConstVolumeY(real &T, real rho,
                                        Chemistry::SpeciesBufferView Y,
@@ -952,6 +1087,8 @@ namespace DNDS::Euler
 
         ChemPtr pool_;
         std::unique_ptr<const IdealGas> igProp_;
+        int nRANS_ = 0;                   ///< runtime RANS count (0=unset or none, 1=SA, 2=2EQ)
+        RANSModel ransModel_ = RANS_None; ///< runtime RANS model selection
     };
 
     // ========================================================================
@@ -994,6 +1131,7 @@ namespace DNDS::Euler
             for (int j = 1; j <= dim; ++j)
                 o[j] /= igProp_->U0;
             o[I4] /= p0();
+            this->template scaleRansPrimPhysToCode<dim>(o);
             return o;
         };
         auto primRhoPCodeToPhys = [&](const Eigen::Vector<real, -1> &v)
@@ -1003,6 +1141,7 @@ namespace DNDS::Euler
             for (int j = 1; j <= dim; ++j)
                 o[j] *= igProp_->U0;
             o[I4] *= p0();
+            this->template scaleRansPrimCodeToPhys<dim>(o);
             return o;
         };
         auto primRhoTPhysToCode = [&](const Eigen::Vector<real, -1> &v)
@@ -1024,6 +1163,7 @@ namespace DNDS::Euler
             for (int j = 1; j <= dim; ++j)
                 o[j] /= igProp_->U0;
             o[I4] /= p0();
+            this->template scaleRansPrimPhysToCode<dim>(o);
             return o;
         };
         auto primTPCodeToPhys = [&](const Eigen::Vector<real, -1> &v)
@@ -1033,6 +1173,7 @@ namespace DNDS::Euler
             for (int j = 1; j <= dim; ++j)
                 o[j] *= igProp_->U0;
             o[I4] *= p0();
+            this->template scaleRansPrimCodeToPhys<dim>(o);
             return o;
         };
 
@@ -1155,10 +1296,12 @@ namespace DNDS::Euler
             {
             case 0:
                 return igProp_->muGas;
-            case 1:
+            case 1: // Sutherland: μ = μ_ref * (T/T_ref)^1.5 * (T_ref + C) / (T + C)
             {
-                real TRel = T / igProp_->TRef;
-                return igProp_->muGas * TRel * std::sqrt(TRel) * (igProp_->TRef + igProp_->CSutherland) / (T + igProp_->CSutherland);
+                real TRefCode = toCodeT(igProp_->TRef);
+                real CSuthCode = toCodeT(igProp_->CSutherland);
+                real TRel = T / TRefCode;
+                return igProp_->muGas * TRel * std::sqrt(TRel) * (TRefCode + CSuthCode) / (T + CSuthCode);
             }
             case 2:
                 return igProp_->muGas * U[0];

@@ -326,7 +326,7 @@ jobs:
         run: cmake --build build -t all_unit_tests -j$(nproc)
 
       - name: Build Euler solvers
-        run: cmake --build build -t euler euler3D eulerSA eulerSA3D euler2EQ euler2EQ3D eulerEX eulerEX3D canteraConstVolTrajectory -j$(nproc)
+        run: cmake --build build -t euler euler3D eulerSA eulerSA3D euler2EQ euler2EQ3D eulerEX eulerEX3D canteraConstVolTrajectory eulerState -j$(nproc)
 
       # ------------------------------------------------------------------
       # 10. Build pybind11 targets

@@ -656,7 +656,7 @@ namespace DNDS::Euler
 
             crhs.trans.startPersistentPull();
             crhs.trans.waitPersistentPull();
-            if (getNVars(model) > (I4 + 1) && iter <= config.others.nFreezePassiveInner)
+            if (nVars > (I4 + 1) && iter <= config.others.nFreezePassiveInner)
             {
                 for (int i = 0; i < crhs.Size(); i++)
                     crhs[i](Eigen::seq(I4 + 1, EigenLast)).setZero();
@@ -1059,7 +1059,7 @@ namespace DNDS::Euler
             }
             // eval.FixIncrement(cx, cxInc);
             // !freeze something
-            if (getNVars(model) > I4 + 1 && iter <= config.others.nFreezePassiveInner)
+            if (nVars > I4 + 1 && iter <= config.others.nFreezePassiveInner)
             {
                 for (int i = 0; i < cres.Size(); i++)
                     cxInc[i](Eigen::seq(I4 + 1, EigenLast)).setZero();
@@ -1188,7 +1188,7 @@ namespace DNDS::Euler
             }
             // eval.FixIncrement(cx, cxInc);
             // !freeze something
-            if (getNVars(model) > I4 + 1 && iter <= config.others.nFreezePassiveInner)
+            if (nVars > I4 + 1 && iter <= config.others.nFreezePassiveInner)
             {
                 for (int i = 0; i < crhs.Size(); i++)
                     cxInc[i](Eigen::seq(I4 + 1, EigenLast)).setZero();

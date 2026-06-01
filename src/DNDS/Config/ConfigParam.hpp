@@ -458,6 +458,8 @@ namespace DNDS
                 auto s = fn();
                 if (!s.contains("description"))
                     s["description"] = desc;
+                else if (desc && desc[0])
+                    s["description"] = std::string(desc) + " || " + s["description"].template get<std::string>();
                 return s;
             };
 
