@@ -879,6 +879,9 @@ namespace DNDS::Euler
                                                alphaDiag, dt, 3, SourceFilter::ReactiveOnly);
                 eval.FixUMaxFilter(uSourceUpdated);
 
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp parallel for
+#endif
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                     cxInc[iCell] = uSourceUpdated[iCell] - cx[iCell];
             }

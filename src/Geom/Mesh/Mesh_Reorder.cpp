@@ -305,7 +305,7 @@ namespace DNDS::Geom
             if (!destroyKinds.count(EntityKind::Edge))
             {
                 regComp(EntityKind::Edge, edge2nodePbi, "edge2nodePbi");
-                regComp(EntityKind::Edge, cell2edgePbi, "cell2edgePbi");
+                regComp(EntityKind::Cell, cell2edgePbi, "cell2edgePbi");
             }
         }
         if (!destroyKinds.count(EntityKind::Face))

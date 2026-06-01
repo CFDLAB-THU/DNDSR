@@ -8,16 +8,22 @@
 ///
 /// | Macro                     | Release behaviour                 | Failure mode              |
 /// |---------------------------|-----------------------------------|---------------------------|
-/// | @ref DNDS_assert               | Always active (MAX level, unless NDEBUG) | `std::abort()`       |
-/// | @ref DNDS_assert_info          | Always active (MAX level, unless NDEBUG) | `std::abort()` + msg |
-/// | @ref DNDS_assert_infof         | Always active (MAX level, unless NDEBUG) | `std::abort()` + fmt |
+/// | @ref DNDS_assert               | Always active (MAX level)              | `std::abort()`       |
+/// | @ref DNDS_assert_info          | Always active (MAX level)              | `std::abort()` + msg |
+/// | @ref DNDS_assert_infof         | Always active (MAX level)              | `std::abort()` + fmt |
 /// | @ref DNDS_assert_l             | Level-dependent (see below)       | `std::abort()`            |
 /// | @ref DNDS_assert_info_l        | Level-dependent (see below)       | `std::abort()` + message  |
 /// | @ref DNDS_assert_infof_l       | Level-dependent (see below)       | `std::abort()` + fmtprintf|
 /// | @ref DNDS_check_throw          | Always active                     | `throw std::runtime_error`|
 /// | @ref DNDS_check_throw_info     | Always active                     | `throw` + message         |
-/// | @ref DNDS_HD_assert            | MAX level; disabled by NDEBUG / NDEBUG_DEVICE | abort / trap |
-/// | @ref DNDS_HD_assert_infof      | MAX level; disabled by NDEBUG / NDEBUG_DEVICE | abort / trap + fmt |
+/// | @ref DNDS_HD_assert            | MAX level; disabled by DNDS_NDEBUG / DNDS_NDEBUG_DEVICE | abort / trap |
+/// | @ref DNDS_HD_assert_infof      | MAX level; disabled by DNDS_NDEBUG / DNDS_NDEBUG_DEVICE | abort / trap + fmt |
+///
+/// NOTE: the standard `NDEBUG` macro does NOT control DNDS assertions.
+/// Use `DNDS_NDEBUG=1` to strip DNDS_assert* from host code, and
+/// `DNDS_NDEBUG_DEVICE=1` for device-side assertions.  This is intentional —
+/// the project relies on assertions remaining active in all build
+/// configurations by default.
 /// | @ref DNDS_HD_assert_l          | Level-dependent (see below)       | abort / trap              |
 /// | @ref DNDS_HD_assert_infof_l    | Level-dependent (see below)       | abort / trap + fmt        |
 ///

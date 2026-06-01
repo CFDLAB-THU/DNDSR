@@ -26,6 +26,9 @@ static std::string mechFile()
     const char *env = std::getenv("DNDS_MECH_PATH");
     return env ? std::string(env) + "/h2o2.yaml" : "h2o2.yaml";
 }
+// Required env vars for Cantera data lookup (set in CI, set manually for local runs):
+//   DNDS_MECH_PATH=../external/cfd_externals/install/data
+//   CANTERA_DATA=../external/cfd_externals/repos/cantera/data
 
 // Shared setup: create a PhysicsProperties<NS_EX> with IdealGasProperty
 // matching the reference-config scales, plus the underlying ChemicalSource pool
