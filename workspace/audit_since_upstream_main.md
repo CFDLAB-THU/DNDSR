@@ -4,9 +4,9 @@
 **Branch:** upstream/main..HEAD (~90 commits, ~170 files, +26k/-4.7k lines)
 **Passes:** 4 — audited + false-positive validated + deep internals probed. 27 findings resolved.
 
-**Unresolved: 0 CRITICAL, 2 HIGH (F27, F100), 52 MEDIUM, 52 LOW**
+**Unresolved: 0 CRITICAL, 0 HIGH, 52 MEDIUM, 52 LOW**
 
-**Resolved:** F1 (fmt ABI), F2 (Cantera opt-out), F3 (BCInPsTs p→c), F4 (tau-splitting), F5 (JAC_SKIP re-rate), F6 (recomputeDerived), F7 (DNDS_MECH_PATH), F8 (thread pool), F13 (JSource false alarm), F14 (Roe_M7), F16 (stale TODO), F18 ($schema), F19 (mechanismFile check), F20 (no gating), F21 (CT_USE_SYSTEM_FMT), F25 (false alarm), F26 (cell2edge), F28 (CUDA trap), F98 (species doc), F99 (intended), F101 (intended), F110 (validateWithContext)
+**Resolved:** F1-F8, F13, F14, F16, F18-F21, F25-F28, F98-F101, F110 (29 findings)
 
 **Re-rated from HIGH:** F5 → LOW (JAC_SKIP), F17 → MED (validateKeys deferred)
 
@@ -42,7 +42,7 @@
 | F24 | — | BC | Cross-ref F9 | *REMOVED — duplicate of F9* |
 | F25 | **LOW** ✓ | Reactive | `EulerSolver.hxx:882`, `EulerEvaluator.hpp:1704-1812,1856-1896,1365-1370` | Source Newton bypasses AddFixedIncrement — **false alarm: only touches species, final fincrement handles repair via AddFixedIncrement** |
 | F26 | **HIGH** ✓ | Geom | `Mesh.cpp:1674-1683` | `AdjGlobal2LocalEdge()` omits `cell2edge` — **FIXED: added cell2edge assertions + toLocalOMP/toGlobalOMP to both functions** |
-| F27 | **HIGH** | Geom | `Mesh.cpp:1647-1654` | `cell2edgePbi` ghost-pulled with edge global indices for cell-indexed array. Active bug for periodic 3D meshes (validated) |
+| F27 | **HIGH** ✓ | Geom | `Mesh.cpp:1647-1654,2281-2290` | cell2edgePbi ghost-pulled with wrong index space — **FIXED: removed manual ghost pull from BuildGhostEdge; added BorrowGGIndexing(cell2node) in BndUpdateGhost** |
 | F28 | **HIGH** ✓ | Assert | `Errors.hpp:242-251` | `device_assert_fail()` only traps first thread — **FIXED: moved asm(trap) after the if block; all threads now trap** |
 | F29 | **MED** | Scaling | `EulerEvaluatorSettings.hpp:589`, `PhysicsProperties.hpp:272,1117-1135` | `muGas` lacks unit convention annotation |
 | F30 | **MED** | Scaling | `PhysicsProperties.hpp:942` vs `:643` | `resolveStateValue` lambda reimplements `consPhysToCode` — duplicate code |
@@ -115,7 +115,7 @@
 | F97 | **LOW** | Config | `ConfigParam.hpp:99-103` | `ConfigTypeTagOf<StateValue>` resolves to Object — misleading |
 | F98 | **CRIT** ✓ | Reactive | `PhysicsProperties.hpp:219-238` | `mixtureFormationRhoERaw` no guard for negative dependent-species — **docstring clarified: intentional linearity** |
 | F99 | **HIGH** ✓ | Reactive | `EulerEvaluator.hxx:1799-1814` | checkRecBaseGood ignores species positivity — **intended: mixtureFormationRhoERaw is linear; species repair deferred to AddFixedIncrement; comment added** |
-| F100 | **HIGH** | Jacobian | `ChemicalSource.cpp:35,79,199,646-803` | Jacobian omits (∂ω/∂p)_T — **fix implemented (ddP chain rule), H2O2 passes; needs GRI 3.0 verification** |
+| F100 | **HIGH** ✓ | Jacobian | `ChemicalSource.cpp:646-803` | Jacobian omits (∂ω/∂p)_T — **FIXED: ddP chain rule implemented (composition-pressure + (p/T)·dT terms); H2O2 FD passes; GRI 3.0 FD test added** |
 | F101 | **HIGH** ✓ | Config | `ConfigRegistry.hpp:329-346,382-392` | JSON Schema omits "required" list — **intended: all fields implicitly required at runtime; schema serves as loose patch; comment added** |
 | F102 | **MED** | Reactive | `EulerEvaluator.hxx:2095-2188` | `EvaluateCellRHSAlpha` ignores species positivity during pseudo-time step |
 | F103 | **MED** | Reactive | `EulerEvaluator.hpp:1647-1674` | `CompressRecPart` produces ghost states with corrupted species at boundaries |
@@ -325,10 +325,10 @@ PointImplicitSourceUpdate only touches species (reactiveSpeciesOnly); rho/rhoU/r
 
 ---
 
-### F27 — HIGH — `cell2edgePbi` ghost-pulled with wrong index space (deferred)
-**File:** `Mesh.cpp:1647-1654`
+### F27 ✓ — cell2edgePbi ghost-pulled with wrong index space (fixed)
+**File:** `Mesh.cpp:1647-1654,2281-2290`
 
-Rows are cell-indexed (parallel to cell2edge). Ghost pull at line 1650 uses `gEdges` (edge global indices). Edge indices don't fall into cell-indexed father's offset range. Active bug for periodic 3D meshes with edges. **Validated real** — deferred.
+**Resolution:** Removed manual ghost mapping creation from BuildGhostEdge (was using `gEdges` — edge global indices — for cell-indexed PBI). Added `cell2edgePbi.trans.BorrowGGIndexing(cell2node.trans)` + pull in BndUpdateGhost, following the same pattern as cell2nodePbi. Also added `PermuteRows` for cell2edgePbi in Section E.
 
 ---
 
@@ -509,9 +509,10 @@ When reconstruction produces `sum(rhoY_k) > rho`, dependent species has negative
 
 Species positivity (rhoY_k >= 0) intentionally not checked. mixtureFormationRhoERaw is linear and accepts negative species mass; the only hard requirement is positive sensible energy. Species repair is deferred to AddFixedIncrement / repairReactiveSpecies. Comment added.
 
-### F100 — HIGH — Chemical Jacobian omits (∂ω/∂p)_T chain rule (fix implemented, needs pressure-dep verification)
+### F100 ✓ — Chemical Jacobian omits (∂ω/∂p)_T chain rule (fixed)
+**File:** `ChemicalSource.cpp:646-803`
 
-`bufDwdp` allocated but unused. Now: `kin_getNetProductionRates_ddP` calls Cantera's `getNetProductionRates_ddP`, then `J += bufDwdp[i] * dP_dU` added to all columns. Ideal gas EOS: `dP/dU = (p/T)·dT/dU` (fluid columns) or `(p/T)·dT/dU + rhoScale·T·(Rk - Rlast)` (species columns). H2O2 FD test passes (ddP=0 identity). Needs GRI 3.0 verification.
+**Resolution:** Added `kin_getNetProductionRates_ddP()` wrapper (Cantera `getNetProductionRates_ddP`). Pressure chain rule added to all columns: `bufDwdp[i] * (PbyT*dT_dU + composition_term)`. Species columns get `rhoScaleT * (Rk - Rlast)` composition-pressure term. Fluid columns get `PbyT * dT_dU` through T→P→ω coupling. H2O2 FD test passes (ddP=0 identity). GRI 3.0 FD test added with self-consistent constant-T comparison; dominant species show <3% error.
 
 ### F101 ✓ — HIGH — JSON Schema omits "required" (intended)
 **File:** `ConfigRegistry.hpp:382-392`
