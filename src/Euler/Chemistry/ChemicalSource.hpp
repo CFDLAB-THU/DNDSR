@@ -64,8 +64,18 @@ namespace DNDS::Euler::Chemistry
     {
     public:
         ChemicalSource();
+        /**
+         * @param mechanismFile  Path to Cantera YAML mechanism.
+         * @param phaseName      Phase name (empty = default).
+         * @param U0             Reference velocity scale [m/s]; used internally for
+         *                       code-unit conversion in productionRatesAndJacobian
+         *                       and mixture formation enthalpy.
+         * @param rho0           Reference density scale [kg/m³]; used internally for
+         *                       code-unit conversion in productionRatesAndJacobian.
+         */
         explicit ChemicalSource(const std::string &mechanismFile,
-                                const std::string &phaseName = "");
+                                const std::string &phaseName = "",
+                                double U0 = 1.0, double rho0 = 1.0);
         ~ChemicalSource();
 
         // Non-copyable, movable
@@ -82,6 +92,11 @@ namespace DNDS::Euler::Chemistry
         int nReactions() const;
         const std::vector<std::string> &speciesNames() const;
         const std::vector<double> &molecularWeights() const;
+
+        /** Reference velocity scale [m/s] used for code-unit conversion. */
+        double velScale() const;
+        /** Reference density scale [kg/m³] used for code-unit conversion. */
+        double rhoScale() const;
 
         // ---- Mixture thermodynamic properties (via Cantera EOS) ----
 
@@ -133,13 +148,15 @@ namespace DNDS::Euler::Chemistry
          *   U = [ρ, ρu, ρv, {ρw,} ρE, ρY_0..ρY_{Ns-2}]
          * dOmegadU: Ns × nVars, column-major.
          * iEnergy = index of ρE in U (dim+1); species start = iEnergy+1.
-         * velScale = U0 (m/s); rhoE, rhoU/V/W are code-scaled.
-         * rhoScale = rho0 (kg/m³); needed for dC_k/d(rhoY_k)_code = rho0/MW_k.
+         * T, p, Y are physical SI units.
+         * rho, rhoE, rhoU, rhoV, rhoW are code-scaled (÷ρ0, ÷ρ0·U0², etc.).
+         * Scale factors U0 and ρ0 are stored at construction and used internally
+         * for the ideal-gas dT/dU and dP/dU chain rules.
          * jacFlags = bitmask of JacobianFlags.
          */
         void productionRatesAndJacobian(double T, double p, double rho,
                                         double rhoE, double rhoU, double rhoV, double rhoW,
-                                        int iEnergy, double velScale, double rhoScale,
+                                        int iEnergy,
                                         ConstSpeciesBufferView Y,
                                         SpeciesBufferView omega,
                                         JacobianBufferView dOmegadU,
@@ -219,12 +236,12 @@ namespace DNDS::Euler::Chemistry
         ConstSpeciesBufferView massFractions(double rho, const double *rhoYK, int nTransported) const;
 
         /** Populate and return bufHf_ with per-species formation enthalpies in code units (hf_k/U0²).
-         *  Needs invU0sq = 1/U0² to convert from physical [J/kg] to code units. */
-        ConstSpeciesBufferView mixtureFormationRhoESpecies(double invU0sq) const;
+         *  Uses internal velScale() for code-unit conversion. */
+        ConstSpeciesBufferView mixtureFormationRhoESpecies() const;
 
         /** Code-scaled volumetric formation enthalpy: rho · Σ Y_k · hf_k / U0².
-         *  @param invU0sq  1 / U0² to convert physical [J/kg] to code units. */
-        double mixtureFormationRhoE(double rho, ConstSpeciesBufferView Y, double invU0sq) const;
+         *  Uses internal velScale() for code-unit conversion. */
+        double mixtureFormationRhoE(double rho, ConstSpeciesBufferView Y) const;
 
         /** Linearized increment of code-scaled formation enthalpy from a d(ρY_k) increment.
          *  dRhoYK[0..nTransported-1] are d(ρY_k)_code, rhoInc = d(ρ)_code.

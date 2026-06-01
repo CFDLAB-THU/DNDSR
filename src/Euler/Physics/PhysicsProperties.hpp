@@ -171,6 +171,10 @@ namespace DNDS::Euler
             real e_sensible = (U[I4] - 0.5 * rho * vel2 - rhoH_form) * rhoInv;
             DNDS_assert_info(e_sensible > 0,
                              fmt::format("gammaEq(): e_sensible={:.3e} ≤ 0 — invalid state", e_sensible));
+            // NOTE: this assertion fires for zero-temperature + zero-momentum
+            // states (e.g. during startup I/O before DOF arrays are initialized).
+            // Per the current internal energy convention in the Euler solver,
+            // rhoE=0 is the uninitialized sentinel; do not call gammaEq() on it.
             real Rmix = Rgas(U);           // code-scaled
             real p_exact = rho * Rmix * T; // code-scaled
 
@@ -210,8 +214,7 @@ namespace DNDS::Euler
             int Isp = nVars - Ns1;
             DNDS_check_throw_info(Isp >= 1, "mixtureFormationRhoE(): state vector too small for mechanism species count");
             auto Y = c.massFractions(U[0], &U[Isp], Ns1);
-            real invU0sq = 1.0 / (igProp_->U0 * igProp_->U0);
-            return c.mixtureFormationRhoE(U[0], Y, invU0sq);
+            return c.mixtureFormationRhoE(U[0], Y);
         }
 
         /// Raw linear formation enthalpy from rho/rhoY without clipping or renormalizing species.
@@ -228,7 +231,7 @@ namespace DNDS::Euler
             int nVars = static_cast<int>(U.size());
             int Isp = nVars - Ns1;
             DNDS_check_throw_info(Isp >= 1, "mixtureFormationRhoERaw(): state vector too small for mechanism species count");
-            auto hfView = c.mixtureFormationRhoESpecies(1.0 / (igProp_->U0 * igProp_->U0));
+            auto hfView = c.mixtureFormationRhoESpecies();
             real rhoH = 0;
             real sumRhoY = 0;
             for (int k = 0; k < Ns1; ++k)
@@ -264,8 +267,6 @@ namespace DNDS::Euler
             int nVars = static_cast<int>(dU.size());
             int Isp = nVars - Ns1;
             DNDS_check_throw_info(Isp >= 1, "mixtureFormationRhoEIncrement(): state vector too small for mechanism species count");
-            double invU0sq = 1.0 / (igProp_->U0 * igProp_->U0);
-            c.mixtureFormationRhoESpecies(invU0sq);
             return c.mixtureFormationRhoEIncrement(dU[0], dU.data() + Isp, Ns1);
         }
 
@@ -835,9 +836,8 @@ namespace DNDS::Euler
             int Ns1 = c.nSpecies() - 1;
             int nVars = static_cast<int>(prim.size());
             int Isp = nVars - Ns1;
-            double invU0sq = 1.0 / (igProp_->U0 * igProp_->U0);
             auto Y = c.massFractions(1.0, prim.data() + Isp, Ns1);
-            return c.mixtureFormationRhoE(prim[0], Y, invU0sq);
+            return c.mixtureFormationRhoE(prim[0], Y);
         }
 
         /// Compute code-scaled mixture Rgas from a primitive vector (uses mass fractions directly).
@@ -936,8 +936,7 @@ namespace DNDS::Euler
             if (!hasChemicalSource())
                 return {nullptr, 0};
             auto &c = chem();
-            double invU0sq = 1.0 / (igProp_->U0 * igProp_->U0);
-            auto v = c.mixtureFormationRhoESpecies(invU0sq);
+            auto v = c.mixtureFormationRhoESpecies();
             return Eigen::Map<const Eigen::Vector<real, Eigen::Dynamic>>(v.data, v.nSpecies);
         }
 

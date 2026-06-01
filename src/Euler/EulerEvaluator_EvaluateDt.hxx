@@ -2309,10 +2309,7 @@ namespace DNDS::Euler
                 farPrimitive(I4) += std::max(pInc, -0.95 * farPrimitive(I4));
             }
             ULxyPrimitive(I4) = farPrimitive(I4); // using far pressure
-            if (settings.reactiveFlow.enabled)
-                phys_.template primToConservative<dim>(ULxyPrimitive, URxy);
-            else
-                Gas::IdealGasThermalPrimitive2Conservative<dim>(ULxyPrimitive, URxy, gammaEq, 0);
+            phys_.template primToConservative<dim>(ULxyPrimitive, URxy);
         }
         else if (un - vgN + a > 0) //  subsonic in
         {

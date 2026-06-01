@@ -605,7 +605,7 @@ namespace DNDS::Euler
         {
             real gamma = 1.4;
             real Rgas = 287; ///< physical gas constant R_phys [J/(kg·K)]; consumed via toCode() → R_code = R_phys·T0/U0²
-            real muGas = 1;
+            real muGas = 1;  ///< dynamic viscosity [Pa·s] physical (μ_phys), code-scaled via μ_0 = ρ0·U0·L0
             real prGas = 0.72;
             real TRef = 273.15;
             real CSutherland = 110.4;
@@ -626,7 +626,7 @@ namespace DNDS::Euler
                            DNDS::Config::range(1.0 + std::numeric_limits<real>::epsilon()));
                 DNDS_FIELD(Rgas,        "Specific gas constant. Must be finite and > 0.",
                            DNDS::Config::range(std::numeric_limits<real>::min()));
-                DNDS_FIELD(muGas,       "Dynamic viscosity",
+                DNDS_FIELD(muGas,       "Dynamic viscosity (Pa·s)",
                            DNDS::Config::range(0.0));
                 DNDS_FIELD(prGas,       "Prandtl number",
                            DNDS::Config::range(0.0));
@@ -682,9 +682,12 @@ namespace DNDS::Euler
                 DNDS_FIELD(mechanismFile, "CHEMKIN-format mechanism YAML path");
                 DNDS_FIELD(thermoFile, "Reserved; currently unused. Mechanism YAML supplies thermodynamics.");
                 DNDS_FIELD(transportModel, "Reserved; currently unused. Transport is selected by ChemicalSource setup.");
-                DNDS_FIELD(CFLScale, "CFL reduction factor for stiff chemistry");
-                DNDS_FIELD(chemRelaxEps, "Pseudo-transient relaxation epsilon");
-                DNDS_FIELD(chemAbsTol, "Absolute species tolerance");
+                DNDS_FIELD(CFLScale, "CFL reduction factor for stiff chemistry",
+                           DNDS::Config::range(0.0));
+                DNDS_FIELD(chemRelaxEps, "Pseudo-transient relaxation epsilon",
+                           DNDS::Config::range(0.0));
+                DNDS_FIELD(chemAbsTol, "Absolute species tolerance",
+                           DNDS::Config::range(0.0));
                 DNDS_FIELD(nSpeciesOverride, "Reserved; currently unused. Species count is read from mechanism.");
             }
         } reactiveFlow; ///< Reactive flow settings.

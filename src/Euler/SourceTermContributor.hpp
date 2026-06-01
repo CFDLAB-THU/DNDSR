@@ -443,7 +443,7 @@ namespace DNDS::Euler
                 double uM2 = (I4 >= 3) ? U[2] : 0; // ρv (I4≥3 always for dim≥2)
                 double uM3 = (I4 >= 4) ? U[3] : 0; // ρw (present only for 3D, 0 for 2D)
                 c.productionRatesAndJacobian(Tcantera, aux.pPhys, rho, U[I4],
-                                             uM1, uM2, uM3, I4, igProp_.U0, igProp_.rho0, Yv, omegav, Jv,
+                                             uM1, uM2, uM3, I4, Yv, omegav, Jv,
                                              Chemistry::ChemicalSource::JAC_DEFAULT);
                 for (int k = 0; k < Ns1; ++k)
                     ret[Isp + k] += sourceScale_ * bufOmega[k] * c.molecularWeights()[k] * invS0;
@@ -549,9 +549,9 @@ namespace DNDS::Euler
                 std::string mechPath = GetEnvString("DNDS_MECH_PATH", "");
                 const std::string &mechFile = settings.reactiveFlow.mechanismFile;
                 if (!mechPath.empty() && !mechFile.empty() && !std::filesystem::path(mechFile).is_absolute())
-                    pool->emplace_back(mechPath + "/" + mechFile);
+                    pool->emplace_back(mechPath + "/" + mechFile, "", settings.idealGasProperty.U0, settings.idealGasProperty.rho0);
                 else
-                    pool->emplace_back(mechFile);
+                    pool->emplace_back(mechFile, "", settings.idealGasProperty.U0, settings.idealGasProperty.rho0);
             }
             for (int t = 1; t < nThreads; ++t)
                 pool->push_back(std::move(*pool->at(0).clone()));

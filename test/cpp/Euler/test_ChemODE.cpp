@@ -33,7 +33,7 @@ static std::string mechFile()
 static auto makeTestFixture()
 {
     auto pool = std::make_shared<std::vector<ChemicalSource>>();
-    pool->emplace_back(mechFile()); // pool[0] is the per-thread instance
+    pool->emplace_back(mechFile(), "", 379.0, 1.0); // pool[0] is the per-thread instance
 
     typename EulerEvaluatorSettings<NS_EX>::IdealGasProperty igProp;
     igProp.gamma = 1.4;
@@ -59,7 +59,7 @@ TEST_CASE("Cantera custom const-volume affine species reactor")
 {
     auto sol = Cantera::newSolution(mechFile(), "", "");
     auto gas = sol->thermo();
-    ChemicalSource chem(mechFile());
+    ChemicalSource chem(mechFile(), "", 379.0, 1.0);
     auto iH2 = gas->speciesIndex("H2");
     auto iO2 = gas->speciesIndex("O2");
     auto iH2O = gas->speciesIndex("H2O");
@@ -121,7 +121,7 @@ TEST_CASE("Cantera custom affine reactor reduces target residual")
     auto sol = Cantera::newSolution(mechFile(), "", "");
     auto gas = sol->thermo();
     auto kin = sol->kinetics();
-    ChemicalSource chem(mechFile());
+    ChemicalSource chem(mechFile(), "", 379.0, 1.0);
     auto iH2 = gas->speciesIndex("H2");
     auto iO2 = gas->speciesIndex("O2");
     auto iH2O = gas->speciesIndex("H2O");
@@ -310,7 +310,7 @@ TEST_CASE("0D const-vol — implicit Euler, species-only Newton, T via PhysicsPr
 
             std::vector<double> jbuf(Ns * nVars, 0.0);
             JacobianBufferView Jv{jbuf.data(), Ns, nVars, Ns};
-            chem.productionRatesAndJacobian(Tk, pk, Uk[0], Uk[4], 0., 0., 0., 4, U0, 1.0, Ykv, omegav, Jv);
+            chem.productionRatesAndJacobian(Tk, pk, Uk[0], Uk[4], 0., 0., 0., 4, Ykv, omegav, Jv);
 
             Eigen::MatrixXd jac = Eigen::MatrixXd::Zero(nVars, nVars);
             for (int k = 0; k < Ns1; k++)
@@ -455,7 +455,7 @@ TEST_CASE("0D const-vol — react_test history tracks Cantera reactor")
 TEST_CASE("0D const-vol helper uses physical Cantera scales")
 {
     auto pool = std::make_shared<std::vector<ChemicalSource>>();
-    pool->emplace_back(mechFile());
+    pool->emplace_back(mechFile(), "", 379.0, 1.0);
     auto &chem = (*pool)[0];
     int Ns = chem.nSpecies();
     int Ns1 = Ns - 1;
@@ -565,7 +565,7 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
                 ret[Isp + k] = omega[k] * MW[k];
 
             std::vector<double> jbuf(Ns * nVars, 0.0);
-            chem->productionRatesAndJacobian(Tk, pk, Uk[0], Uk[4], 0., 0., 0., 4, U0, 1.0, Ykv,
+            chem->productionRatesAndJacobian(Tk, pk, Uk[0], Uk[4], 0., 0., 0., 4, Ykv,
                                              SpeciesBufferView{omega.data(), Ns},
                                              JacobianBufferView{jbuf.data(), Ns, nVars, Ns});
 
@@ -626,7 +626,7 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
         double p = Us[0] * chem->mixtureR(Yv) * Ts;
 
         std::vector<double> jbufRef(Ns * nVars, 0.0), omegaRef(Ns);
-        chem->productionRatesAndJacobian(Ts, p, Us[0], Us[4], 0., 0., 0., 4, U0, 1.0, Yv,
+        chem->productionRatesAndJacobian(Ts, p, Us[0], Us[4], 0., 0., 0., 4, Yv,
                                          SpeciesBufferView{omegaRef.data(), Ns},
                                          JacobianBufferView{jbufRef.data(), Ns, nVars, Ns});
 
@@ -720,7 +720,7 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
             for (int k = 0; k < Ns1; k++)
                 ret[Isp + k] = omega[k] * MW[k];
             std::vector<double> jbuf(Ns * nVars, 0.0);
-            chem->productionRatesAndJacobian(Tk, pk, Uk[0], Uk[4], 0., 0., 0., 4, U0, 1.0, Ykv,
+            chem->productionRatesAndJacobian(Tk, pk, Uk[0], Uk[4], 0., 0., 0., 4, Ykv,
                                              SpeciesBufferView{omega.data(), Ns},
                                              JacobianBufferView{jbuf.data(), Ns, nVars, Ns});
             Eigen::MatrixXd jac = Eigen::MatrixXd::Zero(nVars, nVars);
@@ -761,7 +761,7 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
             for (int k = 0; k < Ns1; k++)
                 ret[Isp + k] = omega[k] * MW[k];
             std::vector<double> jbuf(Ns * nVars, 0.0);
-            chem->productionRatesAndJacobian(Tk, pk, Uk[0], Uk[4], 0., 0., 0., 4, U0, 1.0, Ykv,
+            chem->productionRatesAndJacobian(Tk, pk, Uk[0], Uk[4], 0., 0., 0., 4, Ykv,
                                              SpeciesBufferView{omega.data(), Ns},
                                              JacobianBufferView{jbuf.data(), Ns, nVars, Ns});
             Eigen::MatrixXd jac = Eigen::MatrixXd::Zero(nVars, nVars);
@@ -799,7 +799,7 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
 
         std::vector<double> jbufM(Ns * nVars, 0.0), omegM(Ns);
         chem->productionRatesAndJacobian(Tmom, pmom, Umom[0], Umom[4],
-                                         Umom[1], Umom[2], 0., 4, U0, 1.0, Ymv,
+                                         Umom[1], Umom[2], 0., 4, Ymv,
                                          SpeciesBufferView{omegM.data(), Ns},
                                          JacobianBufferView{jbufM.data(), Ns, nVars, Ns});
 
@@ -834,6 +834,9 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
     // DNDSR-to-Cantera reference-energy bridge is tested in one place.  Fluid
     // columns remain diagnostic while production uses JAC_SKIP_FLUID.  The
     // global Frobenius-scaled error remains O(1e-2 %) at the final checkpoint.
+    // NOTE: the tolerance (nBadS200 <= 25 out of ~3000 entries) is intentionally
+    // generous — it guards against regressions without failing on the reference-
+    // energy bridge's inherent ~0.5-3% cross-column errors at ignition states.
     CHECK(nBadS200 <= 25);
 }
 
@@ -850,7 +853,7 @@ TEST_CASE("FD Jacobian for pressure-dependent mechanism (GRI 3.0)")
     printf("[GRI-test] Using %s\n", gri30Path.c_str());
 
     auto pool = std::make_shared<std::vector<ChemicalSource>>();
-    pool->emplace_back(gri30Path);
+    pool->emplace_back(gri30Path, "", 379.0, 1.0);
     ChemicalSource *chem = &(*pool)[0];
     int Ns = chem->nSpecies();
     int Ns1 = Ns - 1;
@@ -879,7 +882,7 @@ TEST_CASE("FD Jacobian for pressure-dependent mechanism (GRI 3.0)")
 
         std::vector<double> jbuf(static_cast<size_t>(Ns * nVars), 0.0);
         std::vector<double> omega(static_cast<size_t>(Ns));
-        chem->productionRatesAndJacobian(Tphys, Pphys, rho, rhoE, 0., 0., 0., 4, 379.0, 1.0,
+        chem->productionRatesAndJacobian(Tphys, Pphys, rho, rhoE, 0., 0., 0., 4,
                                          Yv, SpeciesBufferView{omega.data(), Ns},
                                          JacobianBufferView{jbuf.data(), Ns, nVars, Ns});
 
