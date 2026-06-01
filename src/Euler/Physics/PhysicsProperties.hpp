@@ -668,9 +668,10 @@ namespace DNDS::Euler
         //   RANS:      per-variable (see below)
         //   rhoY_k:    * rho0   (species only, trailing block)
         // RANS conservative variable scaling (code↔phys):
-        //   nuTilde:   * rho0            (non-dimensional in code)
-        //   k:         * rho0 * U0²      (energy-like)
-        //   omega/eps: * rho0 / T0       (inverse-time-like)
+        //   rho_nuTilde: * rho0            (nuTilde non-dimensional in code)
+        //   rho_k:       * rho0 * U0²      (k: energy-like, [m²/s²])
+        //   rho_omega:   * rho0 * U0 / L0  (omega: 1/t0 = U0/L0, [1/s])
+        //   rho_epsilon: * rho0 * U0³ / L0 (epsilon: U0³/L0, [m²/s³])
 
         template <int dim, typename TVal>
         void consCodeToPhys(const TVal &code, TVal &phys) const
@@ -733,13 +734,13 @@ namespace DNDS::Euler
                 if (pos == 0)
                     return igProp_->U0 * igProp_->U0; // k: U0²
                 if (pos == 1)
-                    return real(1.0) / igProp_->T0; // omega: 1/T0
+                    return igProp_->U0 / std::max(igProp_->L0, real(1e-60)); // omega: U0/L0 = 1/t0
                 break;
             case RANS_RKE:
                 if (pos == 0)
                     return igProp_->U0 * igProp_->U0; // k: U0²
                 if (pos == 1)
-                    return igProp_->U0 * igProp_->U0 * igProp_->U0 / (igProp_->L0 * igProp_->L0); // epsilon: U0³/L0²
+                    return igProp_->U0 * igProp_->U0 * igProp_->U0 / std::max(igProp_->L0, real(1e-60)); // epsilon: U0³/L0
                 break;
             default:
                 break;

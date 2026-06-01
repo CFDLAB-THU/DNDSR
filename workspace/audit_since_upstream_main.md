@@ -2,11 +2,11 @@
 
 **Date:** 2026-06-01
 **Branch:** upstream/main..HEAD (~90 commits, ~170 files, +26k/-4.7k lines)
-**Passes:** 5 — audited + false-positive validated + deep internals probed + edge pipeline audit. 70 findings resolved.
+**Passes:** 5 — audited + false-positive validated + deep internals probed + edge pipeline audit + RANS infrastructure audit. 70 findings resolved.
 
 **Unresolved: 0 CRITICAL, 0 HIGH, 9 MEDIUM, 44 LOW**
 
-**Deferred:** F17 (validateKeys recursive/warn), F47 (formation-enthalpy gradient test), F58 (RANS scaling), F64 (EulerP MPI HDF5), F67 (Python bindings), F68 (∇R term), F69 (StateValueSchema default — done), F70 (StateValue round-trip test), F104 (formation-enthalpy floor), F105 (alphaDiag BDF2+), F106 (speciesDiffusivityK O(Ns²))
+**Deferred:** F17 (validateKeys), F47 (graident test), F64 (HDF5), F67/F68 (bindings/∇R), F70 (round-trip), F104 (enthalpy floor), F105 (BDF2+), F106 (diffusivity O(Ns²))
 
 **EDGE PIPELINE AUDIT:** 10 findings (3 CRITICAL, 5 HIGH, 2 MEDIUM). All CRITICAL/HIGH fixed; new ReorderLocalCells gaps marked as TODO (latent). Edge UT re-enabled.
 
@@ -598,3 +598,29 @@ Calls `speciesDiffusivityK(k)` per transported species — each call allocates h
 5. **Positivity gaps:** F98 (negative dependent species in limiter), F99 (species not checked in early-exit), F25 (Newton bypasses AddFixedIncrement), F102 (pseudo-time species unguarded).
 
 6. **Stable after 4 passes:** Pass 4 confirmed 15 prior findings, re-rated 11 downward, added 20 new findings (1 CRIT, 3 HIGH, 10 MED, 6 LOW). Pass 3 and sweep added only MED/LOW. Convergence confirmed.
+
+7. **RANS Infrastructure Audit (commit 3372c3b + 0187272):**
+
+   **Scale fixes:**
+   - `ransPrimScaleCodeToPhys(pos)`: SA→1.0 (nuTilde non-dim), k-omega→`U0²,k` | `U0/L0,omega`, k-epsilon→`U0²,k` | `U0³/L0,epsilon`
+   - `ransConsScaleCodeToPhys(pos)` = `rho0 * ransPrimScaleCodeToPhys(pos)` — applies `rho0` prefix for cons form
+   - The old omega `1/T0` (T0=temperature → wrong) and epsilon `U0³/L0²` (missing 1/L0) corrected to `U0/L0=1/t0` and `U0³/L0`
+
+   **Range fixes:**
+   - Species block everywhere uses `Isp = nVars - Ns1` (end-aligned), not `I4+1`
+   - RANS block at `dim+2+j` for `j=0..nRANSVars()-1`, between rhoE and species
+   - `expectedNVars = I4 + 1 + nRANSVars() + Ns1` in EulerEvaluator ctor
+   - SourceTermContributor `I4 = dim + 1` (not `Isp - 1`)
+   - EulerSolver passive freezing uses `nVars` (not `getNVars(model)`)
+
+   **Model determination:**
+   - `ransModel()`: static traits first (`hasSA→RANS_SA`, `has2EQ→RANS_KOWilcox` default; KOSST/RKE via `ransModel_`)
+   - `setRANS(settings.ransModel)` called in EulerEvaluator ctor before any conversion
+   - `nRANSVars()`: static trait → 0 for unset NS_EX (safe default)
+   - `ransModel_` defaults to `RANS_None`, `nRANS_` defaults to 0
+   - `buildSourceContributors` receives nVars from caller, passes to `ChemicalContributor`
+
+   **Device view:** `Mesh_DeviceView.hpp` edge views + `Mesh.hpp` `op_on_device_arrays` edge branch + `cell2edge` in `device_array_list_edge`
+   **Assert:** `DNDS_HD_assert_infof` L0-L3 inline macros (no va_list). `NDEBUG` does not control DNDS.
+
+
