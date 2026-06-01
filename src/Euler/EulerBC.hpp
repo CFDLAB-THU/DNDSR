@@ -182,7 +182,7 @@ namespace DNDS::Euler
 
         // --- Wall BCs: BCWall, BCWallInvis, BCWallIsothermal, BCSpecial ---
         json wallProps;
-        wallProps["value"] = rawValue("Raw wall/special payload with size = nVars; BCWallIsothermal uses state[0] as wall temperature");
+        wallProps["value"] = rawValue("Raw wall/special payload with size = nVars; BCWallIsothermal uses state[0] as wall temperature (K), converted internally to code units");
         wallProps["frameOption"] = intProp("Reference frame option");
         wallProps["integrationOption"] = intProp("Integration option");
         wallProps["specialOption"] = intProp("Special BC sub-type option");
@@ -618,6 +618,8 @@ namespace DNDS::Euler
                         BCValues[i].nonState(0) = phys.toCode(BCValues[i].nonState(0));
                         BCValues[i].nonState(1) = phys.toCodeT(BCValues[i].nonState(1));
                     }
+                    if (type == EulerBCType::BCWallIsothermal)
+                        BCValues[i].nonState(0) = phys.toCodeT(BCValues[i].nonState(0));
                     continue;
                 }
                 DNDS_check_throw_info(BCValues[i].originType != StateValueOrigin::NonState,

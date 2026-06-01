@@ -75,6 +75,8 @@ namespace DNDS::Euler
     class EulerSolver
     {
         int nVars = getNVars(model); ///< Runtime number of conserved variables.
+    public:
+        [[nodiscard]] int NVars() const { return nVars; }
 
     public:
         typedef EulerEvaluator<model> TEval;             ///< Evaluator type for this model.

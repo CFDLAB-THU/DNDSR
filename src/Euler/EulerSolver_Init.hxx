@@ -54,8 +54,10 @@ namespace DNDS::Euler
 
         DNDS_MAKE_SSP(reader, mesh, 0);
         DNDS_MAKE_SSP(readerBnd, meshBnd, 0);
-        DNDS_assert(config.dataIOControl.readMeshMode == 0 || config.dataIOControl.readMeshMode == 1 || config.dataIOControl.readMeshMode == 2);
-        DNDS_assert(config.dataIOControl.outPltMode == 0 || config.dataIOControl.outPltMode == 1);
+        DNDS_check_throw_info(config.dataIOControl.readMeshMode == 0 || config.dataIOControl.readMeshMode == 1 || config.dataIOControl.readMeshMode == 2,
+                              "readMeshMode must be 0 (CGNS), 1 (HDF5 partitioned), or 2 (HDF5 distributed)");
+        DNDS_check_throw_info(config.dataIOControl.outPltMode == 0 || config.dataIOControl.outPltMode == 1,
+                              "outPltMode must be 0 or 1");
         auto getPartitionedMeshInput = [&]() -> std::string
         {
             std::string meshInput = config.dataIOControl.meshFilePartitionedInput.empty()
@@ -133,7 +135,8 @@ namespace DNDS::Euler
                     mesh->AdjGlobal2LocalPrimary();
                     mesh->AdjGlobal2LocalN2CB();
                 }
-                DNDS_assert(config.dataIOControl.meshDirectBisect <= 4);
+                DNDS_check_throw_info(config.dataIOControl.meshDirectBisect <= 4,
+                                      "meshDirectBisect must be <= 4");
                 for (int iter = 1; iter <= config.dataIOControl.meshDirectBisect; iter++)
                 {
                     DNDS::ssp<DNDS::Geom::UnstructuredMesh> meshO2;
@@ -454,11 +457,14 @@ namespace DNDS::Euler
         DNDS_MPI_InsertCheck(mpi, "ReadMeshAndInitialize 3 nvars " + std::to_string(nVars));
 
         // update output number
-        DNDS_assert(config.dataIOControl.outCellScalarNames.size() < 128);
+        DNDS_check_throw_info(config.dataIOControl.outCellScalarNames.size() < 128,
+                              "outCellScalarNames must have fewer than 128 entries");
         nOUTS += config.dataIOControl.outCellScalarNames.size();
 
-        DNDS_assert(config.dataIOControl.outAtCellData || config.dataIOControl.outAtPointData);
-        DNDS_assert(config.dataIOControl.outPltVTKFormat || config.dataIOControl.outPltTecplotFormat || config.dataIOControl.outPltVTKHDFFormat);
+        DNDS_check_throw_info(config.dataIOControl.outAtCellData || config.dataIOControl.outAtPointData,
+                              "at least one of outAtCellData or outAtPointData must be enabled");
+        DNDS_check_throw_info(config.dataIOControl.outPltVTKFormat || config.dataIOControl.outPltTecplotFormat || config.dataIOControl.outPltVTKHDFFormat,
+                              "at least one output format must be enabled");
         DNDS_MAKE_SSP(outDistBnd, mpi);
         outDistBnd->Resize(meshBnd->NumCell(), nOUTSBnd);
 

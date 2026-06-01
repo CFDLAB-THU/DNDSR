@@ -1728,6 +1728,32 @@ namespace DNDS::Euler
             if (u.father->getMPI().rank == 0)
             {
                 log() << std::scientific;
+                // Print column label header (rho, rhoU, rhoV, (rhoW), rhoE, ..., species...)
+                {
+                    log() << "PointImplicitSourceUpdate pseudo col labels:";
+                    for (int iVar = 0; iVar < nVars; iVar++)
+                    {
+                        if (iVar < I4)
+                            log() << (iVar == 0 ? " rho" : iVar == 1 ? " rhoU"
+                                                       : iVar == 2   ? " rhoV"
+                                                                     : " rhoW");
+                        else if (iVar == I4)
+                            log() << " rhoE";
+                        else if (phys_.hasChemicalSource() && iVar >= I4 + 1)
+                        {
+                            int Isp = nVars - (phys_.nSpecies() - 1);
+                            if (iVar >= Isp && iVar - Isp < phys_.nSpecies() - 1)
+                                log() << " " << phys_.speciesName(iVar - Isp);
+                            else if (iVar < Isp)
+                                log() << " v" << iVar;
+                            else
+                                log() << " " << phys_.speciesName(phys_.nSpecies() - 1);
+                        }
+                        else
+                            log() << " v" << iVar;
+                    }
+                    log() << std::endl;
+                }
                 for (int iPseudo = 0; iPseudo < nPseudoSteps; iPseudo++)
                 {
                     log() << "PointImplicitSourceUpdate pseudo [" << iPseudo + 1 << "] res/res0 min [";
@@ -1766,7 +1792,7 @@ namespace DNDS::Euler
         const int Ns1 = Ns - 1;
         const int Isp = nVars - Ns1;
         DNDS_check_throw_info(Isp == I4 + 1,
-                              "ReactiveSourceConstVolumeStep expects species variables after energy");
+                              "ReactiveSourceConstVolumeStep expects no RANS variables between energy and species (Isp == I4+1)");
 
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(guided)
@@ -2551,6 +2577,11 @@ namespace DNDS::Euler
      *  Determines the largest alpha in [0,1] such that u + alpha*res remains physically
      *  realizable (positive density and pressure) at all quadrature points. Used for
      *  under-relaxation to preserve positivity during explicit or implicit updates.
+     *
+     *  NOTE: species positivity (rhoY_k >= 0) is intentionally not checked here.
+     *  Density and pressure positivity are enforced; species repair is deferred to
+     *  AddFixedIncrement / repairReactiveSpecies downstream.  See also F99.
+     *
      *
      *  @param u             Conservative variable DOF array.
      *  @param uRec          Reconstruction coefficients.

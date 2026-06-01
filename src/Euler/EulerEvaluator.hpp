@@ -258,6 +258,7 @@ namespace DNDS::Euler
             if (settings.reactiveFlow.enabled)
                 DNDS_assert_info(nVars > I4 + 1, "reactive flow requires at least one species variable (nVars > dim+2)");
 
+            phys_.setRANS(settings.ransModel);
             vfv->BuildUGrad(uGradBuf, nVars);
             vfv->BuildUGrad(uGradBufNoLim, nVars);
 
@@ -290,7 +291,7 @@ namespace DNDS::Euler
             this->GetWallDist();
 
             if constexpr (Traits::isExtended)
-                sourceContributors = buildSourceContributors(settings, axisSymmetric);
+                sourceContributors = buildSourceContributors(settings, nVars, axisSymmetric);
 
             // Wire ChemicalSource into physics module (extract from contributor list)
             for (auto &c : sourceContributors)
@@ -299,9 +300,10 @@ namespace DNDS::Euler
                         phys_.setChemicalSourcePool(chem->pool_);
             if (settings.reactiveFlow.enabled && phys_.hasChemicalSource())
             {
-                int expectedNVars = dim + 2 + phys_.nSpecies() - 1;
+                int Ns1 = phys_.nSpecies() - 1;
+                int expectedNVars = I4 + 1 + phys_.nRANSVars() + Ns1;
                 DNDS_check_throw_info(nVars == expectedNVars,
-                                      fmt::format("reactive flow nVars {} does not match mechanism species count {}; expected {} (= dim + 2 + Ns - 1)",
+                                      fmt::format("reactive flow nVars {} does not match mechanism species count {}; expected {} (= I4+1+nRANS+Ns1)",
                                                   nVars, phys_.nSpecies(), expectedNVars));
             }
 
@@ -1152,9 +1154,15 @@ namespace DNDS::Euler
             real t);
 
         /**
-         * @brief inviscid flux approx jacobian (flux term not reconstructed / no riemann)
-         * if lambdaMain == veryLargeReal, then use lambda0~4 for roe-flux type jacobian
+         * @brief Inviscid flux approximate Jacobian (no reconstruction, no Riemann solver).
          *
+         * Two-term structure: a main diagonal term (lambdaMain * dU) and an optional
+         * Roe-flux term (useRoeTerm).  The Roe path branches on hasChemicalSource()
+         * for the Roe-average (formation-enthalpy-aware vs. single-species).  The
+         * dual-term structure is intentional but fragile — any new flux scheme must
+         * handle both reactive and non-reactive GetRoeAverage paths.
+         *
+         * if lambdaMain == veryLargeReal, then use lambda0~4 for roe-flux type jacobian.
          */
         TU fluxJacobian0_Right_Times_du(
             const TU &U,

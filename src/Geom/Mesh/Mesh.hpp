@@ -139,6 +139,7 @@ namespace DNDS::Geom
         auto device_array_list_edge()
         {
             return std::make_tuple(
+                DNDS_MAKE_1_MEMBER_REF(cell2edge),
                 DNDS_MAKE_1_MEMBER_REF(edge2cell),
                 DNDS_MAKE_1_MEMBER_REF(edge2node),
                 DNDS_MAKE_1_MEMBER_REF(cell2edgePbi),
@@ -1061,6 +1062,8 @@ namespace DNDS::Geom
                 for_each_member_list(this->device_array_list_C2F(), f);
             if (adjN2CBState && node2cell.isBuilt())
                 for_each_member_list(this->device_array_list_N2CB(), f);
+            if (adjEdgeState && cell2edge.isBuilt())
+                for_each_member_list(this->device_array_list_edge(), f);
         }
 
         template <typename F>

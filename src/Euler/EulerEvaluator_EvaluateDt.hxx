@@ -2966,10 +2966,16 @@ namespace DNDS::Euler
         {
             if (settings.reactiveFlow.enabled)
             {
-                for (int k = I4 + 1; k < nVars; ++k)
-                    outMap["rhoY_" + std::to_string(k - (I4 + 1))] =
+                int Isp = nVars - (phys_.nSpecies() - 1);
+                for (int k = Isp; k < nVars; ++k)
+                {
+                    std::string spName = phys_.hasChemicalSource() && (k - Isp) < phys_.nSpecies() - 1
+                                             ? phys_.speciesName(k - Isp)
+                                             : "V" + std::to_string(k - Isp + 1);
+                    outMap[spName] =
                         [&, k](index iCell)
                     { return u[iCell](k); };
+                }
             }
         }
 
