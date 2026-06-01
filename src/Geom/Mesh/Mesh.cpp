@@ -1645,13 +1645,8 @@ namespace DNDS::Geom
                     edge2nodePbi.TransAttach();
                     edge2nodePbi.trans.createFatherGlobalMapping();
                     edge2nodePbi.trans.createGhostMapping(gEdges);
-                    cell2edgePbi.TransAttach();
-                    cell2edgePbi.trans.createFatherGlobalMapping();
-                    cell2edgePbi.trans.createGhostMapping(gEdges);
                     edge2nodePbi.trans.createMPITypes();
-                    cell2edgePbi.trans.createMPITypes();
                     edge2nodePbi.trans.pullOnce();
-                    cell2edgePbi.trans.pullOnce();
                 }
             }
         }
@@ -2250,7 +2245,10 @@ namespace DNDS::Geom
         if (this->adjC2FState != Adj_Unknown && this->cell2face.isBuilt())
             PermuteRows(cell2face, this->NumCell(), cellOld2NewLocal);
         if (this->isPeriodic)
+        {
             PermuteRows(cell2nodePbi, this->NumCell(), cellOld2NewLocal);
+            PermuteRows(cell2edgePbi, this->NumCell(), cellOld2NewLocal);
+        }
         PermuteRows(cellElemInfo, this->NumCell(), cellOld2NewLocal);
 
         // Section F: Rebuild ghost mappings with new cell indices
@@ -2283,6 +2281,12 @@ namespace DNDS::Geom
             cell2nodePbi.trans.BorrowGGIndexing(cell2node.trans);
             cell2nodePbi.trans.createMPITypes();
             cell2nodePbi.trans.pullOnce();
+        }
+        if (this->isPeriodic && this->adjEdgeState != Adj_Unknown && this->cell2edge.isBuilt())
+        { // cell2edgePbi — cell-indexed, borrows from cell2node (same as cell2nodePbi)
+            cell2edgePbi.trans.BorrowGGIndexing(cell2node.trans);
+            cell2edgePbi.trans.createMPITypes();
+            cell2edgePbi.trans.pullOnce();
         }
         { // cellElemInfo
             cellElemInfo.trans.BorrowGGIndexing(cell2node.trans);
