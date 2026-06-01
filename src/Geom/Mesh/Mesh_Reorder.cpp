@@ -683,6 +683,21 @@ namespace DNDS::Geom
 
     void UnstructuredMesh::ReorderLocalCells(int nParts, int nPartsInner)
     {
+        // TODO(reorder-edges): this function does not handle cell2face/face2cell
+        // or edge adjacencies (cell2edge, cell2edgePbi, edge2cell).  In the
+        // standard pipeline ReorderLocalCells runs before InterpolateFace and
+        // InterpolateEdge, so these arrays are never built at this point.
+        // If a user calls ReorderLocalCells after face or edge interpolation,
+        // these adjacencies will be silently corrupted.
+        // Missing operations include:
+        //   - L2G/G2L conversions (AdjLocal2GlobalEdge, AdjGlobal2LocalEdge)
+        //   - Cell ref recording from edge2cell (addCellRefs)
+        //   - Cell index remap in edge2cell (remapCellEntries)
+        //   - Row permutation of cell2edge, cell2edgePbi (cellTransfer.transferRows)
+        //   - Global mapping borrow for cell2edge, cell2edgePbi.father->pLGlobalMapping
+        //   - Ghost borrowAndPull for cell2edge, cell2edgePbi
+        //   - edge2cell re-wire (idx.wireTargetMapping)
+        //   - edge2cell ghost pull (trans.pullOnce)
         DNDS_assert(this->adjPrimaryState == Adj_PointToLocal);
         DNDS_assert(cell2node.isLocal() && bnd2node.isLocal() &&
                     cell2cell.isLocal() && bnd2cell.isLocal());

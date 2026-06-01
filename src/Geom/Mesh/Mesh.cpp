@@ -1372,6 +1372,13 @@ namespace DNDS::Geom
         cell2face.trans.BorrowGGIndexing(cell2node.trans);
         cell2face.trans.createMPITypes();
         cell2face.trans.pullOnce();
+        if (isPeriodic && cell2facePbi.father)
+        { // cell2facePbi — cell-indexed PBI, borrows from cell2node (same as cell2face)
+            cell2facePbi.TransAttach();
+            cell2facePbi.trans.BorrowGGIndexing(cell2node.trans);
+            cell2facePbi.trans.createMPITypes();
+            cell2facePbi.trans.pullOnce();
+        }
         bnd2face.TransAttach();
         bnd2face.trans.BorrowGGIndexing(bnd2node.trans);
         bnd2face.trans.createMPITypes();
@@ -1582,6 +1589,7 @@ namespace DNDS::Geom
         {
             edge2nodePbi.father = globalResult.entity2nodePbi.father;
             cell2edgePbi.father = globalResult.parent2entityPbi.father;
+            cell2edgePbi.father->Compress();
         }
 
         for (index iCell = 0; iCell < nCellAll; iCell++)
@@ -1661,6 +1669,20 @@ namespace DNDS::Geom
         cell2edge.idx.markGlobal();
         edge2node.idx.markGlobal();
         edge2cell.idx.markGlobal();
+
+        // Ghost communication: pull cell2edge and cell2edgePbi using cell2node
+        // ghost indices. Same convention as cell2face in InterpolateFace.
+        cell2edge.TransAttach();
+        cell2edge.trans.BorrowGGIndexing(cell2node.trans);
+        cell2edge.trans.createMPITypes();
+        cell2edge.trans.pullOnce();
+        if (isPeriodic)
+        {
+            cell2edgePbi.TransAttach();
+            cell2edgePbi.trans.BorrowGGIndexing(cell2node.trans);
+            cell2edgePbi.trans.createMPITypes();
+            cell2edgePbi.trans.pullOnce();
+        }
 
         adjEdgeState = Adj_PointToGlobal;
     }
@@ -2184,6 +2206,17 @@ namespace DNDS::Geom
                 for (rowsize in2c = 0; in2c < node2cell[iN].size(); in2c++)
                     record_iCellNonLocal(node2cell(iN, in2c));
         }
+        if (this->adjEdgeState != Adj_Unknown && this->cell2edge.isBuilt())
+        {
+            DNDS_assert(this->adjEdgeState == Adj_PointToLocal);
+            DNDS_assert(cell2edge.isLocal() && edge2node.isLocal() && edge2cell.isLocal());
+            this->AdjLocal2GlobalEdge();
+            // record non-local cells referenced by edge2cell for old→new cell mapping
+            index nEdges = edge2node.father->Size();
+            for (index iE = 0; iE < nEdges; iE++)
+                for (rowsize ie2c = 0; ie2c < edge2cell[iE].size(); ie2c++)
+                    record_iCellNonLocal(edge2cell(iE, ie2c));
+        }
         this->AdjLocal2GlobalPrimary();
         // see cell2cell
         for (index iC = 0; iC < this->NumCell(); iC++)
@@ -2226,6 +2259,10 @@ namespace DNDS::Geom
         for (index iBnd = 0; iBnd < this->NumBnd(); iBnd++)
             for (index &iCell : bnd2cell[iBnd])
                 iCell = replaceCellIndexToNew(iCell);
+        if (this->adjEdgeState != Adj_Unknown && this->edge2cell.isBuilt())
+            for (index iE = 0; iE < edge2cell.father->Size(); iE++)
+                for (index &iCell : edge2cell[iE])
+                    iCell = replaceCellIndexToNew(iCell);
 
         // Section D: Pull ghost data for xxx2cell
         if (this->adjFacialState != Adj_Unknown && this->face2cell.isBuilt())
@@ -2234,6 +2271,8 @@ namespace DNDS::Geom
             node2cell.trans.pullOnce();
         cell2cell.trans.pullOnce(); // should be unnecessary
         bnd2cell.trans.pullOnce();
+        if (this->adjEdgeState != Adj_Unknown && this->edge2cell.isBuilt())
+            edge2cell.trans.pullOnce();
 
         // Section E: Permute LHS of cell2xxx arrays
         auto cellOld2NewLocal = [&](index iCell) -> index
@@ -2244,10 +2283,15 @@ namespace DNDS::Geom
         PermuteRows(cell2cellOrig, this->NumCell(), cellOld2NewLocal);
         if (this->adjC2FState != Adj_Unknown && this->cell2face.isBuilt())
             PermuteRows(cell2face, this->NumCell(), cellOld2NewLocal);
+        if (this->adjEdgeState != Adj_Unknown && this->cell2edge.isBuilt())
+            PermuteRows(cell2edge, this->NumCell(), cellOld2NewLocal);
+        if (this->adjC2FState != Adj_Unknown && this->cell2face.isBuilt() && this->isPeriodic)
+            PermuteRows(cell2facePbi, this->NumCell(), cellOld2NewLocal);
+        if (this->isPeriodic && this->adjEdgeState != Adj_Unknown && this->cell2edge.isBuilt())
+            PermuteRows(cell2edgePbi, this->NumCell(), cellOld2NewLocal);
         if (this->isPeriodic)
         {
             PermuteRows(cell2nodePbi, this->NumCell(), cellOld2NewLocal);
-            PermuteRows(cell2edgePbi, this->NumCell(), cellOld2NewLocal);
         }
         PermuteRows(cellElemInfo, this->NumCell(), cellOld2NewLocal);
 
@@ -2276,11 +2320,23 @@ namespace DNDS::Geom
             cell2face.trans.createMPITypes();
             cell2face.trans.pullOnce();
         }
+        if (this->adjEdgeState != Adj_Unknown && this->cell2edge.isBuilt())
+        { // cell2edge — same convention as cell2face
+            cell2edge.trans.BorrowGGIndexing(cell2node.trans);
+            cell2edge.trans.createMPITypes();
+            cell2edge.trans.pullOnce();
+        }
         if (this->isPeriodic)
         { // cell2nodePbi
             cell2nodePbi.trans.BorrowGGIndexing(cell2node.trans);
             cell2nodePbi.trans.createMPITypes();
             cell2nodePbi.trans.pullOnce();
+        }
+        if (this->isPeriodic && this->adjC2FState != Adj_Unknown && this->cell2face.isBuilt())
+        { // cell2facePbi — cell-indexed PBI, borrows from cell2node (same as cell2face)
+            cell2facePbi.trans.BorrowGGIndexing(cell2node.trans);
+            cell2facePbi.trans.createMPITypes();
+            cell2facePbi.trans.pullOnce();
         }
         if (this->isPeriodic && this->adjEdgeState != Adj_Unknown && this->cell2edge.isBuilt())
         { // cell2edgePbi — cell-indexed, borrows from cell2node (same as cell2nodePbi)
@@ -2306,6 +2362,7 @@ namespace DNDS::Geom
             bnd2cell.idx.wireTargetMapping(cellGhostMap);
             node2cell.idx.wireTargetMapping(cellGhostMap);
             face2cell.idx.wireTargetMapping(cellGhostMap);
+            edge2cell.idx.wireTargetMapping(cellGhostMap);
             node2bnd.idx.wireTargetMapping(bndGhostMap);
         }
 
@@ -2321,6 +2378,10 @@ namespace DNDS::Geom
         if (this->adjN2CBState != Adj_Unknown && this->node2cell.isBuilt())
         {
             this->AdjGlobal2LocalN2CB();
+        }
+        if (this->adjEdgeState != Adj_Unknown && this->cell2edge.isBuilt())
+        {
+            this->AdjGlobal2LocalEdge();
         }
         this->AdjGlobal2LocalPrimary();
         if (mpi.rank == mRank)

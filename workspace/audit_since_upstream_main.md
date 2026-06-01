@@ -1,14 +1,14 @@
 # Audit: Commits Since upstream/main
 
-**Date:** 2026-05-29
+**Date:** 2026-06-01
 **Branch:** upstream/main..HEAD (~90 commits, ~170 files, +26k/-4.7k lines)
-**Passes:** 4 — audited + false-positive validated + deep internals probed. 27 findings resolved.
+**Passes:** 5 — audited + false-positive validated + deep internals probed + edge pipeline audit. 29 findings resolved.
 
 **Unresolved: 0 CRITICAL, 0 HIGH, 52 MEDIUM, 52 LOW**
 
-**Resolved:** F1-F8, F13, F14, F16, F18-F21, F25-F28, F98-F101, F110 (29 findings)
+**Resolved:** F1 (fmt ABI), F2 (Cantera opt-out), F3 (BCInPsTs p→c), F4 (tau-splitting experimental), F5 (JAC_SKIP re-rate), F6 (recomputeDerived), F7 (DNDS_MECH_PATH), F8 (thread pool intent), F13 (JSource false alarm), F14 (Roe_M7), F16 (stale TODO), F18 ($schema), F19 (mechanismFile check), F20 (no gating needed), F21 (CT_USE_SYSTEM_FMT), F25 (false alarm), F26 (cell2edge), F27 (cell2facePbi+cell2edgePbi ghost convention), F28 (CUDA trap), F98 (formation-enthalpy doc), F99 (species pos intended), F100 (ddP chain rule), F101 (schema required intended), F110 (validateWithContext)
 
-**Re-rated from HIGH:** F5 → LOW (JAC_SKIP), F17 → MED (validateKeys deferred)
+**EDGE PIPELINE AUDIT:** 10 findings (3 CRITICAL, 5 HIGH, 2 MEDIUM) in ReorderLocalCellsLegacy + new ReorderLocalCells for missing edge2cell/cell2edge/cell2edgePbi handling. CRITICAL L2G/G2L/cell-index/ghost sections fixed; HIGH redundant createFatherGlobalMapping + missing Compress + weak PermuteRows guard fixed; new ReorderLocalCells gaps marked as TODO (latent). Edge UT re-enabled via #if 1, skips until small 3D mesh added.
 
 ---
 
@@ -42,7 +42,7 @@
 | F24 | — | BC | Cross-ref F9 | *REMOVED — duplicate of F9* |
 | F25 | **LOW** ✓ | Reactive | `EulerSolver.hxx:882`, `EulerEvaluator.hpp:1704-1812,1856-1896,1365-1370` | Source Newton bypasses AddFixedIncrement — **false alarm: only touches species, final fincrement handles repair via AddFixedIncrement** |
 | F26 | **HIGH** ✓ | Geom | `Mesh.cpp:1674-1683` | `AdjGlobal2LocalEdge()` omits `cell2edge` — **FIXED: added cell2edge assertions + toLocalOMP/toGlobalOMP to both functions** |
-| F27 | **HIGH** ✓ | Geom | `Mesh.cpp:1647-1654,2281-2290` | cell2edgePbi ghost-pulled with wrong index space — **FIXED: removed manual ghost pull from BuildGhostEdge; added BorrowGGIndexing(cell2node) in BndUpdateGhost** |
+| F27 | **HIGH** ✓ | Geom | `Mesh.cpp:1647-1654,2281-2304` | cell2edgePbi ghost-pulled with wrong indices — **FIXED: removed BuildGhostEdge manual pull; cell2edgePbi + cell2facePbi now borrow from cell2node in BndUpdateGhost; cell2facePbi also added to InterpolateFace** |
 | F28 | **HIGH** ✓ | Assert | `Errors.hpp:242-251` | `device_assert_fail()` only traps first thread — **FIXED: moved asm(trap) after the if block; all threads now trap** |
 | F29 | **MED** | Scaling | `EulerEvaluatorSettings.hpp:589`, `PhysicsProperties.hpp:272,1117-1135` | `muGas` lacks unit convention annotation |
 | F30 | **MED** | Scaling | `PhysicsProperties.hpp:942` vs `:643` | `resolveStateValue` lambda reimplements `consPhysToCode` — duplicate code |
