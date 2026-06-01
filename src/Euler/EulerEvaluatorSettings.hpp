@@ -825,6 +825,7 @@ namespace DNDS::Euler
             farFieldStaticValue.consSensible(0) = 1;
             farFieldStaticValue.consSensible(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).setZero();
             farFieldStaticValue.consSensible(I4) = 2.5;
+            farFieldStaticValue.consSensible(Eigen::seq(I4 + 1, nVars - 1)).setZero();
             farFieldStaticValue.originType = StateValueOrigin::ConsSensible;
         }
 

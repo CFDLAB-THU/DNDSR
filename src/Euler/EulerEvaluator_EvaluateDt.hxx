@@ -2660,7 +2660,7 @@ namespace DNDS::Euler
                 this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, -1);
             if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
                 this->TransformURotatingFrame(URxy, pPhysics, 1);
-            URxy(Seq123) *= -1;
+            URxy(Seq123) *= -1; // TODO: velocity mirroring should be done on primitive state when general moving frame is needed; currently relies on wall being tangential to rotating velocity (same KE)
             if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") == 0)
                 this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, 1);
             if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)

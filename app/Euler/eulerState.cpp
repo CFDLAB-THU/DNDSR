@@ -36,6 +36,8 @@ namespace
     {
         if (s == "NS")
             return NS;
+        if (s == "NS_2D")
+            return NS_2D;
         if (s == "NS_3D")
             return NS_3D;
         if (s == "NS_EX")

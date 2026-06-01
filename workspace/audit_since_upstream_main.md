@@ -2,9 +2,9 @@
 
 **Date:** 2026-06-01
 **Branch:** upstream/main..HEAD (~90 commits, ~170 files, +26k/-4.7k lines)
-**Passes:** 5 — audited + false-positive validated + deep internals probed + edge pipeline audit. 35 findings resolved.
+**Passes:** 5 — audited + false-positive validated + deep internals probed + edge pipeline audit. 46 findings resolved.
 
-**Unresolved: 0 CRITICAL, 0 HIGH, 40 MEDIUM, 48 LOW**
+**Unresolved: 0 CRITICAL, 0 HIGH, 29 MEDIUM, 48 LOW**
 
 **EDGE PIPELINE AUDIT:** 10 findings (3 CRITICAL, 5 HIGH, 2 MEDIUM). All CRITICAL/HIGH fixed; new ReorderLocalCells gaps marked as TODO (latent). Edge UT re-enabled.
 
@@ -43,38 +43,38 @@
 | F27 | **HIGH** ✓ | Geom | `Mesh.cpp:1647-1654,2281-2304` | cell2edgePbi ghost-pulled with wrong indices — **FIXED: removed BuildGhostEdge manual pull; cell2edgePbi + cell2facePbi now borrow from cell2node in BndUpdateGhost; cell2facePbi also added to InterpolateFace** |
 | F28 | **HIGH** ✓ | Assert | `Errors.hpp:242-251` | `device_assert_fail()` only traps first thread — **FIXED: moved asm(trap) after the if block; all threads now trap** |
 | F29 | **MED** ✓ | Scaling | `EulerEvaluatorSettings.hpp:608,629` | muGas lacking unit annotation — **FIXED: comment added "[Pa·s] physical", schema string "(Pa·s)"** |
-| F30 | **MED** | Scaling | `PhysicsProperties.hpp:942` vs `:643` | `resolveStateValue` lambda reimplements `consPhysToCode` — duplicate code |
+| F30 | **MED** ✓ | Scaling | `PhysicsProperties.hpp:628,641,980,991` | Duplicate consPhysToCode/consCodeToPhys lambdas — **FIXED: templated member functions with TVal, lambdas now delegate to them** |
 | F31 | **MED** | Reactive | `ChemicalSource.cpp:429-451` | `massFractions` clipping+renormalization shifts composition |
 | F32 | **MED** ✓ | Reactive | `ChemicalSource.cpp:666` | No ideal-gas EOS assertion — **FIXED: added DNDS_assert_info(gas_isIdeal()) in productionRatesAndJacobian** |
-| F33 | **MED** | Reactive | `EulerSolver.hxx:865-883` | Pointwise Newton serial — no OpenMP |
+| F33 | **MED** ✓ | Reactive | `EulerSolver.hxx:882-883` | Pointwise Newton serial — **FIXED: added #pragma omp parallel for to cxInc subtraction loop** |
 | F34 | **LOW** | EOS | `IdealGasPhysics.hpp:73-77` | `Enthalpy` param intentionally ignored (commented-out-param convention); separate `IdealGasThermal()` path handles rhoH_form **[H→L: FP pass — FALSE POSITIVE]** |
 | F35 | **LOW** ✓ | EOS | `test_PhysicsProperties.cpp:282` | gammaEq test tautology — **kept as semantic documentation of gammaEq == 1+p/sensibleRhoE identity** |
 | F36 | **LOW** ✓ | EOS | `PhysicsProperties.hpp:172-173` | gammaEq asserts e_sensible>0 — may fire during startup I/O — **comment added explaining zero-T+zero-momentum sentinel convention** |
 | F37 | **MED** | Jacobian | `EulerEvaluator.hpp:1159-1210` | Dual-term dp/dU structure correct but fragile |
 | F38 | **LOW** ✓ | Jacobian | `test_ChemODE.cpp:837` | FD Jacobian tolerance generous — **comment added explaining tolerance guards regressions without failing on inherent cross-column errors** |
-| F39 | **MED** | Config | `EulerEvaluatorSettings.hpp:761,822` | `reactiveFlow` exposed in all model schemas; gate runtime-only |
+| F39 | **LOW** ✓ | Config | `EulerEvaluatorSettings.hpp:761,822` | reactiveFlow exposed in all model schemas — **user: runtime gate only, no fix needed** |
 | F40 | **MED** | Config | `EulerEvaluatorSettings.hpp:653-658,664-669` | `thermoFile`, `transportModel`, `nSpeciesOverride` accept input silently |
 | F41 | **MED** ✓ | Config | `cases/update_schemas.sh:16` | Script omissions — **FIXED: eulerEX/eulerEX3D already in VARIANTS array** |
 | F42 | **MED** ✓ | Config | `EulerEvaluatorSettings.hpp:655-657,685-687` | CFLScale/chemRelaxEps/chemAbsTol lack range() — **FIXED: added range(0.0)** |
 | F43 | **MED** ✓ | Thread | `ChemicalSource.hpp/cpp` | scale params in method args — **FIXED: U0/rho0 stored in Impl ctor, removed from mixtureFormationRhoESpecies/mixtureFormationRhoE/productionRatesAndJacobian; bufHf_ recomputed each call** |
 | F44 | **LOW** | Thread | `EvaluateRHS.hxx:170`, `EvaluateDt.hxx:880`, `EulerEvaluator.hxx:687` | `schedule(runtime)` vs `schedule(static)` — reductions use scratch buffers; zero measurable impact **[M→L: FP pass]** |
-| F45 | **MED** | BC | `PhysicsProperties.hpp:486-516` | `totalToStaticPrimitive` bisection uses pTotal — correct but undocumented |
+| F45 | **MED** ✓ | BC | `PhysicsProperties.hpp:429-440` | totalToStaticPrimitive undocumented — **already documented (brief + params + iterative method described)** |
 | F46 | **LOW** ✓ | BC | `EvaluateDt.hxx:2311-2319` | Two-path reactive/non-reactive farfield prim→cons — **FIXED: unified under phys_.primToConservative (handles single-species as degenerate limit)** |
 | F47 | **MED** | BC | `EvaluateRHS.hxx:405`, `Gas.hpp:1898-1910` | Formation-enthalpy gradient correction lacks unit test |
-| F48 | **MED** | BC | `EvaluateDt.hxx:2652` | Rgas queried on velocity-negated state — confusing |
+| F48 | **MED** ✓ | BC | `EvaluateDt.hxx:2663` | Rgas on velocity-negated state — **TODO added: mirroring should use primitive state for general moving frame** |
 | F49 | **MED** ✓ | Build | `DndsApps.cmake:124,126` | cantera_Test missing CT_USE_SYSTEM_FMT — **FIXED: already present at line 129** |
-| F50 | **MED** | Build | `cmake/DndsTests.cmake` | `cantera_Test` not CTest-registered |
-| F51 | **MED** | Build | `DndsApps.cmake:156` | `canteraConstVolTrajectory` links NS_EX only |
-| F52 | **MED** | Build | `cantera_Test.cpp:12-16`, `canteraConstVolTrajectory.cpp:51-55` | No `CANTERA_DATA` env for manual runs |
+| F50 | **MED** ✓ | Build | `cmake/DndsTests.cmake` | cantera_Test not CTest-registered — **false alarm: cantera_Test is an app, not a ctest target** |
+| F51 | **MED** ✓ | Build | `src/Euler/CMakeLists.txt` | ChemicalSource.cpp in per-model loop — **FIXED: extracted to euler_library_chemical (model-independent), linked by all variants** |
+| F52 | **MED** ✓ | Build | `test_ChemODE.cpp:28-30` | No CANTERA_DATA env for manual runs — **comment added documenting required env vars** |
 | F53 | **LOW** | Reactive | `EulerEvaluator_EvaluateDt.hxx:910-923` | `EvaluateDt()` rebuilds `uGradBufNoLim` but uses previous `uGradBuf` — at most 1 step stale; populated by prior EvaluateRHS in same main-loop iteration **[M→L: FP pass]** |
 | F54 | **LOW** | Reactive | `SourceTermContributor.hpp:228` | Extended-model SA source passes `gammaEq` instead of `gamma` — gammaEq==gamma for all active non-reactive SA models **[M→L: FP pass]** |
 | F55 | **MED** ✓ | Reactive | `EulerSolver.hxx:758` | RANS relaxation scales {I4,I4+1} (energy+k) instead of {I4+1,I4+2} (k+omega) — **FIXED: indexed turbulent DOFs correctly** |
-| F56 | **MED** | Geom | `Mesh_Reorder.cpp:308` | `cell2edgePbi` registered EntityKind::Edge but rows cell-indexed |
+| F56 | **MED** ✓ | Geom | `Mesh_Reorder.cpp:308` | cell2edgePbi registered EntityKind::Edge — **FIXED: changed to EntityKind::Cell (cell-indexed PBI)** |
 | F57 | **MED** | Geom | `Mesh_DeviceView.hpp:242`, `Mesh.hpp:1047` | Edge device arrays never visited by `op_on_device_arrays()` |
 | F58 | **MED** | EOS | `PhysicsProperties.hpp:632`, `eulerState.cpp:431` | RANS variables corrupted by uniform `1/rho0` scaling |
-| F59 | **MED** | EOS | `eulerState.cpp:33` | `parseModel()` rejects NS_2D |
+| F59 | **MED** ✓ | EOS | `eulerState.cpp:37-38` | parseModel rejects NS_2D — **FIXED: added NS_2D case** |
 | F60 | **MED** | CI | `.github/workflows/ci.yml:329` | `eulerState` not in CI solver smoke set |
-| F61 | **MED** | Assert | `Errors.hpp:121` | `NDEBUG` does not suppress DNDS_assert — only `DNDS_NDEBUG` |
+| F61 | **MED** ✓ | Assert | `Errors.hpp:1-30` | NDEBUG doesn't suppress DNDS_assert — **intended: docstring updated to clarify DNDS_NDEBUG control** |
 | F62 | **MED** | Assert | `Errors.hpp:254` | `DNDS_HD_assert_infof*` ignores variadic args on device |
 | F63 | **MED** | Assert | `EulerSolver_Init.hxx:437`, `EvaluateDt.hxx:2436` | Config/BC validation aborts instead of throwing |
 | F64 | **MED** | EulerP | `test/EulerP/test_basic_eulerP.py:312-319` | Per-rank temp dir breaks MPI parallel HDF5 I/O |
@@ -121,7 +121,7 @@
 | F105 | **MED** | Reactive | `EulerSolver.hxx:876-881`, `ODE.hpp:452,548` | alphaDiag mis-scales pointwise Newton time term for BDF2+ (2.25× error) |
 | F106 | **MED** | Transport | `EulerEvaluator_EvaluateDt.hxx:1239-1249`, `PhysicsProperties.hpp:1164-1176` | Per-species speciesDiffusivityK loop O(Ns²); Ns1×Ns Cantera evals per cell |
 | F107 | **MED** | Test | `SourceTermContributor.hpp:441-443`, `ChemicalSource.cpp:276-277` | JAC_SKIP_FLUID production path has zero test coverage (distinct from F5) |
-| F108 | **MED** | Config | `EulerEvaluatorSettings.hpp:798-801` | Constructor defaults species to ΣY_k>1; overridden by JSON but hazard for programmatic use |
+| F108 | **MED** ✓ | Config | `EulerEvaluatorSettings.hpp:828` | Constructor defaults species to ΣY_k>1 — **FIXED: set species rows to zero after setOnes** |
 | F109 | **MED** | Config | `ConfigParam.hpp:456-462` | `field_schema` desc parameter silently dead when StateValueSchema provides own description |
 | F110 | **MED** ✓ | Config | `ConfigParam.hpp:692-704,797-801`, `ConfigRegistry.hpp:427-437` | `validateWithContext`/`check_ctx` generated but never called — **FIXED: called in ConfigureFromJson** |
 | F111 | **LOW** | Reactive | `EulerEvaluator.hpp:1872` | `AddFixedIncrement` speciesClipped detection uses exact floating-point `!=` |

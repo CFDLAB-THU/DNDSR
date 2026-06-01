@@ -625,8 +625,8 @@ namespace DNDS::Euler
 
         // ---- Unit-scaling helpers (I/O only) ---------------------------------
 
-        template <int dim>
-        void consCodeToPhys(const TU &code, TU &phys) const
+        template <int dim, typename TVal>
+        void consCodeToPhys(const TVal &code, TVal &phys) const
         {
             phys = code;
             phys[0] *= igProp_->rho0;
@@ -637,8 +637,8 @@ namespace DNDS::Euler
                 phys[k] *= igProp_->rho0;
         }
 
-        template <int dim>
-        void consPhysToCode(const TU &phys, TU &code) const
+        template <int dim, typename TVal>
+        void consPhysToCode(const TVal &phys, TVal &code) const
         {
             code = phys;
             code[0] /= igProp_->rho0;
@@ -977,24 +977,14 @@ namespace DNDS::Euler
 
         auto consPhysToCode = [&](const Eigen::Vector<real, -1> &v)
         {
-            Eigen::Vector<real, -1> o = v;
-            o[0] /= igProp_->rho0;
-            for (int j = 1; j <= dim; ++j)
-                o[j] /= (igProp_->rho0 * igProp_->U0);
-            o[I4] /= p0();
-            for (int k = I4 + 1; k < o.size(); ++k)
-                o[k] /= igProp_->rho0;
+            Eigen::Vector<real, -1> o;
+            this->template consPhysToCode<dim>(v, o);
             return o;
         };
         auto consCodeToPhys = [&](const Eigen::Vector<real, -1> &v)
         {
-            Eigen::Vector<real, -1> o = v;
-            o[0] *= igProp_->rho0;
-            for (int j = 1; j <= dim; ++j)
-                o[j] *= (igProp_->rho0 * igProp_->U0);
-            o[I4] *= p0();
-            for (int k = I4 + 1; k < o.size(); ++k)
-                o[k] *= igProp_->rho0;
+            Eigen::Vector<real, -1> o;
+            this->template consCodeToPhys<dim>(v, o);
             return o;
         };
         auto primRhoPPhysToCode = [&](const Eigen::Vector<real, -1> &v)
