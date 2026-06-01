@@ -117,12 +117,18 @@ namespace DNDS::Euler::Chemistry
         std::vector<double> Rk; // species gas constants
         std::vector<double> hf; // per-species formation enthalpy [J/kg] at 298 K
 
+        double U0 = 1.0;      // reference velocity [m/s]
+        double rho0 = 1.0;    // reference density [kg/m³]
+        double invU0sq = 1.0; // 1/U0², precomputed for code-unit conversion
+
         // work buffers
         mutable std::vector<double> bufOmega;
         mutable std::vector<double> bufDwdt, bufDwdp, bufDwdc;
         mutable std::vector<double> bufD;
 
-        Impl(const std::string &mechanismFile, const std::string &phaseName)
+        Impl(const std::string &mechanismFile, const std::string &phaseName,
+             double U0In, double rho0In)
+            : U0(U0In), rho0(rho0In), invU0sq(1.0 / (U0In * U0In))
         {
             auto &I = *this;
 #ifdef DNDS_USE_CANTERA
@@ -389,6 +395,9 @@ namespace DNDS::Euler::Chemistry
             c.mw = R.mw;
             c.Rk = R.Rk;
             c.hf = R.hf;
+            c.U0 = R.U0;
+            c.rho0 = R.rho0;
+            c.invU0sq = R.invU0sq;
             c.bufOmega.resize(Ns);
             c.bufDwdt.resize(Ns);
             c.bufDwdp.resize(Ns);
@@ -519,8 +528,9 @@ namespace DNDS::Euler::Chemistry
     ChemicalSource::ChemicalSource() = default;
 
     ChemicalSource::ChemicalSource(const std::string &mechanismFile,
-                                   const std::string &phaseName)
-        : impl_(std::make_unique<Impl>(mechanismFile, phaseName)),
+                                   const std::string &phaseName,
+                                   double U0, double rho0)
+        : impl_(std::make_unique<Impl>(mechanismFile, phaseName, U0, rho0)),
           mechanismFile_(mechanismFile), phaseName_(phaseName)
     {
         DNDS_assert(impl_);
@@ -540,6 +550,16 @@ namespace DNDS::Euler::Chemistry
     {
         DNDS_assert(impl_);
         return static_cast<int>(impl_->kin_nReactions());
+    }
+    double ChemicalSource::velScale() const
+    {
+        DNDS_assert(impl_);
+        return impl_->U0;
+    }
+    double ChemicalSource::rhoScale() const
+    {
+        DNDS_assert(impl_);
+        return impl_->rho0;
     }
     const std::vector<std::string> &ChemicalSource::speciesNames() const
     {
@@ -654,7 +674,7 @@ namespace DNDS::Euler::Chemistry
     void ChemicalSource::productionRatesAndJacobian(
         double T, double p, double rho, double rhoE,
         double rhoU, double rhoV, double rhoW,
-        int iEnergy, double velScale, double rhoScale,
+        int iEnergy,
         ConstSpeciesBufferView Y,
         SpeciesBufferView omega,
         JacobianBufferView dOmegadU,
@@ -664,6 +684,7 @@ namespace DNDS::Euler::Chemistry
         auto &J = dOmegadU;
         auto &I = *impl_;
         I.setTPY(T, p, Y);
+        DNDS_assert_info(I.gas_isIdeal(), "productionRatesAndJacobian: ideal-gas EOS required for dT/dU and dP/dU chain rules");
 
         I.kin_getNetProductionRates(I.bufOmega.data());
         for (int k = 0; k < I.Ns; ++k)
@@ -709,7 +730,7 @@ namespace DNDS::Euler::Chemistry
         int speciesCol0 = iEnergy + 1;
 
         double cv = I.gas_cv_mass();
-        double vs2 = velScale * velScale;
+        double vs2 = I.U0 * I.U0;
         double cvSafe = std::max(cv, 1e-30);
         double rhoInv = 1.0 / std::max(rho, 1e-60);
 
@@ -720,15 +741,15 @@ namespace DNDS::Euler::Chemistry
         double invMlast = skipAbsorb ? 0.0 : (1.0 / std::max(I.mw[Ns1], 1e-30));
 
         // ── Species columns (∂ω/∂(ρY_k)_code) ──
-        // Concentration chain rule: ∂C_k/∂(ρY_k)_code = rhoScale/MW_k
+        // Concentration chain rule: ∂C_k/∂(ρY_k)_code = I.rho0/MW_k
         // Temperature chain rule:   dT/d(rhoY_k)_code = -(1/(rho_code*cv)) * du_k
-        //   (rhoScale cancels: d(rhoY_k)_phys = rhoScale * d(rhoY_k)_code,
-        //    but dT/d(rhoY_k)_phys has 1/rho_phys = 1/(rho_code*rhoScale),
-        //    so dT/d(rhoY_k)_code = rhoScale * dT/d(rhoY_k)_phys = -du/(rho_code*cv))
-        // Pressure chain rule:      dP_phys/d(rhoY_k)_code = (p/T)*dT_drY + rhoScale*T*(Rk - Rlast)
+        //   (I.rho0 cancels: d(rhoY_k)_phys = I.rho0 * d(rhoY_k)_code,
+        //    but dT/d(rhoY_k)_phys has 1/rho_phys = 1/(rho_code*I.rho0),
+        //    so dT/d(rhoY_k)_code = I.rho0 * dT/d(rhoY_k)_phys = -du/(rho_code*cv))
+        // Pressure chain rule:      dP_phys/d(rhoY_k)_code = (p/T)*dT_drY + I.rho0*T*(Rk - Rlast)
         double PbyT = p / std::max(T, 1e-60);
         double dT_pre = -rhoInv / cvSafe;
-        double rhoScaleT = rhoScale * T;
+        double rhoScaleT = I.rho0 * T;
         for (int k = 0; k < Ns1; ++k)
         {
             double invMk = 1.0 / std::max(I.mw[k], 1e-30);
@@ -750,9 +771,9 @@ namespace DNDS::Euler::Chemistry
                 dP_drY -= rhoScaleT * I.Rk[Ns1];
             for (int i = 0; i < nRows; ++i)
             {
-                J(i, speciesCol0 + k) = dWdC.coeff(i, k) * invMk * rhoScale + I.bufDwdt[i] * dT_drY;
+                J(i, speciesCol0 + k) = dWdC.coeff(i, k) * invMk * I.rho0 + I.bufDwdt[i] * dT_drY;
                 if (!skipAbsorb)
-                    J(i, speciesCol0 + k) -= dWdC.coeff(i, Ns1) * invMlast * rhoScale;
+                    J(i, speciesCol0 + k) -= dWdC.coeff(i, Ns1) * invMlast * I.rho0;
                 J(i, speciesCol0 + k) += I.bufDwdp[i] * dP_drY;
             }
         }
@@ -785,7 +806,7 @@ namespace DNDS::Euler::Chemistry
         }
 
         // ∂ω/∂ρ_code = ∂ω/∂T·dT/dρ_code + ∂ω/∂C_last·∂C_last/∂ρ_code
-        //   ∂C_last/∂ρ_code = rhoScale/M_last  (since ∂(ρ·Y_last)/∂ρ = 1 at fixed ρY_k)
+        //   ∂C_last/∂ρ_code = I.rho0/M_last  (since ∂(ρ·Y_last)/∂ρ = 1 at fixed ρY_k)
         // At fixed conservative rhoE, momentum, and transported rhoY_k:
         //   u = U0²·(ρE/ρ - |ρu|²/(2ρ²)) - offset(Y)
         // so dT/dρ includes both the total-energy term -U0²·ρE/ρ² and the
@@ -804,7 +825,7 @@ namespace DNDS::Euler::Chemistry
         {
             double d = I.bufDwdt[i] * dT_drho;
             if (!skipAbsorb)
-                d += dWdC.coeff(i, Ns1) * invMlast * rhoScale;
+                d += dWdC.coeff(i, Ns1) * invMlast * I.rho0;
             d += I.bufDwdp[i] * PbyT * dT_drho;
             J(i, 0) = d;
         }
@@ -952,24 +973,19 @@ namespace DNDS::Euler::Chemistry
         return {bufY_.data(), Ns};
     }
 
-    ConstSpeciesBufferView ChemicalSource::mixtureFormationRhoESpecies(double invU0sq) const
+    ConstSpeciesBufferView ChemicalSource::mixtureFormationRhoESpecies() const
     {
         DNDS_assert(impl_);
         int Ns = impl_->Ns;
-        if (static_cast<int>(bufHf_.size()) < Ns)
-        {
-            bufHf_.resize(Ns);
-            SpeciesBufferView hfv{bufHf_.data(), Ns};
-            speciesFormationEnthalpies(hfv);
-            for (int k = 0; k < Ns; ++k)
-                bufHf_[k] *= invU0sq;
-        }
+        bufHf_.resize(static_cast<size_t>(Ns));
+        for (int k = 0; k < Ns; ++k)
+            bufHf_[k] = impl_->hf[k] * impl_->invU0sq;
         return {bufHf_.data(), Ns};
     }
 
-    double ChemicalSource::mixtureFormationRhoE(double rho, ConstSpeciesBufferView Y, double invU0sq) const
+    double ChemicalSource::mixtureFormationRhoE(double rho, ConstSpeciesBufferView Y) const
     {
-        return rho * mixtureFormationEnthalpy(Y) * invU0sq;
+        return rho * mixtureFormationEnthalpy(Y) * impl_->invU0sq;
     }
 
     double ChemicalSource::mixtureFormationRhoEIncrement(double rhoInc, const double *dRhoYK, int nTransported) const

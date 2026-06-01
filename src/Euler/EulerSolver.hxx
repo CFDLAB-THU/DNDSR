@@ -755,7 +755,7 @@ namespace DNDS::Euler
             {
                 if (config.implicitCFLControl.RANSRelax != 1)
                     for (index i = 0; i < uTemp.Size(); i++)
-                        uTemp[i]({I4, I4 + 1}) *= config.implicitCFLControl.RANSRelax;
+                        uTemp[i]({I4 + 1, I4 + 2}) *= config.implicitCFLControl.RANSRelax;
             }
             Timer().StopTimer(PerformanceTimer::Positivity);
             eval.AddFixedIncrement(cx, uTemp, alpha);

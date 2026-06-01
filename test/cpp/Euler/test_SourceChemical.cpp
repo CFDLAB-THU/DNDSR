@@ -21,7 +21,7 @@ static std::string mechFile()
 
 TEST_CASE("ChemicalSource::productionRates — RHS signs at active T")
 {
-    ChemicalSource chem(mechFile());
+    ChemicalSource chem(mechFile(), "", 379.0, 1.0);
     int Ns = chem.nSpecies();
     int Ns1 = Ns - 1;
     auto names = chem.speciesNames();
@@ -71,7 +71,7 @@ TEST_CASE("ChemicalSource::productionRates — RHS signs at active T")
 
 TEST_CASE("ChemicalSource::productionRatesAndJacobian — Jacobian sign convention")
 {
-    ChemicalSource chem(mechFile());
+    ChemicalSource chem(mechFile(), "", 379.0, 1.0);
     int Ns = chem.nSpecies();
     int Ns1 = Ns - 1;
     int nVars = 5 + Ns1;
@@ -96,7 +96,7 @@ TEST_CASE("ChemicalSource::productionRatesAndJacobian — Jacobian sign conventi
     std::vector<double> w(Ns), jbuf(Ns * nVars, 0.0);
     SpeciesBufferView ov{w.data(), Ns};
     JacobianBufferView Jv{jbuf.data(), Ns, nVars, Ns};
-    chem.productionRatesAndJacobian(T, p, rho, rhoE, 0., 0., 0., I4, velScale, 1.0, Yv, ov, Jv);
+    chem.productionRatesAndJacobian(T, p, rho, rhoE, 0., 0., 0., I4, Yv, ov, Jv);
 
     int Isp = 5;
 
@@ -134,7 +134,7 @@ TEST_CASE("ChemicalSource::productionRatesAndJacobian — Jacobian sign conventi
 
 TEST_CASE("ChemicalSource::mixtureR — gas constant correctness")
 {
-    ChemicalSource chem(mechFile());
+    ChemicalSource chem(mechFile(), "", 379.0, 1.0);
     int Ns = chem.nSpecies();
     auto MW = chem.molecularWeights();
 

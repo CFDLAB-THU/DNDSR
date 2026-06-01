@@ -138,7 +138,7 @@ namespace DNDS::Euler::Reactive0D
 
             std::vector<double> jbuf(Ns * nVars, 0.0);
             chem.productionRatesAndJacobian(TCantera, pPhys, Uk[0], Uk[I4], 0.0, 0.0, 0.0, I4,
-                                            c.U0, c.rho0, Yv, Chemistry::SpeciesBufferView{omega.data(), Ns},
+                                            Yv, Chemistry::SpeciesBufferView{omega.data(), Ns},
                                             Chemistry::JacobianBufferView{jbuf.data(), Ns, nVars, Ns});
 
             Eigen::MatrixXd jac = Eigen::MatrixXd::Zero(nVars, nVars);
