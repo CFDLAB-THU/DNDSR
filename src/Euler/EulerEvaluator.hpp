@@ -1961,11 +1961,16 @@ namespace DNDS::Euler
                 //                 // cx[iCell](I4 + 2) = rhoOmegaaaWall * 0.5; // this is bad
                 //             }
 
-                if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
+                if constexpr (Traits::has2EQ || Traits::isExtended)
                 { // for SST or KOWilcox
-                    if (settings.ransModel == RANSModel::RANS_KOSST ||
-                        settings.ransModel == RANSModel::RANS_KOWilcox)
+                    if (phys_.ransModel() == RANSModel::RANS_KOSST ||
+                        phys_.ransModel() == RANSModel::RANS_KOWilcox)
                         cx[iCell](I4 + 2) = std::max(cx[iCell](I4 + 2), settings.RANSBottomLimit * settings.farFieldStaticValue.cons(I4 + 2));
+                }
+                if constexpr (Traits::hasSA || Traits::isExtended)
+                { // for SA
+                    if (Traits::hasSA || phys_.ransModel() == RANS_SA)
+                        cx[iCell](I4 + 1) = std::min(cx[iCell](I4 + 1), settings.RANSTopLimit * 1.0 * cx[iCell][0]);
                 }
             }
             real alpha_fix_min_c = alpha_fix_min;
