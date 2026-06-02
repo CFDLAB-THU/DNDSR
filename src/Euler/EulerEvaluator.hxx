@@ -1791,8 +1791,8 @@ namespace DNDS::Euler
         const int Ns = phys_.nSpecies();
         const int Ns1 = Ns - 1;
         const int Isp = nVars - Ns1;
-        DNDS_check_throw_info(Isp == I4 + 1,
-                              "ReactiveSourceConstVolumeStep expects no RANS variables between energy and species (Isp == I4+1)");
+        DNDS_check_throw_info(Isp >= I4 + 1,
+                              "ReactiveSourceConstVolumeStep requires Isp >= I4+1 (RANS gap tolerated, frozen)");
 
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(guided)

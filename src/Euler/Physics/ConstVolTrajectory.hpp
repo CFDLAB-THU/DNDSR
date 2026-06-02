@@ -113,7 +113,9 @@ namespace DNDS::Euler::Reactive0D
         int Ns1 = Ns - 1;
         int nVars = static_cast<int>(U.size());
         int Isp = nVars - Ns1;
-        int I4 = Isp - 1;
+        int I4 = dim + 1;
+        DNDS_check_throw_info(Isp >= I4 + 1,
+                              "ConstVolTrajectory does not support RANS variables between energy and species");
         auto MW = chem.molecularWeights();
         double invS0 = c.L0 / (c.rho0 * c.U0);
 

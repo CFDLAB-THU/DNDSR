@@ -780,64 +780,70 @@ namespace DNDS::Euler
                 vec[dim + 2 + j] *= ransPrimScalePhysToCode(j);
         }
 
-        template <int dim>
-        void primCodeToPhys(const TU &code, TU &phys) const
+        template <int dim, typename TVal>
+        void primCodeToPhys(const TVal &code, TVal &phys) const
         {
             phys = code;
             phys[0] *= igProp_->rho0;
             for (int j = 1; j <= dim; ++j)
                 phys[j] *= igProp_->U0;
             phys[dim + 1] *= (igProp_->rho0 * igProp_->U0 * igProp_->U0);
+            this->template scaleRansPrimCodeToPhys<dim>(phys);
         }
 
-        template <int dim>
-        void primPhysToCode(const TU &phys, TU &code) const
+        template <int dim, typename TVal>
+        void primPhysToCode(const TVal &phys, TVal &code) const
         {
             code = phys;
             code[0] /= igProp_->rho0;
             for (int j = 1; j <= dim; ++j)
                 code[j] /= igProp_->U0;
             code[dim + 1] /= (igProp_->rho0 * igProp_->U0 * igProp_->U0);
+            this->template scaleRansPrimPhysToCode<dim>(code);
         }
 
-        template <int dim>
-        void primRhoTCodeToPhys(const TU &code, TU &phys) const
+        template <int dim, typename TVal>
+        void primRhoTCodeToPhys(const TVal &code, TVal &phys) const
         {
             phys = code;
             phys[0] *= igProp_->rho0;
             for (int j = 1; j <= dim; ++j)
                 phys[j] *= igProp_->U0;
             phys[dim + 1] = toPhysT(code[dim + 1]);
+            this->template scaleRansPrimCodeToPhys<dim>(phys);
         }
 
-        template <int dim>
-        void primRhoTPhysToCode(const TU &phys, TU &code) const
+        template <int dim, typename TVal>
+        void primRhoTPhysToCode(const TVal &phys, TVal &code) const
         {
             code = phys;
             code[0] /= igProp_->rho0;
             for (int j = 1; j <= dim; ++j)
                 code[j] /= igProp_->U0;
             code[dim + 1] = toCodeT(phys[dim + 1]);
+            this->template scaleRansPrimPhysToCode<dim>(code);
         }
 
-        template <int dim>
-        void primTPCodeToPhys(const TU &code, TU &phys) const
+        template <int dim, typename TVal>
+        void primTPCodeToPhys(const TVal &code, TVal &phys) const
         {
             phys = code;
             phys[0] = toPhysT(code[0]);
             for (int j = 1; j <= dim; ++j)
                 phys[j] *= igProp_->U0;
             phys[dim + 1] *= (igProp_->rho0 * igProp_->U0 * igProp_->U0);
+            this->template scaleRansPrimCodeToPhys<dim>(phys);
         }
 
-        template <int dim>
-        void primTPPhysToCode(const TU &phys, TU &code) const
+        template <int dim, typename TVal>
+        void primTPPhysToCode(const TVal &phys, TVal &code) const
         {
             code = phys;
             code[0] = toCodeT(phys[0]);
             for (int j = 1; j <= dim; ++j)
                 code[j] /= igProp_->U0;
             code[dim + 1] /= (igProp_->rho0 * igProp_->U0 * igProp_->U0);
+            this->template scaleRansPrimPhysToCode<dim>(code);
         }
 
         template <int dim>
@@ -1127,54 +1133,38 @@ namespace DNDS::Euler
         };
         auto primRhoPPhysToCode = [&](const Eigen::Vector<real, -1> &v)
         {
-            Eigen::Vector<real, -1> o = v;
-            o[0] /= igProp_->rho0;
-            for (int j = 1; j <= dim; ++j)
-                o[j] /= igProp_->U0;
-            o[I4] /= p0();
-            this->template scaleRansPrimPhysToCode<dim>(o);
+            Eigen::Vector<real, -1> o;
+            this->template primPhysToCode<dim>(v, o);
             return o;
         };
         auto primRhoPCodeToPhys = [&](const Eigen::Vector<real, -1> &v)
         {
-            Eigen::Vector<real, -1> o = v;
-            o[0] *= igProp_->rho0;
-            for (int j = 1; j <= dim; ++j)
-                o[j] *= igProp_->U0;
-            o[I4] *= p0();
-            this->template scaleRansPrimCodeToPhys<dim>(o);
+            Eigen::Vector<real, -1> o;
+            this->template primCodeToPhys<dim>(v, o);
             return o;
         };
         auto primRhoTPhysToCode = [&](const Eigen::Vector<real, -1> &v)
         {
-            Eigen::Vector<real, -1> o = primRhoPPhysToCode(v);
-            o[I4] = toCodeT(v[I4]);
+            Eigen::Vector<real, -1> o;
+            this->template primRhoTPhysToCode<dim>(v, o);
             return o;
         };
         auto primRhoTCodeToPhys = [&](const Eigen::Vector<real, -1> &v)
         {
-            Eigen::Vector<real, -1> o = primRhoPCodeToPhys(v);
-            o[I4] = toPhysT(v[I4]);
+            Eigen::Vector<real, -1> o;
+            this->template primRhoTCodeToPhys<dim>(v, o);
             return o;
         };
         auto primTPPhysToCode = [&](const Eigen::Vector<real, -1> &v)
         {
-            Eigen::Vector<real, -1> o = v;
-            o[0] = toCodeT(v[0]);
-            for (int j = 1; j <= dim; ++j)
-                o[j] /= igProp_->U0;
-            o[I4] /= p0();
-            this->template scaleRansPrimPhysToCode<dim>(o);
+            Eigen::Vector<real, -1> o;
+            this->template primTPPhysToCode<dim>(v, o);
             return o;
         };
         auto primTPCodeToPhys = [&](const Eigen::Vector<real, -1> &v)
         {
-            Eigen::Vector<real, -1> o = v;
-            o[0] = toPhysT(v[0]);
-            for (int j = 1; j <= dim; ++j)
-                o[j] *= igProp_->U0;
-            o[I4] *= p0();
-            this->template scaleRansPrimCodeToPhys<dim>(o);
+            Eigen::Vector<real, -1> o;
+            this->template primTPCodeToPhys<dim>(v, o);
             return o;
         };
 
