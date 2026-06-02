@@ -116,12 +116,12 @@ namespace DNDS
          ? void(0)                        \
          : ::DNDS::assert_false_info_throw(#expr, __FILE__, __LINE__, info))
 
-/// Maximum assertion level — assertions at this level are ALWAYS compiled in,
-/// regardless of DNDS_NDEBUG or DNDS_ASSERT_LEVEL settings.
+/// Maximum assertion level — assertions at this level are active by default
+/// but are compiled out when DNDS_NDEBUG is defined (DNDS_ASSERT_LEVEL > MAX).
 #define DNDS_ASSERT_LEVEL_MAX 3
 
 /// Assertion threshold: assertions with level < DNDS_ASSERT_LEVEL (and level < MAX)
-/// are compiled out. Default: 0 (all active) in debug, MAX+1 (only MAX active) under NDEBUG.
+/// are compiled out. Default: 0 (all active) in debug, MAX+1 (none active) under DNDS_NDEBUG.
 /// Override at compile time with -DDNDS_ASSERT_LEVEL=N to keep levels N..MAX active.
 #ifndef DNDS_ASSERT_LEVEL
 #    ifdef DNDS_NDEBUG

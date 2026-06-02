@@ -815,31 +815,9 @@ namespace DNDS::Euler
          * @param T Temperature.
          * @return Effective molecular dynamic viscosity.
          */
-        real muEff(const TU &U, real T) // TODO: more than sutherland law
+        real muEff(const TU &U, real T)
         {
-
-            switch (phys_.muModel())
-            {
-            case 0:
-                return phys_.muRef();
-            case 1:
-            {
-                real TRel = T / phys_.TRef();
-                return phys_.muRef() *
-                       TRel * std::sqrt(TRel) *
-                       (phys_.TRef() + phys_.CSutherland()) /
-                       (T + phys_.CSutherland());
-            }
-            break;
-            case 2:
-            {
-                return phys_.muRef() * U(0);
-            }
-            break;
-            default:
-                DNDS_assert_info(false, "No such muModel");
-            }
-            return std::nan("0");
+            return phys_.mixtureViscosity(T, U[0] * phys_.Rgas(U) * T, U);
         }
 
         /**

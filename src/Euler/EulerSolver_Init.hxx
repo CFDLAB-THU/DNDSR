@@ -245,7 +245,7 @@ namespace DNDS::Euler
                     log() << " WARNING !!! Not Smoothing internal, abandoning boundary smooth displacements" << std::endl;
             }
             else
-                DNDS_assert(false);
+                DNDS_check_throw_info(false, "meshElevationInternalSmoother must be -1, 0, 1, or 2");
         }
 
         if (config.dataIOControl.meshBuildWallDist)
@@ -437,8 +437,8 @@ namespace DNDS::Euler
         int jacMode = eval.settings.useScalarJacobian ? 0 : 1;
         if (eval.settings.reactiveFlow.enabled)
         {
-            DNDS_assert_info(!eval.settings.useScalarJacobian,
-                             "reactive flow requires useScalarJacobian=false");
+            DNDS_check_throw_info(!eval.settings.useScalarJacobian,
+                                  "reactive flow requires useScalarJacobian=false");
             jacMode = 1;
         }
 
@@ -591,7 +591,7 @@ namespace DNDS::Euler
                     {
                         if (v)
                             oss << ", ";
-                        oss << uMinVec(v) << "|" << uMaxVec(v);
+                        oss << this->dofLabel(v) << ":" << uMinVec(v) << "|" << uMaxVec(v);
                     }
                     oss << "]";
                     uMinMaxStr = oss.str();
@@ -721,8 +721,11 @@ namespace DNDS::Euler
                 DNDS_FILL_IN_LOG_ERR_VAL(tLimiterB);
 
                 DNDS_FILL_IN_LOG_ERR_VAL(fluxWall);
-                FillLogValue(logErrVal, "uMin", uMinVec);
-                FillLogValue(logErrVal, "uMax", uMaxVec);
+                for (int v = 0; v < nVars; v++)
+                {
+                    logErrVal["uMin_" + this->dofLabel(v)] = uMinVec(v);
+                    logErrVal["uMax_" + this->dofLabel(v)] = uMaxVec(v);
+                }
                 real CL{CLCur}, CD{CDCur}, AoA(AOACur);
                 DNDS_FILL_IN_LOG_ERR_VAL(CL);
                 DNDS_FILL_IN_LOG_ERR_VAL(CD);
@@ -862,7 +865,7 @@ namespace DNDS::Euler
                     {
                         if (v)
                             oss << ", ";
-                        oss << uMinVec(v) << "|" << uMaxVec(v);
+                        oss << this->dofLabel(v) << ":" << uMinVec(v) << "|" << uMaxVec(v);
                     }
                     oss << "]";
                     uMinMaxStr = oss.str();
@@ -944,8 +947,11 @@ namespace DNDS::Euler
                 DNDS_FILL_IN_LOG_ERR_VAL(tLimiterB);
 
                 DNDS_FILL_IN_LOG_ERR_VAL(fluxWall);
-                FillLogValue(logErrVal, "uMin", uMinVec);
-                FillLogValue(logErrVal, "uMax", uMaxVec);
+                for (int v = 0; v < nVars; v++)
+                {
+                    logErrVal["uMin_" + this->dofLabel(v)] = uMinVec(v);
+                    logErrVal["uMax_" + this->dofLabel(v)] = uMaxVec(v);
+                }
                 real CL{CLCur}, CD{CDCur}, AoA(AOACur);
                 DNDS_FILL_IN_LOG_ERR_VAL(CL);
                 DNDS_FILL_IN_LOG_ERR_VAL(CD);
