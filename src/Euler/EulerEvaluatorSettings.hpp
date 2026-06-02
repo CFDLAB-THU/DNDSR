@@ -358,6 +358,7 @@ namespace DNDS::Euler
         bool ppEpsIsRelaxed = false;       ///< Use relaxed positivity-preserving epsilon.
         /// @}
 
+        real RANSTopLimit = 1e5;     ///< Upper clamp for SA nutilde
         real RANSBottomLimit = 0.01; ///< Lower clamp for RANS turbulence variables.
 
         /// @name Riemann Solver Configuration
@@ -715,6 +716,8 @@ namespace DNDS::Euler
             DNDS_FIELD(uRecBetaCompressPower,   "uRec beta compression power");
             DNDS_FIELD(forceVolURecBeta,        "Force volume uRec beta");
             DNDS_FIELD(ppEpsIsRelaxed,          "Positivity-preserving epsilon is relaxed");
+            DNDS_FIELD(RANSTopLimit,         "RANS variable top limit, currently for SA nutilde",
+                       DNDS::Config::range(0.0));
             DNDS_FIELD(RANSBottomLimit,         "RANS variable bottom limit",
                        DNDS::Config::range(0.0));
             config.field_alias(&T::rsType,      "riemannSolverType",

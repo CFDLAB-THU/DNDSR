@@ -58,8 +58,8 @@ namespace DNDS::Euler::RANS
      */
     namespace SA
     {
-        static constexpr real cnu1 = 7.1;   ///< SA model constant c_{v1} controlling the viscous damping function f_{v1}.
-        static constexpr real cn1 = 16.0;    ///< SA model constant c_{n1} for the negative-nuTilde extension function f_n.
+        static constexpr real cnu1 = 7.1;        ///< SA model constant c_{v1} controlling the viscous damping function f_{v1}.
+        static constexpr real cn1 = 16.0;        ///< SA model constant c_{n1} for the negative-nuTilde extension function f_n.
         static constexpr real sigma = 2.0 / 3.0; ///< SA model diffusion coefficient sigma.
     }
 
@@ -1006,6 +1006,7 @@ namespace DNDS::Euler::RANS
         static const real kappa = 0.41;
         static const real rlim = 10;
         static const real cw1 = cb1 / sqr(kappa) + (1 + cb2) / sigma;
+        static const real C_Plimit = 100.0;
 
 #if SA_USE_FT2_TERM
         static const real ct3 = 1.2;
@@ -1034,10 +1035,10 @@ namespace DNDS::Euler::RANS
         if (settings.frameConstRotation.enabled)
             Omega += Geom::CrossVecToMat(settings.frameConstRotation.vOmega())(Seq012, Seq012); // to static frame rotation
 #endif
-        const real S = Omega.norm() * std::sqrt(2.0);                               // is omega's magnitude
+        const real S = Omega.norm() * std::sqrt(2.0); // is omega's magnitude
         const real SS = SAVersion == 0
-                            ? (diffU + diffU.transpose()).norm() * (1. / std::sqrt(2.0))  // corrected strain rate magnitude
-                            : (diffU + diffU.transpose()).norm();                          // legacy (Frobenius of 2*S_ij)
+                            ? (diffU + diffU.transpose()).norm() * (1. / std::sqrt(2.0)) // corrected strain rate magnitude
+                            : (diffU + diffU.transpose()).norm();                        // legacy (Frobenius of 2*S_ij)
         real SRotCor = 0.0;
         if (rotCor)
         {
@@ -1060,12 +1061,12 @@ namespace DNDS::Euler::RANS
         real lDES = d;
         // DDES shield
         {
-            real lRANS = d;
-            real fwStar = .424;
-            real nuTur = mufPhy / UMeanXy(0) * std::max((Chi * fnu1), 0.0);
-            real nufPhy = mufPhy / UMeanXy(0);
-            real rd = (nuTur + nufPhy) / (sqr(kappa) * sqr(d) * std::max(smallReal, diffUNorm));
-            real fd = 1. - std::tanh(cube(8 * rd));
+            const real lRANS = d;
+            const real fwStar = .424;
+            const real nuTur = mufPhy / UMeanXy(0) * std::max((Chi * fnu1), 0.0);
+            const real nufPhy = mufPhy / UMeanXy(0);
+            const real rd = (nuTur + nufPhy) / (sqr(kappa) * sqr(d) * std::max(smallReal, diffUNorm));
+            const real fd = 1. - std::tanh(cube(8 * rd));
             real psiSqr = 0.0;
             if (Chi <= 0)
                 psiSqr = 100.0;
@@ -1168,6 +1169,9 @@ namespace DNDS::Euler::RANS
             P = cb1 * (1 - ct3) * std::abs(S + SRotCor) * nuh;
         }
 #endif
+
+        // ! production limit
+        P = std::min(P, C_Plimit * std::abs(D));
 
         if (mode == 0)
             source(I4 + 1) = UMeanXy(0) * (P - D + diffNu.squaredNorm() * cb2 / sigma) / muRef -
