@@ -38,7 +38,10 @@ namespace DNDS
     class TeeStreamBuf : public std::streambuf
     {
     public:
-        TeeStreamBuf(std::streambuf *a, std::streambuf *b) : _a(a), _b(b) {}
+        TeeStreamBuf(std::streambuf *a, std::streambuf *b, bool aIsTTY, bool bIsTTY)
+            : _a(a), _b(b), _aIsTTY(aIsTTY), _bIsTTY(bIsTTY) {}
+
+        bool anyBranchTTY() const { return _aIsTTY || _bIsTTY; }
 
     protected:
         int_type overflow(int_type c) override
@@ -69,6 +72,8 @@ namespace DNDS
     private:
         std::streambuf *_a;
         std::streambuf *_b;
+        bool _aIsTTY;
+        bool _bIsTTY;
     };
 
     static ssp<std::ofstream> logFileStream;
@@ -80,6 +85,8 @@ namespace DNDS
             return _isatty(fileno(stdout));
         if (&ostream == &std::cerr)
             return _isatty(fileno(stderr));
+        if (auto *tee = dynamic_cast<TeeStreamBuf *>(ostream.rdbuf()))
+            return tee->anyBranchTTY();
         return false;
     }
 
@@ -103,7 +110,8 @@ namespace DNDS
     {
         auto file = std::make_shared<std::ofstream>(path);
         DNDS_check_throw_info(file->is_open(), "failed to open log file: " + path);
-        auto tee = std::make_shared<TeeStreamBuf>(std::cout.rdbuf(), file->rdbuf());
+        auto tee = std::make_shared<TeeStreamBuf>(std::cout.rdbuf(), file->rdbuf(),
+                                                  _isatty(fileno(stdout)), false);
         auto stream = std::make_shared<std::ostream>(tee.get());
         logFileStream = std::move(file);
         logTeeBuf = std::move(tee);
