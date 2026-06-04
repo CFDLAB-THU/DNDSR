@@ -388,16 +388,14 @@ namespace DNDS::Geom
 #    pragma omp critical
 #endif
             {
-                if (nCellsDone % (nCells / 1000 + 1) == 0)
+                if (nCellsDone % (nCells / 50 + 1) == 0)
                 {
                     auto fmt = DNDS::log().flags();
-                    // DNDS::log() << "\r\033[K" << std::setw(5) << double(nCellsDone) / nCells * 100 << "%";
-                    // DNDS::log().flush();
                     print_progress(log(), double(nCellsDone) / nCells);
                     DNDS::log().setf(fmt);
                 }
 
-                if (nCellsDone == nCells - 1)
+                if (nCellsDone >= nCells - 1)
                     DNDS::log()
                         // << "\r\033[K"
                         << std::endl;
@@ -472,16 +470,14 @@ namespace DNDS::Geom
 #    pragma omp critical
 #endif
             {
-                if (nCellsDone % (nCells / 1000 + 1) == 0)
+                if (nCellsDone % (nCells / 50 + 1) == 0)
                 {
                     auto fmt = DNDS::log().flags();
-                    // DNDS::log() << "\r\033[K" << std::setw(5) << double(nCellsDone) / nCells * 100 << "%";
-                    // DNDS::log().flush();
                     print_progress(log(), double(nCellsDone) / nCells);
                     DNDS::log().setf(fmt);
                 }
 
-                if (nCellsDone == nCells - 1)
+                if (nCellsDone >= nCells - 1)
                     DNDS::log()
                         // << "\r\033[K"
                         << std::endl;
