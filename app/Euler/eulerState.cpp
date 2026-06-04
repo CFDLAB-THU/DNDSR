@@ -625,18 +625,29 @@ int main(int argc, char **argv)
         real k0 = cfg.rho0 * cfg.U0 * cfg.U0 * cfg.U0 * cfg.L0 / std::max(cfg.T0, 1e-60);
         real D0 = cfg.U0 * cfg.L0;
         real S0 = cfg.rho0 * cfg.U0 / std::max(cfg.L0, 1e-60);
+        real rhoU0 = cfg.rho0 * cfg.U0;
+        real rhoE0 = p0;
+        real rhoEFlux0 = cfg.rho0 * cfg.U0 * cfg.U0 * cfg.U0;
         std::cout << "\n--- Reference Scales ---\n";
-        std::cout << fmt::format("  p0   = {:12.4g} Pa         (rho0 * U0^2)\n", p0);
-        std::cout << fmt::format("  rho0 = {:12.4g} kg/m^3\n", cfg.rho0);
-        std::cout << fmt::format("  U0   = {:12.4g} m/s\n", cfg.U0);
-        std::cout << fmt::format("  T0   = {:12.4g} K\n", cfg.T0);
-        std::cout << fmt::format("  L0   = {:12.4g} m\n", cfg.L0);
-        std::cout << fmt::format("  t0   = {:12.4g} s          (L0 / U0)\n", t0);
-        std::cout << fmt::format("  R0   = {:12.4g} J/(kg K)   (U0^2 / T0)\n", R0);
-        std::cout << fmt::format("  mu0  = {:12.4g} Pa s       (rho0 * U0 * L0)\n", mu0);
-        std::cout << fmt::format("  k0   = {:12.4g} W/(m K)    (rho0 * U0^3 * L0 / T0)\n", k0);
-        std::cout << fmt::format("  D0   = {:12.4g} m^2/s      (U0 * L0)\n", D0);
-        std::cout << fmt::format("  S0   = {:12.4g} kg/(m^3 s) (rho0 * U0 / L0)\n", S0);
+        std::cout << fmt::format("  rho0      = {:12.4g} kg/m^3\n", cfg.rho0);
+        std::cout << fmt::format("  U0        = {:12.4g} m/s\n", cfg.U0);
+        std::cout << fmt::format("  T0        = {:12.4g} K\n", cfg.T0);
+        std::cout << fmt::format("  L0        = {:12.4g} m\n", cfg.L0);
+        std::cout << "\n--- Derived Scales ---\n";
+        std::cout << fmt::format("  t0        = {:12.4g} s              (L0 / U0)               time\n", t0);
+        std::cout << fmt::format("  p0        = {:12.4g} Pa             (rho0 * U0^2)           pressure\n", p0);
+        std::cout << fmt::format("  R0        = {:12.4g} J/(kg K)       (U0^2 / T0)             gas constant\n", R0);
+        std::cout << fmt::format("  mu0       = {:12.4g} Pa s           (rho0 * U0 * L0)        dynamic viscosity\n", mu0);
+        std::cout << fmt::format("  k0        = {:12.4g} W/(m K)        (rho0 * U0^3 * L0 / T0) thermal conductivity\n", k0);
+        std::cout << fmt::format("  D0        = {:12.4g} m^2/s          (U0 * L0)               diffusivity\n", D0);
+        std::cout << fmt::format("  S0        = {:12.4g} kg/(m^3 s)     (rho0 * U0 / L0)        volumetric source rate\n", S0);
+        std::cout << "\n--- Conservative Variable Scales ---\n";
+        std::cout << fmt::format("  rhoU0     = {:12.4g} kg/(m^2 s)     (rho0 * U0)             momentum density, mass flux/area\n", rhoU0);
+        std::cout << fmt::format("  rhoE0     = {:12.4g} Pa             (rho0 * U0^2)           total energy density\n", rhoE0);
+        std::cout << "\n--- Flux Scales (per unit face area) ---\n";
+        std::cout << fmt::format("  rhoFlux0  = {:12.4g} kg/(m^2 s)     (rho0 * U0)             mass flux per unit area\n", rhoU0);
+        std::cout << fmt::format("  rhoUFlux0 = {:12.4g} Pa             (rho0 * U0^2)           momentum flux per unit area\n", p0);
+        std::cout << fmt::format("  rhoEFlux0 = {:12.4g} kg/s^3         (rho0 * U0^3)           energy flux per unit area\n", rhoEFlux0);
     }
 
     // --- Print all representations ---

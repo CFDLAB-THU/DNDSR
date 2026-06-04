@@ -19,6 +19,11 @@
  *   k0   = rho0 · U0³ · L0 / T0         [W/(m·K)] — thermal conductivity
  *   D0   = U0 · L0                       [m²/s]    — diffusivity
  *   S0   = rho0 · U0 / L0               [kg/(m³·s)] — volumetric source rate
+ *   rhoU0  = rho0 · U0                    [kg/(m²·s)] — momentum density / mass flux per unit area
+ *   rhoE0  = rho0 · U0²                   [Pa = kg/(m·s²)] — total energy density
+ *   rhoFlux0  = rho0 · U0                 [kg/(m²·s)] — mass flux per unit face area
+ *   rhoUFlux0 = rho0 · U0²                [Pa = kg/(m·s²)] — momentum flux per unit face area
+ *   rhoEFlux0 = rho0 · U0³                [kg/s³ = W/m²] — energy flux per unit face area
  *
  * Code-unit conversions:
  *   x_code  = x_phys / x0   for each quantity x.
@@ -158,6 +163,21 @@ namespace DNDS::Euler
 
         /// Reference volumetric source rate S0 = rho0 · U0 / L0.
         real S0() const { return igProp_->rho0 * igProp_->U0 / igProp_->L0; }
+
+        /// Reference momentum density (mass flux per unit face area) rhoU0 = rho0 · U0.
+        real rhoU0() const { return igProp_->rho0 * igProp_->U0; }
+
+        /// Reference total energy density rhoE0 = rho0 · U0².
+        real rhoE0() const { return p0(); }
+
+        /// Reference mass flux per unit face area rhoFlux0 = rho0 · U0 (same as rhoU0).
+        real rhoFlux0() const { return igProp_->rho0 * igProp_->U0; }
+
+        /// Reference momentum flux per unit face area rhoUFlux0 = rho0 · U0².
+        real rhoUFlux0() const { return p0(); }
+
+        /// Reference energy flux per unit face area rhoEFlux0 = rho0 · U0³.
+        real rhoEFlux0() const { return igProp_->rho0 * igProp_->U0 * igProp_->U0 * igProp_->U0; }
 
         /// Convert physical gas-constant / heat-capacity to code-scaled:  X_code = X_phys / R0.
         real toCode(real xPhys) const { return xPhys / R0(); }
