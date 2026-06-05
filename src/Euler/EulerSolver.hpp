@@ -1250,7 +1250,7 @@ namespace DNDS::Euler
         }
 
         /// @brief Return label string for DOF index v (rho, rhoU, rhoE, k, omega, rho_CH4, ...).
-        std::string dofLabel(int v) const
+        [[nodiscard]] std::string dofLabel(int v) const
         {
             const int I4 = dim + 1;
             const int nR = (*pEval).phys_.nRANSVars();
@@ -1259,7 +1259,7 @@ namespace DNDS::Euler
             if (v == 0)
                 return "rho";
             if (v <= dim)
-                return std::string("rhoU") + char('V' + v - 1);
+                return std::string("rhoU") + char('X' + v - 1);
             if (v == I4)
                 return "rhoE";
             if (v < Isp)
