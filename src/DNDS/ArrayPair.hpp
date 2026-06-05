@@ -592,6 +592,17 @@ namespace DNDS
             // or use even-split for different-np.
             auto mpi = father->getMPI();
 
+            auto checkTotalCellCount = [&](const std::vector<index> &fileOrigIndex)
+            {
+                index totalRestart = index(fileOrigIndex.size());
+                index totalCurrent = index(newOrigIndex.size());
+                MPI::AllreduceOneIndex(totalRestart, MPI_SUM, mpi);
+                MPI::AllreduceOneIndex(totalCurrent, MPI_SUM, mpi);
+                DNDS_assert_info_mpi(totalRestart == totalCurrent, mpi,
+                                     fmt::format("Total cell count mismatch: restart has {} cells, current mesh has {}",
+                                                 totalRestart, totalCurrent));
+            };
+
             if (sameNumPartition)
             {
                 // Same np: we can read normally (rank slices match), then redistribute locally
@@ -609,6 +620,8 @@ namespace DNDS
                 DNDS_assert_info(readPair.father->Size() == index(fileOrigIndex.size()),
                                  fmt::format("readPair.father size {} != fileOrigIndex size {}",
                                              readPair.father->Size(), fileOrigIndex.size()));
+
+                checkTotalCellCount(fileOrigIndex);
 
                 // Redistribute using ArrayTransformer
                 DNDS_assert_info(father->Size() == index(newOrigIndex.size()),
@@ -639,6 +652,8 @@ namespace DNDS
                 DNDS_assert_info(readFather->Size() == index(fileOrigIndex.size()),
                                  fmt::format("readFather size {} != fileOrigIndex size {}",
                                              readFather->Size(), fileOrigIndex.size()));
+
+                checkTotalCellCount(fileOrigIndex);
 
                 // Redistribute using ArrayTransformer
                 DNDS_assert_info(father->Size() == index(newOrigIndex.size()),
