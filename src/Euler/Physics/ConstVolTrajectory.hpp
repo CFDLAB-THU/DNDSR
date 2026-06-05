@@ -74,10 +74,8 @@ namespace DNDS::Euler::Reactive0D
         int Ns = chem.nSpecies();
         int Ns1 = Ns - 1;
         int Isp = static_cast<int>(U.size()) - Ns1;
-        auto Yv = chem.massFractions(U[0], U.data() + Isp, Ns1);
         std::vector<double> Y(Ns);
-        for (int k = 0; k < Ns; ++k)
-            Y[k] = Yv[k];
+        chem.massFractions(U[0], U.data() + Isp, Ns1, {Y.data(), Ns});
         return Y;
     }
 

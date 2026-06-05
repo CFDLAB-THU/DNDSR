@@ -412,7 +412,10 @@ namespace DNDS::Euler
             double rho = U[0];
             double rhoInv = 1.0 / std::max(rho, 1e-60);
 
-            auto Yv = c.massFractions(rho, &U[Isp], Ns1);
+            std::vector<double> Ybuf(static_cast<size_t>(Ns));
+            Chemistry::SpeciesBufferView Yv{Ybuf.data(), Ns};
+            c.massFractions(rho, &U[Isp], Ns1, Yv);
+            Chemistry::ConstSpeciesBufferView Yc{Ybuf.data(), Ns};
             auto &bufOmega = bufOmega_[tid];
 
             DNDS_assert(std::isfinite(aux.T) && aux.T > 0);
@@ -423,7 +426,7 @@ namespace DNDS::Euler
             double Tcantera = std::max(Tphys, 200.0); // NASA poly lower bound
             double pCantera = aux.pPhys;
             if (Tcantera != Tphys)
-                pCantera = rho * igProp_.rho0 * c.mixtureR(Yv) * Tcantera;
+                pCantera = rho * igProp_.rho0 * c.mixtureR(Yc) * Tcantera;
 
             Chemistry::SpeciesBufferView omegav{bufOmega.data(), Ns};
 
@@ -433,7 +436,7 @@ namespace DNDS::Euler
 
             if (Mode == 0)
             {
-                c.productionRates(Tcantera, pCantera, Yv, omegav);
+                c.productionRates(Tcantera, pCantera, Yc, omegav);
                 for (int k = 0; k < Ns1; ++k)
                     ret[Isp + k] += sourceScale_ * bufOmega[k] * c.molecularWeights()[k] * invS0;
             }
@@ -445,7 +448,7 @@ namespace DNDS::Euler
                 double uM2 = (I4 >= 3) ? U[2] : 0; // ρv (I4≥3 always for dim≥2)
                 double uM3 = (I4 >= 4) ? U[3] : 0; // ρw (present only for 3D, 0 for 2D)
                 c.productionRatesAndJacobian(Tcantera, pCantera, rho, U[I4],
-                                             uM1, uM2, uM3, I4, Yv, omegav, Jv,
+                                             uM1, uM2, uM3, I4, Yc, omegav, Jv,
                                              Chemistry::ChemicalSource::JAC_DEFAULT);
                 for (int k = 0; k < Ns1; ++k)
                     ret[Isp + k] += sourceScale_ * bufOmega[k] * c.molecularWeights()[k] * invS0;

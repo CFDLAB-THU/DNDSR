@@ -16,6 +16,8 @@
 namespace DNDS::Euler::Chemistry
 {
 
+    struct ConstSpeciesBufferView;
+
     /**
      * @brief Thin read-only view over a species-indexed buffer (mass fractions,
      *        production rates, diffusivities, etc.). Caller owns the storage.
@@ -27,6 +29,7 @@ namespace DNDS::Euler::Chemistry
 
         double &operator[](int i) { return data[i]; }
         double operator[](int i) const { return data[i]; }
+        operator ConstSpeciesBufferView() const;
     };
 
     /// Const version for input arrays.
@@ -37,6 +40,11 @@ namespace DNDS::Euler::Chemistry
 
         double operator[](int i) const { return data[i]; }
     };
+
+    inline SpeciesBufferView::operator ConstSpeciesBufferView() const
+    {
+        return {data, nSpecies};
+    }
 
     /**
      * @brief Dense Jacobian view: Ns rows × nCols cols, column-major.
@@ -75,6 +83,8 @@ namespace DNDS::Euler::Chemistry
          * @param TBase          Base/reference temperature [K] for per-species
          *                       internal-energy offsets. If <= 0, the minimum
          *                       per-species Cantera temperature is used.
+         * @param transportModel Requested transport model. Only mixture-averaged
+         *                       transport is currently implemented.
          */
         explicit ChemicalSource(const std::string &mechanismFile,
                                 const std::string &phaseName = "",
@@ -228,13 +238,12 @@ namespace DNDS::Euler::Chemistry
         /** Whether the Cantera thermo phase uses an ideal-gas EOS. */
         bool isIdealGas() const;
 
-        // ---- Per-instance buffers (thread-safe when each thread has its own) ----
+        // ---- Caller-owned buffer helpers ----------------------------------------
 
-        /** Compute mass fractions from conservative species densities. Fills bufY_, returns view into it. */
-        ConstSpeciesBufferView massFractions(double rho, const double *rhoYK, int nTransported) const;
+        /** Compute mass fractions from conservative species densities into caller-owned storage. */
+        void massFractions(double rho, const double *rhoYK, int nTransported, SpeciesBufferView Y) const;
 
-        /** Populate and return bufEBase_ with per-species base internal energies in code units (e_base,k/U0²).
-         *  Uses internal velScale() for code-unit conversion. */
+        /** Return read-only per-species base internal energies in code units (e_base,k/U0²). */
         ConstSpeciesBufferView mixtureBaseInternalRhoESpecies() const;
 
         /** Code-scaled volumetric base internal energy: rho · Σ Y_k · e_base,k / U0².
@@ -252,9 +261,6 @@ namespace DNDS::Euler::Chemistry
 
         std::string mechanismFile_;
         std::string phaseName_;
-
-        mutable std::vector<double> bufY_;     ///< Mass-fractions work buffer (per-instance).
-        mutable std::vector<double> bufEBase_; ///< Code-scaled base internal energies (per-instance work buffer).
     };
 
 } // namespace DNDS::Euler::Chemistry

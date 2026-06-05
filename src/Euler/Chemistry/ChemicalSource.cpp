@@ -128,20 +128,16 @@ namespace DNDS::Euler::Chemistry
         std::vector<std::string> speciesNames;
         std::vector<double> mw;
         std::vector<double> invMw;
-        std::vector<double> Rk;    // species gas constants
-        std::vector<double> eBase; // per-species base internal energy [J/kg] at TBase
-        double TBase = 0.0;        // base/reference temperature [K]
+        std::vector<double> Rk;        // species gas constants
+        std::vector<double> eBase;     // per-species base internal energy [J/kg] at TBase
+        std::vector<double> eBaseCode; // eBase / U0²
+        double TBase = 0.0;            // base/reference temperature [K]
 
         double U0 = 1.0;      // reference velocity [m/s]
         double rho0 = 1.0;    // reference density [kg/m³]
         double invU0sq = 1.0; // 1/U0², precomputed for code-unit conversion
         std::string transportModel = "MixtureAveraged";
         std::string transportModelNormalized = "mixtureaveraged";
-
-        // work buffers
-        mutable std::vector<double> bufOmega;
-        mutable std::vector<double> bufDwdt, bufDwdp, bufDwdc;
-        mutable std::vector<double> bufD;
 
         Impl(const std::string &mechanismFile, const std::string &phaseName,
              double U0In, double rho0In, double TBaseIn, std::string transportModelIn)
@@ -160,6 +156,7 @@ namespace DNDS::Euler::Chemistry
             I.invMw.resize(I.Ns);
             I.Rk.resize(I.Ns);
             I.eBase.resize(I.Ns);
+            I.eBaseCode.resize(I.Ns);
             gas->getMolecularWeights(I.mw.data());
             I.TBase = TBaseIn > 0.0 ? TBaseIn : gas->minTemp(0);
             for (int k = 0; k < I.Ns; ++k)
@@ -178,12 +175,10 @@ namespace DNDS::Euler::Chemistry
             I.solT->thermo()->setState_TP(I.TBase, Cantera::OneAtm);
             I.solT->thermo()->getPartialMolarIntEnergies(I.eBase.data());
             for (int k = 0; k < I.Ns; ++k)
+            {
                 I.eBase[k] *= I.invMw[k];
-            I.bufOmega.resize(I.Ns);
-            I.bufDwdt.resize(I.Ns);
-            I.bufDwdp.resize(I.Ns);
-            I.bufDwdc.resize(I.Ns * I.Ns);
-            I.bufD.resize(I.Ns);
+                I.eBaseCode[k] = I.eBase[k] * I.invU0sq;
+            }
 #else
             DNDS_assert_info(false, "ChemicalSource::Impl: Cantera not available");
 #endif
@@ -428,17 +423,13 @@ namespace DNDS::Euler::Chemistry
             c.invMw = R.invMw;
             c.Rk = R.Rk;
             c.eBase = R.eBase;
+            c.eBaseCode = R.eBaseCode;
             c.TBase = R.TBase;
             c.transportModel = R.transportModel;
             c.transportModelNormalized = R.transportModelNormalized;
             c.U0 = R.U0;
             c.rho0 = R.rho0;
             c.invU0sq = R.invU0sq;
-            c.bufOmega.resize(Ns);
-            c.bufDwdt.resize(Ns);
-            c.bufDwdp.resize(Ns);
-            c.bufDwdc.resize(Ns * Ns);
-            c.bufD.resize(Ns);
         }
 
         void advanceAffineConstVolume(
@@ -725,10 +716,12 @@ namespace DNDS::Euler::Chemistry
     {
         DNDS_assert(impl_);
         auto &I = *impl_;
+        DNDS_check_throw_info(Y.data != nullptr && Y.nSpecies >= I.Ns,
+                              "ChemicalSource::productionRates(): input Y buffer too small or null");
+        DNDS_check_throw_info(omega.data != nullptr && omega.nSpecies >= I.Ns,
+                              "ChemicalSource::productionRates(): output omega buffer too small or null");
         I.setTPY(T, p, Y);
-        I.kin_getNetProductionRates(I.bufOmega.data());
-        for (int k = 0; k < I.Ns; ++k)
-            omega[k] = I.bufOmega[k];
+        I.kin_getNetProductionRates(omega.data);
     }
 
     void ChemicalSource::productionRatesAndJacobian(
@@ -743,15 +736,21 @@ namespace DNDS::Euler::Chemistry
         DNDS_assert(impl_);
         auto &J = dOmegadU;
         auto &I = *impl_;
+        DNDS_check_throw_info(Y.data != nullptr && Y.nSpecies >= I.Ns,
+                              "ChemicalSource::productionRatesAndJacobian(): input Y buffer too small or null");
+        DNDS_check_throw_info(omega.data != nullptr && omega.nSpecies >= I.Ns,
+                              "ChemicalSource::productionRatesAndJacobian(): output omega buffer too small or null");
+        DNDS_check_throw_info(J.data != nullptr && J.rows >= I.Ns && J.cols > iEnergy && J.ld >= I.Ns,
+                              "ChemicalSource::productionRatesAndJacobian(): Jacobian buffer too small or null");
         I.setTPY(T, p, Y);
         DNDS_assert_info(I.gas_isIdeal(), "productionRatesAndJacobian: ideal-gas EOS required for dT/dU and dP/dU chain rules");
 
-        I.kin_getNetProductionRates(I.bufOmega.data());
-        for (int k = 0; k < I.Ns; ++k)
-            omega[k] = I.bufOmega[k];
+        I.kin_getNetProductionRates(omega.data);
 
-        I.kin_getNetProductionRates_ddT(I.bufDwdt.data());
-        I.kin_getNetProductionRates_ddP(I.bufDwdp.data());
+        std::vector<double> dwdT(I.Ns);
+        std::vector<double> dwdP(I.Ns);
+        I.kin_getNetProductionRates_ddT(dwdT.data());
+        I.kin_getNetProductionRates_ddP(dwdP.data());
 
         // Per-species concentration Jacobian ∂ω_i/∂C_k (sparse Ns×Ns)
         auto dWdC = I.kin_netProductionRates_ddCi();
@@ -808,10 +807,10 @@ namespace DNDS::Euler::Chemistry
                 dP_drY -= rhoScaleT * I.Rk[Ns1];
             for (int i = 0; i < nRows; ++i)
             {
-                J(i, speciesCol0 + k) = dWdC.coeff(i, k) * invMk * I.rho0 + I.bufDwdt[i] * dT_drY;
+                J(i, speciesCol0 + k) = dWdC.coeff(i, k) * invMk * I.rho0 + dwdT[i] * dT_drY;
                 if (!skipAbsorb)
                     J(i, speciesCol0 + k) -= dWdC.coeff(i, Ns1) * invMlast * I.rho0;
-                J(i, speciesCol0 + k) += I.bufDwdp[i] * dP_drY;
+                J(i, speciesCol0 + k) += dwdP[i] * dP_drY;
             }
         }
 
@@ -821,13 +820,13 @@ namespace DNDS::Euler::Chemistry
         // ── Fluid columns (∂ω/∂(ρu_j), ∂ω/∂(ρE), ∂ω/∂ρ) ──
         // Pressure chain rule: dP/dU = (p/T)·dT/dU for fluid columns at constant
         // composition, since P = ρ·R·T and dT/dU is the sole driver.
-        // bufDwdt and bufDwdp are independent partial derivatives (∂ω/∂T at
+        // dwdT and dwdP are independent partial derivatives (∂ω/∂T at
         // constant C vs ∂ω/∂P at constant T); both contribute additively.
 
         // ∂ω/∂(ρE)_code = ∂ω/∂T · velScale² / (ρ_code·cv) + ∂ω/∂P · (p/T)·dT_drhoe
         double dT_drhoe = vs2 * rhoInv / cvSafe;
         for (int i = 0; i < nRows; ++i)
-            J(i, iEnergy) = I.bufDwdt[i] * dT_drhoe + I.bufDwdp[i] * PbyT * dT_drhoe;
+            J(i, iEnergy) = dwdT[i] * dT_drhoe + dwdP[i] * PbyT * dT_drhoe;
 
         // ∂ω/∂(ρu_j)_code = ∂ω/∂T · dT/d(ρu_j)_code + ∂ω/∂P · (p/T)·dT_dm
         double dT_factor = -vs2 * rhoInv * rhoInv / cvSafe;
@@ -839,7 +838,7 @@ namespace DNDS::Euler::Chemistry
                 continue;
             double dT_dm = dT_factor * rhoUk;
             for (int i = 0; i < nRows; ++i)
-                J(i, 1 + jd) = I.bufDwdt[i] * dT_dm + I.bufDwdp[i] * PbyT * dT_dm;
+                J(i, 1 + jd) = dwdT[i] * dT_dm + dwdP[i] * PbyT * dT_dm;
         }
 
         // ∂ω/∂ρ_code = ∂ω/∂T·dT/dρ_code + ∂ω/∂C_last·∂C_last/∂ρ_code
@@ -861,10 +860,10 @@ namespace DNDS::Euler::Chemistry
         double dP_drho_direct = (!skipAbsorb) ? (I.rho0 * T * I.Rk[Ns1]) : 0.0;
         for (int i = 0; i < nRows; ++i)
         {
-            double d = I.bufDwdt[i] * dT_drho;
+            double d = dwdT[i] * dT_drho;
             if (!skipAbsorb)
                 d += dWdC.coeff(i, Ns1) * invMlast * I.rho0;
-            d += I.bufDwdp[i] * (PbyT * dT_drho + dP_drho_direct);
+            d += dwdP[i] * (PbyT * dT_drho + dP_drho_direct);
             J(i, 0) = d;
         }
     }
@@ -922,10 +921,12 @@ namespace DNDS::Euler::Chemistry
         DNDS_check_throw_info(isMixtureAveragedTransport(),
                               "ChemicalSource::speciesDiffusivity(): only mixture-averaged transport is implemented");
         auto &I = *impl_;
+        DNDS_check_throw_info(Y.data != nullptr && Y.nSpecies >= I.Ns,
+                              "ChemicalSource::speciesDiffusivity(): input Y buffer too small or null");
+        DNDS_check_throw_info(D.data != nullptr && D.nSpecies >= I.Ns,
+                              "ChemicalSource::speciesDiffusivity(): output D buffer too small or null");
         I.setTPY(T, p, Y);
-        I.trn_getMixDiffCoeffs(I.bufD.data());
-        for (int k = 0; k < I.Ns; ++k)
-            D[k] = I.bufD[k];
+        I.trn_getMixDiffCoeffs(D.data);
     }
 
     void ChemicalSource::speciesEnthalpies(double T, double p,
@@ -933,15 +934,21 @@ namespace DNDS::Euler::Chemistry
                                            SpeciesBufferView h) const
     {
         DNDS_assert(impl_);
+        DNDS_check_throw_info(Y.data != nullptr && Y.nSpecies >= impl_->Ns,
+                              "ChemicalSource::speciesEnthalpies(): input Y buffer too small or null");
+        DNDS_check_throw_info(h.data != nullptr && h.nSpecies >= impl_->Ns,
+                              "ChemicalSource::speciesEnthalpies(): output h buffer too small or null");
         impl_->setTPY(T, p, Y);
-        impl_->gas_getPartialMolarEnthalpies(impl_->bufOmega.data());
+        impl_->gas_getPartialMolarEnthalpies(h.data);
         for (int k = 0; k < impl_->Ns; ++k)
-            h[k] = impl_->bufOmega[k] * impl_->invMw[k];
+            h[k] *= impl_->invMw[k];
     }
 
     void ChemicalSource::speciesBaseInternalEnergies(SpeciesBufferView eBase) const
     {
         DNDS_assert(impl_);
+        DNDS_check_throw_info(eBase.data != nullptr && eBase.nSpecies >= impl_->Ns,
+                              "ChemicalSource::speciesBaseInternalEnergies(): output buffer too small or null");
         for (int k = 0; k < impl_->Ns; ++k)
             eBase[k] = impl_->eBase[k];
     }
@@ -974,41 +981,39 @@ namespace DNDS::Euler::Chemistry
         return c;
     }
 
-    // ---- per-instance buffers -------------------------------------------------
+    // ---- caller-owned buffer helpers -----------------------------------------
 
-    ConstSpeciesBufferView ChemicalSource::massFractions(double rho, const double *rhoYK, int nTransported) const
+    void ChemicalSource::massFractions(double rho, const double *rhoYK, int nTransported, SpeciesBufferView Y) const
     {
         DNDS_assert(impl_);
         int Ns = impl_->Ns;
         int Ns1 = Ns - 1;
+        DNDS_check_throw_info(rhoYK != nullptr, "ChemicalSource::massFractions(): input buffer is null");
+        DNDS_check_throw_info(Y.data != nullptr, "ChemicalSource::massFractions(): output buffer is null");
+        DNDS_check_throw_info(Y.nSpecies >= Ns, "ChemicalSource::massFractions(): output buffer too small");
+        DNDS_check_throw_info(nTransported == Ns1,
+                              "ChemicalSource::massFractions(): transported species count mismatch");
         double rhoInv = 1.0 / std::max(rho, 1e-60);
-        if (static_cast<int>(bufY_.size()) < Ns)
-            bufY_.resize(Ns);
         for (int k = 0; k < nTransported; ++k)
-            bufY_[k] = rhoYK[k] * rhoInv;
+            Y[k] = rhoYK[k] * rhoInv;
         double sum = 0;
         for (int k = 0; k < nTransported; ++k)
-            sum += bufY_[k];
-        bufY_[Ns1] = 1.0 - sum;
+            sum += Y[k];
+        Y[Ns1] = 1.0 - sum;
         for (int k = 0; k < Ns; ++k)
-            bufY_[k] = std::max(bufY_[k], 0.0);
+            Y[k] = std::max(Y[k], 0.0);
         double ySum = 0;
         for (int k = 0; k < Ns; ++k)
-            ySum += bufY_[k];
+            ySum += Y[k];
         if (ySum > 0)
             for (int k = 0; k < Ns; ++k)
-                bufY_[k] /= ySum;
-        return {bufY_.data(), Ns};
+                Y[k] /= ySum;
     }
 
     ConstSpeciesBufferView ChemicalSource::mixtureBaseInternalRhoESpecies() const
     {
         DNDS_assert(impl_);
-        int Ns = impl_->Ns;
-        bufEBase_.resize(static_cast<size_t>(Ns));
-        for (int k = 0; k < Ns; ++k)
-            bufEBase_[k] = impl_->eBase[k] * impl_->invU0sq;
-        return {bufEBase_.data(), Ns};
+        return {impl_->eBaseCode.data(), impl_->Ns};
     }
 
     double ChemicalSource::mixtureBaseInternalRhoE(double rho, ConstSpeciesBufferView Y) const

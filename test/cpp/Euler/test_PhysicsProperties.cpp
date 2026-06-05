@@ -467,7 +467,10 @@ TEST_CASE("PhysicsProperties reactive transport uses Cantera mixture coefficient
     real T = phys.template temperature<3>(cons, primTP(0), options.temperatureUVTolerance);
     real p = 0, asqr = 0, H = 0;
     phys.template conservativeThermal<3>(cons, T, p, asqr, H);
-    auto Y = chem.massFractions(cons(0), cons.data() + 5, Ns1);
+    std::vector<double> Ybuf(Ns);
+    SpeciesBufferView Ywrite{Ybuf.data(), Ns};
+    chem.massFractions(cons(0), cons.data() + 5, Ns1, Ywrite);
+    ConstSpeciesBufferView Y{Ybuf.data(), Ns};
 
     real muCode = phys.mixtureViscosity(T, p, cons);
     real kCode = phys.mixtureConductivity(T, p, cons);
@@ -514,10 +517,9 @@ TEST_CASE("PhysicsProperties reactive total-to-static conversion iterates mixtur
     real Rgas = phys.Rgas(cons);
     real vSqr = primStatic(Eigen::seq(Eigen::fix<1>, Eigen::fix<3>)).squaredNorm();
 
-    auto Yv = chem.massFractions(1.0, primStatic.data() + 5, Ns1);
     std::vector<double> Ybuf(Ns);
-    for (int k = 0; k < Ns; ++k)
-        Ybuf[k] = Yv[k];
+    SpeciesBufferView Ywrite{Ybuf.data(), Ns};
+    chem.massFractions(1.0, primStatic.data() + 5, Ns1, Ywrite);
     ConstSpeciesBufferView Y{Ybuf.data(), Ns};
 
     real pStatic = primStatic(4);
