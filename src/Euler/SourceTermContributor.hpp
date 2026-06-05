@@ -393,6 +393,24 @@ namespace DNDS::Euler
             }
         }
 
+        void ensureBuffers(int nVars) const
+        {
+            DNDS_assert(pool_ && pool_->size() > 0);
+            int nT = static_cast<int>(pool_->size());
+            int Ns = (*pool_)[0].nSpecies();
+            if (static_cast<int>(bufOmega_.size()) != nT)
+                bufOmega_.resize(nT);
+            if (static_cast<int>(bufJ_.size()) != nT)
+                bufJ_.resize(nT);
+            for (int t = 0; t < nT; ++t)
+            {
+                if (static_cast<int>(bufOmega_[t].size()) != Ns)
+                    bufOmega_[t].resize(Ns);
+                if (static_cast<int>(bufJ_[t].size()) != Ns * nVars)
+                    bufJ_[t].resize(Ns * nVars);
+            }
+        }
+
         void evaluate(TU &ret, TJac &jac, const TU &U, const TDiffU &,
                       const Geom::tPoint &, const SourceCellAux &aux,
                       index, index, int Mode) const
@@ -406,6 +424,7 @@ namespace DNDS::Euler
             int Ns = c.nSpecies();
             int Ns1 = Ns - 1;
             int nVars = static_cast<int>(ret.size());
+            ensureBuffers(nVars);
             int Isp = nVars - Ns1;                                       // species start
             int I4 = static_cast<int>(EulerModelTraits<model>::dim) + 1; // energy index, not Isp-1 (wrong with RANS)
 
