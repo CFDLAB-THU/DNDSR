@@ -149,6 +149,13 @@ DNDS_MECH_PATH=../external/cfd_externals/install/data \
 - `outPltName`: relative to CWD (e.g. `../data/out/react_test/react_`)
 - `mechanismFile` (in `reactiveFlow`): relative to `DNDS_MECH_PATH` env var or CWD
 
+**Editing solver JSON configs:** must use the edit tool.  Read and
+understand the file first, then edit in place — never rewrite the
+whole config with Python `json.dump`.  Python is acceptable for
+read-only queries (`json.load`, `json.tool` validation).  Configs may
+contain hand-maintained `caseNotes["/**/"]` sections and inline
+comments that must be preserved across edits.
+
 Tests use **pytest** with **pytest-mpi** and **pytest-timeout**. Test files live under `test/`. A default 120-second timeout is configured in `pyproject.toml` to prevent hung MPI tests from blocking CI.
 
 ```bash

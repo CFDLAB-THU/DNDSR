@@ -12,6 +12,7 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <fmt/format.h>
 
 namespace DNDS::Euler::Chemistry
 {
@@ -41,13 +42,73 @@ namespace DNDS::Euler::Chemistry
         double operator[](int i) const { return data[i]; }
     };
 
+} // namespace Chemistry
+
+template <>
+struct fmt::formatter<DNDS::Euler::Chemistry::ConstSpeciesBufferView>
+{
+    char type = 'g';
+    int precision = 6;
+    std::string fmtSpec = "{:.6g}";
+
+    auto parse(fmt::format_parse_context &ctx)
+    {
+        auto it = ctx.begin(), end = ctx.end();
+        while (it != end && *it != '}')
+        {
+            switch (*it)
+            {
+            case 'e':
+            case 'E':
+            case 'f':
+            case 'F':
+            case 'g':
+            case 'G':
+                type = *it++;
+                break;
+            case '.':
+            {
+                it++;
+                std::string v;
+                while (it != end && *it >= '0' && *it <= '9')
+                    v.push_back(*it++);
+                if (!v.empty())
+                    precision = std::stoi(v);
+                break;
+            }
+            default:
+                ++it;
+            }
+        }
+        fmtSpec = fmt::format(FMT_STRING("{{:.{}{}}}"), precision, type);
+        return it;
+    }
+
+    auto format(const DNDS::Euler::Chemistry::ConstSpeciesBufferView &Y,
+                fmt::format_context &ctx) const
+    {
+        auto out = ctx.out();
+        fmt::format_to(out, "[");
+        for (int k = 0; k < Y.nSpecies; ++k)
+        {
+            if (k)
+                fmt::format_to(out, ", ");
+            fmt::format_to(out, fmtSpec, Y[k]);
+        }
+        return fmt::format_to(out, "]");
+    }
+};
+
+namespace DNDS::Euler::Chemistry
+{
+
     inline SpeciesBufferView::operator ConstSpeciesBufferView() const
     {
         return {data, nSpecies};
     }
 
     /**
-     * @brief Dense Jacobian view: Ns rows × nCols cols, column-major.
+     * @brief Dense Jacobian view: Ns rows x nCols cols, column-major.
      *        Caller owns the storage.
      */
     struct JacobianBufferView
