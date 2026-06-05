@@ -379,6 +379,12 @@ was made without reconstructing the investigation from the diff.
 
 For very small mechanical changes, a short message is acceptable.
 
+Every commit message must end with a separate trailing line:
+
+    committed by opencode with model <model name>
+
+where `<model name>` is replaced by the actual model identifier (e.g. `deepseek-v4-pro`). This line must appear after a blank line separating it from the body (or subject, if no body).
+
 **Read-only by default.** You may use `gh` freely for read operations (viewing
 issues, PRs, checks, releases, diffs, comments). **Do NOT use `gh` for any
 write operation** (creating/closing issues, creating/merging PRs, posting
