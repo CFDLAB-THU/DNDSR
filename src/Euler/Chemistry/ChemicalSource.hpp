@@ -69,13 +69,18 @@ namespace DNDS::Euler::Chemistry
          * @param phaseName      Phase name (empty = default).
          * @param U0             Reference velocity scale [m/s]; used internally for
          *                       code-unit conversion in productionRatesAndJacobian
-         *                       and mixture formation enthalpy.
+         *                       and mixture base internal energy.
          * @param rho0           Reference density scale [kg/m³]; used internally for
          *                       code-unit conversion in productionRatesAndJacobian.
+         * @param TBase          Base/reference temperature [K] for per-species
+         *                       internal-energy offsets. If <= 0, the minimum
+         *                       per-species Cantera temperature is used.
          */
         explicit ChemicalSource(const std::string &mechanismFile,
                                 const std::string &phaseName = "",
-                                double U0 = 1.0, double rho0 = 1.0);
+                                double U0 = 1.0, double rho0 = 1.0,
+                                double TBase = 0.0,
+                                std::string transportModel = "MixtureAveraged");
         ~ChemicalSource();
 
         // Non-copyable, movable
@@ -92,11 +97,15 @@ namespace DNDS::Euler::Chemistry
         int nReactions() const;
         const std::vector<std::string> &speciesNames() const;
         const std::vector<double> &molecularWeights() const;
+        const std::vector<double> &speciesGasConstants() const;
 
         /** Reference velocity scale [m/s] used for code-unit conversion. */
         double velScale() const;
         /** Reference density scale [kg/m³] used for code-unit conversion. */
         double rhoScale() const;
+        /** Configured transport model name. Only mixture-averaged is implemented. */
+        const std::string &transportModel() const;
+        bool isMixtureAveragedTransport() const;
 
         // ---- Mixture thermodynamic properties (via Cantera EOS) ----
 
@@ -117,6 +126,9 @@ namespace DNDS::Euler::Chemistry
 
         /** Lower valid thermodynamic temperature bound [K] reported by Cantera. */
         double minTemperature() const;
+
+        /** Temperature [K] used for base internal-energy offsets. */
+        double baseTemperature() const;
 
         /**
          * Solve T from specific internal energy u [J/kg] and specific volume v [m³/kg].
@@ -207,25 +219,11 @@ namespace DNDS::Euler::Chemistry
                                ConstSpeciesBufferView Y,
                                SpeciesBufferView h) const;
 
-        /** Per-species formation enthalpies [J/kg] at 298 K (constant, pre-cached). */
-        void speciesFormationEnthalpies(SpeciesBufferView hf) const;
+        /** Per-species base internal energies [J/kg] at T_base (constant, pre-cached). */
+        void speciesBaseInternalEnergies(SpeciesBufferView eBase) const;
 
-        /** Mixture formation energy Σ Y_k * h_f_k [J/kg]. In physical (SI) units. */
-        /** Specific formation enthalpy per mass Σ Y_k·h_{f,k} [J/kg] (physical units). */
-        double mixtureFormationEnthalpy(ConstSpeciesBufferView Y) const;
-
-        /** EOS-agnostic enthalpy-internal-energy difference at reference T=298.15 K, p=1 atm.
-         *  Returns h_mix(298,Y) − u_mix(298,Y) for the given composition [J/kg].
-         *  For ideal gas this equals R_mix·298.15; for real gases uses the full EOS. */
-        double pVAtReference(ConstSpeciesBufferView Y) const;
-
-        /**
-         * Sensible internal energy of the mixture at reference T=298.15 K,
-         * assuming ideal-gas energy convention (e_sensible = 0 at T = 0 K).
-         * Computed as cv_mass(T_ref, Y) · 298.15 [J/kg] via Cantera's own EOS.
-         * Exact for ideal-gas thermo phases; approximate otherwise.
-         */
-        double sensibleInternalEnergyAtReference(ConstSpeciesBufferView Y) const;
+        /** Specific base internal energy per mass Σ Y_k·e_base,k [J/kg] (physical units). */
+        double mixtureBaseInternalEnergy(ConstSpeciesBufferView Y) const;
 
         /** Whether the Cantera thermo phase uses an ideal-gas EOS. */
         bool isIdealGas() const;
@@ -235,18 +233,18 @@ namespace DNDS::Euler::Chemistry
         /** Compute mass fractions from conservative species densities. Fills bufY_, returns view into it. */
         ConstSpeciesBufferView massFractions(double rho, const double *rhoYK, int nTransported) const;
 
-        /** Populate and return bufHf_ with per-species formation enthalpies in code units (hf_k/U0²).
+        /** Populate and return bufEBase_ with per-species base internal energies in code units (e_base,k/U0²).
          *  Uses internal velScale() for code-unit conversion. */
-        ConstSpeciesBufferView mixtureFormationRhoESpecies() const;
+        ConstSpeciesBufferView mixtureBaseInternalRhoESpecies() const;
 
-        /** Code-scaled volumetric formation enthalpy: rho · Σ Y_k · hf_k / U0².
+        /** Code-scaled volumetric base internal energy: rho · Σ Y_k · e_base,k / U0².
          *  Uses internal velScale() for code-unit conversion. */
-        double mixtureFormationRhoE(double rho, ConstSpeciesBufferView Y) const;
+        double mixtureBaseInternalRhoE(double rho, ConstSpeciesBufferView Y) const;
 
-        /** Linearized increment of code-scaled formation enthalpy from a d(ρY_k) increment.
+        /** Linearized increment of code-scaled base internal energy from a d(ρY_k) increment.
          *  dRhoYK[0..nTransported-1] are d(ρY_k)_code, rhoInc = d(ρ)_code.
          *  The dependent species (N2) contribution is absorbed automatically. */
-        double mixtureFormationRhoEIncrement(double rhoInc, const double *dRhoYK, int nTransported) const;
+        double mixtureBaseInternalRhoEIncrement(double rhoInc, const double *dRhoYK, int nTransported) const;
 
     private:
         struct Impl;
@@ -255,8 +253,8 @@ namespace DNDS::Euler::Chemistry
         std::string mechanismFile_;
         std::string phaseName_;
 
-        mutable std::vector<double> bufY_;  ///< Mass-fractions work buffer (per-instance).
-        mutable std::vector<double> bufHf_; ///< Code-scaled formation enthalpies (per-instance, populated once).
+        mutable std::vector<double> bufY_;     ///< Mass-fractions work buffer (per-instance).
+        mutable std::vector<double> bufEBase_; ///< Code-scaled base internal energies (per-instance work buffer).
     };
 
 } // namespace DNDS::Euler::Chemistry

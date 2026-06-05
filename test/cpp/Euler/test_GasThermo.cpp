@@ -100,15 +100,15 @@ TEST_CASE("IdealGasThermal: gammaEq controls pressure and gamma controls acousti
     CHECK(std::abs(asqr - gammaEq * pExpected / rho) > 1e-8);
 }
 
-TEST_CASE("Shared enthalpy helper does not double-count formation energy")
+TEST_CASE("Shared enthalpy helper does not double-count base energy")
 {
     real rho = 2.0;
     real p = 5.0;
-    real rhoHForm = 7.0;
+    real rhoEBase = 7.0;
     real sensibleRhoE = 23.0;
-    real totalRhoE = sensibleRhoE + rhoHForm;
+    real totalRhoE = sensibleRhoE + rhoEBase;
 
-    CHECK(DNDS::IdealGas::Enthalpy(totalRhoE, rho, p, rhoHForm) == doctest::Approx((totalRhoE + p) / rho).epsilon(1e-14));
+    CHECK(DNDS::IdealGas::Enthalpy(totalRhoE, rho, p, rhoEBase) == doctest::Approx((totalRhoE + p) / rho).epsilon(1e-14));
 }
 
 // ===================================================================
@@ -147,19 +147,19 @@ TEST_CASE("Cons2Prim and Prim2Cons round-trip: 2D")
     }
 }
 
-TEST_CASE("Cons2Prim and Prim2Cons round-trip preserves formation-energy offset")
+TEST_CASE("Cons2Prim and Prim2Cons round-trip preserves base-energy offset")
 {
     Eigen::Vector<real, 5> prim0;
     prim0 << 1.7, 12.0, -4.0, 3.0, 9.5;
     real gammaEq = 1.23;
-    real rhoHForm = 31.0;
+    real rhoEBase = 31.0;
 
     Eigen::Vector<real, 5> U, prim1;
-    IdealGasThermalPrimitive2Conservative<3>(prim0, U, gammaEq, rhoHForm);
-    IdealGasThermalConservative2Primitive<3>(U, prim1, gammaEq, rhoHForm);
+    IdealGasThermalPrimitive2Conservative<3>(prim0, U, gammaEq, rhoEBase);
+    IdealGasThermalConservative2Primitive<3>(U, prim1, gammaEq, rhoEBase);
 
     real vSqr = prim0.segment<3>(1).squaredNorm();
-    CHECK(U(4) == doctest::Approx(prim0(4) / (gammaEq - 1.0) + 0.5 * prim0(0) * vSqr + rhoHForm).epsilon(1e-14));
+    CHECK(U(4) == doctest::Approx(prim0(4) / (gammaEq - 1.0) + 0.5 * prim0(0) * vSqr + rhoEBase).epsilon(1e-14));
     for (int i = 0; i < 5; i++)
     {
         CAPTURE(i);
@@ -407,7 +407,7 @@ TEST_CASE("IdealGasUIncrement: finite-difference verification")
     CHECK(dp == doctest::Approx(dpExpected).epsilon(1e-3));
 }
 
-TEST_CASE("IdealGasUIncrement: formation-energy increment reduces pressure increment")
+TEST_CASE("IdealGasUIncrement: base-energy increment reduces pressure increment")
 {
     auto U = primToCons3D(1.2, 8.0, -3.0, 2.0, 19.0);
     Eigen::Vector<real, 5> dU = Eigen::Vector<real, 5>::Zero();
@@ -556,15 +556,15 @@ TEST_CASE("GradientCons2Prim: finite-difference verification")
     }
 }
 
-TEST_CASE("GradientCons2Prim: species formation gradient corrects pressure gradient")
+TEST_CASE("GradientCons2Prim: species base-energy gradient corrects pressure gradient")
 {
     constexpr int nVars = 7;
     real gammaEq = 1.28;
-    Eigen::Vector3d hfSpecies(2.0, -1.0, 4.0);
+    Eigen::Vector3d eBaseSpecies(2.0, -1.0, 4.0);
 
-    auto rhoHForm = [&](const Eigen::Vector<real, nVars> &U) -> real
+    auto rhoEBase = [&](const Eigen::Vector<real, nVars> &U) -> real
     {
-        return hfSpecies(2) * U(0) + (hfSpecies(0) - hfSpecies(2)) * U(5) + (hfSpecies(1) - hfSpecies(2)) * U(6);
+        return eBaseSpecies(2) * U(0) + (eBaseSpecies(0) - eBaseSpecies(2)) * U(5) + (eBaseSpecies(1) - eBaseSpecies(2)) * U(6);
     };
     auto primToCons = [&](const Eigen::Vector<real, nVars> &prim) -> Eigen::Vector<real, nVars>
     {
@@ -574,7 +574,7 @@ TEST_CASE("GradientCons2Prim: species formation gradient corrects pressure gradi
         U(5) = prim(0) * prim(5);
         U(6) = prim(0) * prim(6);
         real vSqr = prim.segment<3>(1).squaredNorm();
-        U(4) = prim(4) / (gammaEq - 1.0) + 0.5 * prim(0) * vSqr + rhoHForm(U);
+        U(4) = prim(4) / (gammaEq - 1.0) + 0.5 * prim(0) * vSqr + rhoEBase(U);
         return U;
     };
 
@@ -596,7 +596,7 @@ TEST_CASE("GradientCons2Prim: species formation gradient corrects pressure gradi
     GradU.row(0) = (U1 - U0).transpose() / dx;
 
     Eigen::Matrix<real, 3, nVars> GradPrimCorrected, GradPrimRaw;
-    GradientCons2Prim_IdealGas<3>(U0, GradU, GradPrimCorrected, gammaEq, hfSpecies);
+    GradientCons2Prim_IdealGas<3>(U0, GradU, GradPrimCorrected, gammaEq, eBaseSpecies);
     GradientCons2Prim_IdealGas<3>(U0, GradU, GradPrimRaw, gammaEq, Eigen::Vector<real, 0>{});
 
     Eigen::RowVector<real, nVars> dPrimExpected = (prim1 - prim0).transpose() / dx;

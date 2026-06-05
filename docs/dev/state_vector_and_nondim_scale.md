@@ -59,9 +59,9 @@ Every physical quantity `x_phys` is stored as `x_code = x_phys / x0`:
 - `U[dim+2 ..]`: species densities `rho*Y_k` (first `Ns-1` species)
 - Last species (N2) is derived: `rho*Y_last = rho - sum(rho*Y_k)`
 
-`rhoE_total` includes **sensible + kinetic + formation-enthalpy**:
+`rhoE_total` includes **sensible + kinetic + base internal energy**:
 ```
-rhoE_total = rho * (e_sensible + 1/2 * |v|^2 + Sum_k Y_k * h_f_k)
+rhoE_total = rho * (e_sensible + 1/2 * |v|^2 + Sum_k Y_k * e_base,k)
 ```
 
 ### Primitive (dim=3, Ns=10, nVars=14)
@@ -84,55 +84,37 @@ Two additional primitive layouts are supported for input/output convenience:
 **`prim-TP`**: `[T, u, v, w, p, Y_k]` — temperature at index 0 instead of density.
 `rho = p / (Rmix * T)`.
 
-## Formation Enthalpy Convention
+## Base Internal-Energy Convention
 
-The conservative `rhoE` includes formation enthalpy at reference T=298.15 K.
-Configuration input vectors (JSON `farFieldStaticValue`) store **sensible** rhoE;
-formation is added at initialization.
-
-Formation enthalpy per species: `h_f_k = H_f_298(k) / M_k` [J/kg].
-For elements (H2, O2, N2): `h_f = 0`. For H2O: `h_f ≈ −13.4 MJ/kg`.
-
-Code-unit formation energy density:
-```
-rhoH_form_code = rho_code * Sum_k(Y_k * h_f_k) / U0^2
-```
-
-## Energy Convention: DNDSR ↔ Cantera Bridge
-
-### DNDSR's calorically-perfect convention
-
-DNDSR stores energy measured from **0 K** assuming a calorically-perfect ideal
-gas.  The sensible internal energy is:
+Reactive conservative states store **total** `rhoE` compatible with Cantera's
+`intEnergy_mass(T, Y)`.  The separate `rhoE_sensible` representation is only a
+bookkeeping/input and positivity-limiting form:
 
 ```
-e_sensible(T) = cv_stored * T    where    cv_stored = R / (gamma_stored − 1)
+rhoE_sensible = rhoE_total - rho * Sum_k(Y_k * e_base,k) / U0^2
 ```
 
-`cv_stored` is a **chord slope** — the straight line from (0, 0) to (T, e_sensible).
-It is constant for a given gamma_stored; it does **not** vary with temperature.
-This is the defining assumption of a calorically-perfect gas:
+`e_base,k` is the species internal energy at the base temperature `TBase`
+(currently defaulting to the minimum per-species Cantera temperature).  It is
+not standard-state formation enthalpy and it is not used as the energy sent to
+Cantera.
+
+Configuration `StateValue` inputs may use `consSensible` / `consSensible_phy`,
+or more readable physical primitive forms such as `primTP_phy`.  `PhysicsProperties`
+resolves them to total conservative `rhoE` before the solver uses the state.
+
+## Energy Convention: DNDSR ↔ Cantera
+
+For reactive flows, `PhysicsProperties::temperature()` sends the total specific
+internal energy directly to Cantera's UV solve:
 
 ```
-p = (gamma_stored − 1) * rho * e_sensible
-  = (gamma_stored − 1) * rho * cv_stored * T
-  = rho * R * T                                        [ideal gas EOS]
+u_sent = (rhoE_total / rho - 0.5 * |v|^2) * U0^2
 ```
 
-### Cantera's NASA-polynomial convention
-
-Cantera measures thermal energy from the reference temperature **T_ref = 298.15 K**.
-At T_ref the thermal part is zero by definition.  Formation internal energy is
-stored separately:
-
-```
-u_k(T) = u_f_k(T_ref) + Integral(T_ref -> T) cv_k(T') dT'
-```
-
-Cantera's `cv_mass(T)` is the **local slope** — the temperature derivative
-of the `u(T)` curve at the given T.  It varies with T because rotational and
-vibrational modes become active at different temperatures (notably H2 near
-1000 K).
+No 298 K-to-0 K bridge or `pVAtReference` correction is applied.  The older
+formation-enthalpy/298 K offset convention was removed because it mixed
+bookkeeping offsets with thermodynamic internal energy.
 
 ### The three gammas
 
@@ -142,38 +124,17 @@ vibrational modes become active at different temperatures (notably H2 near
 | `gammaEq` | `1 + rho*Rmix*T / (rho*e_sensible)` | `PhysicsProperties::gammaEq` | Pressure/energy closure coefficient used by primitive/conservative conversion and pressure gradients |
 | `cp/cv` | `cp_mass(T,Y) / cv_mass(T,Y)` | `PhysicsProperties::gamma`, Cantera NASA polynomials | Frozen-composition acoustic coefficient used by wave speeds and Mach number |
 
-**Why `gammaEq` ≠ `cp/cv`**: DNDSR's energy convention `e_sensible = c_v_stored * T`
-uses a constant (chord) cv, while Cantera's `cv_mass(T)` varies with T. The
-difference is the gap between a straight-line chord and a curved EOS:
+**Why `gammaEq` ≠ `cp/cv`**: `gammaEq` is the algebraic coefficient that makes
+`p = (gammaEq - 1) * rho * e_sensible` true for the current bookkeeping
+`e_sensible`, while Cantera's `cv_mass(T)` is the local thermodynamic slope.
+The difference is the gap between a bookkeeping energy offset and a curved EOS:
 
 ```
 cv_stored  = e_sensible / T                    (chord slope, 0K -> T)
 cv_mass(T) = du/dT                              (local slope, at T)
 cp/cv      = (cv_mass + R) / cv_mass           (real ratio at T)
-gammaEq    = (cv_stored + R) / cv_stored       (stored ratio = gamma_stored)
+gammaEq    = 1 + p / (rho * e_sensible)
 ```
-
-At 845 K for H2/O2/N2, `cv_stored ≈ 1020`, `cv_local ≈ 1103` J/(kg·K),
-`gammaEq ≈ 1.4`, and `cp/cv ≈ 1.359`.
-
-### Cantera temperature bridge
-
-To convert DNDSR's internal energy (measured from 0 K) to Cantera's convention
-(measured from 298.15 K), `PhysicsProperties::temperature()` subtracts two
-quantities before calling `setState_UV`:
-
-```
-u_sent = u_DNDSR_code * U0^2 − pVAtReference(Y) − e_sens_ref(Y)
-```
-
-- `pVAtReference(Y)` = `h(T_ref) − u(T_ref)` = `Rmix * T_ref` for ideal gas.
-  Converts formation enthalpy → formation internal energy at T_ref.
-- `e_sens_ref(Y)` = `cv_mass(T_ref,Y) * T_ref`.  Subtracts the 0K→T_ref
-  sensible energy that DNDSR includes but Cantera starts counting after.
-
-After these subtractions `u_sent` matches Cantera's `intEnergy_mass(T)` for
-the same T.  This conversion is guarded by `isIdealGas()` — non-ideal phases
-crash with an assertion.
 
 ## PhysicsProperties State-Conversion API
 
@@ -252,14 +213,14 @@ eulerState --model NS_EX --nVars 14 --from cons-sensible --scaling code \
 ```
 
 **Input formats** (`--from`):
-- `cons-total`, `cons-sensible`: conservative, with/without formation
+- `cons-total`, `cons-sensible`: conservative total energy or conservative sensible/base-offset bookkeeping energy
 - `prim`: standard primitive `[rho, u, v, w, p, Y_k]`
 - `prim-rhoT`: `[rho, u, v, w, T, Y_k]` — temperature at energy slot
 - `prim-TP`: `[T, u, v, w, p, Y_k]` — temperature at density slot
 
 **Output**: prints all state representations (conservative total+sensible,
 primitive, prim-rhoT, prim-TP), derived quantities (T, p, gamma_stored,
-gammaEq, cp/cv, Rmix, rhoH_form), reference scales with SI units, Cantera state
+gammaEq, cp/cv, Rmix, rhoE_base), reference scales with SI units, Cantera state
 (intEnergy, enthalpy, cv, cp, speed_of_sound), and energy-consistency
 check (u_sent − u_cantera = 0).  All arrays include JSON versions with
 full precision.
@@ -270,6 +231,6 @@ full precision.
 |------|------|
 | `EulerEvaluatorSettings.hpp` | `IdealGasProperty` struct: L0, U0, rho0, T0, gamma, Rgas |
 | `Physics/PhysicsProperties.hpp` | Scale methods, Cantera boundary, state conversion API |
-| `Chemistry/ChemicalSource.hpp/cpp` | PIMPL Cantera wrapper, isIdealGas, pVAtReference, sensibleInternalEnergyAtReference |
+| `Chemistry/ChemicalSource.hpp/cpp` | PIMPL Cantera wrapper, kinetics/transport access, base internal-energy offsets |
 | `Gas.hpp` | `IdealGasThermal`, Roe flux, Prim2Cons / Cons2Prim |
 | `app/Euler/eulerState.cpp` | CLI state-conversion tool |

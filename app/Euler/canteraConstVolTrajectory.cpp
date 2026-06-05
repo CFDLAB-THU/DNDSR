@@ -26,9 +26,12 @@ namespace
     struct CaseData : Reactive0D::ConstVolCase
     {
         std::string mechanismFile;
+        StateValue initialState;
         double gamma = 1.4;
         double Rgas = 287.0;
         double T0 = 1.0;
+        double TBase = 0.0;
+        std::string transportModel = "MixtureAveraged";
     };
 
     std::string resolveMechanism(const std::string &mechanismFile)
@@ -66,14 +69,16 @@ namespace
         CaseData c;
         c.dtCode = cfg.at("timeMarchControl").at("dtImplicit").get<double>();
         c.nSteps = cfg.at("timeMarchControl").at("nTimeStep").get<int>();
-        c.outputEvery = std::max(1, cfg.at("outputControl").value("nDataOut", 1));
+        // This diagnostic app compares the hand-written backward-Euler 0D path
+        // against Cantera. Always record every BE step; solver output cadence in
+        // the case file is unrelated to this trajectory diagnostic.
+        c.outputEvery = 1;
 
         const auto &euler = cfg.at("eulerSettings");
         c.mechanismFile = euler.at("reactiveFlow").at("mechanismFile").get<std::string>();
-        auto state = euler.at("farFieldStaticValue").get<std::vector<double>>();
-        c.U.resize(static_cast<int>(state.size()));
-        for (int i = 0; i < c.U.size(); ++i)
-            c.U[i] = state[static_cast<size_t>(i)];
+        c.TBase = euler.at("reactiveFlow").value("TBase", c.TBase);
+        c.transportModel = euler.at("reactiveFlow").value("transportModel", c.transportModel);
+        c.initialState = euler.at("farFieldStaticValue").get<StateValue>();
 
         const auto &ig = euler.at("idealGasProperty");
         c.gamma = ig.value("gamma", c.gamma);
@@ -131,9 +136,13 @@ int main(int argc, char **argv)
         CaseData c = readCase(caseFile);
         std::string mechPath = resolveMechanism(c.mechanismFile);
         auto pool = std::make_shared<std::vector<ChemicalSource>>();
-        pool->emplace_back(mechPath);
+        pool->emplace_back(mechPath, "", c.U0, c.rho0, c.TBase, c.transportModel);
         auto phys = makePhysics(c, pool);
         auto &chem = (*pool)[0];
+
+        int nVars = static_cast<int>(c.initialState.originVector().size());
+        phys.resolveStateValue<3>(c.initialState, nVars, nullptr, "farFieldStaticValue");
+        c.U = c.initialState.cons;
 
         auto dnds = Reactive0D::runDNDSRTrajectory<NS_EX, 3>(c, phys, chem);
         auto cantera = Reactive0D::runCanteraTrajectory(c, mechPath, dnds.front(), dnds);

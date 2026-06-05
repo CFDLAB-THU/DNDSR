@@ -48,7 +48,7 @@ namespace DNDS::Euler
         real p = 101325;     // default pressure (code=phys when scaling defaults are 1)
         real pPhys = 101325; // physical pressure [Pa] for Cantera (same as p with default scaling)
         real gammaEq = 1.4;  // pressure/energy closure gammaEq at this point
-        real rhoH_form = 0;  // volumetric formation enthalpy (0 when no chemistry)
+        real rhoE_base = 0;  // volumetric base energy (0 when no chemistry)
     };
 
     /**
@@ -116,14 +116,14 @@ namespace DNDS::Euler
     inline void evalSourceAxisymmetric(real gammaEq, const Geom::tPoint &pPhy,
                                        typename EulerModelTraits<model>::TU &ret,
                                        const typename EulerModelTraits<model>::TU &U, int Mode,
-                                       real rhoH_form = 0)
+                                       real rhoE_base = 0)
     {
         constexpr auto I4 = EulerModelTraits<model>::dim + 1;
         if (Mode == 0)
         {
             typename EulerModelTraits<model>::TU uPrim;
             uPrim.resizeLike(U);
-            Gas::IdealGasThermalConservative2Primitive(U, uPrim, gammaEq, rhoH_form);
+            Gas::IdealGasThermalConservative2Primitive(U, uPrim, gammaEq, rhoE_base);
             ret(2) += uPrim(I4) / std::max(verySmallReal, pPhy(1));
         }
     }
@@ -198,7 +198,7 @@ namespace DNDS::Euler
         {
             if (!active)
                 return;
-            evalSourceAxisymmetric<model>(aux.gammaEq, pPhy, ret, U, Mode, aux.rhoH_form);
+            evalSourceAxisymmetric<model>(aux.gammaEq, pPhy, ret, U, Mode, aux.rhoE_base);
         }
     };
 
@@ -421,6 +421,9 @@ namespace DNDS::Euler
             // aux.T is code-scaled; Cantera needs physical T [K]
             double Tphys = igProp_.T0 > 0 ? aux.T * igProp_.T0 : aux.T;
             double Tcantera = std::max(Tphys, 200.0); // NASA poly lower bound
+            double pCantera = aux.pPhys;
+            if (Tcantera != Tphys)
+                pCantera = rho * igProp_.rho0 * c.mixtureR(Yv) * Tcantera;
 
             Chemistry::SpeciesBufferView omegav{bufOmega.data(), Ns};
 
@@ -430,7 +433,7 @@ namespace DNDS::Euler
 
             if (Mode == 0)
             {
-                c.productionRates(Tcantera, aux.pPhys, Yv, omegav);
+                c.productionRates(Tcantera, pCantera, Yv, omegav);
                 for (int k = 0; k < Ns1; ++k)
                     ret[Isp + k] += sourceScale_ * bufOmega[k] * c.molecularWeights()[k] * invS0;
             }
@@ -441,7 +444,7 @@ namespace DNDS::Euler
                 double uM1 = (I4 >= 2) ? U[1] : 0; // ρu (I4=dim+1≥3, guard always true)
                 double uM2 = (I4 >= 3) ? U[2] : 0; // ρv (I4≥3 always for dim≥2)
                 double uM3 = (I4 >= 4) ? U[3] : 0; // ρw (present only for 3D, 0 for 2D)
-                c.productionRatesAndJacobian(Tcantera, aux.pPhys, rho, U[I4],
+                c.productionRatesAndJacobian(Tcantera, pCantera, rho, U[I4],
                                              uM1, uM2, uM3, I4, Yv, omegav, Jv,
                                              Chemistry::ChemicalSource::JAC_DEFAULT);
                 for (int k = 0; k < Ns1; ++k)
@@ -548,9 +551,11 @@ namespace DNDS::Euler
                 std::string mechPath = GetEnvString("DNDS_MECH_PATH", "");
                 const std::string &mechFile = settings.reactiveFlow.mechanismFile;
                 if (!mechPath.empty() && !mechFile.empty() && !std::filesystem::path(mechFile).is_absolute())
-                    pool->emplace_back(mechPath + "/" + mechFile, "", settings.idealGasProperty.U0, settings.idealGasProperty.rho0);
+                    pool->emplace_back(mechPath + "/" + mechFile, "", settings.idealGasProperty.U0, settings.idealGasProperty.rho0,
+                                       settings.reactiveFlow.TBase, settings.reactiveFlow.transportModel);
                 else
-                    pool->emplace_back(mechFile, "", settings.idealGasProperty.U0, settings.idealGasProperty.rho0);
+                    pool->emplace_back(mechFile, "", settings.idealGasProperty.U0, settings.idealGasProperty.rho0,
+                                       settings.reactiveFlow.TBase, settings.reactiveFlow.transportModel);
             }
             for (int t = 1; t < nThreads; ++t)
                 pool->push_back(std::move(*pool->at(0).clone()));

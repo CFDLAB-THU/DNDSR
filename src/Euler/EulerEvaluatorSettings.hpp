@@ -676,6 +676,7 @@ namespace DNDS::Euler
             real CFLScale = 1.0;
             real chemRelaxEps = 1e-3;
             real chemAbsTol = 1e-10;
+            real TBase = 0.0;
             int nSpeciesOverride = 0;
 
             DNDS_DECLARE_CONFIG(ReactiveFlowSettings)
@@ -683,13 +684,14 @@ namespace DNDS::Euler
                 DNDS_FIELD(enabled, "Enable reactive flow (multi-species + chemistry)");
                 DNDS_FIELD(mechanismFile, "CHEMKIN-format mechanism YAML path");
                 DNDS_FIELD(thermoFile, "Reserved; currently unused. Mechanism YAML supplies thermodynamics.");
-                DNDS_FIELD(transportModel, "Reserved; currently unused. Transport is selected by ChemicalSource setup.");
+                DNDS_FIELD(transportModel, "Cantera transport model requested by reactive flow; currently only mixture-averaged is implemented.");
                 DNDS_FIELD(CFLScale, "CFL reduction factor for stiff chemistry",
                            DNDS::Config::range(0.0));
                 DNDS_FIELD(chemRelaxEps, "Pseudo-transient relaxation epsilon",
                            DNDS::Config::range(0.0));
                 DNDS_FIELD(chemAbsTol, "Absolute species tolerance",
                            DNDS::Config::range(0.0));
+                DNDS_FIELD(TBase, "Base temperature [K] for reactive sensible-energy bookkeeping; <=0 uses the minimum per-species Cantera bound");
                 DNDS_FIELD(nSpeciesOverride, "Reserved; currently unused. Species count is read from mechanism.");
             }
         } reactiveFlow; ///< Reactive flow settings.

@@ -229,21 +229,32 @@ TEST_CASE("0D const-vol — implicit Euler, species-only Newton, T via PhysicsPr
     auto MW = chem.molecularWeights();
     int Isp = 5;
 
-    double rho0 = 1.0, rhoE0 = 8.25; // gives T≈1200K via PhysicsProperties
-    double U0 = 379.0;
+    double rho0 = 1.0;
 
-    Eigen::VectorXd U = Eigen::VectorXd::Zero(nVars);
-    U[0] = rho0;
-    U[4] = rhoE0;
-    U[Isp + 0] = rho0 * 0.028;
-    U[Isp + 1] = 0;
-    U[Isp + 2] = 0;
-    U[Isp + 3] = rho0 * 0.222;
-    U[Isp + 4] = 0;
-    U[Isp + 5] = 0;
-    U[Isp + 6] = 0;
-    U[Isp + 7] = 0;
-    U[Isp + 8] = 0;
+    std::vector<double> Y0(Ns, 0.0);
+    Y0[0] = 0.028;
+    Y0[3] = 0.222;
+    double sumY0 = 0.0;
+    for (int k = 0; k < Ns1; ++k)
+        sumY0 += Y0[k];
+    Y0[Ns1] = 1.0 - sumY0;
+    ConstSpeciesBufferView Y0v{Y0.data(), Ns};
+
+    typename PhysicsProperties<NS_EX>::TU primTP(nVars), Utmp(nVars);
+    primTP.setZero();
+    // Keep this hand-written Newton test at the thermodynamic state that the
+    // old shifted-energy rhoE=8.25 represented (about 1128.8 K). Starting this
+    // exact loop from a direct 1800 K total-energy state currently fails to
+    // converge to the physical ignition branch, even though the RHS signs are
+    // correct. That is a limitation/bug in this diagnostic loop's species-only
+    // Newton formulation, not in the production chemistry integrator.
+    primTP[0] = 1128.8;
+    primTP[4] = rho0 * phys.toCode(chem.mixtureR(Y0v)) * primTP[0];
+    for (int k = 0; k < Ns1; ++k)
+        primTP[Isp + k] = Y0[k];
+
+    phys.template primTPToConservative<3>(primTP, Utmp);
+    Eigen::VectorXd U = Utmp;
 
     auto getY = [&](const Eigen::VectorXd &Uk, std::vector<double> &Y)
     {
@@ -282,7 +293,6 @@ TEST_CASE("0D const-vol — implicit Euler, species-only Newton, T via PhysicsPr
 
     double dt = 1e-6;
     int nSteps = 500;
-
     for (int step = 0; step < nSteps; step++)
     {
         std::vector<double> Y;
@@ -387,16 +397,16 @@ TEST_CASE("0D const-vol — react_test history tracks Cantera reactor")
     double dtCode = cfg.at("timeMarchControl").at("dtImplicit").get<double>();
     int nSteps = cfg.at("timeMarchControl").at("nTimeStep").get<int>();
     int outputEvery = std::max(1, cfg.at("outputControl").value("nDataOut", 10));
-    auto state = cfg.at("eulerSettings").at("farFieldStaticValue").get<std::vector<double>>();
+    auto state = cfg.at("eulerSettings").at("farFieldStaticValue").get<StateValue>();
     const auto &ig = cfg.at("eulerSettings").at("idealGasProperty");
     double U0 = ig.value("U0", 379.0);
     double rho0 = ig.value("rho0", 1.0);
     double L0 = ig.value("L0", 1.0);
 
-    Eigen::VectorXd U(static_cast<int>(state.size()));
-    for (int i = 0; i < U.size(); ++i)
-        U[i] = state[static_cast<size_t>(i)];
-    REQUIRE(U.size() == 5 + Ns1);
+    int nVars = static_cast<int>(state.originVector().size());
+    REQUIRE(nVars == 5 + Ns1);
+    phys.template resolveStateValue<3>(state, nVars, nullptr, "react_test/farFieldStaticValue");
+    Eigen::VectorXd U = state.cons;
 
     Reactive0D::ConstVolCase runCase;
     runCase.U = U;
@@ -524,13 +534,25 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
     auto MW = chem->molecularWeights();
     int Isp = 5;
 
-    double rho0 = 1.0, rhoE0 = 8.25, U0 = 379.0; // gives T≈1129K with reference-offset bridge
+    double rho0 = 1.0;
+    std::vector<double> Y0(Ns, 0.0);
+    Y0[0] = 0.028;
+    Y0[3] = 0.222;
+    double sumY0 = 0.0;
+    for (int k = 0; k < Ns1; ++k)
+        sumY0 += Y0[k];
+    Y0[Ns1] = 1.0 - sumY0;
+    ConstSpeciesBufferView Y0v{Y0.data(), Ns};
 
-    Eigen::VectorXd U = Eigen::VectorXd::Zero(nVars);
-    U[0] = rho0;
-    U[4] = rhoE0;
-    U[Isp + 0] = rho0 * 0.028;
-    U[Isp + 3] = rho0 * 0.222;
+    typename PhysicsProperties<NS_EX>::TU primTP(nVars), Utmp(nVars);
+    primTP.setZero();
+    primTP[0] = 1128.8;
+    primTP[4] = rho0 * phys.toCode(chem->mixtureR(Y0v)) * primTP[0];
+    for (int k = 0; k < Ns1; ++k)
+        primTP[Isp + k] = Y0[k];
+
+    phys.template primTPToConservative<3>(primTP, Utmp);
+    Eigen::VectorXd U = Utmp;
 
     auto getY = [&](const Eigen::VectorXd &Uk, std::vector<double> &Y)
     {
@@ -834,12 +856,12 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
 
     // FD-vs-analytical Jacobian quality across ignition stages (dt=1e-6, const-V):
     // the FD path intentionally calls PhysicsProperties::temperature(), so the
-    // DNDSR-to-Cantera reference-energy bridge is tested in one place.  Fluid
+    // DNDSR-to-Cantera direct internal-energy path is tested in one place.  Fluid
     // columns remain diagnostic while production uses JAC_SKIP_FLUID.  The
     // global Frobenius-scaled error remains O(1e-2 %) at the final checkpoint.
     // NOTE: the tolerance (nBadS200 <= 25 out of ~3000 entries) is intentionally
-    // generous — it guards against regressions without failing on the reference-
-    // energy bridge's inherent ~0.5-3% cross-column errors at ignition states.
+    // generous — it guards against regressions without failing on clipped
+    // trace-species columns at ignition states.
     CHECK(nBadS200 <= 25);
 }
 
@@ -963,9 +985,9 @@ TEST_CASE("FD Jacobian for pressure-dependent mechanism (GRI 3.0)")
     int nb1 = FDcheck(1600.0, "equil-1600K");
     int nb2 = FDcheck(2000.0, "equil-2000K");
     printf("[GRI-self-consistent] 1600K=%d mismatches 2000K=%d mismatches\n", nb1, nb2);
-    printf("[GRI-note] Pre-existing energy-reference bridge mismatch for GRI 3.0;\n"
+    printf("[GRI-note] Pre-existing pressure-dependent FD mismatch for GRI 3.0;\n"
            "  the ddP chain rule is structurally correct but cannot be validated\n"
-           "  independently until the EOS bridge is calibrated for this mechanism.\n");
+           "  independently with this trace-species finite-difference harness.\n");
     // Relaxed limits: the test documents current behavior, not a regression target
     CHECK(nb1 <= 1000);
     CHECK(nb2 <= 1000);

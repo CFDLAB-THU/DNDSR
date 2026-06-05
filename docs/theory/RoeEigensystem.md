@@ -2,21 +2,22 @@
 
 ## State vector convention
 
-The conservative state vector stores **total** `ρE`, which includes formation enthalpy:
+The conservative state vector stores **total** `ρE`. Reactive runs also define a
+bookkeeping-only base internal-energy offset used by the sensible-energy limiter:
 
 ```
 U = [ρ, ρu, ρv, (ρw), ρE_total]
-ρE_total = ρ·(e_sensible + ½|v|² + h_f)
+ρE_total = ρ·(e_sensible + ½|v|² + e_base)
 ```
 
-where `h_f = Σ Y_k · h_{f,k}` is the specific formation enthalpy, and
-`h_f = 0` for H₂, O₂, N₂ (elemental reference species).
+where `e_base = Σ Y_k · e_base,k` and `e_base,k` is the per-species internal
+energy at the configured base temperature `TBase`.
 
 ## Sensible vs. total enthalpy in the Roe Jacobian
 
 The Roe Jacobian `A = ∂F/∂U` of the Euler equations has the same form
-regardless of whether `E` includes `h_f` — the formation energy is a
-constant offset per cell that does not affect the flux derivatives. The
+regardless of whether `E` includes `e_base` — the base-energy offset is a
+linear composition-dependent bookkeeping term. The
 eigenvalues `{u−a, u, u+a}` depend only on the frozen-composition acoustic speed.
 For reactive ideal-gas mixtures DNDSR computes it as `a² = γ_cp/cv·p/ρ`, while
 pressure still comes from the closure `p = (γ_eq−1)·ρe_sensible`.
@@ -33,12 +34,12 @@ r₄ (λ = u+a):  [1,  u+a,  H + u·a]ᵀ
 DNDSR uses the **sensible** specific enthalpy `H_sensible` throughout
 the Roe eigensystem. This choice is both correct (pressure propagation
 is purely thermo-mechanical) and convenient (`H_sensible` is computed
-directly by `IdealGasThermal` with the formation enthalpy already
+directly by `IdealGasThermal` with the base internal energy already
 subtracted).
 
-## Formation enthalpy in the α decomposition
+## Base internal energy in the α decomposition
 
-The formation enthalpy offset in `ρE_total` is handled entirely by the
+The base internal-energy offset in `ρE_total` is handled entirely by the
 α decomposition — the contact/entropy wave `α₁` adjusts to account for
 the difference between the total energy jump and the sensible
 eigenvectors. The decomposition is exact regardless of which H
@@ -129,14 +130,14 @@ H_sensible − ½|u|² = e_sensible + p/ρ = γ·e_sensible
 a² = (γ−1)·γ·e_sensible = γp/ρ        ✓
 ```
 
-For a perfect gas, using `H_total = H_sensible + h_f` would add the spurious
-term `(γ−1)h_f`; this is incorrect.
+For a perfect gas, using `H_total = H_sensible + e_base` would add the spurious
+term `(γ−1)e_base`; this is incorrect.
 
 ## Code trace
 
 | Step | File | Function | What happens |
 |------|------|----------|--------------|
-| 1 | `Gas.hpp` | `ComputeRoePreamble` | `IdealGasThermal(E,ρ,v²,gammaEq,gammaCpCv, p,asqr,H, rhoH_form)` → pressure from `gammaEq`, sound speed from `gammaCpCv`, H sensible |
+| 1 | `Gas.hpp` | `ComputeRoePreamble` | `IdealGasThermal(E,ρ,v²,gammaEq,gammaCpCv, p,asqr,H, rhoE_base)` → pressure from `gammaEq`, sound speed from `gammaCpCv`, H sensible |
 | 2 | `Gas.hpp` | `ComputeRoePreamble` | `HRoe = (√ρL·HLm + √ρR·HRm)/(√ρL+√ρR)` → sensible |
 | 3 | `Gas.hpp` | `ComputeRoePreamble` | `gammaEqRoe` and `gammaRoe` are √ρ-weighted separately |
 | 4 | `Gas.hpp` | `ComputeRoePreamble` | `asqrRoe = gammaRoe·(gammaEqRoe−1)/gammaEqRoe·(HRoe − ½v²)` |
@@ -146,7 +147,7 @@ term `(γ−1)h_f`; this is incorrect.
 All consumption sites use the same sensible H convention derived at step 1.
 The standalone eigenvector extractors `IdealGas_EulerGasRightEigenVector` /
 `IdealGas_EulerGasLeftEigenVector` take both `gammaEq` and `gammaCpCv`; callers
-must pass `rhoH_form` for states that include formation energy.
+must pass `rhoE_base` for states that include base internal energy.
 
 ## EulerP note
 
