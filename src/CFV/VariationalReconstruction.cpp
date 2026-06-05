@@ -342,7 +342,7 @@ namespace DNDS::CFV
             {
             case VRSettings::FunctionalSettings::DirWeightScheme::Factorial:
                 for (int p = 0; p < wd.size(); p++)
-                    wd[p] = 1. / factorials[p];
+                    wd[p] = 1. / factorials[p]; // 1 1 0.5 0.1667
                 break;
             case VRSettings::FunctionalSettings::DirWeightScheme::HQM_OPT:
                 switch (settings.maxOrder)
