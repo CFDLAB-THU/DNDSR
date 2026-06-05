@@ -704,7 +704,21 @@ namespace DNDS::Euler::Chemistry
         double Tinit = std::max(T_guess > 300 ? T_guess : 300, impl_->gas_minTemp());
         double p_init = mixtureR(Y) * Tinit / v;
         impl_->gasT_setState_TP(Tinit, p_init);
-        impl_->gasT_setState_UV(u, v, rtol);
+        try
+        {
+            impl_->gasT_setState_UV(u, v, rtol);
+        }
+        catch (std::exception &e)
+        {
+            double rho = (v > 0) ? 1.0 / v : -1.0;
+            DNDS_check_throw_info(false,
+                                  fmt::format("ChemicalSource::temperatureUV failed: {}\n"
+                                              "  T_guess={:.6e} Tinit={:.6e} p_init={:.6e}\n"
+                                              "  u={:.6e} v={:.6e} rho={:.6e}\n"
+                                              "  Y={}",
+                                              e.what(), T_guess, Tinit, p_init,
+                                              u, v, rho, Y));
+        }
         return impl_->gasT_temperature();
     }
 
