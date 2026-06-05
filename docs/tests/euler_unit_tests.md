@@ -43,7 +43,7 @@ functions are pure.
 | `standard quiescent air` | rho=1, p=1/gamma: checks a=1, H=gamma/(gamma-1), internal energy. |
 | `Mach 2 flow` | Supersonic state: verifies p, a, H, total energy. |
 | `gammaEq controls pressure and gamma controls acoustic speed` | Split-gamma regression for `IdealGasThermal`. |
-| `Shared enthalpy helper does not double-count formation energy` | Verifies `IdealGas::Enthalpy` with nonzero formation input. |
+| `Shared enthalpy helper does not double-count base energy` | Verifies `IdealGas::Enthalpy` with a nonzero base-energy input. |
 
 ### Conservative / Primitive Round-Trip
 

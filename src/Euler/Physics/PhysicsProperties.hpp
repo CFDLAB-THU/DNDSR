@@ -205,7 +205,7 @@ namespace DNDS::Euler
          *  For non-reactive (constant-gamma) gas, returns the configured gamma.
          *  For reactive gas, computes gamma_eq = 1 + p / (rho * e_sensible)
          *  where p = rho * Rmix(Y) * T (exact ideal-gas EOS) and
-         *  e_sensible = (rhoE - KE - rhoH_form) / rho.
+         *  e_sensible = (rhoE - KE - rhoE_base) / rho.
          *  @param T  Code-scaled temperature (already from Cantera UV solver).
          *  @param U  Conservative state vector.
          *  @tparam dim Spatial dimension (2 or 3).
@@ -224,8 +224,8 @@ namespace DNDS::Euler
             for (int jd = 1; jd <= dim; ++jd)
                 vel2 += U[jd] * U[jd];
             vel2 *= rhoInv * rhoInv;
-            real rhoH_form = mixtureFormationRhoE(U);
-            real e_sensible = (U[I4] - 0.5 * rho * vel2 - rhoH_form) * rhoInv;
+            real rhoE_base = mixtureBaseInternalRhoE(U);
+            real e_sensible = (U[I4] - 0.5 * rho * vel2 - rhoE_base) * rhoInv;
             DNDS_assert_info(e_sensible > 0,
                              fmt::format("gammaEq(): e_sensible={:.3e} ≤ 0 — invalid state", e_sensible));
             // NOTE: this assertion fires for zero-temperature + zero-momentum
@@ -253,15 +253,15 @@ namespace DNDS::Euler
             real gammaUse = gamma(T, U); // cp/cv, used for frozen acoustic speed
             Gas::IdealGasThermal(U(I4), U(0), (U(Seq123) / U(0)).squaredNorm(),
                                  gammaEqUse, gammaUse, p, asqr, H,
-                                 mixtureFormationRhoE(U));
+                                 mixtureBaseInternalRhoE(U));
             if (gammaEqOut)
                 *gammaEqOut = gammaEqUse;
             if (gammaOut)
                 *gammaOut = gammaUse;
         }
 
-        /// Code-scaled volumetric formation enthalpy ρ·Σ Y_k·h_f_k.  0 when no chemistry.
-        real mixtureFormationRhoE(const TU &U) const
+        /// Code-scaled volumetric base internal energy ρ·Σ Y_k·e_base,k.  0 when no chemistry.
+        real mixtureBaseInternalRhoE(const TU &U) const
         {
             if (!hasChemicalSource())
                 return 0;
@@ -269,17 +269,17 @@ namespace DNDS::Euler
             int Ns1 = c.nSpecies() - 1;
             int nVars = static_cast<int>(U.size());
             int Isp = nVars - Ns1;
-            DNDS_check_throw_info(Isp >= 1, "mixtureFormationRhoE(): state vector too small for mechanism species count");
+            DNDS_check_throw_info(Isp >= 1, "mixtureBaseInternalRhoE(): state vector too small for mechanism species count");
             auto Y = c.massFractions(U[0], &U[Isp], Ns1);
-            return c.mixtureFormationRhoE(U[0], Y);
+            return c.mixtureBaseInternalRhoE(U[0], Y);
         }
 
-        /// Raw linear formation enthalpy from rho/rhoY without clipping or renormalizing species.
+        /// Raw linear base internal energy from rho/rhoY without clipping or renormalizing species.
         /// Intentionally permits negative independent/dependent species masses (e.g. sum(rhoY_k) > rho)
         /// in order to preserve exact linearity through reconstruction and compression algebra.
         /// Callers are responsible for downstream species-positivity enforcement
         /// (checkRecBaseGood, CompressRecPart, CompressInc, AddFixedIncrement).
-        real mixtureFormationRhoERaw(const TU &U) const
+        real mixtureBaseInternalRhoERaw(const TU &U) const
         {
             if (!hasChemicalSource())
                 return 0;
@@ -287,35 +287,35 @@ namespace DNDS::Euler
             int Ns1 = c.nSpecies() - 1;
             int nVars = static_cast<int>(U.size());
             int Isp = nVars - Ns1;
-            DNDS_check_throw_info(Isp >= 1, "mixtureFormationRhoERaw(): state vector too small for mechanism species count");
-            auto hfView = c.mixtureFormationRhoESpecies();
-            real rhoH = 0;
+            DNDS_check_throw_info(Isp >= 1, "mixtureBaseInternalRhoERaw(): state vector too small for mechanism species count");
+            auto eBaseView = c.mixtureBaseInternalRhoESpecies();
+            real rhoEBase = 0;
             real sumRhoY = 0;
             for (int k = 0; k < Ns1; ++k)
             {
-                rhoH += U[Isp + k] * hfView[k];
+                rhoEBase += U[Isp + k] * eBaseView[k];
                 sumRhoY += U[Isp + k];
             }
-            rhoH += (U[0] - sumRhoY) * hfView[Ns1];
-            return rhoH;
+            rhoEBase += (U[0] - sumRhoY) * eBaseView[Ns1];
+            return rhoEBase;
         }
 
-        /** Sensible ρE = total ρE − ρ·Σ Y_k·h_f_k. Returns U[I4] when no chemistry.
+        /** Sensible ρE = total ρE − ρ·Σ Y_k·e_base,k. Returns U[I4] when no chemistry.
          *  @param iEnergy  Index of the energy variable (dim+1). */
         real sensibleRhoE(const TU &U, int iEnergy) const
         {
-            return U[iEnergy] - mixtureFormationRhoE(U);
+            return U[iEnergy] - mixtureBaseInternalRhoE(U);
         }
 
-        /** Linearized increment of formation enthalpy: d(rhoH_form) from a
+        /** Linearized increment of base internal energy: d(rhoE_base) from a
          *  conservative-variable increment dU.
          *
-         *  d(rhoH_form) = (1/U0²) * Σ_k hf_k · d(ρY_k)
+         *  d(rhoE_base) = (1/U0²) * Σ_k e_base,k · d(ρY_k)
          *
          *  where d(ρY_last) = d(ρ) − Σ_{k<Ns-1} d(ρY_k).  Returns 0 when no
          *  chemistry.  This is the exact differential — no nonlinear terms.
          */
-        real mixtureFormationRhoEIncrement(const TU &dU) const
+        real mixtureBaseInternalRhoEIncrement(const TU &dU) const
         {
             if (!hasChemicalSource())
                 return 0;
@@ -323,8 +323,8 @@ namespace DNDS::Euler
             int Ns1 = c.nSpecies() - 1;
             int nVars = static_cast<int>(dU.size());
             int Isp = nVars - Ns1;
-            DNDS_check_throw_info(Isp >= 1, "mixtureFormationRhoEIncrement(): state vector too small for mechanism species count");
-            return c.mixtureFormationRhoEIncrement(dU[0], dU.data() + Isp, Ns1);
+            DNDS_check_throw_info(Isp >= 1, "mixtureBaseInternalRhoEIncrement(): state vector too small for mechanism species count");
+            return c.mixtureBaseInternalRhoEIncrement(dU[0], dU.data() + Isp, Ns1);
         }
 
         /// Constant gamma (no state needed) — for initialization / analytic fields.
@@ -351,31 +351,31 @@ namespace DNDS::Euler
         // ---- State conversion (I/O helpers, not for tight loops) ------------
 
         /**
-         * @brief cons-total → cons-sensible: subtracts formation enthalpy from U[I4].
+         * @brief cons-total → cons-sensible: subtracts base internal energy from U[I4].
          * @note  For I/O purposes — not for performance-critical tight loops.
          */
         template <int dim>
         void consTotalToSensible(const TU &consTotal, TU &consSensible) const
         {
             consSensible = consTotal;
-            consSensible[dim + 1] -= mixtureFormationRhoE(consTotal);
+            consSensible[dim + 1] -= mixtureBaseInternalRhoE(consTotal);
         }
 
         /**
-         * @brief cons-sensible → cons-total: adds formation enthalpy to U[I4].
+         * @brief cons-sensible → cons-total: adds base internal energy to U[I4].
          * @note  For I/O purposes — not for performance-critical tight loops.
          */
         template <int dim>
         void consSensibleToTotal(const TU &consSensible, TU &consTotal) const
         {
             consTotal = consSensible;
-            consTotal[dim + 1] += mixtureFormationRhoE(consSensible);
+            consTotal[dim + 1] += mixtureBaseInternalRhoE(consSensible);
         }
 
         /**
          * @brief Primitive → conservative.
-         *  Iterates gamma via gammaEq for reactive models (cfg.gamma is initial guess).
-         *  For non-reactive, uses cfg.gamma directly.
+         *  For reactive ideal gases, builds total energy directly from Cantera
+         *  internal energy.  For non-reactive gas, uses cfg.gamma directly.
          * @note  For I/O purposes — not for performance-critical tight loops.
          */
         template <int dim>
@@ -388,30 +388,27 @@ namespace DNDS::Euler
 
             TU primUse = sanitizePrimitiveSpecies<dim>(prim);
             validatePrimitiveRhoP<dim>(primUse, "primToConservative");
-            real rhoH_form = formationFromPrimitive<dim>(primUse);
             real gammaEqUse = igProp_->gamma;
             if (!hasChemicalSource())
             {
-                Gas::IdealGasThermalPrimitive2Conservative<dim>(primUse, cons, gammaEqUse, rhoH_form);
+                Gas::IdealGasThermalPrimitive2Conservative<dim>(primUse, cons, gammaEqUse);
                 return;
             }
 
-            int maxIterations = std::max(options.gammaMaxIterations, 1);
-            bool converged = false;
-            for (int iter = 0; iter < maxIterations; ++iter)
-            {
-                Gas::IdealGasThermalPrimitive2Conservative<dim>(primUse, cons, gammaEqUse, rhoH_form);
-                real T_iter = temperature<dim>(cons, 0, options.temperatureUVTolerance);
-                real gammaEqIter = gammaEq<dim>(T_iter, cons);
-                if (std::abs(gammaEqIter - gammaEqUse) < options.gammaTolerance)
-                {
-                    converged = true;
-                    break;
-                }
-                gammaEqUse = gammaEqIter;
-            }
-            DNDS_check_throw_info(converged,
-                                  fmt::format("primToConservative(): gamma fixed-point failed to converge after {} iterations", maxIterations));
+            auto &c = chem();
+            int Ns1 = c.nSpecies() - 1;
+            int nVars = static_cast<int>(primUse.size());
+            int Isp = nVars - Ns1;
+            int I4 = dim + 1;
+            auto Y = c.massFractions(1.0, primUse.data() + Isp, Ns1);
+            real Rmix = mixtureRfromPrimitive(primUse);
+            real T_code = primUse[I4] / std::max(primUse[0] * Rmix, real(1e-60));
+            double uPhys = c.mixtureIntEnergy(toPhysT(T_code), Y, toPhysP(primUse[I4]));
+
+            cons = primUse * primUse[0];
+            real vel2 = primUse(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).squaredNorm();
+            cons[0] = primUse[0];
+            cons[I4] = primUse[0] * uPhys / (igProp_->U0 * igProp_->U0) + 0.5 * primUse[0] * vel2;
         }
 
         /**
@@ -429,8 +426,8 @@ namespace DNDS::Euler
 
             real T = temperature<dim>(cons, 0, options.temperatureUVTolerance);
             real gammaEqUse = gammaEq<dim>(T, cons);
-            real rhoH_form = mixtureFormationRhoE(cons);
-            Gas::IdealGasThermalConservative2Primitive<dim>(cons, prim, gammaEqUse, rhoH_form);
+            real rhoE_base = mixtureBaseInternalRhoE(cons);
+            Gas::IdealGasThermalConservative2Primitive<dim>(cons, prim, gammaEqUse, rhoE_base);
         }
 
         /**
@@ -983,9 +980,9 @@ namespace DNDS::Euler
             return ret;
         }
 
-        /// Compute rhoH_form from a primitive vector [rho, u, v, (w), p/T, Y_k].
+        /// Compute rhoE_base from a primitive vector [rho, u, v, (w), p/T, Y_k].
         template <int dim>
-        real formationFromPrimitive(const TU &prim) const
+        real baseInternalFromPrimitive(const TU &prim) const
         {
             if (!hasChemicalSource())
                 return 0;
@@ -994,7 +991,7 @@ namespace DNDS::Euler
             int nVars = static_cast<int>(prim.size());
             int Isp = nVars - Ns1;
             auto Y = c.massFractions(1.0, prim.data() + Isp, Ns1);
-            return c.mixtureFormationRhoE(prim[0], Y);
+            return c.mixtureBaseInternalRhoE(prim[0], Y);
         }
 
         /// Compute code-scaled mixture Rgas from a primitive vector (uses mass fractions directly).
@@ -1023,6 +1020,96 @@ namespace DNDS::Euler
 
         real speciesDiffusivityK(real T, real p, const TU &U, int k) const;
 
+        const std::string &transportModel() const
+        {
+            DNDS_assert(hasChemicalSource());
+            return chem().transportModel();
+        }
+
+        bool isMixtureAveragedTransport() const
+        {
+            return hasChemicalSource() && chem().isMixtureAveragedTransport();
+        }
+
+        /** Add mixture-averaged species diffusion and enthalpy transport to a viscous flux slot.
+         *  The solver convention is F_total = F_inviscid - VisFlux, so this stores -J_k in
+         *  species equations and -Σ h_k J_k in the energy equation. Also corrects the
+         *  conductive heat flux for ∇R(Y): k∇T includes -k*T/R*∇R.
+         */
+        template <int dim, class TGradUPrim, class TNorm, class TFlux>
+        void addMixtureAveragedSpeciesDiffusionFlux(real T, real p, const TU &U,
+                                                    const TGradUPrim &GradUPrim,
+                                                    const TNorm &norm,
+                                                    real thermalConductivity,
+                                                    bool adiabaticWall,
+                                                    TFlux &visFlux) const
+        {
+            if (!hasChemicalSource())
+                return;
+            DNDS_check_throw_info(isMixtureAveragedTransport(),
+                                  fmt::format("Reactive species diffusion currently implements only mixture-averaged transport; requested [{}]",
+                                              transportModel()));
+
+            static const auto Seq012 = Eigen::seq(Eigen::fix<0>, Eigen::fix<dim - 1>);
+            static const auto I4 = dim + 1;
+
+            auto &c = chem();
+            int Ns = c.nSpecies();
+            int Ns1 = Ns - 1;
+            int nV = static_cast<int>(U.size());
+            int Isp = nV - Ns1;
+
+            // Energy diffusion uses full species enthalpy h_k(T,p,Y), not the
+            // bookkeeping base-energy/rhoE_base offset. This is the old rhoH
+            // diffusion concern: the correct term is -Σ h_k J_k in physical flux.
+            std::vector<real> hBuf(static_cast<size_t>(Ns));
+            Chemistry::SpeciesBufferView hv{hBuf.data(), Ns};
+            speciesEnthalpies(T, p, U, hv);
+
+            std::vector<real> Dbuf(static_cast<size_t>(Ns));
+            mixtureDiffusivity(T, p, U, Dbuf);
+
+            real rhoFace = U(0);
+            real rhoInvFace = 1.0 / std::max(rhoFace, verySmallReal);
+            std::vector<real> YBuf(static_cast<size_t>(Ns), 0.0);
+            std::vector<real> JRawN(static_cast<size_t>(Ns), 0.0);
+            real sumY = 0.0;
+            real sumGradYDotN = 0.0;
+            real sumJRawN = 0.0;
+            real gradRDotN = 0.0;
+            real RLast = speciesGasConstantK(Ns - 1);
+
+            for (int kk = 0; kk < Ns1; ++kk)
+            {
+                YBuf[kk] = U(Isp + kk) * rhoInvFace;
+                sumY += YBuf[kk];
+                real gradYkDotN = GradUPrim(Seq012, Isp + kk).dot(norm);
+                gradRDotN += (speciesGasConstantK(kk) - RLast) * gradYkDotN;
+                JRawN[kk] = -rhoFace * Dbuf[kk] * gradYkDotN;
+                sumGradYDotN += gradYkDotN;
+                sumJRawN += JRawN[kk];
+            }
+
+            // Conductive heat flux sign: VisFlux stores +k∇T·n and total flux subtracts VisFlux.
+            // Since T = p/(rho R), the mixture correction is -k*T/R*∇R·n.
+            if (!adiabaticWall)
+                visFlux(I4) -= thermalConductivity * T / std::max(Rgas(U), verySmallReal) * gradRDotN;
+
+            YBuf[Ns - 1] = real(1) - sumY;
+            JRawN[Ns - 1] = rhoFace * Dbuf[Ns - 1] * sumGradYDotN;
+            sumJRawN += JRawN[Ns - 1];
+
+            real vcN = -sumJRawN * rhoInvFace;
+            for (int kk = 0; kk < Ns; ++kk)
+            {
+                real JkN = JRawN[kk] + rhoFace * YBuf[kk] * vcN;
+                real FvSpeciesN = -JkN;
+                if (kk < Ns1)
+                    visFlux(Isp + kk) += FvSpeciesN;
+                visFlux(I4) += hBuf[kk] * FvSpeciesN;
+            }
+        }
+
         // ---- Kinetics accessor ----------------------------------------------
 
         int nSpecies() const { return hasChemicalSource() ? chem().nSpecies() : 0; }
@@ -1030,6 +1117,11 @@ namespace DNDS::Euler
         {
             DNDS_assert(hasChemicalSource());
             return chem().speciesNames()[static_cast<size_t>(k)];
+        }
+        real speciesGasConstantK(int k) const
+        {
+            DNDS_assert(hasChemicalSource());
+            return toCode(chem().speciesGasConstants()[static_cast<size_t>(k)]);
         }
 
         void advanceAffineConstVolumeY(real &T, real rho,
@@ -1091,14 +1183,14 @@ namespace DNDS::Euler
                 h[k] *= invU0sq;
         }
 
-        /// Per-species formation-enthalpy in code units (hf_k / U0²) as Eigen Map.
-        /// Sum equals mixtureFormationRhoE(U)/rho. Returns empty Map if no chemistry.
-        Eigen::Map<const Eigen::Vector<real, Eigen::Dynamic>> mixtureFormationRhoESpecies() const
+        /// Per-species base internal energies in code units (e_base,k / U0²) as Eigen Map.
+        /// Sum equals mixtureBaseInternalRhoE(U)/rho. Returns empty Map if no chemistry.
+        Eigen::Map<const Eigen::Vector<real, Eigen::Dynamic>> mixtureBaseInternalRhoESpecies() const
         {
             if (!hasChemicalSource())
                 return {nullptr, 0};
             auto &c = chem();
-            auto v = c.mixtureFormationRhoESpecies();
+            auto v = c.mixtureBaseInternalRhoESpecies();
             return Eigen::Map<const Eigen::Vector<real, Eigen::Dynamic>>(v.data, v.nSpecies);
         }
 
@@ -1339,6 +1431,9 @@ namespace DNDS::Euler
     {
         if (!hasChemicalSource())
             return;
+        DNDS_check_throw_info(isMixtureAveragedTransport(),
+                              fmt::format("mixtureDiffusivity(): only mixture-averaged transport is implemented; requested [{}]",
+                                          transportModel()));
         int Ns = chem().nSpecies();
         std::vector<real> Dbuf(Ns);
         Chemistry::SpeciesBufferView Dv{Dbuf.data(), Ns};
@@ -1355,6 +1450,9 @@ namespace DNDS::Euler
             real mu = mixtureViscosity(T, p, U);
             return mu / std::max(real(U[0]), 1e-60); // Sc = 1
         }
+        DNDS_check_throw_info(isMixtureAveragedTransport(),
+                              fmt::format("speciesDiffusivityK(): only mixture-averaged transport is implemented; requested [{}]",
+                                          transportModel()));
         int Ns = chem().nSpecies();
         std::vector<real> Dbuf(Ns);
         Chemistry::SpeciesBufferView Dv{Dbuf.data(), Ns};
@@ -1382,30 +1480,13 @@ namespace DNDS::Euler
             real p = (igProp_->gamma - 1) * rho * uInternal;
             return p * rhoInv / toCode(igProp_->Rgas);
         }
-        real uSensible = sensibleRhoE(U, I4) * rhoInv - 0.5 * vel2;
         real uPhys = uInternal * igProp_->U0 * igProp_->U0;
-        {
-            auto Yv = massFractions(U);
-            uPhys -= chem().pVAtReference(Yv); // h_f → u_f(298): subtract (h−u) at T_ref
-            if (chem().isIdealGas())
-            {
-                uPhys -= chem().sensibleInternalEnergyAtReference(Yv);
-                // DNDSR stores e_sensible measured from 0 K (ideal-gas convention).
-                // Cantera measures thermal energy from T_ref = 298.15 K.
-                // For ideal gas: e_sensible(298) = cv(298)·T_ref.
-                // TODO(reactive-PP-lower-bound): PP still limits against a
-                // sensible-energy floor near zero, but Cantera NASA polynomials
-                // are only valid above their lower-T bound (typically 200 K).
-                // Defer replacing the 0 K-style PP lower bound with a mechanism
-                // and EOS-aware minimum internal energy.
-            }
-            else
-                DNDS_assert_info(false, "temperature(): non-ideal-gas EOS conversion not yet implemented");
-        }
+        DNDS_assert_info(chem().isIdealGas(), "temperature(): non-ideal-gas EOS conversion not yet implemented");
         real vPhys = rhoInv / igProp_->rho0;
         double T_guess = TGuess > 0 ? toPhysT(TGuess) : 200.0;
         if (T_guess <= 0)
         {
+            real uSensible = sensibleRhoE(U, I4) * rhoInv - 0.5 * vel2;
             real p = (igProp_->gamma - 1) * rho * uSensible;
             T_guess = p * rhoInv / toCode(igProp_->Rgas) * igProp_->T0;
         }

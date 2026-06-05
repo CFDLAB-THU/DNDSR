@@ -18,6 +18,7 @@
 
 #include <cmath>
 #include <algorithm>
+#include <cctype>
 
 namespace DNDS::Euler::Chemistry
 {
@@ -25,6 +26,18 @@ namespace DNDS::Euler::Chemistry
 #ifdef DNDS_USE_CANTERA
     namespace
     {
+        std::string normalizeTransportModel(std::string model)
+        {
+            std::string out;
+            out.reserve(model.size());
+            for (char c : model)
+                if (c != '-' && c != '_' && !std::isspace(static_cast<unsigned char>(c)))
+                    out.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+            if (out.empty() || out == "default")
+                out = "mixtureaveraged";
+            return out;
+        }
+
         class AffineIdealGasConstVolReactor : public Cantera::IdealGasReactor
         {
         public:
@@ -114,12 +127,16 @@ namespace DNDS::Euler::Chemistry
         int Ns = 0;
         std::vector<std::string> speciesNames;
         std::vector<double> mw;
-        std::vector<double> Rk; // species gas constants
-        std::vector<double> hf; // per-species formation enthalpy [J/kg] at 298 K
+        std::vector<double> invMw;
+        std::vector<double> Rk;    // species gas constants
+        std::vector<double> eBase; // per-species base internal energy [J/kg] at TBase
+        double TBase = 0.0;        // base/reference temperature [K]
 
         double U0 = 1.0;      // reference velocity [m/s]
         double rho0 = 1.0;    // reference density [kg/m³]
         double invU0sq = 1.0; // 1/U0², precomputed for code-unit conversion
+        std::string transportModel = "MixtureAveraged";
+        std::string transportModelNormalized = "mixtureaveraged";
 
         // work buffers
         mutable std::vector<double> bufOmega;
@@ -127,10 +144,12 @@ namespace DNDS::Euler::Chemistry
         mutable std::vector<double> bufD;
 
         Impl(const std::string &mechanismFile, const std::string &phaseName,
-             double U0In, double rho0In)
+             double U0In, double rho0In, double TBaseIn, std::string transportModelIn)
             : U0(U0In), rho0(rho0In), invU0sq(1.0 / (U0In * U0In))
         {
             auto &I = *this;
+            I.transportModel = std::move(transportModelIn);
+            I.transportModelNormalized = normalizeTransportModel(I.transportModel);
 #ifdef DNDS_USE_CANTERA
             I.sol = Cantera::newSolution(mechanismFile, phaseName, "default");
             I.solT = Cantera::newSolution(mechanismFile, phaseName, "");
@@ -138,15 +157,28 @@ namespace DNDS::Euler::Chemistry
             I.Ns = static_cast<int>(gas->nSpecies());
             I.speciesNames.resize(I.Ns);
             I.mw.resize(I.Ns);
+            I.invMw.resize(I.Ns);
             I.Rk.resize(I.Ns);
-            I.hf.resize(I.Ns);
+            I.eBase.resize(I.Ns);
             gas->getMolecularWeights(I.mw.data());
+            I.TBase = TBaseIn > 0.0 ? TBaseIn : gas->minTemp(0);
             for (int k = 0; k < I.Ns; ++k)
             {
                 I.speciesNames[k] = gas->speciesName(k);
-                I.Rk[k] = Cantera::GasConstant / I.mw[k];
-                I.hf[k] = gas->Hf298SS(k) / I.mw[k];
+                I.invMw[k] = 1.0 / std::max(I.mw[k], 1e-30);
+                I.Rk[k] = Cantera::GasConstant * I.invMw[k];
+                if (TBaseIn <= 0.0)
+                    I.TBase = std::min(I.TBase, gas->minTemp(static_cast<size_t>(k)));
             }
+            // TODO(reactive-TBase): expose and validate a mechanism-specific
+            // base-temperature policy. For now use the minimum per-species
+            // Cantera lower bound so H2/O2 bookkeeping is based near the bottom
+            // of the mechanism range. For ideal gases, species internal energies
+            // are temperature-only, so one TP state is sufficient.
+            I.solT->thermo()->setState_TP(I.TBase, Cantera::OneAtm);
+            I.solT->thermo()->getPartialMolarIntEnergies(I.eBase.data());
+            for (int k = 0; k < I.Ns; ++k)
+                I.eBase[k] *= I.invMw[k];
             I.bufOmega.resize(I.Ns);
             I.bufDwdt.resize(I.Ns);
             I.bufDwdp.resize(I.Ns);
@@ -393,8 +425,12 @@ namespace DNDS::Euler::Chemistry
             c.Ns = R.Ns;
             c.speciesNames = R.speciesNames;
             c.mw = R.mw;
+            c.invMw = R.invMw;
             c.Rk = R.Rk;
-            c.hf = R.hf;
+            c.eBase = R.eBase;
+            c.TBase = R.TBase;
+            c.transportModel = R.transportModel;
+            c.transportModelNormalized = R.transportModelNormalized;
             c.U0 = R.U0;
             c.rho0 = R.rho0;
             c.invU0sq = R.invU0sq;
@@ -529,8 +565,10 @@ namespace DNDS::Euler::Chemistry
 
     ChemicalSource::ChemicalSource(const std::string &mechanismFile,
                                    const std::string &phaseName,
-                                   double U0, double rho0)
-        : impl_(std::make_unique<Impl>(mechanismFile, phaseName, U0, rho0)),
+                                   double U0, double rho0,
+                                   double TBase,
+                                   std::string transportModel)
+        : impl_(std::make_unique<Impl>(mechanismFile, phaseName, U0, rho0, TBase, std::move(transportModel))),
           mechanismFile_(mechanismFile), phaseName_(phaseName)
     {
         DNDS_assert(impl_);
@@ -561,6 +599,16 @@ namespace DNDS::Euler::Chemistry
         DNDS_assert(impl_);
         return impl_->rho0;
     }
+    const std::string &ChemicalSource::transportModel() const
+    {
+        DNDS_assert(impl_);
+        return impl_->transportModel;
+    }
+    bool ChemicalSource::isMixtureAveragedTransport() const
+    {
+        DNDS_assert(impl_);
+        return impl_->transportModelNormalized == "mixtureaveraged" || impl_->transportModelNormalized == "mix";
+    }
     const std::vector<std::string> &ChemicalSource::speciesNames() const
     {
         DNDS_assert(impl_);
@@ -570,6 +618,12 @@ namespace DNDS::Euler::Chemistry
     {
         DNDS_assert(impl_);
         return impl_->mw;
+    }
+
+    const std::vector<double> &ChemicalSource::speciesGasConstants() const
+    {
+        DNDS_assert(impl_);
+        return impl_->Rk;
     }
 
     // ---- mixture properties --------------------------------------------------
@@ -634,6 +688,12 @@ namespace DNDS::Euler::Chemistry
         return impl_->gas_minTemp();
     }
 
+    double ChemicalSource::baseTemperature() const
+    {
+        DNDS_assert(impl_);
+        return impl_->TBase;
+    }
+
     double ChemicalSource::speedOfSound(double T, ConstSpeciesBufferView Y, double p) const
     {
         DNDS_assert(impl_);
@@ -650,7 +710,7 @@ namespace DNDS::Euler::Chemistry
     {
         DNDS_assert(impl_);
         impl_->gasT_setMassFractions(Y.data);
-        double Tinit = T_guess > 300 ? T_guess : 300;
+        double Tinit = std::max(T_guess > 300 ? T_guess : 300, impl_->gas_minTemp());
         double p_init = mixtureR(Y) * Tinit / v;
         impl_->gasT_setState_TP(Tinit, p_init);
         impl_->gasT_setState_UV(u, v, rtol);
@@ -700,27 +760,7 @@ namespace DNDS::Euler::Chemistry
         std::vector<double> uBar(I.Ns);
         I.gas_getPartialMolarIntEnergies(uBar.data());
 
-        // DNDSR recovers Cantera temperature from a shifted internal-energy
-        // convention: u_cantera = u_DNDSR - pV_ref(Y) - e_sens_ref(Y).  At fixed
-        // conservative rhoE, species perturbations therefore change the energy
-        // sent to Cantera by the derivative of this reference offset.  For the
-        // currently supported ideal-gas bridge, pV_ref + e_sens_ref equals
-        // cp_k(T_ref) * T_ref per species mass.
-        // TODO(reactive-PP-lower-bound): this bridge is ideal-gas/reference-
-        // convention specific.  PP currently assumes a near-zero sensible-energy
-        // lower bound, while Cantera mechanisms have a finite valid T range; a
-        // general EOS path needs an EOS-aware minimum-energy definition.
         int Ns1 = I.Ns - 1;
-        std::vector<double> refOffsetSpecies(I.Ns, 0.0);
-        if (I.gas_isIdeal())
-        {
-            std::vector<double> cpBarRef(I.Ns);
-            I.gasT_setMassFractions(Y.data);
-            I.gasT_setState_TP(298.15, 101325);
-            I.gasT_getPartialMolarCp(cpBarRef.data());
-            for (int k = 0; k < I.Ns; ++k)
-                refOffsetSpecies[k] = cpBarRef[k] * 298.15 / std::max(I.mw[k], 1e-30);
-        }
         std::vector<double> compositionEnergyDiff(Ns1, 0.0);
 
         // zero Jacobian
@@ -738,7 +778,7 @@ namespace DNDS::Euler::Chemistry
         bool skipAbsorb = jacFlags & JAC_SKIP_ABSORPTION;
 
         int nRows = skipAbsorb ? I.Ns : Ns1; // Ns1 excludes the derived last-species row
-        double invMlast = skipAbsorb ? 0.0 : (1.0 / std::max(I.mw[Ns1], 1e-30));
+        double invMlast = skipAbsorb ? 0.0 : I.invMw[Ns1];
 
         // ── Species columns (∂ω/∂(ρY_k)_code) ──
         // Concentration chain rule: ∂C_k/∂(ρY_k)_code = I.rho0/MW_k
@@ -752,15 +792,12 @@ namespace DNDS::Euler::Chemistry
         double rhoScaleT = I.rho0 * T;
         for (int k = 0; k < Ns1; ++k)
         {
-            double invMk = 1.0 / std::max(I.mw[k], 1e-30);
+            double invMk = I.invMw[k];
             double du = uBar[k] * invMk; // specific internal energy [J/kg], EOS-agnostic
             if (!skipAbsorb)
             {
                 du -= uBar[Ns1] * invMlast;
-                du += refOffsetSpecies[k] - refOffsetSpecies[Ns1];
             }
-            else
-                du += refOffsetSpecies[k];
             compositionEnergyDiff[k] = du;
             double dT_drY = dT_pre * du;
             // dP/d(rhoY_k) through temperature (p → rho*R*T, at constant ρ, R varies through Y)
@@ -808,10 +845,10 @@ namespace DNDS::Euler::Chemistry
         // ∂ω/∂ρ_code = ∂ω/∂T·dT/dρ_code + ∂ω/∂C_last·∂C_last/∂ρ_code
         //   ∂C_last/∂ρ_code = I.rho0/M_last  (since ∂(ρ·Y_last)/∂ρ = 1 at fixed ρY_k)
         // At fixed conservative rhoE, momentum, and transported rhoY_k:
-        //   u = U0²·(ρE/ρ - |ρu|²/(2ρ²)) - offset(Y)
+        //   u = U0²·(ρE/ρ - |ρu|²/(2ρ²))
         // so dT/dρ includes both the total-energy term -U0²·ρE/ρ² and the
-        // kinetic correction +U0²·|ρu|²/ρ³, plus the composition/reference-
-        // offset contribution from dY_k/dρ = -Y_k/ρ, dY_last/dρ = ΣY_k/ρ.
+        // kinetic correction +U0²·|ρu|²/ρ³, plus composition contribution from
+        // dY_k/dρ = -Y_k/ρ, dY_last/dρ = ΣY_k/ρ.
         double dComposition_drho = 0.0;
         if (!skipAbsorb)
             for (int k = 0; k < Ns1; ++k)
@@ -821,12 +858,13 @@ namespace DNDS::Euler::Chemistry
                           vs2 * rhoMomentum2 * rhoInv * rhoInv * rhoInv +
                           dComposition_drho) /
                          cvSafe;
+        double dP_drho_direct = (!skipAbsorb) ? (I.rho0 * T * I.Rk[Ns1]) : 0.0;
         for (int i = 0; i < nRows; ++i)
         {
             double d = I.bufDwdt[i] * dT_drho;
             if (!skipAbsorb)
                 d += dWdC.coeff(i, Ns1) * invMlast * I.rho0;
-            d += I.bufDwdp[i] * PbyT * dT_drho;
+            d += I.bufDwdp[i] * (PbyT * dT_drho + dP_drho_direct);
             J(i, 0) = d;
         }
     }
@@ -861,6 +899,8 @@ namespace DNDS::Euler::Chemistry
     double ChemicalSource::viscosity(double T, double p, ConstSpeciesBufferView Y) const
     {
         DNDS_assert(impl_);
+        DNDS_check_throw_info(isMixtureAveragedTransport(),
+                              "ChemicalSource::viscosity(): only mixture-averaged transport is implemented");
         impl_->setTPY(T, p, Y);
         return impl_->trn_viscosity();
     }
@@ -868,6 +908,8 @@ namespace DNDS::Euler::Chemistry
     double ChemicalSource::thermalConductivity(double T, double p, ConstSpeciesBufferView Y) const
     {
         DNDS_assert(impl_);
+        DNDS_check_throw_info(isMixtureAveragedTransport(),
+                              "ChemicalSource::thermalConductivity(): only mixture-averaged transport is implemented");
         impl_->setTPY(T, p, Y);
         return impl_->trn_thermalConductivity();
     }
@@ -877,6 +919,8 @@ namespace DNDS::Euler::Chemistry
                                             SpeciesBufferView D) const
     {
         DNDS_assert(impl_);
+        DNDS_check_throw_info(isMixtureAveragedTransport(),
+                              "ChemicalSource::speciesDiffusivity(): only mixture-averaged transport is implemented");
         auto &I = *impl_;
         I.setTPY(T, p, Y);
         I.trn_getMixDiffCoeffs(I.bufD.data());
@@ -892,39 +936,23 @@ namespace DNDS::Euler::Chemistry
         impl_->setTPY(T, p, Y);
         impl_->gas_getPartialMolarEnthalpies(impl_->bufOmega.data());
         for (int k = 0; k < impl_->Ns; ++k)
-            h[k] = impl_->bufOmega[k] / std::max(impl_->mw[k], 1e-30);
+            h[k] = impl_->bufOmega[k] * impl_->invMw[k];
     }
 
-    void ChemicalSource::speciesFormationEnthalpies(SpeciesBufferView hf) const
+    void ChemicalSource::speciesBaseInternalEnergies(SpeciesBufferView eBase) const
     {
         DNDS_assert(impl_);
         for (int k = 0; k < impl_->Ns; ++k)
-            hf[k] = impl_->hf[k];
+            eBase[k] = impl_->eBase[k];
     }
 
-    double ChemicalSource::mixtureFormationEnthalpy(ConstSpeciesBufferView Y) const
+    double ChemicalSource::mixtureBaseInternalEnergy(ConstSpeciesBufferView Y) const
     {
         DNDS_assert(impl_);
         double e = 0;
         for (int k = 0; k < impl_->Ns; ++k)
-            e += Y[k] * impl_->hf[k];
+            e += Y[k] * impl_->eBase[k];
         return e;
-    }
-
-    double ChemicalSource::pVAtReference(ConstSpeciesBufferView Y) const
-    {
-        DNDS_assert(impl_);
-        impl_->gasT_setMassFractions(Y.data);
-        impl_->gasT_setState_TP(298.15, 101325);
-        return impl_->gasT_enthalpy_mass() - impl_->gasT_intEnergy_mass();
-    }
-
-    double ChemicalSource::sensibleInternalEnergyAtReference(ConstSpeciesBufferView Y) const
-    {
-        DNDS_assert(impl_);
-        impl_->gasT_setMassFractions(Y.data);
-        impl_->gasT_setState_TP(298.15, 101325);
-        return impl_->gasT_cv_mass() * 298.15;
     }
 
     bool ChemicalSource::isIdealGas() const
@@ -973,37 +1001,35 @@ namespace DNDS::Euler::Chemistry
         return {bufY_.data(), Ns};
     }
 
-    ConstSpeciesBufferView ChemicalSource::mixtureFormationRhoESpecies() const
+    ConstSpeciesBufferView ChemicalSource::mixtureBaseInternalRhoESpecies() const
     {
         DNDS_assert(impl_);
         int Ns = impl_->Ns;
-        bufHf_.resize(static_cast<size_t>(Ns));
+        bufEBase_.resize(static_cast<size_t>(Ns));
         for (int k = 0; k < Ns; ++k)
-            bufHf_[k] = impl_->hf[k] * impl_->invU0sq;
-        return {bufHf_.data(), Ns};
+            bufEBase_[k] = impl_->eBase[k] * impl_->invU0sq;
+        return {bufEBase_.data(), Ns};
     }
 
-    double ChemicalSource::mixtureFormationRhoE(double rho, ConstSpeciesBufferView Y) const
+    double ChemicalSource::mixtureBaseInternalRhoE(double rho, ConstSpeciesBufferView Y) const
     {
-        return rho * mixtureFormationEnthalpy(Y) * impl_->invU0sq;
+        return rho * mixtureBaseInternalEnergy(Y) * impl_->invU0sq;
     }
 
-    double ChemicalSource::mixtureFormationRhoEIncrement(double rhoInc, const double *dRhoYK, int nTransported) const
+    double ChemicalSource::mixtureBaseInternalRhoEIncrement(double rhoInc, const double *dRhoYK, int nTransported) const
     {
         DNDS_assert(impl_);
         int Ns = impl_->Ns;
         int Ns1 = Ns - 1;
-        // bufHf_ must already be populated with code-scaled values
-        const double *hf = bufHf_.data();
-        double dRhoHf = hf[Ns1] * rhoInc;
+        double dRhoEBase = impl_->eBase[Ns1] * impl_->invU0sq * rhoInc;
         double sumDRhoYk = 0;
         for (int k = 0; k < nTransported; ++k)
         {
-            dRhoHf += hf[k] * dRhoYK[k];
+            dRhoEBase += impl_->eBase[k] * impl_->invU0sq * dRhoYK[k];
             sumDRhoYk += dRhoYK[k];
         }
-        dRhoHf -= hf[Ns1] * sumDRhoYk;
-        return dRhoHf;
+        dRhoEBase -= impl_->eBase[Ns1] * impl_->invU0sq * sumDRhoYk;
+        return dRhoEBase;
     }
 
 } // namespace DNDS::Euler::Chemistry

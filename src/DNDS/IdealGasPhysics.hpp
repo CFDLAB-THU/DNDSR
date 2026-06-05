@@ -38,18 +38,18 @@ namespace DNDS::IdealGas
      *                 p = (gammaEq - 1) * rho * e_sensible.
      * @param gammaCpCv  Thermodynamic gamma cp/cv used only for acoustic speed,
      *                   a² = gammaCpCv * p / rho.
-     * @param rhoH_form  Volumetric formation enthalpy (ρ · Σ Y_k · h_f_k) to
+     * @param rhoE_base  Volumetric base energy (ρ · Σ Y_k · e_base_k) to
      *                   subtract from total energy for the sensible pressure
      *                   calculation. Defaults to 0 (non-reactive).
      */
     DNDS_DEVICE_CALLABLE inline void
     IdealGasThermal(real E, real rho, real vSqr, real gammaEq, real gammaCpCv,
                     real &p, real &asqr, real &H,
-                    real rhoH_form = 0)
+                    real rhoE_base = 0)
     {
-        p = (gammaEq - 1) * (E - rho * 0.5 * vSqr - rhoH_form);
+        p = (gammaEq - 1) * (E - rho * 0.5 * vSqr - rhoE_base);
         asqr = gammaCpCv * p / rho;
-        H = (E - rhoH_form + p) / rho;
+        H = (E - rhoE_base + p) / rho;
     }
 
     /// Pressure from internal energy: p = (gammaEq - 1) * e.
@@ -71,7 +71,7 @@ namespace DNDS::IdealGas
     /// with older call sites and is intentionally ignored; pass sensible energy
     /// explicitly if a sensible enthalpy is needed.
     DNDS_DEVICE_CALLABLE inline real
-    Enthalpy(real E, real rho, real p, real /*rhoH_form*/ = 0)
+    Enthalpy(real E, real rho, real p, real /*rhoE_base*/ = 0)
     {
         return (E + p) / rho;
     }
@@ -91,20 +91,20 @@ namespace DNDS::IdealGas
      * @brief Convert conservative energy to primitive energy-index value.
      *
      * @tparam prim  Whether to store pressure or internal energy.
-     * @param E     Total energy (conservative), including formation.
+     * @param E     Total energy (conservative), including any caller-supplied base energy offset.
      * @param rho   Density.
      * @param vSqr  Velocity squared.
      * @param gammaEq Pressure/energy closure gamma.
-     * @param rhoH_form  Volumetric formation enthalpy to subtract for
+     * @param rhoE_base  Volumetric base energy to subtract for
      *                   sensible pressure/internal-energy (default 0).
      * @return The value to store at prim[I4].
      */
     template <PrimVariable prim>
     DNDS_DEVICE_CALLABLE inline real
     Cons2PrimEnergy(real E, real rho, real vSqr, real gammaEq,
-                    real rhoH_form = 0)
+                    real rhoE_base = 0)
     {
-        real e = E - rho * 0.5 * vSqr - rhoH_form;
+        real e = E - rho * 0.5 * vSqr - rhoE_base;
         if constexpr (prim == PrimVariable::Pressure)
             return (gammaEq - 1) * e; // p
         else
@@ -119,19 +119,19 @@ namespace DNDS::IdealGas
      * @param rho    Density.
      * @param vSqr   Velocity squared.
      * @param gammaEq  Pressure/energy closure gamma.
-     * @param rhoH_form  Volumetric formation enthalpy to add back for
+     * @param rhoE_base  Volumetric base energy to add back for
      *                   total energy (default 0).
-     * @return Total energy E, including formation if provided.
+     * @return Total energy E, including the caller-supplied base energy offset if provided.
      */
     template <PrimVariable prim>
     DNDS_DEVICE_CALLABLE inline real
     Prim2ConsEnergy(real primE, real rho, real vSqr, real gammaEq,
-                    real rhoH_form = 0)
+                    real rhoE_base = 0)
     {
         if constexpr (prim == PrimVariable::Pressure)
-            return primE / (gammaEq - 1) + rho * 0.5 * vSqr + rhoH_form;
+            return primE / (gammaEq - 1) + rho * 0.5 * vSqr + rhoE_base;
         else
-            return primE + rho * 0.5 * vSqr + rhoH_form;
+            return primE + rho * 0.5 * vSqr + rhoE_base;
     }
 
     /**

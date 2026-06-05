@@ -428,8 +428,8 @@ TEST_CASE("PhysicsProperties reactive conservativeThermal separates gammaEq from
 
     real rho = cons(0);
     real vSqr = (cons(Eigen::seq(Eigen::fix<1>, Eigen::fix<3>)) / rho).squaredNorm();
-    real rhoHForm = phys.mixtureFormationRhoE(cons);
-    real sensibleRhoE = cons(4) - 0.5 * rho * vSqr - rhoHForm;
+    real rhoEBase = phys.mixtureBaseInternalRhoE(cons);
+    real sensibleRhoE = cons(4) - 0.5 * rho * vSqr - rhoEBase;
     real gammaCantera = phys.gamma(T, cons);
 
     CHECK(T == doctest::Approx(primTP(0)).epsilon(1e-11));
@@ -437,7 +437,7 @@ TEST_CASE("PhysicsProperties reactive conservativeThermal separates gammaEq from
     CHECK(gamma == doctest::Approx(gammaCantera).epsilon(1e-12));
     CHECK(gammaEq == doctest::Approx(1.0 + p / sensibleRhoE).epsilon(1e-12));
     CHECK(asqr == doctest::Approx(gammaCantera * p / rho).epsilon(1e-12));
-    CHECK(H == doctest::Approx((cons(4) + p - rhoHForm) / rho).epsilon(1e-12));
+    CHECK(H == doctest::Approx((cons(4) + p - rhoEBase) / rho).epsilon(1e-12));
     CHECK(std::abs(gammaEq - gamma) > 1e-4);
 }
 

@@ -533,13 +533,13 @@ int main(int argc, char **argv)
             Gas::IdealGasThermalPrimitive2Conservative<2>(prim, consTotal, cfg.gamma, 0);
     }
 
-    // --- Compute temperature, gamma, rhoH_form from consTotal ---
-    real T_code, gammaEq, rhoH_form_cons, Rmix_code;
+    // --- Compute temperature, gamma, rhoE_base from consTotal ---
+    real T_code, gammaEq, rhoE_base_cons, Rmix_code;
     if (isReactive)
     {
         T_code = (dim == 3) ? phys->temperature<3>(consTotal) : phys->temperature<2>(consTotal);
         gammaEq = (dim == 3) ? phys->gammaEq<3>(T_code, consTotal) : phys->gammaEq<2>(T_code, consTotal);
-        rhoH_form_cons = phys->mixtureFormationRhoE(consTotal);
+        rhoE_base_cons = phys->mixtureBaseInternalRhoE(consTotal);
         Rmix_code = phys->Rgas(consTotal);
     }
     else
@@ -547,7 +547,7 @@ int main(int argc, char **argv)
         T_code = (dim == 3) ? computeTemperatureNonReactive<3>(consTotal, cfg.gamma, R_code)
                             : computeTemperatureNonReactive<2>(consTotal, cfg.gamma, R_code);
         gammaEq = cfg.gamma;
-        rhoH_form_cons = 0;
+        rhoE_base_cons = 0;
         Rmix_code = R_code;
     }
 
@@ -673,13 +673,13 @@ int main(int argc, char **argv)
         for (int j = 1; j <= dim; ++j)
             vel2 += consTotal[j] * consTotal[j];
         vel2 /= (consTotal[0] * consTotal[0]);
-        real e_sensible = consTotal[dim + 1] / consTotal[0] - 0.5 * vel2 - rhoH_form_cons / consTotal[0];
+        real e_sensible = consTotal[dim + 1] / consTotal[0] - 0.5 * vel2 - rhoE_base_cons / consTotal[0];
         std::cout << fmt::format("  p_eos      = {:12.4g} (code, via gamma_eq)\n",
                                  (gammaEq - 1.0) * consTotal[0] * e_sensible);
     }
     std::cout << fmt::format("  Rmix_phys  = {:12.4g} J/(kg.K)\n",
                              Rmix_code * cfg.U0 * cfg.U0 / cfg.T0);
-    std::cout << fmt::format("  rhoH_form  = {:12.4g} (code)\n", rhoH_form_cons);
+    std::cout << fmt::format("  rhoE_base  = {:12.4g} (code)\n", rhoE_base_cons);
 
     if (!speciesNames.empty())
     {
@@ -744,10 +744,10 @@ int main(int argc, char **argv)
         real uInternal = consTotal[dim + 1] / consTotal[0] - 0.5 * velSqr;
         real uPhysFromInput = uInternal * cfg.U0 * cfg.U0;
         std::cout << fmt::format("  u_phys(input)  = {:12.4g} J/kg  (from consTotal, pre-conversion)\n", uPhysFromInput);
-        std::cout << fmt::format("  u_phys(sent)   = {:12.4g} J/kg  (after pVRef + sensible offset)\n",
-                                 uPhysFromInput - chem.pVAtReference(Yv) - chem.sensibleInternalEnergyAtReference(Yv));
+        std::cout << fmt::format("  u_phys(sent)   = {:12.4g} J/kg  (direct Cantera UV input)\n",
+                                 uPhysFromInput);
         std::cout << fmt::format("  diff           = {:12.4g} J/kg  (sent - cantera)\n",
-                                 (uPhysFromInput - chem.pVAtReference(Yv) - chem.sensibleInternalEnergyAtReference(Yv)) - u_ct);
+                                 uPhysFromInput - u_ct);
     }
 
     return 0;

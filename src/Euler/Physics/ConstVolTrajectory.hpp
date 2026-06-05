@@ -132,14 +132,17 @@ namespace DNDS::Euler::Reactive0D
 
             std::vector<double> omega(Ns);
             double TCantera = std::max(TPhys, options.canteraTemperatureFloor);
-            chem.productionRates(TCantera, pPhys, Yv, Chemistry::SpeciesBufferView{omega.data(), Ns});
+            double pCantera = pPhys;
+            if (TCantera != TPhys)
+                pCantera = Uk[0] * c.rho0 * chem.mixtureR(Yv) * TCantera;
+            chem.productionRates(TCantera, pCantera, Yv, Chemistry::SpeciesBufferView{omega.data(), Ns});
 
             Eigen::VectorXd ret = Eigen::VectorXd::Zero(nVars);
             for (int k = 0; k < Ns1; ++k)
                 ret[Isp + k] = omega[k] * MW[k] * invS0;
 
             std::vector<double> jbuf(Ns * nVars, 0.0);
-            chem.productionRatesAndJacobian(TCantera, pPhys, Uk[0], Uk[I4], 0.0, 0.0, 0.0, I4,
+            chem.productionRatesAndJacobian(TCantera, pCantera, Uk[0], Uk[I4], 0.0, 0.0, 0.0, I4,
                                             Yv, Chemistry::SpeciesBufferView{omega.data(), Ns},
                                             Chemistry::JacobianBufferView{jbuf.data(), Ns, nVars, Ns});
 

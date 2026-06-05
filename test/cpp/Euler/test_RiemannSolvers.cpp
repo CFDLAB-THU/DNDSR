@@ -40,10 +40,10 @@ static Eigen::Vector<real, 5> prim2cons(real rho, real u, real v, real w, real p
     return U;
 }
 
-static Eigen::Vector<real, 5> prim2consSplit(real rho, real u, real v, real w, real p, real gammaEq, real rhoHForm)
+static Eigen::Vector<real, 5> prim2consSplit(real rho, real u, real v, real w, real p, real gammaEq, real rhoEBase)
 {
     Eigen::Vector<real, 5> U;
-    real E = p / (gammaEq - 1.0) + 0.5 * rho * (u * u + v * v + w * w) + rhoHForm;
+    real E = p / (gammaEq - 1.0) + 0.5 * rho * (u * u + v * v + w * w) + rhoEBase;
     U << rho, rho * u, rho * v, rho * w, E;
     return U;
 }
@@ -65,12 +65,12 @@ static Eigen::Vector<real, 5> exactNormalFlux(
 }
 
 static Eigen::Vector<real, 5> exactNormalFluxSplit(
-    const Eigen::Vector<real, 5> &U, const Eigen::Vector3d &n, real gammaEq, real rhoHForm)
+    const Eigen::Vector<real, 5> &U, const Eigen::Vector3d &n, real gammaEq, real rhoEBase)
 {
     Eigen::Vector3d velo = U.segment<3>(1) / U(0);
     real vn = velo.dot(n);
     real vSqr = velo.squaredNorm();
-    real p = (gammaEq - 1.0) * (U(4) - 0.5 * U(0) * vSqr - rhoHForm);
+    real p = (gammaEq - 1.0) * (U(4) - 0.5 * U(0) * vSqr - rhoEBase);
     Eigen::Vector<real, 5> F;
     F(0) = U(0) * vn;
     F.segment<3>(1) = U.segment<3>(1) * vn + p * n;
@@ -154,12 +154,12 @@ TEST_CASE("Variable-gamma Riemann solvers use gammaEq pressure and gamma acousti
 {
     real gammaEq = 1.23;
     real gammaCpCv = 1.41;
-    real rhoHForm = 6.0;
-    auto U = prim2consSplit(1.4, 12.0, -3.0, 2.0, 17.0, gammaEq, rhoHForm);
+    real rhoEBase = 6.0;
+    auto U = prim2consSplit(1.4, 12.0, -3.0, 2.0, 17.0, gammaEq, rhoEBase);
     Eigen::Vector3d n(0.3, -0.4, 0.5);
     n.normalize();
     Eigen::Vector3d vg = Eigen::Vector3d::Zero();
-    auto Fexact = exactNormalFluxSplit(U, n, gammaEq, rhoHForm);
+    auto Fexact = exactNormalFluxSplit(U, n, gammaEq, rhoEBase);
 
     for (auto rs : {Roe, HLLC, HLLEP})
     {
@@ -170,7 +170,7 @@ TEST_CASE("Variable-gamma Riemann solvers use gammaEq pressure and gamma acousti
         InviscidFlux_IdealGas_Dispatcher<3, true>(
             rs, U, U, U, U, vg, n, gammaEq, gammaCpCv, F,
             0.0, 1.0, 0.0, noDump, lam0, lam123, lam4,
-            rhoHForm, rhoHForm, rhoHForm, rhoHForm,
+            rhoEBase, rhoEBase, rhoEBase, rhoEBase,
             gammaEq, gammaEq, gammaEq, gammaEq,
             gammaCpCv, gammaCpCv, gammaCpCv, gammaCpCv);
 
@@ -182,7 +182,7 @@ TEST_CASE("Variable-gamma Riemann solvers use gammaEq pressure and gamma acousti
     }
 
     auto rp = ComputeRoePreamble<3, true>(U, U, gammaEq, gammaCpCv, noDump,
-                                          rhoHForm, rhoHForm,
+                                          rhoEBase, rhoEBase,
                                           gammaEq, gammaEq,
                                           gammaCpCv, gammaCpCv);
     real vn = (U.segment<3>(1) / U(0)).dot(n);
@@ -192,16 +192,16 @@ TEST_CASE("Variable-gamma Riemann solvers use gammaEq pressure and gamma acousti
     CHECK(std::abs(vn + rp.aRoe) > std::abs(vn));
 }
 
-TEST_CASE("Variable-gamma Riemann solvers remain symmetric with formation energy")
+TEST_CASE("Variable-gamma Riemann solvers remain symmetric with base energy")
 {
     real gammaEqL = 1.22;
     real gammaEqR = 1.31;
     real gammaL = 1.39;
     real gammaR = 1.33;
-    real rhoHFormL = 5.0;
-    real rhoHFormR = -2.0;
-    auto UL = prim2consSplit(1.1, 25.0, -5.0, 1.0, 20.0, gammaEqL, rhoHFormL);
-    auto UR = prim2consSplit(0.8, -7.0, 3.0, 0.5, 9.0, gammaEqR, rhoHFormR);
+    real rhoEBaseL = 5.0;
+    real rhoEBaseR = -2.0;
+    auto UL = prim2consSplit(1.1, 25.0, -5.0, 1.0, 20.0, gammaEqL, rhoEBaseL);
+    auto UR = prim2consSplit(0.8, -7.0, 3.0, 0.5, 9.0, gammaEqR, rhoEBaseR);
     Eigen::Vector3d n(1.0, 0.2, -0.1);
     n.normalize();
     Eigen::Vector3d vg = Eigen::Vector3d::Zero();
@@ -214,13 +214,13 @@ TEST_CASE("Variable-gamma Riemann solvers remain symmetric with formation energy
         InviscidFlux_IdealGas_Dispatcher<3, true>(
             rs, UL, UR, UL, UR, vg, n, g_gamma, g_gamma, F1,
             0.0, 1.0, 0.0, noDump, lam0, lam123, lam4,
-            rhoHFormL, rhoHFormR, rhoHFormL, rhoHFormR,
+            rhoEBaseL, rhoEBaseR, rhoEBaseL, rhoEBaseR,
             gammaEqL, gammaEqR, gammaEqL, gammaEqR,
             gammaL, gammaR, gammaL, gammaR);
         InviscidFlux_IdealGas_Dispatcher<3, true>(
             rs, UR, UL, UR, UL, vg, -n, g_gamma, g_gamma, F2,
             0.0, 1.0, 0.0, noDump, lam0, lam123, lam4,
-            rhoHFormR, rhoHFormL, rhoHFormR, rhoHFormL,
+            rhoEBaseR, rhoEBaseL, rhoEBaseR, rhoEBaseL,
             gammaEqR, gammaEqL, gammaEqR, gammaEqL,
             gammaR, gammaL, gammaR, gammaL);
 
@@ -238,7 +238,7 @@ TEST_CASE("Variable-gamma Riemann solvers remain symmetric with formation energy
     InviscidFlux_IdealGas_Dispatcher<3, true>(
         HLLC, UL, UR, UL, UR, vg, n, g_gamma, g_gamma, FHLLC,
         0.0, 1.0, 0.0, noDump, lam0, lam123, lam4,
-        rhoHFormL, rhoHFormR, rhoHFormL, rhoHFormR,
+        rhoEBaseL, rhoEBaseR, rhoEBaseL, rhoEBaseR,
         gammaEqL, gammaEqR, gammaEqL, gammaEqR,
         gammaL, gammaR, gammaL, gammaR);
     CHECK(FHLLC.allFinite());

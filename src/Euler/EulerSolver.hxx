@@ -491,7 +491,7 @@ namespace DNDS::Euler
                     real T = eval.phys().template temperature<dim>(UMean);
                     real gammaEq = eval.phys().template gammaEq<dim>(T, UMean);
                     real gamma = eval.phys().gamma(T, UMean);
-                    auto M = Gas::IdealGas_EulerGasLeftEigenVector<dim>(UC, gammaEq, gamma, eval.phys().mixtureFormationRhoE(UMean));
+                    auto M = Gas::IdealGas_EulerGasLeftEigenVector<dim>(UC, gammaEq, gamma, eval.phys().mixtureBaseInternalRhoE(UMean));
                     M(EigenAll, Seq123) *= normBase.transpose();
 
                     Eigen::Matrix<real, nVarsFixed, nVarsFixed> ret(nVars, nVars);
@@ -513,7 +513,7 @@ namespace DNDS::Euler
                     real T = eval.phys().template temperature<dim>(UMean);
                     real gammaEq = eval.phys().template gammaEq<dim>(T, UMean);
                     real gamma = eval.phys().gamma(T, UMean);
-                    auto M = Gas::IdealGas_EulerGasRightEigenVector<dim>(UC, gammaEq, gamma, eval.phys().mixtureFormationRhoE(UMean));
+                    auto M = Gas::IdealGas_EulerGasRightEigenVector<dim>(UC, gammaEq, gamma, eval.phys().mixtureBaseInternalRhoE(UMean));
                     M(Seq123, EigenAll) = normBase * M(Seq123, EigenAll);
 
                     Eigen::Matrix<real, nVarsFixed, nVarsFixed> ret(nVars, nVars);
@@ -544,7 +544,7 @@ namespace DNDS::Euler
                             }
                             real T = eval.phys().template temperature<dim>(cons);
                             real gammaEq = eval.phys().template gammaEq<dim>(T, cons);
-                            Gas::IdealGasThermalConservative2Primitive<dim>(cons, prim, gammaEq, eval.phys().mixtureFormationRhoE(cons));
+                            Gas::IdealGasThermalConservative2Primitive<dim>(cons, prim, gammaEq, eval.phys().mixtureBaseInternalRhoE(cons));
                             v.setConstant(prim(I4));
                             return;
                         });

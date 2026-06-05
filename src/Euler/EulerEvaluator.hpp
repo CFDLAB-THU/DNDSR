@@ -336,7 +336,7 @@ namespace DNDS::Euler
                 real gammaEq = phys_.template gammaEq<dim>(T, settings.farFieldStaticValue.cons);
                 real gamma = phys_.gamma(T, settings.farFieldStaticValue.cons);
                 Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue.cons, farPrim, gammaEq,
-                                                                phys_.mixtureFormationRhoE(settings.farFieldStaticValue.cons));
+                                                                phys_.mixtureBaseInternalRhoE(settings.farFieldStaticValue.cons));
                 T = farPrim(I4) / ((gamma - 1) / gamma * phys_.Cp(T, settings.farFieldStaticValue.cons) * farPrim(0));
                 // auto [rhs0, rhs] = RANS::SolveZeroGradEquilibrium<dim>(settings.farFieldStaticValue, this->muEff(settings.farFieldStaticValue, T));
                 // if(mesh->getMPI().rank == 0)
@@ -1136,7 +1136,7 @@ namespace DNDS::Euler
          *
          * Two-term structure: a main diagonal term (lambdaMain * dU) and an optional
          * Roe-flux term (useRoeTerm).  The Roe path branches on hasChemicalSource()
-         * for the Roe-average (formation-enthalpy-aware vs. single-species).  The
+         * for the Roe-average (reference-energy-aware vs. single-species).  The
          * dual-term structure is intentional but fragile — any new flux scheme must
          * handle both reactive and non-reactive GetRoeAverage paths.
          *
@@ -1160,11 +1160,11 @@ namespace DNDS::Euler
             TVec velo = U(Seq123) / U(0);
             real p, H, asqr;
             Gas::IdealGasThermal(U(I4), U(0), velo.squaredNorm(), gammaEq, gamma, p, asqr, H,
-                                 phys_.mixtureFormationRhoE(U));
+                                 phys_.mixtureBaseInternalRhoE(U));
             TVec dVelo;
             real dp;
             Gas::IdealGasUIncrement<dim>(U, dU, velo, gammaEq, dVelo, dp,
-                                         phys_.mixtureFormationRhoEIncrement(dU));
+                                         phys_.mixtureBaseInternalRhoEIncrement(dU));
             TU dF(U.size());
             if (omitF == 0)
                 Gas::GasInviscidFluxFacialIncrement<dim>(
@@ -1191,7 +1191,7 @@ namespace DNDS::Euler
                     real sqrtRhoR = std::sqrt(UOther(0));
                     gammaEqRoe = (sqrtRhoL * gammaEq + sqrtRhoR * gammaEqOther) / (sqrtRhoL + sqrtRhoR);
                     Gas::GetRoeAverage<dim, true>(U, UOther, gammaEq, gamma, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe, uMean,
-                                                  phys_.mixtureFormationRhoE(U), phys_.mixtureFormationRhoE(UOther),
+                                                  phys_.mixtureBaseInternalRhoE(U), phys_.mixtureBaseInternalRhoE(UOther),
                                                   gammaEq, gammaEqOther,
                                                   gamma, phys_.gamma(TOther, UOther));
                 }
@@ -1256,11 +1256,11 @@ namespace DNDS::Euler
             TVec velo = U(Seq123) / U(0);
             real p, H, asqr;
             Gas::IdealGasThermal(U(I4), U(0), velo.squaredNorm(), gammaEq, gamma, p, asqr, H,
-                                 phys_.mixtureFormationRhoE(U));
+                                 phys_.mixtureBaseInternalRhoE(U));
             TVec dVelo;
             real dp;
             Gas::IdealGasUIncrement<dim>(U, dU, velo, gammaEq, dVelo, dp,
-                                         phys_.mixtureFormationRhoEIncrement(dU));
+                                         phys_.mixtureBaseInternalRhoEIncrement(dU));
             TU dF(U.size());
             Gas::GasInviscidFluxFacialIncrement<dim>(
                 U, dU,
@@ -1667,7 +1667,7 @@ namespace DNDS::Euler
             }
 
             real eK = ret(Seq123).squaredNorm() * 0.5 / (verySmallReal + ret(0));
-            real e = ret(I4) - eK - phys_.mixtureFormationRhoERaw(ret);
+            real e = ret(I4) - eK - phys_.mixtureBaseInternalRhoERaw(ret);
             if (e < 0)
             {
                 // eFixed = true;
@@ -1761,19 +1761,19 @@ namespace DNDS::Euler
                 newrho = rhoEps;
                 ret *= (newrho - u(0)) / (ret(0) - verySmallReal);
             }
-            real rhoH_form_old = phys_.mixtureFormationRhoERaw(u);
+            real rhoE_base_old = phys_.mixtureBaseInternalRhoERaw(u);
             real ekOld = 0.5 * u(Seq123).squaredNorm() / (u(0) + verySmallReal);
-            real rhoEinternal_sensible = u(I4) - ekOld - rhoH_form_old;
+            real rhoEinternal_sensible = u(I4) - ekOld - rhoE_base_old;
             DNDS_assert(rhoEinternal_sensible > 0);
             real ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
-            real rhoH_form_new = phys_.mixtureFormationRhoERaw(TU(u + ret));
-            real rhoEinternalNew_sensible = u(I4) + ret(I4) - ek - rhoH_form_new;
+            real rhoE_base_new = phys_.mixtureBaseInternalRhoERaw(TU(u + ret));
+            real rhoEinternalNew_sensible = u(I4) + ret(I4) - ek - rhoE_base_new;
             if (rhoEinternalNew_sensible <= rhoeSensibleEps)
             {
                 // Use linear-concave compression ratio (scheme=1).
                 // rhoe_sensible(θ) is concave → secant ≤ function, linear estimate safe.
                 real alpha = Gas::IdealGasGetCompressionRatioPressure<dim, 1, nVarsFixed>(
-                    u, ret, rhoeSensibleEps, rhoH_form_old, rhoH_form_new);
+                    u, ret, rhoeSensibleEps, rhoE_base_old, rhoE_base_new);
                 ret *= alpha * (0.99);
 
                 // Iterative pull-up: concave → rhoe(ret) ≥ linear estimate, may still overshoot.
@@ -1781,23 +1781,23 @@ namespace DNDS::Euler
                 for (int iter = 0; iter < 1000; iter++)
                 {
                     real ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
-                    real rhoH_ret = phys_.mixtureFormationRhoERaw(TU(u + ret));
-                    if (u(I4) + ret(I4) - ek - rhoH_ret < rhoeSensibleEps)
+                    real rhoEBase_ret = phys_.mixtureBaseInternalRhoERaw(TU(u + ret));
+                    if (u(I4) + ret(I4) - ek - rhoEBase_ret < rhoeSensibleEps)
                         ret *= decay, alpha *= decay;
                     else
                         break;
                 }
 
                 real ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
-                real rhoH_ret = phys_.mixtureFormationRhoERaw(TU(u + ret));
+                real rhoEBase_ret = phys_.mixtureBaseInternalRhoERaw(TU(u + ret));
 
-                if (u(I4) + ret(I4) - ek - rhoH_ret < rhoeSensibleEps * 0.5)
+                if (u(I4) + ret(I4) - ek - rhoEBase_ret < rhoeSensibleEps * 0.5)
                 {
                     std::cout << std::scientific << std::setprecision(5);
                     std::cout << u(0) << " " << ret(0) << std::endl;
                     std::cout << rhoEinternalNew_sensible << " " << rhoEinternal_sensible << std::endl;
                     std::cout << rhoeSensibleEps << std::endl;
-                    std::cout << u(I4) + ret(I4) - ek - rhoH_ret << std::endl;
+                    std::cout << u(I4) + ret(I4) - ek - rhoEBase_ret << std::endl;
                     std::cout << alpha << std::endl;
                     DNDS_assert(false);
                 }
@@ -1898,7 +1898,7 @@ namespace DNDS::Euler
                     int nV = static_cast<int>(cx[iCell].size());
                     int Isp = nV - Ns1;               // first transported species index
                     constexpr real rhoYFloor = 1e-30; // tiny positive floor (matches 0D ODE)
-                    real rhoHBeforeClip = phys_.mixtureFormationRhoERaw(cx[iCell]);
+                    real rhoEBaseBeforeClip = phys_.mixtureBaseInternalRhoERaw(cx[iCell]);
                     bool speciesClipped = false;
 
                     // (1) Clip each rhoY_k >= rhoYFloor
@@ -1926,10 +1926,10 @@ namespace DNDS::Euler
                     if (speciesClipped)
                     {
                         // Preserve the sensible part of rhoE across species repair.
-                        // The clipping changes rhoH_form through rhoY_k; total rhoE
-                        // must move by the same amount so rhoE - rhoH_form stays fixed.
-                        real rhoHAfterClip = phys_.mixtureFormationRhoERaw(cx[iCell]);
-                        cx[iCell](I4) += rhoHAfterClip - rhoHBeforeClip;
+                        // The clipping changes rhoE_base through rhoY_k; total rhoE
+                        // must move by the same amount so rhoE - rhoE_base stays fixed.
+                        real rhoEBaseAfterClip = phys_.mixtureBaseInternalRhoERaw(cx[iCell]);
+                        cx[iCell](I4) += rhoEBaseAfterClip - rhoEBaseBeforeClip;
                     }
                 }
 
