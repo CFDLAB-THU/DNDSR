@@ -82,9 +82,9 @@
         "CFL": 1,
         "nSmoothDTau": 4,
         "useLocalDt": true,
-        "nCFLRampStart": 100,
-        "nCFLRampLength": 100,
-        "CFLRampEnd": 1
+        "nCFLRampStart": 10,
+        "nCFLRampLength": 10,
+        "CFLRampEnd": 10
     },
     "convergenceControl": {
         "nTimeStepInternal": 100,
@@ -141,7 +141,7 @@
     "vfvSettings": {
         "maxOrder": 1,
         "intOrder": 1,
-        "jacobiRelax": 0,
+        "jacobiRelax": 1.0,
         "SORInstead": true,
         "smoothThreshold": 0.001,
         "WBAP_nStd": 10.0,
