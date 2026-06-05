@@ -1175,6 +1175,7 @@ namespace DNDS::Euler
         /** viscous flux **/
         TU_Batch visFluxV;
         visFluxV.resizeLike(ULxy);
+        typename PhysicsProperties<model>::MixtureAveragedDiffusionBuffers speciesDiffusionBuffers;
         for (int iB = 0; iB < nB; iB++)
         {
             real pMean, asqrMean, Hmean;
@@ -1220,7 +1221,8 @@ namespace DNDS::Euler
                 {
                     if (phys_.hasChemicalSource())
                         phys_.template addMixtureAveragedSpeciesDiffusionFlux<dim>(
-                            T, pMean, UMeanXYC, DiffUxyPrimC, uNormC, k, adiabaticWall, VisFlux);
+                            T, pMean, UMeanXYC, DiffUxyPrimC, uNormC, k, adiabaticWall,
+                            speciesDiffusionBuffers, VisFlux);
                 }
 
                 this->visFluxTurVariable(UMeanXYC, DiffUxyPrimC, muRef, mufPhy, muTurb, uNormC, iFace, VisFlux);

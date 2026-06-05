@@ -707,11 +707,8 @@ int main(int argc, char **argv)
         int Ns1 = Ns - 1;
         int Isp = dim + 2;
         auto &chem = (*pool)[0];
-        auto YvSanitized = chem.massFractions(1.0, primCode.data() + Isp, Ns1);
-        for (int k = 0; k < Ns; ++k)
-        {
-            Ybuf[k] = YvSanitized[k];
-        }
+        SpeciesBufferView YvSanitized{Ybuf.data(), Ns};
+        chem.massFractions(1.0, primCode.data() + Isp, Ns1, YvSanitized);
         ConstSpeciesBufferView Yv{Ybuf.data(), Ns};
         double u_ct = chem.mixtureIntEnergy(T_phys, Yv, p_phys);
         double h_ct = chem.mixtureEnthalpy(T_phys, Yv, p_phys);

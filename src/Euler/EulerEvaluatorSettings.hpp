@@ -664,8 +664,8 @@ namespace DNDS::Euler
          * @brief Reactive flow configuration.
          *
          * When @c enabled is true, the solver activates multi-species reactive
-         * flow with chemical source terms and multi-species thermodynamics.
-         * Phase 1: structural placeholder — chemistry evaluation wired in Phase 2.
+         * flow with chemical source terms, multi-species thermodynamics, and
+         * mixture-averaged transport.
          */
         struct ReactiveFlowSettings
         {

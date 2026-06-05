@@ -270,8 +270,8 @@ namespace DNDS::Euler
             int nVars = static_cast<int>(U.size());
             int Isp = nVars - Ns1;
             DNDS_check_throw_info(Isp >= 1, "mixtureBaseInternalRhoE(): state vector too small for mechanism species count");
-            auto Y = c.massFractions(U[0], &U[Isp], Ns1);
-            return c.mixtureBaseInternalRhoE(U[0], Y);
+            auto Y = massFractionsVector(U);
+            return c.mixtureBaseInternalRhoE(U[0], {Y.data(), static_cast<int>(Y.size())});
         }
 
         /// Raw linear base internal energy from rho/rhoY without clipping or renormalizing species.
@@ -336,16 +336,16 @@ namespace DNDS::Euler
         real CSutherland() const { return igProp_->CSutherland; }
         int muModel() const { return igProp_->muModel; }
 
-        /// Public access to clamped, renormalized mass fractions. Returns a view into per-thread buffer.
+        /// Public access to clamped, renormalized mass fractions. Caller owns @p Y storage.
         /// Caller must ensure hasChemicalSource() before calling.
-        Chemistry::ConstSpeciesBufferView massFractionsPublic(const TU &U) const
+        void massFractionsPublic(const TU &U, Chemistry::SpeciesBufferView Y) const
         {
             DNDS_assert(hasChemicalSource());
             auto &c = chem();
             int Ns1 = c.nSpecies() - 1;
             int nVars = static_cast<int>(U.size());
             int Isp = nVars - Ns1;
-            return c.massFractions(U[0], U.data() + Isp, Ns1);
+            c.massFractions(U[0], U.data() + Isp, Ns1, Y);
         }
 
         // ---- State conversion (I/O helpers, not for tight loops) ------------
@@ -400,7 +400,9 @@ namespace DNDS::Euler
             int nVars = static_cast<int>(primUse.size());
             int Isp = nVars - Ns1;
             int I4 = dim + 1;
-            auto Y = c.massFractions(1.0, primUse.data() + Isp, Ns1);
+            std::vector<double> Ybuf(static_cast<size_t>(c.nSpecies()));
+            Chemistry::SpeciesBufferView Y{Ybuf.data(), c.nSpecies()};
+            c.massFractions(1.0, primUse.data() + Isp, Ns1, Y);
             real Rmix = mixtureRfromPrimitive(primUse);
             real T_code = primUse[I4] / std::max(primUse[0] * Rmix, real(1e-60));
             double uPhys = c.mixtureIntEnergy(toPhysT(T_code), Y, toPhysP(primUse[I4]));
@@ -534,11 +536,9 @@ namespace DNDS::Euler
             int Ns1 = c.nSpecies() - 1;
             int nVars = static_cast<int>(primStatic.size());
             int Isp = nVars - Ns1;
-            auto Yview = c.massFractions(1.0, primStatic.data() + Isp, Ns1);
             std::vector<double> Ybuf(c.nSpecies());
-            for (int k = 0; k < c.nSpecies(); ++k)
-                Ybuf[k] = Yview[k];
-            Chemistry::ConstSpeciesBufferView Y{Ybuf.data(), c.nSpecies()};
+            Chemistry::SpeciesBufferView Y{Ybuf.data(), c.nSpecies()};
+            c.massFractions(1.0, primStatic.data() + Isp, Ns1, Y);
 
             double TTotalPhys = toPhysT(TTotal);
             double pTotalPhys = toPhysP(pTotal);
@@ -621,11 +621,9 @@ namespace DNDS::Euler
             int Ns1 = c.nSpecies() - 1;
             int nVars = static_cast<int>(primStatic.size());
             int Isp = nVars - Ns1;
-            auto Yview = c.massFractions(1.0, primStatic.data() + Isp, Ns1);
             std::vector<double> Ybuf(c.nSpecies());
-            for (int k = 0; k < c.nSpecies(); ++k)
-                Ybuf[k] = Yview[k];
-            Chemistry::ConstSpeciesBufferView Y{Ybuf.data(), c.nSpecies()};
+            Chemistry::SpeciesBufferView Y{Ybuf.data(), c.nSpecies()};
+            c.massFractions(1.0, primStatic.data() + Isp, Ns1, Y);
 
             double TStaticPhys = toPhysT(pStatic / std::max(primStatic(0) * toCode(c.mixtureR(Y)), 1e-60));
             double pStaticPhys = toPhysP(pStatic);
@@ -974,7 +972,9 @@ namespace DNDS::Euler
             int Isp = nVars - Ns1;
             DNDS_check_throw_info(Isp >= dim + 2,
                                   "sanitizePrimitiveSpecies(): state vector too small for mechanism species count");
-            auto Y = c.massFractions(1.0, ret.data() + Isp, Ns1);
+            std::vector<double> Ybuf(static_cast<size_t>(c.nSpecies()));
+            Chemistry::SpeciesBufferView Y{Ybuf.data(), c.nSpecies()};
+            c.massFractions(1.0, ret.data() + Isp, Ns1, Y);
             for (int k = 0; k < Ns1; ++k)
                 ret[Isp + k] = Y[k];
             return ret;
@@ -990,7 +990,9 @@ namespace DNDS::Euler
             int Ns1 = c.nSpecies() - 1;
             int nVars = static_cast<int>(prim.size());
             int Isp = nVars - Ns1;
-            auto Y = c.massFractions(1.0, prim.data() + Isp, Ns1);
+            std::vector<double> Ybuf(static_cast<size_t>(c.nSpecies()));
+            Chemistry::SpeciesBufferView Y{Ybuf.data(), c.nSpecies()};
+            c.massFractions(1.0, prim.data() + Isp, Ns1, Y);
             return c.mixtureBaseInternalRhoE(prim[0], Y);
         }
 
@@ -1003,8 +1005,10 @@ namespace DNDS::Euler
             int Ns1 = c.nSpecies() - 1;
             int nVars = static_cast<int>(prim.size());
             int Isp = nVars - Ns1;
-            auto Yview = c.massFractions(1.0, prim.data() + Isp, Ns1); // rho=1 → Y_k directly
-            return toCode(c.mixtureR(Yview));
+            std::vector<double> Ybuf(static_cast<size_t>(c.nSpecies()));
+            Chemistry::SpeciesBufferView Y{Ybuf.data(), c.nSpecies()};
+            c.massFractions(1.0, prim.data() + Isp, Ns1, Y); // rho=1 → Y_k directly
+            return toCode(c.mixtureR(Y));
         }
 
     public:
@@ -1031,6 +1035,22 @@ namespace DNDS::Euler
             return hasChemicalSource() && chem().isMixtureAveragedTransport();
         }
 
+        struct MixtureAveragedDiffusionBuffers
+        {
+            std::vector<real> h;
+            std::vector<real> D;
+            std::vector<real> Y;
+            std::vector<real> JRawN;
+
+            void resize(int nSpecies)
+            {
+                h.resize(static_cast<size_t>(nSpecies));
+                D.resize(static_cast<size_t>(nSpecies));
+                Y.resize(static_cast<size_t>(nSpecies));
+                JRawN.resize(static_cast<size_t>(nSpecies));
+            }
+        };
+
         /** Add mixture-averaged species diffusion and enthalpy transport to a viscous flux slot.
          *  The solver convention is F_total = F_inviscid - VisFlux, so this stores -J_k in
          *  species equations and -Σ h_k J_k in the energy equation. Also corrects the
@@ -1042,6 +1062,7 @@ namespace DNDS::Euler
                                                     const TNorm &norm,
                                                     real thermalConductivity,
                                                     bool adiabaticWall,
+                                                    MixtureAveragedDiffusionBuffers &buffers,
                                                     TFlux &visFlux) const
         {
             if (!hasChemicalSource())
@@ -1058,21 +1079,20 @@ namespace DNDS::Euler
             int Ns1 = Ns - 1;
             int nV = static_cast<int>(U.size());
             int Isp = nV - Ns1;
+            buffers.resize(Ns);
 
             // Energy diffusion uses full species enthalpy h_k(T,p,Y), not the
             // bookkeeping base-energy/rhoE_base offset. This is the old rhoH
             // diffusion concern: the correct term is -Σ h_k J_k in physical flux.
-            std::vector<real> hBuf(static_cast<size_t>(Ns));
-            Chemistry::SpeciesBufferView hv{hBuf.data(), Ns};
+            Chemistry::SpeciesBufferView hv{buffers.h.data(), Ns};
             speciesEnthalpies(T, p, U, hv);
 
-            std::vector<real> Dbuf(static_cast<size_t>(Ns));
-            mixtureDiffusivity(T, p, U, Dbuf);
+            mixtureDiffusivity(T, p, U, buffers.D);
 
             real rhoFace = U(0);
             real rhoInvFace = 1.0 / std::max(rhoFace, verySmallReal);
-            std::vector<real> YBuf(static_cast<size_t>(Ns), 0.0);
-            std::vector<real> JRawN(static_cast<size_t>(Ns), 0.0);
+            std::fill(buffers.Y.begin(), buffers.Y.end(), real(0));
+            std::fill(buffers.JRawN.begin(), buffers.JRawN.end(), real(0));
             real sumY = 0.0;
             real sumGradYDotN = 0.0;
             real sumJRawN = 0.0;
@@ -1081,13 +1101,13 @@ namespace DNDS::Euler
 
             for (int kk = 0; kk < Ns1; ++kk)
             {
-                YBuf[kk] = U(Isp + kk) * rhoInvFace;
-                sumY += YBuf[kk];
+                buffers.Y[kk] = U(Isp + kk) * rhoInvFace;
+                sumY += buffers.Y[kk];
                 real gradYkDotN = GradUPrim(Seq012, Isp + kk).dot(norm);
                 gradRDotN += (speciesGasConstantK(kk) - RLast) * gradYkDotN;
-                JRawN[kk] = -rhoFace * Dbuf[kk] * gradYkDotN;
+                buffers.JRawN[kk] = -rhoFace * buffers.D[kk] * gradYkDotN;
                 sumGradYDotN += gradYkDotN;
-                sumJRawN += JRawN[kk];
+                sumJRawN += buffers.JRawN[kk];
             }
 
             // Conductive heat flux sign: VisFlux stores +k∇T·n and total flux subtracts VisFlux.
@@ -1095,18 +1115,18 @@ namespace DNDS::Euler
             if (!adiabaticWall)
                 visFlux(I4) -= thermalConductivity * T / std::max(Rgas(U), verySmallReal) * gradRDotN;
 
-            YBuf[Ns - 1] = real(1) - sumY;
-            JRawN[Ns - 1] = rhoFace * Dbuf[Ns - 1] * sumGradYDotN;
-            sumJRawN += JRawN[Ns - 1];
+            buffers.Y[Ns - 1] = real(1) - sumY;
+            buffers.JRawN[Ns - 1] = rhoFace * buffers.D[Ns - 1] * sumGradYDotN;
+            sumJRawN += buffers.JRawN[Ns - 1];
 
             real vcN = -sumJRawN * rhoInvFace;
             for (int kk = 0; kk < Ns; ++kk)
             {
-                real JkN = JRawN[kk] + rhoFace * YBuf[kk] * vcN;
+                real JkN = buffers.JRawN[kk] + rhoFace * buffers.Y[kk] * vcN;
                 real FvSpeciesN = -JkN;
                 if (kk < Ns1)
                     visFlux(Isp + kk) += FvSpeciesN;
-                visFlux(I4) += hBuf[kk] * FvSpeciesN;
+                visFlux(I4) += buffers.h[kk] * FvSpeciesN;
             }
         }
 
@@ -1176,8 +1196,10 @@ namespace DNDS::Euler
             int Ns1 = c.nSpecies() - 1;
             int nVars = static_cast<int>(U.size());
             int Isp = nVars - Ns1;
-            auto Yv = c.massFractions(U[0], U.data() + Isp, Ns1);
-            c.speciesEnthalpies(toPhysT(T), toPhysP(p), Yv, h);
+            std::vector<double> Ybuf(static_cast<size_t>(c.nSpecies()));
+            Chemistry::SpeciesBufferView Y{Ybuf.data(), c.nSpecies()};
+            c.massFractions(U[0], U.data() + Isp, Ns1, Y);
+            c.speciesEnthalpies(toPhysT(T), toPhysP(p), Y, h);
             real invU0sq = 1.0 / (igProp_->U0 * igProp_->U0);
             for (int k = 0; k < c.nSpecies(); ++k)
                 h[k] *= invU0sq;
@@ -1195,13 +1217,15 @@ namespace DNDS::Euler
         }
 
     private:
-        Chemistry::ConstSpeciesBufferView massFractions(const TU &U) const
+        std::vector<double> massFractionsVector(const TU &U) const
         {
             auto &c = chem();
             int Ns1 = c.nSpecies() - 1;
             int nVars = static_cast<int>(U.size());
             int Isp = nVars - Ns1;
-            return c.massFractions(U[0], U.data() + Isp, Ns1);
+            std::vector<double> Y(static_cast<size_t>(c.nSpecies()));
+            c.massFractions(U[0], U.data() + Isp, Ns1, {Y.data(), c.nSpecies()});
+            return Y;
         }
 
         ChemPtr pool_;
@@ -1412,7 +1436,8 @@ namespace DNDS::Euler
                 return igProp_->muGas;
             }
         }
-        real muPhys = chem().viscosity(toPhysT(T), toPhysP(p), massFractions(U));
+        auto Y = massFractionsVector(U);
+        real muPhys = chem().viscosity(toPhysT(T), toPhysP(p), {Y.data(), static_cast<int>(Y.size())});
         return muPhys / mu0();
     }
 
@@ -1421,7 +1446,8 @@ namespace DNDS::Euler
     {
         if (!hasChemicalSource())
             return Cp(T, U) * mixtureViscosity(T, p, U) / Pr();
-        real kPhys = chem().thermalConductivity(toPhysT(T), toPhysP(p), massFractions(U));
+        auto Y = massFractionsVector(U);
+        real kPhys = chem().thermalConductivity(toPhysT(T), toPhysP(p), {Y.data(), static_cast<int>(Y.size())});
         return kPhys / k0();
     }
 
@@ -1437,7 +1463,8 @@ namespace DNDS::Euler
         int Ns = chem().nSpecies();
         std::vector<real> Dbuf(Ns);
         Chemistry::SpeciesBufferView Dv{Dbuf.data(), Ns};
-        chem().speciesDiffusivity(toPhysT(T), toPhysP(p), massFractions(U), Dv);
+        auto Y = massFractionsVector(U);
+        chem().speciesDiffusivity(toPhysT(T), toPhysP(p), {Y.data(), static_cast<int>(Y.size())}, Dv);
         for (int k = 0; k < Ns; ++k)
             D[k] = Dbuf[k] / D0();
     }
@@ -1456,7 +1483,8 @@ namespace DNDS::Euler
         int Ns = chem().nSpecies();
         std::vector<real> Dbuf(Ns);
         Chemistry::SpeciesBufferView Dv{Dbuf.data(), Ns};
-        chem().speciesDiffusivity(toPhysT(T), toPhysP(p), massFractions(U), Dv);
+        auto Y = massFractionsVector(U);
+        chem().speciesDiffusivity(toPhysT(T), toPhysP(p), {Y.data(), static_cast<int>(Y.size())}, Dv);
         return Dbuf[k] / D0();
     }
 
@@ -1502,7 +1530,8 @@ namespace DNDS::Euler
             // return p * rhoInv / toCode(igProp_->Rgas);
             return 0;
         }
-        double Tphys = chem().temperatureFromUV(uPhys, vPhys, massFractions(U), T_guess, uvTolerance);
+        auto Y = massFractionsVector(U);
+        double Tphys = chem().temperatureFromUV(uPhys, vPhys, {Y.data(), static_cast<int>(Y.size())}, T_guess, uvTolerance);
         return toCodeT(Tphys);
     }
 
@@ -1513,8 +1542,10 @@ namespace DNDS::Euler
             return igProp_->gamma;
         // Ideal-gas pressure: p = ρ_phys · R_phys · T_phys.  Non-ideal EOS
         // paths would need the actual pressure from the primitive state.
-        double pPhys = U(0) * igProp_->rho0 * chem().mixtureR(massFractions(U)) * toPhysT(T);
-        return chem().mixtureGamma(toPhysT(T), massFractions(U), pPhys);
+        auto Y = massFractionsVector(U);
+        Chemistry::ConstSpeciesBufferView Yv{Y.data(), static_cast<int>(Y.size())};
+        double pPhys = U(0) * igProp_->rho0 * chem().mixtureR(Yv) * toPhysT(T);
+        return chem().mixtureGamma(toPhysT(T), Yv, pPhys);
     }
 
     template <EulerModel model>
@@ -1522,7 +1553,8 @@ namespace DNDS::Euler
     {
         if (!hasChemicalSource())
             return toCode(igProp_->Rgas);
-        return toCode(chem().mixtureR(massFractions(U)));
+        auto Y = massFractionsVector(U);
+        return toCode(chem().mixtureR({Y.data(), static_cast<int>(Y.size())}));
     }
 
     template <EulerModel model>
@@ -1530,8 +1562,10 @@ namespace DNDS::Euler
     {
         if (!hasChemicalSource())
             return toCode(igProp_->CpGas());
-        double pPhys = U(0) * igProp_->rho0 * chem().mixtureR(massFractions(U)) * toPhysT(T);
-        return toCode(chem().mixtureCp(toPhysT(T), massFractions(U), pPhys));
+        auto Y = massFractionsVector(U);
+        Chemistry::ConstSpeciesBufferView Yv{Y.data(), static_cast<int>(Y.size())};
+        double pPhys = U(0) * igProp_->rho0 * chem().mixtureR(Yv) * toPhysT(T);
+        return toCode(chem().mixtureCp(toPhysT(T), Yv, pPhys));
     }
 
     template <EulerModel model>
@@ -1539,8 +1573,10 @@ namespace DNDS::Euler
     {
         if (!hasChemicalSource())
             return Cp(T, U) - Rgas(U);
-        double pPhys = U(0) * igProp_->rho0 * chem().mixtureR(massFractions(U)) * toPhysT(T);
-        return toCode(chem().mixtureCv(toPhysT(T), massFractions(U), pPhys));
+        auto Y = massFractionsVector(U);
+        Chemistry::ConstSpeciesBufferView Yv{Y.data(), static_cast<int>(Y.size())};
+        double pPhys = U(0) * igProp_->rho0 * chem().mixtureR(Yv) * toPhysT(T);
+        return toCode(chem().mixtureCv(toPhysT(T), Yv, pPhys));
     }
 
 } // namespace DNDS::Euler

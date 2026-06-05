@@ -2093,7 +2093,7 @@
                         "transportModel": {
                             "type": "string",
                             "default": "MixtureAveraged",
-                            "description": "Reserved; currently unused. Transport is selected by ChemicalSource setup."
+                            "description": "Cantera transport model requested by reactive flow; currently only mixture-averaged is implemented."
                         },
                         "CFLScale": {
                             "type": "number",

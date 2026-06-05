@@ -557,9 +557,7 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
     auto getY = [&](const Eigen::VectorXd &Uk, std::vector<double> &Y)
     {
         Y.resize(Ns);
-        auto Yv = chem->massFractions(Uk[0], Uk.data() + Isp, Ns1);
-        for (int k = 0; k < Ns; ++k)
-            Y[k] = Yv[k];
+        chem->massFractions(Uk[0], Uk.data() + Isp, Ns1, {Y.data(), Ns});
     };
 
     auto getT = [&](const Eigen::VectorXd &Uk)
@@ -623,9 +621,7 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
     auto getY_linear = [&](const Eigen::VectorXd &Uk, std::vector<double> &Y)
     {
         Y.resize(Ns);
-        auto Yv = chem->massFractions(Uk[0], Uk.data() + Isp, Ns1);
-        for (int k = 0; k < Ns; ++k)
-            Y[k] = Yv[k];
+        chem->massFractions(Uk[0], Uk.data() + Isp, Ns1, {Y.data(), Ns});
     };
 
     // FD derivative source: ω from perturbed state (no Y clamping, KE subtracted)
