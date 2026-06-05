@@ -1396,6 +1396,12 @@
                     "default": false,
                     "description": "Positivity-preserving epsilon is relaxed"
                 },
+                "RANSTopLimit": {
+                    "type": "number",
+                    "default": 100000.0,
+                    "description": "RANS variable top limit, currently for SA nutilde",
+                    "minimum": 0.0
+                },
                 "RANSBottomLimit": {
                     "type": "number",
                     "default": 0.01,
@@ -1776,7 +1782,11 @@
                     "description": "Boundary names for CL driver force integration"
                 },
                 "farFieldStaticValue": {
-                    "description": "Far-field state value (size = nVars) Canonical object form is {type, state}. Merge-patch warning: patch type and state together; changing only one reinterprets stale data.",
+                    "description": "Far-field state value (size = nVars) || Far-field state value (size = nVars) Canonical object form is {type, state}. Merge-patch warning: patch type and state together; changing only one reinterprets stale data.",
+                    "default": {
+                        "type": "consSensible",
+                        "state": []
+                    },
                     "oneOf": [
                         {
                             "type": "array",
@@ -1855,7 +1865,11 @@
                                 "description": "Box z-max"
                             },
                             "v": {
-                                "description": "Initial state value (size = nVars) Canonical object form is {type, state}. Merge-patch warning: patch type and state together; changing only one reinterprets stale data.",
+                                "description": "Initial state value (size = nVars) || Initial state value (size = nVars) Canonical object form is {type, state}. Merge-patch warning: patch type and state together; changing only one reinterprets stale data.",
+                                "default": {
+                                    "type": "consSensible",
+                                    "state": []
+                                },
                                 "oneOf": [
                                     {
                                         "type": "array",
@@ -1927,7 +1941,11 @@
                                 "description": "Plane offset"
                             },
                             "v": {
-                                "description": "Initial state value (size = nVars) Canonical object form is {type, state}. Merge-patch warning: patch type and state together; changing only one reinterprets stale data.",
+                                "description": "Initial state value (size = nVars) || Initial state value (size = nVars) Canonical object form is {type, state}. Merge-patch warning: patch type and state together; changing only one reinterprets stale data.",
+                                "default": {
+                                    "type": "consSensible",
+                                    "state": []
+                                },
                                 "oneOf": [
                                     {
                                         "type": "array",
@@ -1985,7 +2003,7 @@
                             },
                             "stateType": {
                                 "type": "string",
-                                "description": "ExprTk state convention: cons, consSensible, primRhoP, primRhoT, primTP, or *_phy variants.",
+                                "description": "ExprTk state convention: cons, consSensible, primRhoP, primRhoT, primTP, or *_phy variants. || ExprTk state convention: cons, consSensible, primRhoP, primRhoT, primTP, or *_phy variants.",
                                 "enum": [
                                     "cons",
                                     "consSensible",
@@ -2021,7 +2039,7 @@
                         "muGas": {
                             "type": "number",
                             "default": 1.0,
-                            "description": "Dynamic viscosity",
+                            "description": "Dynamic viscosity (Pa·s)",
                             "minimum": 0.0
                         },
                         "prGas": {
@@ -2098,17 +2116,25 @@
                         "CFLScale": {
                             "type": "number",
                             "default": 1.0,
-                            "description": "CFL reduction factor for stiff chemistry"
+                            "description": "CFL reduction factor for stiff chemistry",
+                            "minimum": 0.0
                         },
                         "chemRelaxEps": {
                             "type": "number",
                             "default": 0.001,
-                            "description": "Pseudo-transient relaxation epsilon"
+                            "description": "Pseudo-transient relaxation epsilon",
+                            "minimum": 0.0
                         },
                         "chemAbsTol": {
                             "type": "number",
                             "default": 1e-10,
-                            "description": "Absolute species tolerance"
+                            "description": "Absolute species tolerance",
+                            "minimum": 0.0
+                        },
+                        "TBase": {
+                            "type": "number",
+                            "default": 0.0,
+                            "description": "Base temperature [K] for reactive sensible-energy bookkeeping; <=0 uses the minimum per-species Cantera bound"
                         },
                         "nSpeciesOverride": {
                             "type": "integer",
@@ -2365,6 +2391,10 @@
                             },
                             "value": {
                                 "description": "Full BC state; canonical object is {type, state} Canonical object form is {type, state}. Merge-patch warning: patch type and state together; changing only one reinterprets stale data.",
+                                "default": {
+                                    "type": "consSensible",
+                                    "state": []
+                                },
                                 "oneOf": [
                                     {
                                         "type": "array",
@@ -2454,6 +2484,10 @@
                             },
                             "value": {
                                 "description": "Full BC state; canonical object is {type, state} Canonical object form is {type, state}. Merge-patch warning: patch type and state together; changing only one reinterprets stale data.",
+                                "default": {
+                                    "type": "consSensible",
+                                    "state": []
+                                },
                                 "oneOf": [
                                     {
                                         "type": "array",
@@ -2543,6 +2577,10 @@
                             },
                             "value": {
                                 "description": "Full BC state; canonical object is {type, state} Canonical object form is {type, state}. Merge-patch warning: patch type and state together; changing only one reinterprets stale data.",
+                                "default": {
+                                    "type": "consSensible",
+                                    "state": []
+                                },
                                 "oneOf": [
                                     {
                                         "type": "array",
@@ -2632,6 +2670,10 @@
                             },
                             "value": {
                                 "description": "Full BC state; canonical object is {type, state} Canonical object form is {type, state}. Merge-patch warning: patch type and state together; changing only one reinterprets stale data.",
+                                "default": {
+                                    "type": "consSensible",
+                                    "state": []
+                                },
                                 "oneOf": [
                                     {
                                         "type": "array",
@@ -2797,7 +2839,7 @@
                                 "description": "Internal emitted BC id; ignored on read"
                             },
                             "value": {
-                                "description": "Raw wall/special payload with size = nVars; BCWallIsothermal uses state[0] as wall temperature",
+                                "description": "Raw wall/special payload with size = nVars; BCWallIsothermal uses state[0] as wall temperature (K), converted internally to code units",
                                 "oneOf": [
                                     {
                                         "type": "array",
@@ -2873,7 +2915,7 @@
                                 "description": "Internal emitted BC id; ignored on read"
                             },
                             "value": {
-                                "description": "Raw wall/special payload with size = nVars; BCWallIsothermal uses state[0] as wall temperature",
+                                "description": "Raw wall/special payload with size = nVars; BCWallIsothermal uses state[0] as wall temperature (K), converted internally to code units",
                                 "oneOf": [
                                     {
                                         "type": "array",
@@ -2949,7 +2991,7 @@
                                 "description": "Internal emitted BC id; ignored on read"
                             },
                             "value": {
-                                "description": "Raw wall/special payload with size = nVars; BCWallIsothermal uses state[0] as wall temperature",
+                                "description": "Raw wall/special payload with size = nVars; BCWallIsothermal uses state[0] as wall temperature (K), converted internally to code units",
                                 "oneOf": [
                                     {
                                         "type": "array",
@@ -3026,7 +3068,7 @@
                                 "description": "Internal emitted BC id; ignored on read"
                             },
                             "value": {
-                                "description": "Raw wall/special payload with size = nVars; BCWallIsothermal uses state[0] as wall temperature",
+                                "description": "Raw wall/special payload with size = nVars; BCWallIsothermal uses state[0] as wall temperature (K), converted internally to code units",
                                 "oneOf": [
                                     {
                                         "type": "array",
