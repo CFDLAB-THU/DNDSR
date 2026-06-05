@@ -1,0 +1,114 @@
+{
+  "final_log": {
+    "CFLNow": 10.0,
+    "curDtImplicit": 0.002,
+    "residual_max_abs": 4.0008670544e-06,
+    "step": 250,
+    "tSimu": 0.5
+  },
+  "final_snapshot": {
+    "cell_data_minmax": {
+      "M": {
+        "max": 0.016946640050325718,
+        "min": 0.00011512427648953586
+      },
+      "P": {
+        "max": 0.8008217640529867,
+        "min": 0.6990932650310315
+      },
+      "R": {
+        "max": 0.890622799819603,
+        "min": 0.12763388737366035
+      },
+      "RE": {
+        "max": -0.3567341320394053,
+        "min": -0.7800730754630859
+      },
+      "RHSr": {
+        "max": 93.33551365992618,
+        "min": -59.92607195827446
+      },
+      "T": {
+        "max": 2366.4416023825333,
+        "min": 290.377651078057
+      },
+      "V1": {
+        "max": 0.028195704704719732,
+        "min": 0.0010779039916253938
+      },
+      "V2": {
+        "max": 0.0020047280388077633,
+        "min": 1.4751654562964511e-31
+      },
+      "V3": {
+        "max": 0.006854197275566432,
+        "min": 1.020001054764386e-30
+      },
+      "V4": {
+        "max": 0.2239434750396011,
+        "min": 0.007948824856740946
+      },
+      "V5": {
+        "max": 0.010284176533689187,
+        "min": 0.0
+      },
+      "V6": {
+        "max": 0.23595546271830586,
+        "min": 1.217100366535268e-30
+      },
+      "V7": {
+        "max": 0.0006667950557778048,
+        "min": 3.3249961384661794e-29
+      },
+      "V8": {
+        "max": 0.00013790539451037306,
+        "min": 1.132372160405877e-30
+      },
+      "V9": {
+        "max": 7.834909839205987e-30,
+        "min": 1.1228097913084548e-30
+      },
+      "Velo": {
+        "max": 0.03431206008228736,
+        "min": -0.04082209426390385
+      },
+      "iPart": {
+        "max": 7.0,
+        "min": 0.0
+      },
+      "ifUseLimiter": {
+        "max": 0.0,
+        "min": 0.0
+      }
+    },
+    "front_temperature": null,
+    "front_x": null,
+    "time": 0.5
+  },
+  "log_file": "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-strang-R1/react__.log",
+  "log_rows": 17481,
+  "output_dir": "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-strang-R1",
+  "plots": [
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-strang-R1/digest_react__/profiles_thermo.png",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-strang-R1/digest_react__/profiles_species.png",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-strang-R1/digest_react__/profiles_diagnostics.png",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-strang-R1/digest_react__/history_residuals.png",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-strang-R1/digest_react__/history_state_limiters.png"
+  ],
+  "prefix": "react__",
+  "step_final_rows": 250,
+  "vtu_snapshots_used": [
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-strang-R1/react___00000.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-strang-R1/react___20.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-strang-R1/react___40.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-strang-R1/react___70.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-strang-R1/react___90.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-strang-R1/react___110.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-strang-R1/react___140.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-strang-R1/react___160.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-strang-R1/react___180.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-strang-R1/react___210.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-strang-R1/react___230.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-strang-R1/react___t_0.500000.vtu"
+  ]
+}

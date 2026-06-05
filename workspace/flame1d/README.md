@@ -18,46 +18,41 @@ of eligible windows, R² > 0.99998).  Then:
 Tools
 -----
 
-* `analyze_flame_speed.py` — flame speed analysis and marker plotting.
-  Usage:
-  ```
-  python workspace/flame1d/analyze_flame_speed.py <dir1> <dir2> ... \
-      --labels "Label 1" "Label 2" --out plot.png
-  ```
-
-* `plot_output_digest.py` — profile/history digest from a DNDSR
-  output directory.
-  Usage: `python workspace/flame1d/plot_output_digest.py <output-dir>`
+* `analyze_flame_speed.py` — flame speed analysis and marker plotting
+* `plot_output_digest.py` — profile/history digest from a DNDSR output dir
 
 Results
 -------
 
-| Method      | dt    | Su        | R²       | vs Cantera (2.254 m/s) |
-|-------------|-------|-----------|----------|-------------------------|
-| Non-Strang  | 1e-3  | 2.46 m/s  | 0.999999 | 1.09×                   |
-| Non-Strang  | 2e-3  | 2.41 m/s  | 1.000000 | 1.07×                   |
-| Strang      | 1e-3  | 2.66 m/s  | 1.000000 | 1.18×                   |
-| Strang      | 2e-3  | 2.97 m/s  | 1.000000 | 1.32×                   |
+| Method       | dt   | Su        | R²       | vs Cantera |
+|--------------|------|-----------|----------|------------|
+| Non-Strang   | 1e-3 | 2.46 m/s  | 0.999999 | 1.09×      |
+| Non-Strang   | 2e-3 | 2.41 m/s  | 1.000000 | 1.07×      |
+| Non-Strang R1| 2e-3 | 2.54 m/s  | 1.000000 | 1.13×      |
+| Strang       | 1e-3 | 2.66 m/s  | 1.000000 | 1.18×      |
+| Strang       | 2e-3 | 2.97 m/s  | 1.000000 | 1.32×      |
+| Strang R1    | 2e-3 | 3.06 m/s  | 1.000000 | 1.36×      |
 
-* Non-Strang coupled: within 7–9 % of Cantera — no degradation with dt.
-* Strang splitting: 18–32 % over-prediction, error grows with dt.
-* All flames hit the right BCIn boundary (domain too short at 2 cm).
+* Non-Strang coupled: within 7–13 % of Cantera
+* Strang splitting: 18–36 % over-prediction
+* R1 repeats are consistent with first runs
 
 Contents
 --------
 
+* `strang_vs_nostrang_comparison.md` — full report with embedded plots
+* `front_marker_time.png` — combined front-position plot (6 runs)
 * `analyze_flame_speed.py` — speed analysis + marker plot script
 * `plot_output_digest.py` — profile/history digest script
-* `front_marker_time.png` — combined front-position plot (4 runs)
-* `strang_vs_nostrang_comparison.md` — detailed comparison document
-* `strang_*.png` / `strang_digest.json` — Strang dt=1e-3 digest
-* `nostrang_*.png` / `nostrang_digest.json` — Non-Strang dt=1e-3 digest
-* `cantera_freeflame_profile.csv` — Cantera FreeFlame solution
-* `cantera_reference_summary.json` — authoritative Cantera reference
+* `nostrang_profiles_thermo.png` / `_species.png` — Non-Strang dt=1e-3
+* `strang_profiles_thermo.png` / `_species.png` — Strang dt=1e-3
+* `nostrang_dt2e3_R1_profiles_thermo.png` / `_species.png` — Non-Strang dt=2e-3 R1
+* `strang_dt2e3_R1_profiles_thermo.png` / `_species.png` — Strang dt=2e-3 R1
+* `nostrang_digest.json` / `strang_digest.json` — dt=1e-3 digests
+* `nostrang_dt2e3_R1_digest.json` / `strang_dt2e3_R1_digest.json` — dt=2e-3 digests
+* `cantera_freeflame_profile.csv` / `cantera_reference_summary.json` — reference
 
 Current Config
 --------------
 
 `cases/eulerEX/config_1d_premixed_stoichiometric.json`
-
-See `caseNotes["/**/"]` for the latest setup and audit-follow-up list.

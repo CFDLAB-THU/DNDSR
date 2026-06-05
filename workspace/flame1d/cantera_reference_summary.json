@@ -1,0 +1,64 @@
+[
+  {
+    "case": {
+      "name": "react_test_stoich_air",
+      "composition": "H2:0.028, O2:0.222, N2:0.75",
+      "composition_basis": "mass",
+      "temperature": 300.0,
+      "pressure": 101325.0,
+      "width": 0.03,
+      "ratio": 3.0,
+      "slope": 0.06,
+      "curve": 0.12
+    },
+    "mechanism": "h2o2.yaml",
+    "cantera_version": "3.2.0",
+    "transport_model": "mixture-averaged",
+    "soret_enabled": false,
+    "flux_gradient_basis": "mass",
+    "flame_speed_m_per_s": 2.2539659771963283,
+    "inlet_mass_flux_kg_per_m2_s": 1.9235758931302585,
+    "inlet_density_kg_per_m3": 0.8534183357651934,
+    "burned_temperature_K": 2360.016463669699,
+    "domain_width_m": 0.06,
+    "grid_points": 142,
+    "thermal_thickness_m": 0.00034249345986958244,
+    "max_temperature_gradient_K_per_m": 6014761.462756485,
+    "inlet_mole_fractions": {
+      "H2": 0.29178858665869933,
+      "H": 0.0,
+      "O": 0.0,
+      "O2": 0.14575750888032532,
+      "OH": 0.0,
+      "H2O": 0.0,
+      "HO2": 0.0,
+      "H2O2": 0.0,
+      "AR": 0.0,
+      "N2": 0.5624539044609754
+    },
+    "inlet_mass_fractions": {
+      "H2": 0.028,
+      "H": 0.0,
+      "O": 0.0,
+      "O2": 0.222,
+      "OH": 0.0,
+      "H2O": 0.0,
+      "HO2": 0.0,
+      "H2O2": 0.0,
+      "AR": 0.0,
+      "N2": 0.75
+    },
+    "outlet_mass_fractions": {
+      "H2": 0.00104252059926818,
+      "H": 6.646761498134932e-05,
+      "O": 0.00039926443023562515,
+      "O2": 0.008414251274629378,
+      "OH": 0.004935175504120477,
+      "H2O": 0.23512227970013988,
+      "HO2": 1.7935831252213648e-06,
+      "H2O2": 1.8787335344213332e-07,
+      "AR": 0.0,
+      "N2": 0.7500180594201485
+    }
+  }
+]
