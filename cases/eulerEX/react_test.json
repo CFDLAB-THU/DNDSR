@@ -140,5 +140,6 @@
             "U0": 379
         }
     },
+    "_/** this test does not exercise BCs (periodic or interior-only domain) */": "",
     "bcSettings": []
 }
