@@ -1330,4 +1330,50 @@ TEST_CASE("StateValue JSON round-trip")
         for (int i = 0; i < sv.consSensible_phy.size(); ++i)
             CHECK(svBack.consSensible_phy(i) == doctest::Approx(sv.consSensible_phy(i)).epsilon(1e-14));
     }
+
+    SUBCASE("round-trip all canonical origin types")
+    {
+        std::vector<std::pair<StateValueOrigin, std::string>> origins = {
+            {StateValueOrigin::Cons, "cons"},
+            {StateValueOrigin::ConsSensible, "consSensible"},
+            {StateValueOrigin::PrimRhoP, "primRhoP"},
+            {StateValueOrigin::PrimRhoT, "primRhoT"},
+            {StateValueOrigin::PrimTP, "primTP"},
+            {StateValueOrigin::ConsPhy, "cons_phy"},
+            {StateValueOrigin::ConsSensiblePhy, "consSensible_phy"},
+            {StateValueOrigin::PrimRhoPPhy, "primRhoP_phy"},
+            {StateValueOrigin::PrimRhoTPhy, "primRhoT_phy"},
+            {StateValueOrigin::PrimTPPhy, "primTP_phy"},
+        };
+        for (auto &[origin, name] : origins)
+        {
+            CAPTURE(name);
+            int nVars = 5;
+            TSV sv;
+            sv.originType = origin;
+            sv.originVectorMutable(origin).resize(nVars);
+            sv.originVectorMutable(origin).setZero();
+            sv.originVectorMutable(origin)(0) = 1.0;
+            sv.originVectorMutable(origin)(4) = 0.7;
+            sv.keepOnlyOrigin();
+
+            nlohmann::ordered_json j = sv;
+            CHECK(j["type"].get<std::string>() == name);
+            CHECK(j["state"].size() == static_cast<size_t>(nVars));
+
+            TSV svBack = j.get<TSV>();
+            CHECK(svBack.originType == sv.originType);
+            REQUIRE(svBack.originVector().size() == nVars);
+            for (int i = 0; i < nVars; ++i)
+                CHECK(svBack.originVector()(i) == doctest::Approx(sv.originVector()(i)).epsilon(1e-14));
+        }
+    }
+
+    SUBCASE("invalid type name deserializes to empty StateValue")
+    {
+        auto j = nlohmann::ordered_json::parse("{\"type\":\"invalid\",\"state\":[1,2,3]}");
+        TSV sv = j.get<TSV>();
+        CHECK(sv.originType == StateValueOrigin::None);
+        CHECK(sv.originVector().size() == 0);
+    }
 }
