@@ -1173,6 +1173,13 @@ namespace DNDS::Euler
         visFluxV.resizeLike(ULxy);
         typename PhysicsProperties<model>::MixtureAveragedDiffusionBuffers speciesDiffusionBuffers;
         EulerBCType bTypeEuler = pBCHandler->GetTypeFromID(btype);
+        bool impermeableWall = bTypeEuler == EulerBCType::BCWall ||
+                               bTypeEuler == EulerBCType::BCWallIsothermal || 
+                               bTypeEuler == EulerBCType::BCWallInvis ||
+                               bTypeEuler == EulerBCType::BCSym;
+        bool adiabaticWall   = bTypeEuler == EulerBCType::BCWall || 
+                               bTypeEuler == EulerBCType::BCWallInvis ||
+                               bTypeEuler == EulerBCType::BCSym;
         for (int iB = 0; iB < nB; iB++)
         {
             TU UMeanXYC = UMeanXy(EigenAll, iB);
@@ -1199,7 +1206,6 @@ namespace DNDS::Euler
                 TU VisFlux;
                 VisFlux.resizeLike(ULMeanXy);
                 VisFlux.setZero();
-                bool adiabaticWall = bTypeEuler == EulerBCType::BCWall;
                 Gas::ViscousFlux_IdealGas<dim>(
                     UMeanXYC, DiffUxyPrimC, uNormC, adiabaticWall,
                     gammaEq, gamma,
@@ -1212,9 +1218,12 @@ namespace DNDS::Euler
                 if constexpr (Traits::isExtended)
                 {
                     if (phys_.hasChemicalSource())
+                    {
                         phys_.addMixtureAveragedSpeciesDiffusionFlux(
-                            T, pMean, UMeanXYC, DiffUxyPrimC, uNormC, k, adiabaticWall,
+                            T, pMean, UMeanXYC, DiffUxyPrimC, uNormC, k,
+                            adiabaticWall, impermeableWall,
                             speciesDiffusionBuffers, VisFlux);
+                    }
                 }
 
                 this->visFluxTurVariable(UMeanXYC, DiffUxyPrimC, muRef, mufPhy, muTurb, uNormC, iFace, VisFlux);
@@ -1314,7 +1323,7 @@ namespace DNDS::Euler
         // TU_Batch finc1;
         // finc1.resizeLike(ULxy);
         if (settings.rsTypeWall != Gas::UnknownRS &&
-            (bTypeEuler == EulerBCType::BCWall ||
+            (bTypeEuler == BCWall ||
              bTypeEuler == BCWallIsothermal))
         {
             rsType = settings.rsTypeWall;
@@ -1567,10 +1576,12 @@ namespace DNDS::Euler
                 0.5;
         }
 
-        if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall ||
-             pBCHandler->GetTypeFromID(btype) == BCWallIsothermal)
+        if (impermeableWall)
+        { 
             finc(0, EigenAll).setZero(); // no mass leak even using rs on wall
-
+            if(phys_.nSpecies() > 1)
+                finc(Eigen::seq(nVars - (phys_.nSpecies() - 1), EigenLast), EigenAll).setZero();
+        }
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
         if (!ignoreVis)
             finc -= visFluxV;

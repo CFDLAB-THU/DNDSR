@@ -962,7 +962,8 @@ namespace DNDS::Euler
         /// @brief Destructor. Waits for all async output futures to complete.
         ~EulerSolver()
         {
-            int nBad{0};
+            constexpr int maxWaitIter = 1000000; // ~10s at 10us per iteration
+            int nBad{0}, totalIter{0};
             do
             {
                 nBad = 0;
@@ -974,7 +975,7 @@ namespace DNDS::Euler
                         nBad++;
                 if (outSeqFuture.valid() && outSeqFuture.wait_for(std::chrono::microseconds(10)) != std::future_status::ready)
                     nBad++;
-            } while (nBad);
+            } while (nBad && ++totalIter < maxWaitIter);
         }
 
         /**

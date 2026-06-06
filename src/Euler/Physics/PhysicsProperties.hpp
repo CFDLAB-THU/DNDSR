@@ -1070,6 +1070,7 @@ namespace DNDS::Euler
                                                     const TNorm &norm,
                                                     real thermalConductivity,
                                                     bool adiabaticWall,
+                                                    bool impermeableWall,
                                                     MixtureAveragedDiffusionBuffers &buffers,
                                                     TFlux &visFlux) const
         {
@@ -1128,19 +1129,23 @@ namespace DNDS::Euler
             sumJRawN += buffers.JRawN[Ns - 1];
 
             real vcN = -sumJRawN * rhoInvFace;
-            for (int kk = 0; kk < Ns; ++kk)
+            if (!impermeableWall)
             {
-                real JkN = buffers.JRawN[kk] + rhoFace * buffers.Y[kk] * vcN;
-                real FvSpeciesN = -JkN;
-                if (kk < Ns1)
-                    visFlux(Isp + kk) += FvSpeciesN;
-                visFlux(I4) += buffers.h[kk] * FvSpeciesN;
+                for (int kk = 0; kk < Ns; ++kk)
+                {
+                    real JkN = buffers.JRawN[kk] + rhoFace * buffers.Y[kk] * vcN;
+                    real FvSpeciesN = -JkN;
+                    if (kk < Ns1)
+                        visFlux(Isp + kk) += FvSpeciesN;
+                    visFlux(I4) += buffers.h[kk] * FvSpeciesN;
+                }
             }
         }
 
         // ---- Kinetics accessor ----------------------------------------------
 
-        int nSpecies() const { return hasChemicalSource() ? chem().nSpecies() : 0; }
+        /// number of species; 1 for non-extended
+        int nSpecies() const { return hasChemicalSource() ? chem().nSpecies() : 1; }
         const std::string &speciesName(int k) const
         {
             DNDS_assert(hasChemicalSource());
@@ -1441,6 +1446,7 @@ namespace DNDS::Euler
             case 2:
                 return igProp_->muGas * U[0];
             default:
+                DNDS_assert_info(false, fmt::format("mixtureViscosity: unrecognized muModel={}", igProp_->muModel));
                 return igProp_->muGas;
             }
         }

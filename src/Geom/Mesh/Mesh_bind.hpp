@@ -68,7 +68,14 @@ namespace DNDS::Geom
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(cell2face)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(face2cell)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(face2node)
-            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(faceElemInfo);
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(faceElemInfo)
+            // edge connectivity
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(cell2edge)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(edge2cell)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(edge2node)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(edgeElemInfo)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(cell2edgePbi)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(edge2nodePbi);
 
         UnstructuredMesh_
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(RecoverNode2CellAndNode2Bnd)
@@ -119,7 +126,9 @@ namespace DNDS::Geom
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(IsO1)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(IsO2)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(RecreatePeriodicNodes)
-            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(BuildVTKConnectivity);
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(BuildVTKConnectivity)
+            .def("PrintMeshCGNS", &UnstructuredMesh::PrintMeshCGNS,
+                 py::arg("fname"), py::arg("fbcid2name"), py::arg("allNames"));
 
         UnstructuredMesh_
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(getArrayBytes);
