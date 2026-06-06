@@ -407,8 +407,8 @@ namespace DNDS::Euler
                     auto eBaseSpecies = phys_.mixtureBaseInternalRhoESpecies();
                     auto gammaEqFor = [&](const TU &U)
                     {
-                        real T = phys_.template temperature<dim>(U);
-                        return phys_.template gammaEq<dim>(T, U);
+                        real T = phys_.temperature(U);
+                        return phys_.gammaEq(T, U);
                     };
                     auto gradCons2Prim = [&](auto &U, auto &GradU, auto &GradUPrim)
                     {
@@ -470,25 +470,25 @@ namespace DNDS::Euler
                         settings.noRsOnWall)
                     {
                         TU ULc = ULxy;
-                        real T_noRS = phys_.template temperature<dim>(ULc);
+                        real T_noRS = phys_.temperature(ULc);
                         TU ULcPrim;
-                        Gas::IdealGasThermalConservative2Primitive<dim>(ULc, ULcPrim, phys_.template gammaEq<dim>(T_noRS, ULc), phys_.mixtureBaseInternalRhoE(ULc));
+                        Gas::IdealGasThermalConservative2Primitive<dim>(ULc, ULcPrim, phys_.gammaEq(T_noRS, ULc), phys_.mixtureBaseInternalRhoE(ULc));
                         ULcPrim(Seq123).setZero();
-                        Gas::IdealGasThermalPrimitive2Conservative<dim>(ULcPrim, ULc, phys_.template gammaEq<dim>(T_noRS, ULc), phys_.mixtureBaseInternalRhoE(ULc));
+                        Gas::IdealGasThermalPrimitive2Conservative<dim>(ULcPrim, ULc, phys_.gammaEq(T_noRS, ULc), phys_.mixtureBaseInternalRhoE(ULc));
                         if (faceBCType == EulerBCType::BCWallIsothermal)
                         {
                             real temp = pBCHandler->GetValueFromID(mesh->GetFaceZone(iFace))(0);
                             TU ULcPrim;
                             ULcPrim.resizeLike(ULc);
-                            Gas::IdealGasThermalConservative2Primitive<dim>(ULc, ULcPrim, phys_.template gammaEq<dim>(T_noRS, ULc), phys_.mixtureBaseInternalRhoE(ULc));
+                            Gas::IdealGasThermalConservative2Primitive<dim>(ULc, ULcPrim, phys_.gammaEq(T_noRS, ULc), phys_.mixtureBaseInternalRhoE(ULc));
                             DNDS_assert(ULcPrim(0) > 0 && temp > 0);
                             DNDS_assert_info(ULcPrim(0) > 0 && ULcPrim(I4) > 0 && temp > 0, fmt::format("{}, {}, {}", ULcPrim(0), ULcPrim(I4), temp));
                             real newDensity = ULcPrim(I4) / temp / phys_.Rgas(ULc);
                             ULcPrim(0) = newDensity;
                             if (phys_.hasChemicalSource())
-                                phys_.template primToConservative<dim>(ULcPrim, ULc);
+                                phys_.primToConservative(ULcPrim, ULc);
                             else
-                                Gas::IdealGasThermalPrimitive2Conservative<dim>(ULcPrim, ULc, phys_.template gammaEq<dim>(T_noRS, ULc), 0);
+                                Gas::IdealGasThermalPrimitive2Conservative<dim>(ULcPrim, ULc, phys_.gammaEq(T_noRS, ULc), 0);
                         }
                         ULxy = ULc;
                         URxy = ULc;
@@ -585,8 +585,7 @@ namespace DNDS::Euler
 
             if (settings.useSourceGradFixGG)
 #if defined(DNDS_DIST_MT_USE_OMP)
-// todo: save face value to buffer
-#    pragma omp critical
+#    pragma omp critical(flux_grad_fix)
 #endif
             {
                 TDiffU faceGradFixL{faceGradFix}, faceGradFixR{faceGradFix};
@@ -630,8 +629,8 @@ namespace DNDS::Euler
 
             // integrations
             if (!dontUpdateIntegration)
-#if defined(DNDS_DIST_MT_USE_OMP) // todo: use reduction
-#    pragma omp critical
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp critical(bnd_integration)
 #endif
             {
                 if (pBCHandler->GetFlagFromIDSoft(mesh->GetFaceZone(iFace), "integrationOpt") == 1)
@@ -644,14 +643,14 @@ namespace DNDS::Euler
                     if (settings.frameConstRotation.enabled)
                         this->TransformURotatingFrame(uL, vfv->GetFaceQuadraturePPhys(iFace, -1), 1);
                     TU uLPrim = uL;
-                    real T_int = phys_.template temperature<dim>(uL);
-                    auto gammaEq = phys_.template gammaEq<dim>(T_int, uL);
+                    real T_int = phys_.temperature(uL);
+                    auto gammaEq = phys_.gammaEq(T_int, uL);
                     Gas::IdealGasThermalConservative2Primitive<dim>(uL, uLPrim, gammaEq, phys_.mixtureBaseInternalRhoE(uL));
                     Eigen::Vector<real, Eigen::Dynamic> vInt;
                     vInt.resize(nVars + 2);
                     vInt(Eigen::seq(0, nVars - 1)) = uL;
 
-                    auto [p0, T0] = phys_.template primitiveStaticToTotalPT<dim>(uLPrim);
+                    auto [p0, T0] = phys_.primitiveStaticToTotalPT(uLPrim);
                     vInt(nVars) = p0, vInt(nVars + 1) = T0;
                     vInt(0) = 1;
                     bndIntegrations.at(mesh->GetFaceZone(iFace)).Add(vInt * fluxEs(0, 0), fluxEs(0, 0));

@@ -86,7 +86,7 @@ namespace DNDS::Euler::Reactive0D
         validateCaseScales(c);
         auto Y = massFractions(chem, U);
         Chemistry::ConstSpeciesBufferView Yv{Y.data(), static_cast<int>(Y.size())};
-        double TCode = phys.template temperature<dim>(U);
+        double TCode = phys.temperature(U);
         double TPhys = phys.toPhysT(TCode);
         double pCode = U[0] * phys.toCode(chem.mixtureR(Yv)) * TCode;
         return {step * c.dtCode, step * c.dtCode * c.L0 / c.U0, TPhys, phys.toPhysP(pCode), std::move(Y)};
@@ -124,7 +124,7 @@ namespace DNDS::Euler::Reactive0D
         {
             auto Y = massFractions(chem, Uk);
             Chemistry::ConstSpeciesBufferView Yv{Y.data(), Ns};
-            double TCode = phys.template temperature<dim>(Uk);
+            double TCode = phys.temperature(Uk);
             double TPhys = phys.toPhysT(TCode);
             double pPhys = phys.toPhysP(Uk[0] * phys.toCode(chem.mixtureR(Yv)) * TCode);
 

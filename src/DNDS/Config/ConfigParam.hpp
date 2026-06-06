@@ -453,7 +453,7 @@ namespace DNDS
             {
                 j[jsonKey] = static_cast<const T *>(obj)->*member;
             };
-            meta.schemaEntry = [member, desc, fn = std::forward<FSchema>(schemaFn)]() -> nlohmann::ordered_json
+            meta.schemaEntry = [desc, fn = std::forward<FSchema>(schemaFn)]() -> nlohmann::ordered_json
             {
                 auto s = fn();
                 if (!s.contains("description"))

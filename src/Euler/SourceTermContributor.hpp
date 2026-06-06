@@ -459,6 +459,10 @@ namespace DNDS::Euler
                 for (int k = 0; k < Ns1; ++k)
                     ret[Isp + k] += sourceScale_ * bufOmega[k] * c.molecularWeights()[k] * invS0;
             }
+            else if (Mode == 1)
+            {
+                DNDS_assert_info(false, "ChemicalContributor: diagonal-Jacobian mode not implemented");
+            }
             else if (Mode == 2)
             {
                 auto &bufJ = bufJ_[tid];

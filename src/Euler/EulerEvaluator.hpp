@@ -89,24 +89,26 @@ namespace DNDS::Euler
         /// @brief Compute the maximum batch-multiplied column count for batched Eigen matrices.
         static constexpr int MaxBatchMult(int n) { return MaxBatch > 0 ? (n * MaxBatch) : Eigen::Dynamic; }
 
-        typedef typename Traits::TVec TVec;                                    ///< Spatial vector (dim components).
-        typedef typename Traits::template TVec_Batch<MaxBatch> TVec_Batch;     ///< Batch of spatial vectors.
-        typedef typename Traits::TMat TMat;                                    ///< Spatial matrix (dim x dim).
-        typedef typename Traits::template TMat_Batch<MaxBatch> TMat_Batch;     ///< Batch of spatial matrices.
-        typedef typename Traits::TU TU;                                        ///< Conservative variable vector (nVarsFixed components).
-        typedef typename Traits::template TU_Batch<MaxBatch> TU_Batch;         ///< Batch of conservative variable vectors.
-        typedef typename Traits::template TReal_Batch<MaxBatch> TReal_Batch;   ///< Batch of scalar values.
-        typedef typename Traits::TJacobianU TJacobianU;                        ///< Jacobian matrix (nVars x nVars) of the flux w.r.t. conserved variables.
-        typedef typename Traits::TDiffU TDiffU;                                ///< Gradient of conserved variables (dim x nVars).
-        typedef typename Traits::template TDiffU_Batch<MaxBatch> TDiffU_Batch; ///< Batch of gradient matrices.
-        typedef Eigen::MatrixFMTSafe<real, nVarsFixed, dim> TDiffUTransposed;  ///< Transposed gradient (nVars x dim).
-        typedef ArrayDOFV<nVarsFixed> TDof;                                    ///< Cell-centered DOF array (mean values).
-        typedef ArrayRECV<nVarsFixed> TRec;                                    ///< Reconstruction coefficient array (per-cell polynomial coefficients).
-        typedef ArrayRECV<1> TScalar;                                          ///< Scalar reconstruction coefficient array.
+        using TVec = typename Traits::TVec;                                    ///< Spatial vector (dim components).
+        using TVec_Batch = typename Traits::template TVec_Batch<MaxBatch>;     ///< Batch of spatial vectors.
+        using TMat = typename Traits::TMat;                                    ///< Spatial matrix (dim x dim).
+        using TMat_Batch = typename Traits::template TMat_Batch<MaxBatch>;     ///< Batch of spatial matrices.
+        using TU = typename Traits::TU;                                        ///< Conservative variable vector (nVarsFixed components).
+        using TU_Batch = typename Traits::template TU_Batch<MaxBatch>;         ///< Batch of conservative variable vectors.
+        using TReal_Batch = typename Traits::template TReal_Batch<MaxBatch>;   ///< Batch of scalar values.
+        using TJacobianU = typename Traits::TJacobianU;                        ///< Jacobian matrix (nVars x nVars) of the flux w.r.t. conserved variables.
+        using TDiffU = typename Traits::TDiffU;                                ///< Gradient of conserved variables (dim x nVars).
+        using TDiffU_Batch = typename Traits::template TDiffU_Batch<MaxBatch>; ///< Batch of gradient matrices.
+        using TDiffUTransposed = Eigen::MatrixFMTSafe<real, nVarsFixed, dim>;  ///< Transposed gradient (nVars x dim).
+        using TDof = ArrayDOFV<nVarsFixed>;                                    ///< Cell-centered DOF array (mean values).
+        using TRec = ArrayRECV<nVarsFixed>;                                    ///< Reconstruction coefficient array (per-cell polynomial coefficients).
+        using TScalar = ArrayRECV<1>;                                          ///< Scalar reconstruction coefficient array.
 
-        typedef CFV::VariationalReconstruction<gDim> TVFV;       ///< Variational reconstruction type for this geometric dimension.
-        typedef ssp<CFV::VariationalReconstruction<gDim>> TpVFV; ///< Shared pointer to the variational reconstruction object.
-        typedef ssp<BoundaryHandler<model>> TpBCHandler;         ///< Shared pointer to the boundary condition handler.
+        using TVFV = CFV::VariationalReconstruction<gDim>;       ///< Variational reconstruction type for this geometric dimension.
+        using TpVFV = ssp<CFV::VariationalReconstruction<gDim>>; ///< Shared pointer to the variational reconstruction object.
+        using TpBCHandler = ssp<BoundaryHandler<model>>;         ///< Shared pointer to the boundary condition handler.
+
+        using TPhysThermalRet = typename PhysicsProperties<model>::conservativeThermalReturn; ///< return struct of conservativeThermal
 
     public:
         /**
@@ -288,6 +290,7 @@ namespace DNDS::Euler
                 v.resize(nVars);
             fluxBndForceT.resize(mesh->NumBnd());
 
+            // Wall distance is purely geometric — no dependency on ChemicalSource.
             this->GetWallDist();
 
             if constexpr (Traits::isExtended)
@@ -308,23 +311,21 @@ namespace DNDS::Euler
             }
 
             std::ostream *stateLog = mesh->getMPI().rank == 0 ? &DNDS::log() : nullptr;
-            phys_.template resolveStateValue<dim>(settings.farFieldStaticValue, nVars, stateLog, "eulerSettings/farFieldStaticValue");
+            phys_.resolveStateValue(settings.farFieldStaticValue, nVars, stateLog, "eulerSettings/farFieldStaticValue");
             for (auto i = 0u; i < settings.boxInitializers.size(); ++i)
-                phys_.template resolveStateValue<dim>(settings.boxInitializers[i].v, nVars, stateLog,
-                                                      fmt::format("eulerSettings/boxInitializers[{}]/v", i));
+                phys_.resolveStateValue(settings.boxInitializers[i].v, nVars, stateLog,
+                                        fmt::format("eulerSettings/boxInitializers[{}]/v", i));
             for (auto i = 0u; i < settings.planeInitializers.size(); ++i)
-                phys_.template resolveStateValue<dim>(settings.planeInitializers[i].v, nVars, stateLog,
-                                                      fmt::format("eulerSettings/planeInitializers[{}]/v", i));
+                phys_.resolveStateValue(settings.planeInitializers[i].v, nVars, stateLog,
+                                        fmt::format("eulerSettings/planeInitializers[{}]/v", i));
             pBCHandler->template ResolveStateValues<dim>(phys_, stateLog);
             settings.refU = settings.farFieldStaticValue.cons;
             {
                 TU refCons = settings.refU;
                 TU refPrim(nVars);
-                phys_.template conservativeToPrimitive<dim>(refCons, refPrim);
+                phys_.conservativeToPrimitive(refCons, refPrim);
                 settings.refUPrim = refPrim;
-                real TRefState = phys_.template temperature<dim>(refCons);
-                real pRef, asqrRef, HRef;
-                phys_.template conservativeThermal<dim>(refCons, TRefState, pRef, asqrRef, HRef);
+                auto [TRefState, pRef, asqrRef, HRef, gammaEqV, gammaV] = phys_.conservativeThermal(refCons);
                 settings.refU(Seq123).setConstant(settings.refU(Seq123).norm() + std::sqrt(std::max(asqrRef, real(0))));
                 settings.refUPrim(Seq123).setConstant(settings.refUPrim(Seq123).norm());
             }
@@ -332,8 +333,8 @@ namespace DNDS::Euler
             if (model == NS_2EQ || model == NS_2EQ_3D)
             {
                 TU farPrim = settings.farFieldStaticValue.cons;
-                real T = phys_.template temperature<dim>(settings.farFieldStaticValue.cons);
-                real gammaEq = phys_.template gammaEq<dim>(T, settings.farFieldStaticValue.cons);
+                real T = phys_.temperature(settings.farFieldStaticValue.cons);
+                real gammaEq = phys_.gammaEq(T, settings.farFieldStaticValue.cons);
                 real gamma = phys_.gamma(T, settings.farFieldStaticValue.cons);
                 Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue.cons, farPrim, gammaEq,
                                                                 phys_.mixtureBaseInternalRhoE(settings.farFieldStaticValue.cons));
@@ -1154,8 +1155,8 @@ namespace DNDS::Euler
             int useRoeTerm, int incFsign = -1, int omitF = 0)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-            real T = phys_.template temperature<dim>(U);
-            real gammaEq = phys_.template gammaEq<dim>(T, U);
+            real T = phys_.temperature(U);
+            real gammaEq = phys_.gammaEq(T, U);
             real gamma = phys_.gamma(T, U);
             TVec velo = U(Seq123) / U(0);
             real p, H, asqr;
@@ -1185,8 +1186,8 @@ namespace DNDS::Euler
                 TU uMean(U.size());
                 if (phys_.hasChemicalSource())
                 {
-                    real TOther = phys_.template temperature<dim>(UOther);
-                    real gammaEqOther = phys_.template gammaEq<dim>(TOther, UOther);
+                    real TOther = phys_.temperature(UOther);
+                    real gammaEqOther = phys_.gammaEq(TOther, UOther);
                     real sqrtRhoL = std::sqrt(U(0));
                     real sqrtRhoR = std::sqrt(UOther(0));
                     gammaEqRoe = (sqrtRhoL * gammaEq + sqrtRhoR * gammaEqOther) / (sqrtRhoL + sqrtRhoR);
@@ -1250,8 +1251,8 @@ namespace DNDS::Euler
             const TU &dU)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-            real T = phys_.template temperature<dim>(U);
-            real gammaEq = phys_.template gammaEq<dim>(T, U);
+            real T = phys_.temperature(U);
+            real gammaEq = phys_.gammaEq(T, U);
             real gamma = phys_.gamma(T, U);
             TVec velo = U(Seq123) / U(0);
             real p, H, asqr;
@@ -1710,7 +1711,7 @@ namespace DNDS::Euler
                 {
                     try
                     {
-                        real T = phys_.template temperature<dim>(ret);
+                        real T = phys_.temperature(ret);
                         reactiveInvalid = !std::isfinite(T) || phys_.toPhysT(T) < 200.0;
                     }
                     catch (const std::exception &)
@@ -1906,6 +1907,8 @@ namespace DNDS::Euler
                     {
                         real rhoYOld = cx[iCell](Isp + k);
                         cx[iCell](Isp + k) = std::max(rhoYOld, rhoYFloor);
+                        // Exact != is correct — detects whether max(x,floor) changed x.
+                        // floor=1e-30 won't equal any real rhoY, so epsilon not needed.
                         speciesClipped = speciesClipped || (cx[iCell](Isp + k) != rhoYOld);
                     }
 

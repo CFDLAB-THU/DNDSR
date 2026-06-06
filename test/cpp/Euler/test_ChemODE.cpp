@@ -253,7 +253,7 @@ TEST_CASE("0D const-vol — implicit Euler, species-only Newton, T via PhysicsPr
     for (int k = 0; k < Ns1; ++k)
         primTP[Isp + k] = Y0[k];
 
-    phys.template primTPToConservative<3>(primTP, Utmp);
+    phys.primTPToConservative(primTP, Utmp);
     Eigen::VectorXd U = Utmp;
 
     auto getY = [&](const Eigen::VectorXd &Uk, std::vector<double> &Y)
@@ -285,7 +285,7 @@ TEST_CASE("0D const-vol — implicit Euler, species-only Newton, T via PhysicsPr
     {
         // Map into PhysicsProperties-compatible TU (dynamic-sized for NS_EX)
         Eigen::Map<const Eigen::VectorXd> ukMap(Uk.data(), Uk.size());
-        return phys.template temperature<3>(ukMap);
+        return phys.temperature(ukMap);
     };
 
     double T = getT(U);
@@ -405,7 +405,7 @@ TEST_CASE("0D const-vol — react_test history tracks Cantera reactor")
 
     int nVars = static_cast<int>(state.originVector().size());
     REQUIRE(nVars == 5 + Ns1);
-    phys.template resolveStateValue<3>(state, nVars, nullptr, "react_test/farFieldStaticValue");
+    phys.resolveStateValue(state, nVars, nullptr, "react_test/farFieldStaticValue");
     Eigen::VectorXd U = state.cons;
 
     Reactive0D::ConstVolCase runCase;
@@ -496,7 +496,7 @@ TEST_CASE("0D const-vol helper uses physical Cantera scales")
     primTP(5 + 3) = 0.222;
 
     TU U(5 + Ns1);
-    phys.template primTPToConservative<3>(primTP, U);
+    phys.primTPToConservative(primTP, U);
 
     Reactive0D::ConstVolCase runCase;
     runCase.U = U;
@@ -551,7 +551,7 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
     for (int k = 0; k < Ns1; ++k)
         primTP[Isp + k] = Y0[k];
 
-    phys.template primTPToConservative<3>(primTP, Utmp);
+    phys.primTPToConservative(primTP, Utmp);
     Eigen::VectorXd U = Utmp;
 
     auto getY = [&](const Eigen::VectorXd &Uk, std::vector<double> &Y)
@@ -563,7 +563,7 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
     auto getT = [&](const Eigen::VectorXd &Uk)
     {
         Eigen::Map<const Eigen::VectorXd> ukMap(Uk.data(), Uk.size());
-        return phys.template temperature<3>(ukMap);
+        return phys.temperature(ukMap);
     };
 
     // Integrate to a non-initial reactive state (20 steps at dt=1e-6, constant-volume)

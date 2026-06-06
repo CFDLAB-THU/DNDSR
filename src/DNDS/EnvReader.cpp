@@ -112,6 +112,7 @@ namespace DNDS
             return true;
         if (lower == "0" || lower == "false" || lower == "no" || lower == "off")
             return false;
+        // Unrecognized → return caller's default, not hardcoded false
         return defaultValue;
     }
 

@@ -38,6 +38,22 @@ namespace DNDS::Euler::Chemistry
             return out;
         }
 
+        std::string canteraTransportName(std::string model)
+        {
+            std::string out;
+            out.reserve(model.size());
+            for (char c : model)
+            {
+                if (c == '_')
+                    out.push_back('-');
+                else if (c != ' ' && c != '\t')
+                    out.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+            }
+            if (out.empty() || out == "default" || out == "mixtureaveraged")
+                out = "mixture-averaged";
+            return out;
+        }
+
         class AffineIdealGasConstVolReactor : public Cantera::IdealGasReactor
         {
         public:
@@ -138,6 +154,7 @@ namespace DNDS::Euler::Chemistry
         double invU0sq = 1.0; // 1/U0², precomputed for code-unit conversion
         std::string transportModel = "MixtureAveraged";
         std::string transportModelNormalized = "mixtureaveraged";
+        std::string transportModelCantera = "mixture-averaged";
 
         Impl(const std::string &mechanismFile, const std::string &phaseName,
              double U0In, double rho0In, double TBaseIn, std::string transportModelIn)
@@ -146,9 +163,10 @@ namespace DNDS::Euler::Chemistry
             auto &I = *this;
             I.transportModel = std::move(transportModelIn);
             I.transportModelNormalized = normalizeTransportModel(I.transportModel);
+            I.transportModelCantera = canteraTransportName(I.transportModel);
 #ifdef DNDS_USE_CANTERA
-            I.sol = Cantera::newSolution(mechanismFile, phaseName, "default");
-            I.solT = Cantera::newSolution(mechanismFile, phaseName, "");
+            I.sol = Cantera::newSolution(mechanismFile, phaseName, I.transportModelCantera);
+            I.solT = Cantera::newSolution(mechanismFile, phaseName, I.transportModelCantera);
             auto gas = I.sol->thermo();
             I.Ns = static_cast<int>(gas->nSpecies());
             I.speciesNames.resize(I.Ns);
@@ -427,6 +445,7 @@ namespace DNDS::Euler::Chemistry
             c.TBase = R.TBase;
             c.transportModel = R.transportModel;
             c.transportModelNormalized = R.transportModelNormalized;
+            c.transportModelCantera = R.transportModelCantera;
             c.U0 = R.U0;
             c.rho0 = R.rho0;
             c.invU0sq = R.invU0sq;
@@ -701,6 +720,10 @@ namespace DNDS::Euler::Chemistry
     {
         DNDS_assert(impl_);
         impl_->gasT_setMassFractions(Y.data);
+        // T_init floor: T_guess > 300 ? T_guess : 300, then max with gas_minTemp.
+        // The 300 is redundant — gas_minTemp() is always ≥300 for standard mechs.
+        // Could use TBase (per-species min T_low, ~200K) instead, but gas_minTemp
+        // already provides the final clamp so 300 has no effect on valid mechs.
         double Tinit = std::max(T_guess > 300 ? T_guess : 300, impl_->gas_minTemp());
         double p_init = mixtureR(Y) * Tinit / v;
         impl_->gasT_setState_TP(Tinit, p_init);

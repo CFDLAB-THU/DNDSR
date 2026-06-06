@@ -983,9 +983,7 @@ namespace DNDS::Euler
                     // if (pBCHandler->GetTypeFromID(mesh->GetFaceZone(c2f[ic2f])) == EulerBCType::BCWall ||
                     // pBCHandler->GetTypeFromID(mesh->GetFaceZone(c2f[ic2f])) == EulerBCType::BCWallIsothermal)
                     {
-                        real pMean, asqrMean, Hmean;
-                        real T = phys_.template temperature<dim>(u[iCell]);
-                        phys_.template conservativeThermal<dim>(u[iCell], T, pMean, asqrMean, Hmean);
+                        auto [T, pMean, asqrMean, Hmean, gammaEq, gamma] = phys_.conservativeThermal(u[iCell]);
                         real muRef = phys_.muRef();
                         real mufPhy1 = muEff(u[iCell], T);
                         real rhoOmegaaaWall = mufPhy1 / sqr(d) * RANS::kWallOmegaCoeff * 0.1;
@@ -1009,8 +1007,8 @@ namespace DNDS::Euler
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
                     Geom::tPoint pos = vfv->GetCellBary(iCell);
-                    real T = phys_.template temperature<dim>(u[iCell]);
-                    real gammaEq = phys_.template gammaEq<dim>(T, u[iCell]);
+                    real T = phys_.temperature(u[iCell]);
+                    real gammaEq = phys_.gammaEq(T, u[iCell]);
                     real gamma = phys_.gamma(T, u[iCell]);
                     real rho = 2;
                     real p = 1 + 2 * pos(1);
@@ -1032,8 +1030,8 @@ namespace DNDS::Euler
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
                     Geom::tPoint pos = vfv->GetCellBary(iCell);
-                    real T = phys_.template temperature<dim>(u[iCell]);
-                    real gammaEq = phys_.template gammaEq<dim>(T, u[iCell]);
+                    real T = phys_.temperature(u[iCell]);
+                    real gammaEq = phys_.gammaEq(T, u[iCell]);
                     real gamma = phys_.gamma(T, u[iCell]);
                     real rho = 2;
                     real p = 1 + 2 * pos(1);
@@ -1116,8 +1114,8 @@ namespace DNDS::Euler
                 {
                     Geom::tPoint pos = vfv->GetCellBary(iCell);
                     real M0 = 0.1;
-                    real T_cell = phys_.template temperature<dim>(u[iCell]);
-                    real gammaEq = phys_.template gammaEq<dim>(T_cell, u[iCell]);
+                    real T_cell = phys_.temperature(u[iCell]);
+                    real gammaEq = phys_.gammaEq(T_cell, u[iCell]);
                     real gamma = phys_.gamma(T_cell, u[iCell]);
                     auto c2n = mesh->cell2node[iCell];
                     auto gCell = vfv->GetCellQuad(iCell);
@@ -1162,8 +1160,8 @@ namespace DNDS::Euler
             {
                 Geom::tPoint pos = vfv->GetCellBary(iCell);
                 real M0 = 0.1;
-                real T_far = phys_.template temperature<dim>(settings.farFieldStaticValue.cons);
-                real gamma_far = phys_.template gammaEq<dim>(T_far, settings.farFieldStaticValue.cons);
+                real T_far = phys_.temperature(settings.farFieldStaticValue.cons);
+                real gamma_far = phys_.gammaEq(T_far, settings.farFieldStaticValue.cons);
                 auto c2n = mesh->cell2node[iCell];
                 auto gCell = vfv->GetCellQuad(iCell);
                 TU um;
@@ -1315,7 +1313,7 @@ namespace DNDS::Euler
 
                         TU uPrimitive;
                         uPrimitive.resizeLike(u[iCell]);
-                        phys_.template conservativeToStateValueOrigin<dim>(u[iCell], uPrimitive, stateOrigin);
+                        phys_.conservativeToStateValueOrigin(u[iCell], uPrimitive, stateOrigin);
                         for (int i = 0; i < nVars; i++)
                             exprtkEval.VarVec("UExprtk", i) = uPrimitive(i);
 
@@ -1329,7 +1327,7 @@ namespace DNDS::Euler
                         {
                             for (int i = 0; i < nVars; i++)
                                 uPrimitive(i) = exprtkEval.VarVec("UExprtk", i);
-                            phys_.template stateValueOriginToConservative<dim>(uPrimitive, inc, stateOrigin);
+                            phys_.stateValueOriginToConservative(uPrimitive, inc, stateOrigin);
                         }
                         else
                         {
@@ -1454,7 +1452,7 @@ namespace DNDS::Euler
                 return false;
             try
             {
-                real T = phys_.template temperature<dim>(state);
+                real T = phys_.temperature(state);
                 real p = state(0) * phys_.Rgas(state) * T;
                 return std::isfinite(T) && std::isfinite(p) && p > 0 && phys_.toPhysT(T) >= 200.0;
             }
@@ -1599,7 +1597,7 @@ namespace DNDS::Euler
                         constantTerm[static_cast<size_t>(Ns1Point)] = 1.0 / dt - sumC;
 
                         TU candidate = uNew[iCell];
-                        real T = phys_.template temperature<dim>(candidate);
+                        real T = phys_.temperature(candidate);
                         phys_.advanceAffineConstVolumeY(
                             T, candidate(0),
                             Chemistry::SpeciesBufferView{Y.data(), static_cast<int>(Y.size())},
@@ -1821,7 +1819,7 @@ namespace DNDS::Euler
             for (double &y : Y)
                 y /= yNorm;
 
-            real T = phys_.template temperature<dim>(state);
+            real T = phys_.temperature(state);
             phys_.advanceConstVolumeY(
                 T, rho,
                 Chemistry::SpeciesBufferView{Y.data(), Ns},
@@ -1846,7 +1844,7 @@ namespace DNDS::Euler
                     state(Isp + k) *= scale;
             }
 
-            real TCheck = phys_.template temperature<dim>(state, T);
+            real TCheck = phys_.temperature(state, T);
             real pCheck = rho * phys_.Rgas(state) * TCheck;
             DNDS_check_throw_info(std::isfinite(TCheck) && std::isfinite(pCheck) &&
                                       phys_.toPhysT(TCheck) >= 200.0 && pCheck > 0,
@@ -1888,8 +1886,8 @@ namespace DNDS::Euler
 #endif
         for (index iCell = 0; iCell < u.Size(); iCell++)
         {
-            real T_cell = phys_.template temperature<dim>(u[iCell]);
-            real gammaEq = phys_.template gammaEq<dim>(T_cell, u[iCell]);
+            real T_cell = phys_.temperature(u[iCell]);
+            real gammaEq = phys_.gammaEq(T_cell, u[iCell]);
             TU out;
             Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], out, gammaEq,
                                                             phys_.mixtureBaseInternalRhoE(u[iCell]));
@@ -1911,7 +1909,7 @@ namespace DNDS::Euler
         for (index iCell = 0; iCell < w.Size(); iCell++)
         {
             TU out;
-            phys_.template primToConservative<dim>(w[iCell], out);
+            phys_.primToConservative(w[iCell], out);
             u[iCell] = out;
         }
     }
@@ -2266,8 +2264,8 @@ namespace DNDS::Euler
             }
             /***********/
             DNDS_assert_info(u[iCell](0) >= rhoEps, fmt::format("rhoMean {}, {}", u[iCell](0), rhoEps));
-            real T_cell = phys_.template temperature<dim>(u[iCell]);
-            // real gamma = phys_.template gammaEq<dim>(T_cell, u[iCell]);
+            real T_cell = phys_.temperature(u[iCell]);
+            // real gamma = phys_.gammaEq(T_cell, u[iCell]);
             real rhoE_base_cell = phys_.mixtureBaseInternalRhoERaw(u[iCell]);
             real rhoeSensibleCent = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - rhoE_base_cell;
             DNDS_assert_info(rhoeSensibleCent >= rhoeSensibleEps, fmt::format("rhoeSensibleMean {}, {}", rhoeSensibleCent, rhoeSensibleEps));
@@ -2481,7 +2479,7 @@ namespace DNDS::Euler
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
-            real T_cell = phys_.template temperature<dim>(u[iCell]);
+            real T_cell = phys_.temperature(u[iCell]);
             real alphaRho = 1;
             if (u[iCell](0) < rhoEps)
             {
@@ -2623,8 +2621,8 @@ namespace DNDS::Euler
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
-            real T_cell = phys_.template temperature<dim>(u[iCell]);
-            // real gamma = phys_.template gammaEq<dim>(T_cell, u[iCell]);
+            real T_cell = phys_.temperature(u[iCell]);
+            // real gamma = phys_.gammaEq(T_cell, u[iCell]);
             real alphaRho = 1;
             TU inc = res[iCell];
             DNDS_assert(u[iCell](0) >= rhoEps);

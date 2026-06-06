@@ -151,18 +151,6 @@ namespace
                from == "primRhoP" || from == "primRhoT" || from == "primTP";
     }
 
-    void printVec(const Eigen::VectorXd &v, const std::string &prefix, int nPerLine = 4)
-    {
-        std::cout << prefix;
-        for (int i = 0; i < (int)v.size(); ++i)
-        {
-            if (i > 0 && i % nPerLine == 0)
-                std::cout << fmt::format("\n{:{}}", "", prefix.size());
-            std::cout << fmt::format("{:12.4g}", v[i]);
-        }
-        std::cout << "\n";
-    }
-
     void printJsonVec(const Eigen::VectorXd &v, const std::string &label)
     {
         json j;
@@ -230,6 +218,312 @@ namespace
             for (int k = I4 + 1; k < (int)vPhys.size(); ++k)
                 vPhys[k] = v[k] * cfg.rho0;
         printJsonVec(vPhys, jsonLabel + "_phy");
+    }
+
+    template <EulerModel model>
+    int run_main(int nVars, Eigen::VectorXd inputState, bool isReactive, bool inputPhys,
+                 std::string mechStr,
+                 std::string fromStr,
+                 Cfg cfg)
+    {
+        constexpr int dim = EulerModelTraits<model>::dim;
+        std::shared_ptr<std::vector<ChemicalSource>> pool;
+        std::unique_ptr<PhysicsProperties<model>> phys;
+        int nSpecies = 0;
+        std::vector<std::string> speciesNames;
+        typename EulerEvaluatorSettings<model>::IdealGasProperty igProp;
+        igProp.gamma = cfg.gamma;
+        igProp.Rgas = cfg.Rgas;
+        igProp.U0 = cfg.U0;
+        igProp.rho0 = cfg.rho0;
+        igProp.T0 = cfg.T0;
+        igProp.L0 = cfg.L0;
+        igProp.muGas = 1e-200;
+        igProp.prGas = 0.72;
+        phys = std::make_unique<PhysicsProperties<model>>(igProp);
+
+        if (isReactive)
+        {
+            if (model != NS_EX && model != NS_EX_3D)
+            {
+                std::cerr << "Error: --mechanism only valid for NS_EX / NS_EX_3D\n";
+                return 1;
+            }
+            pool = std::make_shared<std::vector<ChemicalSource>>();
+            pool->emplace_back(mechStr, "", cfg.U0, cfg.rho0);
+            nSpecies = (*pool)[0].nSpecies();
+            speciesNames = (*pool)[0].speciesNames();
+            int expectedNVars = dim + 2 + nSpecies - 1;
+            if (nVars != expectedNVars)
+            {
+                std::cerr << "Error: reactive --state has nVars=" << nVars
+                          << ", but mechanism has " << nSpecies
+                          << " species; expected nVars=" << expectedNVars << "\n";
+                return 1;
+            }
+            phys->setChemicalSourcePool(pool);
+        }
+
+        using TU = typename PhysicsProperties<model>::TU; // VectorFMTSafe<real,Dynamic> assignable from VectorXd
+
+        // --- Scaling conversion (phys → code) --- using PhysicsProperties API
+        if (inputPhys)
+        {
+            TU u(inputState.size());
+            u = inputState;
+            TU o(u.size());
+            auto callSc = [&](auto fn)
+            { fn(u, o); inputState = o; };
+            bool isPrim = (fromStr == "primRhoP" || fromStr == "primRhoT" || fromStr == "primTP");
+            if (!isPrim)
+                callSc([&](auto &a, auto &b)
+                       { phys->consPhysToCode(a, b); });
+            else if (fromStr == "primRhoT")
+                callSc([&](auto &a, auto &b)
+                       { phys->primRhoTPhysToCode(a, b); });
+            else if (fromStr == "primTP")
+                callSc([&](auto &a, auto &b)
+                       { phys->primTPPhysToCode(a, b); });
+            else if (fromStr == "primRhoP")
+                callSc([&](auto &a, auto &b)
+                       { phys->primPhysToCode(a, b); });
+            else
+                DNDS_assert_info(false, fmt::format("fromStr invalid {}", fromStr));
+        }
+
+        std::cout << "\n";
+        printJsonVec(inputState, " code-scaled input = ");
+
+        if (fromStr == "primRhoP" && (inputState[0] <= 0 || inputState[dim + 1] <= 0))
+        {
+            std::cerr << "Error: primRhoP input requires positive rho and p\n";
+            return 1;
+        }
+        if (fromStr == "primRhoT" && (inputState[0] <= 0 || inputState[dim + 1] <= 0))
+        {
+            std::cerr << "Error: primRhoT input requires positive rho and T\n";
+            return 1;
+        }
+        if (fromStr == "primTP" && (inputState[0] <= 0 || inputState[dim + 1] <= 0))
+        {
+            std::cerr << "Error: primTP input requires positive T and p\n";
+            return 1;
+        }
+
+        // --- State conversion --- using PhysicsProperties API
+        TU consTotal(nVars);
+        if (fromStr == "cons")
+        {
+            consTotal = inputState;
+        }
+        else if (fromStr == "consSensible")
+        {
+            TU u(nVars);
+            u = inputState;
+            phys->consSensibleToTotal(u, consTotal);
+        }
+        else if (fromStr == "primRhoP")
+        {
+            TU u(nVars);
+            u = inputState;
+            phys->primToConservative(u, consTotal);
+        }
+        else if (fromStr == "primRhoT")
+        {
+            TU u(nVars);
+            u = inputState;
+            phys->primRhoTToConservative(u, consTotal);
+        }
+        else if (fromStr == "primTP")
+        {
+            TU u(nVars);
+            u = inputState;
+            phys->primTPToConservative(u, consTotal);
+        }
+        else
+            DNDS_assert_info(false, fmt::format("fromStr invalid {}", fromStr));
+
+        printJsonVec(consTotal, "consTotal = ");
+
+        // --- Compute temperature, gamma, rhoE_base from consTotal ---
+        real T_code = phys->temperature(consTotal);
+        real gammaEq = phys->gammaEq(T_code, consTotal);
+        real rhoE_base_cons = phys->mixtureBaseInternalRhoE(consTotal);
+        real Rmix_code = phys->Rgas(consTotal);
+
+        // --- Convert consTotal to prim ---
+        TU primCode(nVars);
+        phys->conservativeToPrimitive(consTotal, primCode);
+
+        // --- Build consSensible ---
+        TU consSensible(nVars);
+        phys->consTotalToSensible(consTotal, consSensible);
+
+        // --- Build variable names ---
+        std::vector<std::string> consNames;
+        consNames.emplace_back("rho");
+        if (dim >= 1)
+            consNames.emplace_back("rhoU");
+        if (dim >= 2)
+            consNames.emplace_back("rhoV");
+        if (dim >= 3)
+            consNames.emplace_back("rhoW");
+        consNames.emplace_back("rhoE");
+        int Nsp = nVars - (dim + 2);
+        for (int k = 0; k < Nsp; ++k)
+        {
+            std::string nm = "rhoY_" + std::to_string(k);
+            if (k < (int)speciesNames.size())
+                nm = "rho" + speciesNames[k];
+            consNames.emplace_back(nm);
+        }
+
+        std::vector<std::string> primNames;
+        primNames.emplace_back("rho");
+        primNames.emplace_back("u");
+        primNames.emplace_back("v");
+        if (dim >= 3)
+            primNames.emplace_back("w");
+        primNames.emplace_back("p");
+        for (int k = 0; k < Nsp; ++k)
+        {
+            std::string nm = "Y_" + std::to_string(k);
+            if (k < (int)speciesNames.size())
+                nm = speciesNames[k];
+            primNames.push_back(nm);
+        }
+
+        // --- Scales ---
+        {
+            real p0 = phys->p0();
+            real t0 = phys->t0();
+            real R0 = phys->R0();
+            real mu0 = phys->mu0();
+            real k0 = phys->k0();
+            real D0 = phys->D0();
+            real S0 = phys->S0();
+            real rhoU0 = phys->rhoU0();
+            real rhoE0 = p0;
+            real rhoEFlux0 = phys->rhoEFlux0();
+            std::cout << "\n--- Reference Scales ---\n";
+            std::cout << fmt::format("  rho0      = {:12.4g} kg/m^3\n", cfg.rho0);
+            std::cout << fmt::format("  U0        = {:12.4g} m/s\n", cfg.U0);
+            std::cout << fmt::format("  T0        = {:12.4g} K\n", cfg.T0);
+            std::cout << fmt::format("  L0        = {:12.4g} m\n", cfg.L0);
+            std::cout << "\n--- Derived Scales ---\n";
+            std::cout << fmt::format("  t0        = {:12.4g} s              (L0 / U0)               time\n", t0);
+            std::cout << fmt::format("  p0        = {:12.4g} Pa             (rho0 * U0^2)           pressure\n", p0);
+            std::cout << fmt::format("  R0        = {:12.4g} J/(kg K)       (U0^2 / T0)             gas constant\n", R0);
+            std::cout << fmt::format("  mu0       = {:12.4g} Pa s           (rho0 * U0 * L0)        dynamic viscosity\n", mu0);
+            std::cout << fmt::format("  k0        = {:12.4g} W/(m K)        (rho0 * U0^3 * L0 / T0) thermal conductivity\n", k0);
+            std::cout << fmt::format("  D0        = {:12.4g} m^2/s          (U0 * L0)               diffusivity\n", D0);
+            std::cout << fmt::format("  S0        = {:12.4g} kg/(m^3 s)     (rho0 * U0 / L0)        volumetric source rate\n", S0);
+            std::cout << "\n--- Conservative Variable Scales ---\n";
+            std::cout << fmt::format("  rhoU0     = {:12.4g} kg/(m^2 s)     (rho0 * U0)             momentum density, mass flux/area\n", rhoU0);
+            std::cout << fmt::format("  rhoE0     = {:12.4g} Pa             (rho0 * U0^2)           total energy density\n", rhoE0);
+            std::cout << "\n--- Flux Scales (per unit face area) ---\n";
+            std::cout << fmt::format("  rhoFlux0  = {:12.4g} kg/(m^2 s)     (rho0 * U0)             mass flux per unit area\n", rhoU0);
+            std::cout << fmt::format("  rhoUFlux0 = {:12.4g} Pa             (rho0 * U0^2)           momentum flux per unit area\n", p0);
+            std::cout << fmt::format("  rhoEFlux0 = {:12.4g} kg/s^3         (rho0 * U0^3)           energy flux per unit area\n", rhoEFlux0);
+        }
+
+        // --- Print all representations ---
+        printSection(consTotal, consNames, nVars, dim,
+                     "Conservative (total rhoE, code)", "cons", cfg, false);
+        printSection(consSensible, consNames, nVars, dim,
+                     "Conservative (sensible rhoE, code)", "consSensible", cfg, false);
+        printSection(primCode, primNames, nVars, dim,
+                     "Primitive rho/u/p/Y (code)", "primRhoP", cfg, true);
+
+        real T_phys = T_code * cfg.T0;
+        real p_phys = primCode[dim + 1] * cfg.rho0 * cfg.U0 * cfg.U0;
+
+        std::cout << "\n--- Derived ---\n";
+        std::cout << fmt::format("  T          = {:12.4g} K (code)\n", T_code);
+        std::cout << fmt::format("  T_phys     = {:12.4g} K (physical)\n", T_phys);
+        std::cout << fmt::format("  p_phys     = {:12.4g} Pa\n", p_phys);
+        std::cout << fmt::format("  gamma_cfg  = {:12.4g} (input config)\n", cfg.gamma);
+        std::cout << fmt::format("  gamma_eq   = {:12.4g} (from Cantera EOS)\n", gammaEq);
+        if (isReactive && std::abs(gammaEq - cfg.gamma) > 1e-4)
+        {
+            real vel2 = 0;
+            for (int j = 1; j <= dim; ++j)
+                vel2 += consTotal[j] * consTotal[j];
+            vel2 /= (consTotal[0] * consTotal[0]);
+            real e_sensible = consTotal[dim + 1] / consTotal[0] - 0.5 * vel2 - rhoE_base_cons / consTotal[0];
+            std::cout << fmt::format("  p_eos      = {:12.4g} (code, via gamma_eq)\n",
+                                     (gammaEq - 1.0) * consTotal[0] * e_sensible);
+        }
+        std::cout << fmt::format("  Rmix_phys  = {:12.4g} J/(kg.K)\n",
+                                 Rmix_code * cfg.U0 * cfg.U0 / cfg.T0);
+        std::cout << fmt::format("  rhoE_base  = {:12.4g} (code)\n", rhoE_base_cons);
+
+        if (!speciesNames.empty())
+        {
+            int Ns1 = nSpecies - 1;
+            int Isp = dim + 2;
+            std::cout << fmt::format("\n--- Species ({} transported + 1 derived) ---\n", Ns1);
+            for (int k = 0; k < Ns1; ++k)
+                std::cout << fmt::format("  {:10s} Y={:12.4g}  rhoY={:12.4g}\n",
+                                         speciesNames[k], primCode[Isp + k], consTotal[Isp + k]);
+            real Y_derived = 1.0;
+            real rhoY_derived = consTotal[0];
+            for (int k = 0; k < Ns1; ++k)
+            {
+                Y_derived -= primCode[Isp + k];
+                rhoY_derived -= consTotal[Isp + k];
+            }
+            std::cout << fmt::format("  {:10s} Y={:12.4g}  rhoY={:12.4g} (derived)\n",
+                                     speciesNames[Ns1], Y_derived, rhoY_derived);
+        }
+
+        if (isReactive)
+        {
+            int Ns = nSpecies;
+            std::vector<double> Ybuf(Ns);
+            int Ns1 = Ns - 1;
+            int Isp = dim + 2;
+            auto &chem = (*pool)[0];
+            SpeciesBufferView YvSanitized{Ybuf.data(), Ns};
+            chem.massFractions(1.0, primCode.data() + Isp, Ns1, YvSanitized);
+            ConstSpeciesBufferView Yv{Ybuf.data(), Ns};
+            double u_ct = chem.mixtureIntEnergy(T_phys, Yv, p_phys);
+            double h_ct = chem.mixtureEnthalpy(T_phys, Yv, p_phys);
+            double cv_ct = chem.mixtureCv(T_phys, Yv, p_phys);
+            double cp_ct = chem.mixtureCp(T_phys, Yv, p_phys);
+            double a_ct = chem.speedOfSound(T_phys, Yv, p_phys);
+            double R_ct = chem.mixtureR(Yv);
+
+            std::cout << "\n--- Cantera state at T_phys ---\n";
+            std::cout << fmt::format("  intEnergy_mass = {:12.4g} J/kg\n", u_ct);
+            std::cout << fmt::format("  enthalpy_mass  = {:12.4g} J/kg\n", h_ct);
+            std::cout << fmt::format("  cv_mass        = {:12.4g} J/(kg K)\n", cv_ct);
+            std::cout << fmt::format("  cp_mass        = {:12.4g} J/(kg K)\n", cp_ct);
+            std::cout << fmt::format("  gamma (cp/cv)  = {:12.4g}\n", cp_ct / std::max(cv_ct, 1e-30));
+            std::cout << fmt::format("  gamma (eq)     = {:12.4g}  (from DNDSR state)\n", gammaEq);
+            std::cout << fmt::format("  speed_of_sound = {:12.4g} m/s\n", a_ct);
+            std::cout << fmt::format("  mixture_R      = {:12.4g} J/(kg K)\n", R_ct);
+
+            // Code-unit conversions
+            std::cout << fmt::format("  intEnergy_code = {:12.4g}\n", u_ct / (cfg.U0 * cfg.U0));
+            std::cout << fmt::format("  enthalpy_code  = {:12.4g}\n", h_ct / (cfg.U0 * cfg.U0));
+            std::cout << fmt::format("  cv_code        = {:12.4g}\n", cv_ct / (cfg.U0 * cfg.U0 / cfg.T0));
+            std::cout << fmt::format("  cp_code        = {:12.4g}\n", cp_ct / (cfg.U0 * cfg.U0 / cfg.T0));
+
+            // Verify energy consistency: u_sent should match Cantera's intEnergy_mass
+            real velSqr = 0;
+            for (int j = 1; j <= dim; ++j)
+                velSqr += consTotal[j] * consTotal[j];
+            velSqr /= (consTotal[0] * consTotal[0]);
+            real uInternal = consTotal[dim + 1] / consTotal[0] - 0.5 * velSqr;
+            real uPhysFromInput = uInternal * cfg.U0 * cfg.U0;
+            std::cout << fmt::format("  u_phys(input)  = {:12.4g} J/kg  (from consTotal, pre-conversion)\n", uPhysFromInput);
+            std::cout << fmt::format("  u_phys(sent)   = {:12.4g} J/kg  (direct Cantera UV input)\n",
+                                     uPhysFromInput);
+            std::cout << fmt::format("  diff           = {:12.4g} J/kg  (sent - cantera)\n",
+                                     uPhysFromInput - u_ct);
+        }
+        return 0;
     }
 
 } // anonymous namespace
@@ -322,430 +616,35 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // --- Build PhysicsProperties for reactive case ---
-    std::shared_ptr<std::vector<ChemicalSource>> pool;
-    std::unique_ptr<PhysicsProperties<NS_EX>> phys;
-    int nSpecies = 0;
-    std::vector<std::string> speciesNames;
-
-    if (isReactive)
-    {
-        if (model != NS_EX && model != NS_EX_3D)
-        {
-            std::cerr << "Error: --mechanism only valid for NS_EX / NS_EX_3D\n";
-            return 1;
-        }
-        pool = std::make_shared<std::vector<ChemicalSource>>();
-        pool->emplace_back(mechStr);
-        nSpecies = (*pool)[0].nSpecies();
-        speciesNames = (*pool)[0].speciesNames();
-        int expectedNVars = dim + 2 + nSpecies - 1;
-        if (nVars != expectedNVars)
-        {
-            std::cerr << "Error: reactive --state has nVars=" << nVars
-                      << ", but mechanism has " << nSpecies
-                      << " species; expected nVars=" << expectedNVars << "\n";
-            return 1;
-        }
-
-        typename EulerEvaluatorSettings<NS_EX>::IdealGasProperty igProp;
-        igProp.gamma = cfg.gamma;
-        igProp.Rgas = cfg.Rgas;
-        igProp.U0 = cfg.U0;
-        igProp.rho0 = cfg.rho0;
-        igProp.T0 = cfg.T0;
-        igProp.L0 = cfg.L0;
-        igProp.muGas = 1e-200;
-        igProp.prGas = 0.72;
-
-        phys = std::make_unique<PhysicsProperties<NS_EX>>(igProp);
-        phys->setChemicalSourcePool(pool);
-    }
-
-    using TU = typename PhysicsProperties<NS_EX>::TU; // VectorFMTSafe<real,Dynamic> assignable from VectorXd
-
-    // --- Scaling conversion (phys → code) --- using PhysicsProperties API
-    if (inputPhys)
-    {
-        if (isReactive)
-        {
-            TU u(inputState.size());
-            u = inputState;
-            TU o(u.size());
-            auto callSc = [&](auto fn)
-            { fn(u, o); inputState = o; };
-            bool isPrim = (fromStr == "primRhoP" || fromStr == "primRhoT" || fromStr == "primTP");
-            if (dim == 3)
-            {
-                if (!isPrim)
-                    callSc([&](auto &a, auto &b)
-                           { phys->consPhysToCode<3>(a, b); });
-                else if (fromStr == "primRhoT")
-                    callSc([&](auto &a, auto &b)
-                           { phys->primRhoTPhysToCode<3>(a, b); });
-                else if (fromStr == "primTP")
-                    callSc([&](auto &a, auto &b)
-                           { phys->primTPPhysToCode<3>(a, b); });
-                else
-                    callSc([&](auto &a, auto &b)
-                           { phys->primPhysToCode<3>(a, b); });
-            }
-            else
-            {
-                if (!isPrim)
-                    callSc([&](auto &a, auto &b)
-                           { phys->consPhysToCode<2>(a, b); });
-                else if (fromStr == "primRhoT")
-                    callSc([&](auto &a, auto &b)
-                           { phys->primRhoTPhysToCode<2>(a, b); });
-                else if (fromStr == "primTP")
-                    callSc([&](auto &a, auto &b)
-                           { phys->primTPPhysToCode<2>(a, b); });
-                else
-                    callSc([&](auto &a, auto &b)
-                           { phys->primPhysToCode<2>(a, b); });
-            }
-        }
-        else
-        {
-            // Non-reactive phys→code: use local scaling
-            auto U = inputState;
-            bool isPrim = (fromStr == "primRhoP" || fromStr == "primRhoT" || fromStr == "primTP");
-            if (isPrim)
-            {
-                if (fromStr == "primTP")
-                    U[0] /= cfg.T0;
-                else
-                    U[0] /= cfg.rho0;
-                for (int j = 1; j <= dim; ++j)
-                    U[j] /= cfg.U0;
-                if (fromStr == "primRhoT")
-                    U[dim + 1] /= cfg.T0;
-                else
-                    U[dim + 1] /= (cfg.rho0 * cfg.U0 * cfg.U0);
-            }
-            else
-            {
-                U[0] /= cfg.rho0;
-                for (int j = 1; j <= dim; ++j)
-                    U[j] /= (cfg.rho0 * cfg.U0);
-                U[dim + 1] /= (cfg.rho0 * cfg.U0 * cfg.U0);
-                for (int k = dim + 2; k < nVars; ++k)
-                    U[k] /= cfg.rho0;
-            }
-            inputState = U;
-        }
-    }
-
     std::cout << fmt::format("=== Input: {}, {} units ===\n", fromStr,
                              inputPhys ? "physical" : "code");
     std::cout << fmt::format("  model={}  dim={}  nVars={}  gamma={:.4g}  Rgas_cfg={:.4g}  U0={:.4g}  rho0={:.4g}  T0={:.4g}\n",
                              program.get<std::string>("--model"), dim, nVars,
                              cfg.gamma, R_code, cfg.U0, cfg.rho0, cfg.T0);
-    std::cout << "\n";
-    printVec(inputState, "  input = [", 4);
 
-    if (fromStr == "primRhoP" && (inputState[0] <= 0 || inputState[dim + 1] <= 0))
-    {
-        std::cerr << "Error: primRhoP input requires positive rho and p\n";
-        return 1;
-    }
-    if (fromStr == "primRhoT" && (inputState[0] <= 0 || inputState[dim + 1] <= 0))
-    {
-        std::cerr << "Error: primRhoT input requires positive rho and T\n";
-        return 1;
-    }
-    if (fromStr == "primTP" && (inputState[0] <= 0 || inputState[dim + 1] <= 0))
-    {
-        std::cerr << "Error: primTP input requires positive T and p\n";
-        return 1;
-    }
+#define RUN_MAIN_CALL(model)                                  \
+    run_main<model>(nVars, inputState, isReactive, inputPhys, \
+                    mechStr,                                  \
+                    fromStr,                                  \
+                    cfg)
 
-    // --- State conversion --- using PhysicsProperties API
-    TU consTotal(nVars);
-    if (fromStr == "cons")
-    {
-        consTotal = inputState;
-    }
-    else if (fromStr == "consSensible")
-    {
-        TU u(nVars);
-        u = inputState;
-        if (isReactive)
-        {
-            if (dim == 3)
-                phys->consSensibleToTotal<3>(u, consTotal);
-            else
-                phys->consSensibleToTotal<2>(u, consTotal);
-        }
-        else
-        {
-            consTotal = u;
-        }
-    }
-    else if (fromStr == "primRhoP" && isReactive)
-    {
-        TU u(nVars);
-        u = inputState;
-        if (dim == 3)
-            phys->primToConservative<3>(u, consTotal);
-        else
-            phys->primToConservative<2>(u, consTotal);
-    }
-    else if (fromStr == "primRhoT" && isReactive)
-    {
-        TU u(nVars);
-        u = inputState;
-        if (dim == 3)
-            phys->primRhoTToConservative<3>(u, consTotal);
-        else
-            phys->primRhoTToConservative<2>(u, consTotal);
-    }
-    else if (fromStr == "primTP" && isReactive)
-    {
-        TU u(nVars);
-        u = inputState;
-        if (dim == 3)
-            phys->primTPToConservative<3>(u, consTotal);
-        else
-            phys->primTPToConservative<2>(u, consTotal);
-    }
-    else
-    {
-        // Non-reactive primitive-family inputs: use cfg.gamma directly.
-        TU prim(nVars);
-        prim = inputState;
-        if (fromStr == "primRhoT")
-        {
-            real rho = prim[0];
-            real T = prim[dim + 1];
-            prim[dim + 1] = rho * R_code * T;
-        }
-        else if (fromStr == "primTP")
-        {
-            real T = prim[0];
-            real p = prim[dim + 1];
-            prim[0] = p / std::max(R_code * T, real(1e-60));
-        }
-        if (dim == 3)
-            Gas::IdealGasThermalPrimitive2Conservative<3>(prim, consTotal, cfg.gamma, 0);
-        else
-            Gas::IdealGasThermalPrimitive2Conservative<2>(prim, consTotal, cfg.gamma, 0);
-    }
+#define SWITCH_MODEL(model) \
+    case model:             \
+        return RUN_MAIN_CALL(model);
 
-    // --- Compute temperature, gamma, rhoE_base from consTotal ---
-    real T_code, gammaEq, rhoE_base_cons, Rmix_code;
-    if (isReactive)
+    switch (model)
     {
-        T_code = (dim == 3) ? phys->temperature<3>(consTotal) : phys->temperature<2>(consTotal);
-        gammaEq = (dim == 3) ? phys->gammaEq<3>(T_code, consTotal) : phys->gammaEq<2>(T_code, consTotal);
-        rhoE_base_cons = phys->mixtureBaseInternalRhoE(consTotal);
-        Rmix_code = phys->Rgas(consTotal);
+        SWITCH_MODEL(NS)
+        SWITCH_MODEL(NS_2D)
+        SWITCH_MODEL(NS_3D)
+        SWITCH_MODEL(NS_SA)
+        SWITCH_MODEL(NS_SA_3D)
+        SWITCH_MODEL(NS_2EQ)
+        SWITCH_MODEL(NS_2EQ_3D)
+        SWITCH_MODEL(NS_EX)
+        SWITCH_MODEL(NS_EX_3D)
+    default:
+        DNDS_assert(false);
     }
-    else
-    {
-        T_code = (dim == 3) ? computeTemperatureNonReactive<3>(consTotal, cfg.gamma, R_code)
-                            : computeTemperatureNonReactive<2>(consTotal, cfg.gamma, R_code);
-        gammaEq = cfg.gamma;
-        rhoE_base_cons = 0;
-        Rmix_code = R_code;
-    }
-
-    // --- Convert consTotal to prim ---
-    TU primCode(nVars);
-    if (isReactive)
-    {
-        if (dim == 3)
-            phys->conservativeToPrimitive<3>(consTotal, primCode);
-        else
-            phys->conservativeToPrimitive<2>(consTotal, primCode);
-    }
-    else
-    {
-        if (dim == 3)
-            Gas::IdealGasThermalConservative2Primitive<3>(consTotal, primCode, gammaEq, 0);
-        else
-            Gas::IdealGasThermalConservative2Primitive<2>(consTotal, primCode, gammaEq, 0);
-    }
-
-    // --- Build consSensible ---
-    TU consSensible(nVars);
-    if (isReactive)
-    {
-        if (dim == 3)
-            phys->consTotalToSensible<3>(consTotal, consSensible);
-        else
-            phys->consTotalToSensible<2>(consTotal, consSensible);
-    }
-    else
-    {
-        consSensible = consTotal; // no formation
-    }
-
-    // --- Build variable names ---
-    std::vector<std::string> consNames;
-    consNames.push_back("rho");
-    if (dim >= 1)
-        consNames.push_back("rhoU");
-    if (dim >= 2)
-        consNames.push_back("rhoV");
-    if (dim >= 3)
-        consNames.push_back("rhoW");
-    consNames.push_back("rhoE");
-    int Nsp = nVars - (dim + 2);
-    for (int k = 0; k < Nsp; ++k)
-    {
-        std::string nm = "rhoY_" + std::to_string(k);
-        if (k < (int)speciesNames.size())
-            nm = "rho" + speciesNames[k];
-        consNames.push_back(nm);
-    }
-
-    std::vector<std::string> primNames;
-    primNames.push_back("rho");
-    primNames.push_back("u");
-    primNames.push_back("v");
-    if (dim >= 3)
-        primNames.push_back("w");
-    primNames.push_back("p");
-    for (int k = 0; k < Nsp; ++k)
-    {
-        std::string nm = "Y_" + std::to_string(k);
-        if (k < (int)speciesNames.size())
-            nm = speciesNames[k];
-        primNames.push_back(nm);
-    }
-
-    // --- Scales ---
-    {
-        real p0 = cfg.rho0 * cfg.U0 * cfg.U0;
-        real t0 = cfg.L0 > 0 ? cfg.L0 / cfg.U0 : 0;
-        real R0 = cfg.U0 * cfg.U0 / std::max(cfg.T0, 1e-60);
-        real mu0 = cfg.rho0 * cfg.U0 * cfg.L0;
-        real k0 = cfg.rho0 * cfg.U0 * cfg.U0 * cfg.U0 * cfg.L0 / std::max(cfg.T0, 1e-60);
-        real D0 = cfg.U0 * cfg.L0;
-        real S0 = cfg.rho0 * cfg.U0 / std::max(cfg.L0, 1e-60);
-        real rhoU0 = cfg.rho0 * cfg.U0;
-        real rhoE0 = p0;
-        real rhoEFlux0 = cfg.rho0 * cfg.U0 * cfg.U0 * cfg.U0;
-        std::cout << "\n--- Reference Scales ---\n";
-        std::cout << fmt::format("  rho0      = {:12.4g} kg/m^3\n", cfg.rho0);
-        std::cout << fmt::format("  U0        = {:12.4g} m/s\n", cfg.U0);
-        std::cout << fmt::format("  T0        = {:12.4g} K\n", cfg.T0);
-        std::cout << fmt::format("  L0        = {:12.4g} m\n", cfg.L0);
-        std::cout << "\n--- Derived Scales ---\n";
-        std::cout << fmt::format("  t0        = {:12.4g} s              (L0 / U0)               time\n", t0);
-        std::cout << fmt::format("  p0        = {:12.4g} Pa             (rho0 * U0^2)           pressure\n", p0);
-        std::cout << fmt::format("  R0        = {:12.4g} J/(kg K)       (U0^2 / T0)             gas constant\n", R0);
-        std::cout << fmt::format("  mu0       = {:12.4g} Pa s           (rho0 * U0 * L0)        dynamic viscosity\n", mu0);
-        std::cout << fmt::format("  k0        = {:12.4g} W/(m K)        (rho0 * U0^3 * L0 / T0) thermal conductivity\n", k0);
-        std::cout << fmt::format("  D0        = {:12.4g} m^2/s          (U0 * L0)               diffusivity\n", D0);
-        std::cout << fmt::format("  S0        = {:12.4g} kg/(m^3 s)     (rho0 * U0 / L0)        volumetric source rate\n", S0);
-        std::cout << "\n--- Conservative Variable Scales ---\n";
-        std::cout << fmt::format("  rhoU0     = {:12.4g} kg/(m^2 s)     (rho0 * U0)             momentum density, mass flux/area\n", rhoU0);
-        std::cout << fmt::format("  rhoE0     = {:12.4g} Pa             (rho0 * U0^2)           total energy density\n", rhoE0);
-        std::cout << "\n--- Flux Scales (per unit face area) ---\n";
-        std::cout << fmt::format("  rhoFlux0  = {:12.4g} kg/(m^2 s)     (rho0 * U0)             mass flux per unit area\n", rhoU0);
-        std::cout << fmt::format("  rhoUFlux0 = {:12.4g} Pa             (rho0 * U0^2)           momentum flux per unit area\n", p0);
-        std::cout << fmt::format("  rhoEFlux0 = {:12.4g} kg/s^3         (rho0 * U0^3)           energy flux per unit area\n", rhoEFlux0);
-    }
-
-    // --- Print all representations ---
-    printSection(consTotal, consNames, nVars, dim,
-                 "Conservative (total rhoE, code)", "cons", cfg, false);
-    printSection(consSensible, consNames, nVars, dim,
-                 "Conservative (sensible rhoE, code)", "consSensible", cfg, false);
-    printSection(primCode, primNames, nVars, dim,
-                 "Primitive rho/u/p/Y (code)", "primRhoP", cfg, true);
-
-    real T_phys = T_code * cfg.T0;
-    real p_phys = primCode[dim + 1] * cfg.rho0 * cfg.U0 * cfg.U0;
-
-    std::cout << "\n--- Derived ---\n";
-    std::cout << fmt::format("  T          = {:12.4g} K (code)\n", T_code);
-    std::cout << fmt::format("  T_phys     = {:12.4g} K (physical)\n", T_phys);
-    std::cout << fmt::format("  p_phys     = {:12.4g} Pa\n", p_phys);
-    std::cout << fmt::format("  gamma_cfg  = {:12.4g} (input config)\n", cfg.gamma);
-    std::cout << fmt::format("  gamma_eq   = {:12.4g} (from Cantera EOS)\n", gammaEq);
-    if (isReactive && std::abs(gammaEq - cfg.gamma) > 1e-4)
-    {
-        real vel2 = 0;
-        for (int j = 1; j <= dim; ++j)
-            vel2 += consTotal[j] * consTotal[j];
-        vel2 /= (consTotal[0] * consTotal[0]);
-        real e_sensible = consTotal[dim + 1] / consTotal[0] - 0.5 * vel2 - rhoE_base_cons / consTotal[0];
-        std::cout << fmt::format("  p_eos      = {:12.4g} (code, via gamma_eq)\n",
-                                 (gammaEq - 1.0) * consTotal[0] * e_sensible);
-    }
-    std::cout << fmt::format("  Rmix_phys  = {:12.4g} J/(kg.K)\n",
-                             Rmix_code * cfg.U0 * cfg.U0 / cfg.T0);
-    std::cout << fmt::format("  rhoE_base  = {:12.4g} (code)\n", rhoE_base_cons);
-
-    if (!speciesNames.empty())
-    {
-        int Ns1 = nSpecies - 1;
-        int Isp = dim + 2;
-        std::cout << fmt::format("\n--- Species ({} transported + 1 derived) ---\n", Ns1);
-        for (int k = 0; k < Ns1; ++k)
-            std::cout << fmt::format("  {:10s} Y={:12.4g}  rhoY={:12.4g}\n",
-                                     speciesNames[k], primCode[Isp + k], consTotal[Isp + k]);
-        real Y_derived = 1.0;
-        real rhoY_derived = consTotal[0];
-        for (int k = 0; k < Ns1; ++k)
-        {
-            Y_derived -= primCode[Isp + k];
-            rhoY_derived -= consTotal[Isp + k];
-        }
-        std::cout << fmt::format("  {:10s} Y={:12.4g}  rhoY={:12.4g} (derived)\n",
-                                 speciesNames[Ns1], Y_derived, rhoY_derived);
-    }
-
-    if (isReactive)
-    {
-        int Ns = nSpecies;
-        std::vector<double> Ybuf(Ns);
-        int Ns1 = Ns - 1;
-        int Isp = dim + 2;
-        auto &chem = (*pool)[0];
-        SpeciesBufferView YvSanitized{Ybuf.data(), Ns};
-        chem.massFractions(1.0, primCode.data() + Isp, Ns1, YvSanitized);
-        ConstSpeciesBufferView Yv{Ybuf.data(), Ns};
-        double u_ct = chem.mixtureIntEnergy(T_phys, Yv, p_phys);
-        double h_ct = chem.mixtureEnthalpy(T_phys, Yv, p_phys);
-        double cv_ct = chem.mixtureCv(T_phys, Yv, p_phys);
-        double cp_ct = chem.mixtureCp(T_phys, Yv, p_phys);
-        double a_ct = chem.speedOfSound(T_phys, Yv, p_phys);
-        double R_ct = chem.mixtureR(Yv);
-
-        std::cout << "\n--- Cantera state at T_phys ---\n";
-        std::cout << fmt::format("  intEnergy_mass = {:12.4g} J/kg\n", u_ct);
-        std::cout << fmt::format("  enthalpy_mass  = {:12.4g} J/kg\n", h_ct);
-        std::cout << fmt::format("  cv_mass        = {:12.4g} J/(kg K)\n", cv_ct);
-        std::cout << fmt::format("  cp_mass        = {:12.4g} J/(kg K)\n", cp_ct);
-        std::cout << fmt::format("  gamma (cp/cv)  = {:12.4g}\n", cp_ct / std::max(cv_ct, 1e-30));
-        std::cout << fmt::format("  gamma (eq)     = {:12.4g}  (from DNDSR state)\n", gammaEq);
-        std::cout << fmt::format("  speed_of_sound = {:12.4g} m/s\n", a_ct);
-        std::cout << fmt::format("  mixture_R      = {:12.4g} J/(kg K)\n", R_ct);
-
-        // Code-unit conversions
-        std::cout << fmt::format("  intEnergy_code = {:12.4g}\n", u_ct / (cfg.U0 * cfg.U0));
-        std::cout << fmt::format("  enthalpy_code  = {:12.4g}\n", h_ct / (cfg.U0 * cfg.U0));
-        std::cout << fmt::format("  cv_code        = {:12.4g}\n", cv_ct / (cfg.U0 * cfg.U0 / cfg.T0));
-        std::cout << fmt::format("  cp_code        = {:12.4g}\n", cp_ct / (cfg.U0 * cfg.U0 / cfg.T0));
-
-        // Verify energy consistency: u_sent should match Cantera's intEnergy_mass
-        real velSqr = 0;
-        for (int j = 1; j <= dim; ++j)
-            velSqr += consTotal[j] * consTotal[j];
-        velSqr /= (consTotal[0] * consTotal[0]);
-        real uInternal = consTotal[dim + 1] / consTotal[0] - 0.5 * velSqr;
-        real uPhysFromInput = uInternal * cfg.U0 * cfg.U0;
-        std::cout << fmt::format("  u_phys(input)  = {:12.4g} J/kg  (from consTotal, pre-conversion)\n", uPhysFromInput);
-        std::cout << fmt::format("  u_phys(sent)   = {:12.4g} J/kg  (direct Cantera UV input)\n",
-                                 uPhysFromInput);
-        std::cout << fmt::format("  diff           = {:12.4g} J/kg  (sent - cantera)\n",
-                                 uPhysFromInput - u_ct);
-    }
-
-    return 0;
+    return -1;
 }

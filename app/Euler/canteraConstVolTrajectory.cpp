@@ -52,7 +52,7 @@ namespace
                 return candidate.string();
         }
 #ifdef DNDS_CANTERA_DATA_DIR
-        auto candidate = std::filesystem::path(DNDS_CANTERA_DATA_DIR) / mech;
+        auto candidate = std::filesystem::path(DNDS_MACRO_TO_STRING(DNDS_CANTERA_DATA_DIR)) / mech;
         if (std::filesystem::exists(candidate))
             return candidate.string();
 #endif
@@ -141,7 +141,7 @@ int main(int argc, char **argv)
         auto &chem = (*pool)[0];
 
         int nVars = static_cast<int>(c.initialState.originVector().size());
-        phys.resolveStateValue<3>(c.initialState, nVars, nullptr, "farFieldStaticValue");
+        phys.resolveStateValue(c.initialState, nVars, nullptr, "farFieldStaticValue");
         c.U = c.initialState.cons;
 
         auto dnds = Reactive0D::runDNDSRTrajectory<NS_EX, 3>(c, phys, chem);

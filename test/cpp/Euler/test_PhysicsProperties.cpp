@@ -111,8 +111,8 @@ TEST_CASE("PhysicsProperties non-reactive state conversions")
 
     TU cons;
     TU primOut;
-    phys.template primToConservative<3>(prim, cons);
-    phys.template conservativeToPrimitive<3>(cons, primOut);
+    phys.primToConservative(prim, cons);
+    phys.conservativeToPrimitive(cons, primOut);
     for (int i = 0; i < prim.size(); ++i)
     {
         CAPTURE(i);
@@ -122,8 +122,8 @@ TEST_CASE("PhysicsProperties non-reactive state conversions")
     TU primRhoT;
     TU primRhoTOut;
     primRhoT << 1.2, 0.22, -0.07, 0.03, 300.0;
-    phys.template primRhoTToConservative<3>(primRhoT, cons);
-    phys.template conservativeToPrimRhoT<3>(cons, primRhoTOut);
+    phys.primRhoTToConservative(primRhoT, cons);
+    phys.conservativeToPrimRhoT(cons, primRhoTOut);
     for (int i = 0; i < primRhoT.size(); ++i)
     {
         CAPTURE(i);
@@ -133,8 +133,8 @@ TEST_CASE("PhysicsProperties non-reactive state conversions")
     TU primTP;
     TU primTPOut;
     primTP << 300.0, 0.22, -0.07, 0.03, 0.72;
-    phys.template primTPToConservative<3>(primTP, cons);
-    phys.template conservativeToPrimTP<3>(cons, primTPOut);
+    phys.primTPToConservative(primTP, cons);
+    phys.conservativeToPrimTP(cons, primTPOut);
     for (int i = 0; i < primTP.size(); ++i)
     {
         CAPTURE(i);
@@ -153,11 +153,9 @@ TEST_CASE("PhysicsProperties non-reactive conservativeThermal returns closure an
     TU prim;
     prim << 1.4, 0.18, -0.05, 0.03, 0.67;
     TU cons;
-    phys.template primToConservative<3>(prim, cons);
+    phys.primToConservative(prim, cons);
 
-    real p = 0, asqr = 0, H = 0, gammaEq = 0, gamma = 0;
-    real T = phys.template temperature<3>(cons);
-    phys.template conservativeThermal<3>(cons, T, p, asqr, H, &gammaEq, &gamma);
+    auto [T, p, asqr, H, gammaEq, gamma] = phys.conservativeThermal(cons);
 
     CHECK(gammaEq == doctest::Approx(igProp.gamma).epsilon(1e-14));
     CHECK(gamma == doctest::Approx(igProp.gamma).epsilon(1e-14));
@@ -187,14 +185,14 @@ TEST_CASE("PhysicsProperties non-reactive total-to-static conversion is closed f
     real pStaticExpected = pTotal * std::pow(TStaticExpected / TTotal, igProp.gamma / (igProp.gamma - 1));
     real rhoExpected = pStaticExpected / (Rgas * TStaticExpected);
 
-    phys.template totalToStaticPrimitive<3>(pTotal, TTotal, primStatic);
+    phys.totalToStaticPrimitive(pTotal, TTotal, primStatic);
 
     CHECK(primStatic(0) == doctest::Approx(rhoExpected).epsilon(1e-12));
     CHECK(primStatic(4) == doctest::Approx(pStaticExpected).epsilon(1e-12));
 
     TU cons;
-    phys.template primToConservative<3>(primStatic, cons);
-    CHECK(phys.template temperature<3>(cons) == doctest::Approx(TStaticExpected).epsilon(1e-12));
+    phys.primToConservative(primStatic, cons);
+    CHECK(phys.temperature(cons) == doctest::Approx(TStaticExpected).epsilon(1e-12));
 }
 
 TEST_CASE("PhysicsProperties non-reactive static-to-total conversion is closed form")
@@ -208,7 +206,7 @@ TEST_CASE("PhysicsProperties non-reactive static-to-total conversion is closed f
     TU prim;
     prim << 1.225, 0.30, 0.0, 0.0, 0.90;
 
-    auto [pTotal, TTotal] = phys.template primitiveStaticToTotalPT<3>(prim);
+    auto [pTotal, TTotal] = phys.primitiveStaticToTotalPT(prim);
     real Rgas = phys.toCode(igProp.Rgas);
     real TStatic = prim(4) / (prim(0) * Rgas);
     real asqr = igProp.gamma * prim(4) / prim(0);
@@ -239,7 +237,7 @@ TEST_CASE("PhysicsProperties non-reactive cons code-phys round-trip with non-def
 
     // Test individual physical values
     TU physCons;
-    phys.template consCodeToPhys<3>(cons, physCons);
+    phys.consCodeToPhys(cons, physCons);
     CHECK(physCons(0) == doctest::Approx(cons(0) * rho0).epsilon(1e-12));
     CHECK(physCons(1) == doctest::Approx(cons(1) * rho0 * U0).epsilon(1e-12));
     CHECK(physCons(4) == doctest::Approx(cons(4) * rho0 * U0 * U0).epsilon(1e-12));
@@ -248,7 +246,7 @@ TEST_CASE("PhysicsProperties non-reactive cons code-phys round-trip with non-def
 
     // Round-trip
     TU consRT;
-    phys.template consPhysToCode<3>(physCons, consRT);
+    phys.consPhysToCode(physCons, consRT);
     for (int i = 0; i < nVars; ++i)
     {
         CAPTURE(i);
@@ -278,7 +276,7 @@ TEST_CASE("PhysicsProperties non-reactive prim code-phys round-trip with RANS an
     // primCodeToPhys / primPhysToCode (PrimRhoP)
     {
         TU physPrim;
-        phys.template primCodeToPhys<3>(prim, physPrim);
+        phys.primCodeToPhys(prim, physPrim);
         CHECK(physPrim(0) == doctest::Approx(prim(0) * rho0).epsilon(1e-12));
         CHECK(physPrim(4) == doctest::Approx(prim(4) * rho0 * U0 * U0).epsilon(1e-12));
         // k: prim scale = U0²
@@ -287,7 +285,7 @@ TEST_CASE("PhysicsProperties non-reactive prim code-phys round-trip with RANS an
         CHECK(physPrim(6) == doctest::Approx(prim(6) * U0 / L0).epsilon(1e-12));
 
         TU primRT;
-        phys.template primPhysToCode<3>(physPrim, primRT);
+        phys.primPhysToCode(physPrim, primRT);
         for (int i = 0; i < nVars; ++i)
         {
             CAPTURE(i);
@@ -301,14 +299,14 @@ TEST_CASE("PhysicsProperties non-reactive prim code-phys round-trip with RANS an
         primRhoT << 1.2, 0.22, -0.07, 0.03, 300.0, 0.04, 500.0;
 
         TU physPrimRT;
-        phys.template primRhoTCodeToPhys<3>(primRhoT, physPrimRT);
+        phys.primRhoTCodeToPhys(primRhoT, physPrimRT);
         // Position 4 is temperature: phys = code * T0 (T0=288.15)
         CHECK(physPrimRT(4) == doctest::Approx(primRhoT(4) * igProp.T0).epsilon(1e-12));
         // RANS: k scaled by U0²
         CHECK(physPrimRT(5) == doctest::Approx(primRhoT(5) * U0 * U0).epsilon(1e-12));
 
         TU primRTRT;
-        phys.template primRhoTPhysToCode<3>(physPrimRT, primRTRT);
+        phys.primRhoTPhysToCode(physPrimRT, primRTRT);
         for (int i = 0; i < nVars; ++i)
         {
             CAPTURE(i);
@@ -322,13 +320,13 @@ TEST_CASE("PhysicsProperties non-reactive prim code-phys round-trip with RANS an
         primTP << 300.0, 0.22, -0.07, 0.03, 0.72, 0.04, 500.0;
 
         TU physPrimTP;
-        phys.template primTPCodeToPhys<3>(primTP, physPrimTP);
+        phys.primTPCodeToPhys(primTP, physPrimTP);
         // Position 0 is temperature
         CHECK(physPrimTP(0) == doctest::Approx(primTP(0) * igProp.T0).epsilon(1e-12));
         CHECK(physPrimTP(5) == doctest::Approx(primTP(5) * U0 * U0).epsilon(1e-12));
 
         TU primTPRT;
-        phys.template primTPPhysToCode<3>(physPrimTP, primTPRT);
+        phys.primTPPhysToCode(physPrimTP, primTPRT);
         for (int i = 0; i < nVars; ++i)
         {
             CAPTURE(i);
@@ -364,8 +362,8 @@ TEST_CASE("PhysicsProperties reactive state conversions")
     prim(5 + 0) = 0.028; // H2
     prim(5 + 3) = 0.222; // O2; N2 is the dependent last species
 
-    phys.template primToConservative<3>(prim, cons, options);
-    phys.template conservativeToPrimitive<3>(cons, primOut, options);
+    phys.primToConservative(prim, cons, options);
+    phys.conservativeToPrimitive(cons, primOut, options);
     for (int i = 0; i < prim.size(); ++i)
     {
         CAPTURE(i);
@@ -377,8 +375,8 @@ TEST_CASE("PhysicsProperties reactive state conversions")
     primTP = prim;
     primTP(0) = 1200.0;
     primTP(4) = 0.70;
-    phys.template primTPToConservative<3>(primTP, cons, options);
-    phys.template conservativeToPrimTP<3>(cons, primTPOut, options);
+    phys.primTPToConservative(primTP, cons, options);
+    phys.conservativeToPrimTP(cons, primTPOut, options);
     for (int i = 0; i < primTP.size(); ++i)
     {
         CAPTURE(i);
@@ -390,8 +388,8 @@ TEST_CASE("PhysicsProperties reactive state conversions")
     primRhoT = prim;
     primRhoT(0) = 0.92;
     primRhoT(4) = 1050.0;
-    phys.template primRhoTToConservative<3>(primRhoT, cons, options);
-    phys.template conservativeToPrimRhoT<3>(cons, primRhoTOut, options);
+    phys.primRhoTToConservative(primRhoT, cons, options);
+    phys.conservativeToPrimRhoT(cons, primRhoTOut, options);
     for (int i = 0; i < primRhoT.size(); ++i)
     {
         CAPTURE(i);
@@ -420,11 +418,8 @@ TEST_CASE("PhysicsProperties reactive conservativeThermal separates gammaEq from
     primTP(4) = 0.62;
     primTP(5 + 0) = 0.030;
     primTP(5 + 3) = 0.220;
-    phys.template primTPToConservative<3>(primTP, cons, options);
-
-    real T = phys.template temperature<3>(cons, primTP(0), options.temperatureUVTolerance);
-    real p = 0, asqr = 0, H = 0, gammaEq = 0, gamma = 0;
-    phys.template conservativeThermal<3>(cons, T, p, asqr, H, &gammaEq, &gamma);
+    phys.primTPToConservative(primTP, cons, options);
+    auto [T, p, asqr, H, gammaEq, gamma] = phys.conservativeThermal(cons);
 
     real rho = cons(0);
     real vSqr = (cons(Eigen::seq(Eigen::fix<1>, Eigen::fix<3>)) / rho).squaredNorm();
@@ -462,11 +457,9 @@ TEST_CASE("PhysicsProperties reactive transport uses Cantera mixture coefficient
     primTP(4) = 0.66;
     primTP(5 + 0) = 0.026;
     primTP(5 + 3) = 0.224;
-    phys.template primTPToConservative<3>(primTP, cons, options);
+    phys.primTPToConservative(primTP, cons, options);
 
-    real T = phys.template temperature<3>(cons, primTP(0), options.temperatureUVTolerance);
-    real p = 0, asqr = 0, H = 0;
-    phys.template conservativeThermal<3>(cons, T, p, asqr, H);
+    auto [T, p, asqr, H, gammaEq, gamma] = phys.conservativeThermal(cons);
     std::vector<double> Ybuf(Ns);
     SpeciesBufferView Ywrite{Ybuf.data(), Ns};
     chem.massFractions(cons(0), cons.data() + 5, Ns1, Ywrite);
@@ -509,11 +502,11 @@ TEST_CASE("PhysicsProperties reactive total-to-static conversion iterates mixtur
 
     real pTotal = 101325.0 / (379.0 * 379.0);
     real TTotal = 1200.0;
-    phys.template totalToStaticPrimitive<3>(pTotal, TTotal, primStatic, options);
+    phys.totalToStaticPrimitive(pTotal, TTotal, primStatic, options);
 
     TU cons(5 + Ns1);
-    phys.template primToConservative<3>(primStatic, cons, options);
-    real TStatic = phys.template temperature<3>(cons, primStatic(4), options.temperatureUVTolerance);
+    phys.primToConservative(primStatic, cons, options);
+    real TStatic = phys.temperature(cons, primStatic(4), options.temperatureUVTolerance);
     real Rgas = phys.Rgas(cons);
     real vSqr = primStatic(Eigen::seq(Eigen::fix<1>, Eigen::fix<3>)).squaredNorm();
 
@@ -559,9 +552,9 @@ TEST_CASE("PhysicsProperties reactive static-to-total inverts total-to-static")
 
     real pTotalIn = 101325.0 / (379.0 * 379.0);
     real TTotalIn = 1250.0;
-    phys.template totalToStaticPrimitive<3>(pTotalIn, TTotalIn, primStatic, options);
+    phys.totalToStaticPrimitive(pTotalIn, TTotalIn, primStatic, options);
 
-    auto [pTotalOut, TTotalOut] = phys.template primitiveStaticToTotalPT<3>(primStatic, options);
+    auto [pTotalOut, TTotalOut] = phys.primitiveStaticToTotalPT(primStatic, options);
     CHECK(pTotalOut == doctest::Approx(pTotalIn).epsilon(2e-11));
     CHECK(TTotalOut == doctest::Approx(TTotalIn).epsilon(2e-11));
 }
@@ -588,14 +581,14 @@ TEST_CASE("PhysicsProperties reactive total-to-static default options converge o
     real TTotal = 1200.0;
 
     TU primDefault = primStatic;
-    phys.template totalToStaticPrimitive<3>(pTotal, TTotal, primDefault);
+    phys.totalToStaticPrimitive(pTotal, TTotal, primDefault);
     CHECK(primDefault(0) > 0);
     CHECK(primDefault(4) > 0);
 
     auto tooFewIterations = strictReactiveOptions();
     tooFewIterations.totalToStaticMaxIterations = 1;
     TU primFail = primStatic;
-    CHECK_THROWS_AS(phys.template totalToStaticPrimitive<3>(pTotal, TTotal, primFail, tooFewIterations), std::runtime_error);
+    CHECK_THROWS_AS(phys.totalToStaticPrimitive(pTotal, TTotal, primFail, tooFewIterations), std::runtime_error);
 }
 
 // ============================================================================
@@ -637,7 +630,7 @@ TEST_CASE("PhysicsProperties cons code-phys round-trip multi-species with non-de
     real L0 = makeScaledIdealGas().L0;
 
     TU physCons;
-    phys.template consCodeToPhys<3>(cons, physCons);
+    phys.consCodeToPhys(cons, physCons);
 
     // Physical value checks
     CHECK(physCons(0) == doctest::Approx(cons(0) * rho0).epsilon(1e-12));
@@ -653,7 +646,7 @@ TEST_CASE("PhysicsProperties cons code-phys round-trip multi-species with non-de
 
     // Round-trip
     TU consRT;
-    phys.template consPhysToCode<3>(physCons, consRT);
+    phys.consPhysToCode(physCons, consRT);
     for (int i = 0; i < nVars; ++i)
     {
         CAPTURE(i);
@@ -700,12 +693,12 @@ TEST_CASE("PhysicsProperties prim code-phys round-trip multi-species with RANS a
         prim(Isp + 3) = 0.210;
 
         TU physPrim;
-        phys.template primCodeToPhys<3>(prim, physPrim);
+        phys.primCodeToPhys(prim, physPrim);
         CHECK(physPrim(5) == doctest::Approx(prim(5) * U0 * U0).epsilon(1e-12));           // k: U0²
         CHECK(physPrim(6) == doctest::Approx(prim(6) * U0 * U0 * U0 / L0).epsilon(1e-12)); // epsilon: U0³/L0
 
         TU primRT;
-        phys.template primPhysToCode<3>(physPrim, primRT);
+        phys.primPhysToCode(physPrim, primRT);
         for (int i = 0; i < nVars; ++i)
         {
             CAPTURE(i);
@@ -729,12 +722,12 @@ TEST_CASE("PhysicsProperties prim code-phys round-trip multi-species with RANS a
         primRhoT(Isp + 3) = 0.210;
 
         TU physPrimRT;
-        phys.template primRhoTCodeToPhys<3>(primRhoT, physPrimRT);
+        phys.primRhoTCodeToPhys(primRhoT, physPrimRT);
         CHECK(physPrimRT(4) == doctest::Approx(primRhoT(4) * T0).epsilon(1e-12));
         CHECK(physPrimRT(5) == doctest::Approx(primRhoT(5) * U0 * U0).epsilon(1e-12));
 
         TU primRTRT;
-        phys.template primRhoTPhysToCode<3>(physPrimRT, primRTRT);
+        phys.primRhoTPhysToCode(physPrimRT, primRTRT);
         for (int i = 0; i < nVars; ++i)
         {
             CAPTURE(i);
@@ -758,7 +751,7 @@ TEST_CASE("PhysicsProperties prim code-phys round-trip multi-species with RANS a
         primTP(Isp + 3) = 0.210;
 
         TU physPrimTP;
-        phys.template primTPCodeToPhys<3>(primTP, physPrimTP);
+        phys.primTPCodeToPhys(primTP, physPrimTP);
         CHECK(physPrimTP(0) == doctest::Approx(primTP(0) * T0).epsilon(1e-12));
         for (int j = 1; j <= 3; ++j)
             CHECK(physPrimTP(j) == doctest::Approx(primTP(j) * U0).epsilon(1e-12));
@@ -767,7 +760,7 @@ TEST_CASE("PhysicsProperties prim code-phys round-trip multi-species with RANS a
         CHECK(physPrimTP(6) == doctest::Approx(primTP(6) * U0 * U0 * U0 / L0).epsilon(1e-12));
 
         TU primTPRT;
-        phys.template primTPPhysToCode<3>(physPrimTP, primTPRT);
+        phys.primTPPhysToCode(physPrimTP, primTPRT);
         for (int i = 0; i < nVars; ++i)
         {
             CAPTURE(i);
@@ -862,13 +855,13 @@ TEST_CASE("PhysicsProperties scaleRansPrim round-trip")
     vec << 1.0, 0.2, -0.1, 0.05, 0.7, 0.05, 200.0;
 
     typename Phys::TU original = vec;
-    phys.template scaleRansPrimCodeToPhys<dim>(vec);
+    phys.scaleRansPrimCodeToPhys(vec);
     for (int j = 5; j < 7; ++j)
         CHECK(vec(j) != doctest::Approx(original(j)).epsilon(1e-12)); // scaled
     for (int j = 0; j < 5; ++j)
         CHECK(vec(j) == doctest::Approx(original(j)).epsilon(1e-12)); // fluid untouched
 
-    phys.template scaleRansPrimPhysToCode<dim>(vec);
+    phys.scaleRansPrimPhysToCode(vec);
     for (int i = 0; i < nVars; ++i)
         CHECK(vec(i) == doctest::Approx(original(i)).epsilon(2e-12));
 }
@@ -889,12 +882,12 @@ TEST_CASE("PhysicsProperties scaleRansCons round-trip")
     vec << 1.0, 0.2, -0.1, 0.05, 0.7, 0.02;
 
     typename Phys::TU original = vec;
-    phys.template scaleRansConsCodeToPhys<dim>(vec);
+    phys.scaleRansConsCodeToPhys(vec);
     // Cons scaling: nuTilde → * rho0
     real rho0 = igProp.rho0;
     CHECK(vec(5) == doctest::Approx(original(5) * rho0).epsilon(1e-12));
 
-    phys.template scaleRansConsPhysToCode<dim>(vec);
+    phys.scaleRansConsPhysToCode(vec);
     for (int i = 0; i < nVars; ++i)
         CHECK(vec(i) == doctest::Approx(original(i)).epsilon(2e-12));
 }
@@ -940,10 +933,10 @@ TEST_CASE("PhysicsProperties StateValueOrigin round-trip single-species")
         CAPTURE(StateValueOriginName(origin));
 
         TU state;
-        phys.template conservativeToStateValueOrigin<dim>(cons, state, origin);
+        phys.conservativeToStateValueOrigin(cons, state, origin);
 
         TU consRT;
-        phys.template stateValueOriginToConservative<dim>(state, consRT, origin);
+        phys.stateValueOriginToConservative(state, consRT, origin);
 
         for (int i = 0; i < nVars; ++i)
         {
@@ -1000,10 +993,10 @@ TEST_CASE("PhysicsProperties StateValueOrigin round-trip multi-species Cantera")
         CAPTURE(StateValueOriginName(origin));
 
         typename PhysicsProperties<NS_EX>::TU state;
-        phys.template conservativeToStateValueOrigin<dim>(cons, state, origin);
+        phys.conservativeToStateValueOrigin(cons, state, origin);
 
         typename PhysicsProperties<NS_EX>::TU consRT;
-        phys.template stateValueOriginToConservative<dim>(state, consRT, origin);
+        phys.stateValueOriginToConservative(state, consRT, origin);
 
         for (int i = 0; i < nVars; ++i)
         {
@@ -1069,9 +1062,9 @@ TEST_CASE("PhysicsProperties cons code-phys linearity and range")
             cons << 0.5, 0.1, -0.05, 0.03, 0.4, 0.02, 100.0;
 
             TU phys1, phys2;
-            phys.template consCodeToPhys<dim>(cons, phys1);
+            phys.consCodeToPhys(cons, phys1);
             TU cons2 = cons * 2;
-            phys.template consCodeToPhys<dim>(cons2, phys2);
+            phys.consCodeToPhys(cons2, phys2);
             for (int i = 0; i < nVars; ++i)
                 CHECK(phys2(i) == doctest::Approx(2.0 * phys1(i)).epsilon(1e-12));
         }
@@ -1081,9 +1074,9 @@ TEST_CASE("PhysicsProperties cons code-phys linearity and range")
             TU cons(nVars);
             cons << 1e-4, 1e-5, -5e-6, 2e-6, 5e-5, 1e-6, 1e-2;
             TU physCons;
-            phys.template consCodeToPhys<dim>(cons, physCons);
+            phys.consCodeToPhys(cons, physCons);
             TU consRT;
-            phys.template consPhysToCode<dim>(physCons, consRT);
+            phys.consPhysToCode(physCons, consRT);
             for (int i = 0; i < nVars; ++i)
                 CHECK(consRT(i) == doctest::Approx(cons(i)).epsilon(1e-10));
         }
@@ -1093,9 +1086,9 @@ TEST_CASE("PhysicsProperties cons code-phys linearity and range")
             TU cons(nVars);
             cons << 10.0, 5.0, -3.0, 2.0, 8.0, 2.0, 5000.0;
             TU physCons;
-            phys.template consCodeToPhys<dim>(cons, physCons);
+            phys.consCodeToPhys(cons, physCons);
             TU consRT;
-            phys.template consPhysToCode<dim>(physCons, consRT);
+            phys.consPhysToCode(physCons, consRT);
             for (int i = 0; i < nVars; ++i)
                 CHECK(consRT(i) == doctest::Approx(cons(i)).epsilon(1e-7));
         }
@@ -1105,11 +1098,11 @@ TEST_CASE("PhysicsProperties cons code-phys linearity and range")
             TU cons(nVars);
             cons << 1.0, 0.2, -0.1, 0.05, 0.7, 0.0, 0.0;
             TU physCons;
-            phys.template consCodeToPhys<dim>(cons, physCons);
+            phys.consCodeToPhys(cons, physCons);
             CHECK(physCons(5) == doctest::Approx(0.0).epsilon(1e-14));
             CHECK(physCons(6) == doctest::Approx(0.0).epsilon(1e-14));
             TU consRT;
-            phys.template consPhysToCode<dim>(physCons, consRT);
+            phys.consPhysToCode(physCons, consRT);
             for (int i = 0; i < nVars; ++i)
                 CHECK(consRT(i) == doctest::Approx(cons(i)).epsilon(1e-12));
         }
@@ -1138,9 +1131,9 @@ TEST_CASE("PhysicsProperties prim code-phys linearity and range")
             prim << 0.6, 0.12, -0.04, 0.02, 0.35, 0.015, 150.0;
 
             TU phys1, phys2;
-            phys.template primCodeToPhys<dim>(prim, phys1);
+            phys.primCodeToPhys(prim, phys1);
             TU prim2 = prim * 2;
-            phys.template primCodeToPhys<dim>(prim2, phys2);
+            phys.primCodeToPhys(prim2, phys2);
             for (int i = 0; i < nVars; ++i)
                 CHECK(phys2(i) == doctest::Approx(2.0 * phys1(i)).epsilon(1e-12));
         }
@@ -1151,9 +1144,9 @@ TEST_CASE("PhysicsProperties prim code-phys linearity and range")
             primRhoT << 0.6, 0.12, -0.04, 0.02, 4.0, 0.015, 150.0;
 
             TU phys1, phys2;
-            phys.template primRhoTCodeToPhys<dim>(primRhoT, phys1);
+            phys.primRhoTCodeToPhys(primRhoT, phys1);
             TU prim2 = primRhoT * 2;
-            phys.template primRhoTCodeToPhys<dim>(prim2, phys2);
+            phys.primRhoTCodeToPhys(prim2, phys2);
             for (int i = 0; i < nVars; ++i)
                 CHECK(phys2(i) == doctest::Approx(2.0 * phys1(i)).epsilon(1e-12));
         }
@@ -1163,9 +1156,9 @@ TEST_CASE("PhysicsProperties prim code-phys linearity and range")
             TU prim(nVars);
             prim << 1e-4, 1e-5, -3e-6, 2e-6, 1e-4, 1e-6, 1e-2;
             TU physPrim;
-            phys.template primCodeToPhys<dim>(prim, physPrim);
+            phys.primCodeToPhys(prim, physPrim);
             TU primRT;
-            phys.template primPhysToCode<dim>(physPrim, primRT);
+            phys.primPhysToCode(physPrim, primRT);
             for (int i = 0; i < nVars; ++i)
                 CHECK(primRT(i) == doctest::Approx(prim(i)).epsilon(1e-10));
         }
@@ -1175,9 +1168,9 @@ TEST_CASE("PhysicsProperties prim code-phys linearity and range")
             TU prim(nVars);
             prim << 5.0, 3.0, -2.0, 1.5, 4.0, 1.0, 3000.0;
             TU physPrim;
-            phys.template primCodeToPhys<dim>(prim, physPrim);
+            phys.primCodeToPhys(prim, physPrim);
             TU primRT;
-            phys.template primPhysToCode<dim>(physPrim, primRT);
+            phys.primPhysToCode(physPrim, primRT);
             for (int i = 0; i < nVars; ++i)
                 CHECK(primRT(i) == doctest::Approx(prim(i)).epsilon(1e-7));
         }
@@ -1244,11 +1237,11 @@ TEST_CASE("PhysicsProperties default-RANS nRANSVars=0 cons and prim helpers")
             TU cons(nVars);
             cons << 1.0, 0.2, -0.1, 0.05, 0.7;
             TU physCons;
-            phys.template consCodeToPhys<dim>(cons, physCons);
+            phys.consCodeToPhys(cons, physCons);
             for (int j = 1; j <= dim; ++j)
                 CHECK(physCons(j) == doctest::Approx(cons(j) * sc.rho0 * sc.U0).epsilon(1e-12));
             TU consRT;
-            phys.template consPhysToCode<dim>(physCons, consRT);
+            phys.consPhysToCode(physCons, consRT);
             for (int i = 0; i < nVars; ++i)
                 CHECK(consRT(i) == doctest::Approx(cons(i)).epsilon(1e-12));
         }
@@ -1258,12 +1251,12 @@ TEST_CASE("PhysicsProperties default-RANS nRANSVars=0 cons and prim helpers")
             TU prim(nVars);
             prim << 1.2, 0.22, -0.07, 0.03, 0.72;
             TU physPrim;
-            phys.template primCodeToPhys<dim>(prim, physPrim);
+            phys.primCodeToPhys(prim, physPrim);
             for (int j = 1; j <= dim; ++j)
                 CHECK(physPrim(j) == doctest::Approx(prim(j) * sc.U0).epsilon(1e-12));
             CHECK(physPrim(4) == doctest::Approx(prim(4) * sc.rho0 * sc.U0 * sc.U0).epsilon(1e-12));
             TU primRT;
-            phys.template primPhysToCode<dim>(physPrim, primRT);
+            phys.primPhysToCode(physPrim, primRT);
             for (int i = 0; i < nVars; ++i)
                 CHECK(primRT(i) == doctest::Approx(prim(i)).epsilon(1e-12));
         }
@@ -1290,5 +1283,51 @@ TEST_CASE("PhysicsProperties reference derived scales")
         real pPhys = phys.toPhysP(1.0);
         CHECK(pPhys == doctest::Approx(rho0 * U0 * U0).epsilon(1e-12));
         CHECK(phys.toPhysP(2.0) == doctest::Approx(2.0 * pPhys).epsilon(1e-12)); // linearity
+    }
+}
+
+TEST_CASE("StateValue JSON round-trip")
+{
+    using TSV = StateValue;
+
+    SUBCASE("round-trip primTP with valid data")
+    {
+        TSV sv;
+        sv.originType = StateValueOrigin::PrimTP;
+        sv.primTP.resize(7);
+        sv.primTP << 300.0, 0.2, -0.1, 0.05, 0.8, 0.03, 200.0;
+        sv.keepOnlyOrigin();
+
+        nlohmann::ordered_json j = sv;
+        TSV svBack = j.get<TSV>();
+        CHECK(svBack.originType == sv.originType);
+        REQUIRE(svBack.primTP.size() == sv.primTP.size());
+        for (int i = 0; i < sv.primTP.size(); ++i)
+            CHECK(svBack.primTP(i) == doctest::Approx(sv.primTP(i)).epsilon(1e-14));
+    }
+
+    SUBCASE("default StateValue round-trips as empty")
+    {
+        TSV sv;
+        nlohmann::ordered_json j = sv;
+        TSV svBack = j.get<TSV>();
+        CHECK(svBack.originType == StateValueOrigin::None);
+        CHECK(svBack.originVector().size() == 0);
+    }
+
+    SUBCASE("round-trip consSensiblePhy")
+    {
+        TSV sv;
+        sv.originType = StateValueOrigin::ConsSensiblePhy;
+        sv.consSensible_phy.resize(5);
+        sv.consSensible_phy << 1.0, 0.2, -0.1, 0.05, 0.7;
+        sv.keepOnlyOrigin();
+
+        nlohmann::ordered_json j = sv;
+        TSV svBack = j.get<TSV>();
+        CHECK(svBack.originType == sv.originType);
+        REQUIRE(svBack.consSensible_phy.size() == sv.consSensible_phy.size());
+        for (int i = 0; i < sv.consSensible_phy.size(); ++i)
+            CHECK(svBack.consSensible_phy(i) == doctest::Approx(sv.consSensible_phy(i)).epsilon(1e-14));
     }
 }
