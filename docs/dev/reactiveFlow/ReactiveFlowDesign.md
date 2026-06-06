@@ -79,15 +79,15 @@ conservative sensible, primitive, prim-rhoT, prim-TP) in both code and physical
 units.  Operates on `TU` (Eigen vector) — marked *for I/O only, not tight loops*.
 
 **Conservative ↔ Sensible:**
-- `consSensibleToTotal<dim>(sens, total)`: adds `rhoE_base = rho·ΣY_k e_base,k/U0²` to `U[I4]`
-- `consTotalToSensible<dim>(total, sens)`: subtracts `rhoE_base` from `U[I4]`
+- `consSensibleToTotal(sens, total)`: adds `rhoE_base = rho·ΣY_k e_base,k/U0²` to `U[I4]`
+- `consTotalToSensible(total, sens)`: subtracts `rhoE_base` from `U[I4]`
 
 **Primitive ↔ Conservative:**
-- `primToConservative<dim>(prim, cons)`: reactive path builds total `rhoE` directly from Cantera `mixtureIntEnergy(T,p,Y)`
-- `conservativeToPrimitive<dim>(cons, prim)`: uses `gammaEq` from cons state
-- `primRhoTToConservative<dim>(primRhoT, cons)`: via `p = rho·Rmix·T`
-- `conservativeToPrimRhoT<dim>(cons, primRhoT)`: replaces p with T
-- `primTPToConservative<dim>(primTP, cons)`: via `rho = p/(Rmix·T)`
+- `primToConservative(prim, cons)`: reactive path builds total `rhoE` directly from Cantera `mixtureIntEnergy(T,p,Y)`
+- `conservativeToPrimitive(cons, prim)`: uses `gammaEq` from cons state
+- `primRhoTToConservative(primRhoT, cons)`: via `p = rho·Rmix·T`
+- `conservativeToPrimRhoT(cons, primRhoT)`: replaces p with T
+- `primTPToConservative(primTP, cons)`: via `rho = p/(Rmix·T)`
 - `conservativeToPrimTP<dim>(cons, primTP)`: replaces rho with T
 
 **Code ↔ Physical (I/O only):**

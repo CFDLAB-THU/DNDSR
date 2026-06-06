@@ -1058,6 +1058,16 @@ namespace DNDS::Euler
     //         model == NS_SA);
     // } // use +/- is ok
 
+    template <int dim>
+    constexpr std::array<int, dim> Get_Seq123()
+    {
+        static_assert(dim >= 2 && dim <= 3, "only support 2,3 dim");
+        if constexpr (dim == 2)
+            return {1, 2};
+        else
+            return {1, 2, 3};
+    }
+
     /**
      * @brief Compile-time traits for EulerModel variants.
      *
@@ -1090,6 +1100,8 @@ namespace DNDS::Euler
         static constexpr int dim = getDim_Fixed(model);
         /// Geometry (mesh) spatial dimension.
         static constexpr int gDim = getGeomDim_Fixed(model);
+        /// Seq123 Array
+        static constexpr std::array<int, dim> Seq123{Get_Seq123<dim>()};
 
         /// Conservative-state vector type (fixed or dynamic size).
         using TU = Eigen::VectorFMTSafe<real, nVarsFixed>;

@@ -630,7 +630,7 @@ namespace DNDS::Euler
                 DNDS_check_throw_info(StateValue::filled(BCValues[i].originVector()),
                                       fmt::format("BC [{}] has an empty or non-finite state value", ID2name.at(i)));
                 if (StateValue::filled(BCValues[i].originVector()))
-                    phys.template resolveStateValue<dim>(BCValues[i], nVars, os, "bcSettings/" + ID2name.at(i));
+                    phys.resolveStateValue(BCValues[i], nVars, os, "bcSettings/" + ID2name.at(i));
             }
         }
 

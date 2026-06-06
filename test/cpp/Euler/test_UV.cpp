@@ -13,7 +13,7 @@ static std::string mechFile()
 
 TEST_CASE("setState_UV internal energy consistency")
 {
-    ChemicalSource chem(mechFile());
+    ChemicalSource chem(mechFile(), "", 1, 1);
     int Ns = chem.nSpecies();
 
     std::vector<double> Y(Ns, 0.0);
@@ -41,7 +41,7 @@ TEST_CASE("setState_UV internal energy consistency")
 
 TEST_CASE("setState_UV with evolved composition from ODE step 5")
 {
-    ChemicalSource chem(mechFile());
+    ChemicalSource chem(mechFile(), "", 1, 1);
     int Ns = chem.nSpecies();
 
     // Composition from ODE step 5 (slightly drifted, H/H2O clamped)

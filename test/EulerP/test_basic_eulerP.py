@@ -6,6 +6,7 @@ from DNDSR.DNDS.Debug_Py import MPIDebugHold
 import os
 import tempfile
 import shutil
+from mpi4py import MPI
 
 
 def get_fv(mpi):
@@ -309,14 +310,24 @@ def test_basic_eulerP(mpi: DNDS.MPIInfo, isCuda=False):
             data["uGrad"][iCell], copy=False
         )[0, 1]
 
-    scratch = tempfile.mkdtemp(prefix="dnds_test_eulerP_")
+    comm = MPI.Comm.fromhandle(mpi.comm())
+
+    scratch = tempfile.mkdtemp(
+        prefix="dnds_test_eulerP_") if mpi.rank == 0 else None
+    scratch = comm.bcast(scratch, root=0)
+
+    comm.Barrier()
     eval.PrintDataVTKHDF(
         os.path.join(scratch, "test_0"),
         os.path.join(scratch, "test"),
         [cell_out, cell_out1, cell_out2, data["p"]],
         ["cell_out", "cell_out1", "cell_out2", "p"],
     )
-    shutil.rmtree(scratch, ignore_errors=True)
+    comm.Barrier()
+
+    if mpi.rank == 0 and scratch is not None:
+        shutil.rmtree(scratch, ignore_errors=True)
+    comm.Barrier()
 
     # for iCell in range(mesh.NumCell()):
     #     print(iCell)

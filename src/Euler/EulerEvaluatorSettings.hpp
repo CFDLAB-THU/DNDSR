@@ -105,6 +105,8 @@ namespace DNDS::Euler
             return StateValueOrigin::PrimTPPhy;
         if (name == "nonState")
             return StateValueOrigin::NonState;
+        if (name == "invalid")
+            return StateValueOrigin::Invalid;
         return StateValueOrigin::None;
     }
 
@@ -113,8 +115,11 @@ namespace DNDS::Euler
         using json = nlohmann::ordered_json;
         json stateTypes = json::array({"cons", "consSensible", "primRhoP", "primRhoT", "primTP",
                                        "cons_phy", "consSensible_phy", "primRhoP_phy", "primRhoT_phy", "primTP_phy"});
+        json schemaTypeNames = stateTypes;
+        schemaTypeNames.push_back("none");
+        schemaTypeNames.push_back("invalid");
         if (allowNonState)
-            stateTypes.push_back("nonState");
+            schemaTypeNames.push_back("nonState");
 
         json numArray{{"type", "array"}, {"items", json{{"type", "number"}}}};
         json tagged;
@@ -122,7 +127,7 @@ namespace DNDS::Euler
         tagged["required"] = json::array({"type", "state"});
         tagged["additionalProperties"] = false;
         tagged["properties"] = json::object();
-        tagged["properties"]["type"] = json{{"type", "string"}, {"enum", stateTypes}};
+        tagged["properties"]["type"] = json{{"type", "string"}, {"enum", schemaTypeNames}};
         tagged["properties"]["state"] = numArray;
 
         json legacy = numArray;
@@ -302,8 +307,11 @@ namespace DNDS::Euler
             DNDS_check_throw_info(j.at("type").is_string(), "StateValue.type must be a string");
             DNDS_check_throw_info(j.at("state").is_array(), "StateValue.state must be an array");
             v.originType = StateValueOriginFromName(j.at("type").get<std::string>());
-            DNDS_check_throw_info(v.originType != StateValueOrigin::None && v.originType != StateValueOrigin::Invalid,
-                                  fmt::format("unknown StateValue.type [{}]", j.at("type").get<std::string>()));
+            if (v.originType == StateValueOrigin::None || v.originType == StateValueOrigin::Invalid)
+            {
+                v = StateValue{};
+                return;
+            }
             v.originVectorMutable(v.originType) = j.at("state").get<Eigen::VectorXd>();
             v.keepOnlyOrigin();
         }

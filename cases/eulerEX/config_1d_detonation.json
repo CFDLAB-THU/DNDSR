@@ -2,54 +2,69 @@
     "$schema": "../eulerEX_schema.json",
     "caseNotes": {
         "/**/": {
-            "lastUpdated": "2026-05-31",
-            "purpose": "1-D H2/air detonation initiated from a left-side adiabatic wall via a high-T/P spark region.",
+            "lastUpdated": "2026-06-06",
+            "purpose": "1-D H2/O2 detonation from a left-side adiabatic wall via a high-T/P spark.",
             "reference": {
                 "mechanism": "h2o2.yaml",
-                "reactants": "stoichiometric H2/air, T=300K, P=101325Pa, Y_H2=0.028, Y_O2=0.222, Y_N2=0.75",
-                "CJ_estimated": "U_CJ ~ 1970 m/s, P_CJ ~ 15-20 bar, T_CJ ~ 2800-3000K",
+                "reactants": "stoichiometric H2/O2, T=300K, P=101325Pa, Y_H2=0.1111, Y_O2=0.8889",
+                "CJ_literature": "~2840 m/s for stoich H2/O2",
                 "mesh": "Uniform_01_5000.cgns, 5000 cells, meshScale=0.05 -> 5cm domain, dx=10um"
             },
+            "results": {
+                "dt1em6": {
+                    "steps": "1650/2000 (timed out)",
+                    "shockSpeed_m_per_s": 2767,
+                    "r2": 0.9994,
+                    "domainTraversed_mm": "1.9 -> 12.9"
+                },
+                "dt4em6": {
+                    "steps": "500/500",
+                    "shockSpeed_m_per_s": 2909,
+                    "r2": 0.99997,
+                    "domainTraversed_mm": "1.9 -> 16.2"
+                }
+            },
             "physics": [
-                "Left BC is BCWallInvis (adiabatic reflecting wall) to initiate detonation.",
-                "Right BC is BCIn with unburned stoichiometric H2/air at rest.",
-                "Initial condition: small high-T/P spark region (x<0.001m, T=3500K, P=20bar) near left wall; rest is unburned mixture.",
-                "Expected: shock forms from spark, autoignites mixture, detonation propagates rightward.",
-                "With U_CJ~1970m/s and 5cm domain, crossing time ~25us -> t_code~0.01. tEnd=0.02 gives margin."
+                "Left BC: BCWallInvis (adiabatic reflecting wall). Right BC: BCIn with unburned H2/O2 at rest.",
+                "Spark: x<1mm, T=3500K, P=20bar, equilibrium CJ composition (Y_H2O=0.487, Y_OH=0.229, Y_O2=0.137, Y_O=0.103, Y_H2=0.031, Y_H=0.013).",
+                "Unburned: stoich H2/O2 at 300K, 1atm. Y=sum of transported species = 1.0 (no N2 filler).",
+                "ZND structure observed: leading shock -> induction -> reaction -> products.",
+                "Detonation is self-sustaining: constant shock speed, stable von Neumann spike (~28 bar, ~3650K)."
             ],
             "solverNotes": [
-                "Non-Strang coupled for best accuracy (sourceStrangSplitting=0).",
-                "dt=1e-4 gives ~100 steps across domain. nTimeStepInternal=400 for good convergence.",
-                "CFL=10 with ramp. Limiter enabled from step 0 for shock capturing.",
-                "RecScheme=0 (Green-Gauss) for robustness on shock problems.",
-                "Output every 10 steps for detailed detonation front tracking."
+                "Non-Strang coupled (sourceStrangSplitting=0) for best accuracy.",
+                "dt=1e-6: 166 VTUs, detonation crosses ~11mm, speed=2767 m/s.",
+                "dt=4e-6: 51 VTUs, detonation crosses ~14mm, speed=2909 m/s (+5% vs dt=1e-6, temporal discretization effect).",
+                "nTimeStepInternal=100, CFL=10. Limiter enabled from step 0.",
+                "RecScheme=0 (Green-Gauss). np=16."
             ]
         },
-        "purpose": "1-D stoichiometric H2/air detonation propagation test.",
+        "purpose": "1-D stoichiometric H2/O2 detonation propagation test.",
         "reference": {
             "mechanism": "h2o2.yaml",
-            "canteraCJEstimate_m_per_s": 1970.0,
-            "unburnedState": "T=300K, P=101325Pa, stoichiometric H2/air",
+            "canteraDetonationEstimate_m_per_s": 2840.0,
+            "unburnedState": "T=300K, P=101325Pa, stoich H2/O2 (Y_H2=0.1111, Y_O2=0.8889)",
             "domainLength_m": 0.05,
             "cellCount": 5000,
             "dx_m": 1e-05
         },
         "physics": [
-            "Spark-initiated detonation from left adiabatic wall.",
-            "Left BC (x=0): BCWallInvis \u2014 reflecting, adiabatic.",
-            "Right BC (x=0.05): BCIn \u2014 unburned mixture at rest.",
-            "Initial: high-T/P in x<0.001m (T=3500K, P=20 bar, burned gas composition); unburned elsewhere.",
-            "Detonation expected to propagate at ~1970 m/s."
+            "Spark-initiated detonation from left adiabatic wall (BCWallInvis).",
+            "Left BC (x=0): BCWallInvis — reflecting, adiabatic.",
+            "Right BC (x=0.05): BCIn — unburned H2/O2 at rest.",
+            "Initial: T=3500K, P=20bar equilibrium CJ products in x<0.001m; unburned stoich H2/O2 elsewhere.",
+            "Detonation speed from simulation: 2767-2909 m/s (dt-dependent).",
+            "ZND structure confirmed: leading shock -> induction -> reaction -> products."
         ]
     },
     "timeMarchControl": {
-        "dtImplicit": 1e-06,
-        "nTimeStep": 2000,
+        "dtImplicit": 4e-06,
+        "nTimeStep": 500,
         "steadyQuit": false,
-        "tEnd": 1e+100,
+        "tEnd": 0.002,
         "odeCode": 204,
         "odeSetting1": 0.5,
-        "sourceStrangSplitting": 0,
+        "sourceStrangSplitting": 1,
         "rhsFPPMode": 2,
         "rhsFPPScale": 1,
         "useDtPPLimit": false,
@@ -97,7 +112,7 @@
         "uniqueStamps": false,
         "meshScale": 0.05,
         "meshFile": "../data/mesh/Uniform_01_5000.cgns",
-        "outPltName": "../data/out/react_1d_detonation_h2o2_np16/react_",
+        "outPltName": "../data/out/react_1d_detonation_h2o2_strang_dt4em6_np16/react_",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": false,

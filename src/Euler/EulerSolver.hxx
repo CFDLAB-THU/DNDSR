@@ -488,8 +488,8 @@ namespace DNDS::Euler
                     UMean(Seq123) = normBase.transpose() * UMean(Seq123);
                     Eigen::Vector<real, I4 + 1> UC = UMean(Seq01234);
 
-                    real T = eval.phys().template temperature<dim>(UMean);
-                    real gammaEq = eval.phys().template gammaEq<dim>(T, UMean);
+                    real T = eval.phys().temperature(UMean);
+                    real gammaEq = eval.phys().gammaEq(T, UMean);
                     real gamma = eval.phys().gamma(T, UMean);
                     auto M = Gas::IdealGas_EulerGasLeftEigenVector<dim>(UC, gammaEq, gamma, eval.phys().mixtureBaseInternalRhoE(UMean));
                     M(EigenAll, Seq123) *= normBase.transpose();
@@ -510,8 +510,8 @@ namespace DNDS::Euler
                     UMean(Seq123) = normBase.transpose() * UMean(Seq123);
                     Eigen::Vector<real, I4 + 1> UC = UMean(Seq01234);
 
-                    real T = eval.phys().template temperature<dim>(UMean);
-                    real gammaEq = eval.phys().template gammaEq<dim>(T, UMean);
+                    real T = eval.phys().temperature(UMean);
+                    real gammaEq = eval.phys().gammaEq(T, UMean);
                     real gamma = eval.phys().gamma(T, UMean);
                     auto M = Gas::IdealGas_EulerGasRightEigenVector<dim>(UC, gammaEq, gamma, eval.phys().mixtureBaseInternalRhoE(UMean));
                     M(Seq123, EigenAll) = normBase * M(Seq123, EigenAll);
@@ -542,8 +542,8 @@ namespace DNDS::Euler
                                 v.setConstant(-veryLargeReal * v(I4));
                                 return;
                             }
-                            real T = eval.phys().template temperature<dim>(cons);
-                            real gammaEq = eval.phys().template gammaEq<dim>(T, cons);
+                            real T = eval.phys().temperature(cons);
+                            real gammaEq = eval.phys().gammaEq(T, cons);
                             Gas::IdealGasThermalConservative2Primitive<dim>(cons, prim, gammaEq, eval.phys().mixtureBaseInternalRhoE(cons));
                             v.setConstant(prim(I4));
                             return;

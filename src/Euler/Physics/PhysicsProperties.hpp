@@ -53,6 +53,9 @@ namespace DNDS::Euler
         using TU = typename Traits::TU;
         using IdealGas = typename EulerEvaluatorSettings<model>::IdealGasProperty;
         using ChemPtr = std::shared_ptr<std::vector<Chemistry::ChemicalSource>>;
+        static constexpr int dim = Traits::dim;
+        static constexpr auto Seq123 = Traits::Seq123;
+        static constexpr auto I4 = dim + 1;
 
         struct StateConversionOptions
         {
@@ -143,59 +146,64 @@ namespace DNDS::Euler
 
         // ---- scale helpers --------------------------------------------------
 
+        /// Reference density scale
+        [[nodiscard]] real rho0() const { return igProp_->rho0; }
+        /// Reference speed scale
+        [[nodiscard]] real U0() const { return igProp_->U0; }
+        /// Reference temperature scale
+        [[nodiscard]] real T0() const { return igProp_->T0; }
+
         /// Reference pressure p0 = rho0 · U0².
-        real p0() const { return igProp_->rho0 * igProp_->U0 * igProp_->U0; }
+        [[nodiscard]] real p0() const { return igProp_->rho0 * igProp_->U0 * igProp_->U0; }
 
         /// Reference time t0 = L0 / U0.
-        real t0() const { return igProp_->L0 / igProp_->U0; }
+        [[nodiscard]] real t0() const { return igProp_->L0 / igProp_->U0; }
 
         /// Conversion factor R0 = U0² / T0.  R_code = R_phys / R0.
-        real R0() const { return igProp_->U0 * igProp_->U0 / igProp_->T0; }
+        [[nodiscard]] real R0() const { return igProp_->U0 * igProp_->U0 / igProp_->T0; }
 
         /// Reference dynamic viscosity mu0 = rho0 · U0 · L0.
-        real mu0() const { return igProp_->rho0 * igProp_->U0 * igProp_->L0; }
+        [[nodiscard]] real mu0() const { return igProp_->rho0 * igProp_->U0 * igProp_->L0; }
 
         /// Reference thermal conductivity k0 = rho0 · U0³ · L0 / T0.
-        real k0() const { return igProp_->rho0 * igProp_->U0 * igProp_->U0 * igProp_->U0 * igProp_->L0 / igProp_->T0; }
+        [[nodiscard]] real k0() const { return igProp_->rho0 * igProp_->U0 * igProp_->U0 * igProp_->U0 * igProp_->L0 / igProp_->T0; }
 
         /// Reference diffusivity D0 = U0 · L0.
-        real D0() const { return igProp_->U0 * igProp_->L0; }
+        [[nodiscard]] real D0() const { return igProp_->U0 * igProp_->L0; }
 
         /// Reference volumetric source rate S0 = rho0 · U0 / L0.
-        real S0() const { return igProp_->rho0 * igProp_->U0 / igProp_->L0; }
+        [[nodiscard]] real S0() const { return igProp_->rho0 * igProp_->U0 / igProp_->L0; }
 
         /// Reference momentum density (mass flux per unit face area) rhoU0 = rho0 · U0.
-        real rhoU0() const { return igProp_->rho0 * igProp_->U0; }
+        [[nodiscard]] real rhoU0() const { return igProp_->rho0 * igProp_->U0; }
 
         /// Reference total energy density rhoE0 = rho0 · U0².
-        real rhoE0() const { return p0(); }
+        [[nodiscard]] real rhoE0() const { return p0(); }
 
         /// Reference mass flux per unit face area rhoFlux0 = rho0 · U0 (same as rhoU0).
-        real rhoFlux0() const { return igProp_->rho0 * igProp_->U0; }
+        [[nodiscard]] real rhoFlux0() const { return igProp_->rho0 * igProp_->U0; }
 
         /// Reference momentum flux per unit face area rhoUFlux0 = rho0 · U0².
-        real rhoUFlux0() const { return p0(); }
+        [[nodiscard]] real rhoUFlux0() const { return p0(); }
 
         /// Reference energy flux per unit face area rhoEFlux0 = rho0 · U0³.
-        real rhoEFlux0() const { return igProp_->rho0 * igProp_->U0 * igProp_->U0 * igProp_->U0; }
+        [[nodiscard]] real rhoEFlux0() const { return igProp_->rho0 * igProp_->U0 * igProp_->U0 * igProp_->U0; }
 
         /// Convert physical gas-constant / heat-capacity to code-scaled:  X_code = X_phys / R0.
-        real toCode(real xPhys) const { return xPhys / R0(); }
+        [[nodiscard]] real toCode(real xPhys) const { return xPhys / R0(); }
         /// Convert code pressure to physical:  p_phys = p_code · p0.
-        real toPhysP(real pCode) const { return pCode * p0(); }
+        [[nodiscard]] real toPhysP(real pCode) const { return pCode * p0(); }
         /// Convert code temperature to physical:  T_phys = T_code · T0.
-        real toPhysT(real TCode) const { return igProp_->T0 > 0 ? TCode * igProp_->T0 : TCode; }
+        [[nodiscard]] real toPhysT(real TCode) const { return igProp_->T0 > 0 ? TCode * igProp_->T0 : TCode; }
         /// Convert physical temperature to code-scaled.
-        real toCodeT(real TPhys) const { return igProp_->T0 > 0 ? TPhys / igProp_->T0 : TPhys; }
+        [[nodiscard]] real toCodeT(real TPhys) const { return igProp_->T0 > 0 ? TPhys / igProp_->T0 : TPhys; }
 
-        template <int dim>
         void resolveStateValue(StateValue &value, int nVars,
                                std::ostream *os = nullptr,
                                const std::string &label = "state") const;
 
         // ---- EOS coefficients (per-point — uses state T and U vectors) ----
 
-        template <int dim>
         real temperature(const TU &U, real TGuess = 0, real uvTolerance = 1e-12) const;
 
         /// Thermodynamic gamma cp/cv used for frozen-composition acoustic speeds.
@@ -210,7 +218,6 @@ namespace DNDS::Euler
          *  @param U  Conservative state vector.
          *  @tparam dim Spatial dimension (2 or 3).
          */
-        template <int dim>
         real gammaEq(real T, const TU &U) const
         {
             if (!hasChemicalSource())
@@ -243,21 +250,34 @@ namespace DNDS::Euler
         real Cp(real T, const TU &U) const;
         real Cv(real T, const TU &U) const;
 
-        template <int dim>
-        void conservativeThermal(const TU &U, real T, real &p, real &asqr, real &H,
-                                 real *gammaEqOut = nullptr, real *gammaOut = nullptr) const
+        struct conservativeThermalReturn
         {
-            static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
-            static const auto I4 = dim + 1;
-            real gammaEqUse = gammaEq<dim>(T, U);
+            real T = UnInitReal;
+            real p = UnInitReal;
+            real asqr = UnInitReal;
+            real H = UnInitReal;
+            /// p = (gammaEq - 1) * rho * e_sensible = rho * Rmix * T
+            real gammaEq = UnInitReal;
+            /// Thermodynamic gamma cp/cv, used for frozen-composition acoustic speed a² = gamma·p/ρ
+            real gamma = UnInitReal;
+        };
+
+        /// Compute temperature, pressure, sound speed, enthalpy, and both gamma values.
+        /// @param TGuess warm-start for temperature-from-internal-energy solve
+        /// @param uvTolerance convergence tolerance for temperature solve
+        template <class TVar>
+        [[nodiscard]] conservativeThermalReturn conservativeThermal(TVar &&U, real TGuess = 0, real uvTolerance = 1e-8) const
+        {
+            real T = this->temperature(U, TGuess, uvTolerance);
+            real asqr = UnInitReal;
+            real p = UnInitReal;
+            real H = UnInitReal;
+            real gammaEqUse = gammaEq(T, U);
             real gammaUse = gamma(T, U); // cp/cv, used for frozen acoustic speed
             Gas::IdealGasThermal(U(I4), U(0), (U(Seq123) / U(0)).squaredNorm(),
                                  gammaEqUse, gammaUse, p, asqr, H,
                                  mixtureBaseInternalRhoE(U));
-            if (gammaEqOut)
-                *gammaEqOut = gammaEqUse;
-            if (gammaOut)
-                *gammaOut = gammaUse;
+            return {T, p, asqr, H, gammaEqUse, gammaUse};
         }
 
         /// Code-scaled volumetric base internal energy ρ·Σ Y_k·e_base,k.  0 when no chemistry.
@@ -354,7 +374,6 @@ namespace DNDS::Euler
          * @brief cons-total → cons-sensible: subtracts base internal energy from U[I4].
          * @note  For I/O purposes — not for performance-critical tight loops.
          */
-        template <int dim>
         void consTotalToSensible(const TU &consTotal, TU &consSensible) const
         {
             consSensible = consTotal;
@@ -365,7 +384,6 @@ namespace DNDS::Euler
          * @brief cons-sensible → cons-total: adds base internal energy to U[I4].
          * @note  For I/O purposes — not for performance-critical tight loops.
          */
-        template <int dim>
         void consSensibleToTotal(const TU &consSensible, TU &consTotal) const
         {
             consTotal = consSensible;
@@ -378,7 +396,6 @@ namespace DNDS::Euler
          *  internal energy.  For non-reactive gas, uses cfg.gamma directly.
          * @note  For I/O purposes — not for performance-critical tight loops.
          */
-        template <int dim>
         void primToConservative(const TU &prim, TU &cons,
                                 const StateConversionOptions &options = StateConversionOptions{}) const
         {
@@ -386,8 +403,8 @@ namespace DNDS::Euler
                 DNDS_assert_info(chem().isIdealGas(),
                                  "primToConservative(): requires ideal-gas EOS");
 
-            TU primUse = sanitizePrimitiveSpecies<dim>(prim);
-            validatePrimitiveRhoP<dim>(primUse, "primToConservative");
+            TU primUse = sanitizePrimitiveSpecies(prim);
+            validatePrimitiveRhoP(primUse, "primToConservative");
             real gammaEqUse = igProp_->gamma;
             if (!hasChemicalSource())
             {
@@ -418,7 +435,6 @@ namespace DNDS::Euler
          *  Uses gammaEq from the current conservative state.
          * @note  For I/O purposes — not for performance-critical tight loops.
          */
-        template <int dim>
         void conservativeToPrimitive(const TU &cons, TU &prim,
                                      const StateConversionOptions &options = StateConversionOptions{}) const
         {
@@ -426,8 +442,8 @@ namespace DNDS::Euler
                 DNDS_assert_info(chem().isIdealGas(),
                                  "conservativeToPrimitive(): requires ideal-gas EOS");
 
-            real T = temperature<dim>(cons, 0, options.temperatureUVTolerance);
-            real gammaEqUse = gammaEq<dim>(T, cons);
+            real T = temperature(cons, 0, options.temperatureUVTolerance);
+            real gammaEqUse = gammaEq(T, cons);
             real rhoE_base = mixtureBaseInternalRhoE(cons);
             Gas::IdealGasThermalConservative2Primitive<dim>(cons, prim, gammaEqUse, rhoE_base);
         }
@@ -436,41 +452,38 @@ namespace DNDS::Euler
          * @brief prim-rhoT → conservative.  Input: [rho, u, v, (w), T, Y_k].
          * @note  For I/O purposes — not for performance-critical tight loops.
          */
-        template <int dim>
         void primRhoTToConservative(const TU &primRhoT, TU &cons,
                                     const StateConversionOptions &options = StateConversionOptions{}) const
         {
-            auto prim = sanitizePrimitiveSpecies<dim>(primRhoT);
+            auto prim = sanitizePrimitiveSpecies(primRhoT);
             int I4 = dim + 1;
             real T_code = prim[I4];
             DNDS_check_throw_info(prim[0] > 0 && T_code > 0,
                                   "primRhoTToConservative(): rho and T must be positive");
             real Rmix = mixtureRfromPrimitive(prim);
             prim[I4] = prim[0] * Rmix * T_code;
-            primToConservative<dim>(prim, cons, options);
+            primToConservative(prim, cons, options);
         }
 
         /**
          * @brief Conservative → prim-rhoT.  Output: [rho, u, v, (w), T, Y_k].
          * @note  For I/O purposes — not for performance-critical tight loops.
          */
-        template <int dim>
         void conservativeToPrimRhoT(const TU &cons, TU &primRhoT,
                                     const StateConversionOptions &options = StateConversionOptions{}) const
         {
-            conservativeToPrimitive<dim>(cons, primRhoT, options);
-            primRhoT[dim + 1] = temperature<dim>(cons, 0, options.temperatureUVTolerance);
+            conservativeToPrimitive(cons, primRhoT, options);
+            primRhoT[dim + 1] = temperature(cons, 0, options.temperatureUVTolerance);
         }
 
         /**
          * @brief prim-TP → conservative.  Input: [T, u, v, (w), p, Y_k].
          * @note  For I/O purposes — not for performance-critical tight loops.
          */
-        template <int dim>
         void primTPToConservative(const TU &primTP, TU &cons,
                                   const StateConversionOptions &options = StateConversionOptions{}) const
         {
-            auto prim = sanitizePrimitiveSpecies<dim>(primTP);
+            auto prim = sanitizePrimitiveSpecies(primTP);
             int I4 = dim + 1;
             real T_code = prim[0];
             real p_code = prim[I4];
@@ -479,7 +492,7 @@ namespace DNDS::Euler
             real Rmix = mixtureRfromPrimitive(prim);
             DNDS_check_throw_info(Rmix > 0, "primTPToConservative(): mixture gas constant must be positive");
             prim[0] = p_code / (Rmix * T_code);
-            primToConservative<dim>(prim, cons, options);
+            primToConservative(prim, cons, options);
         }
 
         /**
@@ -494,13 +507,9 @@ namespace DNDS::Euler
          * Reactive ideal-gas mixtures iterate Cp, R, and gamma from the static
          * state at fixed inflow composition.
          */
-        template <int dim>
         void totalToStaticPrimitive(real pTotal, real TTotal, TU &primStatic,
                                     const StateConversionOptions &options = StateConversionOptions{}) const
         {
-            static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
-            static const auto I4 = dim + 1;
-
             DNDS_assert_info(pTotal > 0 && TTotal > 0,
                              fmt::format("totalToStaticPrimitive(): invalid total p/T [{:.3e}, {:.3e}]",
                                          pTotal, TTotal));
@@ -586,13 +595,9 @@ namespace DNDS::Euler
             applyVelocityLimit(vSqrUse);
         }
 
-        template <int dim>
         std::tuple<real, real> primitiveStaticToTotalPT(const TU &primStatic,
                                                         const StateConversionOptions &options = StateConversionOptions{}) const
         {
-            static const auto Seq123 = Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>);
-            static const auto I4 = dim + 1;
-
             real pStatic = primStatic(I4);
             real vSqr = primStatic(Seq123).squaredNorm();
             DNDS_assert_info(primStatic(0) > 0 && pStatic > 0,
@@ -667,12 +672,18 @@ namespace DNDS::Euler
          * @brief Conservative → prim-TP.  Output: [T, u, v, (w), p, Y_k].
          * @note  For I/O purposes — not for performance-critical tight loops.
          */
-        template <int dim>
         void conservativeToPrimTP(const TU &cons, TU &primTP,
                                   const StateConversionOptions &options = StateConversionOptions{}) const
         {
-            conservativeToPrimitive<dim>(cons, primTP, options);
-            primTP[0] = temperature<dim>(cons, 0, options.temperatureUVTolerance);
+            if (hasChemicalSource())
+                DNDS_assert_info(chem().isIdealGas(),
+                                 "conservativeToPrimTP(): requires ideal-gas EOS");
+
+            real T = temperature(cons, 0, options.temperatureUVTolerance);
+            real gammaEqUse = gammaEq(T, cons);
+            real rhoE_base = mixtureBaseInternalRhoE(cons);
+            Gas::IdealGasThermalConservative2Primitive<dim>(cons, primTP, gammaEqUse, rhoE_base);
+            primTP[0] = T;
         }
 
         // ---- Unit-scaling helpers (I/O only) ---------------------------------
@@ -681,14 +692,16 @@ namespace DNDS::Euler
         //   rhoU_j:    * rho0 * U0
         //   rhoE:      * rho0 * U0²
         //   RANS:      per-variable (see below)
-        //   rhoY_k:    * rho0   (species only, trailing block)
+        //   rhoY_k:    * rho0   (species conservative, trailing block)
+        // Primitive helpers: species mass fractions Y_k are dimensionless (mass ratio),
+        // so they are left unscaled in all primCodeToPhys/PrimToPhys helpers.
         // RANS conservative variable scaling (code↔phys):
         //   rho_nuTilde: * rho0            (nuTilde non-dimensional in code)
         //   rho_k:       * rho0 * U0²      (k: energy-like, [m²/s²])
         //   rho_omega:   * rho0 * U0 / L0  (omega: 1/t0 = U0/L0, [1/s])
         //   rho_epsilon: * rho0 * U0³ / L0 (epsilon: U0³/L0, [m²/s³])
 
-        template <int dim, typename TVal>
+        template <typename TVal>
         void consCodeToPhys(const TVal &code, TVal &phys) const
         {
             phys = code;
@@ -696,14 +709,14 @@ namespace DNDS::Euler
             for (int j = 1; j <= dim; ++j)
                 phys[j] *= (igProp_->rho0 * igProp_->U0);
             phys[dim + 1] *= (igProp_->rho0 * igProp_->U0 * igProp_->U0);
-            this->template scaleRansConsCodeToPhys<dim>(phys);
+            this->scaleRansConsCodeToPhys(phys);
             int Ns1 = hasChemicalSource() ? chem().nSpecies() - 1 : 0;
             int Isp = static_cast<int>(phys.size()) - Ns1;
             for (int k = Isp; k < (int)phys.size(); ++k)
                 phys[k] *= igProp_->rho0;
         }
 
-        template <int dim, typename TVal>
+        template <typename TVal>
         void consPhysToCode(const TVal &phys, TVal &code) const
         {
             code = phys;
@@ -711,7 +724,7 @@ namespace DNDS::Euler
             for (int j = 1; j <= dim; ++j)
                 code[j] /= (igProp_->rho0 * igProp_->U0);
             code[dim + 1] /= (igProp_->rho0 * igProp_->U0 * igProp_->U0);
-            this->template scaleRansConsPhysToCode<dim>(code);
+            this->scaleRansConsPhysToCode(code);
             int Ns1 = hasChemicalSource() ? chem().nSpecies() - 1 : 0;
             int Isp = static_cast<int>(code.size()) - Ns1;
             for (int k = Isp; k < (int)code.size(); ++k)
@@ -766,28 +779,28 @@ namespace DNDS::Euler
         real ransConsScaleCodeToPhys(int pos) const { return igProp_->rho0 * ransPrimScaleCodeToPhys(pos); }
         real ransConsScalePhysToCode(int pos) const { return real(1.0) / std::max(ransConsScaleCodeToPhys(pos), real(1e-60)); }
 
-        template <int dim, typename TVal>
+        template <typename TVal>
         void scaleRansConsCodeToPhys(TVal &vec) const
         {
             int n = nRANSVars();
             for (int j = 0; j < n; ++j)
                 vec[dim + 2 + j] *= ransConsScaleCodeToPhys(j);
         }
-        template <int dim, typename TVal>
+        template <typename TVal>
         void scaleRansConsPhysToCode(TVal &vec) const
         {
             int n = nRANSVars();
             for (int j = 0; j < n; ++j)
                 vec[dim + 2 + j] *= ransConsScalePhysToCode(j);
         }
-        template <int dim, typename TVal>
+        template <typename TVal>
         void scaleRansPrimCodeToPhys(TVal &vec) const
         {
             int n = nRANSVars();
             for (int j = 0; j < n; ++j)
                 vec[dim + 2 + j] *= ransPrimScaleCodeToPhys(j);
         }
-        template <int dim, typename TVal>
+        template <typename TVal>
         void scaleRansPrimPhysToCode(TVal &vec) const
         {
             int n = nRANSVars();
@@ -795,7 +808,7 @@ namespace DNDS::Euler
                 vec[dim + 2 + j] *= ransPrimScalePhysToCode(j);
         }
 
-        template <int dim, typename TVal>
+        template <typename TVal>
         void primCodeToPhys(const TVal &code, TVal &phys) const
         {
             phys = code;
@@ -803,10 +816,10 @@ namespace DNDS::Euler
             for (int j = 1; j <= dim; ++j)
                 phys[j] *= igProp_->U0;
             phys[dim + 1] *= (igProp_->rho0 * igProp_->U0 * igProp_->U0);
-            this->template scaleRansPrimCodeToPhys<dim>(phys);
+            this->scaleRansPrimCodeToPhys(phys);
         }
 
-        template <int dim, typename TVal>
+        template <typename TVal>
         void primPhysToCode(const TVal &phys, TVal &code) const
         {
             code = phys;
@@ -814,10 +827,10 @@ namespace DNDS::Euler
             for (int j = 1; j <= dim; ++j)
                 code[j] /= igProp_->U0;
             code[dim + 1] /= (igProp_->rho0 * igProp_->U0 * igProp_->U0);
-            this->template scaleRansPrimPhysToCode<dim>(code);
+            this->scaleRansPrimPhysToCode(code);
         }
 
-        template <int dim, typename TVal>
+        template <typename TVal>
         void primRhoTCodeToPhys(const TVal &code, TVal &phys) const
         {
             phys = code;
@@ -825,10 +838,10 @@ namespace DNDS::Euler
             for (int j = 1; j <= dim; ++j)
                 phys[j] *= igProp_->U0;
             phys[dim + 1] = toPhysT(code[dim + 1]);
-            this->template scaleRansPrimCodeToPhys<dim>(phys);
+            this->scaleRansPrimCodeToPhys(phys);
         }
 
-        template <int dim, typename TVal>
+        template <typename TVal>
         void primRhoTPhysToCode(const TVal &phys, TVal &code) const
         {
             code = phys;
@@ -836,10 +849,10 @@ namespace DNDS::Euler
             for (int j = 1; j <= dim; ++j)
                 code[j] /= igProp_->U0;
             code[dim + 1] = toCodeT(phys[dim + 1]);
-            this->template scaleRansPrimPhysToCode<dim>(code);
+            this->scaleRansPrimPhysToCode(code);
         }
 
-        template <int dim, typename TVal>
+        template <typename TVal>
         void primTPCodeToPhys(const TVal &code, TVal &phys) const
         {
             phys = code;
@@ -847,10 +860,10 @@ namespace DNDS::Euler
             for (int j = 1; j <= dim; ++j)
                 phys[j] *= igProp_->U0;
             phys[dim + 1] *= (igProp_->rho0 * igProp_->U0 * igProp_->U0);
-            this->template scaleRansPrimCodeToPhys<dim>(phys);
+            this->scaleRansPrimCodeToPhys(phys);
         }
 
-        template <int dim, typename TVal>
+        template <typename TVal>
         void primTPPhysToCode(const TVal &phys, TVal &code) const
         {
             code = phys;
@@ -858,10 +871,9 @@ namespace DNDS::Euler
             for (int j = 1; j <= dim; ++j)
                 code[j] /= igProp_->U0;
             code[dim + 1] /= (igProp_->rho0 * igProp_->U0 * igProp_->U0);
-            this->template scaleRansPrimPhysToCode<dim>(code);
+            this->scaleRansPrimPhysToCode(code);
         }
 
-        template <int dim>
         void conservativeToStateValueOrigin(const TU &cons, TU &state, StateValueOrigin origin) const
         {
             TU tmp(cons.size());
@@ -871,42 +883,41 @@ namespace DNDS::Euler
                 state = cons;
                 break;
             case StateValueOrigin::ConsSensible:
-                consTotalToSensible<dim>(cons, state);
+                consTotalToSensible(cons, state);
                 break;
             case StateValueOrigin::PrimRhoP:
-                conservativeToPrimitive<dim>(cons, state);
+                conservativeToPrimitive(cons, state);
                 break;
             case StateValueOrigin::PrimRhoT:
-                conservativeToPrimRhoT<dim>(cons, state);
+                conservativeToPrimRhoT(cons, state);
                 break;
             case StateValueOrigin::PrimTP:
-                conservativeToPrimTP<dim>(cons, state);
+                conservativeToPrimTP(cons, state);
                 break;
             case StateValueOrigin::ConsPhy:
-                consCodeToPhys<dim>(cons, state);
+                consCodeToPhys(cons, state);
                 break;
             case StateValueOrigin::ConsSensiblePhy:
-                consTotalToSensible<dim>(cons, tmp);
-                consCodeToPhys<dim>(tmp, state);
+                consTotalToSensible(cons, tmp);
+                consCodeToPhys(tmp, state);
                 break;
             case StateValueOrigin::PrimRhoPPhy:
-                conservativeToPrimitive<dim>(cons, tmp);
-                primCodeToPhys<dim>(tmp, state);
+                conservativeToPrimitive(cons, tmp);
+                primCodeToPhys(tmp, state);
                 break;
             case StateValueOrigin::PrimRhoTPhy:
-                conservativeToPrimRhoT<dim>(cons, tmp);
-                primRhoTCodeToPhys<dim>(tmp, state);
+                conservativeToPrimRhoT(cons, tmp);
+                primRhoTCodeToPhys(tmp, state);
                 break;
             case StateValueOrigin::PrimTPPhy:
-                conservativeToPrimTP<dim>(cons, tmp);
-                primTPCodeToPhys<dim>(tmp, state);
+                conservativeToPrimTP(cons, tmp);
+                primTPCodeToPhys(tmp, state);
                 break;
             default:
                 DNDS_check_throw_info(false, fmt::format("unsupported StateValueOrigin [{}]", StateValueOriginName(origin)));
             }
         }
 
-        template <int dim>
         void stateValueOriginToConservative(const TU &state, TU &cons, StateValueOrigin origin) const
         {
             TU tmp(state.size());
@@ -916,35 +927,35 @@ namespace DNDS::Euler
                 cons = state;
                 break;
             case StateValueOrigin::ConsSensible:
-                consSensibleToTotal<dim>(state, cons);
+                consSensibleToTotal(state, cons);
                 break;
             case StateValueOrigin::PrimRhoP:
-                primToConservative<dim>(state, cons);
+                primToConservative(state, cons);
                 break;
             case StateValueOrigin::PrimRhoT:
-                primRhoTToConservative<dim>(state, cons);
+                primRhoTToConservative(state, cons);
                 break;
             case StateValueOrigin::PrimTP:
-                primTPToConservative<dim>(state, cons);
+                primTPToConservative(state, cons);
                 break;
             case StateValueOrigin::ConsPhy:
-                consPhysToCode<dim>(state, cons);
+                consPhysToCode(state, cons);
                 break;
             case StateValueOrigin::ConsSensiblePhy:
-                consPhysToCode<dim>(state, tmp);
-                consSensibleToTotal<dim>(tmp, cons);
+                consPhysToCode(state, tmp);
+                consSensibleToTotal(tmp, cons);
                 break;
             case StateValueOrigin::PrimRhoPPhy:
-                primPhysToCode<dim>(state, tmp);
-                primToConservative<dim>(tmp, cons);
+                primPhysToCode(state, tmp);
+                primToConservative(tmp, cons);
                 break;
             case StateValueOrigin::PrimRhoTPhy:
-                primRhoTPhysToCode<dim>(state, tmp);
-                primRhoTToConservative<dim>(tmp, cons);
+                primRhoTPhysToCode(state, tmp);
+                primRhoTToConservative(tmp, cons);
                 break;
             case StateValueOrigin::PrimTPPhy:
-                primTPPhysToCode<dim>(state, tmp);
-                primTPToConservative<dim>(tmp, cons);
+                primTPPhysToCode(state, tmp);
+                primTPToConservative(tmp, cons);
                 break;
             default:
                 DNDS_check_throw_info(false, fmt::format("unsupported StateValueOrigin [{}]", StateValueOriginName(origin)));
@@ -952,7 +963,6 @@ namespace DNDS::Euler
         }
 
     private:
-        template <int dim>
         void validatePrimitiveRhoP(const TU &prim, const char *label) const
         {
             static const int I4 = dim + 1;
@@ -960,7 +970,6 @@ namespace DNDS::Euler
                                   fmt::format("{}: rho and p must be positive", label));
         }
 
-        template <int dim>
         TU sanitizePrimitiveSpecies(const TU &prim) const
         {
             TU ret = prim;
@@ -981,7 +990,6 @@ namespace DNDS::Euler
         }
 
         /// Compute rhoE_base from a primitive vector [rho, u, v, (w), p/T, Y_k].
-        template <int dim>
         real baseInternalFromPrimitive(const TU &prim) const
         {
             if (!hasChemicalSource())
@@ -1056,7 +1064,7 @@ namespace DNDS::Euler
          *  species equations and -Σ h_k J_k in the energy equation. Also corrects the
          *  conductive heat flux for ∇R(Y): k∇T includes -k*T/R*∇R.
          */
-        template <int dim, class TGradUPrim, class TNorm, class TFlux>
+        template <class TGradUPrim, class TNorm, class TFlux>
         void addMixtureAveragedSpeciesDiffusionFlux(real T, real p, const TU &U,
                                                     const TGradUPrim &GradUPrim,
                                                     const TNorm &norm,
@@ -1192,6 +1200,7 @@ namespace DNDS::Euler
         /// Sum_k Y_k·h_k = H_mixture.
         void speciesEnthalpies(real T, real p, const TU &U, Chemistry::SpeciesBufferView h) const
         {
+            DNDS_assert(hasChemicalSource());
             auto &c = chem();
             int Ns1 = c.nSpecies() - 1;
             int nVars = static_cast<int>(U.size());
@@ -1239,7 +1248,6 @@ namespace DNDS::Euler
     // ========================================================================
 
     template <EulerModel model>
-    template <int dim>
     void PhysicsProperties<model>::resolveStateValue(StateValue &value, int nVars,
                                                      std::ostream *os,
                                                      const std::string &label) const
@@ -1258,49 +1266,49 @@ namespace DNDS::Euler
         auto consPhysToCode = [&](const Eigen::Vector<real, -1> &v)
         {
             Eigen::Vector<real, -1> o;
-            this->template consPhysToCode<dim>(v, o);
+            this->consPhysToCode(v, o);
             return o;
         };
         auto consCodeToPhys = [&](const Eigen::Vector<real, -1> &v)
         {
             Eigen::Vector<real, -1> o;
-            this->template consCodeToPhys<dim>(v, o);
+            this->consCodeToPhys(v, o);
             return o;
         };
         auto primRhoPPhysToCode = [&](const Eigen::Vector<real, -1> &v)
         {
             Eigen::Vector<real, -1> o;
-            this->template primPhysToCode<dim>(v, o);
+            this->primPhysToCode(v, o);
             return o;
         };
         auto primRhoPCodeToPhys = [&](const Eigen::Vector<real, -1> &v)
         {
             Eigen::Vector<real, -1> o;
-            this->template primCodeToPhys<dim>(v, o);
+            this->primCodeToPhys(v, o);
             return o;
         };
         auto primRhoTPhysToCode = [&](const Eigen::Vector<real, -1> &v)
         {
             Eigen::Vector<real, -1> o;
-            this->template primRhoTPhysToCode<dim>(v, o);
+            this->primRhoTPhysToCode(v, o);
             return o;
         };
         auto primRhoTCodeToPhys = [&](const Eigen::Vector<real, -1> &v)
         {
             Eigen::Vector<real, -1> o;
-            this->template primRhoTCodeToPhys<dim>(v, o);
+            this->primRhoTCodeToPhys(v, o);
             return o;
         };
         auto primTPPhysToCode = [&](const Eigen::Vector<real, -1> &v)
         {
             Eigen::Vector<real, -1> o;
-            this->template primTPPhysToCode<dim>(v, o);
+            this->primTPPhysToCode(v, o);
             return o;
         };
         auto primTPCodeToPhys = [&](const Eigen::Vector<real, -1> &v)
         {
             Eigen::Vector<real, -1> o;
-            this->template primTPCodeToPhys<dim>(v, o);
+            this->primTPCodeToPhys(v, o);
             return o;
         };
 
@@ -1324,28 +1332,28 @@ namespace DNDS::Euler
         case StateValueOrigin::ConsSensible:
         {
             TU in = toTU(value.consSensible), out(nVars);
-            consSensibleToTotal<dim>(in, out);
+            consSensibleToTotal(in, out);
             value.cons = fromTU(out);
             break;
         }
         case StateValueOrigin::PrimRhoP:
         {
             TU in = toTU(value.primRhoP), out(nVars);
-            primToConservative<dim>(in, out);
+            primToConservative(in, out);
             value.cons = fromTU(out);
             break;
         }
         case StateValueOrigin::PrimRhoT:
         {
             TU in = toTU(value.primRhoT), out(nVars);
-            primRhoTToConservative<dim>(in, out);
+            primRhoTToConservative(in, out);
             value.cons = fromTU(out);
             break;
         }
         case StateValueOrigin::PrimTP:
         {
             TU in = toTU(value.primTP), out(nVars);
-            primTPToConservative<dim>(in, out);
+            primTPToConservative(in, out);
             value.cons = fromTU(out);
             break;
         }
@@ -1356,7 +1364,7 @@ namespace DNDS::Euler
         {
             value.consSensible = consPhysToCode(value.consSensible_phy);
             TU in = toTU(value.consSensible), out(nVars);
-            consSensibleToTotal<dim>(in, out);
+            consSensibleToTotal(in, out);
             value.cons = fromTU(out);
             break;
         }
@@ -1364,7 +1372,7 @@ namespace DNDS::Euler
         {
             value.primRhoP = primRhoPPhysToCode(value.primRhoP_phy);
             TU in = toTU(value.primRhoP), out(nVars);
-            primToConservative<dim>(in, out);
+            primToConservative(in, out);
             value.cons = fromTU(out);
             break;
         }
@@ -1372,7 +1380,7 @@ namespace DNDS::Euler
         {
             value.primRhoT = primRhoTPhysToCode(value.primRhoT_phy);
             TU in = toTU(value.primRhoT), out(nVars);
-            primRhoTToConservative<dim>(in, out);
+            primRhoTToConservative(in, out);
             value.cons = fromTU(out);
             break;
         }
@@ -1380,7 +1388,7 @@ namespace DNDS::Euler
         {
             value.primTP = primTPPhysToCode(value.primTP_phy);
             TU in = toTU(value.primTP), out(nVars);
-            primTPToConservative<dim>(in, out);
+            primTPToConservative(in, out);
             value.cons = fromTU(out);
             break;
         }
@@ -1391,13 +1399,13 @@ namespace DNDS::Euler
         DNDS_assert_info(StateValue::filled(value.cons), label + " did not resolve to cons");
         {
             TU in = toTU(value.cons), out(nVars);
-            consTotalToSensible<dim>(in, out);
+            consTotalToSensible(in, out);
             value.consSensible = fromTU(out);
-            conservativeToPrimitive<dim>(in, out);
+            conservativeToPrimitive(in, out);
             value.primRhoP = fromTU(out);
-            conservativeToPrimRhoT<dim>(in, out);
+            conservativeToPrimRhoT(in, out);
             value.primRhoT = fromTU(out);
-            conservativeToPrimTP<dim>(in, out);
+            conservativeToPrimTP(in, out);
             value.primTP = fromTU(out);
         }
         value.cons_phy = consCodeToPhys(value.cons);
@@ -1474,6 +1482,8 @@ namespace DNDS::Euler
     {
         if (!hasChemicalSource())
         {
+            // Non-reactive: Schmidt-number=1 diffusivity from mixture viscosity.
+            // muModel=0,1,2 all work through mixtureViscosity(); Cantera path unused.
             real mu = mixtureViscosity(T, p, U);
             return mu / std::max(real(U[0]), 1e-60); // Sc = 1
         }
@@ -1493,7 +1503,6 @@ namespace DNDS::Euler
     // ========================================================================
 
     template <EulerModel model>
-    template <int dim>
     real PhysicsProperties<model>::temperature(const TU &U, real TGuess, real uvTolerance) const
     {
         real rho = U[0];
@@ -1512,6 +1521,8 @@ namespace DNDS::Euler
         DNDS_assert_info(chem().isIdealGas(), "temperature(): non-ideal-gas EOS conversion not yet implemented");
         real vPhys = rhoInv / igProp_->rho0;
         double T_guess = TGuess > 0 ? toPhysT(TGuess) : 200.0;
+        // Fallback T guess using constant-gamma p/(rho*R) estimate; only executed
+        // when warm-start T_guess is invalid (≤0), not a hot path.
         if (T_guess <= 0)
         {
             real uSensible = sensibleRhoE(U, I4) * rhoInv - 0.5 * vel2;

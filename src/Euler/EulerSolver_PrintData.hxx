@@ -17,6 +17,15 @@
 namespace DNDS::Euler
 {
     static const auto model = NS;
+
+    template <typename TOut, typename TRecU>
+    static inline void writeExtendedVariables(TRecU &&recu, TOut &&outRow,
+                                              int I4, int nVars, int colOffset)
+    {
+        for (int i = I4 + 1; i < nVars; ++i)
+            outRow[colOffset + i] = recu(i) / recu(0);
+    }
+
     DNDS_SWITCH_INTELLISENSE(template <EulerModel model>, )
     /** @brief Write volume and boundary surface data to VTK-HDF5 or legacy VTK files.
      *
@@ -89,9 +98,7 @@ namespace DNDS::Euler
                             eval.TransformURotatingFrame_ABS_VELO(recu, vfv->GetCellQuadraturePPhys(iCell, -1), -1);
                         TVec velo = (recu(Seq123).array() / recu(0)).matrix();
                         real vsqr = velo.squaredNorm();
-                        real asqr, p, H;
-                        real T = eval.phys().template temperature<dim>(recu);
-                        eval.phys().template conservativeThermal<dim>(recu, T, p, asqr, H);
+                        auto [T, p, asqr, H, gammaEq, gamma] = eval.phys().conservativeThermal(recu);
                         // DNDS_assert(asqr > 0);
                         real M = std::sqrt(std::abs(vsqr / asqr));
 
@@ -113,10 +120,7 @@ namespace DNDS::Euler
                         // }
                         // (*outDist)[iCell][8] = (*vfv->SOR_iCell2iScan)[iCell];//!using SOR rb seq instead
 
-                        for (int i = I4 + 1; i < nVars; i++)
-                        {
-                            (*outDist)[iCell][4 + i] = recu(i) / recu(0); // 4 is additional amount offset, not Index of last flow variable (I4)
-                        }
+                        writeExtendedVariables(recu, (*outDist)[iCell], I4, nVars, 4);
                         int iCur = 4 + nVars;
                         for (auto &out : additionalCellScalars)
                         {
@@ -179,9 +183,7 @@ namespace DNDS::Euler
 
                         TVec velo = (recu(Seq123).array() / recu(0)).matrix();
                         real vsqr = velo.squaredNorm();
-                        real asqr, p, H;
-                        real T = eval.phys().template temperature<dim>(recu);
-                        eval.phys().template conservativeThermal<dim>(recu, T, p, asqr, H);
+                        auto [T, p, asqr, H, gammaEq, gamma] = eval.phys().conservativeThermal(recu);
                         // DNDS_assert(asqr > 0);
                         real M = std::sqrt(std::abs(vsqr / asqr));
 
@@ -192,10 +194,7 @@ namespace DNDS::Euler
                         outDistPointPair[iN][I4 + 1] = T;
                         outDistPointPair[iN][I4 + 2] = M;
 
-                        for (int i = I4 + 1; i < nVars; i++)
-                        {
-                            outDistPointPair[iN][2 + i] = recu(i) / recu(0); // 2 is additional amount offset
-                        }
+                        writeExtendedVariables(recu, outDistPointPair[iN], I4, nVars, 2);
                     }
                     outDistPointPair.trans.startPersistentPull();
                     outDistPointPair.trans.waitPersistentPull();
@@ -528,9 +527,7 @@ namespace DNDS::Euler
                         eval.TransformURotatingFrame_ABS_VELO(recu, vfv->GetCellQuadraturePPhys(iCell, -1), -1);
                     TVec velo = (recu(Seq123).array() / recu(0)).matrix();
                     real vsqr = velo.squaredNorm();
-                    real asqr, p, H;
-                    real T = eval.phys().template temperature<dim>(recu);
-                    eval.phys().template conservativeThermal<dim>(recu, T, p, asqr, H);
+                    auto [T, p, asqr, H, gammaEq, gamma] = eval.phys().conservativeThermal(recu);
                     // DNDS_assert(asqr > 0);
                     real M = std::sqrt(std::abs(vsqr / asqr));
 
@@ -540,10 +537,7 @@ namespace DNDS::Euler
                     (*outDistBnd)[iB][I4 + 0] = p;
                     (*outDistBnd)[iB][I4 + 1] = T;
                     (*outDistBnd)[iB][I4 + 2] = M;
-                    for (int i = I4 + 1; i < nVars; i++)
-                    {
-                        (*outDistBnd)[iB][2 + i] = recu(i) / recu(0); // 4 is additional amount offset, not Index of last flow variable (I4)
-                    }
+                    writeExtendedVariables(recu, (*outDistBnd)[iB], I4, nVars, 2);
                     // if(iFace < 0)
                     // {
                     //     std::cout << iFace << std::endl;

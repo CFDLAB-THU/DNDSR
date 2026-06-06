@@ -148,8 +148,8 @@ namespace DNDS::Euler::Chemistry
          *                       transport is currently implemented.
          */
         explicit ChemicalSource(const std::string &mechanismFile,
-                                const std::string &phaseName = "",
-                                double U0 = 1.0, double rho0 = 1.0,
+                                const std::string &phaseName,
+                                double U0, double rho0,
                                 double TBase = 0.0,
                                 std::string transportModel = "MixtureAveraged");
         ~ChemicalSource();

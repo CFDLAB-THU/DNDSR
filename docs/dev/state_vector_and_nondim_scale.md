@@ -145,19 +145,19 @@ gamma (prim → cons) are marked *for I/O only, not tight loops*.
 
 | Method | Description |
 |--------|-------------|
-| `consSensibleToTotal<dim>(sens, total)` | Add formation to `U[I4]` |
-| `consTotalToSensible<dim>(total, sens)` | Subtract formation from `U[I4]` |
+| `consSensibleToTotal(sens, total)` | Add formation to `U[I4]` |
+| `consTotalToSensible(total, sens)` | Subtract formation from `U[I4]` |
 
 ### Primitive ↔ Conservative
 
 | Method | Description |
 |--------|-------------|
-| `primToConservative<dim>(prim, cons)` | Iterates gammaEq; cfg.gamma as initial guess |
-| `conservativeToPrimitive<dim>(cons, prim)` | Uses gammaEq from cons state |
-| `primRhoTToConservative<dim>(primRhoT, cons)` | Converts via `p = rho*Rmix*T` |
-| `conservativeToPrimRhoT<dim>(cons, primRhoT)` | Replaces p with T |
-| `primTPToConservative<dim>(primTP, cons)` | Converts via `rho = p/(Rmix*T)` |
-| `conservativeToPrimTP<dim>(cons, primTP)` | Replaces rho with T |
+| `primToConservative(prim, cons)` | Iterates gammaEq; cfg.gamma as initial guess |
+| `conservativeToPrimitive(cons, prim)` | Uses gammaEq from cons state |
+| `primRhoTToConservative(primRhoT, cons)` | Converts via `p = rho*Rmix*T` |
+| `conservativeToPrimRhoT(cons, primRhoT)` | Replaces p with T |
+| `primTPToConservative(primTP, cons)` | Converts via `rho = p/(Rmix*T)` |
+| `conservativeToPrimTP(cons, primTP)` | Replaces rho with T |
 
 ### Code ↔ Physical (I/O only)
 
@@ -170,7 +170,7 @@ gamma (prim → cons) are marked *for I/O only, not tight loops*.
 | `primRhoTCodeToPhys<dim>(code, phys)` | prim-rhoT code → physical |
 | `primRhoTPhysToCode<dim>(phys, code)` | prim-rhoT physical → code |
 | `primTPCodeToPhys<dim>(code, phys)` | prim-TP code → physical |
-| `primTPPhysToCode<dim>(phys, code)` | prim-TP physical → code |
+| `primTPPhysToCode(phys, code)` | prim-TP physical → code |
 
 ### Ideal-gas guard
 
