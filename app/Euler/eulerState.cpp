@@ -523,6 +523,20 @@ namespace
             std::cout << fmt::format("  diff           = {:12.4g} J/kg  (sent - cantera)\n",
                                      uPhysFromInput - u_ct);
         }
+
+        {
+            real rho_code = primCode[0];
+            real p_code = primCode[dim + 1];
+            real a_code = std::sqrt(gammaEq * p_code / rho_code);
+            real a_phys = a_code * cfg.U0;
+            real vel2 = 0;
+            for (int j = 1; j <= dim; ++j)
+                vel2 += primCode[j] * primCode[j];
+            real M = std::sqrt(vel2) / a_code;
+            std::cout << "\n--- Acoustic ---\n";
+            std::cout << fmt::format("  speed_of_sound = {:12.4g} (code)  {:12.4g} m/s (phys)\n", a_code, a_phys);
+            std::cout << fmt::format("  Mach_number    = {:12.4g}\n", M);
+        }
         return 0;
     }
 
