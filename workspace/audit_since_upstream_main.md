@@ -4,7 +4,7 @@
 **Branch:** upstream/main..HEAD (~90 commits, ~170 files, +26k/-4.7k lines)
 **Passes:** 5 — audited + false-positive validated + deep internals probed + edge pipeline audit + RANS infrastructure audit. 70 findings resolved.
 
-**Unresolved: 0 CRITICAL, 0 HIGH, 0 MEDIUM, 42 LOW**
+**Unresolved: 0 CRITICAL, 0 HIGH, 0 MEDIUM, 35 LOW**
 
 **Deferred:** F17 (validateKeys), F67 (bindings), F106 (diffusivity O(Ns²))
 
@@ -37,7 +37,7 @@
 | F19 | **HIGH** ✓ | Config | `EulerEvaluatorSettings.hpp:652,822-823` | No check that `mechanismFile` is non-empty — **FIXED: DNDS_check_throw_info in finalize()** |
 | F20 | **LOW** ✓ | Build | `Euler/CMakeLists.txt:18-25` | All model variants compile ChemicalSource.cpp — **not a problem; ChemicalSource.cpp is not heavy, gating adds build complexity** |
 | F21 | **HIGH** ✓ | Build | `Euler/CMakeLists.txt:29-30` | `CT_USE_SYSTEM_FMT` not propagated to library — **RESOLVED by F1** |
-| F22 | **LOW** | BC | `EvaluateRHS.hxx:358`, `EvaluateDt.hxx:1241-1248` | No explicit dY_k/dn=0 at non-catalytic walls — standard viscous-wall practice; error diminishes with mesh refinement **[H→L: FP pass]** |
+| F22 | **LOW** ✓ | BC | `EvaluateRHS.hxx:358`, `EvaluateDt.hxx:1241-1248` | No explicit dY_k/dn=0 at non-catalytic walls — **FIXED: impermeableWall flag gates species diffusion flux and finc species rows at BCWall/BCWallIsothermal/BCWallInvis/BCSym** |
 | F23 | **LOW** | BC | `EvaluateRHS.hxx:474-489` | `noRsOnWall` isothermal uses stale ULc for gammaEq — only affects non-reactive path where gammaEq is constant **[H→L: FP pass]** |
 | F24 | — | BC | Cross-ref F9 | *REMOVED — duplicate of F9* |
 | F25 | **LOW** ✓ | Reactive | `EulerSolver.hxx:882`, `EulerEvaluator.hpp:1704-1812,1856-1896,1365-1370` | Source Newton bypasses AddFixedIncrement — **false alarm: only touches species, final fincrement handles repair via AddFixedIncrement** |
@@ -86,32 +86,32 @@
 | F68 | **MED** ✓ | Transport | `Gas.hpp:1792-1793` | Missing ∇R term in ∇T — **RESOLVED: PhysicsProperties.hpp:1102-1116 adds -k·T/R·∇R·n after ViscousFlux_IdealGas in reactive RHS path** |
 | F69 | **MED** ✓ | Config | `EulerEvaluatorSettings.hpp:132` | StateValueSchema omits default — **FIXED: added default {type: consSensible, state: []}** |
 | F70 | **MED** ✓ | Config | `EulerEvaluatorSettings.hpp` | StateValue JSON round-trip — **FIXED: from_json accepts "none"/"invalid"; schema updated; JSON round-trip test added** |
-| F71 | **LOW** | Scaling | `PhysicsProperties.hpp:650-656` | Primitive species unscaled — missing comment |
-| F72 | **LOW** | Reactive | `PhysicsProperties.hpp:1121-1134` | Sutherland `default` returns `muGas` silently |
+| F71 | **LOW** ✓ | Scaling | `PhysicsProperties.hpp:650-656` | Primitive species unscaled — **FIXED: unit-scaling comments now state primitive species mass fractions are dimensionless and intentionally unscaled** |
+| F72 | **LOW** ✓ | Reactive | `PhysicsProperties.hpp:1121-1134` | Sutherland `default` returns `muGas` silently — **FIXED: DNDS_assert_info on unrecognized muModel** |
 | F73 | **LOW** | Reactive | `ChemicalSource.cpp:349-357` | `bufOmega` aliased in `speciesEnthalpies` |
-| F74 | **LOW** | EOS | `PhysicsProperties.hpp:1188-1190` | Hardcoded dim=2 velocity indexing |
+| F74 | **LOW** ✓ | EOS | `PhysicsProperties.hpp:1188-1190` | Hardcoded dim=2 velocity indexing — **RESOLVED: constexpr dim=N uses dynamic jd≤dim loop** |
 | F75 | **LOW** | Jacobian | `EulerJacobian.hpp:80,86,89` | Zero-sized ghost arrays — safe but fragile |
-| F76 | **LOW** | Thread | `EvaluateRHS.hxx:587,632` | Unnamed `#pragma omp critical` |
-| F77 | **LOW** | Thread | `ChemicalSource.cpp:429-451` | `massFractions()` returns view into mutable `bufY_` |
+| F76 | **LOW** ✓ | Thread | `EvaluateRHS.hxx:587,632` | Unnamed `#pragma omp critical` — **FIXED: critical regions now use explicit names (`flux_grad_fix`, `bnd_integration`)** |
+| F77 | **LOW** ✓ | Thread | `ChemicalSource.cpp:429-451` | `massFractions()` returns view into mutable `bufY_` — **FIXED: massFractions now fills caller-owned SpeciesBufferView buffers** |
 | F78 | **LOW** | Thread | `ChemicalSource.cpp:34-36`, `ChemicalSource.hpp:205-213` | Mutable buffers lack thread-safety docs |
 | F79 | **LOW** | Thread | `Direct.hpp:547-548` | LDLT decompose serial (TODO) |
 | F80 | **LOW** | BC | `cases/eulerEX/react_test.json:140` | Empty bcSettings — test doesn't exercise BCs |
 | F81 | **LOW** | BC | (no test) | No dY_k/dn=0 test coverage |
-| F82 | **LOW** | BC | `EvaluateDt.hxx:1210` | Repeated `GetTypeFromID` hash lookup in flux loop |
+| F82 | **LOW** ✓ | BC | `EvaluateDt.hxx:1210` | Repeated `GetTypeFromID` hash lookup in flux loop — **FIXED: boundary type lookup is cached before the batched flux loop** |
 | F83 | **LOW** | Build | `test/cpp/CMakeLists.txt:361,388` | Euler test env not inherited by CFV/Geom |
-| F84 | **LOW** | Assert | `EnvReader.hpp:77` | `std::tolower` without `#include <cctype>` |
-| F85 | **LOW** | Assert | `EnvReader.hpp:80` | `GetEnvBool()` returns `false` on unrecognized even when default `true` |
-| F86 | **LOW** | Init | `PhysicsProperties.hpp:875-887` | `speciesEnthalpies` has no `hasChemicalSource()` guard |
+| F84 | **LOW** ✓ | Assert | `EnvReader.hpp:77` | `std::tolower` without `#include <cctype>` — **FIXED: EnvReader.cpp includes `<cctype>` and casts through unsigned char before tolower** |
+| F85 | **LOW** ✓ | Assert | `EnvReader.hpp:80` | `GetEnvBool()` returns `false` on unrecognized even when default `true` — **FIXED: unrecognized boolean strings now return the caller default** |
+| F86 | **LOW** ✓ | Init | `PhysicsProperties.hpp:875-887` | `speciesEnthalpies` has no `hasChemicalSource()` guard — **FIXED: speciesEnthalpies now asserts chemistry is configured before accessing chem()** |
 | F87 | **LOW** | Init | `EulerSolver.hpp:959-974` | Destructor spin-waits forever on async I/O futures |
-| F88 | **LOW** | Init | EulerEvaluator ctor ~line 290 | `GetWallDist()` before chemistry pool wiring |
+| F88 | **LOW** ✓ | Init | EulerEvaluator ctor ~line 290 | `GetWallDist()` before chemistry pool wiring — **FIXED: constructor documents wall distance as purely geometric and independent of ChemicalSource before pool wiring** |
 | F89 | **LOW** | Init | `ChemicalSource.cpp:453-465` | `mixtureFormationRhoESpecies` cache discriminator is size only |
 | F90 | **LOW** | Output | `EulerEvaluator.hxx:1491` → `EulerSolver_Init.hxx:941` | No NaN filter between EvaluateMinMax and CSV |
-| F91 | **LOW** ✓ | Output | `EulerSolver_PrintData.hxx:116,195,543` | Three independently coded species offset schemes — **FIXED: unified into writeExtendedVariables helper** |
-| F92 | **LOW** | Python | `Mesh_bind.hpp` | Edge connectivity not bound in Python |
-| F93 | **LOW** | Python | `Mesh_bind.hpp` | `PrintMeshCGNS` not exposed in Python |
-| F94 | **LOW** | Transport | `EulerEvaluator_EvaluateDt.hxx:982-990` | Species-diffusion timescale missing from LU-SGS spectral radius |
-| F95 | **LOW** | Transport | `PhysicsProperties.hpp:1166-1169` | Non-reactive speciesDiffusivityK inconsistent for muModel=0 (dead code) |
-| F96 | **LOW** | Config | `ConfigParam.hpp:456` | Unused `member` capture in `field_schema` lambda |
+| F91 | **LOW** ✓ | Output | `EulerSolver_PrintData.hxx:116,195,543` | Three independently coded species offset schemes — **FIXED: species output indexing unified through writeExtendedVariables helper** |
+| F92 | **LOW** ✓ | Python | `Mesh_bind.hpp` | Edge connectivity not bound in Python — **FIXED: cell2edge, edge2cell, edge2node, edgeElemInfo, and edge PBI arrays are now exposed** |
+| F93 | **LOW** ✓ | Python | `Mesh_bind.hpp` | `PrintMeshCGNS` not exposed in Python — **FIXED: PrintMeshCGNS binding added with fname, fbcid2name, and allNames arguments** |
+| F94 | **LOW** ✓ | Transport | `EulerEvaluator_EvaluateDt.hxx:982-990` | Species-diffusion timescale missing from LU-SGS spectral radius — **FIXED: reactive LU-SGS spectral radius now accounts for the scalar diffusion/thermal-conduction closure** |
+| F95 | **LOW** ✓ | Transport | `PhysicsProperties.hpp:1166-1169` | Non-reactive speciesDiffusivityK inconsistent for muModel=0 (dead code) — **FIXED: non-reactive speciesDiffusivityK now derives diffusivity from mixtureViscosity for all muModel paths** |
+| F96 | **LOW** ✓ | Config | `ConfigParam.hpp:456` | Unused `member` capture in `field_schema` lambda — **FIXED: schemaEntry lambda no longer captures the unused member pointer** |
 | F97 | **LOW** | Config | `ConfigParam.hpp:99-103` | `ConfigTypeTagOf<StateValue>` resolves to Object — misleading |
 | F98 | **CRIT** ✓ | Reactive | `PhysicsProperties.hpp:219-238` | `mixtureFormationRhoERaw` no guard for negative dependent-species — **docstring clarified: intentional linearity** |
 | F99 | **HIGH** ✓ | Reactive | `EulerEvaluator.hxx:1799-1814` | checkRecBaseGood ignores species positivity — **intended: mixtureFormationRhoERaw is linear; species repair deferred to AddFixedIncrement; comment added** |
@@ -126,12 +126,12 @@
 | F108 | **MED** ✓ | Config | `EulerEvaluatorSettings.hpp:828` | Constructor defaults species to ΣY_k>1 — **FIXED: set species rows to zero after setOnes** |
 | F109 | **MED** ✓ | Config | `ConfigParam.hpp:456-462` | field_schema desc silently overwritten — **FIXED: merged with " || " when StateValueSchema already provides description** |
 | F110 | **MED** ✓ | Config | `ConfigParam.hpp:692-704,797-801`, `ConfigRegistry.hpp:427-437` | `validateWithContext`/`check_ctx` generated but never called — **FIXED: called in ConfigureFromJson** |
-| F111 | **LOW** | Reactive | `EulerEvaluator.hpp:1872` | `AddFixedIncrement` speciesClipped detection uses exact floating-point `!=` |
+| F111 | **LOW** ✓ | Reactive | `EulerEvaluator.hpp:1872` | `AddFixedIncrement` speciesClipped detection uses exact floating-point `!=` — **FIXED: comment documents exact inequality as intentional change detection for max(x, floor)** |
 | F112 | **LOW** ✓ | Chemistry | `ChemicalSource.hpp:122-124`, `ChemicalSource.cpp:243-319` | JAC_SKIP_ABSORPTION flag fully implemented but never OR'd — **preserved: complete implementation available for future use; dead-code intentional** |
-| F113 | **LOW** | React/Pref | `PhysicsProperties.hpp:1198` | Dead uSensible computation wastes mixtureFormationRhoE call per temperature() |
-| F114 | **LOW** | Chemistry | `ChemicalSource.cpp:162` | temperatureFromUV warm-start floor at 300K ignores mechanism minTemperature() |
+| F113 | **LOW** ✓ | React/Pref | `PhysicsProperties.hpp:1198` | Dead uSensible computation wastes mixtureFormationRhoE call per temperature() — **FIXED: temperature() normal path now uses total internal energy directly and avoids the dead sensible-energy work** |
+| F114 | **LOW** ✓ | Chemistry | `ChemicalSource.cpp:162` | temperatureFromUV warm-start floor at 300K ignores mechanism minTemperature() — **FIXED: warm-start initial temperature is clamped against Cantera gas_minTemp()/minTemperature** |
 | F115 | **LOW** | Reactive | `SourceTermContributor.hpp:58-59`, `EulerEvaluator_EvaluateDt.hxx:1688` | SourceFilter::NonReactiveOnly enum value never used |
-| F116 | **LOW** | Reactive | `SourceTermContributor.hpp:424-462` | ChemicalContributor silently ignores Mode==1 (diagonal-Jacobian) |
+| F116 | **LOW** ✓ | Reactive | `SourceTermContributor.hpp:424-462` | ChemicalContributor silently ignores Mode==1 (diagonal-Jacobian) — **FIXED: Mode==1 now asserts explicitly that diagonal-Jacobian mode is not implemented** |
 | F117 | **LOW** | Config | `EulerEvaluatorSettings.hpp:84-108` | StateValueOriginFromName silently maps unrecognized to None with no logging |
 
 ---
@@ -644,5 +644,4 @@ Calls `speciesDiffusivityK(k)` per transported species — each call allocates h
    - conservativeThermalReturn: `gammma`→`gamma` typo fix, docstring + params fix
    - conservativeToPrimTP: diagnostic message corrected
    - EnvReader.hpp: removed unnecessary `<cctype>` include from header
-
 
