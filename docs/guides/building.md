@@ -1,5 +1,68 @@
 # Building DNDSR {#building}
 
+## Quick Start (Step-by-Step)
+
+If you just want to build and run as fast as possible, follow these steps.
+Detailed explanations for each step follow in the sections below.
+
+**1. System dependencies**
+```bash
+sudo apt install build-essential cmake ninja-build openmpi-bin libopenmpi-dev
+```
+
+**2. Python virtual environment**
+```bash
+python3.12 -m venv venv
+source venv/bin/activate
+bash scripts/install_python_deps.sh
+```
+
+**3. Clone and get external dependencies**
+```bash
+git clone --recursive https://github.com/CFDLAB-THU/DNDSR.git
+cd DNDSR
+
+# Header-only libs first
+curl -L -o external/external_headeronlys.tar.gz \
+  https://github.com/harryzhou2000/cfd_externals_headeronlys/releases/latest/download/external_headeronlys.tar.gz
+cd external && tar -xzf external_headeronlys.tar.gz && cd ..
+
+# Then binary libs (needs header-onlys already extracted)
+cd external/cfd_externals
+CC=mpicc CXX=mpicxx python cfd_externals_build.py
+cd ../..
+```
+
+**4. Build solvers**
+```bash
+cmake --preset release-test
+cmake --build build -t euler -j32
+```
+
+**5. Run a case**
+```bash
+./build/app/euler.exe cases/your_config.json
+# or parallel:
+mpirun -np 4 ./build/app/euler.exe cases/your_config.json
+```
+
+**6. Install Python package (optional)**
+```bash
+CC=mpicc CXX=mpicxx CMAKE_BUILD_PARALLEL_LEVEL=32 pip install -e .
+```
+
+**7. Run tests (optional)**
+```bash
+# C++ tests
+cmake --build build -t euler_unit_tests -j32
+ctest --test-dir build --output-on-failure
+
+# Python tests
+pytest test/ -v
+```
+
+---
+
 ## Prerequisites
 
 | Requirement     | Version       | Notes                                  |
@@ -16,20 +79,9 @@ Metis, ParMetis, ZLIB.  Optional: CUDA toolkit, SuperLU_dist.
 
 ## Building External Dependencies
 
-DNDSR requires two sets of external dependencies: binary libraries built
-from the `cfd_externals` submodule, and header-only libraries shipped as a
-tarball.
-
-### Binary libraries (HDF5, CGNS, Metis, ParMetis, ZLIB)
-
-```bash
-git submodule update --init --recursive --depth=1
-cd external/cfd_externals
-CC=mpicc CXX=mpicxx python cfd_externals_build.py
-cd ../..
-```
-
-This installs all binary libraries into `external/cfd_externals/install/`.
+DNDSR requires two sets of external dependencies: header-only libraries
+shipped as a tarball, and binary libraries built from the `cfd_externals`
+submodule.
 
 ### Header-only libraries (Eigen, Boost, CGAL, fmt, pybind11, ...)
 
@@ -46,6 +98,17 @@ cd ..
 
 After extraction, directories such as `external/eigen/`,
 `external/boost/`, `external/CGAL/`, etc. should exist.
+
+### Binary libraries (HDF5, CGNS, Metis, ParMetis, ZLIB)
+
+```bash
+git submodule update --init --recursive --depth=1
+cd external/cfd_externals
+CC=mpicc CXX=mpicxx python cfd_externals_build.py
+cd ../..
+```
+
+This installs all binary libraries into `external/cfd_externals/install/`.
 
 ## CMake Module Architecture
 
@@ -68,6 +131,33 @@ order:
 
 Between modules 6 and 7, the five core library subdirectories are
 added: `src/DNDS`, `src/Geom`, `src/CFV`, `src/Euler`, `src/EulerP`.
+
+## System Build Dependencies
+
+Ensure MPI and basic build tools are available before proceeding:
+
+```bash
+# Debian/Ubuntu
+sudo apt install build-essential cmake ninja-build openmpi-bin libopenmpi-dev
+
+# RHEL/Fedora
+sudo dnf install gcc-c++ cmake ninja-build openmpi-devel
+```
+
+## Python Virtual Environment
+
+The Python package and tests need a virtual environment. Set this up before
+building C++ or Python:
+
+```bash
+python3.12 -m venv venv
+source venv/bin/activate
+bash scripts/install_python_deps.sh
+```
+
+> **Why not conda?** Conda Python binaries embed an `RPATH` pointing to
+> conda's bundled libstdc++, which may be too old for the compiler used
+> to build DNDSR.  Using the system Python avoids this entirely.
 
 ## Building C++ (Solvers and Libraries)
 
@@ -145,21 +235,6 @@ Key options (set via `-D<OPTION>=<VALUE>` or in a preset):
 | `DNDS_EIGEN_USE_LAPACK`    | OFF     | Use external LAPACK in Eigen           |
 
 ## Building the Python Package
-
-### Creating a Virtual Environment
-
-Use the system Python (not conda) to avoid libstdc++ version conflicts:
-
-```bash
-python3.12 -m venv venv
-source venv/bin/activate
-pip install numpy scipy pytest pytest-mpi pytest-timeout mpi4py \
-            pybind11 pybind11-stubgen scikit-build-core ninja
-```
-
-> **Why not conda?** Conda Python binaries embed an `RPATH` pointing to
-> conda's bundled libstdc++, which may be too old for the compiler used
-> to build DNDSR.  Using the system Python avoids this entirely.
 
 ### Three Ways to Build the Python Package
 
