@@ -7,7 +7,7 @@ Detailed explanations for each step follow in the sections below.
 
 **1. System dependencies**
 ```bash
-sudo apt install build-essential cmake ninja-build openmpi-bin libopenmpi-dev
+sudo apt install build-essential cmake ninja-build openmpi-bin libopenmpi-dev doxygen
 ```
 
 **2. Python virtual environment**
@@ -72,6 +72,7 @@ pytest test/ -v
 | CMake           | >= 3.21       |                                        |
 | Python          | >= 3.10       | System Python recommended (not conda)  |
 | Ninja           | any           | Optional but recommended for speed     |
+| Doxygen         | any           | Required for Cantera CLib codegen      |
 
 C++ libraries (managed via `external/cfd_externals` submodule):
 Eigen, Boost, CGAL, nlohmann_json, fmt, pybind11, HDF5, CGNS,
@@ -138,7 +139,7 @@ Ensure MPI and basic build tools are available before proceeding:
 
 ```bash
 # Debian/Ubuntu
-sudo apt install build-essential cmake ninja-build openmpi-bin libopenmpi-dev
+sudo apt install build-essential cmake ninja-build openmpi-bin libopenmpi-dev doxygen
 
 # RHEL/Fedora
 sudo dnf install gcc-c++ cmake ninja-build openmpi-devel
