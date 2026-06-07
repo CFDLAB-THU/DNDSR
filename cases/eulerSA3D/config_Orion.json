@@ -18,7 +18,7 @@ pInf = 0.01738424785487074
         "nTimeStep": 20000,
         "steadyQuit": true,
         "useRestart": true,
-        "odeCode": 1, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
+        "odeCode": 103, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
         "tEnd": 3e+200,
         "partitionMeshOnly": false,
         "rhsFPPMode": 2,
@@ -64,11 +64,13 @@ pInf = 0.01738424785487074
         ]
     },
     "implicitCFLControl": {
-        "CFL": 0.1,
+        // "CFL": 0.1,
+        // "CFLRampEnd": 2,
+        "CFL": 2,
+        "CFLRampEnd": 2,
         "nForceLocalStartStep": 2147483647,
         "nCFLRampStart": 100,
         "nCFLRampLength": 5000,
-        "CFLRampEnd": 2,
         "nSmoothDTau": 4,
         "useLocalDt": true
     },
@@ -84,12 +86,18 @@ pInf = 0.01738424785487074
         "meshScale": 1e-3, // mm -> m
         // "rectifyNearPlane": 2,
         // "rectifyNearPlaneThres": 1e-4,
-        "meshFile": "../data/mesh/Orion_merged.cgns",
-        "meshReorderCells": 1, //!
-        // "meshFilePartitionedInput": "../data/mesh/Orion_merged.cgns_part_224.dnds.h5",
-        "readMeshMode": 1,
-        "outPltName": "../data/out/Orion/run5/restart1-out",
+        // === MERGED MESH
+        // "meshFile": "../data/mesh/Orion_merged.cgns",
+        // "meshReorderCells": 1, //!
+        // // "meshFilePartitionedInput": "../data/mesh/Orion_merged.cgns_part_224.dnds.h5",
+        // "outPltName": "../data/out/Orion/run5/restart2-out",
+        // === REDRAW MESH
+        "meshFile": "../data/mesh/Orion_str.cgns-merged-redraw3-A1.cgns",
+        "outPltName": "../data/out/Orion/redraw_run0/out-restart1",
+        // "meshFilePartitionedInput": "../data/mesh/Orion_str.cgns-merged-redraw3-A1.cgns_part_32.dnds.h5",
+        "meshReorderCells": 0,
         "outPltMode": 1,
+        "readMeshMode": 1,
         "outPltTecplotFormat": false,
         "outPltVTKFormat": false,
         "outPltVTKHDFFormat": true,
@@ -132,7 +140,7 @@ pInf = 0.01738424785487074
     "limiterControl": {
         "useLimiter": true,
         "smoothIndicatorProcedure": 0,
-        "limiterProcedure": 0, //1 == CWBAP
+        "limiterProcedure": 1, //1 == CWBAP
         "nPartialLimiterStart": 1000000,
         "nPartialLimiterStartLocal": 1000000
     },
@@ -153,18 +161,19 @@ pInf = 0.01738424785487074
             "anisotropicLengths": false
         },
         "functionalSettings": {
-            "dirWeightScheme": "HQM_OPT",
+            // "dirWeightScheme": "HQM_OPT",
             // "dirWeightScheme": "TEST_OPT",
-            // "dirWeightScheme": "ManualDirWeight",
-            // "manualDirWeights": [
-            //     1.0,
-            //     0.4643,
-            //     0.4643,
-            //     0.16666666666666666,
-            //     0.041666666666666664
-            // ],
+            "dirWeightScheme": "ManualDirWeight",
+            "manualDirWeights": [ // 0.2 HQM_OPT + FACTORIAL
+                1,
+                0.6236,
+                0.26936,
+                0.20269333,
+                0.2
+            ],
             "geomWeightScheme": "HQM_SD",
             "geomWeightBias": 1,
+            "geomWeightPower": 0.0,
             // "geomWeightScheme": "SD_Power",
             // "geomWeightPower1": 0.125,
             // "geomWeightPower2": -0.5,
@@ -234,11 +243,14 @@ pInf = 0.01738424785487074
         "wallDistPoissonP": 6,
         "wallDistDTauScale": 0.1,
         "wallDistNJacobiSweep": 100,
-        "riemannSolverType": "Roe_M2",
+        "riemannSolverType": "Roe_M8",
+        "riemannSolverTypeAux": "Roe_M2",
+        "rsRotateScheme": 1,
         // "riemannSolverTypeWall": "Roe_M1",
         "rsMeanValueEig": 1,
         // "ransEigScheme": 1,
         "ransForce2nd": 1,
+        "RANSTopLimit": 1e4,//!
         // "source2nd": 1,
         // "ransSource2nd": 1,
         // "useSourceGradFixGG": 1,
@@ -303,7 +315,7 @@ pInf = 0.01738424785487074
         },
         {
             "name": "Outflow",
-            "type": "BCFar",
+            "type": "BCIn",
             "value": [
                 1,
                 1,
@@ -360,9 +372,9 @@ pInf = 0.01738424785487074
     ],
     "restartState": {
         "iStep": 1,
-        "iStepInternal": 5000,
+        "iStepInternal": 20000,
         "odeCodePrev": -1,
-        "lastRestartFile": "../data/out/Orion/run5/out-llf-jc2-ranssrc2-O1__C_p896.restart.dnds.h5",
+        "lastRestartFile": "../data/out/Orion/redraw_run0/out-rot-hllepv1-fresh__1_20000_p896.restart.dnds.h5",
         "otherRestartFile": "",
         "otherRestartStoreDim": [
             0
