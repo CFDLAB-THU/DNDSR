@@ -1520,6 +1520,10 @@ namespace DNDS::Euler
         real uInternal = U[I4] * rhoInv - 0.5 * vel2;
         if (!hasChemicalSource())
         {
+            DNDS_assert_info(uInternal > 0,
+                             fmt::format("temperature(): non-reactive uInternal={:.3e} ≤ 0; "
+                                         "rho={:.3e} rhoE={:.3e} vel2={:.3e}",
+                                         uInternal, rho, U[I4], vel2));
             real p = (igProp_->gamma - 1) * rho * uInternal;
             return p * rhoInv / toCode(igProp_->Rgas);
         }
