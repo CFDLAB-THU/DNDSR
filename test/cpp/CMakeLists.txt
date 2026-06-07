@@ -58,19 +58,6 @@ elseif(MPIEXEC_EXECUTABLE)
     endif()
 endif()
 
-# --- Read test timeout from env, default to 120 ---
-if(DEFINED ENV{DNDS_TEST_TIMEOUT})
-    set(DNDS_TEST_TIMEOUT "$ENV{DNDS_TEST_TIMEOUT}")
-    set(DNDS_TEST_SET_TIMEOUT ON)
-else()
-    set(DNDS_TEST_TIMEOUT "120")
-    set(DNDS_TEST_SET_TIMEOUT OFF)
-endif()
-message(STATUS "DNDS_TEST_TIMEOUT: ${DNDS_TEST_TIMEOUT} (set-timout: ${DNDS_TEST_SET_TIMEOUT})")
-
-math(EXPR DNDS_TEST_TIMEOUT_SOLVER "${DNDS_TEST_TIMEOUT} / 2")
-math(EXPR DNDS_TEST_TIMEOUT_PIPELINE "${DNDS_TEST_TIMEOUT} * 5")
-
 # Conditionally set TIMEOUT on a test — only when DNDS_TEST_TIMEOUT env was provided.
 # When not set, ctest --timeout N works naturally.
 function(_dnds_maybe_set_timeout TEST_NAME VALUE)
