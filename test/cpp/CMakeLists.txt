@@ -58,14 +58,37 @@ elseif(MPIEXEC_EXECUTABLE)
     endif()
 endif()
 
+# --- Read test timeout from env, default to 120 ---
+if(DEFINED ENV{DNDS_TEST_TIMEOUT})
+    set(DNDS_TEST_TIMEOUT "$ENV{DNDS_TEST_TIMEOUT}")
+    set(DNDS_TEST_SET_TIMEOUT ON)
+else()
+    set(DNDS_TEST_TIMEOUT "120")
+    set(DNDS_TEST_SET_TIMEOUT OFF)
+endif()
+message(STATUS "DNDS_TEST_TIMEOUT: ${DNDS_TEST_TIMEOUT} (set-timout: ${DNDS_TEST_SET_TIMEOUT})")
+
+math(EXPR DNDS_TEST_TIMEOUT_SOLVER "${DNDS_TEST_TIMEOUT} / 2")
+math(EXPR DNDS_TEST_TIMEOUT_PIPELINE "${DNDS_TEST_TIMEOUT} * 5")
+
+# Conditionally set TIMEOUT on a test — only when DNDS_TEST_TIMEOUT env was provided.
+# When not set, ctest --timeout N works naturally.
+function(_dnds_maybe_set_timeout TEST_NAME VALUE)
+    if(DNDS_TEST_SET_TIMEOUT)
+        set_tests_properties(${TEST_NAME} PROPERTIES TIMEOUT ${VALUE})
+    endif()
+endfunction()
+
 # --- Timeout per np ---
 function(_dnds_np_timeout NP OUT_VAR)
     if(NP LESS_EQUAL 2)
-        set(${OUT_VAR} 120 PARENT_SCOPE)
+        set(${OUT_VAR} ${DNDS_TEST_TIMEOUT} PARENT_SCOPE)
     elseif(NP LESS_EQUAL 4)
-        set(${OUT_VAR} 180 PARENT_SCOPE)
+        math(EXPR _t "${DNDS_TEST_TIMEOUT} * 3 / 2")
+        set(${OUT_VAR} ${_t} PARENT_SCOPE)
     else()
-        set(${OUT_VAR} 240 PARENT_SCOPE)
+        math(EXPR _t "${DNDS_TEST_TIMEOUT} * 2")
+        set(${OUT_VAR} ${_t} PARENT_SCOPE)
     endif()
 endfunction()
 
@@ -89,8 +112,8 @@ function(dnds_add_unit_test TEST_NAME SRC_FILE LIBS)
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
     add_test(NAME dnds_${TEST_NAME} COMMAND ${TARGET_NAME})
+    _dnds_maybe_set_timeout(dnds_${TEST_NAME} ${DNDS_TEST_TIMEOUT})
     set_tests_properties(dnds_${TEST_NAME} PROPERTIES
-        TIMEOUT 120
         ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
 endfunction()
 
@@ -115,8 +138,8 @@ function(dnds_add_mpi_test TEST_NAME SRC_FILE LIBS)
         add_test(NAME dnds_${TEST_NAME}_np${NP}
             COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${NP}
                     ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
+        _dnds_maybe_set_timeout(dnds_${TEST_NAME}_np${NP} ${_TIMEOUT})
         set_tests_properties(dnds_${TEST_NAME}_np${NP} PROPERTIES
-            TIMEOUT ${_TIMEOUT}
             PROCESSORS ${NP}
             ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
     endforeach()
@@ -138,8 +161,8 @@ function(geom_add_unit_test TEST_NAME SRC_FILE LIBS)
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
     add_test(NAME geom_${TEST_NAME} COMMAND ${TARGET_NAME})
+    _dnds_maybe_set_timeout(geom_${TEST_NAME} ${DNDS_TEST_TIMEOUT})
     set_tests_properties(geom_${TEST_NAME} PROPERTIES
-        TIMEOUT 120
         ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
 endfunction()
 
@@ -164,8 +187,8 @@ function(geom_add_mpi_test TEST_NAME SRC_FILE LIBS)
         add_test(NAME geom_${TEST_NAME}_np${NP}
             COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${NP}
                     ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
+        _dnds_maybe_set_timeout(geom_${TEST_NAME}_np${NP} ${_TIMEOUT})
         set_tests_properties(geom_${TEST_NAME}_np${NP} PROPERTIES
-            TIMEOUT ${_TIMEOUT}
             PROCESSORS ${NP}
             ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
     endforeach()
@@ -254,8 +277,8 @@ function(cfv_add_unit_test TEST_NAME SRC_FILE LIBS)
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
     add_test(NAME cfv_${TEST_NAME} COMMAND ${TARGET_NAME})
+    _dnds_maybe_set_timeout(cfv_${TEST_NAME} ${DNDS_TEST_TIMEOUT})
     set_tests_properties(cfv_${TEST_NAME} PROPERTIES
-        TIMEOUT 120
         ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
 endfunction()
 
@@ -280,8 +303,8 @@ function(cfv_add_mpi_test TEST_NAME SRC_FILE LIBS)
         add_test(NAME cfv_${TEST_NAME}_np${NP}
             COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${NP}
                     ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
+        _dnds_maybe_set_timeout(cfv_${TEST_NAME}_np${NP} ${_TIMEOUT})
         set_tests_properties(cfv_${TEST_NAME}_np${NP} PROPERTIES
-            TIMEOUT ${_TIMEOUT}
             PROCESSORS ${NP}
             ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
     endforeach()
@@ -321,8 +344,8 @@ if(DNDS_USE_CUDA)
         add_test(NAME cfv_${TEST_NAME}_np1
             COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 1
                     ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
+        _dnds_maybe_set_timeout(cfv_${TEST_NAME}_np1 ${DNDS_TEST_TIMEOUT})
         set_tests_properties(cfv_${TEST_NAME}_np1 PROPERTIES
-            TIMEOUT 120
             PROCESSORS 1
             ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
     endfunction()
@@ -356,8 +379,8 @@ function(euler_add_unit_test TEST_NAME SRC_FILE LIBS)
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
     add_test(NAME euler_${TEST_NAME} COMMAND ${TARGET_NAME})
+    _dnds_maybe_set_timeout(euler_${TEST_NAME} ${DNDS_TEST_TIMEOUT})
     set_tests_properties(euler_${TEST_NAME} PROPERTIES
-        TIMEOUT 120
         ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS};DNDS_MECH_PATH=${DNDS_CANTERA_DATA_DIR};CANTERA_DATA=${DNDS_CANTERA_DATA_DIR}")
 endfunction()
 
@@ -382,8 +405,8 @@ function(euler_add_mpi_test TEST_NAME SRC_FILE LIBS)
         add_test(NAME euler_${TEST_NAME}_np${NP}
             COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${NP}
                     ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
+        _dnds_maybe_set_timeout(euler_${TEST_NAME}_np${NP} ${_TIMEOUT})
         set_tests_properties(euler_${TEST_NAME}_np${NP} PROPERTIES
-            TIMEOUT ${_TIMEOUT}
             PROCESSORS ${NP}
             ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS};DNDS_MECH_PATH=${DNDS_CANTERA_DATA_DIR};CANTERA_DATA=${DNDS_CANTERA_DATA_DIR}")
     endforeach()
@@ -406,7 +429,7 @@ euler_add_mpi_test(evaluator_pipeline "Euler/test_EulerEvaluator.cpp"
     "euler_library_NS;euler_library_fast_NS;euler_library_NS_SA;euler_library_fast_NS_SA;euler_library_NS_3D;euler_library_fast_NS_3D;cfv;geom;dnds")
 foreach(NP ${DNDS_TEST_NP_LIST})
     if(TEST euler_evaluator_pipeline_np${NP})
-        set_tests_properties(euler_evaluator_pipeline_np${NP} PROPERTIES TIMEOUT 600)
+        _dnds_maybe_set_timeout(euler_evaluator_pipeline_np${NP} ${DNDS_TEST_TIMEOUT_PIPELINE})
     endif()
 endforeach()
 
@@ -447,8 +470,8 @@ function(solver_add_unit_test TEST_NAME SRC_FILE LIBS)
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
     add_test(NAME solver_${TEST_NAME} COMMAND ${TARGET_NAME})
+    _dnds_maybe_set_timeout(solver_${TEST_NAME} ${DNDS_TEST_TIMEOUT_SOLVER})
     set_tests_properties(solver_${TEST_NAME} PROPERTIES
-        TIMEOUT 60
         ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
 endfunction()
 

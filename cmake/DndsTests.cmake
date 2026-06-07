@@ -15,15 +15,17 @@ add_subdirectory(${CMAKE_SOURCE_DIR}/test/cpp)
 get_filename_component(_DNDS_PYTHON_BIN_DIR "${Python_EXECUTABLE}" DIRECTORY)
 if(Python_EXECUTABLE)
     add_test(NAME pytest_DNDS
-        COMMAND ${Python_EXECUTABLE} -m pytest ${CMAKE_SOURCE_DIR}/test/DNDS/ -x --timeout=120
+        COMMAND ${Python_EXECUTABLE} -m pytest ${CMAKE_SOURCE_DIR}/test/DNDS/ -x --timeout=${DNDS_TEST_TIMEOUT}
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    _dnds_maybe_set_timeout(pytest_DNDS ${DNDS_TEST_TIMEOUT_PIPELINE})
     set_tests_properties(pytest_DNDS PROPERTIES
-        TIMEOUT 180 LABELS "python"
+        LABELS "python"
         ENVIRONMENT "PYTHONPATH=${CMAKE_SOURCE_DIR}/python;PATH=${_DNDS_PYTHON_BIN_DIR}:$ENV{PATH}")
     add_test(NAME pytest_CFV
-        COMMAND ${Python_EXECUTABLE} -m pytest ${CMAKE_SOURCE_DIR}/test/CFV/ -x --timeout=120
+        COMMAND ${Python_EXECUTABLE} -m pytest ${CMAKE_SOURCE_DIR}/test/CFV/ -x --timeout=${DNDS_TEST_TIMEOUT}
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    _dnds_maybe_set_timeout(pytest_CFV ${DNDS_TEST_TIMEOUT_PIPELINE})
     set_tests_properties(pytest_CFV PROPERTIES
-        TIMEOUT 180 LABELS "python"
+        LABELS "python"
         ENVIRONMENT "PYTHONPATH=${CMAKE_SOURCE_DIR}/python;PATH=${_DNDS_PYTHON_BIN_DIR}:$ENV{PATH}")
 endif()
