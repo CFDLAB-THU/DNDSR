@@ -30,7 +30,7 @@ Solver executables:
 
 ```bash
 # Debian/Ubuntu
-sudo apt install build-essential cmake ninja-build openmpi-bin libopenmpi-dev
+sudo apt install build-essential cmake ninja-build openmpi-bin libopenmpi-dev doxygen
 
 # RHEL/Fedora
 sudo dnf install gcc-c++ cmake ninja-build openmpi-devel
