@@ -6,6 +6,20 @@ if(NOT DNDS_BUILD_TESTS)
 endif()
 
 enable_testing()
+
+# --- Read test timeout from env, default to 120 ---
+if(DEFINED ENV{DNDS_TEST_TIMEOUT})
+    set(DNDS_TEST_TIMEOUT "$ENV{DNDS_TEST_TIMEOUT}")
+    set(DNDS_TEST_SET_TIMEOUT ON)
+else()
+    set(DNDS_TEST_TIMEOUT "120")
+    set(DNDS_TEST_SET_TIMEOUT OFF)
+endif()
+message(STATUS "DNDS_TEST_TIMEOUT: ${DNDS_TEST_TIMEOUT} (set-timeout: ${DNDS_TEST_SET_TIMEOUT})")
+
+math(EXPR DNDS_TEST_TIMEOUT_SOLVER "${DNDS_TEST_TIMEOUT} / 2")
+math(EXPR DNDS_TEST_TIMEOUT_PIPELINE "${DNDS_TEST_TIMEOUT} * 5")
+
 add_subdirectory(${CMAKE_SOURCE_DIR}/test/cpp)
 
 # Register pytest suites in CTest (serial only; use mpirun manually for MPI tests).
