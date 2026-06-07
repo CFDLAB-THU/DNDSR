@@ -145,8 +145,8 @@ gamma (prim → cons) are marked *for I/O only, not tight loops*.
 
 | Method | Description |
 |--------|-------------|
-| `consSensibleToTotal(sens, total)` | Add formation to `U[I4]` |
-| `consTotalToSensible(total, sens)` | Subtract formation from `U[I4]` |
+| `consSensibleToTotal(sens, total)` | Add base internal energy to `U[I4]` |
+| `consTotalToSensible(total, sens)` | Subtract base internal energy from `U[I4]` |
 
 ### Primitive ↔ Conservative
 
@@ -167,9 +167,12 @@ gamma (prim → cons) are marked *for I/O only, not tight loops*.
 | `consPhysToCode<dim>(phys, code)` | Conservative physical → code |
 | `primCodeToPhys<dim>(code, phys)` | Primitive code → physical |
 | `primPhysToCode<dim>(phys, code)` | Primitive physical → code |
-| `primRhoTCodeToPhys<dim>(code, phys)` | prim-rhoT code → physical |
-| `primRhoTPhysToCode<dim>(phys, code)` | prim-rhoT physical → code |
-| `primTPCodeToPhys<dim>(code, phys)` | prim-TP code → physical |
+| `conservativeThermalReturn` | Return struct `{T, p, asqr, H, gammaEq, gamma}` from a conservative state via `conservativeThermal(U, TGuess, uvTolerance)` |
+| `primCodeToPhys(code, phys)` | prim code → physical (templated on dim, TVal) |
+| `primPhysToCode(phys, code)` | prim physical → code |
+| `primRhoTCodeToPhys(code, phys)` | prim-rhoT code → physical |
+| `primRhoTPhysToCode(phys, code)` | prim-rhoT physical → code |
+| `primTPCodeToPhys(code, phys)` | prim-TP code → physical |
 | `primTPPhysToCode(phys, code)` | prim-TP physical → code |
 
 ### Ideal-gas guard

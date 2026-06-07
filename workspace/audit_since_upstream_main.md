@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-01
 **Branch:** upstream/main..HEAD (~90 commits, ~170 files, +26k/-4.7k lines)
-**Passes:** 7 — full audit (5 passes) + pass 6 LOW cleanup + pass 7 final resolution.
+**Passes:** 8 — full audit (5 passes) + pass 6 LOW cleanup + pass 7 final resolution + pass 8 deep physics.
 
 **Unresolved: 0 CRITICAL, 0 HIGH, 0 MEDIUM, 0 LOW**
 
@@ -643,4 +643,36 @@ Calls `speciesDiffusivityK(k)` per transported species — each call allocates h
    - F71: Comment: species mass fractions dimensionless in prim helpers
    - conservativeThermalReturn: `gammma`→`gamma` typo fix, docstring + params fix
    - conservativeToPrimTP: diagnostic message corrected
-   - EnvReader.hpp: removed unnecessary `<cctype>` include from header
+    - EnvReader.hpp: removed unnecessary `<cctype>` include from header
+
+9. **Pass 8 — Deep physics audit (flux correctness, positivity, BC constraints):**
+   Verified by focused subagent reviews:
+
+   **Flux correctness (all correct):**
+   - Roe average: √ρ-weighted, split-gamma self-consistent, multi-species handled
+   - HLLC wave-speed: uses mean-state gamma (documented limitation, not a bug)
+   - Viscous stress tensor: Stokes hypothesis τ=μ(∇u+∇uᵀ)−⅔μ(∇·u)I correct
+   - Heat flux: adiabatic wall ∂T/∂n=0 correct; impermeable wall ∇Y·n=0 correct (F22)
+   - Species diffusion flux: mixture-averaged Fickian diffusion, correction-velocity formulation
+   - Flux assembly: rotating frames, symmetry, wall BCs all correct
+
+   **Positivity guards (1 fix, rest by design):**
+   - Density: CompressInc clamps to rhoEps (~1e-12·refρ), GMRES path has assertion
+   - Pressure/energy: non-reactive temperature() added guard against uInternal≤0
+   - Species: AddFixedIncrement clips Y_k≥1e-30, enforces ΣY_k<1, dependent species repaired
+   - RANS: k, ω via SPD-limit; SA nuTilde via positivity limiter
+   - Startup I/O: gammaEq assertion on sentinel ρE=0 documented (F36)
+
+   **Boundary conditions & scaling (all correct):**
+   - Farfield: characteristic-based, species handled per regime, values in code units
+   - Wall: no-slip mirroring, adiabatic ∇T·n=0, isothermal T→physical→code conversion (F9)
+   - Isothermal pressure: uses iterative EOS solve for correct density at T_wall
+   - Symmetry: fluxes zeroed, gradients mirrored
+   - All Cantera I/O in physical units, all code→phys conversions consistent
+
+   **Known limitations (not bugs):**
+   - HLLC wave-speed estimate uses mean-state gamma (accuracy issue, documented)
+   - GMRES may produce negative density before CompressInc → asserts
+   - CompressInc stale exponential-decay line (harmless, optimized out)
+   - Pr_t=0.9 hardcoded for turbulent heat conductivity (F94 deferred)
+

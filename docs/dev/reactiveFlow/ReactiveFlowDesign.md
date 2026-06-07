@@ -30,6 +30,7 @@ with coupled fully-implicit time integration using full chemical Jacobian blocks
 | 4c | k2p6 reactive-flow audit (18 SEVERE / 24 MEDIUM / 14 LOW): Roe asqrRoe, temperature offset, dead code, ideal-gas guards, two-state base-energy PP contract, linear-concave PP, invR0→R0, if constexpr fixes, doc updates | Done |
 | 4d | Split `gammaEq` pressure closure from `cp/cv` acoustic speed; update Roe averages/eigen decomposition, CFL, BC wave decisions, Mach output, and total-condition helpers | Done |
 | 4e | Replace formation-enthalpy/298 K bridge with `e_base(TBase)` bookkeeping; keep total `rhoE` Cantera-compatible; move mixture-averaged diffusion flux into `PhysicsProperties`; remove hidden `ChemicalSource` scratch buffers | Done |
+| 4f | 8-pass audit sweep (117 findings, 0 CRIT/0 HIGH/0 MED unresolved): RANS prim-helper scaling, muEff→mixtureViscosity, impermeable-wall ∇Y·n=0, muModel assertion, destructor timeout, min/max labels, prim-helper templatization, conservativeThermalReturn cleanup, non-reactive temperature() guard, StateValue JSON round-trip, edge-Python bindings | Done |
 | 5 | block_scalar Jacobian mode, point-implicit chemistry, GPU kinetics | Future |
 
 ### New files created
@@ -124,6 +125,23 @@ The Roe approximation remains a frozen-composition ideal-gas approximation, but 
 - `toPhysT(TCode)` = `TCode · T0`; `toCodeT(TPhys)` = `TPhys / T0`
 - `IdealGasProperty::Rgas` default changed from 1 (code) to 287 (physical J/(kg·K)),
   consumed via `toCode()`; reactive path uses Cantera's `mixtureR()` instead
+
+#### Audit fixes (Phase 4f)
+
+Key patches applied across the solver and physics modules:
+
+| Fix | Detail |
+|-----|--------|
+| Prim-helper RANS scaling | All 6 `prim{Code,Phys}To*` helpers call `scaleRansPrim*`; `resolveStateValue` lambdas delegate to public helpers |
+| `muEff` → `mixtureViscosity` | Eliminated duplicate Sutherland with missing `toCodeT` on TRef/CSutherland |
+| Impermeable walls | Species diffusion flux zeroed at `BCWall`/`BCWallIsothermal`/`BCWallInvis`/`BCSym`; `finc` mass rows also zeroed |
+| `speciesEnthalpies` guard | `DNDS_assert(hasChemicalSource())` at entry |
+| `mixtureViscosity` default assert | Unrecognized `muModel` now asserts instead of silently returning `muGas` |
+| Destructor timeout | Max 10s wait on async I/O futures instead of infinite loop |
+| Non-reactive `temperature()` guard | `DNDS_assert_info(uInternal > 0)` prevents negative-T propagation |
+| `conservativeThermalReturn` | Fixed `gammma`→`gamma` typo; forwards `TGuess`/`uvTolerance` to `temperature()` |
+| StateValue JSON | `from_json` accepts `"none"`/`"invalid"`; schema updated; all 10 origins round-trip tested |
+| Edge bindings | `cell2edge`, `edge2cell`, `edge2node`, `edgeElemInfo`, `cell2edgePbi`, `edge2nodePbi`, `PrintMeshCGNS` exposed to Python |
 
 #### State-conversion CLI: `eulerState`
 
@@ -275,7 +293,7 @@ for multi-species and other advected scalars.
 | Chemistry source | None | Arrhenius kinetics, reduced mechanisms |
 | Source Jacobian | Diagonal only | Full block (∂ω/∂U) with off-diagonal coupling |
 | Implicit coupling | Block-diagonal, SGS | Full Jacobian blocks, SGS + FGMRES |
-| BCs | Single-species farfield/wall/inflow | Multi-species with mass fractions |
+| BCs | Single-species farfield/wall/inflow | Multi-species with mass fractions; impermeable walls enforce ∇Y_k·n=0 |
 
 ---
 
