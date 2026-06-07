@@ -26,24 +26,46 @@ Solver executables:
 
 ## Quick Start
 
-### 1. Clone and fetch dependencies
+### 1. System dependencies
+
+```bash
+# Debian/Ubuntu
+sudo apt install build-essential cmake ninja-build openmpi-bin libopenmpi-dev
+
+# RHEL/Fedora
+sudo dnf install gcc-c++ cmake ninja-build openmpi-devel
+```
+
+### 2. Python virtual environment
+
+```bash
+python3.12 -m venv venv
+source venv/bin/activate
+bash scripts/install_python_deps.sh
+```
+
+> **Why system Python?** Conda Python embeds an RPATH to conda's bundled
+> libstdc++, which may be too old for the compiler used to build DNDSR.
+> System Python uses the system libstdc++ and avoids this conflict.
+
+### 3. Clone and fetch dependencies
 
 ```bash
 git clone --recursive https://github.com/CFDLAB-THU/DNDSR.git
 cd DNDSR
 
-# Build binary external libraries (HDF5, CGNS, Metis, ParMetis, ...)
-cd external/cfd_externals
-CC=mpicc CXX=mpicxx python cfd_externals_build.py
-cd ../..
-
 # Download and extract header-only libraries (Eigen, Boost, CGAL, fmt, pybind11, ...)
 curl -L -o external/external_headeronlys.tar.gz \
   https://github.com/harryzhou2000/cfd_externals_headeronlys/releases/latest/download/external_headeronlys.tar.gz
 cd external && tar -xzf external_headeronlys.tar.gz && cd ..
+
+# Build binary external libraries (HDF5, CGNS, Metis, ParMetis, ...)
+cd external/cfd_externals
+CC=mpicc CXX=mpicxx python cfd_externals_build.py
+cd ../..
 ```
 
-### 2. Build C++ solvers
+### 4. Build C++ solvers
 
 ```bash
 # Using CMake presets (recommended)
@@ -56,7 +78,7 @@ CC=mpicc CXX=mpicxx cmake .. -DDNDS_BUILD_TESTS=ON
 cmake --build . -t euler -j32
 ```
 
-### 3. Run a solver
+### 5. Run a solver
 
 ```bash
 # Serial
@@ -70,23 +92,11 @@ Input parameters are defined in JSONC config files.
 See [cases/euler_default_config_commented.json](cases/euler_default_config_commented.json)
 for documentation of all options.
 
-### 4. Install the Python package
-
-Use the system Python (not conda) to avoid libstdc++ version conflicts:
+### 6. Install the Python package
 
 ```bash
-python3.12 -m venv venv
-source venv/bin/activate
-pip install numpy scipy pytest pytest-mpi pytest-timeout mpi4py \
-            pybind11 pybind11-stubgen scikit-build-core ninja
-
-CC=mpicc CXX=mpicxx CMAKE_BUILD_PARALLEL_LEVEL=32 \
-    pip install -e .
+CC=mpicc CXX=mpicxx CMAKE_BUILD_PARALLEL_LEVEL=32 pip install -e .
 ```
-
-> **Why system Python?** Conda/Anaconda Python embeds an RPATH to conda's
-> bundled libstdc++, which may be older than what the MPI compiler produces.
-> System Python uses the system libstdc++ and avoids this conflict.
 
 After the initial install, rebuild only the C++ bindings without re-running pip:
 
@@ -96,7 +106,7 @@ cmake --build build_py \
 cmake --install build_py --component py
 ```
 
-### 5. Run tests
+### 7. Run tests
 
 ```bash
 # C++ unit tests (doctest, via CTest)
@@ -107,7 +117,7 @@ ctest --test-dir build -R dnds_ --output-on-failure
 pytest test/DNDS/test_basic.py -v
 ```
 
-### 6. Build and serve documentation locally
+### 8. Build and serve documentation locally
 
 ```bash
 pip install -r docs/sphinx/requirements.txt

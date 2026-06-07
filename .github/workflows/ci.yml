@@ -172,6 +172,31 @@ jobs:
           python-version: "3.12"
 
       # ------------------------------------------------------------------
+      # 4. Python venv
+      # ------------------------------------------------------------------
+      - name: Restore Python venv cache
+        id: cache-venv
+        uses: actions/cache/restore@v4
+        with:
+          path: venv
+          key: venv-ci-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}-${{ hashFiles('requirements.txt', 'scripts/install_python_deps.sh') }}
+
+      - name: Install Python dependencies
+        if: steps.cache-venv.outputs.cache-hit != 'true'
+        run: |
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
+          PIP=$PWD/venv/bin/pip ./scripts/install_python_deps.sh
+
+      - name: Save Python venv cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: venv
+          key: venv-ci-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}-${{ hashFiles('requirements.txt', 'scripts/install_python_deps.sh') }}
+
+      # ------------------------------------------------------------------
       # Clean cached directories so actions/cache is the sole source of
       # truth (matters on self-hosted runners with persistent filesystems)
       # ------------------------------------------------------------------
@@ -183,10 +208,9 @@ jobs:
                  external/nanoflann external/nlohmann external/pybind11 \
                  external/pybind11_json
           rm -rf external/cfd_externals/install
-          rm -rf venv
 
       # ------------------------------------------------------------------
-      # 4. Header-only externals (Eigen, Boost, CGAL, fmt, pybind11, ...)
+      # 5. Header-only externals (Eigen, Boost, CGAL, fmt, pybind11, ...)
       # ------------------------------------------------------------------
       - name: Restore header-only externals cache
         id: cache-headeronlys
@@ -235,7 +259,7 @@ jobs:
           key: headeronlys-v1
 
       # ------------------------------------------------------------------
-      # 5. cfd_externals (zlib, hdf5, cgns, parmetis)
+      # 6. cfd_externals (zlib, hdf5, cgns, parmetis)
       # ------------------------------------------------------------------
       - name: Restore cfd_externals cache
         id: cache-cfd-ext
@@ -263,31 +287,6 @@ jobs:
         with:
           path: external/cfd_externals/install
           key: cfd-ext-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}
-
-      # ------------------------------------------------------------------
-      # 6. Python venv
-      # ------------------------------------------------------------------
-      - name: Restore Python venv cache
-        id: cache-venv
-        uses: actions/cache/restore@v4
-        with:
-          path: venv
-          key: venv-ci-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}-${{ hashFiles('requirements.txt', 'scripts/install_python_deps.sh') }}
-
-      - name: Install Python dependencies
-        if: steps.cache-venv.outputs.cache-hit != 'true'
-        run: |
-          python3 -m venv venv
-          source venv/bin/activate
-          pip install --upgrade pip
-          PIP=$PWD/venv/bin/pip ./scripts/install_python_deps.sh
-
-      - name: Save Python venv cache
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: venv
-          key: venv-ci-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}-${{ hashFiles('requirements.txt', 'scripts/install_python_deps.sh') }}
 
       # ------------------------------------------------------------------
       # 7. ccache
