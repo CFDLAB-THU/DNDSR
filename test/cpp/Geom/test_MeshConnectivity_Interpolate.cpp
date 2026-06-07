@@ -43,12 +43,13 @@ TEST_CASE("Interpolate: 4-quad faces (2D)")
     // Quad4 face table: {0,1}, {1,2}, {2,3}, {3,0}
 
     auto m = makeHandCraftedMesh(g_mpi,
-        {
-            {Elem::Quad4, {0, 1, 4, 3}},
-            {Elem::Quad4, {1, 2, 5, 4}},
-            {Elem::Quad4, {3, 4, 7, 6}},
-            {Elem::Quad4, {4, 5, 8, 7}},
-        }, 9);
+                                 {
+                                     {Elem::Quad4, {0, 1, 4, 3}},
+                                     {Elem::Quad4, {1, 2, 5, 4}},
+                                     {Elem::Quad4, {3, 4, 7, 6}},
+                                     {Elem::Quad4, {4, 5, 8, 7}},
+                                 },
+                                 9);
 
     auto query = makeFaceQuery(m.cellElemInfo);
     auto res = MeshConnectivity::Interpolate(m.cell2node, query, 4, 9, g_mpi);
@@ -137,10 +138,11 @@ TEST_CASE("Interpolate: 2-tri faces (2D)")
     // Total unique: 3 + 3 - 1 = 5
 
     auto m = makeHandCraftedMesh(g_mpi,
-        {
-            {Elem::Tri3, {0, 1, 2}},
-            {Elem::Tri3, {1, 3, 2}},
-        }, 4);
+                                 {
+                                     {Elem::Tri3, {0, 1, 2}},
+                                     {Elem::Tri3, {1, 3, 2}},
+                                 },
+                                 4);
 
     auto query = makeFaceQuery(m.cellElemInfo);
     auto res = MeshConnectivity::Interpolate(m.cell2node, query, 2, 4, g_mpi);
@@ -177,9 +179,10 @@ TEST_CASE("Interpolate: single tet faces (3D)")
     // Tet4: nodes {0,1,2,3}, 4 Tri3 faces
     // face 0: {0,2,1}, face 1: {0,1,3}, face 2: {1,2,3}, face 3: {2,0,3}
     auto m = makeHandCraftedMesh(g_mpi,
-        {
-            {Elem::Tet4, {0, 1, 2, 3}},
-        }, 4);
+                                 {
+                                     {Elem::Tet4, {0, 1, 2, 3}},
+                                 },
+                                 4);
 
     auto query = makeFaceQuery(m.cellElemInfo);
     auto res = MeshConnectivity::Interpolate(m.cell2node, query, 1, 4, g_mpi);
@@ -219,10 +222,11 @@ TEST_CASE("Interpolate: two tets sharing a face (3D)")
     // Shared face: vertices {1,2,3}
     // Total unique faces: 4 + 4 - 1 = 7
     auto m = makeHandCraftedMesh(g_mpi,
-        {
-            {Elem::Tet4, {0, 1, 2, 3}},
-            {Elem::Tet4, {1, 2, 3, 4}},
-        }, 5);
+                                 {
+                                     {Elem::Tet4, {0, 1, 2, 3}},
+                                     {Elem::Tet4, {1, 2, 3, 4}},
+                                 },
+                                 5);
 
     auto query = makeFaceQuery(m.cellElemInfo);
     auto res = MeshConnectivity::Interpolate(m.cell2node, query, 2, 5, g_mpi);
@@ -257,9 +261,10 @@ TEST_CASE("Interpolate: single hex faces (3D)")
 
     // Hex8: 6 Quad4 faces
     auto m = makeHandCraftedMesh(g_mpi,
-        {
-            {Elem::Hex8, {0, 1, 2, 3, 4, 5, 6, 7}},
-        }, 8);
+                                 {
+                                     {Elem::Hex8, {0, 1, 2, 3, 4, 5, 6, 7}},
+                                 },
+                                 8);
 
     auto query = makeFaceQuery(m.cellElemInfo);
     auto res = MeshConnectivity::Interpolate(m.cell2node, query, 1, 8, g_mpi);
@@ -275,8 +280,7 @@ TEST_CASE("Interpolate: single hex faces (3D)")
 
     // Verify face vertex sets
     std::set<std::set<DNDS::index>> expectedFaces = {
-        {0, 1, 2, 3}, {0, 1, 4, 5}, {1, 2, 5, 6},
-        {2, 3, 6, 7}, {0, 3, 4, 7}, {4, 5, 6, 7}};
+        {0, 1, 2, 3}, {0, 1, 4, 5}, {1, 2, 5, 6}, {2, 3, 6, 7}, {0, 3, 4, 7}, {4, 5, 6, 7}};
     std::set<std::set<DNDS::index>> actualFaces;
     for (DNDS::index i = 0; i < 6; i++)
         actualFaces.insert(getEntityVertexSet(res.entity2node, res.entityElemInfo, i));
@@ -294,9 +298,10 @@ TEST_CASE("Interpolate: single tet edges (3D)")
 
     // Tet4: 6 Line2 edges
     auto m = makeHandCraftedMesh(g_mpi,
-        {
-            {Elem::Tet4, {0, 1, 2, 3}},
-        }, 4);
+                                 {
+                                     {Elem::Tet4, {0, 1, 2, 3}},
+                                 },
+                                 4);
 
     auto query = makeEdgeQuery(m.cellElemInfo);
     auto res = MeshConnectivity::Interpolate(m.cell2node, query, 1, 4, g_mpi);
@@ -338,10 +343,11 @@ TEST_CASE("Interpolate: two-tet shared edges (3D)")
     // Shared: {1,2},{1,3},{2,3} -> 3 shared
     // Unique: 6 + 6 - 3 = 9
     auto m = makeHandCraftedMesh(g_mpi,
-        {
-            {Elem::Tet4, {0, 1, 2, 3}},
-            {Elem::Tet4, {1, 2, 3, 4}},
-        }, 5);
+                                 {
+                                     {Elem::Tet4, {0, 1, 2, 3}},
+                                     {Elem::Tet4, {1, 2, 3, 4}},
+                                 },
+                                 5);
 
     auto query = makeEdgeQuery(m.cellElemInfo);
     auto res = MeshConnectivity::Interpolate(m.cell2node, query, 2, 5, g_mpi);
@@ -396,11 +402,12 @@ TEST_CASE("Interpolate: mixed tri+quad faces (2D)")
     // Total: 3 + 3 + 4 - 2 = 8
 
     auto m = makeHandCraftedMesh(g_mpi,
-        {
-            {Elem::Tri3, {0, 1, 3}},
-            {Elem::Tri3, {1, 4, 3}},
-            {Elem::Quad4, {1, 2, 5, 4}},
-        }, 6);
+                                 {
+                                     {Elem::Tri3, {0, 1, 3}},
+                                     {Elem::Tri3, {1, 4, 3}},
+                                     {Elem::Quad4, {1, 2, 5, 4}},
+                                 },
+                                 6);
 
     auto query = makeFaceQuery(m.cellElemInfo);
     auto res = MeshConnectivity::Interpolate(m.cell2node, query, 3, 6, g_mpi);
@@ -618,7 +625,9 @@ TEST_CASE("Interpolate: 2x2 periodic quad mesh — collaborating check required"
         for (DNDS::rowsize j = 0; j < resPbi.parent2entity.father->RowSize(iCell); j++)
         {
             DNDS::index iEnt = resPbi.parent2entity.father->operator()(iCell, j);
-            CAPTURE(iCell); CAPTURE(j); CAPTURE(iEnt);
+            CAPTURE(iCell);
+            CAPTURE(j);
+            CAPTURE(iEnt);
             bool found = false;
             for (DNDS::rowsize p = 0; p < resPbi.entity2parent.father->RowSize(iEnt); p++)
                 if (resPbi.entity2parent.father->operator()(iEnt, p) == iCell)
@@ -1274,7 +1283,12 @@ TEST_CASE("InterpolateGlobal: 4x4x4 distributed hex faces (triply-periodic)")
     DNDS::MPI_int leftRank = (g_mpi.rank - 1 + g_mpi.size) % g_mpi.size;
     DNDS::MPI_int rightRank = (g_mpi.rank + 1) % g_mpi.size;
 
-    struct GhostCell { DNDS::index global; std::array<DNDS::index, 8> nodes; std::array<NodePeriodicBits, 8> pbi; };
+    struct GhostCell
+    {
+        DNDS::index global;
+        std::array<DNDS::index, 8> nodes;
+        std::array<NodePeriodicBits, 8> pbi;
+    };
     std::vector<GhostCell> ghostCells;
 
     auto addGhostLayer = [&](DNDS::MPI_int srcRank, DNDS::index srcIx, DNDS::index physX)
@@ -1297,7 +1311,8 @@ TEST_CASE("InterpolateGlobal: 4x4x4 distributed hex faces (triply-periodic)")
 
     // Sort ghost cells by global index.
     std::sort(ghostCells.begin(), ghostCells.end(),
-              [](const GhostCell &a, const GhostCell &b) { return a.global < b.global; });
+              [](const GhostCell &a, const GhostCell &b)
+              { return a.global < b.global; });
 
     // Collect all node globals.
     std::set<DNDS::index> allNodeGlobals;
@@ -1312,7 +1327,8 @@ TEST_CASE("InterpolateGlobal: 4x4x4 distributed hex faces (triply-periodic)")
     std::vector<DNDS::index> ghostNodeGlobals;
     for (auto ng : allNodeGlobals)
     {
-        DNDS::MPI_int r; DNDS::index v;
+        DNDS::MPI_int r;
+        DNDS::index v;
         if (nodeGM->search(ng, r, v) && r != g_mpi.rank)
             ghostNodeGlobals.push_back(ng);
     }
@@ -1394,7 +1410,11 @@ TEST_CASE("InterpolateGlobal: 4x4x4 distributed hex faces (triply-periodic)")
         auto cmp = [](const P &l, const P &r)
         { return l.first == r.first ? l.second < r.second : l.first < r.first; };
         std::vector<P> pa(nFN), pb(nFN);
-        for (int i = 0; i < nFN; i++) { pa[i] = {nodesA[i], uint8_t(pbiA[i])}; pb[i] = {nodesB[i], uint8_t(pbiB[i])}; }
+        for (int i = 0; i < nFN; i++)
+        {
+            pa[i] = {nodesA[i], uint8_t(pbiA[i])};
+            pb[i] = {nodesB[i], uint8_t(pbiB[i])};
+        }
         std::sort(pa.begin(), pa.end(), cmp);
         std::sort(pb.begin(), pb.end(), cmp);
         uint8_t v0 = pa[0].second ^ pb[0].second;
@@ -1404,16 +1424,18 @@ TEST_CASE("InterpolateGlobal: 4x4x4 distributed hex faces (triply-periodic)")
         return true;
     };
     faceQuery.extractPbi = [&](DNDS::index iP, int iSub,
-                                const std::function<NodePeriodicBits(int)> &pPbi,
-                                NodePeriodicBits *out)
+                               const std::function<NodePeriodicBits(int)> &pPbi,
+                               NodePeriodicBits *out)
     {
         auto e = Elem::Element{cellElemInfo[iP]->getElemType()};
         auto f = e.ObtainFace(iSub);
         std::vector<NodePeriodicBits> pp(e.GetNumNodes());
-        for (int i = 0; i < e.GetNumNodes(); i++) pp[i] = pPbi(i);
+        for (int i = 0; i < e.GetNumNodes(); i++)
+            pp[i] = pPbi(i);
         std::vector<NodePeriodicBits> fp(f.GetNumNodes());
         e.ExtractFaceNodes(iSub, pp, fp);
-        for (int i = 0; i < f.GetNumNodes(); i++) out[i] = fp[i];
+        for (int i = 0; i < f.GetNumNodes(); i++)
+            out[i] = fp[i];
     };
 
     OwnershipResolverMulti resolver =
@@ -1424,9 +1446,12 @@ TEST_CASE("InterpolateGlobal: 4x4x4 distributed hex faces (triply-periodic)")
         DNDS::MPI_int minRank = *std::min_element(parentRanks.begin(), parentRanks.end());
         bool anyLocal = false;
         for (auto p : parents)
-            if (p < nLocal) anyLocal = true;
-        if (!anyLocal) return {false, {}};
-        if (minRank != g_mpi.rank) return {false, {}};
+            if (p < nLocal)
+                anyLocal = true;
+        if (!anyLocal)
+            return {false, {}};
+        if (minRank != g_mpi.rank)
+            return {false, {}};
         std::vector<DNDS::MPI_int> peers;
         for (size_t i = 0; i < parents.size(); i++)
             if (parents[i] >= nLocal && parentRanks[i] != g_mpi.rank)
@@ -1636,7 +1661,11 @@ TEST_CASE("InterpolateGlobal: 4x4x4 distributed hex faces (triply-periodic)")
         auto cmp = [](const P &l, const P &r)
         { return l.first == r.first ? l.second < r.second : l.first < r.first; };
         std::vector<P> pa(nEN), pb(nEN);
-        for (int i = 0; i < nEN; i++) { pa[i] = {nodesA[i], uint8_t(pbiA[i])}; pb[i] = {nodesB[i], uint8_t(pbiB[i])}; }
+        for (int i = 0; i < nEN; i++)
+        {
+            pa[i] = {nodesA[i], uint8_t(pbiA[i])};
+            pb[i] = {nodesB[i], uint8_t(pbiB[i])};
+        }
         std::sort(pa.begin(), pa.end(), cmp);
         std::sort(pb.begin(), pb.end(), cmp);
         uint8_t v0 = pa[0].second ^ pb[0].second;
@@ -1646,16 +1675,18 @@ TEST_CASE("InterpolateGlobal: 4x4x4 distributed hex faces (triply-periodic)")
         return true;
     };
     edgeQuery.extractPbi = [&](DNDS::index iP, int iSub,
-                                const std::function<NodePeriodicBits(int)> &pPbi,
-                                NodePeriodicBits *out)
+                               const std::function<NodePeriodicBits(int)> &pPbi,
+                               NodePeriodicBits *out)
     {
         auto e = Elem::Element{cellElemInfo[iP]->getElemType()};
         auto ed = e.ObtainEdge(iSub);
         std::vector<NodePeriodicBits> pp(e.GetNumNodes());
-        for (int i = 0; i < e.GetNumNodes(); i++) pp[i] = pPbi(i);
+        for (int i = 0; i < e.GetNumNodes(); i++)
+            pp[i] = pPbi(i);
         std::vector<NodePeriodicBits> ep(ed.GetNumNodes());
         e.ExtractEdgeNodes(iSub, pp, ep);
-        for (int i = 0; i < ed.GetNumNodes(); i++) out[i] = ep[i];
+        for (int i = 0; i < ed.GetNumNodes(); i++)
+            out[i] = ep[i];
     };
 
     auto edgeResult = MeshConnectivity::InterpolateGlobal(
@@ -1772,8 +1803,8 @@ TEST_CASE("InterpolateGlobal: 4x4x4 distributed hex faces (triply-periodic)")
     auto makeCoord = [&](DNDS::index nodeGlobalIdx) -> tPoint
     {
         // Find owning rank and local index
-        DNDS::MPI_int r; DNDS::index v;
-        nodeGM->search(nodeGlobalIdx, r, v);
+        auto [search_success, r, v] = nodeGM->search(nodeGlobalIdx);
+        DNDS_assert(search_success);
         DNDS::index localIdx = nodeGlobalIdx - (*nodeGM)(r, 0);
         DNDS::index ix = localIdx / (N * N);
         DNDS::index iy = (localIdx / N) % N;
@@ -1783,9 +1814,12 @@ TEST_CASE("InterpolateGlobal: 4x4x4 distributed hex faces (triply-periodic)")
     auto applyPbi = [&](const tPoint &c, NodePeriodicBits pbi) -> tPoint
     {
         tPoint ret = c;
-        if (pbi.getP1()) ret(0) += double(np * N);
-        if (pbi.getP2()) ret(1) += double(N);
-        if (pbi.getP3()) ret(2) += double(N);
+        if (pbi.getP1())
+            ret(0) += double(np * N);
+        if (pbi.getP2())
+            ret(1) += double(N);
+        if (pbi.getP3())
+            ret(2) += double(N);
         return ret;
     };
 
@@ -1798,11 +1832,13 @@ TEST_CASE("InterpolateGlobal: 4x4x4 distributed hex faces (triply-periodic)")
             for (rowsize j = 0; j < result.parent2entity.father->RowSize(iCell); j++)
             {
                 DNDS::index gFace = result.parent2entity.father->operator()(iCell, j);
-                if (gFace == UnInitIndex) continue;
+                if (gFace == UnInitIndex)
+                    continue;
                 auto faceFatherGM = result.entity2node.trans.pLGlobalMapping;
                 DNDS::index myFaceStart = (*faceFatherGM)(g_mpi.rank, 0);
                 DNDS::index myFaceEnd = myFaceStart + result.nOwnedEntities;
-                if (gFace < myFaceStart || gFace >= myFaceEnd) continue;
+                if (gFace < myFaceStart || gFace >= myFaceEnd)
+                    continue;
                 DNDS::index iFaceLocal = gFace - myFaceStart;
 
                 NodePeriodicBits relPbi = result.parent2entityPbi.father->operator()(iCell, j);
@@ -1861,11 +1897,13 @@ TEST_CASE("InterpolateGlobal: 4x4x4 distributed hex faces (triply-periodic)")
             for (rowsize j = 0; j < edgeResult.parent2entity.father->RowSize(iCell); j++)
             {
                 DNDS::index gEdge = edgeResult.parent2entity.father->operator()(iCell, j);
-                if (gEdge == UnInitIndex) continue;
+                if (gEdge == UnInitIndex)
+                    continue;
                 auto edgeFatherGM = edgeResult.entity2node.trans.pLGlobalMapping;
                 DNDS::index myEdgeStart = (*edgeFatherGM)(g_mpi.rank, 0);
                 DNDS::index myEdgeEnd = myEdgeStart + edgeResult.nOwnedEntities;
-                if (gEdge < myEdgeStart || gEdge >= myEdgeEnd) continue;
+                if (gEdge < myEdgeStart || gEdge >= myEdgeEnd)
+                    continue;
                 DNDS::index iEdgeLocal = gEdge - myEdgeStart;
 
                 NodePeriodicBits relPbi = edgeResult.parent2entityPbi.father->operator()(iCell, j);
@@ -1914,7 +1952,6 @@ TEST_CASE("InterpolateGlobal: 4x4x4 distributed hex faces (triply-periodic)")
         CHECK(globalNFail == 0);
     }
 }
-
 
 // ---------------------------------------------------------------------------
 int main(int argc, char **argv)
