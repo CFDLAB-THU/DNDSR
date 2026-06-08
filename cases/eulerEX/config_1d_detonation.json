@@ -112,7 +112,7 @@
         "uniqueStamps": false,
         "meshScale": 0.05,
         "meshFile": "../data/mesh/Uniform_01_5000.cgns",
-        "outPltName": "../data/out/react_1d_detonation_h2o2_coupled_dt4em6_t5em3_np16/react_",
+        "outPltName": "../data/out/react_1d_detonation_h2o2_coupled_dt4em6_t5em3_np16--perf/react_",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": false,

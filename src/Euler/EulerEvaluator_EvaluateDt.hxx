@@ -876,8 +876,9 @@ namespace DNDS::Euler
             uGradBufNoLim.trans.startPersistentPull();
             uGradBufNoLim.trans.waitPersistentPull();
         }
+        TDiffU GradULxy, GradURxy;
 #if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime) private(GradULxy, GradURxy)
 #endif
         for (index iFace = 0; iFace < mesh->NumFaceProc(); iFace++)
         {
@@ -900,7 +901,6 @@ namespace DNDS::Euler
                 vR = UR(Seq123) / UR(0);
                 thermalR = phys_.conservativeThermal(UR);
             }
-            TDiffU GradULxy, GradURxy;
             GradULxy.resize(Eigen::NoChange, nVars);
             GradURxy.resize(Eigen::NoChange, nVars);
             GradULxy.setZero(), GradURxy.setZero();

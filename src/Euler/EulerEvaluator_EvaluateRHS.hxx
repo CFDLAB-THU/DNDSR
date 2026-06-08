@@ -167,18 +167,28 @@ namespace DNDS::Euler
 
         double t0 = MPI_Wtime();
 
+        TU_Batch fincC;
+        TReal_Batch lam0V, lam123V, lam4V;
+        TU_Batch ULxyV, URxyV;
+        TDiffU_Batch DiffUxyV, DiffUxyPrimV;
+        TVec_Batch unitNormV, vgXYV;
+        TU_Batch FLFix, FRFix;
+        TDiffU faceGradFix;
+        Eigen::Matrix<real, nVarsFixed, 1, Eigen::ColMajor> fluxEs;
+
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp declare reduction(TUAdd:TU : omp_out += omp_in) initializer(omp_priv = omp_orig)
-#    pragma omp parallel for schedule(runtime) reduction(TUAdd : fluxWallSumLocal)
+#    pragma omp parallel for schedule(runtime) reduction(TUAdd : fluxWallSumLocal) private(fincC, lam0V, lam123V, lam4V, ULxyV, URxyV,   \
+                                                                                               DiffUxyV, DiffUxyPrimV, unitNormV, vgXYV, \
+                                                                                               FLFix, FRFix, faceGradFix, fluxEs)
 #endif
         for (index iFace = 0; iFace < mesh->NumFaceProc(); iFace++)
         {
             faceOp(iFace);
             auto f2c = mesh->face2cell[iFace];
             Elem::Quadrature gFace = direct2ndRec ? vfv->GetFaceQuadO1(iFace) : vfv->GetFaceQuad(iFace);
-            Eigen::Matrix<real, nVarsFixed, 1, Eigen::ColMajor> fluxEs(cnvars, 1);
 
-            fluxEs.setZero();
+            fluxEs.setZero(cnvars, 1);
 
             // auto f2n = mesh->face2node[iFace];
             // Geom::tSmallCoords coords;
@@ -187,13 +197,10 @@ namespace DNDS::Euler
             Geom::Elem::SummationNoOp noOp;
             auto faceBndID = mesh->GetFaceZone(iFace);
             auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
-            TU_Batch ULxyV, URxyV;
             ULxyV.resize(u.father->MatRowSize(), gFace.GetNumPoints());
             URxyV.resizeLike(ULxyV);
-            TDiffU_Batch DiffUxyV, DiffUxyPrimV;
             DiffUxyV.resize(dim * gFace.GetNumPoints(), u.father->MatRowSize());
             DiffUxyPrimV.resizeLike(DiffUxyV);
-            TVec_Batch unitNormV, vgXYV;
             unitNormV.resize(dim, gFace.GetNumPoints()), vgXYV.resizeLike(unitNormV);
 
             TVec unitNormCent = vfv->GetFaceNorm(iFace, -1)(Seq012);
@@ -216,11 +223,9 @@ namespace DNDS::Euler
                     t,
                     mesh->GetFaceZone(iFace), false, 0);
             }
-            TU_Batch FLFix, FRFix;
-#ifdef USE_FLUX_BALANCE_TERM                                                                          // todo: decide if the flfix and frfix arguments for fluxface should be completely deleted
-            FLFix.setZero(cnvars, gFace.GetNumPoints()), FRFix.setZero(cnvars, gFace.GetNumPoints()); // todo: finish in faceFlux
+#ifdef USE_FLUX_BALANCE_TERM
+            FLFix.setZero(cnvars, gFace.GetNumPoints()), FRFix.setZero(cnvars, gFace.GetNumPoints());
 #endif
-            TDiffU faceGradFix;
             if (settings.useSourceGradFixGG)
                 faceGradFix.setZero(Eigen::NoChange, u.father->MatRowSize());
 
@@ -233,7 +238,9 @@ namespace DNDS::Euler
                     int nDiff = vfv->GetFaceAtr(iFace).NDIFF;
                     TVec unitNorm = vfv->GetFaceNorm(iFace, iGQ)(Seq012);
                     TMat normBase = Geom::NormBuildLocalBaseV<dim>(unitNorm);
+#ifndef DNDS_DIST_MT_USE_OMP
                     PerformanceTimer::Instance().StartTimer(PerformanceTimer::LimiterB);
+#endif
 
                     TU ULxy = u[f2c[0]];
                     if (direct2ndRec && !direct2ndRec1stConv)
@@ -367,7 +374,9 @@ namespace DNDS::Euler
                                     .dot(unitNorm)) *
                             2.;
                     }
+#ifndef DNDS_DIST_MT_USE_OMP
                     PerformanceTimer::Instance().StopTimer(PerformanceTimer::LimiterB);
+#endif
 
                     real distGRP = minVol / vfv->GetFaceArea(iFace) * 2;
                     distGRP = std::max(std::min(distBaryPerp, distGRP * 2), distGRP * 0.25); //! USING REAL GEOMETRICAL
@@ -505,9 +514,10 @@ namespace DNDS::Euler
                     unitNormV(EigenAll, iG) = unitNorm;
                     vgXYV(EigenAll, iG) = GetFaceVGrid(iFace, iGQ);
                 });
-            TReal_Batch lam0V, lam123V, lam4V;
-
-            TU_Batch fincC;
+            fincC.resizeLike(ULxyV);
+            lam0V.resize(ULxyV.cols());
+            lam123V.resize(ULxyV.cols());
+            lam4V.resize(ULxyV.cols());
             fluxFace(
                 ULxyV, URxyV,
                 ULMeanXy, URMeanXy,
