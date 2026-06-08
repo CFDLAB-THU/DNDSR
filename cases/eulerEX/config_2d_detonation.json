@@ -1,72 +1,15 @@
 {
     "$schema": "../eulerEX_schema.json",
-    "caseNotes": {
-        "/**/": {
-            "lastUpdated": "2026-06-06",
-            "purpose": "1-D H2/O2 detonation from a left-side adiabatic wall via a high-T/P spark.",
-            "reference": {
-                "mechanism": "h2o2.yaml",
-                "reactants": "stoichiometric H2/O2, T=300K, P=101325Pa, Y_H2=0.1111, Y_O2=0.8889",
-                "CJ_literature": "~2840 m/s for stoich H2/O2",
-                "mesh": "Uniform_01_5000.cgns, 5000 cells, meshScale=0.05 -> 5cm domain, dx=10um"
-            },
-            "results": {
-                "dt1em6": {
-                    "steps": "1650/2000 (timed out)",
-                    "shockSpeed_m_per_s": 2767,
-                    "r2": 0.9994,
-                    "domainTraversed_mm": "1.9 -> 12.9"
-                },
-                "dt4em6": {
-                    "steps": "500/500",
-                    "shockSpeed_m_per_s": 2909,
-                    "r2": 0.99997,
-                    "domainTraversed_mm": "1.9 -> 16.2"
-                }
-            },
-            "physics": [
-                "Left BC: BCWallInvis (adiabatic reflecting wall). Right BC: BCIn with unburned H2/O2 at rest.",
-                "Spark: x<1mm, T=3500K, P=20bar, equilibrium CJ composition (Y_H2O=0.487, Y_OH=0.229, Y_O2=0.137, Y_O=0.103, Y_H2=0.031, Y_H=0.013).",
-                "Unburned: stoich H2/O2 at 300K, 1atm. Y=sum of transported species = 1.0 (no N2 filler).",
-                "ZND structure observed: leading shock -> induction -> reaction -> products.",
-                "Detonation is self-sustaining: constant shock speed, stable von Neumann spike (~28 bar, ~3650K)."
-            ],
-            "solverNotes": [
-                "Non-Strang coupled (sourceStrangSplitting=0) for best accuracy.",
-                "dt=1e-6: 166 VTUs, detonation crosses ~11mm, speed=2767 m/s.",
-                "dt=4e-6: 51 VTUs, detonation crosses ~14mm, speed=2909 m/s (+5% vs dt=1e-6, temporal discretization effect).",
-                "nTimeStepInternal=100, CFL=10. Limiter enabled from step 0.",
-                "RecScheme=0 (Green-Gauss). np=16."
-            ]
-        },
-        "purpose": "1-D stoichiometric H2/O2 detonation propagation test.",
-        "reference": {
-            "mechanism": "h2o2.yaml",
-            "canteraDetonationEstimate_m_per_s": 2840.0,
-            "unburnedState": "T=300K, P=101325Pa, stoich H2/O2 (Y_H2=0.1111, Y_O2=0.8889)",
-            "domainLength_m": 0.05,
-            "cellCount": 5000,
-            "dx_m": 1e-05
-        },
-        "physics": [
-            "Spark-initiated detonation from left adiabatic wall (BCWallInvis).",
-            "Left BC (x=0): BCWallInvis — reflecting, adiabatic.",
-            "Right BC (x=0.05): BCIn — unburned H2/O2 at rest.",
-            "Initial: T=3500K, P=20bar equilibrium CJ products in x<0.001m; unburned stoich H2/O2 elsewhere.",
-            "Detonation speed from simulation: 2767-2909 m/s (dt-dependent).",
-            "ZND structure confirmed: leading shock -> induction -> reaction -> products."
-        ]
-    },
     "timeMarchControl": {
-        "dtImplicit": 4e-06,
-        "nTimeStep": 10000,
+        "dtImplicit": 2e-06,
+        "nTimeStep": 100000,
         "steadyQuit": false,
         "tEnd": 0.005,
         "odeCode": 204,
         "odeSetting1": 0.5,
         "sourceStrangSplitting": 0,
         "rhsFPPMode": 2,
-        "rhsFPPScale":5,
+        "rhsFPPScale": 5,
         "useDtPPLimit": false,
         "dtPPLimitScale": 1
     },
@@ -103,16 +46,16 @@
     },
     "convergenceControl": {
         "nTimeStepInternal": 100,
-        "nTimeStepInternalMin": 10,
-        "rhsThresholdInternal": 0.001,
+        "nTimeStepInternalMin": 20,
+        "rhsThresholdInternal": 5e-4,
         "res_base": 0,
         "useVolWiseResidual": true
     },
     "dataIOControl": {
         "uniqueStamps": false,
-        "meshScale": 5e-2,
-        "meshFile": "../data/mesh/Uniform_01_5000.cgns",
-        "outPltName": "../data/out/react_1d_detonation_h2o2_coupled_dt4em6_t5em3_np16--perf/react_",
+        "meshScale": 5e-3,
+        "meshFile": "../data/mesh/Uniform_10x1_2000.cgns",
+        "outPltName": "../data/out/react_2d_detonation_h2o2_coupled_dt2em6/react_",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": false,
@@ -126,7 +69,7 @@
     "boundaryDefinition": {
         "PeriodicTranslation1": [
             0.0,
-            0.0002,
+            1,
             0.0
         ]
     },
@@ -167,7 +110,7 @@
         "reactiveSourceScale": 1,
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
-        "riemannSolverType": "Roe_M2",
+        "riemannSolverType": "Roe_M8",
         "rsMeanValueEig": 1,
         "uRecAlphaCompressPower": 1.0,
         "uRecBetaCompressPower": 1.0,
@@ -199,11 +142,15 @@
         "exprtkInitializers": [
             {
                 "exprs": [
-                    "var s := 0.5 * (1.0 - tanh(x[0] / 5e-4 - 2));",
                     "inRegion := 1;",
+                    "var s := 0.5 * (1.0 - tanh(x[0] / 5e-4 - 2));",
+                    "if (s < 1e-4)",
+                    "  s := 0.0;",
+                    "var Ly := 5e-3;",
+                    "var pert_y := cos( 2 * pi * x[1] / Ly);",
                     "UExprtk[0] := 300.0 + s * (3500.0 - 300.0);",
-                    "UExprtk[1] := 0.0;",
-                    "UExprtk[2] := 0.0;",
+                    "UExprtk[1] := 10.0 * pert_y * s;",
+                    "UExprtk[2] := 10.0 * pert_y * s;",
                     "UExprtk[3] := 0.0;",
                     "UExprtk[4] := 101325.0 + s * (2026500.0 - 101325.0);",
                     "UExprtk[5] := 0.111111 + s * (0.030766 - 0.111111);",
