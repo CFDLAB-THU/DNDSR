@@ -851,7 +851,8 @@ namespace DNDS::Euler
         real CFL, real &dtMinall, real MaxDt,
         bool UseLocaldt,
         real t,
-        uint64_t flags)
+        uint64_t flags,
+        OptionalRef<ArrayDOFV<1>> cellTWarm)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         DNDS_MPI_InsertCheck(u.father->getMPI(), "EvaluateDt 1");
@@ -891,7 +892,8 @@ namespace DNDS::Euler
             TU uMean = UL;
             TVec vL = UL(Seq123) / UL(0);
             TVec vR = vL;
-            TPhysThermalRet thermalL = phys_.conservativeThermal(UL);
+            TPhysThermalRet thermalL = phys_.conservativeThermal(UL,
+                                                                 cellTWarm ? (*cellTWarm)[iCellL](0) : real(0));
             TPhysThermalRet thermalR = thermalL;
             if (f2c[1] != UnInitIndex)
             {
@@ -899,7 +901,9 @@ namespace DNDS::Euler
                 this->UFromCell2Face(UR, iFace, f2c[1], 1);
                 uMean = (uMean + UR) * 0.5;
                 vR = UR(Seq123) / UR(0);
-                thermalR = phys_.conservativeThermal(UR);
+                index iCellR = f2c[1];
+                thermalR = phys_.conservativeThermal(UR,
+                                                     cellTWarm ? (*cellTWarm)[iCellR](0) : real(0));
             }
             GradULxy.resize(Eigen::NoChange, nVars);
             GradURxy.resize(Eigen::NoChange, nVars);
@@ -1106,7 +1110,8 @@ namespace DNDS::Euler
         TReal_Batch &lam0V, TReal_Batch &lam123V, TReal_Batch &lam4V,
         Geom::t_index btype,
         typename Gas::RiemannSolverType rsType,
-        index iFace, bool ignoreVis)
+        index iFace, bool ignoreVis,
+        OptionalRef<ArrayDOFV<1>> cellTWarm)
     {
         finc.resizeLike(ULxy);
         DNDS_assert(&DiffUxy != &DiffUxyPrim);
@@ -1261,12 +1266,28 @@ namespace DNDS::Euler
         lam123V.resize(nB);
         lam4V.resize(nB);
 
-        real T_Lm_rs = phys_.temperature(ULMeanXy);
+        index iCellL = f2c[0];
+        real TguessL = cellTWarm ? (*cellTWarm)[iCellL](0) : real(0);
+        real T_Lm_rs = phys_.temperature(ULMeanXy, TguessL);
         real gammaEqLm_rs = phys_.gammaEq(T_Lm_rs, ULMeanXy);
         real gammaLm_rs = phys_.gamma(T_Lm_rs, ULMeanXy);
-        real T_Rm_rs = phys_.temperature(URMeanXy);
-        real gammaEqRm_rs = phys_.gammaEq(T_Rm_rs, URMeanXy);
-        real gammaRm_rs = phys_.gamma(T_Rm_rs, URMeanXy);
+        real T_Rm_rs = real(0);
+        real gammaEqRm_rs = real(0);
+        real gammaRm_rs = real(0);
+        if (f2c[1] != UnInitIndex)
+        {
+            index iCellR = f2c[1];
+            real TguessR = cellTWarm ? (*cellTWarm)[iCellR](0) : real(0);
+            T_Rm_rs = phys_.temperature(URMeanXy, TguessR);
+            gammaEqRm_rs = phys_.gammaEq(T_Rm_rs, URMeanXy);
+            gammaRm_rs = phys_.gamma(T_Rm_rs, URMeanXy);
+        }
+        else
+        {
+            T_Rm_rs = phys_.temperature(URMeanXy);
+            gammaEqRm_rs = phys_.gammaEq(T_Rm_rs, URMeanXy);
+            gammaRm_rs = phys_.gamma(T_Rm_rs, URMeanXy);
+        }
         real gammaEq_rs = gammaEqLm_rs;
         real gamma_rs = gammaLm_rs;
 
@@ -1665,13 +1686,14 @@ namespace DNDS::Euler
         index iCell,
         index ig,
         int Mode,
-        SourceFilter filter) // mode =0: source; mode = 1, diagJacobi; mode = 2,
+        SourceFilter filter,
+        OptionalRef<ArrayDOFV<1>> cellTWarm)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         TU ret;
         ret.resizeLike(UMeanXy);
         ret.setZero();
-        real dWallC;
+        real dWallC = real(0);
         if (ig < 0)
             dWallC = dWall[iCell].mean();
         else
@@ -1688,14 +1710,16 @@ namespace DNDS::Euler
             SourceCellAux aux;
             aux.dWallC = dWallC;
             aux.hMax = vfv->GetCellMaxLenScale(iCell);
-
-            auto [T, pMean, asqrMean, Hmean, gammaEq, gamma] = phys_.conservativeThermal(UMeanXy);
+            real T_guess = cellTWarm ? (*cellTWarm)[iCell](0) : real(0);
+            auto [T, pMean, asqrMean, Hmean, gammaEq, gamma] = phys_.conservativeThermal(UMeanXy, T_guess);
 
             aux.T = T;
             aux.gammaEq = gammaEq;
             aux.p = pMean;
             aux.pPhys = phys_.toPhysP(pMean);
             aux.muf = phys_.mixtureViscosity(aux.T, pMean, UMeanXy);
+            if (cellTWarm && phys_.hasChemicalSource())
+                (*cellTWarm)[iCell](0) = T;
             aux.rhoE_base = phys_.mixtureBaseInternalRhoE(UMeanXy);
 
             SourceTermVisitor<model> visitor{ret, jacobian, UMeanXy, DiffUxy, pPhy, aux,
@@ -1873,11 +1897,12 @@ namespace DNDS::Euler
         SourceFilter filter,
         real cellAlpha,
         bool useRecArrays,
-        ArrayDOFV<nVarsFixed> *pU,
-        ArrayRECV<nVarsFixed> *pURecUnlim,
-        ArrayRECV<nVarsFixed> *pURec,
+        OptionalRef<ArrayDOFV<nVarsFixed>> pU,
+        OptionalRef<ArrayRECV<nVarsFixed>> pURecUnlim,
+        OptionalRef<ArrayRECV<nVarsFixed>> pURec,
         bool direct2ndRec,
-        real t)
+        real t,
+        OptionalRef<ArrayDOFV<1>> cellTWarm)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         int cnvars = nVars;
@@ -1984,13 +2009,13 @@ namespace DNDS::Euler
                 finc(EigenAll, 0) =
                     source(ULxy, GradU,
                            vfv->GetCellQuadraturePPhys(iCell, iGQ), jac,
-                           iCell, iGQ, 0, filter);
+                           iCell, iGQ, 0, filter, cellTWarm);
                 if (jacMode >= 1)
                 {
                     TU sourceJDiag =
                         source(ULxy, GradU,
                                vfv->GetCellQuadraturePPhys(iCell, iGQ), jac,
-                               iCell, iGQ, (jacMode == 2) ? 2 : 1, filter);
+                               iCell, iGQ, (jacMode == 2) ? 2 : 1, filter, cellTWarm);
                     if (jacMode == 2)
                         finc(EigenAll, Eigen::seq(Eigen::fix<1>, EigenLast)) = jac;
                     else

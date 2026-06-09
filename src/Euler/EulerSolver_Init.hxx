@@ -411,6 +411,7 @@ namespace DNDS::Euler
         vfv->BuildUDof(alphaPP, 1);
         vfv->BuildUDof(alphaPP_tmp, 1);
         vfv->BuildUDof(dTauTmp, 1);
+        vfv->BuildUDof(cellT_warm_, 1);
         betaPP.setConstant(1.0);
         alphaPP.setConstant(1.0);
         if (config.timeMarchControl.timeMarchIsTwoStage())

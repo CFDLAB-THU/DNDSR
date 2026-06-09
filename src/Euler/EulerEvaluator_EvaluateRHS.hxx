@@ -63,7 +63,8 @@ namespace DNDS::Euler
         ArrayDOFV<1> &cellRHSAlpha,
         bool onlyOnHalfAlpha,
         real t,
-        uint64_t flags)
+        uint64_t flags,
+        OptionalRef<ArrayDOFV<1>> cellTWarm)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         using namespace Geom;
@@ -532,7 +533,7 @@ namespace DNDS::Euler
                 lam0V, lam123V, lam4V,
                 mesh->GetFaceZone(iFace),
                 rsType,
-                iFace, ignoreVis);
+                iFace, ignoreVis, cellTWarm);
             if (mesh->getMPI().rank == 0)
             {
                 // std::cout << fincC << std::endl;
@@ -718,27 +719,27 @@ namespace DNDS::Euler
                     EvaluateCellSource(cellSrcRHS, cellJac, u[iCell], dummyGrad,
                                        iCell, jacMode, SourceFilter::NonReactiveOnly,
                                        cellRHSAlpha[iCell](0),
-                                       /*useRecArrays=*/true, &u, &uRecUnlim, &uRec,
-                                       direct2ndRec, t);
+                                       /*useRecArrays=*/true, OptionalRef(u), OptionalRef(uRecUnlim), OptionalRef(uRec),
+                                       direct2ndRec, t, cellTWarm);
                 else if (ignoreReactiveSourceJacobian)
                 {
                     EvaluateCellSource(cellSrcRHS, cellJac, u[iCell], dummyGrad,
                                        iCell, jacMode, SourceFilter::NonReactiveOnly,
                                        cellRHSAlpha[iCell](0),
-                                       /*useRecArrays=*/true, &u, &uRecUnlim, &uRec,
-                                       direct2ndRec, t);
+                                       /*useRecArrays=*/true, OptionalRef(u), OptionalRef(uRecUnlim), OptionalRef(uRec),
+                                       direct2ndRec, t, cellTWarm);
                     EvaluateCellSource(cellSrcRHS, cellJac, u[iCell], dummyGrad,
                                        iCell, 0, SourceFilter::ReactiveOnly,
                                        cellRHSAlpha[iCell](0),
-                                       /*useRecArrays=*/true, &u, &uRecUnlim, &uRec,
-                                       direct2ndRec, t);
+                                       /*useRecArrays=*/true, OptionalRef(u), OptionalRef(uRecUnlim), OptionalRef(uRec),
+                                       direct2ndRec, t, cellTWarm);
                 }
                 else
                     EvaluateCellSource(cellSrcRHS, cellJac, u[iCell], dummyGrad,
                                        iCell, jacMode, SourceFilter::All,
                                        cellRHSAlpha[iCell](0),
-                                       /*useRecArrays=*/true, &u, &uRecUnlim, &uRec,
-                                       direct2ndRec, t);
+                                       /*useRecArrays=*/true, OptionalRef(u), OptionalRef(uRecUnlim), OptionalRef(uRec),
+                                       direct2ndRec, t, cellTWarm);
                 rhs[iCell] += cellSrcRHS;
                 if (JSource.isBlock())
                     JSource.getBlock(iCell) = cellJac;

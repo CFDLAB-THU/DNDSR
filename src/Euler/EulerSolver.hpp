@@ -115,6 +115,7 @@ namespace DNDS::Euler
         JacobianDiagBlock<nVarsFixed> JD, JD1, JDTmp, JSource, JSource1, JSourceTmp;                                  ///< Diagonal Jacobian blocks for implicit methods.
         ssp<JacobianLocalLU<nVarsFixed>> JLocalLU;                                                                    ///< Local LU factorization for direct preconditioner.
         ArrayDOFV<1> alphaPP, alphaPP1, betaPP, betaPP1, alphaPP_tmp, dTauTmp;                                        ///< Positivity-preserving limiter scalars and time-step buffer.
+        ArrayDOFV<1> cellT_warm_;                                                                                     ///< Per-cell last-known temperature for warm-starting T inversion.
 
         int nOUTS = {-1};   ///< Number of output scalars per cell in volume output.
         int nOUTSPoint{-1}; ///< Number of output scalars per node in point output.
