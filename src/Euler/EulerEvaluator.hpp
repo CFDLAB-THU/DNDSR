@@ -41,6 +41,7 @@
 #include "SourceTermContributor.hpp"
 #include "Physics/PhysicsProperties.hpp"
 #include "DNDS/Serializer/SerializerBase.hpp"
+#include "DNDS/OptionalRef.hpp"
 #include "RANS_ke.hpp"
 
 // #ifdef __DNDS_REALLY_COMPILING__HEADER_ON__
@@ -420,7 +421,8 @@ namespace DNDS::Euler
             real CFL, real &dtMinall, real MaxDt,
             bool UseLocaldt,
             real t,
-            uint64_t flags = DT_No_Flags);
+            uint64_t flags = DT_No_Flags,
+            OptionalRef<ArrayDOFV<1>> cellTWarm = {});
 
         /// @name RHS evaluation flags (bitwise OR combinable)
         /// @{
@@ -465,7 +467,8 @@ namespace DNDS::Euler
             ArrayDOFV<1> &cellRHSAlpha,
             bool onlyOnHalfAlpha,
             real t,
-            uint64_t flags = RHS_No_Flags);
+            uint64_t flags = RHS_No_Flags,
+            OptionalRef<ArrayDOFV<1>> cellTWarm = {});
 
         /**
          * @brief Assemble the diagonal blocks of the implicit Jacobian for LU-SGS / SGS.
@@ -1036,7 +1039,8 @@ namespace DNDS::Euler
             TReal_Batch &lam0V, TReal_Batch &lam123V, TReal_Batch &lam4V,
             Geom::t_index btype,
             typename Gas::RiemannSolverType rsType,
-            index iFace, bool ignoreVis);
+            index iFace, bool ignoreVis,
+            OptionalRef<ArrayDOFV<1>> cellTWarm = {});
 
         /**
          * @brief Compute the source term at a cell quadrature point.
@@ -1061,8 +1065,8 @@ namespace DNDS::Euler
             index iCell,
             index ig,
             int Mode,
-            SourceFilter filter = SourceFilter::All) // mode =0: source; mode = 1, diagJacobi; mode = 2,
-            ;
+            SourceFilter filter = SourceFilter::All,
+            OptionalRef<ArrayDOFV<1>> cellTWarm = {});
 
         /**
          * @brief Evaluate the cell-integrated source term for a single cell.
@@ -1103,11 +1107,12 @@ namespace DNDS::Euler
             SourceFilter filter = SourceFilter::All,
             real cellAlpha = 1.0,
             bool useRecArrays = false,
-            ArrayDOFV<nVarsFixed> *pU = nullptr,
-            ArrayRECV<nVarsFixed> *pURecUnlim = nullptr,
-            ArrayRECV<nVarsFixed> *pURec = nullptr,
+            OptionalRef<ArrayDOFV<nVarsFixed>> pU = {},
+            OptionalRef<ArrayRECV<nVarsFixed>> pURecUnlim = {},
+            OptionalRef<ArrayRECV<nVarsFixed>> pURec = {},
             bool direct2ndRec = true,
-            real t = 0);
+            real t = 0,
+            OptionalRef<ArrayDOFV<1>> cellTWarm = {});
 
         /**
          * @brief Apply a cell-local implicit update for a selected source subset.
@@ -1124,13 +1129,15 @@ namespace DNDS::Euler
             real alphaDiag,
             real dt,
             int nNewtonSteps = 3,
-            SourceFilter filter = SourceFilter::ReactiveOnly);
+            SourceFilter filter = SourceFilter::ReactiveOnly,
+            OptionalRef<ArrayDOFV<1>> cellTWarm = {});
 
         void ReactiveSourceConstVolumeStep(
             ArrayDOFV<nVarsFixed> &u,
             ArrayRECV<nVarsFixed> &uRec,
             real dt,
-            real t);
+            real t,
+            OptionalRef<ArrayDOFV<1>> cellTWarm = {});
 
         /**
          * @brief Inviscid flux approximate Jacobian (no reconstruction, no Riemann solver).
@@ -2144,12 +2151,14 @@ namespace DNDS::Euler
             real alphaDiag,                                                                                               \
             real dt,                                                                                                      \
             int nNewtonSteps,                                                                                             \
-            SourceFilter filter);                                                                                         \
+            SourceFilter filter,                                                                                          \
+            OptionalRef<ArrayDOFV<1>> cellTWarm);                                                                         \
         ext template void EulerEvaluator<model>::ReactiveSourceConstVolumeStep(                                           \
             ArrayDOFV<nVarsFixed> &u,                                                                                     \
             ArrayRECV<nVarsFixed> &uRec,                                                                                  \
             real dt,                                                                                                      \
-            real t);                                                                                                      \
+            real t,                                                                                                       \
+            OptionalRef<ArrayDOFV<1>> cellTWarm);                                                                         \
                                                                                                                           \
         ext template void EulerEvaluator<model>::TimeAverageAddition(                                                     \
             ArrayDOFV<nVarsFixed> &w, ArrayDOFV<nVarsFixed> &wAveraged, real dt, real &tCur);                             \
@@ -2232,7 +2241,8 @@ DNDS_EulerEvaluator_INS_EXTERN(NS_2EQ_3D, extern);
             real CFL, real &dtMinall, real MaxDt,                                                                          \
             bool UseLocaldt,                                                                                               \
             real t,                                                                                                        \
-            uint64_t flags);                                                                                               \
+            uint64_t flags,                                                                                                \
+            OptionalRef<ArrayDOFV<1>> cellTWarm);                                                                          \
         ext template void                                                                                                  \
         EulerEvaluator<model>::fluxFace(                                                                                   \
             const TU_Batch &ULxy,                                                                                          \
@@ -2251,7 +2261,8 @@ DNDS_EulerEvaluator_INS_EXTERN(NS_2EQ_3D, extern);
             TReal_Batch &lam0V, TReal_Batch &lam123V, TReal_Batch &lam4V,                                                  \
             Geom::t_index btype,                                                                                           \
             typename Gas::RiemannSolverType rsType,                                                                        \
-            index iFace, bool ignoreVis);                                                                                  \
+            index iFace, bool ignoreVis,                                                                                   \
+            OptionalRef<ArrayDOFV<1>> cellTWarm);                                                                          \
         ext template                                                                                                       \
             typename EulerEvaluator<model>::TU                                                                             \
             EulerEvaluator<model>::source(                                                                                 \
@@ -2262,7 +2273,8 @@ DNDS_EulerEvaluator_INS_EXTERN(NS_2EQ_3D, extern);
                 index iCell,                                                                                               \
                 index ig,                                                                                                  \
                 int Mode,                                                                                                  \
-                SourceFilter filter);                                                                                      \
+                SourceFilter filter,                                                                                       \
+                OptionalRef<ArrayDOFV<1>> cellTWarm);                                                                      \
         ext template void EulerEvaluator<model>::EvaluateCellSource(                                                       \
             TU &cellRHS,                                                                                                   \
             TJacobianU &cellJac,                                                                                           \
@@ -2273,11 +2285,12 @@ DNDS_EulerEvaluator_INS_EXTERN(NS_2EQ_3D, extern);
             SourceFilter filter,                                                                                           \
             real cellAlpha,                                                                                                \
             bool useRecArrays,                                                                                             \
-            ArrayDOFV<nVarsFixed> *pU,                                                                                     \
-            ArrayRECV<nVarsFixed> *pURecUnlim,                                                                             \
-            ArrayRECV<nVarsFixed> *pURec,                                                                                  \
+            OptionalRef<ArrayDOFV<nVarsFixed>> pU,                                                                         \
+            OptionalRef<ArrayRECV<nVarsFixed>> pURecUnlim,                                                                 \
+            OptionalRef<ArrayRECV<nVarsFixed>> pURec,                                                                      \
             bool direct2ndRec,                                                                                             \
-            real t);                                                                                                       \
+            real t,                                                                                                        \
+            OptionalRef<ArrayDOFV<1>> cellTWarm);                                                                          \
         ext template                                                                                                       \
             typename EulerEvaluator<model>::TU                                                                             \
             EulerEvaluator<model>::generateBoundaryValue(                                                                  \
@@ -2336,7 +2349,8 @@ DNDS_EulerEvaluator_EvaluateDt_INS_EXTERN(NS_2EQ_3D, extern);
             ArrayDOFV<1> &cellRHSAlpha,                        \
             bool onlyOnHalfAlpha,                              \
             real t,                                            \
-            uint64_t flags);                                   \
+            uint64_t flags,                                    \
+            OptionalRef<ArrayDOFV<1>> cellTWarm);              \
     }
 
 DNDS_EulerEvaluator_EvaluateRHS_INS_EXTERN(NS, extern);

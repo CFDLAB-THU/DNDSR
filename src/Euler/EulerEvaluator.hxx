@@ -1379,7 +1379,8 @@ namespace DNDS::Euler
         real alphaDiag,
         real dt,
         int nNewtonSteps,
-        SourceFilter filter)
+        SourceFilter filter,
+        OptionalRef<ArrayDOFV<1>> cellTWarm)
     {
         DNDS_check_throw_info(dt > 0, "PointImplicitSourceUpdate requires positive dt");
         DNDS_check_throw_info(nNewtonSteps >= 0, "PointImplicitSourceUpdate requires non-negative nNewtonSteps");
@@ -1772,7 +1773,8 @@ namespace DNDS::Euler
         ArrayDOFV<nVarsFixed> &u,
         ArrayRECV<nVarsFixed> &uRec,
         real dt,
-        real t)
+        real t,
+        OptionalRef<ArrayDOFV<1>> cellTWarm)
     {
         (void)uRec;
         (void)t;
@@ -1819,7 +1821,9 @@ namespace DNDS::Euler
             for (double &y : Y)
                 y /= yNorm;
 
-            real T = phys_.temperature(state);
+            real T = phys_.temperature(state, cellTWarm ? (*cellTWarm)[iCell](0) : real(0));
+            if (cellTWarm)
+                (*cellTWarm)[iCell](0) = T;
             phys_.advanceConstVolumeY(
                 T, rho,
                 Chemistry::SpeciesBufferView{Y.data(), Ns},
@@ -1845,6 +1849,8 @@ namespace DNDS::Euler
             }
 
             real TCheck = phys_.temperature(state, T);
+            if (cellTWarm)
+                (*cellTWarm)[iCell](0) = TCheck;
             real pCheck = rho * phys_.Rgas(state) * TCheck;
             DNDS_check_throw_info(std::isfinite(TCheck) && std::isfinite(pCheck) &&
                                       phys_.toPhysT(TCheck) >= 200.0 && pCheck > 0,
