@@ -521,7 +521,7 @@ namespace DNDS::Euler
                     //   (7 % of total cycles in ComplexSchur::reduceToTriangularForm).
                     //   Preserved as a reference for validation.
                     //
-                    static const int kDebugEigenFilter = 2;
+                    static const int kDebugEigenFilter = 0;
                     switch (kDebugEigenFilter)
                     {
                     case 0:
@@ -555,6 +555,8 @@ namespace DNDS::Euler
                         }
                         break;
                     }
+                    default:
+                        break;
                     }
                 }
                 jac -= dSdu;

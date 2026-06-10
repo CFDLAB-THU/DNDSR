@@ -175,7 +175,7 @@
         "ransModel": "RANS_None",
         "reactiveFlow": {
             "enabled": true,
-            "mechanismFile": "h2o2.yaml"
+            "mechanismFile": "../cases/eulerEX/h2o2.yaml"
         },
         "farFieldStaticValue": {
             "type": "primTP_phy",
