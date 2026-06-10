@@ -2889,7 +2889,7 @@ namespace DNDS::Euler
                     GradU({0, 1, 2}, EigenAll) =
                         vfv->GetIntPointDiffBaseValue(iCell, -1, -1, -1, std::array<int, 3>{1, 2, 3}, 4) *
                         uRec[iCell]; // 3d specific
-                auto [T, pMean, asqrMean, Hmean] = phys_.conservativeThermal(Uxy);
+                auto [T, pMean, asqrMean, Hmean, gammaEq, gamma] = phys_.conservativeThermal(Uxy);
                 // ! refvalue:
                 real muRef = phys_.muRef();
                 real mufPhy = muEff(Uxy, T);

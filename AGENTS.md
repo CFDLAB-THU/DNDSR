@@ -1,5 +1,11 @@
 # AGENTS.md — DNDSR
 
+> **CRITICAL RULE — NEVER COMMIT WITHOUT AUTHORIZATION.**
+> `git commit`, `git commit --amend`, and `git push` require an explicit
+> "proceed", "go ahead", "authorized", or similar directive from the user.
+> "Looks good", "ok", or passive approval is NOT sufficient.  If in doubt,
+> ask: "Proceed with commit?"
+
 DNDSR is a C++17 / Python CFD (Computational Fluid Dynamics) research code implementing
 Compact Finite Volume methods with MPI parallelism and optional CUDA GPU support.
 
@@ -425,5 +431,11 @@ actions — ask each time.
 - `gh release create/delete`
 - `gh cache delete`
 - `gh api` with non-GET methods (POST, PUT, PATCH, DELETE)
+
+Explicit authorization means a direct imperative like "commit", "proceed",
+"go ahead", or "authorized".  Passive or ambiguous statements ("looks good",
+"ok", "fine", "nice") are NOT authorization to commit.  A single-commit
+authorization is consumed by the first commit — do NOT commit again without
+a fresh authorization, even for follow-up fixes.
 
 **Draft PR by default** You must use --draft on new prs.
