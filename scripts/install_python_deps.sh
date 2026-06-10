@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # install_python_deps.sh — Install ALL Python dependencies for DNDSR.
 #
+# This script must be run AFTER building cfd_externals (HDF5, zlib, etc.).
+# The Cantera build deps (scons, packaging, ruamel.yaml, patchelf) should
+# already be installed from external/cfd_externals/requirements.txt before
+# running cfd_externals_build.py.
+#
 # This is the single entry point for setting up the Python environment.
 # It installs:
 #   1. Binary-wheel packages from requirements.txt  (numpy, scipy, pytest, …)
