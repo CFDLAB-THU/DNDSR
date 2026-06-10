@@ -683,6 +683,50 @@ namespace DNDS::Euler
          */
         void EvaluateMinMax(Eigen::Vector<real, -1> &uMin, Eigen::Vector<real, -1> &uMax, ArrayDOFV<nVarsFixed> &u);
 
+        /// Return label string for DOF index v, following StateValueOrigin layout.
+        [[nodiscard]] std::string varLabel(int v, StateValueOrigin layout = StateValueOrigin::Cons) const
+        {
+            const int I4 = dim + 1;
+            const int nR = phys_.nRANSVars();
+            const int Ns1 = phys_.nSpecies() - 1;
+            const int Isp = nVars - Ns1;
+            auto isCons = [](StateValueOrigin lo)
+            {
+                return lo == StateValueOrigin::Cons || lo == StateValueOrigin::ConsSensible ||
+                       lo == StateValueOrigin::ConsPhy || lo == StateValueOrigin::ConsSensiblePhy;
+            };
+            const bool c = isCons(layout);
+
+            if (v == 0)
+                return (layout == StateValueOrigin::PrimTP || layout == StateValueOrigin::PrimTPPhy) ? "T" : "rho";
+            if (v <= dim)
+                return c ? std::string("rho") + char('U' + v - 1)
+                         : std::string("") + char('U' + v - 1);
+            if (v == I4)
+            {
+                if (layout == StateValueOrigin::PrimTP || layout == StateValueOrigin::PrimTPPhy)
+                    return "p";
+                if (layout == StateValueOrigin::PrimRhoT || layout == StateValueOrigin::PrimRhoTPhy)
+                    return "T";
+                if (layout == StateValueOrigin::PrimRhoP || layout == StateValueOrigin::PrimRhoPPhy)
+                    return "p";
+                return "rhoE";
+            }
+            if (v < Isp)
+            {
+                int r = v - I4 - 1;
+                if (r == 0)
+                    return nR == 1 ? (c ? "rho_nuTilde" : "nuTilde")
+                                   : (c ? "rho_k" : "k");
+                return phys_.ransModel() == RANS_RKE ? (c ? "rho_epsilon" : "epsilon")
+                                                     : (c ? "rho_omega" : "omega");
+            }
+            return c ? "rho_" + phys_.speciesName(v - Isp)
+                     : phys_.speciesName(v - Isp);
+        }
+        [[nodiscard]] std::string dofLabel(int v) const { return varLabel(v, StateValueOrigin::Cons); }
+        [[nodiscard]] std::string primVarLabel(int v, StateValueOrigin layout = StateValueOrigin::PrimRhoP) const { return varLabel(v, layout); }
+
         /**
          * @brief Compute the reconstruction error norm (optionally against an analytical field).
          *

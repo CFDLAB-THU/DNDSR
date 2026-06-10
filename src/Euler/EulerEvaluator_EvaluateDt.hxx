@@ -2904,23 +2904,17 @@ namespace DNDS::Euler
             return mut;
         };
 
-        // Species output fields for reactive flow
-        if constexpr (Traits::isExtended)
-        {
-            if (settings.reactiveFlow.enabled)
-            {
-                int Isp = nVars - (phys_.nSpecies() - 1);
-                for (int k = Isp; k < nVars; ++k)
-                {
-                    std::string spName = phys_.hasChemicalSource() && (k - Isp) < phys_.nSpecies() - 1
-                                             ? phys_.speciesName(k - Isp)
-                                             : "V" + std::to_string(k - Isp + 1);
-                    outMap[spName] =
-                        [&, k](index iCell)
-                    { return u[iCell](k); };
-                }
-            }
-        }
+        // Fluid + extended DOFs with dofLabel names
+        for (int v = 0; v < nVars; ++v)
+            outMap[this->dofLabel(v)] =
+                [&, v](index iCell)
+            { return u[iCell](v); };
+
+        // old indexed convention (RV1, RV2, ...) for extended variables
+        for (int v = I4 + 1; v < nVars; ++v)
+            outMap["RV" + std::to_string(v - I4)] =
+                [&, v](index iCell)
+            { return u[iCell](v); };
 
         op.setMap(outMap);
     }

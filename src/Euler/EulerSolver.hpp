@@ -1251,27 +1251,6 @@ namespace DNDS::Euler
                 v_map[name] = 0;
         }
 
-        /// @brief Return label string for DOF index v (rho, rhoU, rhoE, k, omega, rho_CH4, ...).
-        [[nodiscard]] std::string dofLabel(int v) const
-        {
-            const int I4 = dim + 1;
-            const int nR = (*pEval).phys_.nRANSVars();
-            const int Ns1 = (*pEval).phys_.nSpecies() - 1;
-            const int Isp = nVars - Ns1;
-            if (v == 0)
-                return "rho";
-            if (v <= dim)
-                return std::string("rhoU") + char('X' + v - 1);
-            if (v == I4)
-                return "rhoE";
-            if (v < Isp)
-            {
-                int r = v - I4 - 1;
-                return r == 0 ? (nR == 1 ? "nuTilde" : "k") : ((*pEval).phys_.ransModel() == RANS_RKE ? "epsilon" : "omega");
-            }
-            return "rho_" + (*pEval).phys_.speciesName(v - Isp);
-        }
-
         /// @brief Initialize the CSV error logger and value map for convergence monitoring.
         /// @return Tuple of (CsvLog writer, value map with all column names initialized).
         std::tuple<std::unique_ptr<CsvLog>, tLogSimpleDIValueMap> LogErrInitialize()
@@ -1292,8 +1271,8 @@ namespace DNDS::Euler
                 {
                     for (int i = 0; i < nVars; i++)
                     {
-                        v_map[name + "_" + this->dofLabel(i)] = initVec[i];
-                        realNames.push_back(name + "_" + this->dofLabel(i));
+                        v_map[name + "_" + (*pEval).dofLabel(i)] = initVec[i];
+                        realNames.push_back(name + "_" + (*pEval).dofLabel(i));
                     }
                 }
                 else
