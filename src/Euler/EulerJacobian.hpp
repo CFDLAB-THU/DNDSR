@@ -47,13 +47,18 @@ namespace DNDS::Euler
     template <typename tMat>
     static void invertBlockSVD(const tMat &A, tMat &AI)
     {
-        HardEigen::EigenLeastSquareInverse_Filtered(A, AI, 0, 0);
-        DNDS_assert_info(AI.allFinite() && !AI.hasNaN(), [&]()
+        // HardEigen uses Eigen::MatrixXd (dynamic); fixed-size tMat
+        // (e.g. Matrix<double, 6, 6> for NS_SA) cannot bind to MatrixXd&.
+        Eigen::MatrixXd Ad = A;
+        Eigen::MatrixXd AId;
+        HardEigen::EigenLeastSquareInverse_Filtered(Ad, AId, 0, 0);
+        DNDS_assert_info(AId.allFinite() && !AId.hasNaN(), [&]()
                          {
             std::ostringstream oss;
             oss << "invertBlockSVD produced NaN/inf.\n"
-                << "A = \n" << A << "\n\n";
+                << "A = \n" << Ad << "\n\n";
             return oss.str(); }());
+        AI = AId;
     }
 
     /**
