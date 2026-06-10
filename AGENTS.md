@@ -125,10 +125,24 @@ files but does NOT rebuild binaries — the installed `.so` files will be
 from the previous build and will silently produce wrong behavior.
 
 **CRITICAL: Before running ANY `git checkout`, `git switch`, `git restore`,
-or `git reset` command, ALWAYS run `git status` first.** Verify the working
+`git reset`, `git stash`, `git stash pop`, or `git checkout -- <file>`
+command, ALWAYS run `git status` first.** Verify the working
 tree is clean or that all valuable changes are committed/stashed. These
 commands silently overwrite uncommitted modifications and delete untracked
 files, discarding work with no way to recover it.
+
+When `git status` shows uncommitted changes that are NOT related to
+the task at hand (e.g. case configs, unrelated source files):
+  - **Never** `git checkout -- <file>` or `git stash` those files without
+    asking the user first.  These are the user's working changes and
+    should be preserved.
+  - If you need a clean tree for benchmarking (build baseline vs
+    optimized), **ask the user** before stashing.  They may prefer a
+    different approach (e.g. build directory copies, separate
+    worktrees).
+  - Always check `git stash list` after popping to confirm the stash
+    was consumed.  A popped stash with conflicts or a dirty tree
+    leaves the stash intact — the changes are NOT applied.
 
 ### Running Solver Executables
 

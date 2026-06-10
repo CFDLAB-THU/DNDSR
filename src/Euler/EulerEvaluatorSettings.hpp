@@ -686,6 +686,7 @@ namespace DNDS::Euler
             real chemAbsTol = 1e-10;
             real TBase = 0.0;
             int nSpeciesOverride = 0;
+            bool useCellTWarmCache = true;
 
             DNDS_DECLARE_CONFIG(ReactiveFlowSettings)
             {
@@ -701,6 +702,7 @@ namespace DNDS::Euler
                            DNDS::Config::range(0.0));
                 DNDS_FIELD(TBase, "Base temperature [K] for reactive sensible-energy bookkeeping; <=0 uses the minimum per-species Cantera bound");
                 DNDS_FIELD(nSpeciesOverride, "Reserved; currently unused. Species count is read from mechanism.");
+                DNDS_FIELD(useCellTWarmCache, "Enable per-cell T warm-start cache for temperature inversion");
             }
         } reactiveFlow; ///< Reactive flow settings.
 
@@ -799,7 +801,7 @@ namespace DNDS::Euler
             config.field_section(&T::idealGasProperty, "idealGasProperty",
                                   "Ideal gas thermodynamic properties");
             config.field_section(&T::reactiveFlow,     "reactiveFlow",
-                                  "Reactive flow settings (multi-species chemistry)");
+                                   "Reactive flow settings (multi-species chemistry)");
 
             // Cross-field checks
             config.check("useScalarJacobian and useRoeJacobian are mutually exclusive",

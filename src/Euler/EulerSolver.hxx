@@ -165,8 +165,10 @@ namespace DNDS::Euler
         // source() (via EvaluateCellSource in RHS), ReactiveSourceConstVolumeStep
         // (Strang), and PointImplicitSourceUpdate.  Face loops (EvaluateDt,
         // fluxFace) read the cache as TGuess for conservativeThermal() and
-        // temperature() calls.
-        auto warmT = eval.phys().hasChemicalSource() ? OptionalRef<ArrayDOFV<1>>(cellT_warm_) : OptionalRef<ArrayDOFV<1>>{};
+        // temperature() calls.  Controlled by eulerSettings.useCellTWarmCache.
+        auto warmT = (eval.settings.reactiveFlow.useCellTWarmCache && eval.phys().hasChemicalSource())
+                         ? OptionalRef<ArrayDOFV<1>>(cellT_warm_)
+                         : OptionalRef<ArrayDOFV<1>>{};
 
         auto frhsOuter =
             [&](
