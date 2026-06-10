@@ -50,7 +50,7 @@
         "uniqueStamps": false,
         "meshRotZ": 0.0,
         "meshFile": "../data/mesh/Unifrom_Ma2000Jet800.cgns",
-        "outPltName": "../data/outUnsteady/PP5/M2000/RE1E2_1-200-RM2",
+        "outPltName": "../data/outUnsteady/PP5/M2000_RM/REInf_1-200-RM8",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -137,7 +137,7 @@
     "eulerSettings": {
         "ignoreSourceTerm": true,
         "useScalarJacobian": true,
-        "riemannSolverType": "Roe_M2",
+        "riemannSolverType": "Roe_M8",
         "rsMeanValueEig": 1,
         "usePrimGradInVisFlux": 0,
         "nCentralSmoothStep": 0,
@@ -159,7 +159,7 @@
         "idealGasProperty": {
             "gamma": 1.666666666666667,
             "Rgas": 289,
-            "muGas": 1e-2,
+            "muGas": 1e-200,
             "prGas": 0.72,
             "TRef": 273.15,
             "CSutherland": 110.4,
