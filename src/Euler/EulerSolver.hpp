@@ -1158,17 +1158,29 @@ namespace DNDS::Euler
             // ---- 4. Mechanism file ----
             if (config.eulerSettings.reactiveFlow.enabled)
             {
-                std::string mechPath = config.eulerSettings.reactiveFlow.mechanismFile;
-                std::string mechPrefix = GetEnvString("DNDS_MECH_PATH", "");
-                if (!std::filesystem::path(mechPath).is_absolute() && !mechPrefix.empty())
-                    mechPath = mechPrefix + "/" + mechPath;
-                std::filesystem::path mechFSPath(mechPath);
-                if (mechFSPath.is_relative())
-                    mechFSPath = std::filesystem::absolute(mechFSPath);
-                DNDS_check_throw_info(std::filesystem::exists(mechFSPath),
-                                      "validateConfigFiles: mechanismFile not found [" + mechFSPath.string() + "] (did you set DNDS_MECH_PATH?)");
-                if (mpi.rank == 0)
-                    log() << "validateConfigFiles: mechanismFile OK [" << mechFSPath.string() << "]" << std::endl;
+                const std::string &mechFile = config.eulerSettings.reactiveFlow.mechanismFile;
+                std::filesystem::path mechPath(mechFile);
+                // Bare filenames (no directory separator) are resolved by Cantera's
+                // built-in data directory search — skip validation for those.
+                if (mechPath.has_parent_path())
+                {
+                    std::string resolved = mechFile;
+                    std::string mechPrefix = GetEnvString("DNDS_MECH_PATH", "");
+                    if (mechPath.is_relative() && !mechPrefix.empty())
+                        resolved = mechPrefix + "/" + resolved;
+                    std::filesystem::path mechFSPath(resolved);
+                    if (mechFSPath.is_relative())
+                        mechFSPath = std::filesystem::absolute(mechFSPath);
+                    DNDS_check_throw_info(std::filesystem::exists(mechFSPath),
+                                          "validateConfigFiles: mechanismFile not found [" + mechFSPath.string() + "] (did you set DNDS_MECH_PATH?)");
+                    if (mpi.rank == 0)
+                        log() << "validateConfigFiles: mechanismFile OK [" << mechFSPath.string() << "]" << std::endl;
+                }
+                else if (mpi.rank == 0)
+                {
+                    log() << "validateConfigFiles: mechanismFile is a bare filename ["
+                          << mechFile << "] — relying on Cantera built-in data dir search" << std::endl;
+                }
             }
         }
 

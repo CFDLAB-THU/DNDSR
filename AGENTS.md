@@ -143,6 +143,14 @@ the task at hand (e.g. case configs, unrelated source files):
   - Always check `git stash list` after popping to confirm the stash
     was consumed.  A popped stash with conflicts or a dirty tree
     leaves the stash intact — the changes are NOT applied.
+  - **Every modified tracked file belongs to the user** (or another
+    agent).  Never `git restore`, `git checkout --`, `git reset --hard`,
+    or `git clean` any file unless the user explicitly asks you to touch
+    that specific file.
+  - When `git diff` shows changes you don't recognise, **read the diff**
+    to understand what they are before deciding how to handle them.
+    Do not guess — a "clang-format: N file(s)" pre-commit message does
+    not guarantee the changes are formatting-only.
 
 ### Running Solver Executables
 
@@ -408,6 +416,8 @@ action.** One-time explicit permission does not carry over to other write
 actions — ask each time.
 
 **Operations requiring explicit user authorization (non-exhaustive):**
+- `git commit` / `git commit --amend`
+- `git push` / `git push --force` / `git push --force-with-lease`
 - `gh pr create/merge/close/edit`
 - `gh issue create/close/edit`
 - `gh pr comment` / `gh issue comment`
@@ -415,6 +425,5 @@ actions — ask each time.
 - `gh release create/delete`
 - `gh cache delete`
 - `gh api` with non-GET methods (POST, PUT, PATCH, DELETE)
-- `git push --force` / `git push --force-with-lease`
 
 **Draft PR by default** You must use --draft on new prs.
