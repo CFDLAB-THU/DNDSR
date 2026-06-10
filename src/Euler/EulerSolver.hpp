@@ -1099,6 +1099,79 @@ namespace DNDS::Euler
                       << " Done ===" << std::endl;
         }
 
+        void validateConfigFiles()
+        {
+            using namespace std::literals;
+
+            const auto &dio = config.dataIOControl;
+            const auto &tmc = config.timeMarchControl;
+            const auto &rst = config.restartState;
+
+            // ---- 1. Mesh file (CGNS source) ----
+            {
+                std::filesystem::path meshPath(dio.meshFile);
+                if (meshPath.is_relative())
+                    meshPath = std::filesystem::absolute(meshPath);
+                DNDS_check_throw_info(std::filesystem::exists(meshPath),
+                                      "validateConfigFiles: meshFile not found [" + meshPath.string() + "]");
+                if (mpi.rank == 0)
+                    log() << "validateConfigFiles: meshFile OK [" << meshPath.string() << "]" << std::endl;
+            }
+
+            // ---- 2. Partitioned/distributed mesh ----
+            if (dio.readMeshMode == 1 || dio.readMeshMode == 2)
+            {
+                std::string partBase;
+                if (!dio.meshFilePartitionedInput.empty())
+                    partBase = dio.meshFilePartitionedInput;
+                else
+                {
+                    partBase = dio.meshFile + "_part_" + std::to_string(mpi.size);
+                    if (dio.meshElevation == 1)
+                        partBase += "_elevated";
+                    if (dio.meshDirectBisect > 0)
+                        partBase += "_bisect" + std::to_string(dio.meshDirectBisect);
+                }
+                std::string readerType = dio.meshPartitionedReaderType;
+                std::string suffix = (readerType == "JSON") ? ".dir" : ".dnds.h5";
+                std::filesystem::path partPath = partBase + suffix;
+                if (partPath.is_relative())
+                    partPath = std::filesystem::absolute(partPath);
+                DNDS_check_throw_info(std::filesystem::exists(partPath),
+                                      "validateConfigFiles: partitioned mesh not found [" + partPath.string() + "] (readMeshMode=" + std::to_string(dio.readMeshMode) + ")");
+                if (mpi.rank == 0)
+                    log() << "validateConfigFiles: partitioned mesh OK [" << partPath.string() << "]" << std::endl;
+            }
+
+            // ---- 3. Restart file ----
+            if (tmc.useRestart && !rst.lastRestartFile.empty())
+            {
+                std::filesystem::path rstPath(rst.lastRestartFile);
+                if (rstPath.is_relative())
+                    rstPath = std::filesystem::absolute(rstPath);
+                DNDS_check_throw_info(std::filesystem::exists(rstPath),
+                                      "validateConfigFiles: restart file not found [" + rstPath.string() + "]");
+                if (mpi.rank == 0)
+                    log() << "validateConfigFiles: restart file OK [" << rstPath.string() << "]" << std::endl;
+            }
+
+            // ---- 4. Mechanism file ----
+            if (config.eulerSettings.reactiveFlow.enabled)
+            {
+                std::string mechPath = config.eulerSettings.reactiveFlow.mechanismFile;
+                std::string mechPrefix = GetEnvString("DNDS_MECH_PATH", "");
+                if (!std::filesystem::path(mechPath).is_absolute() && !mechPrefix.empty())
+                    mechPath = mechPrefix + "/" + mechPath;
+                std::filesystem::path mechFSPath(mechPath);
+                if (mechFSPath.is_relative())
+                    mechFSPath = std::filesystem::absolute(mechFSPath);
+                DNDS_check_throw_info(std::filesystem::exists(mechFSPath),
+                                      "validateConfigFiles: mechanismFile not found [" + mechFSPath.string() + "] (did you set DNDS_MECH_PATH?)");
+                if (mpi.rank == 0)
+                    log() << "validateConfigFiles: mechanismFile OK [" << mechFSPath.string() << "]" << std::endl;
+            }
+        }
+
         /**
          * @brief Read the mesh and initialize the full solver pipeline.
          *
