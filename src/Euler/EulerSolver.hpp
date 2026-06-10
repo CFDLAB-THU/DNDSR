@@ -340,10 +340,10 @@ namespace DNDS::Euler
                 int nPrecisionLog = 10;
                 bool dataOutAtInit = false;
                 bool restartOutAtInit = false;
-                int nDataOut = 10000;
-                int nDataOutC = 50;
+                int nDataOut = 10;
+                int nDataOutC = 1;
                 int nDataOutInternal = 10000;
-                int nDataOutCInternal = 1;
+                int nDataOutCInternal = 10000;
                 int nRestartOut = INT_MAX;
                 int nRestartOutC = INT_MAX;
                 int nRestartOutInternal = INT_MAX;
@@ -536,7 +536,7 @@ namespace DNDS::Euler
 
                 Serializer::SerializerFactory restartWriter;
                 Serializer::SerializerFactory meshPartitionedWriter;
-                std::string meshPartitionedReaderType = "JSON";
+                std::string meshPartitionedReaderType = "H5";
 
                 std::string getOutPltName() const
                 {
