@@ -1342,6 +1342,7 @@ namespace DNDS::Euler
                 }
                 else if (name == "uMin" || name == "uMax")
                 {
+                    DNDS_assert(pEval);
                     for (int i = 0; i < nVars; i++)
                     {
                         v_map[name + "_" + (*pEval).dofLabel(i)] = initVec[i];

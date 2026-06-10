@@ -721,8 +721,8 @@ namespace DNDS::Euler
                 return phys_.ransModel() == RANS_RKE ? (c ? "rho_epsilon" : "epsilon")
                                                      : (c ? "rho_omega" : "omega");
             }
-            return c ? "rho_" + phys_.speciesName(v - Isp)
-                     : phys_.speciesName(v - Isp);
+            return c ? "rhoY_" + phys_.speciesName(v - Isp)
+                     : "Y_" + phys_.speciesName(v - Isp);
         }
         [[nodiscard]] std::string dofLabel(int v) const { return varLabel(v, StateValueOrigin::Cons); }
         [[nodiscard]] std::string primVarLabel(int v, StateValueOrigin layout = StateValueOrigin::PrimRhoP) const { return varLabel(v, layout); }
