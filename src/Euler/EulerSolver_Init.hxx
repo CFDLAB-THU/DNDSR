@@ -592,7 +592,7 @@ namespace DNDS::Euler
                     {
                         if (v)
                             oss << ", ";
-                        oss << this->dofLabel(v) << ":" << uMinVec(v) << "|" << uMaxVec(v);
+                        oss << eval.dofLabel(v) << ":" << uMinVec(v) << "|" << uMaxVec(v);
                     }
                     oss << "]";
                     uMinMaxStr = oss.str();
@@ -724,8 +724,8 @@ namespace DNDS::Euler
                 DNDS_FILL_IN_LOG_ERR_VAL(fluxWall);
                 for (int v = 0; v < nVars; v++)
                 {
-                    logErrVal["uMin_" + this->dofLabel(v)] = uMinVec(v);
-                    logErrVal["uMax_" + this->dofLabel(v)] = uMaxVec(v);
+                    logErrVal["uMin_" + eval.dofLabel(v)] = uMinVec(v);
+                    logErrVal["uMax_" + eval.dofLabel(v)] = uMaxVec(v);
                 }
                 real CL{CLCur}, CD{CDCur}, AoA(AOACur);
                 DNDS_FILL_IN_LOG_ERR_VAL(CL);
@@ -866,7 +866,7 @@ namespace DNDS::Euler
                     {
                         if (v)
                             oss << ", ";
-                        oss << this->dofLabel(v) << ":" << uMinVec(v) << "|" << uMaxVec(v);
+                        oss << eval.dofLabel(v) << ":" << uMinVec(v) << "|" << uMaxVec(v);
                     }
                     oss << "]";
                     uMinMaxStr = oss.str();
@@ -950,8 +950,8 @@ namespace DNDS::Euler
                 DNDS_FILL_IN_LOG_ERR_VAL(fluxWall);
                 for (int v = 0; v < nVars; v++)
                 {
-                    logErrVal["uMin_" + this->dofLabel(v)] = uMinVec(v);
-                    logErrVal["uMax_" + this->dofLabel(v)] = uMaxVec(v);
+                    logErrVal["uMin_" + eval.dofLabel(v)] = uMinVec(v);
+                    logErrVal["uMax_" + eval.dofLabel(v)] = uMaxVec(v);
                 }
                 real CL{CLCur}, CD{CDCur}, AoA(AOACur);
                 DNDS_FILL_IN_LOG_ERR_VAL(CL);

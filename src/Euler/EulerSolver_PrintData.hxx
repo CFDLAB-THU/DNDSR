@@ -235,8 +235,8 @@ namespace DNDS::Euler
                     "R", "U", "V", "W", "P", "T", "M"};
             for (int i = I4 + 1; i < nVars; i++)
             {
-                names.push_back("V" + std::to_string(i - I4));
-                namesPoint.push_back("V" + std::to_string(i - I4));
+                names.push_back(eval.primVarLabel(i));
+                namesPoint.push_back(eval.primVarLabel(i));
             }
             for (auto &out : additionalCellScalars)
             {
@@ -584,8 +584,8 @@ namespace DNDS::Euler
             int currentTop = dim + 4;
             for (int i = I4 + 1; i < nVars; i++)
             {
-                names.push_back("V" + std::to_string(i - I4));
-                namesScalar.push_back("V" + std::to_string(i - I4));
+                names.push_back(eval.primVarLabel(i));
+                namesScalar.push_back(eval.primVarLabel(i));
                 offsetsScalar.push_back(currentTop++);
             }
             for (int i = 0; i < nVars; i++)
