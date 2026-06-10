@@ -2,12 +2,19 @@
 #
 # To set up the full dev environment, run:
 #
-#   ./scripts/install_python_deps.sh
+#   pip install -r external/cfd_externals/requirements.txt   # Cantera deps (first)
+#   <build cfd_externals>
+#   ./scripts/install_python_deps.sh                         # everything else (after)
 #
 # The script installs everything in this file, then builds h5py and mpi4py
 # from source against the project's HDF5 (cfd_externals) and MPI.  Those
 # two packages are deliberately excluded here because their PyPI wheels
 # bundle incompatible library versions that crash at import time.
+#
+# Packages needed to *build* the cfd_externals C libraries (scons,
+# packaging, ruamel.yaml, patchelf for Cantera) are listed separately
+# in external/cfd_externals/requirements.txt and must be installed FIRST,
+# before running cfd_externals_build.py.
 #
 # pyproject.toml [project.optional-dependencies].dev mirrors the formatter
 # tools below — keep the two lists in sync when editing.
@@ -33,12 +40,6 @@ typing_extensions
 compdb
 ninja
 cython
-
-# For building Cantera in cfd_externals
-scons
-packaging
-ruamel.yaml
-patchelf
 
 # Testing
 pytest

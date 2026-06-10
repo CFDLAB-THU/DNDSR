@@ -14,13 +14,15 @@ sudo apt install build-essential cmake ninja-build openmpi-bin libopenmpi-dev do
 ```bash
 python3.12 -m venv venv
 source venv/bin/activate
-bash scripts/install_python_deps.sh
 ```
 
 **3. Clone and get external dependencies**
 ```bash
 git clone --recursive https://github.com/CFDLAB-THU/DNDSR.git
 cd DNDSR
+
+# Cantera build deps (must be installed before cfd_externals_build.py)
+pip install -r external/cfd_externals/requirements.txt
 
 # Header-only libs first
 curl -L -o external/external_headeronlys.tar.gz \
@@ -31,6 +33,9 @@ cd external && tar -xzf external_headeronlys.tar.gz && cd ..
 cd external/cfd_externals
 CC=mpicc CXX=mpicxx python cfd_externals_build.py
 cd ../..
+
+# Install remaining Python dependencies (h5py against the project's HDF5, etc.)
+bash scripts/install_python_deps.sh
 ```
 
 **4. Build solvers**
@@ -147,12 +152,21 @@ sudo dnf install gcc-c++ cmake ninja-build openmpi-devel
 
 ## Python Virtual Environment
 
-The Python package and tests need a virtual environment. Set this up before
-building C++ or Python:
+The Python package and tests need a virtual environment. Create it first,
+then install Cantera build dependencies before building cfd_externals,
+and the full Python environment after:
 
 ```bash
 python3.12 -m venv venv
 source venv/bin/activate
+
+# First: install packages needed to build cfd_externals (Cantera)
+pip install -r external/cfd_externals/requirements.txt
+
+# Then build cfd_externals (HDF5, CGNS, Metis, ParMetis, Cantera)
+# (see "Binary libraries" section above)
+
+# Finally: install full Python environment (h5py, mpi4py, numpy, etc.)
 bash scripts/install_python_deps.sh
 ```
 

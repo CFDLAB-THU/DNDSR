@@ -41,7 +41,6 @@ sudo dnf install gcc-c++ cmake ninja-build openmpi-devel
 ```bash
 python3.12 -m venv venv
 source venv/bin/activate
-bash scripts/install_python_deps.sh
 ```
 
 > **Why system Python?** Conda Python embeds an RPATH to conda's bundled
@@ -54,15 +53,21 @@ bash scripts/install_python_deps.sh
 git clone --recursive https://github.com/CFDLAB-THU/DNDSR.git
 cd DNDSR
 
+# Install Python packages needed to build cfd_externals (Cantera)
+pip install -r external/cfd_externals/requirements.txt
+
 # Download and extract header-only libraries (Eigen, Boost, CGAL, fmt, pybind11, ...)
 curl -L -o external/external_headeronlys.tar.gz \
   https://github.com/harryzhou2000/cfd_externals_headeronlys/releases/latest/download/external_headeronlys.tar.gz
 cd external && tar -xzf external_headeronlys.tar.gz && cd ..
 
-# Build binary external libraries (HDF5, CGNS, Metis, ParMetis, ...)
+# Build binary external libraries (HDF5, CGNS, Metis, ParMetis, Cantera)
 cd external/cfd_externals
 CC=mpicc CXX=mpicxx python cfd_externals_build.py
 cd ../..
+
+# Install remaining Python dependencies (h5py against the project's HDF5, etc.)
+bash scripts/install_python_deps.sh
 ```
 
 ### 4. Build C++ solvers
