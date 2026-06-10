@@ -9,7 +9,8 @@
         "odeSetting1": 0.5,
         "sourceStrangSplitting": 0,
         "rhsFPPMode": 2,
-        "rhsFPPScale": 5,
+        "rhsFPPScale": 0.5,
+        "rhsFPPRelax": 0.6,
         "useDtPPLimit": false,
         "dtPPLimitScale": 1
     },
@@ -18,6 +19,7 @@
         "nConsoleCheckInternal": 1,
         "nDataOutC": 1,
         "nDataOut": 10,
+        "nRestartOut": 10,
         "tDataOut": 3e+200,
         "dataOutAtInit": true,
         "consoleOutputEveryFix": 1,
@@ -55,16 +57,32 @@
         "uniqueStamps": false,
         "meshScale": 5e-3,
         "meshFile": "../data/mesh/Uniform_10x1_2000.cgns",
-        "outPltName": "../data/out/react_2d_detonation_h2o2_coupled_dt2em6/react_",
-        "outPltMode": 0,
+        "outPltName": "../data/out/react_2d_detonation_h2o2_coupled_dt2em6-I1/react_",
+        "outPltMode": 1,
         "readMeshMode": 0,
-        "outPltTecplotFormat": false,
-        "outPltVTKFormat": true,
-        "outAtPointData": true,
-        "outAtCellData": true,
         "outCellScalarNames": [
             "RE"
-        ]
+        ],
+        "outPltTecplotFormat": false,
+        "outPltVTKFormat": false,
+        "outPltVTKHDFFormat": true,
+        "hdfDeflateLevel": 4,
+        // "hdfChunkSize": 32768,
+        "hdfChunkSize": 131072,
+        "outAtPointData": false,
+        "outAtCellData": true,
+        "outBndData": true,
+        "restartWriter": {
+            "type": "H5",
+            "hdfDeflateLevel": 5,
+            "hdfChunkSize": 4096
+        },
+        "meshPartitionedReaderType": "H5",
+        "meshPartitionedWriter": {
+            "type": "H5",
+            "hdfDeflateLevel": 5,
+            "hdfChunkSize": 4096
+        }
     },
     "boundaryDefinition": {
         "PeriodicTranslation1": [
@@ -76,11 +94,12 @@
     "limiterControl": {
         "useLimiter": true,
         "usePPRecLimiter": true,
-        "nPartialLimiterStart": 0
+        "nPartialLimiterStart": 1000000,
+        "nPartialLimiterStartInternal": 1000000
     },
     "linearSolverControl": {
         "jacobiCode": 1,
-        "sgsIter": 2,
+        "sgsIter": 4,
         "gmresCode": 0,
         "nGmresIter": 1,
         "nGmresSpace": 10,
@@ -110,7 +129,7 @@
         "reactiveSourceScale": 1,
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
-        "riemannSolverType": "Roe_M8",
+        "riemannSolverType": "HLLEP_V1",
         "rsMeanValueEig": 1,
         "uRecAlphaCompressPower": 1.0,
         "uRecBetaCompressPower": 1.0,
@@ -118,7 +137,7 @@
         "ransModel": "RANS_None",
         "reactiveFlow": {
             "enabled": true,
-            "mechanismFile": "h2o2.yaml"
+            "mechanismFile": "../cases/eulerEX/h2o2.yaml"
         },
         "farFieldStaticValue": {
             "type": "primTP_phy",
@@ -148,6 +167,7 @@
                     "  s := 0.0;",
                     "var Ly := 5e-3;",
                     "var pert_y := cos( 2 * pi * x[1] / Ly);",
+                    "s *= 0.5 * (pert_y + 1);",
                     "UExprtk[0] := 300.0 + s * (3500.0 - 300.0);",
                     "UExprtk[1] := 10.0 * pert_y * s;",
                     "UExprtk[2] := 10.0 * pert_y * s;",
