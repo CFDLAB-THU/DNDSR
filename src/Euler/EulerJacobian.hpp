@@ -93,7 +93,7 @@ namespace DNDS::Euler
 
     public:
         /// @brief Default constructor; mode and storage are uninitialized until SetModeAndInit().
-        JacobianDiagBlock() {}
+        JacobianDiagBlock() = default;
 
         /**
          * @brief Select the storage mode and allocate arrays matching @p mock's layout.

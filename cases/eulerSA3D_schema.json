@@ -66,7 +66,7 @@
                 "odeCode": {
                     "type": "integer",
                     "default": 0,
-                    "description": "ODE integrator code"
+                    "description": "ODE integrator code:\n    0       : ESDIRK4       | implicit | 5 stages\n    1       : SSP-SDIRK4    | implicit | 3 stages\n    202     : ESIDRK3       | implicit | 3 stages\n    203     : Trapz/C-N     | implicit | 1 stage\n    204     : ESDIRK2       | implicit | 2 stages\n    1/102   : BDF2          | implicit | 1 stage - 2 steps\n    103     : Backward Euler| implicit | 1 stage\n    2       : SSPRK3        | explicit | 3 stages (explicit)\n    401 ↓   : DITR          | implicit | 2 stages (coupled)\n        - c2                     = odeSetting1 \n        - backward-Euler starter = odeSetting2\n        - thetaM1                = odeSetting3\n        - mask                   = odeSetting4\n    411 ↓   : DITR-U2R2     | implicit | 2 stages (coupled)\n    412 ↓   : DITR-U2R1     | implicit | 2 stages (coupled)\n    413 ↓   : DITR-U3R1     | implicit | 2 stages (coupled) - 2 steps\n        - c2                     = odeSetting1 \n        - backward-Euler starter = odeSetting2\n        - thetaM1                = odeSetting3\n        - thetaM2                = odeSetting4\n"
                 },
                 "tEnd": {
                     "type": "number",
