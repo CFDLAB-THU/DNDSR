@@ -215,7 +215,28 @@ namespace DNDS::Euler
                                DNDS::Config::range(0.0, 1.0));
                     DNDS_FIELD(incrementPPRelax,    "Increment PP relaxation factor",
                                DNDS::Config::range(0.0, 1.0));
-                    DNDS_FIELD(odeCode,             "ODE integrator code");
+                    DNDS_FIELD(odeCode,             R"EOF(ODE integrator code:
+    0       : ESDIRK4       | implicit | 5 stages
+    1       : SSP-SDIRK4    | implicit | 3 stages
+    202     : ESIDRK3       | implicit | 3 stages
+    203     : Trapz/C-N     | implicit | 1 stage
+    204     : ESDIRK2       | implicit | 2 stages
+    1/102   : BDF2          | implicit | 1 stage - 2 steps
+    103     : Backward Euler| implicit | 1 stage
+    2       : SSPRK3        | explicit | 3 stages (explicit)
+    401 ↓   : DITR          | implicit | 2 stages (coupled)
+        - c2                     = odeSetting1 
+        - backward-Euler starter = odeSetting2
+        - thetaM1                = odeSetting3
+        - mask                   = odeSetting4
+    411 ↓   : DITR-U2R2     | implicit | 2 stages (coupled)
+    412 ↓   : DITR-U2R1     | implicit | 2 stages (coupled)
+    413 ↓   : DITR-U3R1     | implicit | 2 stages (coupled) - 2 steps
+        - c2                     = odeSetting1 
+        - backward-Euler starter = odeSetting2
+        - thetaM1                = odeSetting3
+        - thetaM2                = odeSetting4
+)EOF");
                     DNDS_FIELD(tEnd,                "End time for unsteady simulation");
                     DNDS_FIELD(odeSetting1,         "ODE parameter 1");
                     DNDS_FIELD(odeSetting2,         "ODE parameter 2");

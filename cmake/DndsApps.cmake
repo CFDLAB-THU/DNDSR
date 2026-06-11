@@ -162,3 +162,10 @@ target_compile_definitions(canteraConstVolTrajectory PRIVATE CT_USE_SYSTEM_FMT=1
 if(DNDS_CANTERA_DATA_DIR)
     target_compile_definitions(canteraConstVolTrajectory PRIVATE DNDS_CANTERA_DATA_DIR="${DNDS_CANTERA_DATA_DIR}")
 endif()
+
+# -------------------------------------------------------------------
+# Aggregate convenience targets
+# -------------------------------------------------------------------
+
+add_custom_target(all_euler)
+add_dependencies(all_euler ${DNDS_APPS_Euler_Models} eulerState canteraConstVolTrajectory)
