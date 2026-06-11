@@ -14,8 +14,25 @@ scripts to compute:
 * CJ detonation speed U_CJ
 * von Neumann (post-shock) state: T_VN, P_VN, ρ_VN
 * CJ (equilibrium) state: T_CJ, P_CJ, ρ_CJ
-* Ignition delay and induction length
+* ZND induction length and exothermic length
 * Mesh resolution requirements (cells across induction zone)
+
+## Backend: SDToolbox
+
+The scripts use the Caltech **Shock and Detonation Toolbox (SDToolbox)** —
+https://shepherd.caltech.edu/EDL/PublicResources/sdt/
+
+SDToolbox provides the standard "minimum wave speed" method for CJ speed and
+a robust ZND ODE integrator for detonation structure.  It is the canonical
+tool for detonation property estimates.
+
+Install SDToolbox from the pip-installable mirror:
+
+```bash
+pip install "sdtoolbox @ git+https://github.com/harryzhou2000/sdtoolbox.git#subdirectory=Python3"
+```
+
+Docs and examples are at the source repo (same URL) under `Python3/demo/`.
 
 ## Scripts
 
@@ -25,32 +42,41 @@ All scripts are in the skill directory alongside this file.
 
 ```bash
 python .opencode/skills/cj-detonation/estimate_cj.py \
-    --mechanism h2o2.yaml \
-    --composition "H2:0.2, O2:0.1, AR:0.7" \
+    --mechanism gri30.yaml \
+    --composition "H2:2, O2:1" \
     --basis mole \
     --temperature 300 --pressure 101325
 ```
 
-Outputs: U_CJ, T_VN, P_VN, ρ_VN, T_CJ, P_CJ, ρ_CJ, Mach numbers.
+Outputs: U_CJ, T_CJ, P_CJ, ρ_CJ, T_VN, P_VN, ρ_VN, u_VN, Mach numbers.
 
-Supports `--composition` with molar (`--basis mole`) or mass
-(`--basis mass`) fractions.  Default mechanism is Cantera's built-in
-search path; use an absolute or relative path otherwise.
+Supports `--composition` with molar (`--basis mole`) or mass (`--basis mass`)
+fractions.  Mechanism is resolved via Cantera's search path; use a relative or
+absolute path for project-local mechanisms.  Default mechanism is `gri30.yaml`.
 
-### `estimate_induction.py` — Ignition delay and induction length
+### `estimate_induction.py` — ZND structure and induction length
 
 ```bash
 python .opencode/skills/cj-detonation/estimate_induction.py \
-    --mechanism h2o2.yaml \
-    --composition "H2:0.2, O2:0.1, AR:0.7" \
+    --mechanism gri30.yaml \
+    --composition "H2:2, O2:1, AR:7" \
     --basis mole \
     --temperature 300 --pressure 101325 \
     --dx 1e-5
 ```
 
-Uses Cantera constant-pressure reactor at the von Neumann state to
-compute ignition delay (OH threshold) and induction length.
-Optional `--dx` reports cells across the induction zone.
+Uses SDToolbox's `zndsolve` to integrate the reactive Euler equations through
+the detonation wave (shock → induction → reaction → equilibrium products).
+The induction length is the distance from the shock to the point of maximum
+thermicity gradient (dσ̇/dx).
+
+Options:
+* `--overdrive 1.001` — U/U_CJ > 1 to avoid the sonic singularity (default 1.001)
+* `--t-end` — max integration time (auto-selected based on pressure)
+* `--tolerance 1e-8` — integration tolerance
+* `--dx 1e-5` — report cells across the induction zone for mesh resolution
+* `--znd-output profile.npz` — save full ZND profile (distance, T, P, ρ,
+  species, thermicity, Mach number)
 
 ## When to use this skill
 
@@ -61,28 +87,48 @@ Optional `--dx` reports cells across the induction zone.
 
 ## Typical workflow
 
-1. Run `estimate_cj.py` to get U_CJ and post-shock state
-2. Run `estimate_induction.py` to get induction length
+1. Run `estimate_cj.py` to get U_CJ and thermodynamic states
+2. Run `estimate_induction.py` to get induction length and ZND profile
 3. Compare induction length with mesh dx to assess resolution
-4. Recommend dt so the detonation advances ~1 cell/step:
+4. Compute dt so the detonation advances ~1 cell/step:
    dt_code = dx / U_CJ * U0 (where U0 is the code-unit velocity scale)
 
 ## Physics notes
 
-* The CJ condition is the minimum-speed detonation solution where
-  products are sonic relative to the shock (M_product = 1).
-* The von Neumann spike is the frozen-shock state before any reaction.
-* Induction length ≈ u_VN × t_ignition, where u_VN is the particle
-  velocity behind the shock (lab frame, U_CJ × (1 − ρ₀/ρ_VN)).
+* The CJ condition is the minimum-speed detonation solution where products
+  are sonic relative to the shock (M_product = 1).  SDToolbox finds it via
+  the minimum wave speed method: U_CJ = argmin_U w(U), where w is the
+  particle velocity at the equilibrium end state for each trial U.
+* The von Neumann spike is the frozen-shock state before any reaction
+  (PostShock_fr).
+* Induction length ≈ u_VN × t_induction, where u_VN is the particle velocity
+  behind the shock in the lab frame: U_CJ × (1 − ρ₀/ρ_VN).
 * For H2/O2 mixtures, induction is extremely sensitive to post-shock T.
-  Even small differences in U_CJ produce large changes in t_ignition.
-* Dilution (Ar, N2) increases induction length and slows CJ speed,
-  making detonations easier to resolve numerically.
+  Even small differences in U_CJ produce large changes in induction length.
+* Ar dilution **increases** T_VN (Ar reduces γ → stronger shock compression
+  at a given Mach number), which *shortens* induction.  The CJ speed drops
+  because the mixture has higher density (higher MW), but the induction
+  zone can become very short (~50 μm for H2/O2/Ar 2:1:7 at 1 atm).
+* The ZND solver needs U > U_CJ (overdrive > 1) to avoid division by zero
+  at the sonic point (1 − M² → 0).  Use `--overdrive 1.001` as default;
+  increase to 1.005 if integration fails.
+* If the ZND solve fails, try: (a) increase `--overdrive`, (b) use a simpler
+  mechanism, (c) increase `--tolerance` to 1e-6, or (d) increase `--t-end`.
 
 ## Integration with DNDSR
 
 * Use U_CJ to set dt: dt_code ≈ dx / U_CJ * U0
-* Use induction_length / dx to verify mesh resolution
+* Use ℓ_induction / dx to verify mesh resolution
 * Compare DNDSR-measured shock speed with estimate_cj.py output
-* The ZND structure (shock → induction → reaction → products) should
-  be visible in DNDSR VTU profiles
+* The ZND structure (shock → induction → reaction → products) should be visible
+  in DNDSR VTU profiles
+* Save full ZND profiles with `--znd-output` for comparison with 1D code output
+
+## Reference H2/O2 values (GRI-Mech 3.0, T1=300 K)
+
+| Mixture | P1 | U_CJ [m/s] | T_VN [K] | ℓ_ind [mm] |
+|---|---|---|---|---|
+| H2/O2 2:1 | 1 atm | 2836 | 1765 | 0.05 |
+| H2/O2 2:1 | 6.67 kPa | 2689 | 1626 | 0.98 |
+| H2/O2/Ar 2:1:7 | 1 atm | 1692 | 2055 | 0.08 |
+| H2/O2/Ar 2:1:7 | 6.67 kPa | 1617 | 1903 | 1.51 |
