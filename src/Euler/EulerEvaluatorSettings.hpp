@@ -299,8 +299,8 @@ namespace DNDS::Euler
             }
             DNDS_check_throw_info(j.is_object(), "StateValue must be an array or object");
             for (auto it = j.begin(); it != j.end(); ++it)
-                DNDS_check_throw_info(it.key() == "type" || it.key() == "state",
-                                      fmt::format("StateValue object only accepts keys 'type' and 'state', got [{}]", it.key()));
+                DNDS_check_throw_info(it.key() == "type" || it.key() == "state" || (it.key().size() > 0 && it.key()[0] == '_'),
+                                      fmt::format("StateValue object only accepts keys 'type' and 'state', or '_' comments, got [{}]", it.key()));
             DNDS_check_throw_info(j.contains("type") && j.contains("state"),
                                   "StateValue object must use canonical form {\"type\": string, \"state\": [...]}"
                                   "; old keyed forms like {\"primTP_phy\": [...]} are not accepted");
