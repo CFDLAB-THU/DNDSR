@@ -883,7 +883,7 @@ namespace DNDS::Euler
         {
             std::filesystem::path outPath;
             outPath = {fname + "_p" + std::to_string(mpi.size) + "_restart.dir"};
-            std::filesystem::create_directories(outPath);
+            createOutputDirAsDir(outPath, mpi, OutputDirMode::Fast);
             char BUF[512];
             std::sprintf(BUF, "%04d", mpi.rank);
             fname = getStringForcePath(outPath / (std::string(BUF) + ".json"));
@@ -893,7 +893,7 @@ namespace DNDS::Euler
         {
             fname += "_p" + std::to_string(mpi.size) + ".restart.dnds.h5";
             std::filesystem::path outPath = fname;
-            std::filesystem::create_directories(outPath.parent_path() / ".");
+            createOutputDir(outPath, mpi, OutputDirMode::Fast);
             config.restartState.lastRestartFile = fname;
         }
         else

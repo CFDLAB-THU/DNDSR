@@ -28,6 +28,7 @@
 #include <functional>
 #include <tuple>
 #include <filesystem>
+#include "DNDS/OutputDir.hpp"
 #include <mutex>
 #include <future>
 
@@ -1106,8 +1107,7 @@ namespace DNDS::Euler
                     gSetting["bcSettings"] = *pBCHandler;
                 if (mpi.rank == 0) // single call for output
                 {
-                    std::filesystem::path outFile{jsonName};
-                    std::filesystem::create_directories(outFile.parent_path() / ".");
+                    createOutputDir(jsonName);
                     auto fIn = std::ofstream(jsonName);
                     DNDS_assert(fIn);
                     fIn << std::setw(4) << gSetting;
@@ -1246,8 +1246,7 @@ namespace DNDS::Euler
             if (mpi.rank == 0)
             {
                 std::string logConfigFileName = config.dataIOControl.getOutLogName() + "_" + output_stamp + ".config.json";
-                std::filesystem::path outFile{logConfigFileName};
-                std::filesystem::create_directories(outFile.parent_path() / ".");
+                createOutputDir(logConfigFileName);
                 std::ofstream logConfig(logConfigFileName);
                 DNDS_assert(logConfig);
                 gSetting["___Compile_Time_Defines"] = DNDS_Defines_state;
