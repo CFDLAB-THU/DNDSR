@@ -41,6 +41,7 @@
 #include "SourceTermContributor.hpp"
 #include "Physics/PhysicsProperties.hpp"
 #include "DNDS/Serializer/SerializerBase.hpp"
+#include "DNDS/OutputDir.hpp"
 #include "DNDS/OptionalRef.hpp"
 #include "RANS_ke.hpp"
 
@@ -1554,7 +1555,7 @@ namespace DNDS::Euler
             {
                 std::string fname = name + "_bc[" + pBCHandler->GetNameFormID(id) + "]_profile.csv";
                 std::filesystem::path outFile{fname};
-                std::filesystem::create_directories(outFile.parent_path() / ".");
+                createOutputDir(outFile);
                 std::ofstream fout(fname);
                 DNDS_assert_info(fout, fmt::format("failed to open [{}]", fname));
                 bcProfile.OutProfileCSV(fout);
@@ -1591,6 +1592,7 @@ namespace DNDS::Euler
                 if (!bndIntegrationLogs.count(id))
                 {
                     std::string fname = name + "_bc[" + pBCHandler->GetNameFormID(id) + "]_integrationLog.csv";
+                    createOutputDir(fname);
                     bndIntegrationLogs.emplace(std::make_pair(id, std::ofstream(fname)));
                     DNDS_assert_info(bndIntegrationLogs.at(id), fmt::format("failed to open [{}]", fname));
                     bndIntegrationLogs.at(id) << "step, stage, iter";

@@ -177,8 +177,20 @@ namespace DNDS::Euler
             solver.ConfigureFromJson(defaultConfJson, true, confJson, overwriteKeys, overwriteValues);
             solver.validateConfigFiles();
             {
+                // Ensure all output directories exist (safe collective mode)
+                const auto &dio = solver.config.dataIOControl;
+                auto ensureDir = [&](const std::string &path)
+                {
+                    createOutputDir(path, mpi, OutputDirMode::Safe);
+                };
+                ensureDir(dio.getOutPltName());
+                if (!dio.outLogName.empty())
+                    ensureDir(dio.getOutLogName());
+                if (!dio.outRestartName.empty())
+                    ensureDir(dio.getOutRestartName());
+
                 std::string logFileName = solver.config.dataIOControl.getOutLogName() + ".logstr.txt";
-                std::filesystem::create_directories(std::filesystem::path(logFileName).parent_path() / ".");
+                createOutputDir(logFileName);
                 DNDS::setLogFile(logFileName);
             }
             solver.ReadMeshAndInitialize();

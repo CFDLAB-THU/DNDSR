@@ -8,6 +8,7 @@
 #include "SerializerH5.hpp"
 #include "JsonUtil.hpp"
 #include "DNDS/Config/ConfigParam.hpp"
+#include "DNDS/OutputDir.hpp"
 
 #include <utility>
 
@@ -100,7 +101,7 @@ namespace DNDS::Serializer
                 std::filesystem::path outPath;
                 outPath = {fname + ".dir"};
                 if (!read)
-                    std::filesystem::create_directories(outPath);
+                    DNDS::createOutputDirAsDir(outPath, mpi, OutputDirMode::Fast);
                 std::array<char, 512> BUF{};
                 std::sprintf(BUF.data(), rank_part_fmt.c_str(), mpi.rank);
                 fname = getStringForcePath(outPath / (std::string(BUF.data()) + ".json"));
@@ -112,7 +113,7 @@ namespace DNDS::Serializer
                 fname += ".dnds.h5";
                 std::filesystem::path outPath = fname;
                 if (!read)
-                    std::filesystem::create_directories(outPath.parent_path() / ".");
+                    DNDS::createOutputDir(outPath, mpi, OutputDirMode::Fast);
                 return std::make_tuple(fname, fname);
             }
             else

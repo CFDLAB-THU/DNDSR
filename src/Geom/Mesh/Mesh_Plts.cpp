@@ -1,6 +1,7 @@
 #include "Geom/Quadrature.hpp"
 #include "Mesh.hpp"
 #include "Geom/CGNS.hpp"
+#include "DNDS/OutputDir.hpp"
 #include <array>
 #include <thread>
 #include <filesystem>
@@ -142,14 +143,14 @@ namespace DNDS::Geom
         {
             fname += ".plt";
             std::filesystem::path outFile{fname};
-            std::filesystem::create_directories(outFile.parent_path() / ".");
+            createOutputDir(outFile);
             DNDS_assert(mode == SerialOutput && dataIsSerialOut);
         }
         if (flag == 1)
         {
 
             std::filesystem::path outPath{fname + ".dir"};
-            std::filesystem::create_directories(outPath);
+            createOutputDirAsDir(outPath, mpi, OutputDirMode::Fast);
             std::array<char, 512> BUF{};
             std::sprintf(BUF.data(), "%06d", mpi.rank);
             fname = getStringForcePath(outPath / (std::string(BUF.data()) + ".plt"));
@@ -771,7 +772,7 @@ namespace DNDS::Geom
         {
             fname += ".vtu";
             std::filesystem::path outFile{fname};
-            std::filesystem::create_directories(outFile.parent_path() / ".");
+            createOutputDir(outFile);
             DNDS_assert(mode == SerialOutput && dataIsSerialOut);
             if (!seriesName.empty())
                 updateVTKSeries(seriesName + ".vtu.series", getStringForcePath(outFile.filename()), t);
@@ -780,7 +781,7 @@ namespace DNDS::Geom
         if (flag == 1)
         {
             outPath = {fname + ".vtu.dir"};
-            std::filesystem::create_directories(outPath);
+            createOutputDirAsDir(outPath, mpi, OutputDirMode::Fast);
             std::array<char, 512> BUF{};
             std::sprintf(BUF.data(), "%04d", mpi.rank);
             fname = getStringForcePath(outPath / (std::string(BUF.data()) + ".vtu"));
@@ -1347,8 +1348,7 @@ namespace DNDS::Geom
     {
         fname += ".vtkhdf";
         std::filesystem::path outFile{fname};
-        // if (mpi.rank == mRank) // only mRank creates could be faulty?
-        std::filesystem::create_directories(outFile.parent_path() / ".");
+        createOutputDir(outFile, mpi, OutputDirMode::Fast);
         if (mpi.rank == mRank)
             if (!seriesName.empty())
                 updateVTKSeries(seriesName + ".vtkhdf.series", getStringForcePath(outFile.filename()), t);
@@ -1629,7 +1629,7 @@ namespace DNDS::Geom
         /*****************************/
 
         std::filesystem::path outFile{fname};
-        std::filesystem::create_directories(outFile.parent_path() / ".");
+        createOutputDir(outFile, mpi, OutputDirMode::Fast);
 
         int cgns_file{0};
         DNDS_CGNS_CALL_EXIT(cgp_open(fname.c_str(), CG_MODE_WRITE, &cgns_file));
