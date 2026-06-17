@@ -47,6 +47,7 @@ namespace DNDS::Euler
      *  @param fnameSeries            Filename for VTK time series metadata.
      *  @param odeResidualF           Functor returning per-cell ODE residual scalar.
      *  @param additionalCellScalars  List of additional named cell scalar fields to output.
+     *  @param additionalBndScalars   List of additional named bnd-face scalar fields to output.
      *  @param eval                   Reference to the EulerEvaluator.
      *  @param tSimu                  Current simulation time for time-series annotation.
      *  @param mode                   Output mode (normal or time-averaged).
@@ -56,6 +57,7 @@ namespace DNDS::Euler
         const std::string &fnameSeries,
         const tCellScalarFGet &odeResidualF,
         tAdditionalCellScalarList &additionalCellScalars,
+        tAdditionalCellScalarList &additionalBndScalars,
         TEval &eval, real tSimu, PrintDataMode mode)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -506,6 +508,7 @@ namespace DNDS::Euler
             {
                 std::lock_guard<std::mutex> outBndLock(outBndArraysMutex);
                 DNDS_MPI_InsertCheck(mpi, "EulerSolver<model>::PrintData === bnd enter");
+                int nOUTSBndBase = nOUTSBnd - static_cast<int>(additionalBndScalars.size());
                 for (index iB = 0; iB < meshBnd->NumCell(); iB++)
                 {
                     // TU recu =
@@ -518,8 +521,8 @@ namespace DNDS::Euler
                     index iFace = mesh->bnd2faceV.at(iBnd);
                     if (iFace == -1)
                     {
-                        DNDS_assert(mesh->isPeriodic);                              // only internal bnd is valid, periodic bnd should be omitted
-                        (*outDistBnd)[iB](nOUTSBnd - 4) = meshBnd->GetCellZone(iB); // add this to enable blanking
+                        DNDS_assert(mesh->isPeriodic);                                  // only internal bnd is valid, periodic bnd should be omitted
+                        (*outDistBnd)[iB](nOUTSBndBase - 4) = meshBnd->GetCellZone(iB); // add this to enable blanking
                         continue;
                     }
                     TU recu = uOut[iCell];
@@ -549,9 +552,16 @@ namespace DNDS::Euler
                     fluxT.setZero();
                     fluxT(Seq012) = eval.fluxBndForceT.at(iBnd);
                     (*outDistBnd)[iB](Eigen::seq(nVars + 2 + nVars, nVars + 2 + nVars + 3 - 1)) = fluxT;
-                    // (*outDistBnd)[iB](nOUTSBnd - 4) = mesh->GetFaceZone(iFace);
-                    (*outDistBnd)[iB](nOUTSBnd - 4) = meshBnd->GetCellZone(iB);
-                    (*outDistBnd)[iB](Eigen::seq(nOUTSBnd - 3, nOUTSBnd - 1)) = vfv->GetFaceNorm(iFace, 0) * vfv->GetFaceArea(iFace);
+                    // (*outDistBnd)[iB](nOUTSBndBase - 4) = mesh->GetFaceZone(iFace);
+                    (*outDistBnd)[iB](nOUTSBndBase - 4) = meshBnd->GetCellZone(iB);
+                    (*outDistBnd)[iB](Eigen::seq(nOUTSBndBase - 3, nOUTSBndBase - 1)) = vfv->GetFaceNorm(iFace, 0) * vfv->GetFaceArea(iFace);
+
+                    int iCurBnd = nOUTSBndBase;
+                    for (auto &out : additionalBndScalars)
+                    {
+                        (*outDistBnd)[iB][iCurBnd] = std::get<1>(out)(iBnd);
+                        iCurBnd++;
+                    }
 
                     // (*outDist)[iCell][8] = (*vfv->SOR_iCell2iScan)[iCell];//!using SOR rb seq instead
                 }
@@ -607,6 +617,13 @@ namespace DNDS::Euler
             names.push_back("N2");
             namesVector.push_back("Norm");
             offsetsVector.push_back(currentTop), currentTop += 3;
+
+            for (auto &out : additionalBndScalars)
+            {
+                names.push_back(std::get<0>(out));
+                namesScalar.push_back(std::get<0>(out));
+                offsetsScalar.push_back(currentTop++);
+            }
 
             if (config.dataIOControl.outPltTecplotFormat)
             {

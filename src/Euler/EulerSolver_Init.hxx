@@ -462,6 +462,10 @@ namespace DNDS::Euler
                               "outCellScalarNames must have fewer than 128 entries");
         nOUTS += config.dataIOControl.outCellScalarNames.size();
 
+        DNDS_check_throw_info(config.dataIOControl.outBndScalarNames.size() < 128,
+                              "outBndScalarNames must have fewer than 128 entries");
+        nOUTSBnd += config.dataIOControl.outBndScalarNames.size();
+
         DNDS_check_throw_info(config.dataIOControl.outAtCellData || config.dataIOControl.outAtPointData,
                               "at least one of outAtCellData or outAtPointData must be enabled");
         DNDS_check_throw_info(config.dataIOControl.outPltVTKFormat || config.dataIOControl.outPltTecplotFormat || config.dataIOControl.outPltVTKHDFFormat,
@@ -755,6 +759,7 @@ namespace DNDS::Euler
                 [&](index iCell)
                 { return ode->getLatestRHS()[iCell](0); },
                 addOutList,
+                addBndOutList,
                 eval, tSimu);
             eval.PrintBCProfiles(config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + std::to_string(step),
                                  u, uRec);
@@ -769,6 +774,7 @@ namespace DNDS::Euler
                 [&](index iCell)
                 { return ode->getLatestRHS()[iCell](0); },
                 addOutList,
+                addBndOutList,
                 eval, tSimu);
             eval.PrintBCProfiles(config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + "C",
                                  u, uRec);
@@ -981,6 +987,7 @@ namespace DNDS::Euler
                     [&](index iCell)
                     { return ode->getLatestRHS()[iCell](0); },
                     addOutList,
+                    addBndOutList,
                     eval, tSimu);
                 eval.PrintBCProfiles(config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + "C",
                                      u, uRec);
@@ -996,6 +1003,7 @@ namespace DNDS::Euler
                 [&](index iCell)
                 { return ode->getLatestRHS()[iCell](0); },
                 addOutList,
+                addBndOutList,
                 eval, tSimu);
             eval.PrintBCProfiles(config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + std::to_string(step),
                                  u, uRec);
@@ -1014,6 +1022,7 @@ namespace DNDS::Euler
                     [&](index iCell)
                     { return ode->getLatestRHS()[iCell](0); },
                     addOutList,
+                    addBndOutList,
                     eval, tSimu,
                     PrintDataTimeAverage);
             }
@@ -1030,6 +1039,7 @@ namespace DNDS::Euler
                 [&](index iCell)
                 { return ode->getLatestRHS()[iCell](0); },
                 addOutList,
+                addBndOutList,
                 eval, tSimu,
                 PrintDataTimeAverage);
             nextStepOutAverage += config.outputControl.nTimeAverageOut;
@@ -1060,6 +1070,7 @@ namespace DNDS::Euler
                 [&](index iCell)
                 { return ode->getLatestRHS()[iCell](0); },
                 addOutList,
+                addBndOutList,
                 eval, tSimu);
             eval.PrintBCProfiles(config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + "t_" + std::to_string(nextTout),
                                  u, uRec);

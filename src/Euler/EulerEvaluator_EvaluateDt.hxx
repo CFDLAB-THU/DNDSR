@@ -2918,4 +2918,139 @@ namespace DNDS::Euler
 
         op.setMap(outMap);
     }
+
+    template <EulerModel model>
+    /** @brief Register available output scalar fields for boundary output in the OutputPicker.
+     *
+     *  Analogous to InitializeOutputPicker, but the registered functors accept a boundary
+     *  index @c iBnd (the index into @c mesh->bnd2cell / @c mesh->bnd2faceV) rather than a
+     *  cell index. Each functor internally maps @c iBnd to the owning cell
+     *  @c iCell = mesh->bnd2cell[iBnd][0] and (where needed) the volume face
+     *  @c iFace = mesh->bnd2faceV.at(iBnd).
+     *
+     *  Includes the same cell-centered quantities as InitializeOutputPicker (conservative
+     *  components, reconstruction coefficients, limiter values, wall distance, cell volume,
+     *  turbulent viscosity, etc.) plus the face-specific @c dWallFace.
+     *
+     *  @param op        OutputPicker to populate with named field extractors (output).
+     *  @param dataRefs  References to the solution arrays (u, uRec, betaPP, alphaPP).
+     */
+    void EulerEvaluator<model>::InitializeOutputPickerBnd(OutputPicker &op, OutputOverlapDataRefs dataRefs)
+    {
+        DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+
+        auto &u = dataRefs.u;
+        auto &uRec = dataRefs.uRec;
+        auto &betaPP = dataRefs.betaPP;
+        auto &alphaPP = dataRefs.alphaPP;
+
+        auto iBnd2Cell = [this](index iBnd) -> index
+        {
+            return mesh->bnd2cell[iBnd][0];
+        };
+        auto iBnd2Face = [this](index iBnd) -> index
+        {
+            return mesh->bnd2faceV.at(iBnd);
+        };
+        auto dWallCellMean = [this](index iCell) -> real
+        {
+            if (iCell >= 0 && iCell < static_cast<index>(dWall.size()) &&
+                dWall.at(iCell).size() > 0)
+                return dWall.at(iCell).mean();
+            return real(0);
+        };
+
+        OutputPicker::tMap outMap;
+        outMap["RU"] = [&, iBnd2Cell](index iBnd)
+        { return u[iBnd2Cell(iBnd)](1); };
+        outMap["RV"] = [&, iBnd2Cell](index iBnd)
+        { return u[iBnd2Cell(iBnd)](I4 - 1); };
+        outMap["RE"] = [&, iBnd2Cell](index iBnd)
+        { return u[iBnd2Cell(iBnd)](I4); };
+        outMap["R_REC_1"] = [&, iBnd2Cell](index iBnd)
+        { return uRec[iBnd2Cell(iBnd)](0, 0); };
+        outMap["RU_REC_1"] = [&, iBnd2Cell](index iBnd)
+        { return uRec[iBnd2Cell(iBnd)](1, 0); };
+
+        outMap["betaPP"] = [&, iBnd2Cell](index iBnd)
+        { return betaPP[iBnd2Cell(iBnd)](0); };
+        outMap["alphaPP"] = [&, iBnd2Cell](index iBnd)
+        { return alphaPP[iBnd2Cell(iBnd)](0); };
+        outMap["ACond"] = [&, iBnd2Cell](index iBnd)
+        {
+            index iCell = iBnd2Cell(iBnd);
+            auto AI = vfv->GetCellRecMatAInv(iCell);
+            Eigen::MatrixXd AIInv = AI;
+            real aCond = HardEigen::EigenLeastSquareInverse(AI, AIInv);
+            return aCond;
+        };
+        outMap["dWall"] = [&, iBnd2Cell, dWallCellMean](index iBnd)
+        {
+            return dWallCellMean(iBnd2Cell(iBnd));
+        };
+        outMap["dWallFace"] = [&, iBnd2Face](index iBnd)
+        {
+            index iFace = iBnd2Face(iBnd);
+            if (iFace >= 0 && iFace < static_cast<index>(dWallFace.size()))
+                return dWallFace.at(iFace);
+            return real(0);
+        };
+        outMap["minJacobiDetRel"] = [&, iBnd2Cell](index iBnd)
+        {
+            index iCell = iBnd2Cell(iBnd);
+            auto eCell = mesh->GetCellElement(iCell);
+            auto qCell = vfv->GetCellQuad(iCell);
+            real minDetJac = veryLargeReal;
+            for (int iG = 0; iG < qCell.GetNumPoints(); iG++)
+                minDetJac = std::min(vfv->GetCellJacobiDet(iCell, iG), minDetJac);
+            return minDetJac * Geom::Elem::ParamSpaceVol(eCell.GetParamSpace()) / vfv->GetCellVol(iCell);
+        };
+        outMap["cellVolume"] = [&, iBnd2Cell](index iBnd)
+        {
+            return vfv->GetCellVol(iBnd2Cell(iBnd));
+        };
+        outMap["mut"] = [&, iBnd2Cell, dWallCellMean](index iBnd)
+        {
+            real mut = 0;
+            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
+            {
+                index iCell = iBnd2Cell(iBnd);
+                TU Uxy = u[iCell];
+                TDiffU GradU;
+                GradU.resize(Eigen::NoChange, nVars);
+                GradU.setZero();
+                if constexpr (gDim == 2)
+                    GradU({0, 1}, EigenAll) =
+                        vfv->GetIntPointDiffBaseValue(iCell, -1, -1, -1, std::array<int, 2>{1, 2}, 3) *
+                        uRec[iCell];
+                else
+                    GradU({0, 1, 2}, EigenAll) =
+                        vfv->GetIntPointDiffBaseValue(iCell, -1, -1, -1, std::array<int, 3>{1, 2, 3}, 4) *
+                        uRec[iCell];
+                auto [T, pMean, asqrMean, Hmean, gammaEq, gamma] = phys_.conservativeThermal(Uxy);
+                real muRef = phys_.muRef();
+                real mufPhy = muEff(Uxy, T);
+                if (settings.ransModel == RANSModel::RANS_KOSST)
+                    mut = RANS::GetMut_SST<dim>(Uxy, GradU, mufPhy, dWallCellMean(iCell));
+                else if (settings.ransModel == RANSModel::RANS_KOWilcox)
+                    mut = RANS::GetMut_KOWilcox<dim>(Uxy, GradU, mufPhy, dWallCellMean(iCell));
+                else if (settings.ransModel == RANSModel::RANS_RKE)
+                    mut = RANS::GetMut_RealizableKe<dim>(Uxy, GradU, mufPhy, dWallCellMean(iCell));
+            }
+
+            return mut;
+        };
+
+        for (int v = 0; v < nVars; ++v)
+            outMap[this->dofLabel(v)] =
+                [&, iBnd2Cell, v](index iBnd)
+            { return u[iBnd2Cell(iBnd)](v); };
+
+        for (int v = I4 + 1; v < nVars; ++v)
+            outMap["RV" + std::to_string(v - I4)] =
+                [&, iBnd2Cell, v](index iBnd)
+            { return u[iBnd2Cell(iBnd)](v); };
+
+        op.setMap(outMap);
+    }
 }
