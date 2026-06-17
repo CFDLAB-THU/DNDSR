@@ -120,6 +120,10 @@ namespace DNDS::Euler
         eval.InitializeOutputPicker(outputPicker, {u, uRec, betaPP, alphaPP});
         addOutList = outputPicker.getSubsetList(config.dataIOControl.outCellScalarNames);
 
+        OutputPicker outputPickerBnd;
+        eval.InitializeOutputPickerBnd(outputPickerBnd, {u, uRec, betaPP, alphaPP});
+        addBndOutList = outputPickerBnd.getSubsetList(config.dataIOControl.outBndScalarNames);
+
         /*******************************************************/
         /*                 TEMPORARY Us                        */
         /*******************************************************/
@@ -1322,6 +1326,7 @@ namespace DNDS::Euler
                 [&](index iCell)
                 { return ode->getLatestRHS()[iCell](0); },
                 addOutList,
+                addBndOutList,
                 eval, tSimu);
             eval.PrintBCProfiles(config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + "00000",
                                  u, uRec);

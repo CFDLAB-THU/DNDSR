@@ -548,6 +548,7 @@ namespace DNDS::Euler
                 bool outBndData = false;
 
                 std::vector<std::string> outCellScalarNames{};
+                std::vector<std::string> outBndScalarNames{};
 
                 bool serializerSaveURec = false;
 
@@ -631,6 +632,7 @@ namespace DNDS::Euler
                     DNDS_FIELD(outVolumeData,               "Output volume data");
                     DNDS_FIELD(outBndData,                  "Output boundary data");
                     DNDS_FIELD(outCellScalarNames,          "Additional cell scalar names to output");
+                    DNDS_FIELD(outBndScalarNames,           "Additional bnd scalar names to output (picked from bnd2cell)");
                     DNDS_FIELD(serializerSaveURec,          "Save reconstruction in restart");
                     DNDS_FIELD(allowAsyncPrintData,         "Allow asynchronous data output");
                     DNDS_FIELD(rectifyNearPlane,            "Rectify nodes near planes: bitmask 1=x,2=y,4=z");
@@ -1295,6 +1297,7 @@ namespace DNDS::Euler
          * @param fnameSeries             Series file name (for VTK time series).
          * @param odeResidualF             Callback returning the ODE residual for each cell.
          * @param additionalCellScalars    Additional per-cell scalar fields to output.
+         * @param additionalBndScalars     Additional per-bnd-face scalar fields to output.
          * @param eval                     Reference to the evaluator (for output field computation).
          * @param TSimu                    Current simulation time (-1 for steady).
          * @param mode                     PrintDataLatest or PrintDataTimeAverage.
@@ -1302,6 +1305,7 @@ namespace DNDS::Euler
         void PrintData(const std::string &fname, const std::string &fnameSeries,
                        const tCellScalarFGet &odeResidualF,
                        tAdditionalCellScalarList &additionalCellScalars,
+                       tAdditionalCellScalarList &additionalBndScalars,
                        TEval &eval, real TSimu = -1.0, PrintDataMode mode = PrintDataLatest);
 
         /// @brief Serialize the solution to a SerializerBase (currently unused standalone path).
@@ -1469,6 +1473,7 @@ namespace DNDS::Euler
             int dtIncreaseCounter = 0;
 
             tAdditionalCellScalarList addOutList;
+            tAdditionalCellScalarList addBndOutList;
 
 #define DNDS_EULERSOLVER_RUNNINGENV_GET_REF(name) auto &name = runningEnvironment.name
 
@@ -1514,7 +1519,8 @@ namespace DNDS::Euler
                                                                \
     DNDS_EULERSOLVER_RUNNINGENV_GET_REF(dtIncreaseCounter);    \
                                                                \
-    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(addOutList);
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(addOutList);           \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(addBndOutList);
 
             RunningEnvironment(){};
         };
@@ -1597,6 +1603,7 @@ DNDS_EULERSOLVER_INS_EXTERN(NS_2EQ_3D, extern);
             const std::string &fname, const std::string &fnameSeries, \
             const tCellScalarFGet &odeResidualF,                      \
             tAdditionalCellScalarList &additionalCellScalars,         \
+            tAdditionalCellScalarList &additionalBndScalars,          \
             TEval &eval, real tSimu,                                  \
             PrintDataMode mode);                                      \
         ext template void EulerSolver<model>::PrintRestart(           \

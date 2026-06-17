@@ -2104,6 +2104,15 @@ namespace DNDS::Euler
 
         /// @brief Initialize an OutputPicker with field callbacks for VTK/HDF5 output.
         void InitializeOutputPicker(OutputPicker &op, OutputOverlapDataRefs dataRefs);
+
+        /// @brief Initialize an OutputPicker for boundary output with field callbacks.
+        ///
+        /// Like InitializeOutputPicker, but the registered functors accept a boundary
+        /// index @c iBnd (into @c mesh->bnd2cell) and internally map to the owning cell
+        /// via @c mesh->bnd2cell[iBnd][0]. Includes cell-centered quantities (wallDist,
+        /// conservative components, limiter values, etc.) plus the face-specific
+        /// @c dWallFace.
+        void InitializeOutputPickerBnd(OutputPicker &op, OutputOverlapDataRefs dataRefs);
     };
 }
 
@@ -2270,108 +2279,109 @@ DNDS_EulerEvaluator_INS_EXTERN(NS_3D, extern);
 DNDS_EulerEvaluator_INS_EXTERN(NS_SA_3D, extern);
 DNDS_EulerEvaluator_INS_EXTERN(NS_2EQ_3D, extern);
 
-#define DNDS_EulerEvaluator_EvaluateDt_INS_EXTERN(model, ext)                                                              \
-    namespace DNDS::Euler                                                                                                  \
-    {                                                                                                                      \
-        ext template void EulerEvaluator<model>::GetWallDist();                                                            \
-        ext template void EulerEvaluator<model>::GetWallDist_CollectTriangles(                                             \
-            bool, std::vector<Eigen::Matrix<real, 3, 3>> &);                                                               \
-        ext template void EulerEvaluator<model>::GetWallDist_AABB();                                                       \
-        ext template void EulerEvaluator<model>::GetWallDist_BatchedAABB();                                                \
-        ext template void EulerEvaluator<model>::GetWallDist_Poisson();                                                    \
-        ext template void EulerEvaluator<model>::GetWallDist_ComputeFaceDistances();                                       \
-        ext template void EulerEvaluator<model>::EvaluateDt(                                                               \
-            ArrayDOFV<1> &dt,                                                                                              \
-            ArrayDOFV<nVarsFixed> &u,                                                                                      \
-            ArrayRECV<nVarsFixed> &uRec,                                                                                   \
-            real CFL, real &dtMinall, real MaxDt,                                                                          \
-            bool UseLocaldt,                                                                                               \
-            real t,                                                                                                        \
-            uint64_t flags,                                                                                                \
-            OptionalRef<ArrayDOFV<1>> cellTWarm);                                                                          \
-        ext template void                                                                                                  \
-        EulerEvaluator<model>::fluxFace(                                                                                   \
-            const TU_Batch &ULxy,                                                                                          \
-            const TU_Batch &URxy,                                                                                          \
-            const TU &ULMeanXy,                                                                                            \
-            const TU &URMeanXy,                                                                                            \
-            const TDiffU_Batch &DiffUxy,                                                                                   \
-            const TDiffU_Batch &DiffUxyPrim,                                                                               \
-            const TVec_Batch &unitNorm,                                                                                    \
-            const TVec_Batch &vg,                                                                                          \
-            const TVec &unitNormC,                                                                                         \
-            const TVec &vgC,                                                                                               \
-            TU_Batch &FLfix,                                                                                               \
-            TU_Batch &FRfix,                                                                                               \
-            TU_Batch &finc,                                                                                                \
-            TReal_Batch &lam0V, TReal_Batch &lam123V, TReal_Batch &lam4V,                                                  \
-            Geom::t_index btype,                                                                                           \
-            typename Gas::RiemannSolverType rsType,                                                                        \
-            index iFace, bool ignoreVis,                                                                                   \
-            OptionalRef<ArrayDOFV<1>> cellTWarm);                                                                          \
-        ext template                                                                                                       \
-            typename EulerEvaluator<model>::TU                                                                             \
-            EulerEvaluator<model>::source(                                                                                 \
-                const TU &UMeanXy,                                                                                         \
-                const TDiffU &DiffUxy,                                                                                     \
-                const Geom::tPoint &pPhy,                                                                                  \
-                TJacobianU &jacobian,                                                                                      \
-                index iCell,                                                                                               \
-                index ig,                                                                                                  \
-                int Mode,                                                                                                  \
-                SourceFilter filter,                                                                                       \
-                OptionalRef<ArrayDOFV<1>> cellTWarm);                                                                      \
-        ext template void EulerEvaluator<model>::EvaluateCellSource(                                                       \
-            TU &cellRHS,                                                                                                   \
-            TJacobianU &cellJac,                                                                                           \
-            const TU &uCell,                                                                                               \
-            const TDiffU &cellGradU,                                                                                       \
-            index iCell,                                                                                                   \
-            int jacMode,                                                                                                   \
-            SourceFilter filter,                                                                                           \
-            real cellAlpha,                                                                                                \
-            bool useRecArrays,                                                                                             \
-            OptionalRef<ArrayDOFV<nVarsFixed>> pU,                                                                         \
-            OptionalRef<ArrayRECV<nVarsFixed>> pURecUnlim,                                                                 \
-            OptionalRef<ArrayRECV<nVarsFixed>> pURec,                                                                      \
-            bool direct2ndRec,                                                                                             \
-            real t,                                                                                                        \
-            OptionalRef<ArrayDOFV<1>> cellTWarm);                                                                          \
-        ext template                                                                                                       \
-            typename EulerEvaluator<model>::TU                                                                             \
-            EulerEvaluator<model>::generateBoundaryValue(                                                                  \
-                TU &ULxy,                                                                                                  \
-                const TU &ULMeanXy,                                                                                        \
-                index iCell, index iFace, int iG,                                                                          \
-                const TVec &uNorm,                                                                                         \
-                const TMat &normBase,                                                                                      \
-                const Geom::tPoint &pPhysics,                                                                              \
-                real t,                                                                                                    \
-                Geom::t_index btype,                                                                                       \
-                bool fixUL,                                                                                                \
-                int geomMode, int linMode);                                                                                \
-        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_FarField(                        \
-            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                               \
-            const Geom::tPoint &, real, Geom::t_index, bool, int);                                                         \
-        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_SpecialFar(                      \
-            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                               \
-            const Geom::tPoint &, real, Geom::t_index);                                                                    \
-        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_InviscidWall(                    \
-            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                               \
-            const Geom::tPoint &, real, Geom::t_index);                                                                    \
-        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_ViscousWall(                     \
-            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                               \
-            const Geom::tPoint &, real, Geom::t_index, bool, int);                                                         \
-        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_Outflow(                         \
-            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                               \
-            const Geom::tPoint &, real, Geom::t_index);                                                                    \
-        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_Inflow(                          \
-            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                               \
-            const Geom::tPoint &, real, Geom::t_index);                                                                    \
-        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_TotalConditionInflow(            \
-            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                               \
-            const Geom::tPoint &, real, Geom::t_index);                                                                    \
-        ext template void EulerEvaluator<model>::InitializeOutputPicker(OutputPicker &op, OutputOverlapDataRefs dataRefs); \
+#define DNDS_EulerEvaluator_EvaluateDt_INS_EXTERN(model, ext)                                                                 \
+    namespace DNDS::Euler                                                                                                     \
+    {                                                                                                                         \
+        ext template void EulerEvaluator<model>::GetWallDist();                                                               \
+        ext template void EulerEvaluator<model>::GetWallDist_CollectTriangles(                                                \
+            bool, std::vector<Eigen::Matrix<real, 3, 3>> &);                                                                  \
+        ext template void EulerEvaluator<model>::GetWallDist_AABB();                                                          \
+        ext template void EulerEvaluator<model>::GetWallDist_BatchedAABB();                                                   \
+        ext template void EulerEvaluator<model>::GetWallDist_Poisson();                                                       \
+        ext template void EulerEvaluator<model>::GetWallDist_ComputeFaceDistances();                                          \
+        ext template void EulerEvaluator<model>::EvaluateDt(                                                                  \
+            ArrayDOFV<1> &dt,                                                                                                 \
+            ArrayDOFV<nVarsFixed> &u,                                                                                         \
+            ArrayRECV<nVarsFixed> &uRec,                                                                                      \
+            real CFL, real &dtMinall, real MaxDt,                                                                             \
+            bool UseLocaldt,                                                                                                  \
+            real t,                                                                                                           \
+            uint64_t flags,                                                                                                   \
+            OptionalRef<ArrayDOFV<1>> cellTWarm);                                                                             \
+        ext template void                                                                                                     \
+        EulerEvaluator<model>::fluxFace(                                                                                      \
+            const TU_Batch &ULxy,                                                                                             \
+            const TU_Batch &URxy,                                                                                             \
+            const TU &ULMeanXy,                                                                                               \
+            const TU &URMeanXy,                                                                                               \
+            const TDiffU_Batch &DiffUxy,                                                                                      \
+            const TDiffU_Batch &DiffUxyPrim,                                                                                  \
+            const TVec_Batch &unitNorm,                                                                                       \
+            const TVec_Batch &vg,                                                                                             \
+            const TVec &unitNormC,                                                                                            \
+            const TVec &vgC,                                                                                                  \
+            TU_Batch &FLfix,                                                                                                  \
+            TU_Batch &FRfix,                                                                                                  \
+            TU_Batch &finc,                                                                                                   \
+            TReal_Batch &lam0V, TReal_Batch &lam123V, TReal_Batch &lam4V,                                                     \
+            Geom::t_index btype,                                                                                              \
+            typename Gas::RiemannSolverType rsType,                                                                           \
+            index iFace, bool ignoreVis,                                                                                      \
+            OptionalRef<ArrayDOFV<1>> cellTWarm);                                                                             \
+        ext template                                                                                                          \
+            typename EulerEvaluator<model>::TU                                                                                \
+            EulerEvaluator<model>::source(                                                                                    \
+                const TU &UMeanXy,                                                                                            \
+                const TDiffU &DiffUxy,                                                                                        \
+                const Geom::tPoint &pPhy,                                                                                     \
+                TJacobianU &jacobian,                                                                                         \
+                index iCell,                                                                                                  \
+                index ig,                                                                                                     \
+                int Mode,                                                                                                     \
+                SourceFilter filter,                                                                                          \
+                OptionalRef<ArrayDOFV<1>> cellTWarm);                                                                         \
+        ext template void EulerEvaluator<model>::EvaluateCellSource(                                                          \
+            TU &cellRHS,                                                                                                      \
+            TJacobianU &cellJac,                                                                                              \
+            const TU &uCell,                                                                                                  \
+            const TDiffU &cellGradU,                                                                                          \
+            index iCell,                                                                                                      \
+            int jacMode,                                                                                                      \
+            SourceFilter filter,                                                                                              \
+            real cellAlpha,                                                                                                   \
+            bool useRecArrays,                                                                                                \
+            OptionalRef<ArrayDOFV<nVarsFixed>> pU,                                                                            \
+            OptionalRef<ArrayRECV<nVarsFixed>> pURecUnlim,                                                                    \
+            OptionalRef<ArrayRECV<nVarsFixed>> pURec,                                                                         \
+            bool direct2ndRec,                                                                                                \
+            real t,                                                                                                           \
+            OptionalRef<ArrayDOFV<1>> cellTWarm);                                                                             \
+        ext template                                                                                                          \
+            typename EulerEvaluator<model>::TU                                                                                \
+            EulerEvaluator<model>::generateBoundaryValue(                                                                     \
+                TU &ULxy,                                                                                                     \
+                const TU &ULMeanXy,                                                                                           \
+                index iCell, index iFace, int iG,                                                                             \
+                const TVec &uNorm,                                                                                            \
+                const TMat &normBase,                                                                                         \
+                const Geom::tPoint &pPhysics,                                                                                 \
+                real t,                                                                                                       \
+                Geom::t_index btype,                                                                                          \
+                bool fixUL,                                                                                                   \
+                int geomMode, int linMode);                                                                                   \
+        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_FarField(                           \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                                  \
+            const Geom::tPoint &, real, Geom::t_index, bool, int);                                                            \
+        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_SpecialFar(                         \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                                  \
+            const Geom::tPoint &, real, Geom::t_index);                                                                       \
+        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_InviscidWall(                       \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                                  \
+            const Geom::tPoint &, real, Geom::t_index);                                                                       \
+        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_ViscousWall(                        \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                                  \
+            const Geom::tPoint &, real, Geom::t_index, bool, int);                                                            \
+        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_Outflow(                            \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                                  \
+            const Geom::tPoint &, real, Geom::t_index);                                                                       \
+        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_Inflow(                             \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                                  \
+            const Geom::tPoint &, real, Geom::t_index);                                                                       \
+        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_TotalConditionInflow(               \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                                  \
+            const Geom::tPoint &, real, Geom::t_index);                                                                       \
+        ext template void EulerEvaluator<model>::InitializeOutputPicker(OutputPicker &op, OutputOverlapDataRefs dataRefs);    \
+        ext template void EulerEvaluator<model>::InitializeOutputPickerBnd(OutputPicker &op, OutputOverlapDataRefs dataRefs); \
     }
 
 DNDS_EulerEvaluator_EvaluateDt_INS_EXTERN(NS, extern);
