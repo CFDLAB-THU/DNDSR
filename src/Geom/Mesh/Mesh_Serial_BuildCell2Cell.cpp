@@ -383,25 +383,6 @@ namespace DNDS::Geom
             //                                    // std::vector<DNDS::index> c_neighbors;
             //                                    // c_neighbors.reserve(30);
             //                                    /****/
-#ifdef DNDS_USE_OMP
-            // #pragma omp single
-#    pragma omp critical
-#endif
-            {
-                if (nCellsDone % (nCells / 50 + 1) == 0)
-                {
-                    auto fmt = DNDS::log().flags();
-                    print_progress(log(), double(nCellsDone) / nCells);
-                    DNDS::log().setf(fmt);
-                }
-
-                if (nCellsDone >= nCells - 1)
-                    DNDS::log()
-                        // << "\r\033[K"
-                        << std::endl;
-            }
-            /****/
-
             for (auto iNode : cell2nodeRow)
                 for (auto iCellOther : node2cell[iNode])
                 {
@@ -446,10 +427,23 @@ namespace DNDS::Geom
             DNDS::rowsize ic2c = 0;
             for (auto iCellOther : c_neighbors)
                 (*cell2cellSerial)(iCell, ic2c++) = iCellOther;
+            index myDone;
 #ifdef DNDS_USE_OMP
-#    pragma omp atomic
+#    pragma omp atomic capture
 #endif
-            nCellsDone++;
+            myDone = nCellsDone++;
+
+            if (myDone % (nCells / 50 + 1) == 0 || myDone == nCells - 1)
+            {
+#ifdef DNDS_USE_OMP
+#    pragma omp critical
+#endif
+                {
+                    auto fmt = DNDS::log().flags();
+                    print_progress(log(), double(myDone + 1) / nCells);
+                    DNDS::log().setf(fmt);
+                }
+            }
         }
         (*cell2cellSerial).Compress();
         if (mesh->getMPI().rank == mRank)
@@ -466,22 +460,6 @@ namespace DNDS::Geom
 #endif
         for (index iCell = 0; iCell < cell2cellSerial->Size(); iCell++)
         {
-#ifdef DNDS_USE_OMP
-#    pragma omp critical
-#endif
-            {
-                if (nCellsDone % (nCells / 50 + 1) == 0)
-                {
-                    auto fmt = DNDS::log().flags();
-                    print_progress(log(), double(nCellsDone) / nCells);
-                    DNDS::log().setf(fmt);
-                }
-
-                if (nCellsDone >= nCells - 1)
-                    DNDS::log()
-                        // << "\r\033[K"
-                        << std::endl;
-            }
             std::vector<index> facialNeighbors;
             facialNeighbors.reserve(6);
             std::vector<index> c2ni((*cell2nodeSerial)[iCell].begin(),
@@ -502,10 +480,23 @@ namespace DNDS::Geom
             }
             (*cell2cellSerialFacial).ResizeRow(iCell, facialNeighbors.size());
             (*cell2cellSerialFacial)[iCell] = facialNeighbors;
+            index myDone;
 #ifdef DNDS_USE_OMP
-#    pragma omp atomic
+#    pragma omp atomic capture
 #endif
-            nCellsDone++;
+            myDone = nCellsDone++;
+
+            if (myDone % (nCells / 50 + 1) == 0 || myDone == nCells - 1)
+            {
+#ifdef DNDS_USE_OMP
+#    pragma omp critical
+#endif
+                {
+                    auto fmt = DNDS::log().flags();
+                    print_progress(log(), double(myDone + 1) / nCells);
+                    DNDS::log().setf(fmt);
+                }
+            }
         }
         if (mesh->getMPI().rank == mRank)
             log() << std::endl;
