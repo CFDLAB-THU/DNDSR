@@ -129,7 +129,7 @@
         "reactiveSourceScale": 1,
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
-        "riemannSolverType": "HLLEP_V1",
+        "riemannSolverType": "Roe_M8",
         "rsMeanValueEig": 1,
         "uRecAlphaCompressPower": 1.0,
         "uRecBetaCompressPower": 1.0,
