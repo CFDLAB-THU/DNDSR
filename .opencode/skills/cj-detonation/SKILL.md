@@ -77,9 +77,45 @@ Options:
 * `--dx 1e-5` — report cells across the induction zone for mesh resolution
 * `--znd-output profile.npz` — save full ZND profile (distance, T, P, ρ,
   species, thermicity, Mach number)
-* `--plot-output profile.png` — save a 4-panel ZND profile plot (T, P,
-  thermicity, major species mass fractions vs distance from shock; supports
-  png/pdf/svg)
+* `--plot-output profile.png` — save a 5-panel ZND profile plot (T, P,
+  velocity in both frames, thermicity, major species mass fractions vs
+  distance from shock; supports png/pdf/svg)
+
+The `--znd-output` npz file also stores metadata: detonation speed `D`,
+`cj_speed`, `species_names`, initial state (`T1`, `P1`, `rho1`, `Y1`),
+and `ind_len`/`exo_len` for downstream use by `generate_znd_exprtk.py`.
+
+### `generate_znd_exprtk.py` — exprtk initial condition from ZND profile
+
+```bash
+python .opencode/skills/cj-detonation/generate_znd_exprtk.py \
+    --znd-profile data/out/znd_H2O2_6667Pa.npz \
+    --Ly 0.1 --shock-pert-amp 1e-3 --v-pert-amp 40 \
+    --output data/out/znd_exprtk_init.json
+```
+
+Generates `exprtkInitializers` JSON for injecting a 1D ZND detonation profile
+as the initial condition in DNDSR solver configs.  The output JSON can be
+copy-pasted into the `eulerSettings.exprtkInitializers` field.
+
+The generated exprtk expression:
+1. Defines inline data vectors (50 points, adaptively sampled) for distance,
+   T, P, lab-frame velocity, and all species mass fractions
+2. Computes a perturbed shock position: `x_shock(y) = x_shock_0 + A * cos(2πy/Ly)`
+3. Uses piecewise linear interpolation with for-loop + break to map
+   `dist = x_shock - x[0]` to ZND state variables
+4. Falls back to unreacted gas (farfield) for `dist < 0` and CJ equilibrium
+   for `dist > L_CJ`
+5. Adds transverse velocity perturbation `v = A_v * sin(2πy/Ly)` near the
+   shock, decaying exponentially over ~2 induction lengths
+
+Options:
+* `--n-points 50` — number of interpolation points (adaptive spacing)
+* `--Ly 0.1` — periodic domain width in y [m]
+* `--shock-pert-amp 1e-3` — shock position perturbation amplitude [m]
+* `--v-pert-amp 40` — transverse velocity perturbation amplitude [m/s]
+* `--x-shock` — override shock position [m] (default: 1.5 × L_CJ)
+* `--cj-tol 0.01` — tolerance for detecting CJ distance (P within tol of final)
 
 ## When to use this skill
 
@@ -87,14 +123,17 @@ Options:
 * User wants to know if their mesh resolves the induction zone
 * User is designing a detonation simulation and needs dt, dx estimates
 * User is comparing simulation results with CJ theory
+* User wants to inject a ZND profile as initial conditions for a solver run
 
 ## Typical workflow
 
 1. Run `estimate_cj.py` to get U_CJ and thermodynamic states
-2. Run `estimate_induction.py` to get induction length and ZND profile
+2. Run `estimate_induction.py` to get induction length, ZND profile, and plot
 3. Compare induction length with mesh dx to assess resolution
 4. Compute dt so the detonation advances ~1 cell/step:
    dt_code = dx / U_CJ * U0 (where U0 is the code-unit velocity scale)
+5. (Optional) Run `generate_znd_exprtk.py` to produce exprtk initial conditions
+   from the ZND profile for solver injection
 
 ## Physics notes
 
