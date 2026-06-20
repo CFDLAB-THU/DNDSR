@@ -77,6 +77,9 @@ Options:
 * `--dx 1e-5` — report cells across the induction zone for mesh resolution
 * `--znd-output profile.npz` — save full ZND profile (distance, T, P, ρ,
   species, thermicity, Mach number)
+* `--plot-output profile.png` — save a 4-panel ZND profile plot (T, P,
+  thermicity, major species mass fractions vs distance from shock; supports
+  png/pdf/svg)
 
 ## When to use this skill
 
