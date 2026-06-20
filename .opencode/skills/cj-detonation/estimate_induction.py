@@ -41,6 +41,9 @@ def plot_znd_profile(znd_out, gas, cj_speed, overdrive, plot_path,
     therm = znd_out["thermicity"]
     species = znd_out["species"]
     M = znd_out["M"]
+    U_sf = znd_out["U"]
+    D = overdrive * cj_speed
+    u_lab = D - U_sf
 
     species_names = gas.species_names
     n_species = len(species_names)
@@ -51,7 +54,7 @@ def plot_znd_profile(znd_out, gas, cj_speed, overdrive, plot_path,
     else:
         xlim_mm = dist[-1]
 
-    fig, axes = plt.subplots(4, 1, figsize=(10, 12), sharex=True)
+    fig, axes = plt.subplots(5, 1, figsize=(10, 14), sharex=True)
 
     axes[0].plot(dist, T, "r-", linewidth=1.5)
     axes[0].set_ylabel("Temperature [K]")
@@ -61,20 +64,27 @@ def plot_znd_profile(znd_out, gas, cj_speed, overdrive, plot_path,
     axes[1].set_ylabel("Pressure [bar]")
     axes[1].grid(True, alpha=0.3)
 
-    axes[2].plot(dist, therm, "k-", linewidth=1.5)
-    axes[2].set_ylabel("Thermicity [1/s]")
-    axes[2].set_yscale("symlog", linthresh=1e3)
+    axes[2].plot(dist, u_lab, "m-", linewidth=1.5,
+                 label="Lab frame (unreacted gas rest)")
+    axes[2].plot(dist, U_sf, "c--", linewidth=1.2, label="Shock frame")
+    axes[2].set_ylabel("Velocity [m/s]")
+    axes[2].legend(loc="center right", fontsize=8)
     axes[2].grid(True, alpha=0.3)
+
+    axes[3].plot(dist, therm, "k-", linewidth=1.5)
+    axes[3].set_ylabel("Thermicity [1/s]")
+    axes[3].set_yscale("symlog", linthresh=1e3)
+    axes[3].grid(True, alpha=0.3)
 
     major_threshold = 0.01
     for i in range(n_species):
         y = species[i] if species.shape[0] == n_species else species[:, i]
         if np.max(y) > major_threshold:
-            axes[3].plot(dist, y, linewidth=1.2, label=species_names[i])
-    axes[3].set_ylabel("Mass fraction")
-    axes[3].set_xlabel("Distance from shock [mm]")
-    axes[3].legend(loc="center right", fontsize=8, ncol=2)
-    axes[3].grid(True, alpha=0.3)
+            axes[4].plot(dist, y, linewidth=1.2, label=species_names[i])
+    axes[4].set_ylabel("Mass fraction")
+    axes[4].set_xlabel("Distance from shock [mm]")
+    axes[4].legend(loc="center right", fontsize=8, ncol=2)
+    axes[4].grid(True, alpha=0.3)
 
     for ax in axes:
         ax.set_xlim(0, xlim_mm)
@@ -82,7 +92,7 @@ def plot_znd_profile(znd_out, gas, cj_speed, overdrive, plot_path,
             ax.axvline(ind_len * 1e3, color="gray", linestyle="--",
                        linewidth=0.8, alpha=0.7)
 
-    title = (f"ZND Profile — U={overdrive * cj_speed:.0f} m/s "
+    title = (f"ZND Profile — U={D:.0f} m/s "
              f"(U_CJ={cj_speed:.0f}, f={overdrive:.3f})")
     if ind_len is not None:
         title += f"  |  ℓ_ind={ind_len*1e3:.3f} mm"
