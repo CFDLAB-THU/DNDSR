@@ -32,6 +32,12 @@ from sdtoolbox.znd import zndsolve
 
 def plot_znd_profile(znd_out, gas, cj_speed, overdrive, plot_path,
                      ind_len=None, exo_len=None):
+    """Save a 5-panel ZND structure plot (T, P, velocity, thermicity, species).
+
+    The x-axis auto-zooms so that the induction zone occupies at least 10 %
+    of the plot width.  Velocity is shown in both the shock-fixed and
+    lab (unreacted-gas-at-rest) frames.
+    """
     import matplotlib.pyplot as plt
 
     dist = znd_out["distance"] * 1e3  # mm
@@ -215,7 +221,16 @@ def main():
                  U_loc=znd_out["U"],
                  thermicity=znd_out["thermicity"],
                  species=znd_out["species"],
-                 M=znd_out["M"])
+                 M=znd_out["M"],
+                 D=np.array([U]),
+                 cj_speed=np.array([cj_speed]),
+                 species_names=np.array(gas.species_names),
+                 T1=np.array([T1]),
+                 P1=np.array([P1]),
+                 rho1=np.array([rho1]),
+                 ind_len=np.array([ind_len]),
+                 exo_len=np.array([exo_len]),
+                 Y1=gas1.Y)
         print(f"\nZND profile saved to {args.znd_output}")
 
     if args.plot_output:
