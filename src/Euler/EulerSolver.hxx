@@ -19,6 +19,7 @@
 #include "Solver/ODE.hpp"
 #include "Solver/Linear.hpp"
 #include "SpecialFields.hpp"
+#include "Geom/Mesh/Mesh_Helpers.hpp"
 // #ifdef __DNDS_REALLY_COMPILING__HEADER_ON__
 // #undef __DNDS_REALLY_COMPILING__
 // #endif
@@ -1334,6 +1335,18 @@ namespace DNDS::Euler
         if (config.outputControl.restartOutAtInit)
         {
             PrintRestart(config.dataIOControl.getOutRestartName() + "_" + output_stamp + "_" + "00000");
+        }
+        if (config.outputControl.meshOutAtInit)
+        {
+            auto meshOutDir = std::filesystem::path(config.dataIOControl.getOutPltName()).parent_path();
+            if (meshOutDir.empty())
+                meshOutDir = ".";
+            auto meshFileName = std::filesystem::path(config.dataIOControl.meshFile).filename().string();
+            std::string meshOutName = Geom::MeshH5Path(
+                (meshOutDir / meshFileName).string(), mpi.size,
+                config.dataIOControl.meshElevation,
+                config.dataIOControl.meshDirectBisect);
+            Geom::SerializeMesh(*mesh, meshOutName, config.dataIOControl.meshPartitionedWriter);
         }
 
         for (step = 1; step <= config.timeMarchControl.nTimeStep; step++)

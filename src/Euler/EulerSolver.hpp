@@ -362,6 +362,7 @@ namespace DNDS::Euler
                 int nPrecisionLog = 10;
                 bool dataOutAtInit = false;
                 bool restartOutAtInit = false;
+                bool meshOutAtInit = false;
                 int nDataOut = 10;
                 int nDataOutC = 1;
                 int nDataOutInternal = 10000;
@@ -394,6 +395,7 @@ namespace DNDS::Euler
                                DNDS::Config::range(1));
                     DNDS_FIELD(dataOutAtInit,                   "Output data at initialization");
                     DNDS_FIELD(restartOutAtInit,                "Output restart at initialization");
+                    DNDS_FIELD(meshOutAtInit,                   "Output mesh CGNS at initialization");
                     DNDS_FIELD(nDataOut,                        "Data output interval (outer steps)",
                                DNDS::Config::range(1));
                     DNDS_FIELD(nDataOutC,                       "Data output interval (convergence steps)",
