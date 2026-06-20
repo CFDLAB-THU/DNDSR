@@ -22,12 +22,12 @@
                     "type": "integer",
                     "default": 1000000,
                     "description": "Max number of time steps",
-                    "minimum": 1.0
+                    "minimum": 0.0
                 },
                 "steadyQuit": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Quit on steady convergence"
+                    "description": "Quit on steady convergence, automatically sets nTimeStep <= 1 and dtImplicit -> inf"
                 },
                 "useRestart": {
                     "type": "boolean",
@@ -765,6 +765,11 @@
                     "type": "array",
                     "default": [],
                     "description": "Additional cell scalar names to output"
+                },
+                "outBndScalarNames": {
+                    "type": "array",
+                    "default": [],
+                    "description": "Additional bnd scalar names to output (picked from bnd2cell)"
                 },
                 "serializerSaveURec": {
                     "type": "boolean",

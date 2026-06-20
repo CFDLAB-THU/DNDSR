@@ -206,8 +206,8 @@ namespace DNDS::Euler
                     DNDS_FIELD(dtImplicitMin,       "Minimum implicit time step",
                                DNDS::Config::range(0.0));
                     DNDS_FIELD(nTimeStep,           "Max number of time steps",
-                               DNDS::Config::range(1));
-                    DNDS_FIELD(steadyQuit,          "Quit on steady convergence");
+                               DNDS::Config::range(0));
+                    DNDS_FIELD(steadyQuit,          "Quit on steady convergence, automatically sets nTimeStep <= 1 and dtImplicit -> inf");
                     DNDS_FIELD(useRestart,          "Initialize from restart file");
                     DNDS_FIELD(useImplicitPP,       "Use implicit positivity-preserving");
                     DNDS_FIELD(rhsFPPMode,          "RHS flux-positivity-preserving mode");

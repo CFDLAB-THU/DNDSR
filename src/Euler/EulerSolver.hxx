@@ -1812,10 +1812,10 @@ namespace DNDS::Euler
             if (mpi.rank == 0)
                 log() << "Using steady!" << std::endl;
             config.timeMarchControl.odeCode = 1; // To bdf;
-            config.timeMarchControl.nTimeStep = 1;
-            config.timeMarchControl.dtImplicit = 1e100;
+            config.timeMarchControl.nTimeStep = std::min(1, config.timeMarchControl.nTimeStep);
+            config.timeMarchControl.dtImplicit = 1e200;
             config.timeMarchControl.useDtPPLimit = false;
-            config.timeMarchControl.dtCFLLimitScale = 1e110;
+            config.timeMarchControl.dtCFLLimitScale = 1e210;
             config.outputControl.tDataOut = 1e300; // no t-out steps
         }
         switch (config.timeMarchControl.odeCode)
