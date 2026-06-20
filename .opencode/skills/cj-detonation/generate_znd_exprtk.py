@@ -170,22 +170,22 @@ def generate_exprtk(npz_path, n_points=50, Ly=0.1, shock_pert_amp=1e-3,
 
     lines.append("else {")
     lines.append("    var idx := 0;")
-    lines.append("    var frac := 0.0;")
+    lines.append("    var wt := 0.0;")
     lines.append("    for (var i := 0; i < xd[] - 1; i += 1) {")
     lines.append("        if (dist >= xd[i] and dist < xd[i + 1]) {")
     lines.append("            idx := i;")
-    lines.append("            frac := (dist - xd[i]) / (xd[i + 1] - xd[i]);")
+    lines.append("            wt := (dist - xd[i]) / (xd[i + 1] - xd[i]);")
     lines.append("            break;")
     lines.append("        };")
     lines.append("    };")
-    lines.append("    UExprtk[0] := Td[idx] + frac * (Td[idx + 1] - Td[idx]);")
-    lines.append("    UExprtk[1] := ud[idx] + frac * (ud[idx + 1] - ud[idx]);")
+    lines.append("    UExprtk[0] := Td[idx] + wt * (Td[idx + 1] - Td[idx]);")
+    lines.append("    UExprtk[1] := ud[idx] + wt * (ud[idx + 1] - ud[idx]);")
     lines.append("    UExprtk[2] := 0.0;")
     lines.append("    UExprtk[3] := 0.0;")
-    lines.append("    UExprtk[4] := Pd[idx] + frac * (Pd[idx + 1] - Pd[idx]);")
+    lines.append("    UExprtk[4] := Pd[idx] + wt * (Pd[idx + 1] - Pd[idx]);")
     for i in range(n_species - 1):
         lines.append(
-            f"    UExprtk[{5 + i}] := Y{i}d[idx] + frac * (Y{i}d[idx + 1] - Y{i}d[idx]);")
+            f"    UExprtk[{5 + i}] := Y{i}d[idx] + wt * (Y{i}d[idx + 1] - Y{i}d[idx]);")
     lines.append("};")
     lines.append("")
 
