@@ -30,6 +30,72 @@ from sdtoolbox.postshock import CJspeed, PostShock_fr
 from sdtoolbox.znd import zndsolve
 
 
+def plot_znd_profile(znd_out, gas, cj_speed, overdrive, plot_path,
+                     ind_len=None, exo_len=None):
+    import matplotlib.pyplot as plt
+
+    dist = znd_out["distance"] * 1e3  # mm
+    T = znd_out["T"]
+    P = znd_out["P"] / 1e5  # bar
+    rho = znd_out["rho"]
+    therm = znd_out["thermicity"]
+    species = znd_out["species"]
+    M = znd_out["M"]
+
+    species_names = gas.species_names
+    n_species = len(species_names)
+
+    if ind_len is not None:
+        reaction_scale = ind_len + (exo_len if exo_len else ind_len)
+        xlim_mm = max(10 * ind_len * 1e3, 3 * reaction_scale * 1e3)
+    else:
+        xlim_mm = dist[-1]
+
+    fig, axes = plt.subplots(4, 1, figsize=(10, 12), sharex=True)
+
+    axes[0].plot(dist, T, "r-", linewidth=1.5)
+    axes[0].set_ylabel("Temperature [K]")
+    axes[0].grid(True, alpha=0.3)
+
+    axes[1].plot(dist, P, "b-", linewidth=1.5)
+    axes[1].set_ylabel("Pressure [bar]")
+    axes[1].grid(True, alpha=0.3)
+
+    axes[2].plot(dist, therm, "k-", linewidth=1.5)
+    axes[2].set_ylabel("Thermicity [1/s]")
+    axes[2].set_yscale("symlog", linthresh=1e3)
+    axes[2].grid(True, alpha=0.3)
+
+    major_threshold = 0.01
+    for i in range(n_species):
+        y = species[i] if species.shape[0] == n_species else species[:, i]
+        if np.max(y) > major_threshold:
+            axes[3].plot(dist, y, linewidth=1.2, label=species_names[i])
+    axes[3].set_ylabel("Mass fraction")
+    axes[3].set_xlabel("Distance from shock [mm]")
+    axes[3].legend(loc="center right", fontsize=8, ncol=2)
+    axes[3].grid(True, alpha=0.3)
+
+    for ax in axes:
+        ax.set_xlim(0, xlim_mm)
+        if ind_len is not None:
+            ax.axvline(ind_len * 1e3, color="gray", linestyle="--",
+                       linewidth=0.8, alpha=0.7)
+
+    title = (f"ZND Profile — U={overdrive * cj_speed:.0f} m/s "
+             f"(U_CJ={cj_speed:.0f}, f={overdrive:.3f})")
+    if ind_len is not None:
+        title += f"  |  ℓ_ind={ind_len*1e3:.3f} mm"
+    if exo_len is not None:
+        title += f", ℓ_exo={exo_len*1e3:.3f} mm"
+    axes[0].set_title(title, fontsize=11)
+
+    plt.tight_layout()
+    plt.savefig(plot_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"\nZND profile plot saved to {plot_path}")
+
+
 def parse_composition(comp: str) -> str:
     """Convert "H2:2, O2:1" to "H2:2 O2:1" for SDToolbox."""
     return comp.replace(",", " ").strip()
@@ -54,6 +120,8 @@ def main():
                    help="Integration tolerance (relTol=absTol=tolerance, default 1e-8)")
     p.add_argument("--znd-output", type=str,
                    help="Save full ZND profile to this file (npz format)")
+    p.add_argument("--plot-output", type=str,
+                   help="Save ZND profile plot to this file (png/pdf/svg)")
     args = p.parse_args()
 
     q = parse_composition(args.composition)
@@ -139,6 +207,10 @@ def main():
                  species=znd_out["species"],
                  M=znd_out["M"])
         print(f"\nZND profile saved to {args.znd_output}")
+
+    if args.plot_output:
+        plot_znd_profile(znd_out, gas, cj_speed, args.overdrive,
+                         args.plot_output, ind_len=ind_len, exo_len=exo_len)
 
     return 0
 
