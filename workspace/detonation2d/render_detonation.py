@@ -172,13 +172,48 @@ def _render_one_frame(args_tuple):
         return f"FAIL {fname}: {e}"
 
 
+def _filter_existing(data_dir, file_list):
+    """Return only (fname, tval) pairs where fpath exists, with per-file warning."""
+    existing, missing = [], 0
+    for fname, tval in file_list:
+        if os.path.exists(os.path.join(data_dir, fname)):
+            existing.append((fname, tval))
+        else:
+            print(f"  WARN missing: {fname}")
+            missing += 1
+    if missing:
+        print(f"  ({missing} files in series not on disk, skipped)")
+    return existing
+
+
 def cmd_render(args):
+    # Single-frame mode: --series points to a .vtkhdf file
+    if args.series.endswith(".vtkhdf"):
+        fpath = args.series
+        if not os.path.exists(fpath):
+            sys.exit(f"File not found: {fpath}")
+        data_dir = os.path.dirname(os.path.abspath(fpath))
+        output_dir = os.path.join(data_dir, "pics")
+        os.makedirs(output_dir, exist_ok=True)
+        mesh = pv.read(fpath)
+        base_name = os.path.splitext(os.path.basename(fpath))[0]
+        for field in args.field:
+            clim = (args.clim_min, args.clim_max) if args.clim_min is not None and args.clim_max is not None else get_field_clim(
+                mesh, field)
+            out_path = os.path.join(output_dir, f"{base_name}_{field}.png")
+            render_frame(mesh, field, clim, 0.0, out_path,
+                         cmap=args.cmap, window_size=tuple(args.window),
+                         h_pad_factor=args.hpad, font_scale=args.font_scale)
+            print(f"  {os.path.basename(out_path)}")
+        print(f"Done. 1 frame x {len(args.field)} fields -> {output_dir}")
+        return
+
     series_path = args.series
     data_dir = os.path.dirname(os.path.abspath(series_path))
     output_dir = os.path.join(data_dir, "pics")
     os.makedirs(output_dir, exist_ok=True)
 
-    files = load_series(series_path)
+    files = _filter_existing(data_dir, load_series(series_path))
 
     if args.step:
         step_target = str(args.step)
@@ -199,18 +234,26 @@ def cmd_render(args):
     hpad = args.hpad
     font_scale = args.font_scale
 
+    # Use last-found frame (not last-in-series) for default clim
+    last_found = selected[-1]
+    if args.clim_min is not None and args.clim_max is not None:
+        clim_override = (args.clim_min, args.clim_max)
+    else:
+        clim_override = None
+
     global_clims = {}
     for field in args.field:
-        if args.clim_min is not None and args.clim_max is not None:
-            clim = (args.clim_min, args.clim_max)
+        if clim_override:
+            clim = clim_override
         elif args.global_clim:
             clim = get_global_clim(data_dir, [f[0] for f in selected], field)
         else:
-            last_fpath = os.path.join(data_dir, selected[-1][0])
+            last_fpath = os.path.join(data_dir, last_found[0])
             last_mesh = pv.read(last_fpath)
             clim = get_field_clim(last_mesh, field)
         global_clims[field] = clim
-        print(f"  {field} clim: [{clim[0]:.4e}, {clim[1]:.4e}]")
+        print(
+            f"  {field} clim: [{clim[0]:.4e}, {clim[1]:.4e}] (from {last_found[0]})")
 
     # Build task list — one task per VTKHDF file (all fields rendered from same mesh)
     tasks = []
@@ -239,6 +282,12 @@ def cmd_render(args):
 
     print(
         f"Done. {len(selected)} frames x {len(args.field)} fields -> {output_dir}")
+
+
+def cmd_all(args):
+    """render + combine in one step."""
+    cmd_render(args)
+    cmd_combine(args)
 
 
 # ---------------------------------------------------------------------------
@@ -272,12 +321,18 @@ def cmd_combine(args):
 
     for field in fields:
         ordered = []
+        n_missing = 0
         for fname, _time in files:
             base = os.path.splitext(fname)[0]
             png_name = f"{base}_{field}.png"
             png_path = os.path.join(pics_dir, png_name)
             if os.path.exists(png_path):
                 ordered.append(png_path)
+            else:
+                n_missing += 1
+        if n_missing:
+            print(
+                f"  WARN {field}: {n_missing} PNGs missing of {len(files)} series entries")
 
         if not ordered:
             print(f"  No PNGs for field {field}, skipping")
@@ -316,7 +371,7 @@ def main():
     # ---- render ----
     p_render = sub.add_parser("render", help="Render VTKHDF frames to PNG")
     p_render.add_argument("--series", required=True,
-                          help="Path to .vtkhdf.series file")
+                          help="Path to .vtkhdf.series file or single .vtkhdf file")
     p_render.add_argument("--field", action="append", default=[],
                           help="Scalar field(s) to render (repeatable)")
     p_render.add_argument("-i", "--index", default="all",
@@ -354,6 +409,39 @@ def main():
     p_combine.add_argument("--crf", type=int, default=18,
                            help="Video quality (lower = better, 18-28)")
 
+    # ---- all (render + combine) ----
+    p_all = sub.add_parser("all", help="Render frames then combine into video")
+    p_all.add_argument("--series", required=True,
+                       help="Path to .vtkhdf.series file")
+    p_all.add_argument("--field", action="append", default=[],
+                       help="Scalar field(s) to render and combine (repeatable)")
+    p_all.add_argument("-i", "--index", default="all",
+                       help="Series indices: N, start:stop:step, or 'all'")
+    p_all.add_argument("--step", type=str, default=None,
+                       help="Match step number in filename")
+    p_all.add_argument("--stride", type=int, default=None,
+                       help="Render every Nth frame")
+    p_all.add_argument("--window", nargs=2, type=int,
+                       default=[5000, 1000], help="Window width height")
+    p_all.add_argument("--hpad", type=float, default=1.04,
+                       help="Horizontal padding factor")
+    p_all.add_argument("--font-scale", type=float, default=2.0,
+                       help="Font scale multiplier")
+    p_all.add_argument("--clim-min", type=float, default=None,
+                       help="Fixed colorbar minimum")
+    p_all.add_argument("--clim-max", type=float, default=None,
+                       help="Fixed colorbar maximum")
+    p_all.add_argument("--cmap", type=str, default="plasma",
+                       help="Colormap: plasma, inferno, viridis, turbo, hot, coolwarm, RdBu, magma, cividis, Blues, Reds, etc.")
+    p_all.add_argument("--jobs", "-j", type=int, default=1,
+                       help="Parallel workers (1 = serial, 0 = cpu_count)")
+    p_all.add_argument("--global-clim", action="store_true",
+                       help="Use global min/max across all selected frames")
+    p_all.add_argument("--fps", type=int, default=24,
+                       help="Video frames per second")
+    p_all.add_argument("--crf", type=int, default=18,
+                       help="Video quality (lower = better, 18-28)")
+
     args = parser.parse_args()
 
     if args.command == "render":
@@ -362,6 +450,10 @@ def main():
         cmd_render(args)
     elif args.command == "combine":
         cmd_combine(args)
+    elif args.command == "all":
+        if not args.field:
+            p_all.error("At least one --field is required")
+        cmd_all(args)
 
 
 if __name__ == "__main__":
