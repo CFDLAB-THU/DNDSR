@@ -81,7 +81,8 @@ def fmt_vec(name, vals, per_line=6):
 
 
 def generate_exprtk(npz_path, n_points=50, Ly=0.1, shock_pert_amp=1e-3,
-                    v_pert_amp=40.0, x_shock_override=None, cj_tol=0.01):
+                    v_pert_amp=40.0, x_shock_override=None, cj_tol=0.01,
+                    pocket=None):
     """Build the exprtk initializer dict from a ZND profile .npz file.
 
     Returns a dict with keys ``"exprtkInitializers"`` (ready for JSON config
@@ -91,6 +92,12 @@ def generate_exprtk(npz_path, n_points=50, Ly=0.1, shock_pert_amp=1e-3,
     Perturbations (shock position cosine, transverse velocity sine) are
     parameterised as ``var`` declarations at the top of the expression so
     they can be edited in-place without re-running the generator.
+
+    If *pocket* is a dict, a rectangular pocket of unreacted gas is added
+    behind the shock.  Expected keys: ``offset`` (distance from shock to
+    nearest edge [m]), ``size_x``, ``size_y`` [m], ``T`` [K], ``P`` [Pa],
+    and optionally ``y_center`` [m] (defaults to Ly/2).  The pocket
+    overrides T, P, and species but preserves the interpolated velocity.
     """
     d = np.load(npz_path, allow_pickle=True)
 
@@ -192,6 +199,33 @@ def generate_exprtk(npz_path, n_points=50, Ly=0.1, shock_pert_amp=1e-3,
     lines.append("UExprtk[2] += A_v * pert_y_sin * exp(-dist / (2 * ind_len))"
                  " * clamp(0, dist / (0.1 * ind_len), 1);")
     lines.append("")
+
+    if pocket is not None:
+        p_off = pocket.get("offset", 0.003)
+        p_sx = pocket.get("size_x", 0.01)
+        p_sy = pocket.get("size_y", 0.014)
+        p_T = pocket.get("T", 2100.0)
+        p_P = pocket.get("P", 46667.0)
+        p_yc = pocket.get("y_center")
+
+        lines.append(f"var pocket_xR := x_shock_0 - {p_off:.8g};")
+        lines.append(f"var pocket_xL := x_shock_0 - {p_off + p_sx:.8g};")
+        if p_yc is not None:
+            lines.append(f"var pocket_yC := {p_yc:.8g};")
+        else:
+            lines.append("var pocket_yC := Ly / 2;")
+        lines.append(f"var pocket_yH := {p_sy / 2:.8g};")
+        lines.append(
+            "if (x[0] >= pocket_xL and x[0] <= pocket_xR"
+            " and x[1] >= (pocket_yC - pocket_yH)"
+            " and x[1] <= (pocket_yC + pocket_yH)) {")
+        lines.append(f"    UExprtk[0] := {p_T:.8g};")
+        lines.append(f"    UExprtk[4] := {p_P:.8g};")
+        for i in range(n_species - 1):
+            lines.append(f"    UExprtk[{5 + i}] := {Y1[i]:.8g};")
+        lines.append("};")
+        lines.append("")
+
     lines.append("0")
 
     result = {
@@ -212,6 +246,7 @@ def generate_exprtk(npz_path, n_points=50, Ly=0.1, shock_pert_amp=1e-3,
             "Ly_m": Ly,
             "shock_pert_amp_mm": shock_pert_amp * 1e3,
             "v_pert_amp_m_s": v_pert_amp,
+            "pocket": pocket,
         }
     }
     return result
@@ -233,8 +268,34 @@ def main():
                    help="Override shock position [m] (default: 1.5 * L_CJ)")
     p.add_argument("--cj-tol", type=float, default=0.01,
                    help="Tolerance for CJ distance detection (default 0.01)")
+    p.add_argument("--pocket", action="store_true",
+                   help="Add a rectangular pocket of unreacted gas behind the shock")
+    p.add_argument("--pocket-offset", type=float, default=0.003,
+                   help="Distance from shock to nearest pocket edge [m] (default 0.003)")
+    p.add_argument("--pocket-size-x", type=float, default=0.01,
+                   help="Pocket width in x [m] (default 0.01)")
+    p.add_argument("--pocket-size-y", type=float, default=0.014,
+                   help="Pocket height in y [m] (default 0.014)")
+    p.add_argument("--pocket-T", type=float, default=2100.0,
+                   help="Pocket temperature [K] (default 2100)")
+    p.add_argument("--pocket-P", type=float, default=46667.0,
+                   help="Pocket pressure [Pa] (default 46667)")
+    p.add_argument("--pocket-y-center", type=float, default=None,
+                   help="Pocket y-center [m] (default: Ly/2)")
     p.add_argument("--output", required=True, help="Output JSON file")
     args = p.parse_args()
+
+    pocket_cfg = None
+    if args.pocket:
+        pocket_cfg = {
+            "offset": args.pocket_offset,
+            "size_x": args.pocket_size_x,
+            "size_y": args.pocket_size_y,
+            "T": args.pocket_T,
+            "P": args.pocket_P,
+        }
+        if args.pocket_y_center is not None:
+            pocket_cfg["y_center"] = args.pocket_y_center
 
     result = generate_exprtk(
         args.znd_profile,
@@ -244,6 +305,7 @@ def main():
         v_pert_amp=args.v_pert_amp,
         x_shock_override=args.x_shock,
         cj_tol=args.cj_tol,
+        pocket=pocket_cfg,
     )
 
     with open(args.output, "w") as f:

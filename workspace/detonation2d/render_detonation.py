@@ -63,6 +63,24 @@ def load_series(series_path: str):
 # Render
 # ---------------------------------------------------------------------------
 
+
+def compute_window_size(mesh, h_pad_factor: float = 1.04, annotation_factor: float = 2.0):
+    """Return (W, H) so domain fills full width with proportional annotation space.
+
+    Domain pixel height = W / (domain_aspect * h_pad_factor).
+    H = domain_px * annotation_factor  (2.0 reproduces old 5000x1000 for 10:1).
+    """
+    domain_w = mesh.bounds[1] - mesh.bounds[0]
+    domain_h = mesh.bounds[3] - mesh.bounds[2]
+    domain_aspect = domain_w / domain_h if domain_h > 1e-30 else 10.0
+    W = 5000
+    domain_px = W / (domain_aspect * h_pad_factor)
+    H = int(domain_px * annotation_factor)
+    H = ((H + 7) // 8) * 8   # macroblock-aligned for video encoding
+    H = max(400, min(H, 4000))
+    return (W, H)
+
+
 def render_frame(
     mesh: pv.UnstructuredGrid,
     field: str,
@@ -70,10 +88,12 @@ def render_frame(
     time_val: float,
     out_path: str,
     cmap: str = "plasma",
-    window_size: tuple = (5000, 1000),
+    window_size: tuple = None,
     h_pad_factor: float = 1.04,
     font_scale: float = 2.0,
 ):
+    if window_size is None:
+        window_size = compute_window_size(mesh, h_pad_factor)
     W, H = window_size
     domain_w = mesh.bounds[1] - mesh.bounds[0]
     cx = (mesh.bounds[0] + mesh.bounds[1]) / 2
@@ -202,7 +222,9 @@ def cmd_render(args):
                 mesh, field)
             out_path = os.path.join(output_dir, f"{base_name}_{field}.png")
             render_frame(mesh, field, clim, 0.0, out_path,
-                         cmap=args.cmap, window_size=tuple(args.window),
+                         cmap=args.cmap,
+                         window_size=tuple(
+                             args.window) if args.window else None,
                          h_pad_factor=args.hpad, font_scale=args.font_scale)
             print(f"  {os.path.basename(out_path)}")
         print(f"Done. 1 frame x {len(args.field)} fields -> {output_dir}")
@@ -230,30 +252,66 @@ def cmd_render(args):
     if not selected:
         sys.exit("No frames selected")
 
-    window = tuple(args.window)
+    window = tuple(args.window) if args.window else None
     hpad = args.hpad
     font_scale = args.font_scale
 
-    # Use last-found frame (not last-in-series) for default clim
+    # Determine clim source
     last_found = selected[-1]
+    clim_source_mesh = None
+    clim_source_label = ""
+
+    # Parse per-field --clim specs
+    per_field_clims = {}
+    for spec in args.clim:
+        if "=" not in spec or ":" not in spec:
+            sys.exit(f"Invalid --clim spec '{spec}': use FIELD=LOW:HIGH")
+        field, range_str = spec.split("=", 1)
+        low, high = range_str.split(":", 1)
+        per_field_clims[field.strip()] = (
+            float(low.strip()), float(high.strip()))
+
     if args.clim_min is not None and args.clim_max is not None:
-        clim_override = (args.clim_min, args.clim_max)
+        global_override = (args.clim_min, args.clim_max)
     else:
-        clim_override = None
+        global_override = None
+
+    if args.clim_from:
+        clim_from_fpath = os.path.join(data_dir, args.clim_from)
+        if not os.path.exists(clim_from_fpath):
+            for fname, _ in files:
+                if extract_step(fname) == str(args.clim_from):
+                    clim_from_fpath = os.path.join(data_dir, fname)
+                    break
+            else:
+                sys.exit(f"Clim-from step/file not found: {args.clim_from}")
+        clim_source_mesh = pv.read(clim_from_fpath)
+        clim_source_label = args.clim_from
 
     global_clims = {}
     for field in args.field:
-        if clim_override:
-            clim = clim_override
+        if field in per_field_clims:
+            clim = per_field_clims[field]
+            print(
+                f"  {field} clim: [{clim[0]:.4e}, {clim[1]:.4e}] (per-field)")
+        elif global_override:
+            clim = global_override
+            print(
+                f"  {field} clim: [{clim[0]:.4e}, {clim[1]:.4e}] (global manual)")
+        elif clim_source_mesh:
+            clim = get_field_clim(clim_source_mesh, field)
+            print(
+                f"  {field} clim: [{clim[0]:.4e}, {clim[1]:.4e}] (from {clim_source_label})")
         elif args.global_clim:
             clim = get_global_clim(data_dir, [f[0] for f in selected], field)
+            print(f"  {field} clim: [{clim[0]:.4e}, {clim[1]:.4e}] (global)")
         else:
             last_fpath = os.path.join(data_dir, last_found[0])
             last_mesh = pv.read(last_fpath)
             clim = get_field_clim(last_mesh, field)
+            print(
+                f"  {field} clim: [{clim[0]:.4e}, {clim[1]:.4e}] (from last-found {last_found[0]})")
         global_clims[field] = clim
-        print(
-            f"  {field} clim: [{clim[0]:.4e}, {clim[1]:.4e}] (from {last_found[0]})")
 
     # Build task list — one task per VTKHDF file (all fields rendered from same mesh)
     tasks = []
@@ -381,15 +439,19 @@ def main():
     p_render.add_argument("--stride", type=int, default=None,
                           help="Render every Nth frame")
     p_render.add_argument("--window", nargs=2, type=int,
-                          default=[5000, 1000], help="Window width height")
+                          default=None, help="Window width height (auto if unset)")
     p_render.add_argument("--hpad", type=float, default=1.04,
                           help="Horizontal padding factor")
     p_render.add_argument("--font-scale", type=float,
                           default=2.0, help="Font scale multiplier")
     p_render.add_argument("--clim-min", type=float,
-                          default=None, help="Fixed colorbar minimum")
+                          default=None, help="Fixed colorbar minimum (applies to all fields)")
     p_render.add_argument("--clim-max", type=float,
-                          default=None, help="Fixed colorbar maximum")
+                          default=None, help="Fixed colorbar maximum (applies to all fields)")
+    p_render.add_argument("--clim", action="append", default=[],
+                          help="Per-field range: FIELD=LOW:HIGH (e.g. T=300:4000 P=0:25)")
+    p_render.add_argument("--clim-from", type=str, default=None,
+                          help="Use this step number's data for colorbar range (e.g. '500' or 't_0.005000')")
     p_render.add_argument("--cmap", type=str, default="plasma",
                           help="Colormap: plasma, inferno, viridis, turbo, hot, coolwarm, RdBu, magma, cividis, Blues, Reds, etc.")
     p_render.add_argument("--jobs", "-j", type=int, default=1,
@@ -422,7 +484,7 @@ def main():
     p_all.add_argument("--stride", type=int, default=None,
                        help="Render every Nth frame")
     p_all.add_argument("--window", nargs=2, type=int,
-                       default=[5000, 1000], help="Window width height")
+                       default=None, help="Window width height (auto if unset)")
     p_all.add_argument("--hpad", type=float, default=1.04,
                        help="Horizontal padding factor")
     p_all.add_argument("--font-scale", type=float, default=2.0,
@@ -430,7 +492,11 @@ def main():
     p_all.add_argument("--clim-min", type=float, default=None,
                        help="Fixed colorbar minimum")
     p_all.add_argument("--clim-max", type=float, default=None,
-                       help="Fixed colorbar maximum")
+                       help="Fixed colorbar maximum (applies to all fields)")
+    p_all.add_argument("--clim", action="append", default=[],
+                       help="Per-field range: FIELD=LOW:HIGH (e.g. T=300:4000 P=0:25)")
+    p_all.add_argument("--clim-from", type=str, default=None,
+                       help="Use this step number's data for colorbar range")
     p_all.add_argument("--cmap", type=str, default="plasma",
                        help="Colormap: plasma, inferno, viridis, turbo, hot, coolwarm, RdBu, magma, cividis, Blues, Reds, etc.")
     p_all.add_argument("--jobs", "-j", type=int, default=1,
