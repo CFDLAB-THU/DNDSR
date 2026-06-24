@@ -89,6 +89,35 @@ pl.renderer.SetViewport(xmin, ymin, xmax, ymax)
 Use only when you need multiple renderers. Avoid for single-domain
 layouts — black bars outside the viewport are ugly.
 
+### Creating white margins around the data
+
+When the mesh extends beyond the region you want to show (e.g. a far-field
+that reaches well past the body), you cannot get a clean white margin by
+camera framing alone — zooming out just reveals more mesh. Options, in
+order of preference:
+
+1. **Give up the margin** (simplest, best for *mesh* plots). Frame the
+   camera to the window (`parallel_scale = half window height`) and let the
+   mesh fill the canvas; the frustum edges give a clean straight crop and
+   real cell edges are preserved (no geometry modification).
+
+2. **`clip_box` geometry clip** (good for *scalar field* plots). Clips the
+   data to the window so white shows around it with `parallel_scale`
+   padding:
+   ```python
+   box = sub.clip_box((x0, x1, y0, y1, z0, z1), invert=False)
+   ```
+   **Caveat:** it cuts cells, so quads/hexes become triangles. Harmless for
+   filled `add_mesh(scalars=...)` colour, but it **ruins `show_edges` mesh
+   plots** (spurious diagonal edges). Never use it for a mesh/grid figure.
+
+3. **Layered multi-renderer** (faithful margin, preserves topology). Put a
+   full-canvas white background renderer behind a data renderer placed in a
+   sub-viewport. Tiled subplot renderers (see *Dedicated colorbar strip*)
+   also avoid black bars because every renderer clears its area to white —
+   unlike a single shrunk `SetViewport`, whose uncovered area renders black.
+   Use this when you need both an unclipped mesh **and** a white margin.
+
 ### view_xy() helper
 
 Sets camera looking down the +Z axis at the XY plane. Good for quick
@@ -139,7 +168,71 @@ scalar_bar_args={
 - `"%.2g"` — 2 significant digits, auto-switches to scientific for large/small
 - `"%.3e"` — always scientific, 3 decimal places
 
+### Dedicated colorbar strip (stable colorbar region)
+
+Placing the scalar bar over the data with normalized `position_x/width/
+height` fights VTK's internal layout: the title/labels spill outside the
+bar box, proportions are hard to control, the bar or its background box
+ends up too thick, and you need an opaque background panel
+(`DrawBackgroundOn()` + frame) just to keep labels readable over the
+field. **Don't fight it — give the colorbar its own renderer.**
+
+Use a 2-renderer plotter (`shape=(2, 1)` for a bottom strip, or
+`(1, 2)` for a side strip), override the viewports for an unequal split,
+and put the bar in the thin strip on clean white. Because the two
+renderers *tile the whole canvas*, every pixel is cleared to white — so
+there are **no black bars** (unlike shrinking a single renderer's
+viewport with `SetViewport`, where the uncovered area renders black).
+
+```python
+STRIP = 0.13   # bottom fraction reserved for the colorbar
+
+pl = pv.Plotter(off_screen=True, window_size=[W, H],
+                shape=(2, 1), border=False)   # border=False removes the
+                                              # divider line between renderers
+
+# --- data renderer (top) ---
+pl.subplot(0, 0)
+pl.background_color = "white"
+actor = pl.add_mesh(mesh, scalars=field, cmap=cmap, clim=clim,
+                    show_scalar_bar=False)     # no bar here
+pl.camera.parallel_projection = True
+pl.camera.focal_point = (cx, cy, 0.0)
+pl.camera.position    = (cx, cy, 1.0)
+pl.camera.view_up     = (0.0, 1.0, 0.0)
+pl.camera.parallel_scale = (0.5 * domain_h) / 0.92   # ~4% margin
+
+# --- colorbar renderer (thin bottom strip) ---
+pl.subplot(1, 0)
+pl.background_color = "white"
+pl.add_scalar_bar(
+    title=field, mapper=actor.mapper,   # reuse the data mesh's LUT
+    vertical=False,
+    position_x=0.20, position_y=0.55,   # coords are within THIS strip
+    width=0.60, height=0.32,            # height = bar thickness; lower = thinner
+    label_font_size=16, title_font_size=18, color="black", fmt="%.3g",
+)
+
+# unequal split: tall data renderer + thin colorbar strip
+pl.renderers[0].SetViewport(0.0, STRIP, 1.0, 1.0)
+pl.renderers[1].SetViewport(0.0, 0.0, 1.0, STRIP)
+```
+
+Notes:
+- `mapper=actor.mapper` makes the bar in the second renderer use the data
+  mesh's lookup table (color map + `clim`); without it the bar has no
+  scalars to map.
+- `border=False` on the `Plotter` removes the thin divider line VTK draws
+  between subplot renderers.
+- Expose `STRIP` and the bar `position/width/height` as constants — they
+  are the proportions you will tune. The bar's *thickness* is its `height`
+  (horizontal bar) and is the usual "too thick" culprit.
+- This is the robust choice whenever you need a stable, non-overlapping
+  colorbar region; the over-the-data overlay below is fine only for quick
+  single-frame looks.
+
 ### Text overlays
+
 
 ```python
 pl.add_text(f"t = {time_val:.4e}", position="upper_edge",

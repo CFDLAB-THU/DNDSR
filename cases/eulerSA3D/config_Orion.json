@@ -112,6 +112,9 @@ pInf = 0.01738424785487074
             // "cellVolume",
             "dWall"
         ],
+        "outBndScalarNames": [
+            "dWall"
+        ],
         "restartWriter": {
             "type": "H5",
             "hdfDeflateLevel": 5,
