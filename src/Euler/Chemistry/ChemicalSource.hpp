@@ -12,6 +12,7 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <ostream>
 #include <fmt/format.h>
 
 namespace DNDS::Euler::Chemistry
@@ -164,6 +165,9 @@ namespace DNDS::Euler::Chemistry
         /// from the same mechanism file (no shared state between instances).
         std::unique_ptr<ChemicalSource> clone() const;
 
+        const std::string &mechanismFile() const { return mechanismFile_; }
+        const std::string &phaseName() const { return phaseName_; }
+
         int nSpecies() const;
         int nReactions() const;
         const std::vector<std::string> &speciesNames() const;
@@ -200,6 +204,9 @@ namespace DNDS::Euler::Chemistry
 
         /** Temperature [K] used for base internal-energy offsets. */
         double baseTemperature() const;
+
+        /** Print detailed mechanism info (species, reactions, base temperature, etc.) to stream. */
+        void printInfo(std::ostream &os) const;
 
         /**
          * Solve T from specific internal energy u [J/kg] and specific volume v [m³/kg].

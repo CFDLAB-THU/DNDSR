@@ -682,7 +682,8 @@ namespace DNDS::Euler
          * @param[out] uMax  Per-component maximum (resized to nVars).
          * @param[in]  u     Cell-centered DOF array.
          */
-        void EvaluateMinMax(Eigen::Vector<real, -1> &uMin, Eigen::Vector<real, -1> &uMax, ArrayDOFV<nVarsFixed> &u);
+        void EvaluateMinMax(Eigen::Vector<real, -1> &uMin, Eigen::Vector<real, -1> &uMax, ArrayDOFV<nVarsFixed> &u,
+                            StateValueOrigin representation = StateValueOrigin::Cons);
 
         /// Return label string for DOF index v, following StateValueOrigin layout.
         [[nodiscard]] std::string varLabel(int v, StateValueOrigin layout = StateValueOrigin::Cons) const
@@ -2226,7 +2227,8 @@ namespace DNDS::Euler
             Eigen::Vector<real, -1> &res, ArrayDOFV<nVarsFixed> &rhs, index P, bool volWise, bool average);               \
                                                                                                                           \
         ext template void EulerEvaluator<model>::EvaluateMinMax(                                                          \
-            Eigen::Vector<real, -1> &uMin, Eigen::Vector<real, -1> &uMax, ArrayDOFV<nVarsFixed> &u);                      \
+            Eigen::Vector<real, -1> &uMin, Eigen::Vector<real, -1> &uMax, ArrayDOFV<nVarsFixed> &u,                       \
+            StateValueOrigin representation);                                                                             \
                                                                                                                           \
         ext template void EulerEvaluator<model>::EvaluateRecNorm(                                                         \
             Eigen::Vector<real, -1> &res,                                                                                 \
