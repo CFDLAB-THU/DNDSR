@@ -218,7 +218,7 @@ namespace DNDS::Euler
                                DNDS::Config::range(0.0, 1.0));
                     DNDS_FIELD(odeCode,             R"EOF(ODE integrator code:
     0       : ESDIRK4       | implicit | 5 stages
-    1       : SSP-SDIRK4    | implicit | 3 stages
+    101     : SSP-SDIRK4    | implicit | 3 stages
     202     : ESIDRK3       | implicit | 3 stages
     203     : Trapz/C-N     | implicit | 1 stage
     204     : ESDIRK2       | implicit | 2 stages

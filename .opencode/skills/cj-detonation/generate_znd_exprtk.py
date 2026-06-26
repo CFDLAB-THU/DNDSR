@@ -82,7 +82,7 @@ def fmt_vec(name, vals, per_line=6):
 
 def generate_exprtk(npz_path, n_points=50, Ly=0.1, shock_pert_amp=1e-3,
                     v_pert_amp=40.0, x_shock_override=None, cj_tol=0.01,
-                    pocket=None):
+                    pocket=None, frame_velocity=None):
     """Build the exprtk initializer dict from a ZND profile .npz file.
 
     Returns a dict with keys ``"exprtkInitializers"`` (ready for JSON config
@@ -92,6 +92,11 @@ def generate_exprtk(npz_path, n_points=50, Ly=0.1, shock_pert_amp=1e-3,
     Perturbations (shock position cosine, transverse velocity sine) are
     parameterised as ``var`` declarations at the top of the expression so
     they can be edited in-place without re-running the generator.
+
+    If *frame_velocity* is set (e.g. the CJ speed), a ``var D`` declaration
+    is emitted and all u-velocity values are shifted by ``-D``, converting
+    from the lab frame (unreacted gas at rest) to a frame co-moving with
+    the detonation at speed *frame_velocity*.
 
     If *pocket* is a dict, a rectangular pocket of unreacted gas is added
     behind the shock.  Expected keys: ``offset`` (distance from shock to
@@ -147,6 +152,11 @@ def generate_exprtk(npz_path, n_points=50, Ly=0.1, shock_pert_amp=1e-3,
     lines.append("var dist := x_shock - x[0];")
     lines.append("")
 
+    fv = frame_velocity
+    if fv is not None:
+        lines.append(f"var D := {fv:.8g};")
+        lines.append("")
+
     lines.extend(fmt_vec("xd", x_new))
     lines.extend(fmt_vec("Td", sampled["T"]))
     lines.extend(fmt_vec("Pd", sampled["P"]))
@@ -157,9 +167,12 @@ def generate_exprtk(npz_path, n_points=50, Ly=0.1, shock_pert_amp=1e-3,
 
     lines.append("if (dist < 0) {")
     lines.append(f"    UExprtk[0] := {T1:.8g};")
-    lines.append(f"    UExprtk[1] := 0.0;")
-    lines.append(f"    UExprtk[2] := 0.0;")
-    lines.append(f"    UExprtk[3] := 0.0;")
+    if fv is not None:
+        lines.append("    UExprtk[1] := -D;")
+    else:
+        lines.append("    UExprtk[1] := 0.0;")
+    lines.append("    UExprtk[2] := 0.0;")
+    lines.append("    UExprtk[3] := 0.0;")
     lines.append(f"    UExprtk[4] := {P1:.8g};")
     for i in range(n_species - 1):
         lines.append(f"    UExprtk[{5 + i}] := {Y1[i]:.8g};")
@@ -167,8 +180,11 @@ def generate_exprtk(npz_path, n_points=50, Ly=0.1, shock_pert_amp=1e-3,
 
     lines.append(f"else if (dist >= xd[{n_pts - 1}]) {{")
     lines.append(f"    UExprtk[0] := {T_cj:.8g};")
-    lines.append(f"    UExprtk[1] := {u_cj:.8g};")
-    lines.append(f"    UExprtk[2] := 0.0;")
+    if fv is not None:
+        lines.append(f"    UExprtk[1] := {u_cj:.8g} - D;")
+    else:
+        lines.append(f"    UExprtk[1] := {u_cj:.8g};")
+    lines.append("    UExprtk[2] := 0.0;")
     lines.append(f"    UExprtk[3] := 0.0;")
     lines.append(f"    UExprtk[4] := {P_cj:.8g};")
     for i in range(n_species - 1):
@@ -186,7 +202,12 @@ def generate_exprtk(npz_path, n_points=50, Ly=0.1, shock_pert_amp=1e-3,
     lines.append("        };")
     lines.append("    };")
     lines.append("    UExprtk[0] := Td[idx] + wt * (Td[idx + 1] - Td[idx]);")
-    lines.append("    UExprtk[1] := ud[idx] + wt * (ud[idx + 1] - ud[idx]);")
+    if fv is not None:
+        lines.append(
+            "    UExprtk[1] := ud[idx] + wt * (ud[idx + 1] - ud[idx]) - D;")
+    else:
+        lines.append(
+            "    UExprtk[1] := ud[idx] + wt * (ud[idx + 1] - ud[idx]);")
     lines.append("    UExprtk[2] := 0.0;")
     lines.append("    UExprtk[3] := 0.0;")
     lines.append("    UExprtk[4] := Pd[idx] + wt * (Pd[idx + 1] - Pd[idx]);")
@@ -246,6 +267,16 @@ def generate_exprtk(npz_path, n_points=50, Ly=0.1, shock_pert_amp=1e-3,
             "Ly_m": Ly,
             "shock_pert_amp_mm": shock_pert_amp * 1e3,
             "v_pert_amp_m_s": v_pert_amp,
+            "frame_velocity": fv,
+            "left_bc_CJ_state": {
+                "type": "primTP_phy",
+                "state": (
+                    [T_cj]
+                    + ([(u_cj - fv) if fv else u_cj])
+                    + [0.0, 0.0, P_cj]
+                    + list(Y_cj[:n_species - 1])
+                ),
+            },
             "pocket": pocket,
         }
     }
@@ -282,6 +313,9 @@ def main():
                    help="Pocket pressure [Pa] (default 46667)")
     p.add_argument("--pocket-y-center", type=float, default=None,
                    help="Pocket y-center [m] (default: Ly/2)")
+    p.add_argument("--frame-velocity", type=float, default=None,
+                   help="Frame co-moving velocity [m/s]: emits 'var D' and "
+                   "shifts all u by -D (e.g. set to CJ speed for shock-fixed frame)")
     p.add_argument("--output", required=True, help="Output JSON file")
     args = p.parse_args()
 
@@ -306,6 +340,7 @@ def main():
         x_shock_override=args.x_shock,
         cj_tol=args.cj_tol,
         pocket=pocket_cfg,
+        frame_velocity=args.frame_velocity,
     )
 
     with open(args.output, "w") as f:
@@ -315,6 +350,11 @@ def main():
     print(f"Generated exprtk initializer:")
     print(f"  L_CJ = {info['L_cj_mm']:.1f} mm")
     print(f"  x_shock = {info['x_shock_mm']:.1f} mm")
+    if info["frame_velocity"] is not None:
+        lb = info["left_bc_CJ_state"]["state"]
+        print(f"  Frame velocity D = {info['frame_velocity']:.1f} m/s")
+        print(
+            f"  Left BC (CJ): T={lb[0]:.0f}K u_x={lb[1]:.1f} P={lb[4]:.0f}Pa")
     print(f"  Interpolation points: {info['n_interp_points']}")
     print(f"  Species: {info['species_order']}")
     print(f"  Saved to {args.output}")
