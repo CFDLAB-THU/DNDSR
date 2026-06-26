@@ -1057,6 +1057,24 @@ namespace DNDS::Euler::Gas
                 lam123 = (sqr(lam123) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
             //*HY
         }
+        else if constexpr (eigScheme == 9) // 8, plust aAve replaced by max(aL,aR);
+        {
+            const real aAveUse = std::max(aL, aR);
+            lam0 = std::max(std::abs(uAve * incFScale - aAveUse * incFScaleA), dLambda * scaleHFix);
+            lam4 = std::max(std::abs(uAve * incFScale + aAveUse * incFScaleA), dLambda * scaleHFix);
+            lam123 = std::max(std::abs(uAve * incFScale), dLambda * scaleHFix);
+
+            //*HY
+            const real thresholdHartenYee = scaleHartenYee * (VAve + aAveUse);
+            const real thresholdHartenYeeS = sqr(thresholdHartenYee);
+            if (lam0 < thresholdHartenYee)
+                lam0 = (sqr(lam0) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
+            if (lam4 < thresholdHartenYee)
+                lam4 = (sqr(lam4) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
+            if (lam123 < thresholdHartenYee)
+                lam123 = (sqr(lam123) + thresholdHartenYeeS) / (2 * thresholdHartenYee);
+            //*HY
+        }
         else
         {
             DNDS_assert(false);
@@ -1474,6 +1492,8 @@ namespace DNDS::Euler::Gas
         real gammaEqRoe = (sqrtRhoLm * gammaEqLmUse + sqrtRhoRm * gammaEqRmUse) / (sqrtRhoLm + sqrtRhoRm);
         real gammaRoe = (sqrtRhoLm * gammaLmUse + sqrtRhoRm * gammaRmUse) / (sqrtRhoLm + sqrtRhoRm);
 
+        // p/rho = (E - ½*v²) * (gammaEqRoe-1) => E - ½*v² = p/rho / (gammaEqRoe-1)
+        // H_sensible - ½v² = E - ½*v² + p/rho => H_sensible - ½v² = p/rho * (1/(gammaEqRoe-1)+1) =>
         // p/rho = (gammaEqRoe-1)/gammaEqRoe * (H_sensible - ½v²)
         // a² = gammaCpCvRoe * p/rho. Reduces to the standard Roe formula
         // when gammaEq == gamma == constant.
