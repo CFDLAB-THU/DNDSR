@@ -742,11 +742,9 @@ namespace DNDS::Euler::Chemistry
     {
         DNDS_assert(impl_);
         impl_->gasT_setMassFractions(Y.data);
-        // T_init floor: T_guess > 300 ? T_guess : 300, then max with gas_minTemp.
-        // The 300 is redundant — gas_minTemp() is always ≥300 for standard mechs.
-        // Could use TBase (per-species min T_low, ~200K) instead, but gas_minTemp
-        // already provides the final clamp so 300 has no effect on valid mechs.
-        double Tinit = std::max(T_guess > 300 ? T_guess : 300, impl_->gas_minTemp());
+        // T_init floor: use per-species base temperature as lower bound,
+        // then max with gas_minTemp() for the final clamp.
+        double Tinit = std::max(std::max(T_guess, impl_->TBase), impl_->gas_minTemp());
         double p_init = mixtureR(Y) * Tinit / v;
         impl_->gasT_setState_TP(Tinit, p_init);
         try

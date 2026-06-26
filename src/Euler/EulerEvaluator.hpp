@@ -1766,7 +1766,7 @@ namespace DNDS::Euler
                     try
                     {
                         real T = phys_.temperature(ret);
-                        reactiveInvalid = !std::isfinite(T) || phys_.toPhysT(T) < 200.0;
+                        reactiveInvalid = !std::isfinite(T) || phys_.toPhysT(T) < phys_.temperatureFloor();
                     }
                     catch (const std::exception &)
                     {

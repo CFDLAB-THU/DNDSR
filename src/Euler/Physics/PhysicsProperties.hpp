@@ -201,6 +201,12 @@ namespace DNDS::Euler
         /// Convert physical temperature to code-scaled.
         [[nodiscard]] real toCodeT(real TPhys) const { return igProp_->T0 > 0 ? TPhys / igProp_->T0 : TPhys; }
 
+        /// Per-mechanism temperature lower bound [K] (physical); 0 when no chemical source.
+        [[nodiscard]] real temperatureFloor() const
+        {
+            return hasChemicalSource() ? chem().baseTemperature() : real(0);
+        }
+
         void resolveStateValue(StateValue &value, int nVars,
                                std::ostream *os = nullptr,
                                const std::string &label = "state") const;
@@ -1429,16 +1435,17 @@ namespace DNDS::Euler
             nlohmann::ordered_json j = value;
             *os << fmt::format("Resolved state [{}] origin [{}]:\n{}\n",
                                label, StateValueOriginName(value.originType), j.dump(2));
-            *os << fmt::format("  uConsCode: {}\n", fmt::streamed(value.cons.transpose()));
-            *os << fmt::format("  uConsPhys: {}\n", fmt::streamed(value.cons_phy.transpose()));
-            *os << fmt::format("  uTPCode:   {}\n", fmt::streamed(value.primTP.transpose()));
-            *os << fmt::format("  uTPPhys:   {}\n", fmt::streamed(value.primTP_phy.transpose()));
+            *os << fmt::format("  uConsCode: {}\n", fmt::streamed(value.cons.transpose().eval()));
+            *os << fmt::format("  uConsPhys: {}\n", fmt::streamed(value.cons_phy.transpose().eval()));
+            *os << fmt::format("  uTPCode:   {}\n", fmt::streamed(value.primTP.transpose().eval()));
+            *os << fmt::format("  uTPPhys:   {}\n", fmt::streamed(value.primTP_phy.transpose().eval()));
         }
     }
 
     template <EulerModel model>
     void PhysicsProperties<model>::printInfo(std::ostream &os) const
     {
+        DNDS_assert(igProp_);
         auto &ig = *igProp_;
         os << fmt::format("=== PhysicsProperties (IdealGas) Info ===\n");
         os << fmt::format("  gamma:        {:.6e}\n", ig.gamma);
@@ -1574,7 +1581,7 @@ namespace DNDS::Euler
         real uPhys = uInternal * igProp_->U0 * igProp_->U0;
         DNDS_assert_info(chem().isIdealGas(), "temperature(): non-ideal-gas EOS conversion not yet implemented");
         real vPhys = rhoInv / igProp_->rho0;
-        double T_guess = TGuess > 0 ? toPhysT(TGuess) : 200.0;
+        double T_guess = TGuess > 0 ? toPhysT(TGuess) : temperatureFloor();
         // Fallback T guess using constant-gamma p/(rho*R) estimate; only executed
         // when warm-start T_guess is invalid (≤0), not a hot path.
         if (T_guess <= 0)

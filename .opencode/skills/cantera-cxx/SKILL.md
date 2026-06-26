@@ -53,7 +53,7 @@ For comprehensive API details see:
 3. **Dedicated phase for UV** — `setState_UV` does a Newton solve; use a separate `Solution` to avoid state corruption.
 4. **Work buffers** — pre-allocate mutable `std::vector` in `Impl`; reuse across calls.
 5. **Clamp Y** — clamp to [0,1] + renormalize before every call (done by caller, not by ChemicalSource).
-6. **Clamp T ≥ 200 K** — NASA polynomial lower bound.
+6. **Clamp T ≥ baseTemperature()** — per-mechanism species lower bound from Cantera (typically ~200 K).
 7. **Physical pressure** — pass `aux.pPhys` (SI Pa), not code-scaled pressure, to Cantera.
 8. **Legacy headers banned** — never use `thermo.h`, `kinetics.h`, `transport.h` (deprecated 3.2).
 
