@@ -438,7 +438,7 @@ namespace DNDS::Euler
             DNDS_assert(std::isfinite(rho) && rho > 0);
             // aux.T is code-scaled; Cantera needs physical T [K]
             double Tphys = igProp_.T0 > 0 ? aux.T * igProp_.T0 : aux.T;
-            double Tcantera = std::max(Tphys, 200.0); // NASA poly lower bound
+            double Tcantera = std::max(Tphys, c.baseTemperature());
             double pCantera = aux.pPhys;
             if (Tcantera != Tphys)
                 pCantera = rho * igProp_.rho0 * c.mixtureR(Yc) * Tcantera;

@@ -248,8 +248,8 @@ for (int k = 0; k < Ns; ++k) ySum += bufY[k];
 if (ySum > 0)
     for (int k = 0; k < Ns; ++k) bufY[k] /= ySum;
 
-// 4. Clamp T ≥ 200 K (NASA poly lower bound)
-double Tcantera = std::max(T, 200.0);
+// 4. Clamp T ≥ baseTemperature() (per-mechanism species lower bound)
+double Tcantera = std::max(T, chem->baseTemperature());
 
 // 5. Use physical pressure (pPhys, not code-scaled p)
 chem->productionRates(Tcantera, aux.pPhys, Yv, omega);

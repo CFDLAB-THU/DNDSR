@@ -1455,7 +1455,7 @@ namespace DNDS::Euler
             {
                 real T = phys_.temperature(state);
                 real p = state(0) * phys_.Rgas(state) * T;
-                return std::isfinite(T) && std::isfinite(p) && p > 0 && phys_.toPhysT(T) >= 200.0;
+                return std::isfinite(T) && std::isfinite(p) && p > 0 && phys_.toPhysT(T) >= phys_.temperatureFloor();
             }
             catch (const std::exception &)
             {
@@ -1992,34 +1992,6 @@ namespace DNDS::Euler
         localMin.setConstant(nV, std::numeric_limits<real>::max());
         localMax.setConstant(nV, std::numeric_limits<real>::lowest());
 
-        auto convertCell = [&](index iCell, TU &buf)
-        {
-            if (representation == StateValueOrigin::Cons)
-            {
-                buf = u[iCell];
-            }
-            else if (representation == StateValueOrigin::ConsPhy)
-            {
-                TU src = u[iCell];
-                phys_.consCodeToPhys(src, buf);
-            }
-            else if (representation == StateValueOrigin::PrimTP)
-            {
-                phys_.conservativeToPrimTP(u[iCell], buf);
-            }
-            else if (representation == StateValueOrigin::PrimTPPhy)
-            {
-                TU tmp(nV);
-                phys_.conservativeToPrimTP(u[iCell], tmp);
-                phys_.primTPCodeToPhys(tmp, buf);
-            }
-            else
-            {
-                DNDS_assert_info(false, "EvaluateMinMax: unsupported StateValueOrigin");
-                buf = u[iCell];
-            }
-        };
-
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp declare reduction(TUMin:TU : omp_out = omp_out.array().min(omp_in.array())) initializer(omp_priv = omp_orig)
 #    pragma omp declare reduction(TUMax:TU : omp_out = omp_out.array().max(omp_in.array())) initializer(omp_priv = omp_orig)
@@ -2027,10 +1999,41 @@ namespace DNDS::Euler
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
-            TU buf(nV);
-            convertCell(iCell, buf);
-            localMin = localMin.array().min(buf.array()).matrix();
-            localMax = localMax.array().max(buf.array()).matrix();
+            if (representation == StateValueOrigin::Cons)
+            {
+                localMin = localMin.array().min(u[iCell].array()).matrix();
+                localMax = localMax.array().max(u[iCell].array()).matrix();
+            }
+            else if (representation == StateValueOrigin::ConsPhy)
+            {
+                TU src = u[iCell];
+                TU buf(nV);
+                phys_.consCodeToPhys(src, buf);
+                localMin = localMin.array().min(buf.array()).matrix();
+                localMax = localMax.array().max(buf.array()).matrix();
+            }
+            else if (representation == StateValueOrigin::PrimTP)
+            {
+                TU buf(nV);
+                phys_.conservativeToPrimTP(u[iCell], buf);
+                localMin = localMin.array().min(buf.array()).matrix();
+                localMax = localMax.array().max(buf.array()).matrix();
+            }
+            else if (representation == StateValueOrigin::PrimTPPhy)
+            {
+                TU buf(nV);
+                TU tmp(nV);
+                phys_.conservativeToPrimTP(u[iCell], tmp);
+                phys_.primTPCodeToPhys(tmp, buf);
+                localMin = localMin.array().min(buf.array()).matrix();
+                localMax = localMax.array().max(buf.array()).matrix();
+            }
+            else
+            {
+                DNDS_assert_info(false, "EvaluateMinMax: unsupported StateValueOrigin");
+                localMin = localMin.array().min(u[iCell].array()).matrix();
+                localMax = localMax.array().max(u[iCell].array()).matrix();
+            }
         }
         MPI::Allreduce(localMin.data(), uMin.data(), nV, DNDS_MPI_REAL, MPI_MIN, u.father->getMPI().comm);
         MPI::Allreduce(localMax.data(), uMax.data(), nV, DNDS_MPI_REAL, MPI_MAX, u.father->getMPI().comm);
