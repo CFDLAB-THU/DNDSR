@@ -1853,7 +1853,7 @@ namespace DNDS::Euler
                 (*cellTWarm)[iCell](0) = TCheck;
             real pCheck = rho * phys_.Rgas(state) * TCheck;
             DNDS_check_throw_info(std::isfinite(TCheck) && std::isfinite(pCheck) &&
-                                      phys_.toPhysT(TCheck) >= 200.0 && pCheck > 0,
+                                      phys_.toPhysT(TCheck) >= phys_.chem().baseTemperature() && pCheck > 0,
                                   fmt::format("ReactiveSourceConstVolumeStep invalid post-step state at cell {}: T={} K, p_code={}",
                                               iCell, phys_.toPhysT(TCheck), pCheck));
         }

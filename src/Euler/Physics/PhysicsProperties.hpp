@@ -127,7 +127,9 @@ namespace DNDS::Euler
                                               pool_->size(), tid));
             return tid;
         }
-        Chemistry::ChemicalSource &chem() const
+
+    public:
+        [[nodiscard]] Chemistry::ChemicalSource &chem() const
         {
             int tid = threadIdx();
             return (*pool_)[tid];
@@ -348,13 +350,13 @@ namespace DNDS::Euler
         }
 
         /// Constant gamma (no state needed) — for initialization / analytic fields.
-        real gammaConst() const { return igProp_->gamma; }
+        [[nodiscard]] real gammaConst() const { return igProp_->gamma; }
 
-        real muRef() const { return igProp_->muGas; }
-        real Pr() const { return igProp_->prGas; }
-        real TRef() const { return igProp_->TRef; }
-        real CSutherland() const { return igProp_->CSutherland; }
-        int muModel() const { return igProp_->muModel; }
+        [[nodiscard]] real muRef() const { return igProp_->muGas; }
+        [[nodiscard]] real Pr() const { return igProp_->prGas; }
+        [[nodiscard]] real TRef() const { return igProp_->TRef; }
+        [[nodiscard]] real CSutherland() const { return igProp_->CSutherland; }
+        [[nodiscard]] int muModel() const { return igProp_->muModel; }
 
         /// Public access to clamped, renormalized mass fractions. Caller owns @p Y storage.
         /// Caller must ensure hasChemicalSource() before calling.
