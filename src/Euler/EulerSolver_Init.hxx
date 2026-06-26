@@ -434,6 +434,9 @@ namespace DNDS::Euler
         DNDS_MAKE_SSP(pEval, mesh, vfv, pBCHandler, config.eulerSettings, nVars);
         EulerEvaluator<model> &eval = *pEval;
 
+        if (mpi.rank == 0)
+            eval.phys().printInfo(log());
+
         // Reactive flow requires full-block Jacobian for chemical coupling
         int jacMode = eval.settings.useScalarJacobian ? 0 : 1;
         if (eval.settings.reactiveFlow.enabled)

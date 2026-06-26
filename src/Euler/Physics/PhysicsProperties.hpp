@@ -38,6 +38,7 @@
 #include <cmath>
 #include <limits>
 #include <ostream>
+#include <fmt/ostream.h>
 #ifdef DNDS_DIST_MT_USE_OMP
 #    include <omp.h>
 #endif
@@ -203,6 +204,8 @@ namespace DNDS::Euler
         void resolveStateValue(StateValue &value, int nVars,
                                std::ostream *os = nullptr,
                                const std::string &label = "state") const;
+
+        void printInfo(std::ostream &os) const;
 
         // ---- EOS coefficients (per-point — uses state T and U vectors) ----
 
@@ -1426,6 +1429,45 @@ namespace DNDS::Euler
             nlohmann::ordered_json j = value;
             *os << fmt::format("Resolved state [{}] origin [{}]:\n{}\n",
                                label, StateValueOriginName(value.originType), j.dump(2));
+            *os << fmt::format("  uConsCode: {}\n", fmt::streamed(value.cons.transpose()));
+            *os << fmt::format("  uConsPhys: {}\n", fmt::streamed(value.cons_phy.transpose()));
+            *os << fmt::format("  uTPCode:   {}\n", fmt::streamed(value.primTP.transpose()));
+            *os << fmt::format("  uTPPhys:   {}\n", fmt::streamed(value.primTP_phy.transpose()));
+        }
+    }
+
+    template <EulerModel model>
+    void PhysicsProperties<model>::printInfo(std::ostream &os) const
+    {
+        auto &ig = *igProp_;
+        os << fmt::format("=== PhysicsProperties (IdealGas) Info ===\n");
+        os << fmt::format("  gamma:        {:.6e}\n", ig.gamma);
+        os << fmt::format("  Rgas:         {:.6e} J/(kg*K)\n", ig.Rgas);
+        os << fmt::format("  muGas:        {:.6e} Pa*s\n", ig.muGas);
+        os << fmt::format("  Pr_gas:       {:.6e}\n", ig.prGas);
+        os << fmt::format("  TRef:         {:.6e} K\n", ig.TRef);
+        os << fmt::format("  C_Sutherland: {:.6e}\n", ig.CSutherland);
+        os << fmt::format("  muModel:      {:d}\n", ig.muModel);
+        os << fmt::format("\n");
+        os << fmt::format("  Reference scales:\n");
+        os << fmt::format("    T0:         {:.6e} K\n", ig.T0);
+        os << fmt::format("    rho0:       {:.6e} kg/m^3\n", ig.rho0);
+        os << fmt::format("    U0:         {:.6e} m/s\n", ig.U0);
+        os << fmt::format("    L0:         {:.6e} m\n", ig.L0);
+        os << fmt::format("  Derived scales:\n");
+        os << fmt::format("    p0  = rho0*U0^2:              {:.6e} Pa\n", p0());
+        os << fmt::format("    t0  = L0/U0:                   {:.6e} s\n", ig.L0 / ig.U0);
+        os << fmt::format("    R0  = U0^2/T0:                 {:.6e} J/(kg*K)\n", R0());
+        os << fmt::format("    mu0 = rho0*U0*L0:              {:.6e} Pa*s\n", ig.rho0 * ig.U0 * ig.L0);
+        os << fmt::format("  Code Rgas:   {:.6e}\n", ig.Rgas / R0());
+        os << fmt::format("  Code muGas:  {:.6e}\n", ig.muGas / (ig.rho0 * ig.U0 * ig.L0));
+        os << fmt::format("  RANS model:  {:d}\n", static_cast<int>(ransModel_));
+        os << fmt::format("  nRANS vars:  {:d}\n", nRANS_);
+        if (hasChemicalSource())
+        {
+            os << fmt::format("\n");
+            os << fmt::format("  nSpecies:    {:d}\n", nSpecies());
+            chem().printInfo(os);
         }
     }
 

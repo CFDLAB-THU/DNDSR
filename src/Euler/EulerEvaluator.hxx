@@ -1982,13 +1982,44 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>, )
     void EulerEvaluator<model>::EvaluateMinMax(
-        Eigen::Vector<real, -1> &uMin, Eigen::Vector<real, -1> &uMax, ArrayDOFV<nVarsFixed> &u)
+        Eigen::Vector<real, -1> &uMin, Eigen::Vector<real, -1> &uMax, ArrayDOFV<nVarsFixed> &u,
+        StateValueOrigin representation)
     {
-        uMin.resize(nVars);
-        uMax.resize(nVars);
+        const int nV = nVars;
+        uMin.resize(nV);
+        uMax.resize(nV);
         TU localMin, localMax;
-        localMin.setConstant(nVars, std::numeric_limits<real>::max());
-        localMax.setConstant(nVars, std::numeric_limits<real>::lowest());
+        localMin.setConstant(nV, std::numeric_limits<real>::max());
+        localMax.setConstant(nV, std::numeric_limits<real>::lowest());
+
+        auto convertCell = [&](index iCell, TU &buf)
+        {
+            if (representation == StateValueOrigin::Cons)
+            {
+                buf = u[iCell];
+            }
+            else if (representation == StateValueOrigin::ConsPhy)
+            {
+                TU src = u[iCell];
+                phys_.consCodeToPhys(src, buf);
+            }
+            else if (representation == StateValueOrigin::PrimTP)
+            {
+                phys_.conservativeToPrimTP(u[iCell], buf);
+            }
+            else if (representation == StateValueOrigin::PrimTPPhy)
+            {
+                TU tmp(nV);
+                phys_.conservativeToPrimTP(u[iCell], tmp);
+                phys_.primTPCodeToPhys(tmp, buf);
+            }
+            else
+            {
+                DNDS_assert_info(false, "EvaluateMinMax: unsupported StateValueOrigin");
+                buf = u[iCell];
+            }
+        };
+
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp declare reduction(TUMin:TU : omp_out = omp_out.array().min(omp_in.array())) initializer(omp_priv = omp_orig)
 #    pragma omp declare reduction(TUMax:TU : omp_out = omp_out.array().max(omp_in.array())) initializer(omp_priv = omp_orig)
@@ -1996,11 +2027,13 @@ namespace DNDS::Euler
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
-            localMin = localMin.array().min(u[iCell].array()).matrix();
-            localMax = localMax.array().max(u[iCell].array()).matrix();
+            TU buf(nV);
+            convertCell(iCell, buf);
+            localMin = localMin.array().min(buf.array()).matrix();
+            localMax = localMax.array().max(buf.array()).matrix();
         }
-        MPI::Allreduce(localMin.data(), uMin.data(), nVars, DNDS_MPI_REAL, MPI_MIN, u.father->getMPI().comm);
-        MPI::Allreduce(localMax.data(), uMax.data(), nVars, DNDS_MPI_REAL, MPI_MAX, u.father->getMPI().comm);
+        MPI::Allreduce(localMin.data(), uMin.data(), nV, DNDS_MPI_REAL, MPI_MIN, u.father->getMPI().comm);
+        MPI::Allreduce(localMax.data(), uMax.data(), nV, DNDS_MPI_REAL, MPI_MAX, u.father->getMPI().comm);
     }
 
     template <class TU>

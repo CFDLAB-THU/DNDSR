@@ -704,6 +704,28 @@ namespace DNDS::Euler::Chemistry
         return impl_->TBase;
     }
 
+    void ChemicalSource::printInfo(std::ostream &os) const
+    {
+        DNDS_assert(impl_);
+        auto &I = *impl_;
+        os << fmt::format("=== ChemicalSource Info ===\n");
+        os << fmt::format("  Mechanism file:       {}\n", mechanismFile_);
+        os << fmt::format("  Phase name:           {}\n", phaseName_.empty() ? "(default)" : phaseName_);
+        os << fmt::format("  Chemical source:      Cantera (built-in)\n");
+        os << fmt::format("  EOS type:             {}\n", I.gas_isIdeal() ? "ideal gas" : "non-ideal");
+        os << fmt::format("  Transport model:      {}\n", I.transportModel);
+        os << fmt::format("  Number of species:    {}\n", I.Ns);
+        os << fmt::format("  Number of reactions:  {}\n", I.kin_nReactions());
+        os << fmt::format("  Base temperature TBase: {:.6e} K\n", I.TBase);
+        os << fmt::format("  Min temperature (Cantera): {:.6e} K\n", I.gas_minTemp());
+        os << fmt::format("  Reference velocity U0:    {:.6e} m/s\n", I.U0);
+        os << fmt::format("  Reference density rho0:   {:.6e} kg/m^3\n", I.rho0);
+        os << fmt::format("  Species ({:d}):\n", I.Ns);
+        for (int k = 0; k < I.Ns; ++k)
+            os << fmt::format("    [{:2d}] {:<16s}  MW={:.6e} kg/mol  Rk={:.6e} J/(kg*K)  eBase={:.6e} J/kg\n",
+                              k, I.speciesNames[k], I.mw[k], I.Rk[k], I.eBase[k]);
+    }
+
     double ChemicalSource::speedOfSound(double T, ConstSpeciesBufferView Y, double p) const
     {
         DNDS_assert(impl_);
