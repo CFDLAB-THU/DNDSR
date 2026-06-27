@@ -82,16 +82,26 @@ def fmt_vec(name, vals, per_line=6):
 
 def generate_exprtk(npz_path, n_points=50, Ly=0.1, shock_pert_amp=1e-3,
                     v_pert_amp=40.0, x_shock_override=None, cj_tol=0.01,
-                    pocket=None, frame_velocity=None):
+                    pocket=None, frame_velocity=None,
+                    perturbation_mode="sine", ic=5, n_modes=10, seed=42):
     """Build the exprtk initializer dict from a ZND profile .npz file.
 
     Returns a dict with keys ``"exprtkInitializers"`` (ready for JSON config
     injection) and ``"_info"`` (metadata for human inspection).
 
     The shock is placed at *x_shock_override* or 1.5 × L_CJ from x = 0.
-    Perturbations (shock position cosine, transverse velocity sine) are
-    parameterised as ``var`` declarations at the top of the expression so
-    they can be edited in-place without re-running the generator.
+
+    *perturbation_mode* controls the shock-front shape:
+
+    ``"sine"`` — single cosine: ``x_shock_0 + A_shock * cos(2π y / Ly)``.
+
+    ``"spectral"`` — Fourier series of *n_modes* modes:
+    ``A_i ∝ exp(-i² / ic²)`` with deterministic random phases, renormalised
+    so that max|series| = A_shock.  *ic* controls the spectral roll-off
+    (default 5), *seed* fixes the random phases (default 42).
+
+    For the transverse velocity perturbation the original single sine/cosine
+    is always used regardless of *perturbation_mode*.
 
     If *frame_velocity* is set (e.g. the CJ speed), a ``var D`` declaration
     is emitted and all u-velocity values are shifted by ``-D``, converting
@@ -148,7 +158,34 @@ def generate_exprtk(npz_path, n_points=50, Ly=0.1, shock_pert_amp=1e-3,
     lines.append("")
     lines.append("var pert_y := cos(2 * pi * x[1] / Ly);")
     lines.append("var pert_y_sin := sin(2 * pi * x[1] / Ly);")
-    lines.append("var x_shock := x_shock_0 + A_shock * pert_y;")
+
+    if perturbation_mode == "spectral":
+        # Pre-compute Fourier coefficients: Ai ~ exp(-i^2/ic^2), random phases
+        np.random.seed(seed)
+        ks = np.arange(1, n_modes + 1)
+        Ai_raw = np.exp(-(ks ** 2) / (ic ** 2))
+        phis = np.random.uniform(0, 2 * np.pi, n_modes)
+
+        # Find max |series| on a fine y grid to renormalise to unit amplitude
+        y_grid = np.linspace(0, Ly, 200)
+        series = np.sum(
+            Ai_raw[:, None] * np.cos(ks[:, None] * 2 * np.pi * y_grid[None, :] / Ly
+                                     + phis[:, None]),
+            axis=0,
+        )
+        Ai = Ai_raw / np.max(np.abs(series))
+
+        lines.extend(fmt_vec("As", Ai))
+        lines.extend(fmt_vec("phis", phis))
+        lines.append("")
+        lines.append("var sp := 0.0;")
+        lines.append("for (var im := 0; im < As[]; im += 1) {")
+        lines.append(
+            "    sp += As[im] * cos((im + 1) * 2 * pi * x[1] / Ly + phis[im]);")
+        lines.append("};")
+        lines.append("var x_shock := x_shock_0 + A_shock * sp;")
+    else:
+        lines.append("var x_shock := x_shock_0 + A_shock * pert_y;")
     lines.append("var dist := x_shock - x[0];")
     lines.append("")
 
@@ -266,6 +303,7 @@ def generate_exprtk(npz_path, n_points=50, Ly=0.1, shock_pert_amp=1e-3,
             "species_order": species_names,
             "Ly_m": Ly,
             "shock_pert_amp_mm": shock_pert_amp * 1e3,
+            "perturbation_mode": perturbation_mode,
             "v_pert_amp_m_s": v_pert_amp,
             "frame_velocity": fv,
             "left_bc_CJ_state": {
@@ -316,6 +354,15 @@ def main():
     p.add_argument("--frame-velocity", type=float, default=None,
                    help="Frame co-moving velocity [m/s]: emits 'var D' and "
                    "shifts all u by -D (e.g. set to CJ speed for shock-fixed frame)")
+    p.add_argument("--perturbation-mode", default="sine", choices=["sine", "spectral"],
+                   help="Shock-front shape: 'sine' (single cos) or 'spectral' "
+                   "(Fourier series, default 'sine')")
+    p.add_argument("--ic", type=float, default=5.0,
+                   help="Spectral roll-off 'ic' (default 5, spectral mode only)")
+    p.add_argument("--n-modes", type=int, default=10,
+                   help="Number of Fourier modes (default 10, spectral mode only)")
+    p.add_argument("--seed", type=int, default=42,
+                   help="Random seed for phases (default 42, spectral mode only)")
     p.add_argument("--output", required=True, help="Output JSON file")
     args = p.parse_args()
 
@@ -341,6 +388,10 @@ def main():
         cj_tol=args.cj_tol,
         pocket=pocket_cfg,
         frame_velocity=args.frame_velocity,
+        perturbation_mode=args.perturbation_mode,
+        ic=args.ic,
+        n_modes=args.n_modes,
+        seed=args.seed,
     )
 
     with open(args.output, "w") as f:
@@ -356,6 +407,7 @@ def main():
         print(
             f"  Left BC (CJ): T={lb[0]:.0f}K u_x={lb[1]:.1f} P={lb[4]:.0f}Pa")
     print(f"  Interpolation points: {info['n_interp_points']}")
+    print(f"  Perturbation mode: {info['perturbation_mode']}")
     print(f"  Species: {info['species_order']}")
     print(f"  Saved to {args.output}")
     return 0

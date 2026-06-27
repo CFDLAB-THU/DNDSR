@@ -101,7 +101,11 @@ copy-pasted into the `eulerSettings.exprtkInitializers` field.
 The generated exprtk expression:
 1. Defines inline data vectors (50 points, adaptively sampled) for distance,
    T, P, lab-frame velocity, and all species mass fractions
-2. Computes a perturbed shock position: `x_shock(y) = x_shock_0 + A * cos(2πy/Ly)`
+2. Computes a perturbed shock position:
+   * ``"sine"`` (default): ``x_shock(y) = x_shock_0 + A * cos(2πy/Ly)``
+   * ``"spectral"``: Fourier series ``∑ Aᵢ cos(kᵢ·2π·y/Ly + φᵢ)`` with
+     ``Aᵢ ∝ exp(-i²/ic²)`` and deterministic random phases, renormalised
+     to ``max |series| = A_shock``
 3. Uses piecewise linear interpolation with for-loop + break to map
    `dist = x_shock - x[0]` to ZND state variables
 4. Falls back to unreacted gas (farfield) for `dist < 0` and CJ equilibrium
@@ -116,6 +120,12 @@ Options:
 * `--v-pert-amp 40` — transverse velocity perturbation amplitude [m/s]
 * `--x-shock` — override shock position [m] (default: 1.5 × L_CJ)
 * `--cj-tol 0.01` — tolerance for detecting CJ distance (P within tol of final)
+* `--perturbation-mode sine` — shock-front shape: ``"sine"`` or ``"spectral"``
+* `--ic 5` — spectral roll-off parameter (spectral mode only, default 5)
+* `--n-modes 10` — number of Fourier modes (spectral mode only, default 10)
+* `--seed 42` — random seed for phases (spectral mode only, default 42)
+* `--frame-velocity` — frame co-moving velocity [m/s]; emits ``var D`` and
+  shifts all u by ``-D`` (set to CJ speed for shock-fixed frame)
 
 ## When to use this skill
 
