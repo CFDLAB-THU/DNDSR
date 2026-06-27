@@ -64,19 +64,27 @@ def load_series(series_path: str):
 # ---------------------------------------------------------------------------
 
 
-def compute_window_size(mesh, h_pad_factor: float = 1.04, annotation_factor: float = 2.0):
-    """Return (W, H) so domain fills full width with proportional annotation space.
+def compute_window_size(mesh_or_region, h_pad_factor: float = 1.04, annotation_factor: float = 2.0, width: int = 5000):
+    """Return (W, H) so the region fills full width with proportional annotation space.
 
-    Domain pixel height = W / (domain_aspect * h_pad_factor).
-    H = domain_px * annotation_factor  (2.0 reproduces old 5000x1000 for 10:1).
+    `mesh_or_region` can be a pyvista mesh (uses mesh bounds) or a
+    (xmin, xmax, ymin, ymax) tuple for a custom render region.
+
+    Domain pixel height = W / (region_aspect * h_pad_factor).
+    H = domain_px * annotation_factor  (2.0 gives equal height for domain + annotations).
     """
-    domain_w = mesh.bounds[1] - mesh.bounds[0]
-    domain_h = mesh.bounds[3] - mesh.bounds[2]
-    domain_aspect = domain_w / domain_h if domain_h > 1e-30 else 10.0
-    W = 5000
-    domain_px = W / (domain_aspect * h_pad_factor)
+    if isinstance(mesh_or_region, tuple):
+        rxmin, rxmax, rymin, rymax = mesh_or_region
+    else:
+        rxmin, rxmax = mesh_or_region.bounds[0], mesh_or_region.bounds[1]
+        rymin, rymax = mesh_or_region.bounds[2], mesh_or_region.bounds[3]
+    region_w = rxmax - rxmin
+    region_h = rymax - rymin
+    region_aspect = region_w / region_h if region_h > 1e-30 else 10.0
+    W = width
+    domain_px = W / (region_aspect * h_pad_factor)
     H = int(domain_px * annotation_factor)
-    H = ((H + 7) // 8) * 8   # macroblock-aligned for video encoding
+    H = ((H + 7) // 8) * 8
     H = max(400, min(H, 4000))
     return (W, H)
 
@@ -88,54 +96,119 @@ def render_frame(
     time_val: float,
     out_path: str,
     cmap: str = "plasma",
-    window_size: tuple = None,
+    render_width: int = 5000,
+    render_dpi: int = 144,
     h_pad_factor: float = 1.04,
     font_scale: float = 2.0,
+    margin: float = 0.03,
+    top_strip: float = 0.12,
+    cb_strip: float = 0.12,
+    render_region: tuple = None,
 ):
-    if window_size is None:
-        window_size = compute_window_size(mesh, h_pad_factor)
+    window_size = compute_window_size(
+        render_region if render_region else mesh, h_pad_factor, width=render_width)
     W, H = window_size
-    domain_w = mesh.bounds[1] - mesh.bounds[0]
-    cx = (mesh.bounds[0] + mesh.bounds[1]) / 2
-    cy = (mesh.bounds[2] + mesh.bounds[3]) / 2
-    aspect = W / H
 
-    ps = domain_w * h_pad_factor / (2 * aspect)
+    # Render region in world coords
+    if render_region:
+        rxmin, rxmax, rymin, rymax = render_region
+    else:
+        rxmin, rxmax = mesh.bounds[0], mesh.bounds[1]
+        rymin, rymax = mesh.bounds[2], mesh.bounds[3]
+    region_w = rxmax - rxmin
+    region_h = rymax - rymin
+    cx = (rxmin + rxmax) / 2
+    cy = (rymin + rymax) / 2
+
+    # Viewport maths — strips have horizontal margin, bg renderer fills gaps
+    data_vp = (margin, cb_strip, 1 - margin, 1 - top_strip)
+    data_w = data_vp[2] - data_vp[0]
+    data_h = data_vp[3] - data_vp[1]
+    data_aspect = W * data_w / (H * data_h)
+
+    ps = region_w * h_pad_factor / (2 * data_aspect)
 
     base_fs = 24 * font_scale
     title_fs = 28 * font_scale
     text_fs = 22 * font_scale
 
-    pl = pv.Plotter(off_screen=True, window_size=[W, H])
-    pl.background_color = "white"
+    # Layered multi-renderer: bg + three strips, no black gaps
+    pl = pv.Plotter(off_screen=True, window_size=[W, H],
+                    shape=(4, 1), border=False)
 
-    pl.add_mesh(
+    # --- Renderer 0: full-canvas white background ---
+    pl.subplot(0, 0)
+    pl.background_color = "white"
+    pl.camera.parallel_projection = True
+
+    # --- Renderer 1: top strip (time label) ---
+    pl.subplot(1, 0)
+    pl.background_color = "white"
+    ta = pl.add_text(f"t = {time_val:.4e}", position="lower_edge",
+                     font_size=int(0.5 * text_fs), color="black")
+    ta.prop.font_family = "times"
+    pl.camera.parallel_projection = True
+
+    # --- Renderer 2: data (mesh + axes + time label in data viewport) ---
+    pl.subplot(2, 0)
+    pl.background_color = "white"
+    actor = pl.add_mesh(
         mesh,
         scalars=field,
         cmap=cmap,
         clim=clim,
         show_edges=False,
-        scalar_bar_args={
-            "title": f"{field}",
-            "vertical": False,
-            "position_x": 0.2,
-            "position_y": 0.08,
-            "width": 0.6,
-            "height": 0.06,
-            "label_font_size": int(base_fs),
-            "title_font_size": int(title_fs),
-            "fmt": "%.2g",
-        },
+        show_scalar_bar=False,
     )
-
     pl.camera.parallel_projection = True
     pl.camera.position = (cx, cy, 1.0)
     pl.camera.focal_point = (cx, cy, 0.0)
     pl.camera.view_up = (0.0, 1.0, 0.0)
     pl.camera.parallel_scale = ps
+    ca = pl.show_bounds(
+        location="all", ticks="both",
+        xtitle="x", ytitle="y",
+        font_size=int(0.125 * base_fs), color="black",
+        n_xlabels=5, n_ylabels=3,
+        bounds=(rxmin, rxmax, rymin, rymax, 0, 0),
+    )
+    ca.SetScreenSize(10.0 * 72.0 / render_dpi)
+    ca.x_label_format = "%.4g"
+    ca.y_label_format = "%.4g"
+    ca.label_offset = 2.0
+    ca.title_offset = (2.0, 5.0)
+    for prop_name in ("x_axis_label_text_property", "y_axis_label_text_property",
+                      "x_axis_title_text_property", "y_axis_title_text_property"):
+        if hasattr(ca, prop_name):
+            getattr(ca, prop_name).font_family = "times"
 
-    pl.add_text(f"t = {time_val:.4e}", position="upper_edge",
-                font_size=int(text_fs), color="black")
+    # --- Renderer 3: colorbar strip ---
+    pl.subplot(3, 0)
+    pl.background_color = "white"
+    pl.add_scalar_bar(
+        title=f"{field}",
+        mapper=actor.mapper,
+        vertical=False,
+        position_x=0.20,
+        position_y=0.45,
+        width=0.60,
+        height=0.30,
+        label_font_size=int(base_fs),
+        title_font_size=int(title_fs),
+        color="black",
+        font_family="times",
+        fmt="%.2g",
+    )
+
+    # Viewports: bg full-canvas, strips inset with margins
+    pl.renderers[0].SetViewport(0, 0, 1, 1)
+    pl.renderers[1].SetViewport(margin, 1 - top_strip, 1 - margin, 1)
+    pl.renderers[2].SetViewport(
+        data_vp[0], data_vp[1], data_vp[2], data_vp[3])
+    pl.renderers[3].SetViewport(margin, 0, 1 - margin, cb_strip)
+
+    if hasattr(pl, 'render_window'):
+        pl.render_window.SetDPI(render_dpi)
 
     pl.screenshot(out_path)
     pl.close()
@@ -169,7 +242,8 @@ def _render_one_frame(args_tuple):
     """Worker for multiprocessing: renders all fields for a single VTKHDF file."""
     (
         fname, data_dir, fields, clims, time_val,
-        cmap, window_size, hpad, font_scale,
+        cmap, render_width, render_dpi, hpad, font_scale,
+        margin, top_strip, cb_strip, render_region,
     ) = args_tuple
 
     fpath = os.path.join(data_dir, fname)
@@ -184,8 +258,11 @@ def _render_one_frame(args_tuple):
             out_name = f"{base_name}_{field}.png"
             out_path = os.path.join(data_dir, "pics", out_name)
             render_frame(mesh, field, clims[field], time_val, out_path,
-                         cmap=cmap, window_size=window_size,
-                         h_pad_factor=hpad, font_scale=font_scale)
+                         cmap=cmap, render_width=render_width,
+                         render_dpi=render_dpi,
+                         h_pad_factor=hpad, font_scale=font_scale,
+                         margin=margin, top_strip=top_strip,
+                         cb_strip=cb_strip, render_region=render_region)
             results.append(out_name)
         return f"OK {fname} -> {', '.join(results)}"
     except Exception as e:
@@ -223,9 +300,11 @@ def cmd_render(args):
             out_path = os.path.join(output_dir, f"{base_name}_{field}.png")
             render_frame(mesh, field, clim, 0.0, out_path,
                          cmap=args.cmap,
-                         window_size=tuple(
-                             args.window) if args.window else None,
-                         h_pad_factor=args.hpad, font_scale=args.font_scale)
+                         render_width=args.render_width,
+                         render_dpi=args.render_dpi,
+                         h_pad_factor=args.hpad, font_scale=args.font_scale,
+                         margin=args.margin, top_strip=args.top_strip,
+                         cb_strip=args.cb_strip)
             print(f"  {os.path.basename(out_path)}")
         print(f"Done. 1 frame x {len(args.field)} fields -> {output_dir}")
         return
@@ -252,9 +331,25 @@ def cmd_render(args):
     if not selected:
         sys.exit("No frames selected")
 
-    window = tuple(args.window) if args.window else None
+    render_width = args.render_width
+    render_dpi = args.render_dpi
     hpad = args.hpad
     font_scale = args.font_scale
+    margin = args.margin
+    top_strip = args.top_strip
+    cb_strip = args.cb_strip
+
+    # Parse render region
+    render_region = None
+    if args.render_x_lim or args.render_y_lim:
+        rx = [float(x) for x in args.render_x_lim.split(
+            ":")] if args.render_x_lim else None
+        ry = [float(x) for x in args.render_y_lim.split(
+            ":")] if args.render_y_lim else None
+        render_region = (
+            rx[0] if rx else 0.0, rx[1] if rx else float("inf"),
+            ry[0] if ry else 0.0, ry[1] if ry else float("inf"),
+        )
 
     # Determine clim source
     last_found = selected[-1]
@@ -318,7 +413,8 @@ def cmd_render(args):
     for fname, time_val in selected:
         tasks.append((
             fname, data_dir, args.field, global_clims, time_val,
-            args.cmap, window, hpad, font_scale,
+            args.cmap, render_width, render_dpi, hpad, font_scale,
+            margin, top_strip, cb_strip, render_region,
         ))
 
     n_jobs = args.jobs
@@ -401,7 +497,9 @@ def cmd_combine(args):
                 dst = os.path.join(tmpdir, f"{i:06d}.png")
                 os.symlink(os.path.abspath(src), dst)
 
-            out_video = os.path.join(pics_dir, f"{series_base}{field}.mp4")
+            out_video = os.path.join(
+                data_dir, "vids", f"{series_base}{field}.mp4")
+            os.makedirs(os.path.dirname(out_video), exist_ok=True)
             cmd = [
                 "ffmpeg", "-y",
                 "-framerate", str(args.fps),
@@ -414,7 +512,7 @@ def cmd_combine(args):
             print(f"  Encoding {field}: {len(ordered)} frames -> {out_video}")
             subprocess.run(cmd, check=True)
 
-    print(f"Done. Videos in {pics_dir}")
+    print(f"Done. Videos in {os.path.join(data_dir, 'vids')}")
 
 
 # ---------------------------------------------------------------------------
@@ -426,38 +524,61 @@ def main():
         description="2D detonation VTKHDF render and video tools")
     sub = parser.add_subparsers(dest="command", required=True)
 
+    # Shared parent for render and all commands
+    _render_parent = argparse.ArgumentParser(add_help=False)
+    _render_parent.add_argument("--series", required=True,
+                                help="Path to .vtkhdf.series file or single .vtkhdf file")
+    _render_parent.add_argument("--field", action="append", default=[],
+                                help="Scalar field(s) to render (repeatable)")
+    _render_parent.add_argument("-i", "--index", default="all",
+                                help="Series indices: N, start:stop:step, or 'all'")
+    _render_parent.add_argument("--step", type=str, default=None,
+                                help="Match step number in filename")
+    _render_parent.add_argument("--stride", type=int, default=None,
+                                help="Render every Nth frame")
+    _render_parent.add_argument("--render-width", type=int, default=5000,
+                                help="Output image width in pixels (height auto from aspect)")
+    _render_parent.add_argument("--render-dpi", type=int, default=72,
+                                help="Screen-space DPI for font/tick sizing (higher = smaller)")
+    _render_parent.add_argument("--hpad", type=float, default=1.04,
+                                help="Horizontal padding factor")
+    _render_parent.add_argument("--font-scale", type=float, default=2.0,
+                                help="Font scale multiplier")
+    _render_parent.add_argument("--margin", type=float, default=0.03,
+                                help="Canvas margin fraction")
+    _render_parent.add_argument("--top-strip", type=float, default=0.12,
+                                help="Top annotation strip height fraction")
+    _render_parent.add_argument("--cb-strip", type=float, default=0.12,
+                                help="Colorbar strip height fraction")
+    _render_parent.add_argument("--render-x-lim", type=str, default=None,
+                                help="Render region x-range: LOW:HIGH (default: full mesh)")
+    _render_parent.add_argument("--render-y-lim", type=str, default=None,
+                                help="Render region y-range: LOW:HIGH (default: full mesh)")
+    _render_parent.add_argument("--clim-min", type=float, default=None,
+                                help="Fixed colorbar minimum (applies to all fields)")
+    _render_parent.add_argument("--clim-max", type=float, default=None,
+                                help="Fixed colorbar maximum (applies to all fields)")
+    _render_parent.add_argument("--clim", action="append", default=[],
+                                help="Per-field range: FIELD=LOW:HIGH (e.g. T=300:4000 P=0:25)")
+    _render_parent.add_argument("--clim-from", type=str, default=None,
+                                help="Use this step number's data for colorbar range")
+    _render_parent.add_argument("--cmap", type=str, default="plasma",
+                                help="Colormap: plasma, inferno, viridis, turbo, hot, coolwarm, RdBu, magma, cividis, Blues, Reds, etc.")
+    _render_parent.add_argument("--jobs", "-j", type=int, default=1,
+                                help="Parallel workers (1 = serial, 0 = cpu_count)")
+    _render_parent.add_argument("--global-clim", action="store_true",
+                                help="Use global min/max across all selected frames")
+
+    # Shared parent for combine and all commands
+    _combine_parent = argparse.ArgumentParser(add_help=False)
+    _combine_parent.add_argument("--fps", type=int, default=24,
+                                 help="Frames per second")
+    _combine_parent.add_argument("--crf", type=int, default=18,
+                                 help="Video quality (lower = better, 18-28)")
+
     # ---- render ----
-    p_render = sub.add_parser("render", help="Render VTKHDF frames to PNG")
-    p_render.add_argument("--series", required=True,
-                          help="Path to .vtkhdf.series file or single .vtkhdf file")
-    p_render.add_argument("--field", action="append", default=[],
-                          help="Scalar field(s) to render (repeatable)")
-    p_render.add_argument("-i", "--index", default="all",
-                          help="Series indices: N, start:stop:step, or 'all'")
-    p_render.add_argument("--step", type=str, default=None,
-                          help="Match step number in filename")
-    p_render.add_argument("--stride", type=int, default=None,
-                          help="Render every Nth frame")
-    p_render.add_argument("--window", nargs=2, type=int,
-                          default=None, help="Window width height (auto if unset)")
-    p_render.add_argument("--hpad", type=float, default=1.04,
-                          help="Horizontal padding factor")
-    p_render.add_argument("--font-scale", type=float,
-                          default=2.0, help="Font scale multiplier")
-    p_render.add_argument("--clim-min", type=float,
-                          default=None, help="Fixed colorbar minimum (applies to all fields)")
-    p_render.add_argument("--clim-max", type=float,
-                          default=None, help="Fixed colorbar maximum (applies to all fields)")
-    p_render.add_argument("--clim", action="append", default=[],
-                          help="Per-field range: FIELD=LOW:HIGH (e.g. T=300:4000 P=0:25)")
-    p_render.add_argument("--clim-from", type=str, default=None,
-                          help="Use this step number's data for colorbar range (e.g. '500' or 't_0.005000')")
-    p_render.add_argument("--cmap", type=str, default="plasma",
-                          help="Colormap: plasma, inferno, viridis, turbo, hot, coolwarm, RdBu, magma, cividis, Blues, Reds, etc.")
-    p_render.add_argument("--jobs", "-j", type=int, default=1,
-                          help="Parallel workers (1 = serial, 0 = cpu_count)")
-    p_render.add_argument("--global-clim", action="store_true",
-                          help="Use global min/max across all selected frames")
+    p_render = sub.add_parser("render", help="Render VTKHDF frames to PNG",
+                              parents=[_render_parent])
 
     # ---- combine ----
     p_combine = sub.add_parser(
@@ -472,41 +593,8 @@ def main():
                            help="Video quality (lower = better, 18-28)")
 
     # ---- all (render + combine) ----
-    p_all = sub.add_parser("all", help="Render frames then combine into video")
-    p_all.add_argument("--series", required=True,
-                       help="Path to .vtkhdf.series file")
-    p_all.add_argument("--field", action="append", default=[],
-                       help="Scalar field(s) to render and combine (repeatable)")
-    p_all.add_argument("-i", "--index", default="all",
-                       help="Series indices: N, start:stop:step, or 'all'")
-    p_all.add_argument("--step", type=str, default=None,
-                       help="Match step number in filename")
-    p_all.add_argument("--stride", type=int, default=None,
-                       help="Render every Nth frame")
-    p_all.add_argument("--window", nargs=2, type=int,
-                       default=None, help="Window width height (auto if unset)")
-    p_all.add_argument("--hpad", type=float, default=1.04,
-                       help="Horizontal padding factor")
-    p_all.add_argument("--font-scale", type=float, default=2.0,
-                       help="Font scale multiplier")
-    p_all.add_argument("--clim-min", type=float, default=None,
-                       help="Fixed colorbar minimum")
-    p_all.add_argument("--clim-max", type=float, default=None,
-                       help="Fixed colorbar maximum (applies to all fields)")
-    p_all.add_argument("--clim", action="append", default=[],
-                       help="Per-field range: FIELD=LOW:HIGH (e.g. T=300:4000 P=0:25)")
-    p_all.add_argument("--clim-from", type=str, default=None,
-                       help="Use this step number's data for colorbar range")
-    p_all.add_argument("--cmap", type=str, default="plasma",
-                       help="Colormap: plasma, inferno, viridis, turbo, hot, coolwarm, RdBu, magma, cividis, Blues, Reds, etc.")
-    p_all.add_argument("--jobs", "-j", type=int, default=1,
-                       help="Parallel workers (1 = serial, 0 = cpu_count)")
-    p_all.add_argument("--global-clim", action="store_true",
-                       help="Use global min/max across all selected frames")
-    p_all.add_argument("--fps", type=int, default=24,
-                       help="Video frames per second")
-    p_all.add_argument("--crf", type=int, default=18,
-                       help="Video quality (lower = better, 18-28)")
+    p_all = sub.add_parser("all", help="Render frames then combine into video",
+                           parents=[_render_parent, _combine_parent])
 
     args = parser.parse_args()
 
