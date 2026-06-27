@@ -64,14 +64,14 @@ def load_series(series_path: str):
 # ---------------------------------------------------------------------------
 
 
-def compute_window_size(mesh_or_region, h_pad_factor: float = 1.04, annotation_factor: float = 2.0, width: int = 5000):
-    """Return (W, H) so the region fills full width with proportional annotation space.
+def compute_window_size(mesh_or_region, h_pad_factor: float = 1.04,
+                        fill_frac: float = 0.75, width: int = 5000,
+                        margin: float = 0.03, top_strip: float = 0.12,
+                        cb_strip: float = 0.12):
+    """Return (W, H) so region fills width and `fill_frac` of data viewport height.
 
-    `mesh_or_region` can be a pyvista mesh (uses mesh bounds) or a
-    (xmin, xmax, ymin, ymax) tuple for a custom render region.
-
-    Domain pixel height = W / (region_aspect * h_pad_factor).
-    H = domain_px * annotation_factor  (2.0 gives equal height for domain + annotations).
+    Accounts for viewport layout: data viewport occupies
+    (1 - 2*margin) × (1 - top_strip - cb_strip) fraction of canvas.
     """
     if isinstance(mesh_or_region, tuple):
         rxmin, rxmax, rymin, rymax = mesh_or_region
@@ -81,11 +81,14 @@ def compute_window_size(mesh_or_region, h_pad_factor: float = 1.04, annotation_f
     region_w = rxmax - rxmin
     region_h = rymax - rymin
     region_aspect = region_w / region_h if region_h > 1e-30 else 10.0
+    data_w_frac = 1 - 2 * margin
+    data_h_frac = 1 - top_strip - cb_strip
+    viewport_ratio = data_w_frac / (data_h_frac * fill_frac)
     W = width
     domain_px = W / (region_aspect * h_pad_factor)
-    H = int(domain_px * annotation_factor)
+    H = int(domain_px * viewport_ratio)
     H = ((H + 7) // 8) * 8
-    H = max(400, min(H, 4000))
+    H = max(400, min(H, 2 * W))
     return (W, H)
 
 
@@ -100,13 +103,18 @@ def render_frame(
     render_dpi: int = 144,
     h_pad_factor: float = 1.04,
     font_scale: float = 2.0,
+    font_scale_time: float = 1.0,
+    font_scale_cb: float = 1.0,
+    font_scale_axes: float = 1.0,
     margin: float = 0.03,
     top_strip: float = 0.12,
     cb_strip: float = 0.12,
     render_region: tuple = None,
 ):
     window_size = compute_window_size(
-        render_region if render_region else mesh, h_pad_factor, width=render_width)
+        render_region if render_region else mesh, h_pad_factor,
+        width=render_width, margin=margin,
+        top_strip=top_strip, cb_strip=cb_strip)
     W, H = window_size
 
     # Render region in world coords
@@ -145,7 +153,7 @@ def render_frame(
     pl.subplot(1, 0)
     pl.background_color = "white"
     ta = pl.add_text(f"t = {time_val:.4e}", position="lower_edge",
-                     font_size=int(0.5 * text_fs), color="black")
+                     font_size=int(0.5 * text_fs * font_scale_time), color="black")
     ta.prop.font_family = "times"
     pl.camera.parallel_projection = True
 
@@ -168,15 +176,15 @@ def render_frame(
     ca = pl.show_bounds(
         location="all", ticks="both",
         xtitle="x", ytitle="y",
-        font_size=int(0.125 * base_fs), color="black",
+        font_size=int(0.125 * base_fs * font_scale_axes), color="black",
         n_xlabels=5, n_ylabels=3,
         bounds=(rxmin, rxmax, rymin, rymax, 0, 0),
     )
     ca.SetScreenSize(10.0 * 72.0 / render_dpi)
     ca.x_label_format = "%.4g"
     ca.y_label_format = "%.4g"
-    ca.label_offset = 2.0
-    ca.title_offset = (2.0, 5.0)
+    ca.label_offset = 2.0 * font_scale_axes
+    ca.title_offset = (2.0 * font_scale_axes, 5.0 * font_scale_axes)
     for prop_name in ("x_axis_label_text_property", "y_axis_label_text_property",
                       "x_axis_title_text_property", "y_axis_title_text_property"):
         if hasattr(ca, prop_name):
@@ -193,8 +201,8 @@ def render_frame(
         position_y=0.45,
         width=0.60,
         height=0.30,
-        label_font_size=int(base_fs),
-        title_font_size=int(title_fs),
+        label_font_size=int(base_fs * font_scale_cb),
+        title_font_size=int(title_fs * font_scale_cb),
         color="black",
         font_family="times",
         fmt="%.2g",
@@ -238,13 +246,25 @@ def get_global_clim(data_dir: str, files: list, field: str, sample_count: int = 
     return (global_min, global_max)
 
 
-def _render_one_frame(args_tuple):
+def _render_one_frame(kwargs):
     """Worker for multiprocessing: renders all fields for a single VTKHDF file."""
-    (
-        fname, data_dir, fields, clims, time_val,
-        cmap, render_width, render_dpi, hpad, font_scale,
-        margin, top_strip, cb_strip, render_region,
-    ) = args_tuple
+    fname = kwargs["fname"]
+    data_dir = kwargs["data_dir"]
+    fields = kwargs["fields"]
+    clims = kwargs["clims"]
+    time_val = kwargs["time_val"]
+    cmap = kwargs["cmap"]
+    render_width = kwargs["render_width"]
+    render_dpi = kwargs["render_dpi"]
+    font_scale = kwargs["font_scale"]
+    font_scale_time = kwargs.get("font_scale_time", 1.0)
+    font_scale_cb = kwargs.get("font_scale_cb", 1.0)
+    font_scale_axes = kwargs.get("font_scale_axes", 1.0)
+    hpad = kwargs.get("hpad", 1.04)
+    margin = kwargs.get("margin", 0.03)
+    top_strip = kwargs.get("top_strip", 0.12)
+    cb_strip = kwargs.get("cb_strip", 0.12)
+    render_region = kwargs.get("render_region")
 
     fpath = os.path.join(data_dir, fname)
     if not os.path.exists(fpath):
@@ -260,7 +280,11 @@ def _render_one_frame(args_tuple):
             render_frame(mesh, field, clims[field], time_val, out_path,
                          cmap=cmap, render_width=render_width,
                          render_dpi=render_dpi,
-                         h_pad_factor=hpad, font_scale=font_scale,
+                         font_scale=font_scale,
+                         font_scale_time=font_scale_time,
+                         font_scale_cb=font_scale_cb,
+                         font_scale_axes=font_scale_axes,
+                         h_pad_factor=hpad,
                          margin=margin, top_strip=top_strip,
                          cb_strip=cb_strip, render_region=render_region)
             results.append(out_name)
@@ -302,7 +326,11 @@ def cmd_render(args):
                          cmap=args.cmap,
                          render_width=args.render_width,
                          render_dpi=args.render_dpi,
-                         h_pad_factor=args.hpad, font_scale=args.font_scale,
+                         font_scale=args.font_scale,
+                         font_scale_time=args.font_scale_time,
+                         font_scale_cb=args.font_scale_cb,
+                         font_scale_axes=args.font_scale_axes,
+                         h_pad_factor=args.hpad,
                          margin=args.margin, top_strip=args.top_strip,
                          cb_strip=args.cb_strip)
             print(f"  {os.path.basename(out_path)}")
@@ -333,8 +361,11 @@ def cmd_render(args):
 
     render_width = args.render_width
     render_dpi = args.render_dpi
-    hpad = args.hpad
     font_scale = args.font_scale
+    font_scale_time = args.font_scale_time
+    font_scale_cb = args.font_scale_cb
+    font_scale_axes = args.font_scale_axes
+    hpad = args.hpad
     margin = args.margin
     top_strip = args.top_strip
     cb_strip = args.cb_strip
@@ -411,10 +442,15 @@ def cmd_render(args):
     # Build task list — one task per VTKHDF file (all fields rendered from same mesh)
     tasks = []
     for fname, time_val in selected:
-        tasks.append((
-            fname, data_dir, args.field, global_clims, time_val,
-            args.cmap, render_width, render_dpi, hpad, font_scale,
-            margin, top_strip, cb_strip, render_region,
+        tasks.append(dict(
+            fname=fname, data_dir=data_dir, fields=args.field,
+            clims=global_clims, time_val=time_val,
+            cmap=args.cmap, render_width=render_width,
+            render_dpi=render_dpi,
+            font_scale=font_scale, font_scale_time=font_scale_time,
+            font_scale_cb=font_scale_cb, font_scale_axes=font_scale_axes,
+            hpad=hpad, margin=margin, top_strip=top_strip,
+            cb_strip=cb_strip, render_region=render_region,
         ))
 
     n_jobs = args.jobs
@@ -422,17 +458,52 @@ def cmd_render(args):
         n_jobs = os.cpu_count() or 1
 
     if n_jobs > 1:
+        import signal
         from concurrent.futures import ProcessPoolExecutor, as_completed
-        print(f"Rendering {len(tasks)} tasks with {n_jobs} workers ...")
-        with ProcessPoolExecutor(max_workers=n_jobs) as ex:
-            futures = {ex.submit(_render_one_frame, t): t for t in tasks}
-            for i, fut in enumerate(as_completed(futures), 1):
-                result = fut.result()
-                print(f"  [{i}/{len(tasks)}] {result}")
+
+        pool = None
+
+        def _on_signal(signum, frame):
+            if pool:
+                print(f"\n  Caught signal {signum}, shutting down workers ...")
+                pool.shutdown(wait=False, cancel_futures=True)
+            sys.exit(1)
+
+        old_sigint = signal.signal(signal.SIGINT, _on_signal)
+        old_sigterm = signal.signal(signal.SIGTERM, _on_signal)
+
+        try:
+            print(f"Rendering {len(tasks)} tasks with {n_jobs} workers ...")
+            pool = ProcessPoolExecutor(
+                max_workers=n_jobs,
+                initializer=lambda: signal.signal(
+                    signal.SIGINT, signal.SIG_IGN),
+            )
+            futures = {}
+            with pool:
+                for k in tasks:
+                    futures[pool.submit(_render_one_frame, k)] = k
+
+                for i, fut in enumerate(as_completed(futures), 1):
+                    try:
+                        result = fut.result()
+                    except Exception as e:
+                        result = f"FAIL worker: {e}"
+                    print(f"  [{i}/{len(tasks)}] {result}")
+        except KeyboardInterrupt:
+            print("\n  Interrupted.")
+        finally:
+            signal.signal(signal.SIGINT, old_sigint)
+            signal.signal(signal.SIGTERM, old_sigterm)
+            if pool:
+                pool.shutdown(wait=False, cancel_futures=True)
     else:
-        for t in tasks:
-            result = _render_one_frame(t)
-            print(f"  {result}")
+        try:
+            for k in tasks:
+                result = _render_one_frame(k)
+                print(f"  {result}")
+        except KeyboardInterrupt:
+            print("\n  Interrupted.")
 
     print(
         f"Done. {len(selected)} frames x {len(args.field)} fields -> {output_dir}")
@@ -543,7 +614,13 @@ def main():
     _render_parent.add_argument("--hpad", type=float, default=1.04,
                                 help="Horizontal padding factor")
     _render_parent.add_argument("--font-scale", type=float, default=2.0,
-                                help="Font scale multiplier")
+                                help="Base font scale multiplier")
+    _render_parent.add_argument("--font-scale-time", type=float, default=1.0,
+                                help="Time strip font scale (× base)")
+    _render_parent.add_argument("--font-scale-cb", type=float, default=1.0,
+                                help="Colorbar strip font scale (× base)")
+    _render_parent.add_argument("--font-scale-axes", type=float, default=1.0,
+                                help="Cube axes font + spacing scale (× base)")
     _render_parent.add_argument("--margin", type=float, default=0.03,
                                 help="Canvas margin fraction")
     _render_parent.add_argument("--top-strip", type=float, default=0.12,
