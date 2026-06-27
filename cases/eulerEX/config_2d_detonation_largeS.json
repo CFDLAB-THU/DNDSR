@@ -51,7 +51,7 @@
     "convergenceControl": {
         "nTimeStepInternal": 100,
         "nTimeStepInternalMin": 10,
-        "rhsThresholdInternal": 5e-4,
+        "rhsThresholdInternal": 10e-4,
         "res_base": 0,
         "useVolWiseResidual": true
     },
@@ -132,8 +132,9 @@
         "reactiveSourceScale": 1,
         "ignoreSourceTerm": false,
         "useScalarJacobian": false,
-        "riemannSolverType": "Roe_M8",
+        "riemannSolverType": "Roe_M2",
         "rsMeanValueEig": 1,
+        "rsFixScale": 4,
         "uRecAlphaCompressPower": 1.0,
         "uRecBetaCompressPower": 1.0,
         "ppEpsIsRelaxed": false,
