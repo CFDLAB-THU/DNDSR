@@ -231,6 +231,75 @@ Notes:
   colorbar region; the over-the-data overlay below is fine only for quick
   single-frame looks.
 
+### Dedicated annotation strips (time text, titles)
+
+Text overlays placed in the data renderer suffer the same problems as
+overlaid colorbars: they can be invisible over the data colormap, position
+drifts with camera framing, and there's no clean background.  **Give
+annotations their own renderer strip.**  The pattern is identical to the
+colorbar strip: a thin white renderer with only text actors.
+
+Use a 4-renderer plotter with a full-canvas white background renderer
+(see *Creating white margins*), then stack three strips on top:
+
+```
+[0] full-canvas white bg (fills gaps → no black bars)
+[1] thin top strip — text-only, time/label
+[2] data renderer — mesh + camera + axes
+[3] thin bottom strip — colorbar
+```
+
+**Top strip — text-only with `add_text` at `lower_edge`:**
+
+```python
+# top strip: text is centred horizontally by VTK at lower_edge
+pl.subplot(1, 0)
+pl.background_color = "white"
+pl.add_text(f"t = {time_val:.4e}", position="lower_edge",
+            font_size=44, color="black")
+pl.camera.parallel_projection = True   # suppress warning
+```
+
+Key points:
+- `position="lower_edge"` — VTK centres the text horizontally and puts it
+  at the bottom of this renderer's viewport (closer to the data strip
+  below, not cut off at the very top).
+- `position="upper_edge"` also works — text at the very top of the strip.
+- Do NOT use `position=(x, y)` manually — the coordinate system with
+  `SetViewport` overrides is confusing and unreliable for centering.
+  Let VTK's built-in edge positions handle it.
+- The top renderer needs `pl.camera.parallel_projection = True` only to
+  suppress a VTK warning about an unset camera — no geometry is drawn.
+- Strip height is typically 6% (`top_strip=0.06`) of canvas.
+
+**Data renderer — mesh + axes:**
+
+The data renderer goes in the middle. Axes are best rendered with
+`show_bounds(location="all", ...)` which draws tick marks and labels on
+all four edges of the renderer's viewport, adapted to the data bounds:
+
+```python
+pl.show_bounds(location="all", ticks="both", xtitle="x", ytitle="y",
+               font_size=22, color="black", n_xlabels=5, n_ylabels=3)
+```
+
+If `show_bounds` labels are clipped or invisible (common with inset
+viewports), try `location="all"` to show labels on all four sides, or
+increase the camera's `h_pad_factor` (e.g. 1.08) to give the axis labels
+room between the mesh edge and the viewport edge.
+
+`show_bounds` returns a `CubeAxesActor`. Tweak its appearance after creation:
+
+```python
+ca = pl.show_bounds(...)
+ca.SetScreenSize(10.0)       # overall size (higher = larger, default ~10)
+ca.label_offset = 2.0        # text distance from tick (default 20 — huge)
+ca.title_offset = (2.0, 5.0) # title distance from axis (default 20,20)
+```
+
+Tick length is not exposed through pyvista but `SetScreenSize` + small
+`label_offset` produce compact, readable axes.
+
 ### Text overlays
 
 
