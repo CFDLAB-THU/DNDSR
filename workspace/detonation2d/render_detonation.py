@@ -13,7 +13,28 @@ Usage:
 
   # Combine with custom fps
   python render_detonation.py combine --series SERIES_FILE --fps 30
+
+  # Force CPU rendering (no GPU)
+  python render_detonation.py render --cpu-render ...
 """
+
+import os
+import sys
+
+# --cpu-render must be parsed BEFORE pyvista import to set VTK backend
+if "--cpu-render" in sys.argv:
+    os.environ.setdefault("VTK_DEFAULT_OPENGL_WINDOW",
+                          "vtkOSOpenGLRenderWindow")
+    print("  [cpu-render] OSMesa software rasterizer (requires libosmesa6-dev)")
+elif not os.environ.get("DISPLAY"):
+    # Try common X displays: VNC :1, then local :0
+    for d in (":1", ":0"):
+        if os.path.exists(f"/tmp/.X{d[1:]}-lock"):
+            os.environ["DISPLAY"] = d
+            break
+    else:
+        print("  WARNING: no DISPLAY set and no X display found.", file=sys.stderr)
+        print("  Set DISPLAY=:N or use --cpu-render.", file=sys.stderr)
 
 import argparse
 import json
@@ -645,6 +666,8 @@ def main():
                                 help="Parallel workers (1 = serial, 0 = cpu_count)")
     _render_parent.add_argument("--global-clim", action="store_true",
                                 help="Use global min/max across all selected frames")
+    _render_parent.add_argument("--cpu-render", action="store_true",
+                                help="Force CPU rendering via EGL + llvmpipe (no GPU)")
 
     # Shared parent for combine and all commands
     _combine_parent = argparse.ArgumentParser(add_help=False)
