@@ -1722,7 +1722,7 @@ namespace DNDS::Euler
             }
 
             real eK = ret(Seq123).squaredNorm() * 0.5 / (verySmallReal + ret(0));
-            real e = ret(I4) - eK - phys_.mixtureBaseInternalRhoERaw(ret);
+            real e = ret(I4) - eK - phys_.mixtureBaseInternalRhoE(ret);
             if (e < 0)
             {
                 // eFixed = true;
@@ -1816,12 +1816,12 @@ namespace DNDS::Euler
                 newrho = rhoEps;
                 ret *= (newrho - u(0)) / (ret(0) - verySmallReal);
             }
-            real rhoE_base_old = phys_.mixtureBaseInternalRhoERaw(u);
+            real rhoE_base_old = phys_.mixtureBaseInternalRhoE(u);
             real ekOld = 0.5 * u(Seq123).squaredNorm() / (u(0) + verySmallReal);
             real rhoEinternal_sensible = u(I4) - ekOld - rhoE_base_old;
             DNDS_assert(rhoEinternal_sensible > 0);
             real ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
-            real rhoE_base_new = phys_.mixtureBaseInternalRhoERaw(TU(u + ret));
+            real rhoE_base_new = phys_.mixtureBaseInternalRhoE(TU(u + ret));
             real rhoEinternalNew_sensible = u(I4) + ret(I4) - ek - rhoE_base_new;
             if (rhoEinternalNew_sensible <= rhoeSensibleEps)
             {
@@ -1836,7 +1836,7 @@ namespace DNDS::Euler
                 for (int iter = 0; iter < 1000; iter++)
                 {
                     real ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
-                    real rhoEBase_ret = phys_.mixtureBaseInternalRhoERaw(TU(u + ret));
+                    real rhoEBase_ret = phys_.mixtureBaseInternalRhoE(TU(u + ret));
                     if (u(I4) + ret(I4) - ek - rhoEBase_ret < rhoeSensibleEps)
                         ret *= decay, alpha *= decay;
                     else
@@ -1844,7 +1844,7 @@ namespace DNDS::Euler
                 }
 
                 real ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
-                real rhoEBase_ret = phys_.mixtureBaseInternalRhoERaw(TU(u + ret));
+                real rhoEBase_ret = phys_.mixtureBaseInternalRhoE(TU(u + ret));
 
                 if (u(I4) + ret(I4) - ek - rhoEBase_ret < rhoeSensibleEps * 0.5)
                 {
@@ -1953,40 +1953,20 @@ namespace DNDS::Euler
                     int nV = static_cast<int>(cx[iCell].size());
                     int Isp = nV - Ns1;               // first transported species index
                     constexpr real rhoYFloor = 1e-30; // tiny positive floor (matches 0D ODE)
-                    real rhoEBaseBeforeClip = phys_.mixtureBaseInternalRhoERaw(cx[iCell]);
-                    bool speciesClipped = false;
 
                     // (1) Clip each rhoY_k >= rhoYFloor
                     for (int k = 0; k < Ns1; ++k)
-                    {
-                        real rhoYOld = cx[iCell](Isp + k);
-                        cx[iCell](Isp + k) = std::max(rhoYOld, rhoYFloor);
-                        // Exact != is correct — detects whether max(x,floor) changed x.
-                        // floor=1e-30 won't equal any real rhoY, so epsilon not needed.
-                        speciesClipped = speciesClipped || (cx[iCell](Isp + k) != rhoYOld);
-                    }
+                        cx[iCell](Isp + k) = std::max(cx[iCell](Isp + k), rhoYFloor);
 
                     // (2) Enforce rho - sum(rhoY_k) > 0  (dependent species > 0)
                     real sumRhoY = 0;
                     for (int k = 0; k < Ns1; ++k)
                         sumRhoY += cx[iCell](Isp + k);
-                    real rho = cx[iCell](0);
-                    if (sumRhoY > rho)
+                    if (sumRhoY > cx[iCell](0))
                     {
-                        // Scale all rhoY_k proportionally so sum = rho * (1 - eps)
-                        real scale = rho / sumRhoY * (1.0 - 1e-14);
+                        real scale = cx[iCell](0) / sumRhoY * (1.0 - 1e-14);
                         for (int k = 0; k < Ns1; ++k)
                             cx[iCell](Isp + k) *= scale;
-                        speciesClipped = true;
-                    }
-
-                    if (speciesClipped)
-                    {
-                        // Preserve the sensible part of rhoE across species repair.
-                        // The clipping changes rhoE_base through rhoY_k; total rhoE
-                        // must move by the same amount so rhoE - rhoE_base stays fixed.
-                        real rhoEBaseAfterClip = phys_.mixtureBaseInternalRhoERaw(cx[iCell]);
-                        cx[iCell](I4) += rhoEBaseAfterClip - rhoEBaseBeforeClip;
                     }
                 }
 

@@ -1414,7 +1414,7 @@ namespace DNDS::Euler
             int Ns1 = Ns - 1;
             int nV = static_cast<int>(state.size());
             int Isp = nV - Ns1;
-            constexpr real rhoYFloor = 1e-30;
+            constexpr real rhoYFloor = 0.0;
             real rhoEBaseBeforeClip = phys_.mixtureBaseInternalRhoERaw(state);
             bool speciesClipped = false;
             for (int k = 0; k < Ns1; ++k)
@@ -1448,7 +1448,7 @@ namespace DNDS::Euler
             for (int iDim = 1; iDim <= dim; iDim++)
                 kinetic += state(iDim) * state(iDim);
             kinetic *= 0.5 * rhoInv;
-            real rhoESensible = state(I4) - kinetic - phys_.mixtureBaseInternalRhoERaw(state);
+            real rhoESensible = state(I4) - kinetic - phys_.mixtureBaseInternalRhoE(state);
             if (!std::isfinite(rhoESensible) || rhoESensible <= 0)
                 return false;
             try
@@ -2263,7 +2263,7 @@ namespace DNDS::Euler
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 rhoMin = std::min(rhoMin, u[iCell](0));
-                real rhoEi_cell = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureBaseInternalRhoERaw(u[iCell]);
+                real rhoEi_cell = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureBaseInternalRhoE(u[iCell]);
                 rhoEiMin = std::min(rhoEiMin, rhoEi_cell);
             }
             MPI::AllreduceOneReal(rhoMin, MPI_MIN, mesh->getMPI());
@@ -2308,9 +2308,26 @@ namespace DNDS::Euler
             DNDS_assert_info(u[iCell](0) >= rhoEps, fmt::format("rhoMean {}, {}", u[iCell](0), rhoEps));
             real T_cell = phys_.temperature(u[iCell]);
             // real gamma = phys_.gammaEq(T_cell, u[iCell]);
-            real rhoE_base_cell = phys_.mixtureBaseInternalRhoERaw(u[iCell]);
+            real rhoE_base_cell = phys_.mixtureBaseInternalRhoE(u[iCell]);
             real rhoeSensibleCent = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - rhoE_base_cell;
             DNDS_assert_info(rhoeSensibleCent >= rhoeSensibleEps, fmt::format("rhoeSensibleMean {}, {}", rhoeSensibleCent, rhoeSensibleEps));
+
+            if constexpr (Traits::isExtended)
+            {
+                if (phys_.hasChemicalSource())
+                {
+                    int Ns1 = phys_.nSpecies() - 1;
+                    int Isp = nVars - Ns1;
+                    for (int k = 0; k < Ns1; ++k)
+                    {
+                        real rhoYk = u[iCell](Isp + k);
+                        DNDS_assert_info(rhoYk >= 0,
+                                         fmt::format("cell mean rhoY[{}] = {:.3e} < 0", k, rhoYk));
+                    }
+                    DNDS_assert_info(u[iCell](Eigen::seqN(Isp, Ns1)).sum() <= u[iCell](0) + smallReal * u[iCell](0),
+                                     "sumRhoY exceeds rho at cell mean");
+                }
+            }
 
             auto rhoE_base_perQ = [&](const Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> &rec)
             {
@@ -2342,11 +2359,25 @@ namespace DNDS::Euler
                     0.5 * (recBase(EigenAll, Seq123).array().square().rowwise().sum()) / recBase(EigenAll, 0).array();
                 Eigen::Vector<real, Eigen::Dynamic> rhoE_base_q = rhoE_base_perQ(recBase);
                 Eigen::Vector<real, Eigen::Dynamic> eInternalS = (recBase(EigenAll, I4) - ek - rhoE_base_q);
-                // NOTE: species positivity (rhoY_k >= 0) is intentionally not checked here.
-                // mixtureBaseInternalRhoERaw is linear and accepts negative species mass; the only
-                // hard requirement for thermodynamic validity is positive sensible energy.
-                // Species repair is deferred to AddFixedIncrement / repairReactiveSpecies.
-                return eInternalS.minCoeff() >= rhoeSensibleEps;
+                if (eInternalS.minCoeff() < rhoeSensibleEps)
+                    return false;
+                // Species positivity: required because mixtureBaseInternalRhoE (used by
+                // gammaEq in fluxFace) clips negative rhoY_k, increasing base energy and
+                // lowering sensible energy relative to mixtureBaseInternalRhoERaw.
+                if constexpr (Traits::isExtended)
+                {
+                    if (phys_.hasChemicalSource())
+                    {
+                        int Ns1 = phys_.nSpecies() - 1;
+                        int Isp = nVars - Ns1;
+                        auto speciesBlock = recBase(EigenAll, Eigen::seqN(Isp, Ns1));
+                        if (speciesBlock.minCoeff() < 0)
+                            return false;
+                        if ((speciesBlock.rowwise().sum().array() > recBase(EigenAll, 0).array()).any())
+                            return false;
+                    }
+                }
+                return true;
             };
             if (checkRecBaseGood())
             {
@@ -2419,7 +2450,7 @@ namespace DNDS::Euler
                 if (phys_.hasChemicalSource())
                 {
                     int Ns1 = phys_.nSpecies() - 1;
-                    int Isp = static_cast<int>(u[iCell].size()) - Ns1;
+                    int Isp = nVars - Ns1;
                     recInc(EigenAll, Eigen::seq(Isp, EigenLast)) *= theta1;
                 }
             }
@@ -2446,6 +2477,34 @@ namespace DNDS::Euler
                         thetaP = std::min(thetaP, thetaThis);
                     }
                 }
+
+            // --- species-aware PP check ---
+            // thetaP was computed using raw base energy (mixtureBaseInternalRhoERaw).
+            // gammaEq in fluxFace uses mixtureBaseInternalRhoE which clips negative
+            // rhoY_k to 0, potentially increasing rhoE_base and making e_sensible go
+            // negative.  Post-check using mixtureBaseInternalRhoE directly so the
+            // computed sensible energy matches what gammaEq will see.  If violated,
+            // zero the entire reconstruction increment (thetaP = 0), forcing
+            // fallback to uRecBase which passed checkRecBaseGood.
+            if constexpr (Traits::isExtended)
+            {
+                if (phys_.hasChemicalSource())
+                {
+                    Eigen::Vector<real, Eigen::Dynamic> ekC =
+                        0.5 * (recVRhoG(EigenAll, Seq123).array().square().rowwise().sum()) / recVRhoG(EigenAll, 0).array();
+                    Eigen::Vector<real, Eigen::Dynamic> rhoE_base_VC(nPoint);
+                    for (int iG = 0; iG < nPoint; ++iG)
+                    {
+                        typename EulerEvaluator<model>::TU tmp = recVRhoG.row(iG);
+                        rhoE_base_VC(iG) = phys_.mixtureBaseInternalRhoE(tmp);
+                    }
+                    Eigen::Vector<real, Eigen::Dynamic> eInternalSC =
+                        recVRhoG(EigenAll, I4) - ekC - rhoE_base_VC;
+
+                    if (eInternalSC.minCoeff() < rhoeSensibleEps)
+                        thetaP = 0;
+                }
+            }
 
             uRecBeta[iCell](0) = theta1 * thetaP;
             // if (uRecBeta[iCell](0) < 1)
@@ -2474,7 +2533,7 @@ namespace DNDS::Euler
                     if (phys_.hasChemicalSource())
                     {
                         int Ns1 = phys_.nSpecies() - 1;
-                        int Isp = static_cast<int>(u[iCell].size()) - Ns1;
+                        int Isp = nVars - Ns1;
                         auto seqSpecies = Eigen::seq(Isp, EigenLast);
                         uRec[iCell](EigenAll, seqSpecies) = (uRec[iCell](EigenAll, seqSpecies) - uRecBase(EigenAll, seqSpecies)) * uRecBeta[iCell](0) + uRecBase(EigenAll, seqSpecies);
                     }
@@ -2539,7 +2598,7 @@ namespace DNDS::Euler
 #endif
                 ret = false;
             }
-            real rhoeSensible = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureBaseInternalRhoERaw(u[iCell]);
+            real rhoeSensible = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureBaseInternalRhoE(u[iCell]);
             if (rhoeSensible < rhoeSensibleEps)
             {
                 if (panic)
@@ -2563,7 +2622,7 @@ namespace DNDS::Euler
             {
                 int Ns = phys_.nSpecies();
                 int Ns1 = Ns - 1;
-                int nV = static_cast<int>(u[iCell].size());
+                int nV = nVars;
                 int Isp = nV - Ns1;
 
                 for (int k = 0; k < Ns1; ++k)
@@ -2618,9 +2677,8 @@ namespace DNDS::Euler
      *  realizable (positive density and pressure) at all quadrature points. Used for
      *  under-relaxation to preserve positivity during explicit or implicit updates.
      *
-     *  NOTE: species positivity (rhoY_k >= 0) is intentionally not checked here.
-     *  Density and pressure positivity are enforced; species repair is deferred to
-     *  AddFixedIncrement / repairReactiveSpecies downstream.  See also F99.
+     *  NOTE: uses mixtureBaseInternalRhoE (not Raw) for the sensible-energy
+     *  check, matching gammaEq's species clipping in fluxFace.
      *
      *
      *  @param u             Conservative variable DOF array.
@@ -2704,9 +2762,9 @@ namespace DNDS::Euler
             inc *= alphaRho;
 
             TU uNew = u[iCell] + inc;
-            real rhoE_base_new = phys_.mixtureBaseInternalRhoERaw(uNew);
+            real rhoE_base_new = phys_.mixtureBaseInternalRhoE(uNew);
             real rhoeSensibleNew = uNew(I4) - 0.5 * uNew(Seq123).squaredNorm() / uNew(0) - rhoE_base_new;
-            real rhoeSensibleOld = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureBaseInternalRhoERaw(u[iCell]);
+            real rhoeSensibleOld = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureBaseInternalRhoE(u[iCell]);
             real relaxedRhoeSensible = rhoeSensibleEps;
             if (rhoeSensibleNew < rhoeSensibleOld)
                 relaxedRhoeSensible = rhoeSensibleEps + (rhoeSensibleOld - rhoeSensibleEps) * (1 - relax);
@@ -2716,7 +2774,7 @@ namespace DNDS::Euler
             {
                 // todo: use high order accurate (add control switch)
                 real alphaC = Gas::IdealGasGetCompressionRatioPressure<dim, 1, nVarsFixed>(
-                    u[iCell], inc, relaxedRhoeSensible, phys_.mixtureBaseInternalRhoERaw(u[iCell]), rhoE_base_new);
+                    u[iCell], inc, relaxedRhoeSensible, phys_.mixtureBaseInternalRhoE(u[iCell]), rhoE_base_new);
                 alphaP = std::min(alphaP, alphaC);
             }
             cellRHSAlpha[iCell](0) = alphaRho * alphaP;
@@ -2785,7 +2843,7 @@ namespace DNDS::Euler
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 rhoMin = std::min(rhoMin, u[iCell](0));
-                real rhoEi_cell = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureBaseInternalRhoERaw(u[iCell]);
+                real rhoEi_cell = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureBaseInternalRhoE(u[iCell]);
                 rhoEiMin = std::min(rhoEiMin, rhoEi_cell);
             }
             MPI::AllreduceOneReal(rhoMin, MPI_MIN, mesh->getMPI());
@@ -2845,7 +2903,7 @@ namespace DNDS::Euler
             TU inc = res[iCell];
 
             TU uNew = u[iCell] + inc;
-            real rhoeSensibleNew = uNew(I4) - 0.5 * uNew(Seq123).squaredNorm() / uNew(0) - phys_.mixtureBaseInternalRhoERaw(uNew);
+            real rhoeSensibleNew = uNew(I4) - 0.5 * uNew(Seq123).squaredNorm() / uNew(0) - phys_.mixtureBaseInternalRhoE(uNew);
 
             if (rhoeSensibleNew < rhoeSensibleEps || uNew(0) < rhoEps)
             {
