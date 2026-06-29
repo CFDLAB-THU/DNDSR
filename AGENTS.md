@@ -130,31 +130,36 @@ and reinstall before running Python tests. A `git checkout` changes source
 files but does NOT rebuild binaries — the installed `.so` files will be
 from the previous build and will silently produce wrong behavior.
 
-**CRITICAL: Before running ANY `git checkout`, `git switch`, `git restore`,
-`git reset`, `git stash`, `git stash pop`, or `git checkout -- <file>`
-command, ALWAYS run `git status` first.** Verify the working
-tree is clean or that all valuable changes are committed/stashed. These
-commands silently overwrite uncommitted modifications and delete untracked
-files, discarding work with no way to recover it.
+### HARD RULE — never discard changes you did not make
 
-When `git status` shows uncommitted changes that are NOT related to
-the task at hand (e.g. case configs, unrelated source files):
-  - **Never** `git checkout -- <file>` or `git stash` those files without
-    asking the user first.  These are the user's working changes and
-    should be preserved.
-  - If you need a clean tree for benchmarking (build baseline vs
-    optimized), **ask the user** before stashing.  They may prefer a
-    different approach (e.g. build directory copies, separate
-    worktrees).
-  - Always check `git stash list` after popping to confirm the stash
-    was consumed.  A popped stash with conflicts or a dirty tree
-    leaves the stash intact — the changes are NOT applied.
-  - **Every modified tracked file belongs to the user** (or another
-    agent).  Never `git restore`, `git checkout --`, `git reset --hard`,
-    or `git clean` any file unless the user explicitly asks you to touch
-    that specific file.
-  - When `git diff` shows changes you don't recognise, **read the diff**
-    to understand what they are before deciding how to handle them.
+**Every modified tracked file belongs to the user** (or another agent).
+The agent is a visitor in the user's working tree.  It may edit files,
+stage changes, or create new files, but it must **never** destroy the
+user's uncommitted work.
+
+**Prohibited operations on files/state the agent did NOT modify:**
+- `git checkout -- <file>`
+- `git restore <file>`
+- `git checkout <file>`
+- `git reset --hard` / `git clean -f`
+- overwriting a file with `git show <rev>:<path> > <path>`
+- any command whose effect is to discard or revert the user's changes
+
+If a clean working tree is genuinely needed (e.g. for a benchmark
+baseline, or to isolate the agent's own edits from pre-existing noise),
+**push a stash with a brief message first** — a stash is harmless and
+the user can pop it later:
+
+    git stash push -m "baseline: user changes before <task description>"
+
+Always check `git stash list` after popping to confirm the stash was
+consumed.  A popped stash with conflicts or a dirty tree leaves the
+stash intact — the changes are NOT applied.
+
+**Before running ANY `git checkout`, `git switch`, `git restore`,
+`git reset`, `git stash`, `git stash pop`, or `git checkout -- <file>`
+command, ALWAYS run `git status` first.** Verify the working tree is
+clean or that all valuable changes are committed/stashed.
     Do not guess — a "clang-format: N file(s)" pre-commit message does
     not guarantee the changes are formatting-only.
 
