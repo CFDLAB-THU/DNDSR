@@ -8,6 +8,8 @@
 #include "DNDS/Defines.hpp" // for correct  DNDS_SWITCH_INTELLISENSE
 #include "EulerEvaluator.hpp"
 #include "DNDS/HardEigen.hpp"
+#include <sstream>
+#include <iomanip>
 #include "SpecialFields.hpp"
 #include "DNDS/ExprtkWrapper.hpp"
 
@@ -2141,8 +2143,9 @@ namespace DNDS::Euler
         uint64_t flags)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-        static const real safetyRatio = 1 - 1e-2;
-        static const real E_lb_eps = smallReal;
+        static constexpr real safetyRatio = 1 - 1e-2;
+        static constexpr real E_lb_eps = 1e-2;
+        static constexpr real ratio_decay = 0.75;
 
         bool disable_shock_limiter = flags & LIMITER_UGRAD_Disable_Shock_Limiter;
 
@@ -2159,8 +2162,8 @@ namespace DNDS::Euler
             TU uOtherMin = u[iCell];
             TU uOtherMax = u[iCell];
             auto fEInternal = [this](const TU &u) -> real
-            { return u(I4) - 0.5 * u(Seq123).squaredNorm() / (u(0) + verySmallReal) - phys_.mixtureBaseInternalRhoERaw(u); };
-            real eOtherMin, eOtherMax;
+            { return u(I4) - 0.5 * u(Seq123).squaredNorm() / (u(0) + verySmallReal) - phys_.mixtureBaseInternalRhoE(u); };
+            real eOtherMin{0}, eOtherMax{0};
             eOtherMin = eOtherMax = fEInternal(u[iCell]);
             for (rowsize ic2f = 0; ic2f < c2f.size(); ic2f++)
             {
@@ -2173,7 +2176,7 @@ namespace DNDS::Euler
                 if (iCellOther != UnInitIndex)
                 {
                     uOtherMin = uOtherMin.array().min(u[iCellOther].array());
-                    uOtherMax = uOtherMin.array().max(u[iCellOther].array());
+                    uOtherMax = uOtherMax.array().max(u[iCellOther].array());
                     eOtherMin = std::min(eOtherMin, fEInternal(u[iCellOther]));
                     eOtherMax = std::max(eOtherMax, fEInternal(u[iCellOther]));
                     // ! adding bary value if the other cell exists
@@ -2183,14 +2186,14 @@ namespace DNDS::Euler
                 }
             }
 
-            TU uFaceIncMax = uFaceInc.array().rowwise().maxCoeff();
-            TU uFaceIncMin = uFaceInc.array().rowwise().minCoeff();
+            TU uFaceIncMax = uFaceInc.array().rowwise().maxCoeff().array().max(0.0).matrix();
+            TU uFaceIncMin = uFaceInc.array().rowwise().minCoeff().array().min(0.0).matrix();
             if (!disable_shock_limiter)
             {
                 TU alpha0;
                 alpha0.setConstant(nVars, 1.0);
-                alpha0 = alpha0.array().min(((uOtherMax - u[iCell]).array().abs() / (uFaceIncMax.array().abs() + verySmallReal)));
-                alpha0 = alpha0.array().min(((uOtherMin - u[iCell]).array().abs() / (uFaceIncMin.array().abs() + verySmallReal)));
+                alpha0 = alpha0.array().min(((uOtherMax - u[iCell]).array() / (uFaceIncMax.array() + verySmallReal)));
+                alpha0 = alpha0.array().min(((u[iCell] - uOtherMin).array() / (-uFaceIncMin.array() + verySmallReal)));
                 uGradNew[iCell].array().rowwise() *= alpha0.array().transpose();
                 uFaceInc.array().colwise() *= alpha0.array();
             }
@@ -2202,11 +2205,9 @@ namespace DNDS::Euler
                 alphaPP_Rho = std::min(alphaPP_Rho, u[iCell][0] / (std::abs(uFaceIncMin(0)) + smallReal * u[iCell][0]));
                 if (alphaPP_Rho < 1.0)
                     alphaPP_Rho *= safetyRatio;
-                uGradNew[iCell].array() *= alphaPP_Rho;
-                uFaceInc.array() *= alphaPP_Rho;
             }
 
-            TU_Batch uFaceAlpha0 = uFaceInc.colwise() + u[iCell];
+            TU_Batch uFaceAlpha0 = (uFaceInc * alphaPP_Rho).colwise() + u[iCell];
             for (int j = 0; j < uFaceAlpha0.cols(); j++)
                 DNDS_assert(uFaceAlpha0(0, j) > 0);
             real minEFace = veryLargeReal;
@@ -2219,7 +2220,47 @@ namespace DNDS::Euler
                 alphaPP_E = std::min(alphaPP_E, std::abs(eC * (1 - E_lb_eps)) / (verySmallReal - deltaEFaceMin));
             if (alphaPP_E < 1.0)
                 alphaPP_E *= safetyRatio;
-            uGradNew[iCell](EigenAll, Seq01234) *= alphaPP_E;
+
+            int i_decay = 0;
+            for (; i_decay < 1000; i_decay++)
+            {
+                uFaceAlpha0 = (uFaceInc * (alphaPP_Rho * alphaPP_E)).colwise() + u[iCell];
+                real minEFaceDecay = veryLargeReal;
+                for (int j = 0; j < uFaceAlpha0.cols(); j++)
+                    minEFaceDecay = std::min(minEFaceDecay, fEInternal(uFaceAlpha0(EigenAll, j)));
+                if (minEFaceDecay >= eC * (1 - E_lb_eps))
+                    break;
+                alphaPP_E *= ratio_decay;
+            }
+            if (i_decay >= 1000)
+            {
+                std::ostringstream oss;
+                oss << std::scientific << std::setprecision(4);
+                oss << "LimiterUGrad: species PP decay exhausted on cell " << iCell << "\n";
+                oss << "  alphaPP_Rho=" << alphaPP_Rho << " alphaPP_E=" << alphaPP_E
+                    << " eC=" << eC << " E_lb_eps=" << E_lb_eps << "\n";
+                oss << "  u[cell] = " << u[iCell].transpose() << "\n";
+                oss << "  uGrad[cell] = \n"
+                    << uGrad[iCell] << "\n";
+                oss << "  uFaceInc (nVars x nFace) = \n"
+                    << uFaceInc << "\n";
+                oss << "  The sensible-energy positivity check against mixtureBaseInternalRhoE\n"
+                    << "  could not be satisfied even after 1000 decay iterations.  This\n"
+                    << "  indicates the cell-mean itself has invalid species that the\n"
+                    << "  gradient limiter cannot repair.";
+                DNDS_assert_info(false, oss.str());
+            }
+
+            uGradNew[iCell](EigenAll, Seq01234) *= alphaPP_Rho * alphaPP_E;
+            if constexpr (Traits::isExtended)
+            {
+                if (phys_.hasChemicalSource())
+                {
+                    int Ns1 = phys_.nSpecies() - 1;
+                    int Isp = nVars - Ns1;
+                    uGradNew[iCell](EigenAll, Eigen::seq(Isp, EigenLast)) *= alphaPP_Rho * alphaPP_E;
+                }
+            }
         }
     }
 
