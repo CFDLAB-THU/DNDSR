@@ -19,6 +19,7 @@
         "nConsoleCheckInternal": 1,
         "nDataOutC": 20,
         "nDataOut": 20,
+        "nDataOutCInternal": 10000,
         "nRestartOut": 100,
         "tDataOut": 3e+200,
         "dataOutAtInit": true,
@@ -49,10 +50,11 @@
         "CFLRampEnd": 10
     },
     "convergenceControl": {
-        "nTimeStepInternal": 100,
+        "nTimeStepInternal": 40,
         "nTimeStepInternalMin": 10,
         "rhsThresholdInternal": 10e-4,
         "res_base": 0,
+        "resBaseType": 1,
         "useVolWiseResidual": true
     },
     "dataIOControl": {
@@ -62,6 +64,7 @@
         // "outPltName": "../data/out/react_2d_detonation_largeS_h2o2-DilI9/out",
         "meshFile": "../data/mesh/Uniform_5x2-10x2_1000.cgns",
         "outPltName": "../data/out/react_2d_detonation_largeS1_h2o2-5x2-DilIX3/out",
+        // "outPltName": "../data/out/react_2d_detonation_largeS1_h2o2-5x2-S05-DilIX3/out",
         "meshReorderCells": 1,
         "outPltMode": 1,
         "readMeshMode": 0,
@@ -101,34 +104,82 @@
         "useLimiter": true,
         "usePPRecLimiter": true,
         "nPartialLimiterStart": 1000000,
-        "nPartialLimiterStartInternal": 1000000
+        "nPartialLimiterStartInternal": 1000000,
+        "ppRecLimiterCompressToMean": false
     },
     "linearSolverControl": {
         "jacobiCode": 1,
         "sgsIter": 4,
-        "gmresCode": 0,
-        "nGmresIter": 1,
-        "nGmresSpace": 10,
+        "sgsWithRec": 0,
         "nSgsConsoleCheck": 100,
-        "sourceTauSplitting": 0,
+        "gmresCode": 0,
+        "gmresScale": 1,
+        "nGmresSpace": 5,
+        "nGmresIter": 1,
+        // "nGmresConsoleCheck": 1,
+        "multiGridLP": 0,
+        "coarseGridLinearSolverControlList": {
+            "1": {
+                "jacobiCode": 1,
+                "sgsIter": 4,
+                "gmresCode": 0,
+                "gmresScale": 0,
+                "nGmresIter": 2,
+                "nSgsConsoleCheck": 100,
+                "nGmresConsoleCheck": 100,
+                "multiGridNIter": 4,
+                "multiGridNIterPost": 0,
+                "centralSmoothInputResidual": 0
+            }
+        },
         "directPrecControl": {
-            "useDirectPrec": true,
+            "useDirectPrec": false,
             "iluCode": 2,
             "orderingCode": 0
         }
     },
     "implicitReconstructionControl": {
         "nInternalRecStep": 1,
-        "recLinearScheme": 0
+        "recLinearScheme": 0,
+        "nRecMultiplyForZeroedGrad": 1000,
+        "recThreshold": 1e-5,
+        "nGmresSpace": 5,
+        "nGmresIter": 1,
+        "fpcgResetScheme": 0,
+        "fpcgResetReport": 1
     },
     "vfvSettings": {
         "maxOrder": 1,
         "intOrder": 1,
-        "jacobiRelax": 1.0,
-        "SORInstead": true,
-        "smoothThreshold": 0.001,
+        "cacheDiffBase": true,
+        "jacobiRelax": 1,
+        "SORInstead": false,
+        "smoothThreshold": 1e-3,
         "WBAP_nStd": 10.0,
-        "subs2ndOrder": 1
+        "normWBAP": false,
+        "subs2ndOrder": 1,
+        "baseSettings": {
+            "localOrientation": false,
+            "anisotropicLengths": false
+        },
+        "functionalSettings": {
+            // "scaleType": "BaryDiff",
+            // "scaleMultiplier": 0.5,
+            // "dirWeightScheme": "Factorial",
+            // "dirWeightScheme": "ManualDirWeight", 
+            // "manualDirWeights": [ // Pan mix 0.2
+            //     1.0,
+            //     0.5059,
+            //     0.14234000000000002,
+            //     0.059006666666666666,
+            //     0
+            // ],
+            "dirWeightScheme": "HQM_OPT",
+            "geomWeightScheme": "HQM_SD",
+            // "useAnisotropicFunctional": true,
+            // "scaleMultiplier": 3.464101615137754,
+            "_tail": 0
+        }
     },
     "eulerSettings": {
         "pointImplicitSourceUpdateOut": 1,
@@ -140,6 +191,8 @@
         "rsFixScale": 4,
         "uRecAlphaCompressPower": 1.0,
         "uRecBetaCompressPower": 1.0,
+        "nCentralSmoothStep": 0,
+        "centralSmoothEps": 0.5,
         "ppEpsIsRelaxed": false,
         "ransModel": "RANS_None",
         "reactiveFlow": {
@@ -195,8 +248,8 @@
             {
                 "exprs": [
                     "inRegion := 1;",
-                    "var Ly := 0.2;",
-                    "var x_shock_0 := 0.4;",
+                    "var Ly := 0.2 * 1;",
+                    "var x_shock_0 := 0.4 * 1;",
                     "var A_shock := -0.005;",
                     "var A_v := 40;",
                     "var ind_len := 0.0015086086;",
