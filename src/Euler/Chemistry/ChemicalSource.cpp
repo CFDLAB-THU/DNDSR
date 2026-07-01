@@ -1042,31 +1042,32 @@ namespace DNDS::Euler::Chemistry
 
     // ---- caller-owned buffer helpers -----------------------------------------
 
-    void ChemicalSource::massFractions(double rho, const double *rhoYK, int nTransported, SpeciesBufferView Y) const
+    void ChemicalSource::massFractions(double rho, ConstSpeciesBufferView rhoYTransported, SpeciesBufferView Y) const
     {
         DNDS_assert(impl_);
         int Ns = impl_->Ns;
         int Ns1 = Ns - 1;
-        DNDS_check_throw_info(rhoYK != nullptr, "ChemicalSource::massFractions(): input buffer is null");
+        DNDS_check_throw_info(rhoYTransported.data != nullptr, "ChemicalSource::massFractions(): input buffer is null");
         DNDS_check_throw_info(Y.data != nullptr, "ChemicalSource::massFractions(): output buffer is null");
         DNDS_check_throw_info(Y.nSpecies >= Ns, "ChemicalSource::massFractions(): output buffer too small");
-        DNDS_check_throw_info(nTransported == Ns1,
+        DNDS_check_throw_info(rhoYTransported.nSpecies == Ns1,
                               "ChemicalSource::massFractions(): transported species count mismatch");
-        double rhoInv = 1.0 / std::max(rho, 1e-60);
-        for (int k = 0; k < nTransported; ++k)
-            Y[k] = rhoYK[k] * rhoInv;
+        DNDS_check_throw_info(std::isfinite(rho) && rho > 0,
+                              "ChemicalSource::massFractions(): rho must be finite and positive");
+        double rhoInv = 1.0 / rho;
+        for (int k = 0; k < Ns1; ++k)
+        {
+            DNDS_check_throw_info(std::isfinite(rhoYTransported[k]),
+                                  "ChemicalSource::massFractions(): transported species density is not finite");
+            Y[k] = rhoYTransported[k] * rhoInv;
+        }
         double sum = 0;
-        for (int k = 0; k < nTransported; ++k)
+        for (int k = 0; k < Ns1; ++k)
             sum += Y[k];
         Y[Ns1] = 1.0 - sum;
         for (int k = 0; k < Ns; ++k)
-            Y[k] = std::max(Y[k], 0.0);
-        double ySum = 0;
-        for (int k = 0; k < Ns; ++k)
-            ySum += Y[k];
-        if (ySum > 0)
-            for (int k = 0; k < Ns; ++k)
-                Y[k] /= ySum;
+            DNDS_check_throw_info(std::isfinite(Y[k]) && Y[k] >= 0,
+                                  fmt::format("ChemicalSource::massFractions(): invalid mass fraction Y[{}]={}", k, Y[k]));
     }
 
     ConstSpeciesBufferView ChemicalSource::mixtureBaseInternalRhoESpecies() const

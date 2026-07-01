@@ -430,7 +430,7 @@ namespace DNDS::Euler
 
             std::vector<double> &Ybuf = bufY_[tid];
             Chemistry::SpeciesBufferView Yv{Ybuf.data(), Ns};
-            c.massFractions(rho, &U[Isp], Ns1, Yv);
+            c.massFractions(rho, {&U[Isp], Ns1}, Yv);
             Chemistry::ConstSpeciesBufferView Yc{Ybuf.data(), Ns};
             auto &bufOmega = bufOmega_[tid];
 

@@ -14,20 +14,18 @@ Key physical assumptions to preserve:
 
 ## Status Summary
 
-Open findings: 36
+Open findings: 31
 
 Withdrawn findings: 2 (`RMS-AUDIT-001`, `RMS-AUDIT-016`)
 
-Fixed in working tree: 9 (`RMS-AUDIT-002`, `RMS-AUDIT-003`, `RMS-AUDIT-005`, `RMS-AUDIT-008`, `RMS-AUDIT-011`, `RMS-AUDIT-012`, `RMS-AUDIT-043`, `RMS-AUDIT-044`, `RMS-AUDIT-048`)
-
-Partially fixed in working tree: 1 (`RMS-AUDIT-032`)
+Fixed/resolved in working tree: 15 (`RMS-AUDIT-002`, `RMS-AUDIT-003`, `RMS-AUDIT-004`, `RMS-AUDIT-005`, `RMS-AUDIT-008`, `RMS-AUDIT-009`, `RMS-AUDIT-011`, `RMS-AUDIT-012`, `RMS-AUDIT-032`, `RMS-AUDIT-043`, `RMS-AUDIT-044`, `RMS-AUDIT-045`, `RMS-AUDIT-046`, `RMS-AUDIT-047`, `RMS-AUDIT-048`)
 
 Severity counts:
 
 | Severity | Count |
 | --- | ---: |
 | High | 0 |
-| Medium | 30 |
+| Medium | 25 |
 | Low | 6 |
 
 Category counts:
@@ -35,11 +33,11 @@ Category counts:
 | Category | Count |
 | --- | ---: |
 | Reactive source control | 1 |
-| Positivity / thermodynamics | 2 |
-| Chemical Jacobian | 1 |
-| Flux / multispecies numerics | 1 |
+| Positivity / thermodynamics | 1 |
+| Chemical Jacobian | 0 |
+| Flux / multispecies numerics | 0 |
 | Boundary / transport units | 0 |
-| Viscous / transport | 2 |
+| Viscous / transport | 0 |
 | Cases / configuration / schema | 4 |
 | Mesh / MPI geometry state | 16 |
 | Geometry Python / device / usability | 5 |
@@ -110,7 +108,7 @@ Impact: Invalid states can be masked until later; source/Jacobian consistency on
 
 Suggested fix: separate strict conservative-state species extraction from Cantera-safe normalization. Use strict extraction for validity checks and Jacobian consistency, and reserve normalization for controlled recovery paths that also repair energy/species explicitly.
 
-Status: Open.
+Status: Fixed in working tree for the low-level API. `ChemicalSource::massFractions()` is now strict and hard-fails on invalid species; physics-facing APIs intentionally keep explicit tolerant repair through `Chemistry::RepairMassFractions()` for reconstructed CFD states.
 
 #### RMS-AUDIT-010 — Medium — 0D implicit reactor path does not enforce dependent-species simplex
 
@@ -148,7 +146,7 @@ Impact: Near positivity recovery states below the chemistry floor, the source RH
 
 Suggested fix: when the floor is active, assemble the Jacobian of the clamped RHS: zero temperature-derivative columns caused solely by `T(U)`, zero momentum/rhoE couplings through `T`, and retain only valid density/composition effects at fixed `Tfloor`. Add finite-difference checks below `TBase`.
 
-Status: Open, pending discussion. A linearization that ignores clamp-boundary derivatives may be acceptable for robustness near invalid states; the remaining question is whether the Jacobian should simply approximate the smooth interior function or explicitly model the clamped source.
+Status: Resolved in working tree. Source Jacobian evaluation uses the same clamped Cantera temperature `Tcantera` as the RHS; derivative discontinuity at the clamp boundary is intentionally not modeled.
 
 ### Flux / Multispecies Numerics
 
@@ -162,7 +160,7 @@ Impact: A pure composition contact with equal `rho`, velocity, and pressure but 
 
 Suggested fix: in Roe acoustic decomposition, use `Delta E_sensible = Delta E_total - Delta rhoE_base` for acoustic alphas while preserving total energy in conservative fluxes. Apply to scalar, batched, and implicit Roe-dissipation helper paths. Add a two-state multispecies contact test with same `rho/u/p` and different valid `Y`.
 
-Status: Partially fixed in working tree. Scalar and batched Roe acoustic decomposition now subtract the base-energy jump from the energy jump used in acoustic wave strengths (`src/Euler/Gas.hpp:1198`, `src/Euler/Gas.hpp:1548-1556`). RMS-AUDIT-043 is fixed; RMS-AUDIT-045 still tracks the implicit-dissipation helper question.
+Status: Fixed in working tree. Scalar and batched Roe now route pressure-neutral thermochemical contact energy through the contact wave under `USE_ROE_BASE_ENERGY_CONTACT_FIX`, and `RMS-AUDIT-045` separately tracks the remaining implicit-dissipation approximation question.
 
 #### RMS-AUDIT-043 — High — Roe species upwinding lacks matching base-energy contact flux
 
@@ -186,7 +184,7 @@ Impact: The implicit Roe/LU-SGS dissipation is better aligned with reactive base
 
 Suggested fix: add a targeted finite-difference test for `fluxJacobian0_Right_Times_du()` on composition perturbations that change `gammaEq`; if the approximation is too crude, pass a more complete contact-energy increment including the linearized `gammaEq` contribution.
 
-Status: Partially fixed in working tree; pending targeted finite-difference validation.
+Status: Resolved in working tree / no further action planned. The helper now accepts a pressure-neutral contact-energy increment for base-energy bookkeeping; remaining `d(gammaEq)` effects are accepted as part of the approximate implicit Roe linearization.
 
 ### Boundary Conditions / Units
 
@@ -226,7 +224,7 @@ Impact: Reactive RANS cases can have turbulent heat and momentum diffusion witho
 
 Suggested fix: add a configurable turbulent species diffusivity, for example `D_t = mu_t / (rho * Sc_t)`, to the species diffusion closure and correction velocity, and use the augmented `J_k` for the enthalpy flux. Add a RANS reactive face-flux test with nonzero `muTurb` and `grad Y`.
 
-Status: Open. TODO documented in `src/Euler/EulerEvaluator_EvaluateDt.hxx:1206-1210`.
+Status: Fixed in working tree. Reactive viscous flux now includes a shared turbulent species diffusivity `D_t=mu_t/(rho*Sc_t)` and uses the resulting species fluxes in the enthalpy diffusion term.
 
 #### RMS-AUDIT-047 — Medium — Viscous spectral radius ignores species diffusion timescale
 
@@ -238,7 +236,7 @@ Impact: If a species diffusivity exceeds thermal/momentum diffusivity, timestep 
 
 Suggested fix: include `max_k(D_k)` in `lamVis`, and include `mu_t/(rho*Sc_t)` if turbulent species diffusion is added. Add a test/mocked transport case where species diffusivity dominates thermal and momentum diffusivity.
 
-Status: Open. TODO documented in `src/Euler/EulerEvaluator_EvaluateDt.hxx:982-988`.
+Status: Resolved in working tree / no further action planned for `EvaluateDt`. The scalar viscous spectral-radius estimate intentionally remains NS-flow based and assumes species Schmidt numbers are O(1); future implicit species blocks should use per-species diffusion radii.
 
 #### RMS-AUDIT-048 — Medium — Isothermal wall RANS formulas use cell temperature viscosity
 

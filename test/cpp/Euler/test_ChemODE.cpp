@@ -566,6 +566,22 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
         return phys.temperature(ukMap);
     };
 
+    auto repairSpeciesSimplex = [&](Eigen::VectorXd &Uk)
+    {
+        for (int k = Isp; k < Isp + Ns1; k++)
+            if (Uk[k] < 0)
+                Uk[k] = 1e-30;
+        double sumRhoY = 0.0;
+        for (int k = Isp; k < Isp + Ns1; k++)
+            sumRhoY += Uk[k];
+        if (sumRhoY > Uk[0])
+        {
+            double scale = Uk[0] / sumRhoY * (1.0 - 1e-14);
+            for (int k = Isp; k < Isp + Ns1; k++)
+                Uk[k] *= scale;
+        }
+    };
+
     // Integrate to a non-initial reactive state (20 steps at dt=1e-6, constant-volume)
     double T = getT(U), dt = 1e-6;
     for (int step = 0; step < 20; step++)
@@ -604,9 +620,7 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
 
             Eigen::VectorXd dU = Jn.partialPivLu().solve(-F);
             Uk += dU;
-            for (int k = Isp; k < Isp + Ns1; k++)
-                if (Uk[k] < 0)
-                    Uk[k] = 1e-30;
+            repairSpeciesSimplex(Uk);
             Tk = getT(Uk);
             if (dU.lpNorm<Eigen::Infinity>() < 1e-12)
                 break;
@@ -627,6 +641,15 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
     // FD derivative source: ω from perturbed state (no Y clamping, KE subtracted)
     auto sourceAtU = [&](const Eigen::VectorXd &Up)
     {
+        double sumRhoY = 0.0;
+        for (int k = 0; k < Ns1; ++k)
+        {
+            if (Up[Isp + k] < 0)
+                return std::vector<double>{};
+            sumRhoY += Up[Isp + k];
+        }
+        if (sumRhoY > Up[0])
+            return std::vector<double>{};
         std::vector<double> Yp;
         getY_linear(Up, Yp);
         ConstSpeciesBufferView Ypv{Yp.data(), Ns};
@@ -657,7 +680,9 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
         Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>,
                    Eigen::Unaligned, Eigen::OuterStride<>>
             anJac(jbufRef.data(), Ns, nVars, Eigen::OuterStride<>(Ns));
-        Eigen::MatrixXd fdJac(Ns, nVars);
+        Eigen::MatrixXd fdJac = Eigen::MatrixXd::Zero(Ns, nVars);
+        std::vector<double> om0 = sourceAtU(Us);
+        REQUIRE(om0.size() == static_cast<size_t>(Ns));
 
         for (int j = 0; j < nVars; j++)
         {
@@ -670,7 +695,15 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
             auto omM = sourceAtU(Up);
             for (int i = 0; i < Ns; i++)
             {
-                double fd = (omP[i] - omM[i]) / (2.0 * h);
+                double fd = 0.0;
+                if (omP.size() == static_cast<size_t>(Ns) && omM.size() == static_cast<size_t>(Ns))
+                    fd = (omP[i] - omM[i]) / (2.0 * h);
+                else if (omP.size() == static_cast<size_t>(Ns))
+                    fd = (omP[i] - om0[i]) / h;
+                else if (omM.size() == static_cast<size_t>(Ns))
+                    fd = (om0[i] - omM[i]) / h;
+                else
+                    continue;
                 fdJac(i, j) = fd;
                 double an = anJac(i, j);
                 double denom = std::max(std::max(std::abs(fd), std::abs(an)), 1e-60);
@@ -723,6 +756,7 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
     };
 
     // ── Checkpoints ──
+    repairSpeciesSimplex(U);
     compareJacobian(U, T, "s20");
 
     for (int step = 20; step < 50; step++)
@@ -754,9 +788,7 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
                 Jn.row(r) = Eigen::VectorXd::Unit(nVars, r), F[r] = 0;
             Eigen::VectorXd dU = Jn.partialPivLu().solve(-F);
             Uk += dU;
-            for (int k = Isp; k < Isp + Ns1; k++)
-                if (Uk[k] < 0)
-                    Uk[k] = 1e-30;
+            repairSpeciesSimplex(Uk);
             Tk = getT(Uk);
             if (dU.lpNorm<Eigen::Infinity>() < 1e-12)
                 break;
@@ -764,6 +796,7 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
         U = Uk;
         T = Tk;
     }
+    repairSpeciesSimplex(U);
     compareJacobian(U, T, "s50");
 
     for (int step = 50; step < 200; step++)
@@ -795,9 +828,7 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
                 Jn.row(r) = Eigen::VectorXd::Unit(nVars, r), F[r] = 0;
             Eigen::VectorXd dU = Jn.partialPivLu().solve(-F);
             Uk += dU;
-            for (int k = Isp; k < Isp + Ns1; k++)
-                if (Uk[k] < 0)
-                    Uk[k] = 1e-30;
+            repairSpeciesSimplex(Uk);
             Tk = getT(Uk);
             if (dU.lpNorm<Eigen::Infinity>() < 1e-12)
                 break;
@@ -805,6 +836,7 @@ TEST_CASE("Finite-difference Jacobian check at non-initial state")
         U = Uk;
         T = Tk;
     }
+    repairSpeciesSimplex(U);
     int nBadS200 = compareJacobian(U, T, "s200");
 
     // ── Fluid-column check (inject non-zero velocity) ──

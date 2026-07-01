@@ -985,9 +985,9 @@ namespace DNDS::Euler
                 // viscous spectral radius. Reactive RHS has species diffusion,
                 // so light-species mixtures can be stiffer than momentum/heat
                 // diffusion alone indicate.
-                // TODO(RMS-AUDIT-046): if turbulent species diffusion is added,
-                // include its Schmidt contribution here as well.
-                real k = phys_.mixtureConductivity(T, pMean, uMean) + phys_.Cp(T, uMean) * muTurb / 0.9;
+                // Spectral-radius estimation intentionally remains NS-flow based;
+                // future implicit species blocks should use per-species diffusion radii.
+                real k = phys_.mixtureConductivity(T, pMean, uMean) + phys_.Cp(T, uMean) * muTurb / phys_.PrTurb();
                 lamVis = std::max(4. / 3. * muf / uMean(0), k / (uMean(0) * phys_.Cv(T, uMean)));
             }
 
@@ -1205,13 +1205,11 @@ namespace DNDS::Euler
                 muf += muTurb;
 
                 // Reactive RHS face flux uses Cantera mixture molecular k plus
-                // turbulent heat conductivity k_t=Cp*mu_t/Pr_t.
-                // TODO(reactive-turbulence): make the fixed Pr_t=0.9 configurable.
-                // TODO(RMS-AUDIT-046): add turbulent species diffusion with a
-                // turbulent Schmidt number and use the same species fluxes in
-                // the enthalpy diffusion term.
+                // turbulent heat conductivity k_t=Cp*mu_t/Pr_t and a shared
+                // turbulent species diffusivity D_t=mu_t/(rho*Sc_t).
                 real k = phys_.mixtureConductivity(T, pMean, UMeanXYC) +
-                            phys_.Cp(T, UMeanXYC) * muTurb / 0.9;
+                            phys_.Cp(T, UMeanXYC) * muTurb / phys_.PrTurb();
+                real speciesDiffTurb = muTurb / std::max(UMeanXYC(0) * phys_.ScTurb(), verySmallReal);
                 TU VisFlux;
                 VisFlux.resizeLike(ULMeanXy);
                 VisFlux.setZero();
@@ -1230,6 +1228,7 @@ namespace DNDS::Euler
                     {
                         phys_.addMixtureAveragedSpeciesDiffusionFlux(
                             T, pMean, UMeanXYC, DiffUxyPrimC, uNormC, k,
+                            speciesDiffTurb,
                             adiabaticWall, impermeableWall,
                             speciesDiffusionBuffers, VisFlux);
                     }
