@@ -1628,7 +1628,9 @@
                 "reactiveSourceScale": {
                     "type": "number",
                     "default": 1.0,
-                    "description": "Scale reactive source RHS and Jacobian directly; use 0 for non-reactive debugging"
+                    "description": "Scale reactive source RHS and Jacobian directly; use 0 for non-reactive debugging",
+                    "minimum": 0.0,
+                    "maximum": 1.0
                 },
                 "constMassForce": {
                     "type": "array",
@@ -2063,6 +2065,18 @@
                             "default": 0.72,
                             "description": "Prandtl number",
                             "minimum": 0.0
+                        },
+                        "prTurb": {
+                            "type": "number",
+                            "default": 0.9,
+                            "description": "Turbulent Prandtl number",
+                            "minimum": 2.2250738585072014e-308
+                        },
+                        "scTurb": {
+                            "type": "number",
+                            "default": 0.9,
+                            "description": "Shared turbulent Schmidt number for species diffusion",
+                            "minimum": 2.2250738585072014e-308
                         },
                         "TRef": {
                             "type": "number",

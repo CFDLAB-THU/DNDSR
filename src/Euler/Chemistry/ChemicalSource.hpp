@@ -9,6 +9,10 @@
 
 #pragma once
 
+#include "DNDS/Errors.hpp"
+
+#include <algorithm>
+#include <cmath>
 #include <memory>
 #include <vector>
 #include <string>
@@ -106,6 +110,45 @@ namespace DNDS::Euler::Chemistry
     inline SpeciesBufferView::operator ConstSpeciesBufferView() const
     {
         return {data, nSpecies};
+    }
+
+    /**
+     * @brief Clamp/renormalize transported independent species into a full
+     *        Cantera-safe mass-fraction vector.
+     *
+     * This is intentionally tolerant for reconstructed/limited CFD states.
+     * Low-level chemistry APIs should call ChemicalSource::massFractions(),
+     * which hard-fails on invalid species instead of repairing them.
+     */
+    inline void RepairMassFractions(double rho, ConstSpeciesBufferView rhoYTransported,
+                                    SpeciesBufferView Y)
+    {
+        int Ns = Y.nSpecies;
+        int Ns1 = Ns - 1;
+        DNDS_check_throw_info(rhoYTransported.data != nullptr, "RepairMassFractions(): input buffer is null");
+        DNDS_check_throw_info(Y.data != nullptr, "RepairMassFractions(): output buffer is null");
+        DNDS_check_throw_info(Ns > 0 && rhoYTransported.nSpecies == Ns1,
+                              "RepairMassFractions(): transported species count mismatch");
+        DNDS_check_throw_info(std::isfinite(rho) && rho > 0, "RepairMassFractions(): rho must be finite and positive");
+        double rhoInv = 1.0 / rho;
+        double sum = 0.0;
+        for (int k = 0; k < Ns1; ++k)
+        {
+            DNDS_check_throw_info(std::isfinite(rhoYTransported[k]),
+                                  fmt::format("RepairMassFractions(): transported species density [{}] is not finite", k));
+            Y[k] = std::max(0.0, rhoYTransported[k] * rhoInv);
+            sum += Y[k];
+        }
+        Y[Ns1] = std::max(0.0, 1.0 - sum);
+        double ySum = 0.0;
+        for (int k = 0; k < Ns; ++k)
+            ySum += Y[k];
+        DNDS_check_throw_info(std::isfinite(ySum) && ySum > 0, "RepairMassFractions(): repaired species mass is invalid");
+        for (int k = 0; k < Ns; ++k)
+        {
+            Y[k] /= ySum;
+            DNDS_check_throw_info(std::isfinite(Y[k]), fmt::format("RepairMassFractions(): repaired Y[{}] is not finite", k));
+        }
     }
 
     /**
@@ -311,7 +354,11 @@ namespace DNDS::Euler::Chemistry
         // ---- Caller-owned buffer helpers ----------------------------------------
 
         /** Compute mass fractions from conservative species densities into caller-owned storage. */
-        void massFractions(double rho, const double *rhoYK, int nTransported, SpeciesBufferView Y) const;
+        void massFractions(double rho, ConstSpeciesBufferView rhoYTransported, SpeciesBufferView Y) const;
+        void massFractions(double rho, const double *rhoYK, int nTransported, SpeciesBufferView Y) const
+        {
+            massFractions(rho, {rhoYK, nTransported}, Y);
+        }
 
         /** Return read-only per-species base internal energies in code units (e_base,k/U0²). */
         ConstSpeciesBufferView mixtureBaseInternalRhoESpecies() const;

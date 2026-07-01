@@ -617,6 +617,8 @@ namespace DNDS::Euler
             real Rgas = 287; ///< physical gas constant R_phys [J/(kg·K)]; consumed via toCode() → R_code = R_phys·T0/U0²
             real muGas = 1;  ///< dynamic viscosity [Pa·s] physical (μ_phys), code-scaled via μ_0 = ρ0·U0·L0
             real prGas = 0.72;
+            real prTurb = 0.9; ///< Turbulent Prandtl number for eddy heat conductivity.
+            real scTurb = 0.9; ///< Shared turbulent Schmidt number for species diffusion.
             real TRef = 273.15;
             real CSutherland = 110.4;
             int muModel = 1;
@@ -640,6 +642,10 @@ namespace DNDS::Euler
                            DNDS::Config::range(0.0));
                 DNDS_FIELD(prGas,       "Prandtl number",
                            DNDS::Config::range(0.0));
+                DNDS_FIELD(prTurb,      "Turbulent Prandtl number",
+                           DNDS::Config::range(std::numeric_limits<real>::min()));
+                DNDS_FIELD(scTurb,      "Shared turbulent Schmidt number for species diffusion",
+                           DNDS::Config::range(std::numeric_limits<real>::min()));
                 DNDS_FIELD(TRef,        "Reference temperature (K)");
                 DNDS_FIELD(CSutherland, "Sutherland constant (K)");
                 DNDS_FIELD(muModel,     "Viscosity model: 0=constant, 1=sutherland, 2=constant_nu");
