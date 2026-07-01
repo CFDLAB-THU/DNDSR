@@ -1804,6 +1804,8 @@ namespace DNDS::Euler
                 pEps *= verySmallReal, rhoEps *= verySmallReal;
             }
             real rhoeSensibleEps = pEps;
+            constexpr real rhoYFloor = 1e-30; // tiny positive floor (matches 0D ODE)
+            constexpr real ratio_decay = 0.75;
 
             TU ret = uInc;
 
@@ -1900,6 +1902,56 @@ namespace DNDS::Euler
                 }
             }
 
+            if (phys_.hasChemicalSource())
+            {
+                int Ns = phys_.nSpecies();
+                int Ns1 = Ns - 1;
+                int nV = static_cast<int>(u.size());
+                int Isp = nV - Ns1;
+                auto clipReactiveSpecies = [&](TU &state)
+                {
+                    for (int k = 0; k < Ns1; ++k)
+                        state(Isp + k) = std::max(state(Isp + k), rhoYFloor);
+                    real sumRhoY = 0;
+                    for (int k = 0; k < Ns1; ++k)
+                        sumRhoY += state(Isp + k);
+                    if (sumRhoY > state(0))
+                    {
+                        real scale = state(0) / sumRhoY * (1.0 - 1e-14);
+                        for (int k = 0; k < Ns1; ++k)
+                            state(Isp + k) *= scale;
+                    }
+                };
+                auto sensibleGood = [&](const TU &state) -> bool
+                {
+                    if (!state.allFinite() || state(0) <= 0)
+                        return false;
+                    real ek = 0.5 * state(Seq123).squaredNorm() / (state(0) + verySmallReal);
+                    real rhoeSensible = state(I4) - ek - phys_.mixtureBaseInternalRhoE(state);
+                    return rhoeSensible >= rhoeSensibleEps;
+                };
+
+                TU candidate;
+                int iDecay = 0;
+                real decayScale = 1.0;
+                for (; iDecay < 1000; iDecay++)
+                {
+                    TU decayedInc = ret;
+                    decayedInc(Seq01234) *= decayScale;
+                    decayedInc(Eigen::seq(Isp, EigenLast)) *= decayScale;
+                    candidate = u + decayedInc;
+                    clipReactiveSpecies(candidate);
+                    if (sensibleGood(candidate))
+                    {
+                        ret = candidate - u;
+                        break;
+                    }
+                    decayScale *= ratio_decay;
+                }
+                DNDS_assert_info(iDecay < 1000,
+                                 "CompressInc: reactive species PP decay exhausted");
+            }
+
             return ret;
         }
 
@@ -1930,14 +1982,14 @@ namespace DNDS::Euler
             real alpha_fix_min = 1.0;
             for (index iCell = 0; iCell < cxInc.Size(); iCell++)
             {
-                TU compressedInc = this->CompressInc(cx[iCell], cxInc[iCell] * alpha);
+                const TU uOld = cx[iCell];
+                const TU rawInc = cxInc[iCell] * alpha;
+                TU compressedInc = this->CompressInc(uOld, rawInc);
                 real newAlpha = std::abs(compressedInc(0)) /
-                                (std::abs((cxInc[iCell] * alpha)(0)));
-                if (std::abs((cxInc[iCell] * alpha)(0)) < verySmallReal)
+                                (std::abs(rawInc(0)));
+                if (std::abs(rawInc(0)) < verySmallReal)
                     newAlpha = 1.; //! old inc could be zero, so compresion alpha is always 1
-                alpha_fix_min = std::min(
-                    alpha_fix_min,
-                    newAlpha);
+                alpha_fix_min = std::min(alpha_fix_min, newAlpha);
                 // if (newAlpha < 1.0 - 1e-14)
                 //     std::cout << "KL\n"
                 //               << std::scientific << std::setprecision(5)
