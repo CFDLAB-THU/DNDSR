@@ -823,7 +823,9 @@ namespace DNDS::Euler::Chemistry
         for (int idx = 0; idx < J.rows * J.cols; ++idx)
             J.data[idx] = 0;
 
-        int speciesCol0 = iEnergy + 1;
+        int speciesCol0 = J.cols - Ns1;
+        DNDS_check_throw_info(speciesCol0 > iEnergy,
+                              "ChemicalSource::productionRatesAndJacobian(): species columns must follow fluid/RANS columns");
 
         double cv = I.gas_cv_mass();
         double vs2 = I.U0 * I.U0;

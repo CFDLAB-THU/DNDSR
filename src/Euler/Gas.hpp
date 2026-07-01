@@ -675,7 +675,7 @@ namespace DNDS::Euler::Gas
 
         TVec alpha23V = incU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) - incU(0) * rp.veloRoe;
         TVec alpha23VT = alpha23V - n * alpha23V.dot(n);
-        real incU4b = incU(dim + 1) - alpha23VT.dot(rp.veloRoe);
+        real incU4b = incU(dim + 1) - (rhoE_base_R - rhoE_base_L) - alpha23VT.dot(rp.veloRoe);
         real alpha1 = (rp.gammaEqRoe - 1) / rp.asqrRoe *
                       (incU(0) * (rp.HRoe - veloRoeN * veloRoeN) +
                        veloRoeN * incU123N - incU4b);
@@ -1195,7 +1195,7 @@ namespace DNDS::Euler::Gas
 
         TVec alpha23V = incU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) - incU(0) * rp.veloRoe;
         TVec alpha23VT = alpha23V - n * alpha23V.dot(n);
-        real incU4b = incU(dim + 1) - alpha23VT.dot(rp.veloRoe);
+        real incU4b = incU(dim + 1) - (rhoE_base_R - rhoE_base_L) - alpha23VT.dot(rp.veloRoe);
         real alpha1 = (rp.gammaEqRoe - 1) / rp.asqrRoe *
                       (incU(0) * (rp.HRoe - veloRoeN * veloRoeN) +
                        veloRoeN * incU123N - incU4b);
@@ -1546,8 +1546,9 @@ namespace DNDS::Euler::Gas
         TVec_Batch alpha23V = incU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>), EigenAll) - veloRoe * incU(0, EigenAll);
         TVec_Batch alpha23VT = alpha23V.array() - n.array().rowwise() * (alpha23V.array() * n.array()).colwise().sum();
         TReal_Batch incU4b =
-            incU(dim + 1, EigenAll) -
-            veloRoe.transpose() * alpha23VT;
+            incU(dim + 1, EigenAll) - veloRoe.transpose() * alpha23VT;
+        if constexpr (variableBaseEnergy)
+            incU4b -= rhoE_base_R - rhoE_base_L;
         TReal_Batch alpha1 =
             (gammaEqRoe - 1) / asqrRoe *
             (incU(0, EigenAll) * (HRoe - veloRoeN * veloRoeN) +

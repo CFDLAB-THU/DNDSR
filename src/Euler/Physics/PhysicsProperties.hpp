@@ -194,6 +194,8 @@ namespace DNDS::Euler
 
         /// Convert physical gas-constant / heat-capacity to code-scaled:  X_code = X_phys / R0.
         [[nodiscard]] real toCode(real xPhys) const { return xPhys / R0(); }
+        /// Convert physical pressure to code-scaled: p_code = p_phys / p0.
+        [[nodiscard]] real toCodeP(real pPhys) const { return pPhys / p0(); }
         /// Convert code pressure to physical:  p_phys = p_code · p0.
         [[nodiscard]] real toPhysP(real pCode) const { return pCode * p0(); }
         /// Convert code temperature to physical:  T_phys = T_code · T0.

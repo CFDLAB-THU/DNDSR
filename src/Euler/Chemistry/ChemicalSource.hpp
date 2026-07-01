@@ -237,7 +237,9 @@ namespace DNDS::Euler::Chemistry
          * Production rates AND Jacobian ∂ω/∂U.
          *   U = [ρ, ρu, ρv, {ρw,} ρE, ρY_0..ρY_{Ns-2}]
          * dOmegadU: Ns × nVars, column-major.
-         * iEnergy = index of ρE in U (dim+1); species start = iEnergy+1.
+         * iEnergy = index of ρE in U (dim+1); species columns are inferred as
+         * the last Ns-1 columns of dOmegadU, allowing RANS/passive variables
+         * between ρE and species.
          * T, p, Y are physical SI units.
          * rho, rhoE, rhoU, rhoV, rhoW are code-scaled (÷ρ0, ÷ρ0·U0², etc.).
          * Scale factors U0 and ρ0 are stored at construction and used internally

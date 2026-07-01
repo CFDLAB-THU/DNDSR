@@ -615,7 +615,7 @@ namespace DNDS::Euler
                 {
                     if (type == EulerBCType::BCInPsTs)
                     {
-                        BCValues[i].nonState(0) = phys.toCode(BCValues[i].nonState(0));
+                        BCValues[i].nonState(0) = phys.toCodeP(BCValues[i].nonState(0));
                         BCValues[i].nonState(1) = phys.toCodeT(BCValues[i].nonState(1));
                     }
                     if (type == EulerBCType::BCWallIsothermal)
