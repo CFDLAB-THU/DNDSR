@@ -488,7 +488,7 @@ TEST_CASE("GetRoeAverage: density is geometric mean")
     CHECK(URoe(0) == doctest::Approx(2.0).epsilon(1e-10));
 }
 
-TEST_CASE("RoeFluxIncFDiff: entropy wave strength uses gammaEq, not acoustic gamma")
+TEST_CASE("RoeFluxIncFDiff: entropy wave strength preserves split-gamma identity")
 {
     Eigen::Vector<real, 5> incU = Eigen::Vector<real, 5>::Zero();
     incU(4) = 10.0;
@@ -505,9 +505,9 @@ TEST_CASE("RoeFluxIncFDiff: entropy wave strength uses gammaEq, not acoustic gam
     RoeFluxIncFDiff<3>(incU, n, veloRoe, 0.0, aRoe, asqrRoe, HRoe,
                        0.0, 1.0, 0.0, gammaEqRoe, incF);
 
-    real alphaEntropyExpected = -(gammaEqRoe - 1.0) / asqrRoe * incU(4);
+    real alphaEntropyExpected = -incU(4) / HRoe;
     CHECK(incF(0) == doctest::Approx(alphaEntropyExpected).epsilon(1e-14));
-    CHECK(std::abs(incF(0) + (gammaCpCvRoe - 1.0) / asqrRoe * incU(4)) > 1e-8);
+    CHECK(std::abs(incF(0) + (gammaEqRoe - 1.0) / asqrRoe * incU(4)) > 1e-8);
 }
 
 // ===================================================================

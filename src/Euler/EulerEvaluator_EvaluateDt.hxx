@@ -981,11 +981,12 @@ namespace DNDS::Euler
             {
                 // Reactive scalar includes mixture molecular transport, mu_t, and
                 // k_t = Cp*mu_t/Pr_t, matching the face viscous flux closure.
-                // TODO(reactive-turbulence): make Pr_t configurable and add the
-                // missing turbulent species-diffusion/Schmidt contribution to the
-                // implicit spectral radius if reactive RANS needs it.
-                // F94(deferred): species-diffusion timescale missing here; would
-                // improve implicit convergence for multi-species, not critical.
+                // TODO(RMS-AUDIT-047): include max species diffusivity in the
+                // viscous spectral radius. Reactive RHS has species diffusion,
+                // so light-species mixtures can be stiffer than momentum/heat
+                // diffusion alone indicate.
+                // TODO(RMS-AUDIT-046): if turbulent species diffusion is added,
+                // include its Schmidt contribution here as well.
                 real k = phys_.mixtureConductivity(T, pMean, uMean) + phys_.Cp(T, uMean) * muTurb / 0.9;
                 lamVis = std::max(4. / 3. * muf / uMean(0), k / (uMean(0) * phys_.Cv(T, uMean)));
             }
@@ -1206,6 +1207,9 @@ namespace DNDS::Euler
                 // Reactive RHS face flux uses Cantera mixture molecular k plus
                 // turbulent heat conductivity k_t=Cp*mu_t/Pr_t.
                 // TODO(reactive-turbulence): make the fixed Pr_t=0.9 configurable.
+                // TODO(RMS-AUDIT-046): add turbulent species diffusion with a
+                // turbulent Schmidt number and use the same species fluxes in
+                // the enthalpy diffusion term.
                 real k = phys_.mixtureConductivity(T, pMean, UMeanXYC) +
                             phys_.Cp(T, UMeanXYC) * muTurb / 0.9;
                 TU VisFlux;
@@ -2626,8 +2630,7 @@ namespace DNDS::Euler
             real temp = pBCHandler->GetValueFromID(btype)(0);
             TU URxyPrim;
             URxyPrim.resizeLike(ULxy);
-            real T = phys_.temperature(URxy);
-            real gammaEq = phys_.gammaEq(T, URxy);
+            real gammaEq = phys_.gammaEq(temp, URxy);
             Gas::IdealGasThermalConservative2Primitive<dim>(URxy, URxyPrim, gammaEq,
                                                             phys_.mixtureBaseInternalRhoE(URxy));
             DNDS_assert_info(URxyPrim(0) > 0 && URxyPrim(I4) > 0 && temp > 0, fmt::format("{}, {}, {}", URxyPrim(0), URxyPrim(I4), temp));
@@ -2657,8 +2660,11 @@ namespace DNDS::Euler
             { // BC for RealizableKe
                 real d1 = dWall[iCell].mean();
                 real k1 = ULMeanXy(I4 + 1) / ULMeanXy(0);
-                auto [T, pMean, asqrMean, Hmean, gammaEq, gamma] = phys_.conservativeThermal(ULMeanXy);
-                real mufPhy1 = muEff(ULMeanXy, T);
+                TU uMu = bTypeEuler == EulerBCType::BCWallIsothermal ? URxy : ULMeanXy;
+                real T = bTypeEuler == EulerBCType::BCWallIsothermal
+                             ? pBCHandler->GetValueFromID(btype)(0)
+                             : phys_.temperature(uMu);
+                real mufPhy1 = muEff(uMu, T);
                 real epsWall = 2 * mufPhy1 / ULMeanXy(0) * k1 / sqr(d1);
                 URxy(I4 + 2) = 2 * epsWall * ULxy(0) - ULxy(I4 + 2);
             }
@@ -2666,8 +2672,11 @@ namespace DNDS::Euler
                 settings.ransModel == RANSModel::RANS_KOWilcox)
             { // BC for SST or KOWilcox
                 real d1 = dWall[iCell].mean();
-                auto [T, pMean, asqrMean, Hmean, gammaEq, gamma] = phys_.conservativeThermal(ULMeanXy);
-                real mufPhy1 = muEff(ULMeanXy, T);
+                TU uMu = bTypeEuler == EulerBCType::BCWallIsothermal ? URxy : ULMeanXy;
+                real T = bTypeEuler == EulerBCType::BCWallIsothermal
+                             ? pBCHandler->GetValueFromID(btype)(0)
+                             : phys_.temperature(uMu);
+                real mufPhy1 = muEff(uMu, T);
 
                 real rhoOmegaaaWall = mufPhy1 / sqr(d1) * RANS::kWallOmegaCoeff;
                 URxy(I4 + 2) = 2 * rhoOmegaaaWall - ULxy(I4 + 2);

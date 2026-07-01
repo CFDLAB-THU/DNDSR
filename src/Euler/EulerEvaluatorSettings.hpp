@@ -779,7 +779,8 @@ namespace DNDS::Euler
             DNDS_FIELD(pointImplicitSourceUpdateOut, "Print point-implicit source-update Newton residual ratio min/max: 0=off, 1=on");
             config.field_section(&T::reactorStepSettings, "reactorStepSettings",
                                  "Cantera reactor settings for direct source substeps");
-            DNDS_FIELD(reactiveSourceScale,     "Scale reactive source RHS and Jacobian directly; use 0 for non-reactive debugging");
+            DNDS_FIELD(reactiveSourceScale,     "Scale reactive source RHS and Jacobian directly; use 0 for non-reactive debugging",
+                       DNDS::Config::range(0, 1));
             DNDS_FIELD(constMassForce,          "Constant mass force vector (3D)");
             config.field_section(&T::frameConstRotation, "frameConstRotation",
                                  "Constant-rotation reference frame settings");
