@@ -152,9 +152,15 @@ namespace DNDS::Euler
         /*                   DEFINE LAMBDAS                    */
         /*******************************************************/
 
-        const bool sourceTauSplittingEnabled = config.linearSolverControl.sourceTauSplitting &&
-                                               TEval::Traits::isExtended &&
-                                               eval.settings.reactiveFlow.enabled;
+        const bool sourceTauSplittingRequested = config.linearSolverControl.sourceTauSplitting &&
+                                                 TEval::Traits::isExtended &&
+                                                 eval.settings.reactiveFlow.enabled;
+        // The experimental tau split rebuilds a residual around the source
+        // substep and is not identity-preserving in the S -> 0 limit. Bypass
+        // it completely when the reactive source is scaled to zero so debug
+        // runs recover the unsplit zero-source equations exactly.
+        const bool sourceTauSplittingEnabled = sourceTauSplittingRequested &&
+                                               eval.settings.reactiveSourceScale > 0;
         const bool sourceStrangSplittingEnabled = config.timeMarchControl.sourceStrangSplitting &&
                                                   TEval::Traits::isExtended &&
                                                   eval.settings.reactiveFlow.enabled;

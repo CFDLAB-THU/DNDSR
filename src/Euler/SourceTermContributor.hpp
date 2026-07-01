@@ -595,17 +595,19 @@ namespace DNDS::Euler
         if (axisSymmetric)
             contribs.push_back(AxisymmetricContributor<model>{true});
 
+        real muGasCode = settings.idealGasProperty.muGas /
+                         (settings.idealGasProperty.rho0 * settings.idealGasProperty.U0 * settings.idealGasProperty.L0);
         switch (settings.ransModel)
         {
         case RANS_SA:
             contribs.push_back(SASourceContributor<model>{
-                settings.idealGasProperty.muGas,
+                muGasCode,
                 settings.SADESScale,
                 settings.SADESMode, settings.SAVersion, settings.ransSARotCorrection});
             break;
         case RANS_KOSST:
             contribs.push_back(SSTSourceContributor<model>{
-                settings.idealGasProperty.muGas,
+                muGasCode,
                 settings.SADESScale});
             break;
         case RANS_KOWilcox:
@@ -628,12 +630,12 @@ namespace DNDS::Euler
             {
                 std::string mechPath = GetEnvString("DNDS_MECH_PATH", "");
                 const std::string &mechFile = settings.reactiveFlow.mechanismFile;
-                if (!mechPath.empty() && !mechFile.empty() && !std::filesystem::path(mechFile).is_absolute())
-                    pool->emplace_back(mechPath + "/" + mechFile, "", settings.idealGasProperty.U0, settings.idealGasProperty.rho0,
-                                       settings.reactiveFlow.TBase, settings.reactiveFlow.transportModel);
-                else
-                    pool->emplace_back(mechFile, "", settings.idealGasProperty.U0, settings.idealGasProperty.rho0,
-                                       settings.reactiveFlow.TBase, settings.reactiveFlow.transportModel);
+                std::filesystem::path mechFSPath(mechFile);
+                std::string resolvedMechFile = mechFile;
+                if (!mechFile.empty() && mechFSPath.is_relative() && !std::filesystem::exists(mechFSPath) && !mechPath.empty())
+                    resolvedMechFile = (std::filesystem::path(mechPath) / mechFSPath).string();
+                pool->emplace_back(resolvedMechFile, "", settings.idealGasProperty.U0, settings.idealGasProperty.rho0,
+                                   settings.reactiveFlow.TBase, settings.reactiveFlow.transportModel);
             }
             for (int t = 1; t < nThreads; ++t)
                 pool->push_back(std::move(*pool->at(0).clone()));
