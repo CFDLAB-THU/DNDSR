@@ -610,7 +610,7 @@ namespace DNDS::Euler::Gas
      * @param[out] lam4     Absolute eigenvalue |V_n + a| after entropy fixing.
      */
     // #define DNDS_GAS_HLLEP_USE_V1
-    template <int dim = 3, int type = 0, bool variableGamma = false,
+    template <int dim = 3, int type = 0, bool variableGamma = false, bool variableBaseEnergy = variableGamma,
               typename TUL, typename TUR,
               typename TULm, typename TURm, typename TVecVG, typename TVecN,
               typename TF, typename TFdumpInfo>
@@ -675,8 +675,23 @@ namespace DNDS::Euler::Gas
 
         TVec alpha23V = incU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) - incU(0) * rp.veloRoe;
         TVec alpha23VT = alpha23V - n * alpha23V.dot(n);
-        real incU4b = incU(dim + 1) - (rhoE_base_R - rhoE_base_L) - alpha23VT.dot(rp.veloRoe);
-        real alpha1 = (rp.gammaEqRoe - 1) / rp.asqrRoe *
+        real incU4b = incU(dim + 1) - alpha23VT.dot(rp.veloRoe);
+#ifdef USE_ROE_BASE_ENERGY_CONTACT_FIX
+        if constexpr (variableGamma || variableBaseEnergy)
+        {
+            DNDS_assert_info(rp.gammaEqRoe > 1,
+                             fmt::format("Roe gammaEqRoe must be > 1, got {}", rp.gammaEqRoe));
+            real contactEnergyJump = (rhoE_base_R - rhoE_base_L) +
+                                     pR / (gammaEqRUse - 1) - pL / (gammaEqLUse - 1) -
+                                     (pR - pL) / (rp.gammaEqRoe - 1);
+            incU4b -= contactEnergyJump;
+        }
+#endif
+        real entropyDenom = rp.HRoe - 0.5 * rp.vsqrRoe;
+        DNDS_assert_info(entropyDenom > 0,
+                         fmt::format("Roe entropy/contact denominator must be positive, got {}", entropyDenom));
+        real invEntropyDenom = 1.0 / entropyDenom;
+        real alpha1 = invEntropyDenom *
                       (incU(0) * (rp.HRoe - veloRoeN * veloRoeN) +
                        veloRoeN * incU123N - incU4b);
         real alpha0 = (incU(0) * (veloRoeN + rp.aRoe) - incU123N - rp.aRoe * alpha1) / (2 * rp.aRoe);
@@ -735,6 +750,15 @@ namespace DNDS::Euler::Gas
             incF(0) = alpha0 + alpha1 + alpha4;
             incF(dim + 1) = (rp.HRoe - veloRoeN * rp.aRoe) * alpha0 + 0.5 * rp.vsqrRoe * alpha1 +
                             (rp.HRoe + veloRoeN * rp.aRoe) * alpha4 + alpha23VT.dot(rp.veloRoe);
+#ifdef USE_ROE_BASE_ENERGY_CONTACT_FIX
+            if constexpr (variableGamma || variableBaseEnergy)
+            {
+                real contactEnergyJump = (rhoE_base_R - rhoE_base_L) +
+                                         pR / (gammaEqRUse - 1) - pL / (gammaEqLUse - 1) -
+                                         (pR - pL) / (rp.gammaEqRoe - 1);
+                incF(dim + 1) += lam123 * contactEnergyJump;
+            }
+#endif
             incF(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) =
                 (rp.veloRoe - rp.aRoe * n) * alpha0 + (rp.veloRoe + rp.aRoe * n) * alpha4 +
                 rp.veloRoe * alpha1 + alpha23VT;
@@ -1110,7 +1134,7 @@ namespace DNDS::Euler::Gas
      * @param[out] lam123  |V_n| after entropy fixing.
      * @param[out] lam4    |V_n + a| after entropy fixing.
      */
-    template <int dim = 3, int eigScheme = 0, bool variableGamma = false,
+    template <int dim = 3, int eigScheme = 0, bool variableGamma = false, bool variableBaseEnergy = variableGamma,
               typename TUL, typename TUR,
               typename TULm, typename TURm,
               typename TVecVG, typename TVecN,
@@ -1195,8 +1219,23 @@ namespace DNDS::Euler::Gas
 
         TVec alpha23V = incU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) - incU(0) * rp.veloRoe;
         TVec alpha23VT = alpha23V - n * alpha23V.dot(n);
-        real incU4b = incU(dim + 1) - (rhoE_base_R - rhoE_base_L) - alpha23VT.dot(rp.veloRoe);
-        real alpha1 = (rp.gammaEqRoe - 1) / rp.asqrRoe *
+        real incU4b = incU(dim + 1) - alpha23VT.dot(rp.veloRoe);
+#ifdef USE_ROE_BASE_ENERGY_CONTACT_FIX
+        if constexpr (variableGamma || variableBaseEnergy)
+        {
+            DNDS_assert_info(rp.gammaEqRoe > 1,
+                             fmt::format("Roe gammaEqRoe must be > 1, got {}", rp.gammaEqRoe));
+            real contactEnergyJump = (rhoE_base_R - rhoE_base_L) +
+                                     pR / (gammaEqRUse - 1) - pL / (gammaEqLUse - 1) -
+                                     (pR - pL) / (rp.gammaEqRoe - 1);
+            incU4b -= contactEnergyJump;
+        }
+#endif
+        real entropyDenom = rp.HRoe - 0.5 * rp.vsqrRoe;
+        DNDS_assert_info(entropyDenom > 0,
+                         fmt::format("Roe entropy/contact denominator must be positive, got {}", entropyDenom));
+        real invEntropyDenom = 1.0 / entropyDenom;
+        real alpha1 = invEntropyDenom *
                       (incU(0) * (rp.HRoe - veloRoeN * veloRoeN) +
                        veloRoeN * incU123N - incU4b);
         real alpha0 = (incU(0) * (veloRoeN + rp.aRoe) - incU123N - rp.aRoe * alpha1) / (2 * rp.aRoe);
@@ -1211,6 +1250,15 @@ namespace DNDS::Euler::Gas
         incF(0) = alpha0 + alpha1 + alpha4;
         incF(dim + 1) = (rp.HRoe - veloRoeN * rp.aRoe) * alpha0 + 0.5 * rp.vsqrRoe * alpha1 +
                         (rp.HRoe + veloRoeN * rp.aRoe) * alpha4 + alpha23VT.dot(rp.veloRoe);
+#ifdef USE_ROE_BASE_ENERGY_CONTACT_FIX
+        if constexpr (variableGamma || variableBaseEnergy)
+        {
+            real contactEnergyJump = (rhoE_base_R - rhoE_base_L) +
+                                     pR / (gammaEqRUse - 1) - pL / (gammaEqLUse - 1) -
+                                     (pR - pL) / (rp.gammaEqRoe - 1);
+            incF(dim + 1) += lam123 * contactEnergyJump;
+        }
+#endif
         incF(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) =
             (rp.veloRoe - rp.aRoe * n) * alpha0 + (rp.veloRoe + rp.aRoe * n) * alpha4 +
             rp.veloRoe * alpha1 + alpha23VT;
@@ -1330,12 +1378,14 @@ namespace DNDS::Euler::Gas
      * @param  lam4     Entropy-fixed eigenvalue |V_n + a|.
      * @param  gammaEqRoe  Roe-averaged pressure/energy closure gamma.
      * @param[in,out] incF  Dissipation flux; accumulated (not zeroed).
+     * @param  contactEnergyJump Pressure-neutral energy increment carried by
+     *                           the contact wave instead of acoustic waves.
      */
     template <int dim = 3, typename TDU, typename TDF, typename TVecV, typename TVecN>
     void RoeFluxIncFDiff(const TDU &incU, const TVecN &n, const TVecV &veloRoe,
                          real vsqrRoe, real aRoe, real asqrRoe, real HRoe,
                          real lam0, real lam123, real lam4, real gammaEqRoe,
-                         TDF &incF)
+                         TDF &incF, real contactEnergyJump = 0)
     {
         static const auto SeqI52Last = Eigen::seq(Eigen::fix<dim + 2>, EigenLast);
         using TVec = Eigen::Vector<real, dim>;
@@ -1346,7 +1396,14 @@ namespace DNDS::Euler::Gas
         TVec alpha23V = incU(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) - incU(0) * veloRoe;
         TVec alpha23VT = alpha23V - n * alpha23V.dot(n);
         real incU4b = incU(dim + 1) - alpha23VT.dot(veloRoe);
-        real alpha1 = (gammaEqRoe - 1) / asqrRoe *
+#ifdef USE_ROE_BASE_ENERGY_CONTACT_FIX
+        incU4b -= contactEnergyJump;
+#endif
+        real entropyDenom = HRoe - 0.5 * vsqrRoe;
+        DNDS_assert_info(entropyDenom > 0,
+                         fmt::format("RoeFluxIncFDiff entropy/contact denominator must be positive, got {}", entropyDenom));
+        real invEntropyDenom = 1.0 / entropyDenom;
+        real alpha1 = invEntropyDenom *
                       (incU(0) * (HRoe - veloRoeN * veloRoeN) +
                        veloRoeN * incU123N - incU4b);
         real alpha0 = (incU(0) * (veloRoeN + aRoe) - incU123N - aRoe * alpha1) / (2 * aRoe);
@@ -1360,6 +1417,9 @@ namespace DNDS::Euler::Gas
         incF(0) += alpha0 + alpha1 + alpha4;
         incF(dim + 1) += (HRoe - veloRoeN * aRoe) * alpha0 + 0.5 * vsqrRoe * alpha1 +
                          (HRoe + veloRoeN * aRoe) * alpha4 + alpha23VT.dot(veloRoe);
+#ifdef USE_ROE_BASE_ENERGY_CONTACT_FIX
+        incF(dim + 1) += lam123 * contactEnergyJump;
+#endif
         incF(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)) +=
             (veloRoe - aRoe * n) * alpha0 + (veloRoe + aRoe * n) * alpha4 +
             veloRoe * alpha1 + alpha23VT;
@@ -1438,6 +1498,11 @@ namespace DNDS::Euler::Gas
 
         TReal_Batch pL, pR;
         pL.resize(nB), pR.resize(nB);
+#ifdef USE_ROE_BASE_ENERGY_CONTACT_FIX
+        TReal_Batch gammaEqLContact, gammaEqRContact;
+        if constexpr (variableGamma || variableBaseEnergy)
+            gammaEqLContact.resize(nB), gammaEqRContact.resize(nB);
+#endif
         real gammaEqLmUse = gammaEq;
         real gammaEqRmUse = gammaEq;
         real gammaLmUse = gamma;
@@ -1472,6 +1537,10 @@ namespace DNDS::Euler::Gas
                 rhoEBase_LUse = rhoE_base_L(iB);
                 rhoEBase_RUse = rhoE_base_R(iB);
             }
+#ifdef USE_ROE_BASE_ENERGY_CONTACT_FIX
+            if constexpr (variableGamma || variableBaseEnergy)
+                gammaEqLContact(iB) = gammaEqLUse, gammaEqRContact(iB) = gammaEqRUse;
+#endif
             IdealGasThermal(UL(dim + 1, iB), UL(0, iB), vsqrL, gammaEqLUse, gammaLUse, pL(iB), asqrL, HL, rhoEBase_LUse);
             IdealGasThermal(UR(dim + 1, iB), UR(0, iB), vsqrR, gammaEqRUse, gammaRUse, pR(iB), asqrR, HR, rhoEBase_RUse);
         }
@@ -1547,12 +1616,28 @@ namespace DNDS::Euler::Gas
         TVec_Batch alpha23VT = alpha23V.array() - n.array().rowwise() * (alpha23V.array() * n.array()).colwise().sum();
         TReal_Batch incU4b =
             incU(dim + 1, EigenAll) - veloRoe.transpose() * alpha23VT;
-        if constexpr (variableBaseEnergy)
-            incU4b -= rhoE_base_R - rhoE_base_L;
-        TReal_Batch alpha1 =
-            (gammaEqRoe - 1) / asqrRoe *
-            (incU(0, EigenAll) * (HRoe - veloRoeN * veloRoeN) +
-             veloRoeN * incU123N - incU4b);
+        if constexpr (variableGamma || variableBaseEnergy)
+        {
+#ifdef USE_ROE_BASE_ENERGY_CONTACT_FIX
+            DNDS_assert_info(gammaEqRoe > 1,
+                             fmt::format("Batched Roe gammaEqRoe must be > 1, got {}", gammaEqRoe));
+            TReal_Batch contactEnergyJump;
+            contactEnergyJump.resize(nB);
+            contactEnergyJump.array() = pR.array() / (gammaEqRContact.array() - 1) -
+                                        pL.array() / (gammaEqLContact.array() - 1) -
+                                        (pR - pL).array() / (gammaEqRoe - 1);
+            if constexpr (variableBaseEnergy)
+                contactEnergyJump.array() += (rhoE_base_R - rhoE_base_L).array();
+            incU4b -= contactEnergyJump;
+#endif
+        }
+        real entropyDenom = HRoe - 0.5 * vsqrRoe;
+        DNDS_assert_info(entropyDenom > 0,
+                         fmt::format("Batched Roe entropy/contact denominator must be positive, got {}", entropyDenom));
+        real invEntropyDenom = 1.0 / entropyDenom;
+        TReal_Batch alpha1 = invEntropyDenom *
+                             (incU(0, EigenAll) * (HRoe - veloRoeN * veloRoeN) +
+                              veloRoeN * incU123N - incU4b);
         TReal_Batch alpha0 =
             (incU(0, EigenAll) * (veloRoeN + aRoe) - incU123N - aRoe * alpha1) / (2 * aRoe);
         TReal_Batch alpha4 =
@@ -1568,6 +1653,19 @@ namespace DNDS::Euler::Gas
         incF(0, EigenAll) = alpha0 + alpha1 + alpha4;
         incF(dim + 1, EigenAll) = (HRoe - veloRoeN * aRoe) * alpha0 + 0.5 * vsqrRoe * alpha1 +
                                   (HRoe + veloRoeN * aRoe) * alpha4 + veloRoe.transpose() * alpha23VT;
+#ifdef USE_ROE_BASE_ENERGY_CONTACT_FIX
+        if constexpr (variableGamma || variableBaseEnergy)
+        {
+            TReal_Batch contactEnergyJump;
+            contactEnergyJump.resize(nB);
+            contactEnergyJump.array() = pR.array() / (gammaEqRContact.array() - 1) -
+                                        pL.array() / (gammaEqLContact.array() - 1) -
+                                        (pR - pL).array() / (gammaEqRoe - 1);
+            if constexpr (variableBaseEnergy)
+                contactEnergyJump.array() += (rhoE_base_R - rhoE_base_L).array();
+            incF(dim + 1, EigenAll) += lam123 * contactEnergyJump;
+        }
+#endif
         incF(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>), EigenAll) =
             ((-aRoe * n).array().colwise() + veloRoe.array()).rowwise() * alpha0.array() +
             ((aRoe * n).array().colwise() + veloRoe.array()).rowwise() * alpha4.array() +

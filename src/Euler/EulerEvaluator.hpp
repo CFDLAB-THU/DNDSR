@@ -1263,9 +1263,26 @@ namespace DNDS::Euler
                     //     dF);
                 }
                 // lambda0 = lambda123 = lambda4 = aRoe + std::abs(veloRoe.dot(n));
+                real contactEnergyJump = 0;
+#ifdef USE_ROE_BASE_ENERGY_CONTACT_FIX
+                if (phys_.hasChemicalSource())
+                {
+                    TVec alpha23V = dU(Seq123) - dU(0) * veloRoe;
+                    TVec alpha23VT = alpha23V - n * alpha23V.dot(n);
+                    real incU4b = dU(I4) - alpha23VT.dot(veloRoe);
+                    TVec dVeloRoe;
+                    real dpRoe = 0;
+                    Gas::IdealGasUIncrement<dim>(
+                        uMean, dU, veloRoe, gammaEqRoe, dVeloRoe, dpRoe,
+                        phys_.mixtureBaseInternalRhoEIncrement(dU));
+                    DNDS_assert_info(gammaEqRoe > 1,
+                                     fmt::format("Roe Jacobian gammaEqRoe must be > 1, got {}", gammaEqRoe));
+                    contactEnergyJump = incU4b - dpRoe / (gammaEqRoe - 1);
+                }
+#endif
                 Gas::RoeFluxIncFDiff<dim>(dU, n, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe,
                                           incFsign * lambda0, incFsign * lambda123, incFsign * lambda4, gammaEqRoe,
-                                          dF);
+                                          dF, contactEnergyJump);
                 dF += incFsign * lambdaVis * dU;
             }
             //! now dF(U, dU) (GasInviscidFluxFacialIncrement) part actually treats the SeqI52Last part (as passive scalars)

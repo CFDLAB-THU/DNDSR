@@ -14,18 +14,20 @@ Key physical assumptions to preserve:
 
 ## Status Summary
 
-Open findings: 33
+Open findings: 36
 
 Withdrawn findings: 2 (`RMS-AUDIT-001`, `RMS-AUDIT-016`)
 
-Fixed in working tree: 7 (`RMS-AUDIT-002`, `RMS-AUDIT-003`, `RMS-AUDIT-005`, `RMS-AUDIT-008`, `RMS-AUDIT-011`, `RMS-AUDIT-012`, `RMS-AUDIT-032`)
+Fixed in working tree: 9 (`RMS-AUDIT-002`, `RMS-AUDIT-003`, `RMS-AUDIT-005`, `RMS-AUDIT-008`, `RMS-AUDIT-011`, `RMS-AUDIT-012`, `RMS-AUDIT-043`, `RMS-AUDIT-044`, `RMS-AUDIT-048`)
+
+Partially fixed in working tree: 1 (`RMS-AUDIT-032`)
 
 Severity counts:
 
 | Severity | Count |
 | --- | ---: |
 | High | 0 |
-| Medium | 27 |
+| Medium | 30 |
 | Low | 6 |
 
 Category counts:
@@ -35,8 +37,9 @@ Category counts:
 | Reactive source control | 1 |
 | Positivity / thermodynamics | 2 |
 | Chemical Jacobian | 1 |
-| Flux / multispecies numerics | 0 |
+| Flux / multispecies numerics | 1 |
 | Boundary / transport units | 0 |
+| Viscous / transport | 2 |
 | Cases / configuration / schema | 4 |
 | Mesh / MPI geometry state | 16 |
 | Geometry Python / device / usability | 5 |
@@ -159,7 +162,31 @@ Impact: A pure composition contact with equal `rho`, velocity, and pressure but 
 
 Suggested fix: in Roe acoustic decomposition, use `Delta E_sensible = Delta E_total - Delta rhoE_base` for acoustic alphas while preserving total energy in conservative fluxes. Apply to scalar, batched, and implicit Roe-dissipation helper paths. Add a two-state multispecies contact test with same `rho/u/p` and different valid `Y`.
 
-Status: Fixed in working tree. Scalar and batched Roe acoustic decomposition now subtract the base-energy jump from the energy jump used in acoustic wave strengths (`src/Euler/Gas.hpp:1198`, `src/Euler/Gas.hpp:1548-1556`).
+Status: Partially fixed in working tree. Scalar and batched Roe acoustic decomposition now subtract the base-energy jump from the energy jump used in acoustic wave strengths (`src/Euler/Gas.hpp:1198`, `src/Euler/Gas.hpp:1548-1556`). RMS-AUDIT-043 is fixed; RMS-AUDIT-045 still tracks the implicit-dissipation helper question.
+
+#### RMS-AUDIT-043 — High — Roe species upwinding lacks matching base-energy contact flux
+
+Evidence: acoustic base-energy subtraction at `src/Euler/Gas.hpp:1198` and `src/Euler/Gas.hpp:1548-1551`, energy dissipative flux assembly at `src/Euler/Gas.hpp:1212` and `src/Euler/Gas.hpp:1568-1579`, passive/species flux handling via `lambdaFaceCC` around `src/Euler/EulerEvaluator_EvaluateDt.hxx:1593-1597`
+
+The Roe acoustic fix subtracts `rhoE_base_R - rhoE_base_L` from acoustic energy jumps, but it does not add a separate contact/passive energy correction corresponding to upwinded species transport. Extended species are still transported as passive variables, while the base-energy portion of total energy can remain centered.
+
+Impact: For a moving pure-composition contact with equal `rho`, velocity, and pressure but different species base energies, species can be upwinded without the matching base-energy transport in total energy. This can create sensible-energy/pressure errors as composition advects.
+
+Suggested fix: keep acoustic jumps base-adjusted, but add a contact/passive total-energy correction consistent with the same species mass flux, including dependent species. Apply to scalar and batched Roe paths. Add a moving multispecies-contact regression that checks pressure preservation after one FV update.
+
+Status: Fixed in working tree. `USE_ROE_BASE_ENERGY_CONTACT_FIX` now carries base-energy jumps through the contact wave for scalar and batched Roe fluxes, with unit tests for selected-mode identity reconstruction and pure composition-contact flux sanity.
+
+#### RMS-AUDIT-045 — Medium — Implicit Roe dissipation helper approximates variable-`gammaEq` contact jumps
+
+Evidence: `src/Euler/Gas.hpp:1382-1415`, caller at `src/Euler/EulerEvaluator.hpp:1266-1285`
+
+`RoeFluxIncFDiff()` now accepts a pressure-neutral contact-energy increment, and the reactive caller passes one based on a frozen-`gammaEqRoe` pressure increment around the Roe mean state. This fixes the base-energy increment part, but it still does not model `d(gammaEq)` from composition/temperature changes in the implicit perturbation.
+
+Impact: The implicit Roe/LU-SGS dissipation is better aligned with reactive base-energy bookkeeping, but composition perturbations that change `gammaEq` without a matching base-energy increment can still be approximate relative to the face Roe contact correction.
+
+Suggested fix: add a targeted finite-difference test for `fluxJacobian0_Right_Times_du()` on composition perturbations that change `gammaEq`; if the approximation is too crude, pass a more complete contact-energy increment including the linearized `gammaEq` contribution.
+
+Status: Partially fixed in working tree; pending targeted finite-difference validation.
 
 ### Boundary Conditions / Units
 
@@ -186,6 +213,44 @@ Impact: With non-unit `rho0`, `U0`, or `L0`, viscous and RANS terms can mix phys
 Suggested fix: make `muRef()` and non-Cantera viscosity paths return `muGas / mu0()`, and pass code-scaled viscosity into RANS contributors or rename/configure the field explicitly as code-scaled. Add a nondimensional viscous-flux test under changed reference scales.
 
 Status: Fixed in working tree. `muRef()` and non-Cantera `mixtureViscosity()` now return code-scaled viscosity, and RANS source contributors receive code-scaled `muGas`.
+
+### Viscous / Transport
+
+#### RMS-AUDIT-046 — Medium — Reactive RANS lacks turbulent species diffusion
+
+Evidence: RANS viscous heat/momentum augmentation at `src/Euler/EulerEvaluator_EvaluateDt.hxx:1203-1230`, species diffusion closure at `src/Euler/Physics/PhysicsProperties.hpp:1112-1153`
+
+Reactive viscous flux adds turbulent viscosity to momentum and turbulent heat conductivity to energy, but `addMixtureAveragedSpeciesDiffusionFlux()` uses only Cantera molecular species diffusivities. No turbulent Schmidt-number term is added to species fluxes or to the corresponding species-enthalpy diffusion term.
+
+Impact: Reactive RANS cases can have turbulent heat and momentum diffusion without turbulent species mixing. Composition fields can remain too sharp, and species enthalpy transport becomes inconsistent with the modeled turbulent heat/momentum transport.
+
+Suggested fix: add a configurable turbulent species diffusivity, for example `D_t = mu_t / (rho * Sc_t)`, to the species diffusion closure and correction velocity, and use the augmented `J_k` for the enthalpy flux. Add a RANS reactive face-flux test with nonzero `muTurb` and `grad Y`.
+
+Status: Open. TODO documented in `src/Euler/EulerEvaluator_EvaluateDt.hxx:1206-1210`.
+
+#### RMS-AUDIT-047 — Medium — Viscous spectral radius ignores species diffusion timescale
+
+Evidence: `src/Euler/EulerEvaluator_EvaluateDt.hxx:980-990`, species diffusivity API at `src/Euler/Physics/PhysicsProperties.hpp:1523-1537`
+
+The reactive viscous spectral radius uses momentum and thermal diffusivity only: `max(4/3*muf/rho, k/(rho*Cv))`. Species diffusivities from `mixtureDiffusivity()` are not included, even though species diffusion appears in the RHS flux.
+
+Impact: If a species diffusivity exceeds thermal/momentum diffusivity, timestep limits and implicit face eigenvalues underpredict diffusive stiffness, which can destabilize explicit/local-time stepping or weaken implicit damping.
+
+Suggested fix: include `max_k(D_k)` in `lamVis`, and include `mu_t/(rho*Sc_t)` if turbulent species diffusion is added. Add a test/mocked transport case where species diffusivity dominates thermal and momentum diffusivity.
+
+Status: Open. TODO documented in `src/Euler/EulerEvaluator_EvaluateDt.hxx:982-988`.
+
+#### RMS-AUDIT-048 — Medium — Isothermal wall RANS formulas use cell temperature viscosity
+
+Evidence: isothermal wall ghost construction at `src/Euler/EulerEvaluator_EvaluateDt.hxx:2624-2639`, RANS wall formulas at `src/Euler/EulerEvaluator_EvaluateDt.hxx:2656-2673`
+
+`BCWallIsothermal` enforces the wall ghost temperature, but the two-equation RANS wall formulas compute `mufPhy1 = muEff(ULMeanXy, T)` from the interior cell-mean temperature, not the wall/ghost state temperature.
+
+Impact: With Sutherland or Cantera transport, k-omega/epsilon wall boundary values use the wrong laminar viscosity when `T_wall != T_cell`, affecting near-wall turbulence and heat-transfer predictions.
+
+Suggested fix: for `BCWallIsothermal`, evaluate viscosity from the wall ghost/primitive state after temperature enforcement, or document and implement a clear face/wall averaging rule. Add an isothermal-wall test where `T_wall` differs strongly from cell temperature.
+
+Status: Fixed in working tree. Two-equation RANS wall formulas now evaluate laminar viscosity from the isothermal wall ghost state when `BCWallIsothermal` is active (`src/Euler/EulerEvaluator_EvaluateDt.hxx:2656-2673`).
 
 ### Cases / Configuration / Schema
 
@@ -248,6 +313,18 @@ Impact: Users can tune advertised controls with no effect on timestep limiting, 
 Suggested fix: wire these fields into their intended runtime paths, or mark them reserved and reject non-default values during config finalization. Add a config-validation test that non-default values either affect runtime controls observably or fail clearly.
 
 Status: Open.
+
+#### RMS-AUDIT-044 — Medium — `reactiveSourceScale` lacks finite nonnegative validation in coupled source path
+
+Evidence: field declaration around `src/Euler/EulerEvaluatorSettings.hpp:449` and JSON registration around `src/Euler/EulerEvaluatorSettings.hpp:782`; coupled source use at `src/Euler/SourceTermContributor.hpp:418-457` and `src/Euler/SourceTermContributor.hpp:484`; Strang validation at `src/Euler/EulerEvaluator.hxx:1788-1791`
+
+`reactiveSourceScale` is not range-validated in configuration finalization. The coupled source contributor only no-ops when `sourceScale_ == 0.0`, then multiplies RHS/Jacobian by the value. The Strang path separately rejects negative/non-finite scales.
+
+Impact: Negative or NaN source scales can invert or poison the coupled RHS/Jacobian while Strang rejects the same configuration. Tau splitting also bypasses when the scale is not positive, so a negative scale disables tau splitting but still leaves negative chemistry active in the coupled path.
+
+Suggested fix: validate `reactiveSourceScale` as finite and `>= 0` in config/schema/finalization, unless signed scaling is explicitly intended and made consistent across all source paths. Add config validation tests for negative and non-finite values.
+
+Status: Fixed in working tree. `reactiveSourceScale` now uses config metadata `DNDS::Config::range(0, 1)` for schema and read-time validation (`src/Euler/EulerEvaluatorSettings.hpp:782-783`).
 
 ### Mesh / MPI Geometry State
 
@@ -652,3 +729,13 @@ Subagent: one `ReorderEntities()`-only auditor.
 New findings: RMS-AUDIT-042.
 
 Disposition: stop automated audit rounds for this session. The new findings in rounds 3-6 are concentrated in `ReorderEntities()` variants; additional review should likely start by fixing or formally disabling unsupported reorder modes, then re-auditing that subsystem. Continuing to launch more agents before that design decision is likely to produce more variants of the same unsupported-mode problem rather than independent audit coverage.
+
+### Round 7 — Focused Scaling / Flux / Transport Audit
+
+Subagents: code/physics scaling and state layout, Riemann/inviscid flux, viscous/transport flux.
+
+New findings: RMS-AUDIT-043 through RMS-AUDIT-048.
+
+Corrections: RMS-AUDIT-032 reclassified as partially fixed; the acoustic pressure-wave coupling was fixed, but base-energy contact transport and implicit Roe-dissipation consistency remain open follow-ups.
+
+Disposition: next work should prioritize Roe multispecies contact energy consistency, implicit Roe-dissipation base-energy awareness, and reactive transport/RANS diffusivity consistency.

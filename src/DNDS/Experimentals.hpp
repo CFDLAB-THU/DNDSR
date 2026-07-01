@@ -27,6 +27,12 @@
 
 // #define USE_SIGN_MINUS_AT_ROE_M4_FLUX
 
+/// @brief Remove pressure-neutral composition-energy jumps from Roe acoustic
+/// strengths and carry them through the contact wave.  Undefine to recover the
+/// original total-energy contact handling while keeping current split-gamma
+/// eigenvector normalization.
+#define USE_ROE_BASE_ENERGY_CONTACT_FIX
+
 /// @brief Use first-order viscous wall distance inside the VR weight calculation.
 #define USE_FIRST_ORDER_VISCOUS_WALL_DELTA_IN_VR_WEIGHT
 
@@ -77,6 +83,9 @@ static const std::string DNDS_Experimentals_State = std::string("DNDS_Experiment
 #endif
 #ifdef USE_SIGN_MINUS_AT_ROE_M4_FLUX
                                                     + " USE_SIGN_MINUS_AT_ROE_M4_FLUX "
+#endif
+#ifdef USE_ROE_BASE_ENERGY_CONTACT_FIX
+                                                    + " USE_ROE_BASE_ENERGY_CONTACT_FIX "
 #endif
 #ifdef USE_FIRST_ORDER_VISCOUS_WALL_DELTA_IN_VR_WEIGHT
                                                     + " USE_FIRST_ORDER_VISCOUS_WALL_DELTA_IN_VR_WEIGHT "
