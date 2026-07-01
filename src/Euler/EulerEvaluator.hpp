@@ -296,7 +296,7 @@ namespace DNDS::Euler
             this->GetWallDist();
 
             if constexpr (Traits::isExtended)
-                sourceContributors = buildSourceContributors(settings, nVars, axisSymmetric);
+                sourceContributors = buildSourceContributors(settings, phys_, nVars, axisSymmetric);
 
             // Wire ChemicalSource into physics module (extract from contributor list)
             for (auto &c : sourceContributors)

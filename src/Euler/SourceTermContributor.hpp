@@ -15,6 +15,7 @@
 #include "RANS_ke.hpp"
 #include "Chemistry/ChemicalSource.hpp"
 #include "EulerEvaluatorSettings.hpp"
+#include "Physics/PhysicsProperties.hpp"
 #include "DNDS/EnvReader.hpp"
 #include <Eigen/Eigenvalues>
 #include <filesystem>
@@ -581,7 +582,8 @@ namespace DNDS::Euler
 
     template <EulerModel model>
     inline std::vector<SourceTermVariant<model>> buildSourceContributors(
-        const EulerEvaluatorSettings<model> &settings, int nVars, int axisSymmetric)
+        const EulerEvaluatorSettings<model> &settings, const PhysicsProperties<model> &phys,
+        int nVars, int axisSymmetric)
     {
         using Traits = EulerModelTraits<model>;
         if (!Traits::isExtended)
@@ -595,8 +597,7 @@ namespace DNDS::Euler
         if (axisSymmetric)
             contribs.push_back(AxisymmetricContributor<model>{true});
 
-        real muGasCode = settings.idealGasProperty.muGas /
-                         (settings.idealGasProperty.rho0 * settings.idealGasProperty.U0 * settings.idealGasProperty.L0);
+        real muGasCode = phys.muRef();
         switch (settings.ransModel)
         {
         case RANS_SA:
