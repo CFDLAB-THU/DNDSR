@@ -14,30 +14,30 @@ Key physical assumptions to preserve:
 
 ## Status Summary
 
-Open findings: 36
+Open findings: 33
 
 Withdrawn findings: 2 (`RMS-AUDIT-001`, `RMS-AUDIT-016`)
 
-Fixed in working tree: 4 (`RMS-AUDIT-003`, `RMS-AUDIT-005`, `RMS-AUDIT-008`, `RMS-AUDIT-032`)
+Fixed in working tree: 7 (`RMS-AUDIT-002`, `RMS-AUDIT-003`, `RMS-AUDIT-005`, `RMS-AUDIT-008`, `RMS-AUDIT-011`, `RMS-AUDIT-012`, `RMS-AUDIT-032`)
 
 Severity counts:
 
 | Severity | Count |
 | --- | ---: |
 | High | 0 |
-| Medium | 30 |
+| Medium | 27 |
 | Low | 6 |
 
 Category counts:
 
 | Category | Count |
 | --- | ---: |
-| Reactive source control | 2 |
+| Reactive source control | 1 |
 | Positivity / thermodynamics | 2 |
 | Chemical Jacobian | 1 |
 | Flux / multispecies numerics | 0 |
-| Boundary / transport units | 1 |
-| Cases / configuration / schema | 5 |
+| Boundary / transport units | 0 |
+| Cases / configuration / schema | 4 |
 | Mesh / MPI geometry state | 16 |
 | Geometry Python / device / usability | 5 |
 | Geometry output robustness | 1 |
@@ -69,7 +69,7 @@ Impact: Setting `reactiveSourceScale = 0` for nonreactive debugging can still ch
 
 Suggested fix: disable tau splitting when `reactiveSourceScale == 0`, or reformulate the split source update so zero source and zero source Jacobian produce an exact identity update.
 
-Status: Open.
+Status: Fixed in working tree. `src/Euler/EulerSolver.hxx:155-163` now separates requested vs active tau splitting and bypasses the split when `reactiveSourceScale <= 0`, with an explicit comment that the split is not identity-preserving in the `S -> 0` limit.
 
 #### RMS-AUDIT-015 — Low — Point-implicit source update accepts warm cache but does not refresh it
 
@@ -145,7 +145,7 @@ Impact: Near positivity recovery states below the chemistry floor, the source RH
 
 Suggested fix: when the floor is active, assemble the Jacobian of the clamped RHS: zero temperature-derivative columns caused solely by `T(U)`, zero momentum/rhoE couplings through `T`, and retain only valid density/composition effects at fixed `Tfloor`. Add finite-difference checks below `TBase`.
 
-Status: Open.
+Status: Open, pending discussion. A linearization that ignores clamp-boundary derivatives may be acceptable for robustness near invalid states; the remaining question is whether the Jacobian should simply approximate the smooth interior function or explicitly model the clamped source.
 
 ### Flux / Multispecies Numerics
 
@@ -185,7 +185,7 @@ Impact: With non-unit `rho0`, `U0`, or `L0`, viscous and RANS terms can mix phys
 
 Suggested fix: make `muRef()` and non-Cantera viscosity paths return `muGas / mu0()`, and pass code-scaled viscosity into RANS contributors or rename/configure the field explicitly as code-scaled. Add a nondimensional viscous-flux test under changed reference scales.
 
-Status: Open.
+Status: Fixed in working tree. `muRef()` and non-Cantera `mixtureViscosity()` now return code-scaled viscosity, and RANS source contributors receive code-scaled `muGas`.
 
 ### Cases / Configuration / Schema
 
@@ -199,7 +199,7 @@ Impact: Reactive example cases can fail mechanism validation/loading depending o
 
 Suggested fix: only prepend `DNDS_MECH_PATH` for bare filenames, or implement clear precedence: absolute path, working-directory/project-relative path, then `DNDS_MECH_PATH`/Cantera search. Normalize committed cases to one convention and test both path modes.
 
-Status: Open.
+Status: Fixed in working tree. Mechanism resolution now uses the configured path if it exists, otherwise falls back through `DNDS_MECH_PATH`, otherwise leaves bare filenames to Cantera's data search.
 
 #### RMS-AUDIT-013 — Low — Non-EX schemas advertise reactive flow settings that runtime rejects
 
@@ -285,7 +285,7 @@ Impact: Ghost-cell `cell2face` rows can contain negative encoded face IDs for gh
 
 Suggested fix: before converting pulled ghost `cell2face` rows, expand the face ghost map to include all global faces in pulled ghost-cell rows, or trim/clear ghost rows and document that only owner rows are valid. Add assertions around consumers that require complete ghost rows.
 
-Status: Open.
+Status: Open, pending reclassification. Negative encoded IDs after local conversion are expected for referenced entities that are not locally stored; this should be treated as a consumer-contract issue only if downstream code dereferences those entries as local IDs.
 
 #### RMS-AUDIT-020 — Medium — Ghost DSL can include `UnInitIndex` as a requested ghost entity
 

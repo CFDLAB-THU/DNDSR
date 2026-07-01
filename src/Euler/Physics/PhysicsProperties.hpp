@@ -363,7 +363,7 @@ namespace DNDS::Euler
         /// Constant gamma (no state needed) — for initialization / analytic fields.
         [[nodiscard]] real gammaConst() const { return igProp_->gamma; }
 
-        [[nodiscard]] real muRef() const { return igProp_->muGas; }
+        [[nodiscard]] real muRef() const { return igProp_->muGas / mu0(); }
         [[nodiscard]] real Pr() const { return igProp_->prGas; }
         [[nodiscard]] real TRef() const { return igProp_->TRef; }
         [[nodiscard]] real CSutherland() const { return igProp_->CSutherland; }
@@ -1488,19 +1488,19 @@ namespace DNDS::Euler
             switch (igProp_->muModel)
             {
             case 0:
-                return igProp_->muGas;
+                return igProp_->muGas / mu0();
             case 1: // Sutherland: μ = μ_ref * (T/T_ref)^1.5 * (T_ref + C) / (T + C)
             {
                 real TRefCode = toCodeT(igProp_->TRef);
                 real CSuthCode = toCodeT(igProp_->CSutherland);
                 real TRel = T / TRefCode;
-                return igProp_->muGas * TRel * std::sqrt(TRel) * (TRefCode + CSuthCode) / (T + CSuthCode);
+                return (igProp_->muGas / mu0()) * TRel * std::sqrt(TRel) * (TRefCode + CSuthCode) / (T + CSuthCode);
             }
             case 2:
-                return igProp_->muGas * U[0];
+                return (igProp_->muGas / mu0()) * U[0];
             default:
                 DNDS_assert_info(false, fmt::format("mixtureViscosity: unrecognized muModel={}", igProp_->muModel));
-                return igProp_->muGas;
+                return igProp_->muGas / mu0();
             }
         }
         auto Y = massFractionsVector(U);
