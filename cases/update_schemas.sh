@@ -22,9 +22,16 @@ for v in "${VARIANTS[@]}"; do
         echo "SKIP $v: $exe not found or not executable" >&2
         continue
     fi
-    mpirun -np 1 "$exe" --emit-schema 2>/dev/null \
-        | grep -v '^JSON:' > "$out"
-    echo "  $v -> $(basename "$out")"
+    tmp="${out}.tmp.$$"
+    if mpirun -np 1 "$exe" --emit-schema 2>/dev/null \
+        | grep -v '^JSON:' > "$tmp"; then
+        mv "$tmp" "$out"
+        echo "  $v -> $(basename "$out")"
+    else
+        rm -f "$tmp"
+        echo "FAIL $v: mpirun pipeline failed" >&2
+        exit 1
+    fi
 done
 
 echo "Done."

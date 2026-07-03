@@ -1183,6 +1183,9 @@ namespace DNDS::Euler
             // ---- 4. Mechanism file ----
             if (config.eulerSettings.reactiveFlow.enabled)
             {
+#ifndef DNDS_USE_CANTERA
+                DNDS_check_throw_info(false, "reactiveFlow.enabled requires DNDS_USE_CANTERA=ON");
+#endif
                 const std::string &mechFile = config.eulerSettings.reactiveFlow.mechanismFile;
                 std::filesystem::path mechPath(mechFile);
                 std::filesystem::path mechFSPath;

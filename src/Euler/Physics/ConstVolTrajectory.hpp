@@ -2,7 +2,9 @@
 
 #include "PhysicsProperties.hpp"
 
-#include "cantera/zerodim.h"
+#ifdef DNDS_USE_CANTERA
+#    include "cantera/zerodim.h"
+#endif
 
 #include <Eigen/Dense>
 
@@ -77,6 +79,28 @@ namespace DNDS::Euler::Reactive0D
         std::vector<double> Y(Ns);
         chem.massFractions(U[0], U.data() + Isp, Ns1, {Y.data(), Ns});
         return Y;
+    }
+
+    template <EulerModel model, int dim>
+    inline void repairSpeciesSimplex(PhysicsProperties<model> &phys, Eigen::VectorXd &U)
+    {
+        int Ns = phys.nSpecies();
+        int Ns1 = Ns - 1;
+        int nVars = static_cast<int>(U.size());
+        int Isp = nVars - Ns1;
+        DNDS_check_throw_info(U[0] > 0, "ConstVolTrajectory species repair requires positive density");
+        double sumRhoY = 0.0;
+        for (int k = 0; k < Ns1; ++k)
+        {
+            U[Isp + k] = std::max(U[Isp + k], 0.0);
+            sumRhoY += U[Isp + k];
+        }
+        if (sumRhoY >= U[0])
+        {
+            const double scale = U[0] * (1.0 - 1e-14) / sumRhoY;
+            for (int k = 0; k < Ns1; ++k)
+                U[Isp + k] *= scale;
+        }
     }
 
     template <EulerModel model, int dim>
@@ -161,8 +185,7 @@ namespace DNDS::Euler::Reactive0D
             finalStepNorm = dU.lpNorm<Eigen::Infinity>();
             DNDS_check_throw_info(std::isfinite(finalStepNorm), "ConstVolTrajectory Newton produced non-finite update");
             Uk += dU;
-            for (int k = Isp; k < nVars; ++k)
-                Uk[k] = std::max(Uk[k], 1e-30);
+            repairSpeciesSimplex<model, dim>(phys, Uk);
             if (finalStepNorm < options.newtonTolerance)
             {
                 converged = true;
@@ -200,6 +223,7 @@ namespace DNDS::Euler::Reactive0D
                                                          const StateSample &initial,
                                                          const std::vector<StateSample> &times)
     {
+#ifdef DNDS_USE_CANTERA
         validateCaseScales(c);
         DNDS_check_throw_info(c.U.size() > 0, "ConstVolTrajectory Cantera reference requires a nonempty state vector");
         DNDS_check_throw_info(!times.empty(), "ConstVolTrajectory Cantera reference requires nonempty sample times");
@@ -226,6 +250,14 @@ namespace DNDS::Euler::Reactive0D
             lastTime = target.tPhys;
         }
         return out;
+#else
+        (void)c;
+        (void)mechPath;
+        (void)initial;
+        (void)times;
+        DNDS_check_throw_info(false, "ConstVolTrajectory Cantera reference requires DNDS_USE_CANTERA=ON");
+        return {};
+#endif
     }
 
     inline double ignitionTime(const std::vector<StateSample> &hist, double threshold)

@@ -2146,19 +2146,19 @@
                         "CFLScale": {
                             "type": "number",
                             "default": 1.0,
-                            "description": "CFL reduction factor for stiff chemistry",
-                            "minimum": 0.0
+                            "description": "Point-implicit chemistry pseudo-time multiplier",
+                            "minimum": 2.2250738585072014e-308
                         },
                         "chemRelaxEps": {
                             "type": "number",
-                            "default": 0.001,
-                            "description": "Pseudo-transient relaxation epsilon",
+                            "default": 0.0,
+                            "description": "Minimum point-implicit chemistry pseudo-time step",
                             "minimum": 0.0
                         },
                         "chemAbsTol": {
                             "type": "number",
                             "default": 1e-10,
-                            "description": "Absolute species tolerance",
+                            "description": "Absolute point-implicit chemistry residual tolerance",
                             "minimum": 0.0
                         },
                         "TBase": {

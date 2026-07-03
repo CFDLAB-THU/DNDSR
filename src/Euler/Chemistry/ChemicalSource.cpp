@@ -23,7 +23,6 @@
 namespace DNDS::Euler::Chemistry
 {
 
-#ifdef DNDS_USE_CANTERA
     namespace
     {
         std::string normalizeTransportModel(std::string model)
@@ -54,6 +53,7 @@ namespace DNDS::Euler::Chemistry
             return out;
         }
 
+#ifdef DNDS_USE_CANTERA
         class AffineIdealGasConstVolReactor : public Cantera::IdealGasReactor
         {
         public:
@@ -123,8 +123,8 @@ namespace DNDS::Euler::Chemistry
         private:
             double chemistryScale_ = 1.0;
         };
+#endif
     }
-#endif // DNDS_USE_CANTERA
 
     struct ChemicalSource::Impl
     {
