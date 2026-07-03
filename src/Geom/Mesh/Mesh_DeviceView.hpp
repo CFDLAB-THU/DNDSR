@@ -173,6 +173,7 @@ namespace DNDS::Geom
         MeshAdjState adjC2FState{Adj_Unknown};
         MeshAdjState adjN2CBState{Adj_Unknown};
         MeshAdjState adjEdgeState{Adj_Unknown};
+        bool hasNodeWallDist{false};
         // state of: cell2cellFace
         // MeshAdjState adjC2CFaceState{Adj_Unknown};
 
@@ -189,6 +190,7 @@ namespace DNDS::Geom
         /// periodic only, after reader
         tPbiPair::t_deviceView<B> cell2nodePbi;
         tPbiPair::t_deviceView<B> bnd2nodePbi;
+        tCoordPair::t_deviceView<B> nodeWallDist;
 
         auto device_array_list_primary()
         {
@@ -201,7 +203,8 @@ namespace DNDS::Geom
                 DNDS_MAKE_1_MEMBER_REF(cellElemInfo),
                 DNDS_MAKE_1_MEMBER_REF(bndElemInfo),
                 DNDS_MAKE_1_MEMBER_REF(cell2nodePbi),
-                DNDS_MAKE_1_MEMBER_REF(bnd2nodePbi));
+                DNDS_MAKE_1_MEMBER_REF(bnd2nodePbi),
+                DNDS_MAKE_1_MEMBER_REF(nodeWallDist));
         }
 
         template <class TMain>
@@ -219,6 +222,8 @@ namespace DNDS::Geom
                 DNDS_COPY_MEMBER_VIEW(m_obj, cell2nodePbi);
                 DNDS_COPY_MEMBER_VIEW(m_obj, bnd2nodePbi);
             }
+            if (hasNodeWallDist)
+                DNDS_COPY_MEMBER_VIEW(m_obj, nodeWallDist);
         }
 
         AdjPairTrackedDeviceView<B, tAdjPair::t_arr> node2cell;
@@ -336,6 +341,7 @@ namespace DNDS::Geom
             DNDS_COPY_MEMBER(mesh, adjC2FState);
             DNDS_COPY_MEMBER(mesh, adjN2CBState);
             DNDS_COPY_MEMBER(mesh, adjEdgeState);
+            hasNodeWallDist = bool(mesh.nodeWallDist.father) && bool(mesh.nodeWallDist.son);
             // DNDS_COPY_MEMBER(mesh, adjC2CFaceState);
 
             if (adjPrimaryState && mesh.cell2node.isBuilt())
@@ -501,19 +507,21 @@ namespace DNDS::Geom
             return periodicInfo.GetCoordByBits(coords[face2node(iFace, if2n)], face2nodePbi(iFace, if2n));
         }
 
-        // tPoint GetCoordWallDistOnCell(index iCell, rowsize ic2n)
-        // {
-        //     if (!isPeriodic)
-        //         return nodeWallDist[cell2node(iCell, ic2n)];
-        //     return periodicInfo.GetVectorByBits<3, 1>(nodeWallDist[cell2node(iCell, ic2n)], cell2nodePbi(iCell, ic2n));
-        // }
+        DNDS_DEVICE_CALLABLE tPoint GetCoordWallDistOnCell(index iCell, rowsize ic2n)
+        {
+            DNDS_assert(hasNodeWallDist);
+            if (!isPeriodic)
+                return nodeWallDist[cell2node(iCell, ic2n)];
+            return periodicInfo.GetVectorByBits<3, 1>(nodeWallDist[cell2node(iCell, ic2n)], cell2nodePbi(iCell, ic2n));
+        }
 
-        // tPoint GetCoordWallDistOnFace(index iFace, rowsize if2n)
-        // {
-        //     if (!isPeriodic)
-        //         return nodeWallDist[face2node(iFace, if2n)];
-        //     return periodicInfo.GetVectorByBits<3, 1>(nodeWallDist[face2node(iFace, if2n)], face2nodePbi(iFace, if2n));
-        // }
+        DNDS_DEVICE_CALLABLE tPoint GetCoordWallDistOnFace(index iFace, rowsize if2n)
+        {
+            DNDS_assert(hasNodeWallDist);
+            if (!isPeriodic)
+                return nodeWallDist[face2node(iFace, if2n)];
+            return periodicInfo.GetVectorByBits<3, 1>(nodeWallDist[face2node(iFace, if2n)], face2nodePbi(iFace, if2n));
+        }
 
         DNDS_DEVICE_CALLABLE [[nodiscard]] bool CellIsFaceBack(index iCell, index iFace, rowsize ic2f) const
         {

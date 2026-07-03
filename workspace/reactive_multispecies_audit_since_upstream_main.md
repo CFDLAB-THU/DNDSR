@@ -14,19 +14,21 @@ Key physical assumptions to preserve:
 
 ## Status Summary
 
-Open findings: 24
+Open findings: 17
 
 Withdrawn findings: 2 (`RMS-AUDIT-001`, `RMS-AUDIT-016`)
 
-Fixed/resolved in working tree: 22 (`RMS-AUDIT-002`, `RMS-AUDIT-003`, `RMS-AUDIT-004`, `RMS-AUDIT-005`, `RMS-AUDIT-008`, `RMS-AUDIT-009`, `RMS-AUDIT-010`, `RMS-AUDIT-011`, `RMS-AUDIT-012`, `RMS-AUDIT-013`, `RMS-AUDIT-015`, `RMS-AUDIT-017`, `RMS-AUDIT-019`, `RMS-AUDIT-032`, `RMS-AUDIT-033`, `RMS-AUDIT-036`, `RMS-AUDIT-043`, `RMS-AUDIT-044`, `RMS-AUDIT-045`, `RMS-AUDIT-046`, `RMS-AUDIT-047`, `RMS-AUDIT-048`)
+Deferred findings: 1 (`RMS-AUDIT-030`)
+
+Fixed/resolved in working tree: 28 (`RMS-AUDIT-002`, `RMS-AUDIT-003`, `RMS-AUDIT-004`, `RMS-AUDIT-005`, `RMS-AUDIT-008`, `RMS-AUDIT-009`, `RMS-AUDIT-010`, `RMS-AUDIT-011`, `RMS-AUDIT-012`, `RMS-AUDIT-013`, `RMS-AUDIT-015`, `RMS-AUDIT-017`, `RMS-AUDIT-018`, `RMS-AUDIT-019`, `RMS-AUDIT-022`, `RMS-AUDIT-027`, `RMS-AUDIT-029`, `RMS-AUDIT-031`, `RMS-AUDIT-032`, `RMS-AUDIT-033`, `RMS-AUDIT-035`, `RMS-AUDIT-036`, `RMS-AUDIT-043`, `RMS-AUDIT-044`, `RMS-AUDIT-045`, `RMS-AUDIT-046`, `RMS-AUDIT-047`, `RMS-AUDIT-048`)
 
 Severity counts:
 
 | Severity | Count |
 | --- | ---: |
 | High | 0 |
-| Medium | 21 |
-| Low | 3 |
+| Medium | 17 |
+| Low | 0 |
 
 Category counts:
 
@@ -38,10 +40,10 @@ Category counts:
 | Flux / multispecies numerics | 0 |
 | Boundary / transport units | 0 |
 | Viscous / transport | 0 |
-| Cases / configuration / schema | 2 |
+| Cases / configuration / schema | 0 |
 | Mesh / MPI geometry state | 16 |
-| Geometry Python / device / usability | 5 |
-| Geometry output robustness | 1 |
+| Geometry Python / device / usability | 1 |
+| Geometry output robustness | 0 |
 | Build / test robustness | 0 |
 
 ## Findings
@@ -286,7 +288,7 @@ Impact: Options that affect serial CGNS partitioning silently do nothing for red
 
 Suggested fix: plumb supported options into ParMETIS or reject/document unsupported fields on this path. Add tests showing changed options affect ParMETIS inputs or emit explicit unsupported-option diagnostics.
 
-Status: Open.
+Status: Fixed in working tree. Distributed HDF5 repartition now plumbs supported ParMETIS controls (`metisUfactor`, `metisSeed`, and `metisNcuts`, implemented as repeated seeded ParMETIS cuts keeping the best objective) and rejects currently unsupported options (`metisType != KWAY`, nonzero `edgeWeightMethod`) with explicit diagnostics instead of silently ignoring them.
 
 #### RMS-AUDIT-018 — Medium — Config validation rejects valid partitioned-mesh workflows
 
@@ -298,7 +300,7 @@ Impact: Valid partitioned-mesh runs can fail before initialization when the orig
 
 Suggested fix: validate `meshFile` only for workflows that read it, and normalize partitioned input exactly as runtime `getPartitionedMeshInput()` does before checking existence. Add config-validation tests for partition-only workflows.
 
-Status: Open.
+Status: Fixed in working tree. Config validation now checks `meshFile` only for source-mesh reads (`readMeshMode == 0`) and normalizes `meshFilePartitionedInput` suffixes the same way runtime read logic does before checking partitioned mesh existence.
 
 #### RMS-AUDIT-033 — Medium — Advertised reactive chemistry controls are unwired
 
@@ -530,7 +532,7 @@ Impact: `prepare_mesh(mesh, reader, wall_dist_predicate=...)` fails in the defau
 
 Suggested fix: construct `Geom.UnstructuredMesh.WallDistOptions()` when options are `None`, and explicitly map dict keys if dict input is intended. Add a Python test for the default predicate path.
 
-Status: Open.
+Status: Fixed in working tree. `prepare_mesh()` now constructs a typed `WallDistOptions` object for the default path, maps dict keys onto that object when supplied, and still accepts an explicitly constructed `WallDistOptions` object.
 
 #### RMS-AUDIT-028 — Medium — Python exposes edge arrays but not edge construction APIs
 
@@ -554,7 +556,7 @@ Impact: `mesh.to_device()` does not transfer wall distance, and device-side cons
 
 Suggested fix: include `nodeWallDist` in device transfer lists and add guarded device-view accessors that assert the field is built. Add a host/device wall-distance consistency test.
 
-Status: Open.
+Status: Fixed in working tree. `nodeWallDist` is now included in mesh device transfer, and `UnstructuredMeshDeviceView` exposes guarded wall-distance accessors for cell and face nodes when the field is built.
 
 #### RMS-AUDIT-030 — Medium — Wall-distance builder lacks pipeline and method validation
 
@@ -566,7 +568,7 @@ Impact: Python or solver callers can crash or get poisoned wall distances for wr
 
 Suggested fix: add release-active checks for facial/C2F state and `bnd2faceV.size() == NumBnd()`. Validate `method` against supported values or use an enum. Add tests for calling before face interpolation and invalid method.
 
-Status: Open.
+Status: Deferred / resolved by decision. Wall-distance pipeline and method validation is intentionally deferred because the current builder behavior is still needed for future wall-distance development; revisit this when the wall-distance API is hardened.
 
 #### RMS-AUDIT-035 — Low — Python `CellFaceOther`/`CellIsFaceBack` lost common two-argument usability
 
@@ -578,7 +580,7 @@ Impact: Existing Python geometry scripts using the previous two-argument helpers
 
 Suggested fix: add Python overloads or default `ic2f=-1`; accept two-argument calls when the face is not self-periodic and throw a clear message requiring `ic2f` only for self-periodic faces. Add binding tests for non-periodic and self-periodic cases.
 
-Status: Open.
+Status: Fixed in working tree. Python bindings now default `ic2f` to `-1` for the common non-self-periodic case and document that `ic2f` is only required for self-periodic faces.
 
 ### Geometry Output Robustness
 
@@ -592,7 +594,7 @@ Impact: Calling `BuildVTKConnectivity()` twice appends duplicate connectivity wh
 
 Suggested fix: clear `vtkCell2node` at function entry alongside offsets and types. Add an idempotency test that calls the builder twice and checks sizes/output remain unchanged.
 
-Status: Open.
+Status: Fixed in working tree. `BuildVTKConnectivity()` now clears `vtkCell2node` before rebuilding, and the Geom pipeline test calls the builder twice to verify repeated calls replace rather than append connectivity.
 
 ### Build / Test Robustness
 

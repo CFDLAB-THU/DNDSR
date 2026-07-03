@@ -81,7 +81,8 @@ namespace DNDS::Geom
                 DNDS_MAKE_1_MEMBER_REF(cellElemInfo),
                 DNDS_MAKE_1_MEMBER_REF(bndElemInfo),
                 DNDS_MAKE_1_MEMBER_REF(cell2nodePbi),
-                DNDS_MAKE_1_MEMBER_REF(bnd2nodePbi));
+                DNDS_MAKE_1_MEMBER_REF(bnd2nodePbi),
+                DNDS_MAKE_1_MEMBER_REF(nodeWallDist));
         }
 
         /// inverse relations

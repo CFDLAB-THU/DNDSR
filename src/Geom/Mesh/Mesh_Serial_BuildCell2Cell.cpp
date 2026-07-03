@@ -644,6 +644,7 @@ namespace DNDS::Geom
             vtkCellType[iC] = vtkType;
             vtkCell2nodeOffsets[iC + 1] = vtkCell2nodeOffsets[iC] + vtkC2n.size();
         }
+        vtkCell2node.clear();
         vtkCell2node.reserve(vtkCell2nodeOffsets.back()); // now offsets are local
         for (index iC = 0; iC < cell2node.father->Size(); iC++)
         {

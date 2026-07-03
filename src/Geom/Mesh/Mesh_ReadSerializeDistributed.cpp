@@ -333,6 +333,10 @@ namespace DNDS::Geom
 
         if (nPart > 1)
         {
+            DNDS_check_throw_info(partitionOptions.metisType == "KWAY",
+                                  "ReadSerializeAndDistribute: distributed H5 repartition currently supports metisType=KWAY only");
+            DNDS_check_throw_info(partitionOptions.edgeWeightMethod == 0,
+                                  "ReadSerializeAndDistribute: distributed H5 repartition currently supports edgeWeightMethod=0 only");
             for (int i = 0; i < mpi.size; i++)
                 DNDS_assert_info(vtxdist[i + 1] - vtxdist[i] > 0,
                                  "ParMetis requires > 0 cells on each proc");
@@ -340,20 +344,33 @@ namespace DNDS::Geom
             idx_t nCon{1};
             idx_t wgtflag{0}, numflag{0};
             std::vector<real_t> tpWeights(static_cast<size_t>(nPart) * nCon, 1.0 / nPart);
-            std::array<real_t, 1> ubVec{1.05};
+            std::array<real_t, 1> ubVec{1.0 + real_t(partitionOptions.metisUfactor) / real_t(1000)};
             std::array<idx_t, 3> optsC{1, 0, static_cast<idx_t>(partitionOptions.metisSeed)};
             idx_t objval = 0;
             std::vector<idx_t> partOut(cell2cellFacial->Size());
             if (partOut.empty())
                 partOut.resize(1, 0);
 
-            int ret = ParMETIS_V3_PartKway(
-                vtxdist.data(), xadj.data(), adjncy.data(),
-                nullptr, nullptr, &wgtflag, &numflag,
-                &nCon, &nPart, tpWeights.data(), ubVec.data(), optsC.data(),
-                &objval, partOut.data(), &mpi.comm);
-            DNDS_assert_info(ret == METIS_OK,
-                             fmt::format("ParMETIS_V3_PartKway returned {}", ret));
+            std::vector<idx_t> partCandidate(partOut.size());
+            bool hasBestPart{false};
+            for (int iCut = 0; iCut < std::max(partitionOptions.metisNcuts, 1); iCut++)
+            {
+                optsC[2] = static_cast<idx_t>(partitionOptions.metisSeed + iCut);
+                idx_t objCandidate = 0;
+                int ret = ParMETIS_V3_PartKway(
+                    vtxdist.data(), xadj.data(), adjncy.data(),
+                    nullptr, nullptr, &wgtflag, &numflag,
+                    &nCon, &nPart, tpWeights.data(), ubVec.data(), optsC.data(),
+                    &objCandidate, partCandidate.data(), &mpi.comm);
+                DNDS_assert_info(ret == METIS_OK,
+                                 fmt::format("ParMETIS_V3_PartKway returned {}", ret));
+                if (!hasBestPart || objCandidate < objval)
+                {
+                    hasBestPart = true;
+                    objval = objCandidate;
+                    partOut = partCandidate;
+                }
+            }
 
             for (index i = 0; i < cell2cellFacial->Size(); i++)
                 cellPartition[i] = static_cast<MPI_int>(partOut[i]);

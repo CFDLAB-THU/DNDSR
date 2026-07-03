@@ -1132,7 +1132,29 @@ namespace DNDS::Euler
             const auto &tmc = config.timeMarchControl;
             const auto &rst = config.restartState;
 
-            // ---- 1. Mesh file (CGNS source) ----
+            auto normalizePartitionedMeshInput = [](std::string partBase, const std::string &readerType)
+            {
+                if (readerType == "H5")
+                {
+                    const std::string suffix = ".dnds.h5";
+                    if (partBase.size() >= suffix.size() &&
+                        partBase.compare(partBase.size() - suffix.size(), suffix.size(), suffix) == 0)
+                        partBase.resize(partBase.size() - suffix.size());
+                }
+                else if (readerType == "JSON")
+                {
+                    const std::string suffix = ".dir";
+                    if (partBase.size() >= suffix.size() &&
+                        partBase.compare(partBase.size() - suffix.size(), suffix.size(), suffix) == 0)
+                        partBase.resize(partBase.size() - suffix.size());
+                }
+                return partBase;
+            };
+
+            // ---- 1. Mesh file (CGNS/source mesh) ----
+            // readMeshMode 1/2 read serialized partitioned mesh data directly;
+            // meshFile is only a naming seed when meshFilePartitionedInput is empty.
+            if (dio.readMeshMode == 0)
             {
                 std::filesystem::path meshPath(dio.meshFile);
                 if (meshPath.is_relative())
@@ -1159,6 +1181,7 @@ namespace DNDS::Euler
                 }
                 std::string readerType = dio.meshPartitionedReaderType;
                 std::string suffix = (readerType == "JSON") ? ".dir" : ".dnds.h5";
+                partBase = normalizePartitionedMeshInput(partBase, readerType);
                 std::filesystem::path partPath = partBase + suffix;
                 if (partPath.is_relative())
                     partPath = std::filesystem::absolute(partPath);
