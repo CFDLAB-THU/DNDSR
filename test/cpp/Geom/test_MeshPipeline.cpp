@@ -1198,6 +1198,17 @@ TEST_CASE("BuildVTKConnectivity: arrays populated correctly"){
             CHECK(ct != 0);
     })}
 
+TEST_CASE("BuildVTKConnectivity: repeat call replaces connectivity"){
+    FOR_EACH_MESH_CONFIG({
+        const auto vtkCell2nodeSize = m->vtkCell2node.size();
+        const auto vtkCell2nodeOffsets = m->vtkCell2nodeOffsets;
+        const auto vtkCellType = m->vtkCellType;
+        m->BuildVTKConnectivity();
+        CHECK(m->vtkCell2node.size() == vtkCell2nodeSize);
+        CHECK(m->vtkCell2nodeOffsets == vtkCell2nodeOffsets);
+        CHECK(m->vtkCellType == vtkCellType);
+    })}
+
 // ===========================================================================
 // ReorderLocalCells (config 0 only)
 // ===========================================================================
