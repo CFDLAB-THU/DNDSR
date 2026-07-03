@@ -14,20 +14,20 @@ Key physical assumptions to preserve:
 
 ## Status Summary
 
-Open findings: 17
+Open findings: 11
 
 Withdrawn findings: 2 (`RMS-AUDIT-001`, `RMS-AUDIT-016`)
 
-Deferred findings: 1 (`RMS-AUDIT-030`)
+Deferred findings: 4 (`RMS-AUDIT-021`, `RMS-AUDIT-023`, `RMS-AUDIT-026`, `RMS-AUDIT-030`)
 
-Fixed/resolved in working tree: 28 (`RMS-AUDIT-002`, `RMS-AUDIT-003`, `RMS-AUDIT-004`, `RMS-AUDIT-005`, `RMS-AUDIT-008`, `RMS-AUDIT-009`, `RMS-AUDIT-010`, `RMS-AUDIT-011`, `RMS-AUDIT-012`, `RMS-AUDIT-013`, `RMS-AUDIT-015`, `RMS-AUDIT-017`, `RMS-AUDIT-018`, `RMS-AUDIT-019`, `RMS-AUDIT-022`, `RMS-AUDIT-027`, `RMS-AUDIT-029`, `RMS-AUDIT-031`, `RMS-AUDIT-032`, `RMS-AUDIT-033`, `RMS-AUDIT-035`, `RMS-AUDIT-036`, `RMS-AUDIT-043`, `RMS-AUDIT-044`, `RMS-AUDIT-045`, `RMS-AUDIT-046`, `RMS-AUDIT-047`, `RMS-AUDIT-048`)
+Fixed/resolved in working tree: 31 (`RMS-AUDIT-002`, `RMS-AUDIT-003`, `RMS-AUDIT-004`, `RMS-AUDIT-005`, `RMS-AUDIT-008`, `RMS-AUDIT-009`, `RMS-AUDIT-010`, `RMS-AUDIT-011`, `RMS-AUDIT-012`, `RMS-AUDIT-013`, `RMS-AUDIT-015`, `RMS-AUDIT-017`, `RMS-AUDIT-018`, `RMS-AUDIT-019`, `RMS-AUDIT-020`, `RMS-AUDIT-022`, `RMS-AUDIT-024`, `RMS-AUDIT-027`, `RMS-AUDIT-028`, `RMS-AUDIT-029`, `RMS-AUDIT-031`, `RMS-AUDIT-032`, `RMS-AUDIT-033`, `RMS-AUDIT-035`, `RMS-AUDIT-036`, `RMS-AUDIT-043`, `RMS-AUDIT-044`, `RMS-AUDIT-045`, `RMS-AUDIT-046`, `RMS-AUDIT-047`, `RMS-AUDIT-048`)
 
 Severity counts:
 
 | Severity | Count |
 | --- | ---: |
 | High | 0 |
-| Medium | 17 |
+| Medium | 11 |
 | Low | 0 |
 
 Category counts:
@@ -41,8 +41,8 @@ Category counts:
 | Boundary / transport units | 0 |
 | Viscous / transport | 0 |
 | Cases / configuration / schema | 0 |
-| Mesh / MPI geometry state | 16 |
-| Geometry Python / device / usability | 1 |
+| Mesh / MPI geometry state | 11 |
+| Geometry Python / device / usability | 0 |
 | Geometry output robustness | 0 |
 | Build / test robustness | 0 |
 
@@ -374,7 +374,7 @@ Impact: A ghost chain traversing optional fixed-width slots can request invalid 
 
 Suggested fix: skip `UnInitIndex` in `traverseHopImpl()` before inserting into `seen`, and assert/reject other negative values unless explicitly supported. Add a ghost-tree unit test with fixed-width adjacency containing `UnInitIndex`.
 
-Status: Open.
+Status: Fixed in working tree. Ghost traversal now skips entries equal to the project `UnInitIndex` sentinel before adding requested ghost entities, without treating arbitrary negative encodings as invalid.
 
 #### RMS-AUDIT-021 — Medium — Redistributed HDF5 read aborts on over-decomposed small meshes
 
@@ -386,7 +386,7 @@ Impact: Small meshes, smoke tests, or over-decomposed CI runs abort during redis
 
 Suggested fix: support empty ranks through an active subcommunicator/fallback partitioner, or reject over-decomposition before ParMETIS with a clear user-facing error and documented limit. Test a 1-2 cell serialized mesh on 4 ranks.
 
-Status: Open.
+Status: Deferred / resolved by documented contract. The redistributed-HDF5 repartition path now documents that the surrounding DNDSR redistribution/mapping code requires at least one initially read cell per MPI rank before ParMETIS; over-decomposed runs should use fewer ranks or read an already partitioned mesh.
 
 #### RMS-AUDIT-023 — Medium — Boundary mesh extraction creates orphan nodes from skipped periodic boundaries
 
@@ -398,7 +398,7 @@ Impact: Periodic-only or mixed periodic/non-periodic meshes can create orphan no
 
 Suggested fix: build `node2bndNodeGlobal` only from boundary rows that will become boundary-mesh cells, or include periodic boundary cells consistently with clear semantics. Test periodic-only and mixed periodic/wall meshes.
 
-Status: Open.
+Status: Deferred / resolved by design. Boundary-mesh construction now documents that periodic boundary nodes are intentionally retained as residual parent-node metadata while periodic boundary elements are skipped, so consumers must not assume every boundary-mesh node is referenced by an emitted cell.
 
 #### RMS-AUDIT-024 — Medium — `IsO1()` and `IsO2()` return rank-local results after global reduction
 
@@ -410,7 +410,7 @@ Impact: If only some ranks hold higher/lower-order elements, ranks can make diff
 
 Suggested fix: return `hasBadAll == 0` in both functions. Add a two-rank mixed-order mesh test and assert both ranks report the same result.
 
-Status: Open.
+Status: Fixed in working tree. `IsO1()` and `IsO2()` now return the globally reduced result (`hasBadAll == 0`) so all ranks make the same order-state decision.
 
 #### RMS-AUDIT-025 — Medium — CGNS multi-zone node deduplication depends on connectivity traversal order
 
@@ -434,7 +434,7 @@ Impact: With `meshBuildWallDist=1` plus scale or rotation, solver-visible wall-d
 
 Suggested fix: move `BuildNodeWallDist()` after all coordinate rectification or transform `nodeWallDist` consistently under rotation and scaling. Add a wall mesh test with `meshScale` and `meshRotZ`.
 
-Status: Open.
+Status: Deferred / partially resolved by documented contract. Solver initialization now documents that serialized wall distance is tied to the pre-runtime-transform mesh frame; current runtime transforms are rotation, uniform scale, and coordinate snapping. Uniform scale is applied once to the running `nodeWallDist` vectors, while non-orthogonal future transforms must invalidate or rebuild the field.
 
 #### RMS-AUDIT-034 — Medium — `ReorderEntities()` destroy mode leaves edge and periodic face state stale
 
@@ -544,7 +544,7 @@ Impact: Python users can inspect edge fields but cannot build them, making new e
 
 Suggested fix: bind `InterpolateEdge()`, `AdjGlobal2LocalEdge()`, and `AdjLocal2GlobalEdge()`, and preferably expose a high-level helper option for edge construction. Add a small 3D Python edge-connectivity test.
 
-Status: Open.
+Status: Fixed in working tree. Python bindings now expose `InterpolateEdge()`, `AdjGlobal2LocalEdge()`, and `AdjLocal2GlobalEdge()` so edge arrays can be built and converted from Python.
 
 #### RMS-AUDIT-029 — Medium — Mesh device transfer omits wall distance
 

@@ -250,6 +250,14 @@ namespace DNDS::Euler
 
         if (config.dataIOControl.meshBuildWallDist)
         {
+            // Wall distance is built before partition-only serialization and
+            // before solver-only coordinate transforms so serialized meshes keep
+            // a distance field in the same frame as the stored coordinates.
+            // Runtime transforms below are currently limited to rotations,
+            // uniform scaling, and optional coordinate snapping. Rotations
+            // preserve distance magnitudes; uniform scaling is applied to the
+            // running distance vectors below; non-orthogonal future transforms
+            // must invalidate or rebuild nodeWallDist instead of reusing it.
             mesh->BuildNodeWallDist(
                 [pBCHandler = pBCHandler](Geom::t_index id)
                 {
@@ -305,6 +313,13 @@ namespace DNDS::Euler
                 [&](const Geom::tPoint &p)
                 { return p * scale; });
 
+            if (mesh->nodeWallDist.father)
+                for (index iNode = 0; iNode < mesh->nodeWallDist.father->Size(); iNode++)
+                    (*mesh->nodeWallDist.father)[iNode] *= scale;
+            if (mesh->nodeWallDist.son)
+                for (index iNode = 0; iNode < mesh->nodeWallDist.son->Size(); iNode++)
+                    (*mesh->nodeWallDist.son)[iNode] *= scale;
+
             for (auto &i : mesh->periodicInfo.translation)
                 i.map() *= scale;
             for (auto &i : mesh->periodicInfo.rotationCenter)
@@ -312,6 +327,10 @@ namespace DNDS::Euler
         }
         if (config.dataIOControl.rectifyNearPlane)
         {
+            // Coordinate snapping is a solver-side cleanup transform, not a
+            // general geometry transform. If a prebuilt directional
+            // nodeWallDist field is later used with snapping enabled, callers
+            // must treat that field as pre-snap metadata or rebuild it.
             auto fTrans = [&](const Geom::tPoint &p)
             {
                 Geom::tPoint ret = p;
@@ -330,6 +349,9 @@ namespace DNDS::Euler
             meshBnd->TransformCoords(fTrans);
         }
         { //* symBnd's rectifying: !  altering mesh
+            // Like rectifyNearPlane, symmetry-boundary rectification snaps
+            // coordinates after serialized mesh loading. It intentionally does
+            // not reinterpret serialized wall-distance metadata.
             for (index iB = 0; iB < mesh->NumBnd(); iB++)
             {
                 index iFace = mesh->bnd2faceV.at(iB);

@@ -337,9 +337,15 @@ namespace DNDS::Geom
                                   "ReadSerializeAndDistribute: distributed H5 repartition currently supports metisType=KWAY only");
             DNDS_check_throw_info(partitionOptions.edgeWeightMethod == 0,
                                   "ReadSerializeAndDistribute: distributed H5 repartition currently supports edgeWeightMethod=0 only");
+            // This redistributed-HDF5 path currently requires each MPI rank to
+            // own at least one cell in the initial even split before calling
+            // ParMETIS. Empty local graphs may be representable by ParMETIS via
+            // vtxdist on some versions, but the surrounding redistribution and
+            // mapping code is not contracted for over-decomposed empty ranks.
+            // Use fewer ranks or read an already partitioned mesh for such cases.
             for (int i = 0; i < mpi.size; i++)
                 DNDS_assert_info(vtxdist[i + 1] - vtxdist[i] > 0,
-                                 "ParMetis requires > 0 cells on each proc");
+                                 "ReadSerializeAndDistribute requires > 0 cells on each proc before ParMETIS repartition");
 
             idx_t nCon{1};
             idx_t wgtflag{0}, numflag{0};

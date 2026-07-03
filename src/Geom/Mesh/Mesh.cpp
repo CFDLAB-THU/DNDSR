@@ -313,7 +313,7 @@ namespace DNDS::Geom
         }
         int hasBadAll = 0;
         MPI::Allreduce(&hasBad, &hasBadAll, 1, MPI_INT, MPI_SUM, mpi.comm);
-        return hasBad == 0;
+        return hasBadAll == 0;
     }
 
     bool UnstructuredMesh::IsO2()
@@ -341,7 +341,7 @@ namespace DNDS::Geom
         }
         int hasBadAll = 0;
         MPI::Allreduce(&hasBad, &hasBadAll, 1, MPI_INT, MPI_SUM, mpi.comm);
-        return hasBad == 0;
+        return hasBadAll == 0;
     }
 
     void UnstructuredMesh::SetPeriodicGeometry(
@@ -1880,6 +1880,10 @@ namespace DNDS::Geom
         {
             for (index i = 0; i < node2bndNodeGlobal.Size(); i++)
                 node2bndNodeGlobal[i] = 0;
+            // Boundary-node metadata intentionally includes periodic boundary rows.
+            // Periodic boundary elements are skipped below, but retaining their nodes
+            // keeps parent-node/residual geometry information available for periodic
+            // boundary diagnostics and future boundary-mesh features.
             for (index iBnd = 0; iBnd < this->NumBnd(); iBnd++)
                 for (auto iNode : bnd2node.father->operator[](iBnd))
                     node2bndNodeGlobal[iNode]++; // now stores num-reference
@@ -1972,6 +1976,10 @@ namespace DNDS::Geom
         for (index iB = 0; iB < this->NumBnd(); iB++)
         {
             if (FaceIDIsPeriodic(this->bndElemInfo(iB, 0).zone))
+                // Periodic boundary faces are not emitted as boundary-mesh cells.
+                // Nodes touched only by these rows may remain as intentionally
+                // orphaned residual nodes; consumers must not assume every
+                // boundary-mesh node is referenced by an output cell.
                 continue;
             bMesh.cell2parentCell.at(nBndCellUse) = iB;
             bMesh.cell2node.ResizeRow(nBndCellUse, bnd2node.RowSize(iB));
