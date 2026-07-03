@@ -405,11 +405,13 @@ add_dependencies(all_unit_tests euler_unit_tests)
 euler_add_unit_test(gas_thermo "Euler/test_GasThermo.cpp" "cfv;geom;dnds")
 euler_add_unit_test(riemann_solvers "Euler/test_RiemannSolvers.cpp" "cfv;geom;dnds")
 euler_add_unit_test(rans "Euler/test_RANS.cpp" "cfv;geom;dnds")
-euler_add_unit_test(source_chemical "Euler/test_SourceChemical.cpp" "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds")
-euler_add_unit_test(uv "Euler/test_UV.cpp" "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds")
-euler_add_unit_test(physics_properties "Euler/test_PhysicsProperties.cpp" "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds")
-euler_add_unit_test(chem_ode "Euler/test_ChemODE.cpp" "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds")
-target_compile_definitions(euler_test_chem_ode PRIVATE CT_USE_SYSTEM_FMT=1)
+if(DNDS_USE_CANTERA)
+    euler_add_unit_test(source_chemical "Euler/test_SourceChemical.cpp" "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds")
+    euler_add_unit_test(uv "Euler/test_UV.cpp" "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds")
+    euler_add_unit_test(physics_properties "Euler/test_PhysicsProperties.cpp" "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds")
+    euler_add_unit_test(chem_ode "Euler/test_ChemODE.cpp" "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds")
+    target_compile_definitions(euler_test_chem_ode PRIVATE CT_USE_SYSTEM_FMT=1)
+endif()
 
 # EulerEvaluator pipeline test: needs full Euler libraries for NS, NS_SA, NS_3D
 euler_add_mpi_test(evaluator_pipeline "Euler/test_EulerEvaluator.cpp"
@@ -424,12 +426,15 @@ set(EULER_TEST_TARGETS
     euler_test_gas_thermo
     euler_test_riemann_solvers
     euler_test_rans
-    euler_test_source_chemical
-    euler_test_uv
-    euler_test_physics_properties
-    euler_test_chem_ode
     euler_test_evaluator_pipeline
 )
+if(DNDS_USE_CANTERA)
+    list(APPEND EULER_TEST_TARGETS
+        euler_test_source_chemical
+        euler_test_uv
+        euler_test_physics_properties
+        euler_test_chem_ode)
+endif()
 foreach(T ${EULER_TEST_TARGETS})
     add_dependencies(euler_unit_tests ${T})
 endforeach()

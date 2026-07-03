@@ -1401,6 +1401,15 @@ namespace DNDS::Euler
         const int iVarBegPoint = reactiveSpeciesOnly ? nVars - Ns1Point : 0;
         const int nPointVars = reactiveSpeciesOnly ? Ns1Point : nVars;
         const int nPseudoSteps = std::max(nNewtonSteps, 8);
+        const real chemPseudoTimeScale = reactiveSpeciesOnly ? settings.reactiveFlow.CFLScale : real(1);
+        const real chemPseudoTimeFloor = reactiveSpeciesOnly ? settings.reactiveFlow.chemRelaxEps : real(0);
+        const real chemResidualAbsTol = reactiveSpeciesOnly ? settings.reactiveFlow.chemAbsTol : smallReal;
+        DNDS_check_throw_info(std::isfinite(chemPseudoTimeScale) && chemPseudoTimeScale > 0,
+                              "PointImplicitSourceUpdate requires positive finite reactiveFlow.CFLScale");
+        DNDS_check_throw_info(std::isfinite(chemPseudoTimeFloor) && chemPseudoTimeFloor >= 0,
+                              "PointImplicitSourceUpdate requires non-negative finite reactiveFlow.chemRelaxEps");
+        DNDS_check_throw_info(std::isfinite(chemResidualAbsTol) && chemResidualAbsTol >= 0,
+                              "PointImplicitSourceUpdate requires non-negative finite reactiveFlow.chemAbsTol");
         // Local experiment switch:
         // 0: local pseudo-time linearized march; 1: Cantera affine reactor;
         // 2: single linear source-Jacobian smoother, (I/dt + I/dtau + JS)^-1.
@@ -1499,7 +1508,13 @@ namespace DNDS::Euler
             sourceAtU.setZero(nVars);
             TJacobianU sourceJac;
             EvaluateCellSource(sourceAtU, sourceJac, u[iCell], zeroGrad,
-                               iCell, 0, filter);
+                               iCell, 0, filter, 1.0, false, {}, {}, {}, true, 0, cellTWarm);
+            auto refreshCellTWarm = [&](const TU &state)
+            {
+                if (!cellTWarm || !phys_.hasChemicalSource())
+                    return;
+                (*cellTWarm)[iCell](0) = phys_.temperature(state, (*cellTWarm)[iCell](0));
+            };
             auto sourceResidual = [&](TU &residualOut, const TU &state, const TU &sourceAtState)
             {
                 residualOut = res[iCell];
@@ -1524,7 +1539,7 @@ namespace DNDS::Euler
                 sourceAtUNew.setZero(nVars);
                 sourceJac.setZero(nVars, nVars);
                 EvaluateCellSource(sourceAtUNew, sourceJac, uNew[iCell], zeroGrad,
-                                   iCell, 2, filter);
+                                   iCell, 2, filter, 1.0, false, {}, {}, {}, true, 0, cellTWarm);
 
                 // This uses the real rebuilt residual to preserve the fixed point
                 // of the full dual-time system. Consequently, this split form is
@@ -1536,7 +1551,8 @@ namespace DNDS::Euler
                 for (int iRow = iVarBegPoint; iRow < iVarBegPoint + nPointVars; iRow++)
                     for (int iCol = iVarBegPoint; iCol < iVarBegPoint + nPointVars; iCol++)
                         sourceJacScale = std::max(sourceJacScale, std::abs(alphaDiag * sourceJac(iRow, iCol)));
-                real pseudoDtau = 1.0 / (1.0 / dt + sourceJacScale + smallReal);
+                real pseudoDtau = std::max(chemPseudoTimeFloor,
+                                           chemPseudoTimeScale / (1.0 / dt + sourceJacScale + smallReal));
 
                 TU delta;
                 delta.setZero(nVars);
@@ -1562,10 +1578,11 @@ namespace DNDS::Euler
                     TU sourceAtCandidate;
                     sourceAtCandidate.setZero(nVars);
                     EvaluateCellSource(sourceAtCandidate, sourceJac, candidate, zeroGrad,
-                                       iCell, 0, filter);
+                                       iCell, 0, filter, 1.0, false, {}, {}, {}, true, 0, cellTWarm);
                     TU residualCandidate;
                     sourceResidual(residualCandidate, candidate, sourceAtCandidate);
                     uNew[iCell] = candidate;
+                    refreshCellTWarm(uNew[iCell]);
                     for (int iPseudo = 0; iPseudo < nPseudoSteps; iPseudo++)
                         recordResidualRatio(iPseudo, residualCandidate, res0Abs);
                     continue;
@@ -1600,7 +1617,7 @@ namespace DNDS::Euler
                         constantTerm[static_cast<size_t>(Ns1Point)] = 1.0 / dt - sumC;
 
                         TU candidate = uNew[iCell];
-                        real T = phys_.temperature(candidate);
+                        real T = phys_.temperature(candidate, cellTWarm ? (*cellTWarm)[iCell](0) : real(0));
                         phys_.advanceAffineConstVolumeY(
                             T, candidate(0),
                             Chemistry::SpeciesBufferView{Y.data(), static_cast<int>(Y.size())},
@@ -1617,10 +1634,11 @@ namespace DNDS::Euler
                             TU sourceAtCandidate;
                             sourceAtCandidate.setZero(nVars);
                             EvaluateCellSource(sourceAtCandidate, sourceJac, candidate, zeroGrad,
-                                               iCell, 0, filter);
+                                               iCell, 0, filter, 1.0, false, {}, {}, {}, true, 0, cellTWarm);
                             TU residualCandidate;
                             sourceResidual(residualCandidate, candidate, sourceAtCandidate);
                             uNew[iCell] = candidate;
+                            refreshCellTWarm(uNew[iCell]);
                             for (int iPseudo = 0; iPseudo < nPseudoSteps; iPseudo++)
                                 recordResidualRatio(iPseudo, residualCandidate, res0Abs);
                             continue;
@@ -1640,12 +1658,12 @@ namespace DNDS::Euler
                 sourceAtUNew.setZero(nVars);
                 sourceJac.setZero(nVars, nVars);
                 EvaluateCellSource(sourceAtUNew, sourceJac, uNew[iCell], zeroGrad,
-                                   iCell, 2, filter);
+                                   iCell, 2, filter, 1.0, false, {}, {}, {}, true, 0, cellTWarm);
 
                 TU residualLocal;
                 sourceResidual(residualLocal, uNew[iCell], sourceAtUNew);
                 const real oldResidualNorm = activeResidualNorm(residualLocal);
-                if (oldResidualNorm <= smallReal)
+                if (oldResidualNorm <= chemResidualAbsTol)
                 {
                     recordResidualRatio(iPseudo, residualLocal, res0Abs);
                     break;
@@ -1655,7 +1673,8 @@ namespace DNDS::Euler
                 for (int iRow = iVarBegPoint; iRow < iVarBegPoint + nPointVars; iRow++)
                     for (int iCol = iVarBegPoint; iCol < iVarBegPoint + nPointVars; iCol++)
                         sourceJacScale = std::max(sourceJacScale, std::abs(alphaDiag * sourceJac(iRow, iCol)));
-                real pseudoDtau = pseudoDtauScale / (1.0 / dt + sourceJacScale + smallReal);
+                real pseudoDtau = std::max(chemPseudoTimeFloor,
+                                           chemPseudoTimeScale * pseudoDtauScale / (1.0 / dt + sourceJacScale + smallReal));
 
                 // sourceJac stores -d(source)/dU. Therefore
                 // (I / dtau + I / dt + alphaDiag * sourceJac) * delta = residualLocal.
@@ -1693,7 +1712,7 @@ namespace DNDS::Euler
                     TU sourceAtCandidate;
                     sourceAtCandidate.setZero(nVars);
                     EvaluateCellSource(sourceAtCandidate, sourceJac, candidate, zeroGrad,
-                                       iCell, 0, filter);
+                                       iCell, 0, filter, 1.0, false, {}, {}, {}, true, 0, cellTWarm);
                     TU residualCandidate;
                     sourceResidual(residualCandidate, candidate, sourceAtCandidate);
                     real candidateResidualNorm = activeResidualNorm(residualCandidate);
@@ -1714,6 +1733,7 @@ namespace DNDS::Euler
                     break;
                 }
                 uNew[iCell] = accepted;
+                refreshCellTWarm(uNew[iCell]);
                 recordResidualRatio(iPseudo, acceptedResidual, res0Abs);
                 pseudoDtauScale = acceptedResidualNorm < oldResidualNorm * 0.8
                                       ? std::min(pseudoDtauScale * 1.5, 100.0)

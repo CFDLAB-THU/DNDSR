@@ -14,35 +14,35 @@ Key physical assumptions to preserve:
 
 ## Status Summary
 
-Open findings: 31
+Open findings: 24
 
 Withdrawn findings: 2 (`RMS-AUDIT-001`, `RMS-AUDIT-016`)
 
-Fixed/resolved in working tree: 15 (`RMS-AUDIT-002`, `RMS-AUDIT-003`, `RMS-AUDIT-004`, `RMS-AUDIT-005`, `RMS-AUDIT-008`, `RMS-AUDIT-009`, `RMS-AUDIT-011`, `RMS-AUDIT-012`, `RMS-AUDIT-032`, `RMS-AUDIT-043`, `RMS-AUDIT-044`, `RMS-AUDIT-045`, `RMS-AUDIT-046`, `RMS-AUDIT-047`, `RMS-AUDIT-048`)
+Fixed/resolved in working tree: 22 (`RMS-AUDIT-002`, `RMS-AUDIT-003`, `RMS-AUDIT-004`, `RMS-AUDIT-005`, `RMS-AUDIT-008`, `RMS-AUDIT-009`, `RMS-AUDIT-010`, `RMS-AUDIT-011`, `RMS-AUDIT-012`, `RMS-AUDIT-013`, `RMS-AUDIT-015`, `RMS-AUDIT-017`, `RMS-AUDIT-019`, `RMS-AUDIT-032`, `RMS-AUDIT-033`, `RMS-AUDIT-036`, `RMS-AUDIT-043`, `RMS-AUDIT-044`, `RMS-AUDIT-045`, `RMS-AUDIT-046`, `RMS-AUDIT-047`, `RMS-AUDIT-048`)
 
 Severity counts:
 
 | Severity | Count |
 | --- | ---: |
 | High | 0 |
-| Medium | 25 |
-| Low | 6 |
+| Medium | 21 |
+| Low | 3 |
 
 Category counts:
 
 | Category | Count |
 | --- | ---: |
-| Reactive source control | 1 |
-| Positivity / thermodynamics | 1 |
+| Reactive source control | 0 |
+| Positivity / thermodynamics | 0 |
 | Chemical Jacobian | 0 |
 | Flux / multispecies numerics | 0 |
 | Boundary / transport units | 0 |
 | Viscous / transport | 0 |
-| Cases / configuration / schema | 4 |
+| Cases / configuration / schema | 2 |
 | Mesh / MPI geometry state | 16 |
 | Geometry Python / device / usability | 5 |
 | Geometry output robustness | 1 |
-| Build / test robustness | 3 |
+| Build / test robustness | 0 |
 
 ## Findings
 
@@ -82,7 +82,7 @@ Impact: After point-implicit reactive species updates, later thermodynamic solve
 
 Suggested fix: pass `cellTWarm` through internal source evaluations where appropriate, and after accepting `uNew[iCell]`, recompute and store `phys_.temperature(uNew[iCell], oldGuess)` in the cache.
 
-Status: Open.
+Status: Fixed in working tree. `PointImplicitSourceUpdate()` now forwards `cellTWarm` through its internal source evaluations and refreshes the accepted cell temperature guess after point-implicit source updates.
 
 ### Positivity / Thermodynamics
 
@@ -120,7 +120,7 @@ Impact: The 0D validation path can advance and report a normalized composition t
 
 Suggested fix: after every 0D Newton update, enforce the independent/dependent species simplex on `U` itself and explicitly choose whether to preserve total energy or adjust base/sensible energy. Add a large-`dt` stiff regression that asserts `rhoY >= 0`, `sum(rhoY_k) <= rho`, and reported `Y` matches `U`.
 
-Status: Open.
+Status: Fixed in working tree. `ConstVolTrajectory` now repairs the independent/dependent species simplex after each Newton update while preserving total energy for the constant-volume reactor path. The focused `euler_chem_ode` CTest and the `canteraConstVolTrajectory` app pass with the repaired path.
 
 ### Chemical Jacobian
 
@@ -274,7 +274,7 @@ Impact: Schema validation and editor autocomplete can bless configurations that 
 
 Suggested fix: generate model-aware schemas that omit `reactiveFlow` for non-EX models or constrain `enabled` to `false`. Ensure reactive examples reference `eulerEX_schema.json` or `eulerEX3D_schema.json`.
 
-Status: Open.
+Status: Fixed in working tree. Non-EX model schemas now constrain `reactiveFlow.enabled` to `false`, while EX schemas keep reactive flow enabled support. Runtime validation also uses DNDS config context metadata to reject `reactiveFlow.enabled=true` for non-EX model codes.
 
 #### RMS-AUDIT-022 — Low — Distributed HDF5 repartition ignores most configured partition options
 
@@ -310,7 +310,7 @@ Impact: Users can tune advertised controls with no effect on timestep limiting, 
 
 Suggested fix: wire these fields into their intended runtime paths, or mark them reserved and reject non-default values during config finalization. Add a config-validation test that non-default values either affect runtime controls observably or fail clearly.
 
-Status: Open.
+Status: Fixed in working tree. `CFLScale`, `chemRelaxEps`, and `chemAbsTol` are now wired into point-implicit chemistry pseudo-time scaling and residual stopping tolerance, with finite range validation. Config defaults and regenerated schemas now match current runtime defaults: `CFLScale=1.0`, `chemRelaxEps=0.0`, `chemAbsTol=1e-10`.
 
 #### RMS-AUDIT-044 — Medium — `reactiveSourceScale` lacks finite nonnegative validation in coupled source path
 
@@ -610,15 +610,15 @@ Status: Withdrawn / false positive.
 
 #### RMS-AUDIT-017 — Medium — `DNDS_USE_CANTERA=OFF` is not a reliable build mode
 
-Evidence: `cmake/DndsOptions.cmake:19`, `src/Euler/CMakeLists.txt:12-16`, `src/Euler/Chemistry/ChemicalSource.cpp:26-127`, `src/Euler/Chemistry/ChemicalSource.cpp:164-166`
+Evidence: `cmake/DndsOptions.cmake:19`, `cmake/DndsExternalDeps.cmake`, `cmake/DndsApps.cmake`, `test/cpp/CMakeLists.txt`, `src/Euler/Physics/ConstVolTrajectory.hpp`, `src/Euler/EulerEvaluatorSettings.hpp`
 
-`DNDS_USE_CANTERA` is user-facing, but `euler_library_chemical` is always built. With Cantera disabled, helper functions such as `normalizeTransportModel()` are not defined while constructors still call them.
+`DNDS_USE_CANTERA` is user-facing, but Cantera-only headers, apps, and tests were still reachable from normal build graphs. Reactive solver paths also needed to fail before attempting Cantera-backed chemistry.
 
-Impact: `-DDNDS_USE_CANTERA=OFF` can fail to compile instead of producing a non-reactive build or a clear unsupported-mode error.
+Impact: `-DDNDS_USE_CANTERA=OFF` can fail to compile instead of producing a non-reactive build that rejects reactive chemistry paths clearly.
 
-Suggested fix: remove the option, gate reactive/EX targets and tests behind it, or provide complete no-Cantera stubs with clear runtime errors for reactive paths.
+Suggested fix: keep solver targets buildable without Cantera, exclude Cantera-only tests/apps from OFF builds, hide Cantera headers behind preprocessor guards, and reject `reactiveFlow.enabled=true` with a clear config/runtime validation error when Cantera is disabled.
 
-Status: Open.
+Status: Fixed in working tree. `DNDS_USE_CANTERA=OFF` now keeps Cantera libraries/includes out of the global dependency lists, excludes Cantera-specific trajectory apps/tests, compiles `ConstVolTrajectory.hpp` without including Cantera headers, emits disabled reactive-flow schema metadata for OFF builds, and rejects `reactiveFlow.enabled=true` through configuration/runtime checks instead of entering Cantera-backed paths.
 
 #### RMS-AUDIT-019 — Medium — C++ tests have no default timeout unless environment variable is set
 
@@ -628,9 +628,9 @@ When `DNDS_TEST_TIMEOUT` is unset, `DNDS_TEST_SET_TIMEOUT` is `OFF`, so `_dnds_m
 
 Impact: Hung MPI or C++ tests can block local or CI runs indefinitely unless every caller supplies a timeout externally.
 
-Suggested fix: set a default per-test timeout, such as 120 seconds, and allow environment or CTest overrides. Verify timeout properties with `ctest -N -V`.
+Suggested fix: set a default per-test timeout, such as 1800 seconds, and allow environment or CTest overrides. Verify timeout properties with `ctest -N -V`.
 
-Status: Open.
+Status: Fixed in working tree. The default no-environment branch now enables CTest timeout properties with the 1800-second default, while keeping environment overrides.
 
 #### RMS-AUDIT-036 — Low — Schema update script can clobber committed schemas on failure
 
@@ -642,7 +642,7 @@ Impact: A transient app/schema-generation failure can replace a valid schema wit
 
 Suggested fix: write to a temporary file and atomically move it over the schema only after the pipeline succeeds; remove the temporary file on failure. Add a shell test with a fake failing executable that verifies the original schema remains unchanged.
 
-Status: Open.
+Status: Fixed in working tree. `cases/update_schemas.sh` now writes schema output to a temporary file, moves it over the committed schema only after a successful emitter pipeline, removes the temporary file on failure, and exits nonzero on failure.
 
 ## Checked Areas Without Current Findings
 

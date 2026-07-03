@@ -688,8 +688,8 @@ namespace DNDS::Euler
             std::string thermoFile;
             std::string transportModel = "MixtureAveraged";
             real CFLScale = 1.0;
-            real chemRelaxEps = 1e-3;
-            real chemAbsTol = 1e-10;
+            real chemRelaxEps = 0.0;
+            real chemAbsTol = smallReal;
             real TBase = 0.0;
             int nSpeciesOverride = 0;
             bool useCellTWarmCache = true;
@@ -700,11 +700,11 @@ namespace DNDS::Euler
                 DNDS_FIELD(mechanismFile, "CHEMKIN-format mechanism YAML path");
                 DNDS_FIELD(thermoFile, "Reserved; currently unused. Mechanism YAML supplies thermodynamics.");
                 DNDS_FIELD(transportModel, "Cantera transport model requested by reactive flow; currently only mixture-averaged is implemented.");
-                DNDS_FIELD(CFLScale, "CFL reduction factor for stiff chemistry",
+                DNDS_FIELD(CFLScale, "Point-implicit chemistry pseudo-time multiplier",
+                           DNDS::Config::range(std::numeric_limits<real>::min()));
+                DNDS_FIELD(chemRelaxEps, "Minimum point-implicit chemistry pseudo-time step",
                            DNDS::Config::range(0.0));
-                DNDS_FIELD(chemRelaxEps, "Pseudo-transient relaxation epsilon",
-                           DNDS::Config::range(0.0));
-                DNDS_FIELD(chemAbsTol, "Absolute species tolerance",
+                DNDS_FIELD(chemAbsTol, "Absolute point-implicit chemistry residual tolerance",
                            DNDS::Config::range(0.0));
                 DNDS_FIELD(TBase, "Base temperature [K] for reactive sensible-energy bookkeeping; <=0 uses the minimum per-species Cantera bound");
                 DNDS_FIELD(nSpeciesOverride, "Reserved; currently unused. Species count is read from mechanism.");
@@ -807,14 +807,51 @@ namespace DNDS::Euler
                 "Exprtk expression initializers");
             config.field_section(&T::idealGasProperty, "idealGasProperty",
                                   "Ideal gas thermodynamic properties");
-            config.field_section(&T::reactiveFlow,     "reactiveFlow",
-                                   "Reactive flow settings (multi-species chemistry)");
+            auto disabledReactiveFlowSchema = []()
+            {
+                ReactiveFlowSettings::_dnds_ensure_registered();
+                auto schema = ConfigRegistry<ReactiveFlowSettings>::emitSchema();
+                schema["properties"]["enabled"]["const"] = false;
+                schema["properties"]["enabled"]["default"] = false;
+                return schema;
+            };
+            if constexpr (model == NS_EX || model == NS_EX_3D)
+            {
+#ifdef DNDS_USE_CANTERA
+                config.field_section(&T::reactiveFlow, "reactiveFlow",
+                                     "Reactive flow settings (multi-species chemistry)");
+#else
+                config.field_schema(
+                    &T::reactiveFlow, "reactiveFlow",
+                    "Reactive flow settings (multi-species chemistry). reactiveFlow.enabled requires DNDS_USE_CANTERA=ON.",
+                    disabledReactiveFlowSchema);
+#endif
+            }
+            else
+                config.field_schema(
+                    &T::reactiveFlow, "reactiveFlow",
+                    "Reactive flow settings (multi-species chemistry). reactiveFlow.enabled must be false for this model.",
+                    disabledReactiveFlowSchema);
 
             // Cross-field checks
             config.check("useScalarJacobian and useRoeJacobian are mutually exclusive",
                          [](const T &s) { return !(s.useScalarJacobian && s.useRoeJacobian); });
             config.check("ransModel must not be RANS_Unknown",
                          [](const T &s) { return s.ransModel != RANS_Unknown; });
+            config.check_ctx(
+                [](const T &s, const ConfigContext &ctx) -> CheckResult {
+                    if (ctx.modelCode == static_cast<int>(NS_EX) || ctx.modelCode == static_cast<int>(NS_EX_3D))
+                    {
+#ifndef DNDS_USE_CANTERA
+                        if (s.reactiveFlow.enabled)
+                            return {false, "reactiveFlow.enabled requires DNDS_USE_CANTERA=ON"};
+#endif
+                        return {true, ""};
+                    }
+                    if (s.reactiveFlow.enabled)
+                        return {false, "reactiveFlow.enabled is only supported for eulerEX/eulerEX3D models"};
+                    return {true, ""};
+                });
 
             // Post-read hook: finalize derived quantities using stored _nVars
             config.post_read([](T &s) { s.finalize(); });
@@ -871,6 +908,10 @@ namespace DNDS::Euler
                 return; // skip finalize if nVars not set (e.g. schema emission default-ctor)
             DNDS_check_throw_info(!reactiveFlow.enabled || model == NS_EX || model == NS_EX_3D,
                                   "reactiveFlow.enabled is only supported for eulerEX/eulerEX3D models");
+#ifndef DNDS_USE_CANTERA
+            DNDS_check_throw_info(!reactiveFlow.enabled,
+                                  "reactiveFlow.enabled requires DNDS_USE_CANTERA=ON");
+#endif
             DNDS_check_throw_info(!reactiveFlow.enabled || specialBuiltinInitializer == 0,
                                   "reactiveFlow.enabled does not support specialBuiltinInitializer; use explicit StateValue/ExprTk initialization");
             DNDS_check_throw_info(!reactiveFlow.enabled || !reactiveFlow.mechanismFile.empty(),

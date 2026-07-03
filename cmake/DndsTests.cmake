@@ -7,13 +7,13 @@ endif()
 
 enable_testing()
 
-# --- Read test timeout from env, default to 120 ---
+# --- Read test timeout from env, default to 1800 ---
 if(DEFINED ENV{DNDS_TEST_TIMEOUT})
     set(DNDS_TEST_TIMEOUT "$ENV{DNDS_TEST_TIMEOUT}")
     set(DNDS_TEST_SET_TIMEOUT ON)
 else()
-    set(DNDS_TEST_TIMEOUT "120")
-    set(DNDS_TEST_SET_TIMEOUT OFF)
+    set(DNDS_TEST_TIMEOUT "1800")
+    set(DNDS_TEST_SET_TIMEOUT ON)
 endif()
 message(STATUS "DNDS_TEST_TIMEOUT: ${DNDS_TEST_TIMEOUT} (set-timeout: ${DNDS_TEST_SET_TIMEOUT})")
 
