@@ -341,7 +341,11 @@ namespace DNDS::Geom
             }
 
             for (auto entry : adj[localIdx])
+            {
+                if (entry == UnInitIndex)
+                    continue;
                 seen.insert(entry);
+            }
         }
 
         // Convert to sorted vector.
