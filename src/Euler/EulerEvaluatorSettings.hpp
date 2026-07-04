@@ -24,10 +24,309 @@
 #include "Euler.hpp"
 #include "Gas.hpp"
 #include "CLDriver.hpp"
+#include <cmath>
 #include <unordered_set>
+#include <string>
+#include <limits>
 
 namespace DNDS::Euler
 {
+    enum class StateValueOrigin
+    {
+        None,
+        Cons,
+        ConsSensible,
+        PrimRhoP,
+        PrimRhoT,
+        PrimTP,
+        ConsPhy,
+        ConsSensiblePhy,
+        PrimRhoPPhy,
+        PrimRhoTPhy,
+        PrimTPPhy,
+        NonState,
+        Invalid,
+    };
+
+    inline std::string StateValueOriginName(StateValueOrigin origin)
+    {
+        switch (origin)
+        {
+        case StateValueOrigin::Cons:
+            return "cons";
+        case StateValueOrigin::ConsSensible:
+            return "consSensible";
+        case StateValueOrigin::PrimRhoP:
+            return "primRhoP";
+        case StateValueOrigin::PrimRhoT:
+            return "primRhoT";
+        case StateValueOrigin::PrimTP:
+            return "primTP";
+        case StateValueOrigin::ConsPhy:
+            return "cons_phy";
+        case StateValueOrigin::ConsSensiblePhy:
+            return "consSensible_phy";
+        case StateValueOrigin::PrimRhoPPhy:
+            return "primRhoP_phy";
+        case StateValueOrigin::PrimRhoTPhy:
+            return "primRhoT_phy";
+        case StateValueOrigin::PrimTPPhy:
+            return "primTP_phy";
+        case StateValueOrigin::NonState:
+            return "nonState";
+        case StateValueOrigin::Invalid:
+            return "invalid";
+        default:
+            return "none";
+        }
+    }
+
+    inline StateValueOrigin StateValueOriginFromName(const std::string &name)
+    {
+        if (name == "cons")
+            return StateValueOrigin::Cons;
+        if (name == "consSensible")
+            return StateValueOrigin::ConsSensible;
+        if (name == "primRhoP")
+            return StateValueOrigin::PrimRhoP;
+        if (name == "primRhoT")
+            return StateValueOrigin::PrimRhoT;
+        if (name == "primTP")
+            return StateValueOrigin::PrimTP;
+        if (name == "cons_phy")
+            return StateValueOrigin::ConsPhy;
+        if (name == "consSensible_phy")
+            return StateValueOrigin::ConsSensiblePhy;
+        if (name == "primRhoP_phy")
+            return StateValueOrigin::PrimRhoPPhy;
+        if (name == "primRhoT_phy")
+            return StateValueOrigin::PrimRhoTPhy;
+        if (name == "primTP_phy")
+            return StateValueOrigin::PrimTPPhy;
+        if (name == "nonState")
+            return StateValueOrigin::NonState;
+        if (name == "invalid")
+            return StateValueOrigin::Invalid;
+        return StateValueOrigin::None;
+    }
+
+    inline nlohmann::ordered_json StateValueSchema(const std::string &desc, bool allowNonState = false)
+    {
+        using json = nlohmann::ordered_json;
+        json stateTypes = json::array({"cons", "consSensible", "primRhoP", "primRhoT", "primTP",
+                                       "cons_phy", "consSensible_phy", "primRhoP_phy", "primRhoT_phy", "primTP_phy"});
+        json schemaTypeNames = stateTypes;
+        schemaTypeNames.push_back("none");
+        schemaTypeNames.push_back("invalid");
+        if (allowNonState)
+            schemaTypeNames.push_back("nonState");
+
+        json numArray{{"type", "array"}, {"items", json{{"type", "number"}}}};
+        json tagged;
+        tagged["type"] = "object";
+        tagged["required"] = json::array({"type", "state"});
+        tagged["additionalProperties"] = false;
+        tagged["properties"] = json::object();
+        tagged["properties"]["type"] = json{{"type", "string"}, {"enum", schemaTypeNames}};
+        tagged["properties"]["state"] = numArray;
+
+        json legacy = numArray;
+        legacy["description"] = "Legacy plain array; interpreted as consSensible.";
+
+        json s;
+        s["description"] = desc + std::string(" Canonical object form is {type, state}. Merge-patch warning: patch type and state together; changing only one reinterprets stale data.");
+        s["default"] = json{{"type", "consSensible"}, {"state", json::array()}};
+        s["oneOf"] = json::array({legacy, tagged});
+        return s;
+    }
+
+    inline nlohmann::ordered_json StateValueTypeNameSchema(const std::string &desc)
+    {
+        using json = nlohmann::ordered_json;
+        return json{{"type", "string"},
+                    {"description", desc},
+                    {"enum", json::array({"cons", "consSensible", "primRhoP", "primRhoT", "primTP",
+                                          "cons_phy", "consSensible_phy", "primRhoP_phy", "primRhoT_phy", "primTP_phy"})}};
+    }
+
+    struct StateValue
+    {
+        Eigen::Vector<real, -1> cons;
+        Eigen::Vector<real, -1> consSensible;
+        Eigen::Vector<real, -1> primRhoP;
+        Eigen::Vector<real, -1> primRhoT;
+        Eigen::Vector<real, -1> primTP;
+        Eigen::Vector<real, -1> cons_phy;
+        Eigen::Vector<real, -1> consSensible_phy;
+        Eigen::Vector<real, -1> primRhoP_phy;
+        Eigen::Vector<real, -1> primRhoT_phy;
+        Eigen::Vector<real, -1> primTP_phy;
+        Eigen::Vector<real, -1> nonState;
+        StateValueOrigin originType = StateValueOrigin::None;
+
+        static bool filled(const Eigen::Vector<real, -1> &v) { return v.size() > 0 && v.allFinite(); }
+
+        const Eigen::Vector<real, -1> &originVector() const
+        {
+            switch (originType)
+            {
+            case StateValueOrigin::Cons:
+                return cons;
+            case StateValueOrigin::ConsSensible:
+                return consSensible;
+            case StateValueOrigin::PrimRhoP:
+                return primRhoP;
+            case StateValueOrigin::PrimRhoT:
+                return primRhoT;
+            case StateValueOrigin::PrimTP:
+                return primTP;
+            case StateValueOrigin::ConsPhy:
+                return cons_phy;
+            case StateValueOrigin::ConsSensiblePhy:
+                return consSensible_phy;
+            case StateValueOrigin::PrimRhoPPhy:
+                return primRhoP_phy;
+            case StateValueOrigin::PrimRhoTPhy:
+                return primRhoT_phy;
+            case StateValueOrigin::PrimTPPhy:
+                return primTP_phy;
+            case StateValueOrigin::NonState:
+                return nonState;
+            default:
+                return cons;
+            }
+        }
+
+        Eigen::Vector<real, -1> &originVectorMutable(StateValueOrigin origin)
+        {
+            switch (origin)
+            {
+            case StateValueOrigin::Cons:
+                return cons;
+            case StateValueOrigin::ConsSensible:
+                return consSensible;
+            case StateValueOrigin::PrimRhoP:
+                return primRhoP;
+            case StateValueOrigin::PrimRhoT:
+                return primRhoT;
+            case StateValueOrigin::PrimTP:
+                return primTP;
+            case StateValueOrigin::ConsPhy:
+                return cons_phy;
+            case StateValueOrigin::ConsSensiblePhy:
+                return consSensible_phy;
+            case StateValueOrigin::PrimRhoPPhy:
+                return primRhoP_phy;
+            case StateValueOrigin::PrimRhoTPhy:
+                return primRhoT_phy;
+            case StateValueOrigin::PrimTPPhy:
+                return primTP_phy;
+            case StateValueOrigin::NonState:
+                return nonState;
+            default:
+                return cons;
+            }
+        }
+
+        void keepOnlyOrigin()
+        {
+            auto clearUnless = [&](Eigen::Vector<real, -1> &v, StateValueOrigin origin)
+            {
+                if (originType != origin)
+                    v.resize(0);
+            };
+            clearUnless(cons, StateValueOrigin::Cons);
+            clearUnless(consSensible, StateValueOrigin::ConsSensible);
+            clearUnless(primRhoP, StateValueOrigin::PrimRhoP);
+            clearUnless(primRhoT, StateValueOrigin::PrimRhoT);
+            clearUnless(primTP, StateValueOrigin::PrimTP);
+            clearUnless(cons_phy, StateValueOrigin::ConsPhy);
+            clearUnless(consSensible_phy, StateValueOrigin::ConsSensiblePhy);
+            clearUnless(primRhoP_phy, StateValueOrigin::PrimRhoPPhy);
+            clearUnless(primRhoT_phy, StateValueOrigin::PrimRhoTPhy);
+            clearUnless(primTP_phy, StateValueOrigin::PrimTPPhy);
+            clearUnless(nonState, StateValueOrigin::NonState);
+        }
+
+        void fillMissingWithNaN(int nVars)
+        {
+            auto fillOne = [&](Eigen::Vector<real, -1> &v)
+            {
+                if (v.size() == 0)
+                    v.setConstant(nVars, std::numeric_limits<real>::quiet_NaN());
+            };
+            fillOne(cons);
+            fillOne(consSensible);
+            fillOne(primRhoP);
+            fillOne(primRhoT);
+            fillOne(primTP);
+            fillOne(cons_phy);
+            fillOne(consSensible_phy);
+            fillOne(primRhoP_phy);
+            fillOne(primRhoT_phy);
+            fillOne(primTP_phy);
+            fillOne(nonState);
+        }
+
+        void checkSize(int nVars, const std::string &name) const
+        {
+            auto checkOne = [&](const Eigen::Vector<real, -1> &v, const char *key)
+            {
+                DNDS_check_throw_info(v.size() == 0 || v.size() == nVars,
+                                      fmt::format("{} {} dim {} != {}", name, key, v.size(), nVars));
+            };
+            checkOne(cons, "cons");
+            checkOne(consSensible, "consSensible");
+            checkOne(primRhoP, "primRhoP");
+            checkOne(primRhoT, "primRhoT");
+            checkOne(primTP, "primTP");
+            checkOne(cons_phy, "cons_phy");
+            checkOne(consSensible_phy, "consSensible_phy");
+            checkOne(primRhoP_phy, "primRhoP_phy");
+            checkOne(primRhoT_phy, "primRhoT_phy");
+            checkOne(primTP_phy, "primTP_phy");
+            checkOne(nonState, "nonState");
+        }
+
+        friend void from_json(const nlohmann::ordered_json &j, StateValue &v)
+        {
+            v = StateValue{};
+            if (j.is_array())
+            {
+                v.consSensible = j.get<Eigen::VectorXd>();
+                v.originType = StateValueOrigin::ConsSensible;
+                return;
+            }
+            DNDS_check_throw_info(j.is_object(), "StateValue must be an array or object");
+            for (auto it = j.begin(); it != j.end(); ++it)
+                DNDS_check_throw_info(it.key() == "type" || it.key() == "state" || (it.key().size() > 0 && it.key()[0] == '_'),
+                                      fmt::format("StateValue object only accepts keys 'type' and 'state', or '_' comments, got [{}]", it.key()));
+            DNDS_check_throw_info(j.contains("type") && j.contains("state"),
+                                  "StateValue object must use canonical form {\"type\": string, \"state\": [...]}"
+                                  "; old keyed forms like {\"primTP_phy\": [...]} are not accepted");
+            DNDS_check_throw_info(j.at("type").is_string(), "StateValue.type must be a string");
+            DNDS_check_throw_info(j.at("state").is_array(), "StateValue.state must be an array");
+            v.originType = StateValueOriginFromName(j.at("type").get<std::string>());
+            if (v.originType == StateValueOrigin::None || v.originType == StateValueOrigin::Invalid)
+            {
+                v = StateValue{};
+                return;
+            }
+            v.originVectorMutable(v.originType) = j.at("state").get<Eigen::VectorXd>();
+            v.keepOnlyOrigin();
+        }
+
+        friend void to_json(nlohmann::ordered_json &j, const StateValue &v)
+        {
+            j = nlohmann::ordered_json::object();
+            j["type"] = StateValueOriginName(v.originType);
+            if (v.originType != StateValueOrigin::None && v.originType != StateValueOrigin::Invalid)
+                j["state"] = v.originVector();
+            else
+                j["state"] = nlohmann::ordered_json::array();
+        }
+    };
+
     /**
      * @brief Master configuration struct for the compressible Euler/Navier-Stokes evaluator.
      *
@@ -67,6 +366,7 @@ namespace DNDS::Euler
         bool ppEpsIsRelaxed = false;       ///< Use relaxed positivity-preserving epsilon.
         /// @}
 
+        real RANSTopLimit = 1e5;     ///< Upper clamp for SA nutilde
         real RANSBottomLimit = 0.01; ///< Lower clamp for RANS turbulence variables.
 
         /// @name Riemann Solver Configuration
@@ -123,11 +423,30 @@ namespace DNDS::Euler
 
         /// @name Viscous Flux and Source Options
         /// @{
-        int source2nd = 0;                                                       ///< Enable 2nd-order source term discretization.
-        int usePrimGradInVisFlux = 0;                                            ///< Use primitive-variable gradients in viscous flux.
-        int useSourceGradFixGG = 0;                                              ///< Apply Green-Gauss gradient fix for source terms.
-        int nCentralSmoothStep = 0;                                              ///< Number of central-difference smoothing steps.
-        real centralSmoothEps = 0.5;                                             ///< Epsilon for central smoothing.
+        int source2nd = 0;                    ///< Enable 2nd-order source term discretization.
+        int usePrimGradInVisFlux = 0;         ///< Use primitive-variable gradients in viscous flux.
+        int useSourceGradFixGG = 0;           ///< Apply Green-Gauss gradient fix for source terms.
+        int nCentralSmoothStep = 0;           ///< Number of central-difference smoothing steps.
+        real centralSmoothEps = 0.5;          ///< Epsilon for central smoothing.
+        int pointImplicitSourceUpdateOut = 0; ///< Print point-implicit source-update Newton residual ratios.
+        struct ReactorStepSettings
+        {
+            real rtol = 1e-10;       ///< Cantera reactor relative tolerance.
+            real atol = 1e-18;       ///< Cantera reactor absolute tolerance.
+            int maxOrder = 0;        ///< CVODE max order; <=0 leaves Cantera default.
+            int maxSteps = 10000000; ///< CVODE max internal steps.
+
+            DNDS_DECLARE_CONFIG(ReactorStepSettings)
+            {
+                // clang-format off
+                DNDS_FIELD(rtol,     "Cantera reactor relative tolerance", DNDS::Config::range(0.0));
+                DNDS_FIELD(atol,     "Cantera reactor absolute tolerance", DNDS::Config::range(0.0));
+                DNDS_FIELD(maxOrder, "Cantera reactor max order; <=0 leaves default");
+                DNDS_FIELD(maxSteps, "Cantera reactor max internal steps", DNDS::Config::range(1));
+                // clang-format on
+            }
+        } reactorStepSettings;                                                   ///< Settings for direct Cantera source substeps.
+        real reactiveSourceScale = 1.0;                                          ///< Multiplier for reactive source RHS and Jacobian.
         Eigen::Vector<real, 3> constMassForce = Eigen::Vector<real, 3>{0, 0, 0}; ///< Constant body force vector [fx, fy, fz].
         /// @}
         /**
@@ -146,14 +465,14 @@ namespace DNDS::Euler
 
             /// @brief Compute angular velocity magnitude (rad/s) from RPM.
             /// @return Omega = rpm * 2π / 60.
-            real Omega()
+            real Omega() const
             {
                 return rpm * (2 * pi / 60.);
             }
 
             /// @brief Return the angular velocity vector (axis * Omega).
             /// @return 3-D omega vector aligned with the rotation axis.
-            Geom::tPoint vOmega()
+            Geom::tPoint vOmega() const
             {
                 return axis * Omega();
             }
@@ -195,10 +514,10 @@ namespace DNDS::Euler
                 DNDS_FIELD(rpm,     "Rotational speed in RPM");
                 // clang-format on
             }
-        } frameConstRotation;                                                                  ///< Rotating reference frame configuration.
-        CLDriverSettings cLDriverSettings;                                                     ///< Lift-coefficient (CL) driver settings.
-        std::vector<std::string> cLDriverBCNames;                                              ///< Boundary zone names for CL driver force integration.
-        Eigen::Vector<real, -1> farFieldStaticValue = Eigen::Vector<real, 5>{1, 0, 0, 0, 2.5}; ///< Far-field reference state vector (size = nVars).
+        } frameConstRotation;                     ///< Rotating reference frame configuration.
+        CLDriverSettings cLDriverSettings;        ///< Lift-coefficient (CL) driver settings.
+        std::vector<std::string> cLDriverBCNames; ///< Boundary zone names for CL driver force integration.
+        StateValue farFieldStaticValue;           ///< Far-field reference state; resolved to conservative total before use.
         /**
          * @brief Axis-aligned box region for initial condition specification.
          *
@@ -208,7 +527,7 @@ namespace DNDS::Euler
         struct BoxInitializer
         {
             real x0{0}, x1{0}, y0{0}, y1{0}, z0{0}, z1{0}; ///< Box bounds [min, max] per axis.
-            Eigen::Vector<real, -1> v;                     ///< Initial state vector (size = nVars).
+            StateValue v;                                  ///< Initial state; resolved to conservative total before use.
 
             DNDS_DECLARE_CONFIG(BoxInitializer)
             {
@@ -219,7 +538,8 @@ namespace DNDS::Euler
                 DNDS_FIELD(y1, "Box y-max");
                 DNDS_FIELD(z0, "Box z-min");
                 DNDS_FIELD(z1, "Box z-max");
-                DNDS_FIELD(v,  "Initial value vector (size = nVars)");
+                config.field_schema(&T::v, "v", "Initial state value (size = nVars)",
+                                    []() { return StateValueSchema("Initial state value (size = nVars)"); });
                 // clang-format on
             }
         };
@@ -234,7 +554,7 @@ namespace DNDS::Euler
         struct PlaneInitializer
         {
             real a{0}, b{0}, c{0}, h{0}; ///< Plane equation coefficients: a*x + b*y + c*z = h.
-            Eigen::Vector<real, -1> v;   ///< Initial state vector (size = nVars).
+            StateValue v;                ///< Initial state; resolved to conservative total before use.
 
             DNDS_DECLARE_CONFIG(PlaneInitializer)
             {
@@ -243,7 +563,8 @@ namespace DNDS::Euler
                 DNDS_FIELD(b, "Plane normal y-component");
                 DNDS_FIELD(c, "Plane normal z-component");
                 DNDS_FIELD(h, "Plane offset");
-                DNDS_FIELD(v, "Initial value vector (size = nVars)");
+                config.field_schema(&T::v, "v", "Initial state value (size = nVars)",
+                                    []() { return StateValueSchema("Initial state value (size = nVars)"); });
                 // clang-format on
             }
         };
@@ -258,12 +579,16 @@ namespace DNDS::Euler
          */
         struct ExprtkInitializer
         {
-            std::vector<std::string> exprs; ///< ExprTk expression lines (concatenated with newlines).
+            std::vector<std::string> exprs;     ///< ExprTk expression lines (concatenated with newlines).
+            std::string stateType = "primRhoP"; ///< ExprTk vector state convention (StateValue type name, excluding nonState).
 
             DNDS_DECLARE_CONFIG(ExprtkInitializer)
             {
                 // clang-format off
                 DNDS_FIELD(exprs, "Expression lines (concatenated with newlines)");
+                config.field_schema(&T::stateType, "stateType",
+                                    "ExprTk state convention: cons, consSensible, primRhoP, primRhoT, primTP, or *_phy variants.",
+                                    []() { return StateValueTypeNameSchema("ExprTk state convention: cons, consSensible, primRhoP, primRhoT, primTP, or *_phy variants."); });
                 // clang-format on
             }
 
@@ -285,45 +610,107 @@ namespace DNDS::Euler
          * @brief Ideal gas thermodynamic property set.
          *
          * Stores gamma, gas constant, viscosity parameters, and Prandtl number.
-         * The heat capacity CpGas is a derived quantity recomputed automatically
-         * after deserialization via the post_read hook calling recomputeDerived().
          */
         struct IdealGasProperty
         {
-            real gamma = 1.4;                        ///< Ratio of specific heats (Cp/Cv).
-            real Rgas = 1;                           ///< Specific gas constant (J/(kg·K) in dimensional runs).
-            real muGas = 1;                          ///< Dynamic viscosity (or reference viscosity for Sutherland).
-            real prGas = 0.72;                       ///< Prandtl number.
-            real CpGas = Rgas * gamma / (gamma - 1); ///< Heat capacity at constant pressure (derived, not serialized).
-            real TRef = 273.15;                      ///< Reference temperature (K) for Sutherland's law.
-            real CSutherland = 110.4;                ///< Sutherland constant (K).
-            int muModel = 1;                         ///< Viscosity model: 0 = constant, 1 = Sutherland, 2 = constant_nu.
+            real gamma = 1.4;
+            real Rgas = 287; ///< physical gas constant R_phys [J/(kg·K)]; consumed via toCode() → R_code = R_phys·T0/U0²
+            real muGas = 1;  ///< dynamic viscosity [Pa·s] physical (μ_phys), code-scaled via μ_0 = ρ0·U0·L0
+            real prGas = 0.72;
+            real prTurb = 0.9; ///< Turbulent Prandtl number for eddy heat conductivity.
+            real scTurb = 0.9; ///< Shared turbulent Schmidt number for species diffusion.
+            real TRef = 273.15;
+            real CSutherland = 110.4;
+            int muModel = 1;
+
+            /// Reference scales for dimensional-physical conversion.
+            /// R_code = R_phys / R0  where R0 = U0² / T0.
+            /// p0 = rho0 · U0².
+            real T0 = 1;   ///< Reference temperature (K).
+            real rho0 = 1; ///< Reference density (kg/m³).
+            real U0 = 1;   ///< Reference velocity (m/s).
+            real L0 = 1;   ///< Reference length (m).
 
             DNDS_DECLARE_CONFIG(IdealGasProperty)
             {
                 // clang-format off
-                DNDS_FIELD(gamma,       "Ratio of specific heats",
-                           DNDS::Config::range(1.0));
-                DNDS_FIELD(Rgas,        "Specific gas constant",
-                           DNDS::Config::range(0.0));
-                DNDS_FIELD(muGas,       "Dynamic viscosity",
+                DNDS_FIELD(gamma,       "Ratio of specific heats. Must be finite and > 1.",
+                           DNDS::Config::range(1.0 + std::numeric_limits<real>::epsilon()));
+                DNDS_FIELD(Rgas,        "Specific gas constant. Must be finite and > 0.",
+                           DNDS::Config::range(std::numeric_limits<real>::min()));
+                DNDS_FIELD(muGas,       "Dynamic viscosity (Pa·s)",
                            DNDS::Config::range(0.0));
                 DNDS_FIELD(prGas,       "Prandtl number",
                            DNDS::Config::range(0.0));
+                DNDS_FIELD(prTurb,      "Turbulent Prandtl number",
+                           DNDS::Config::range(std::numeric_limits<real>::min()));
+                DNDS_FIELD(scTurb,      "Shared turbulent Schmidt number for species diffusion",
+                           DNDS::Config::range(std::numeric_limits<real>::min()));
                 DNDS_FIELD(TRef,        "Reference temperature (K)");
                 DNDS_FIELD(CSutherland, "Sutherland constant (K)");
                 DNDS_FIELD(muModel,     "Viscosity model: 0=constant, 1=sutherland, 2=constant_nu");
-                // CpGas is derived: recomputed after deserialization
-                config.post_read([](T &s) { s.recomputeDerived(); });
+                DNDS_FIELD(T0,          "Reference temperature (K). Must be finite and > 0.", DNDS::Config::range(std::numeric_limits<real>::min()));
+                DNDS_FIELD(rho0,        "Reference density (kg/m^3). Must be finite and > 0.", DNDS::Config::range(std::numeric_limits<real>::min()));
+                DNDS_FIELD(U0,          "Reference velocity (m/s). Must be finite and > 0.", DNDS::Config::range(std::numeric_limits<real>::min()));
+                DNDS_FIELD(L0,          "Reference length (m). Must be finite and > 0.", DNDS::Config::range(std::numeric_limits<real>::min()));
+                config.post_read([](T &s) { s.validateScales(); });
                 // clang-format on
             }
 
-            /// @brief Recompute derived quantities (CpGas) from gamma and Rgas after deserialization.
-            void recomputeDerived()
+            /// @brief Constant-pressure heat capacity from gamma and Rgas.
+            real CpGas() const
             {
-                CpGas = Rgas * gamma / (gamma - 1);
+                return Rgas * gamma / (gamma - 1);
+            }
+
+            void validateScales() const
+            {
+                DNDS_check_throw_info(std::isfinite(T0) && T0 > 0, "idealGasProperty.T0 must be finite and > 0");
+                DNDS_check_throw_info(std::isfinite(rho0) && rho0 > 0, "idealGasProperty.rho0 must be finite and > 0");
+                DNDS_check_throw_info(std::isfinite(U0) && U0 > 0, "idealGasProperty.U0 must be finite and > 0");
+                DNDS_check_throw_info(std::isfinite(L0) && L0 > 0, "idealGasProperty.L0 must be finite and > 0");
+                DNDS_check_throw_info(std::isfinite(gamma) && gamma > 1, "idealGasProperty.gamma must be finite and > 1");
+                DNDS_check_throw_info(std::isfinite(Rgas) && Rgas > 0, "idealGasProperty.Rgas must be finite and > 0");
             }
         } idealGasProperty; ///< Ideal gas thermodynamic property configuration.
+
+        /**
+         * @brief Reactive flow configuration.
+         *
+         * When @c enabled is true, the solver activates multi-species reactive
+         * flow with chemical source terms, multi-species thermodynamics, and
+         * mixture-averaged transport.
+         */
+        struct ReactiveFlowSettings
+        {
+            bool enabled = false;
+            std::string mechanismFile;
+            std::string thermoFile;
+            std::string transportModel = "MixtureAveraged";
+            real CFLScale = 1.0;
+            real chemRelaxEps = 0.0;
+            real chemAbsTol = smallReal;
+            real TBase = 0.0;
+            int nSpeciesOverride = 0;
+            bool useCellTWarmCache = true;
+
+            DNDS_DECLARE_CONFIG(ReactiveFlowSettings)
+            {
+                DNDS_FIELD(enabled, "Enable reactive flow (multi-species + chemistry)");
+                DNDS_FIELD(mechanismFile, "CHEMKIN-format mechanism YAML path");
+                DNDS_FIELD(thermoFile, "Reserved; currently unused. Mechanism YAML supplies thermodynamics.");
+                DNDS_FIELD(transportModel, "Cantera transport model requested by reactive flow; currently only mixture-averaged is implemented.");
+                DNDS_FIELD(CFLScale, "Point-implicit chemistry pseudo-time multiplier",
+                           DNDS::Config::range(std::numeric_limits<real>::min()));
+                DNDS_FIELD(chemRelaxEps, "Minimum point-implicit chemistry pseudo-time step",
+                           DNDS::Config::range(0.0));
+                DNDS_FIELD(chemAbsTol, "Absolute point-implicit chemistry residual tolerance",
+                           DNDS::Config::range(0.0));
+                DNDS_FIELD(TBase, "Base temperature [K] for reactive sensible-energy bookkeeping; <=0 uses the minimum per-species Cantera bound");
+                DNDS_FIELD(nSpeciesOverride, "Reserved; currently unused. Species count is read from mechanism.");
+                DNDS_FIELD(useCellTWarmCache, "Enable per-cell T warm-start cache for temperature inversion");
+            }
+        } reactiveFlow; ///< Reactive flow settings.
 
         /***************************************************************************************************/
         // end of setting entries
@@ -347,6 +734,8 @@ namespace DNDS::Euler
             DNDS_FIELD(uRecBetaCompressPower,   "uRec beta compression power");
             DNDS_FIELD(forceVolURecBeta,        "Force volume uRec beta");
             DNDS_FIELD(ppEpsIsRelaxed,          "Positivity-preserving epsilon is relaxed");
+            DNDS_FIELD(RANSTopLimit,         "RANS variable top limit, currently for SA nutilde",
+                       DNDS::Config::range(0.0));
             DNDS_FIELD(RANSBottomLimit,         "RANS variable bottom limit",
                        DNDS::Config::range(0.0));
             config.field_alias(&T::rsType,      "riemannSolverType",
@@ -393,13 +782,20 @@ namespace DNDS::Euler
             DNDS_FIELD(nCentralSmoothStep,      "Central smoothing steps",
                        DNDS::Config::range(0));
             DNDS_FIELD(centralSmoothEps,        "Central smoothing epsilon");
+            DNDS_FIELD(pointImplicitSourceUpdateOut, "Print point-implicit source-update Newton residual ratio min/max: 0=off, 1=on");
+            config.field_section(&T::reactorStepSettings, "reactorStepSettings",
+                                 "Cantera reactor settings for direct source substeps");
+            DNDS_FIELD(reactiveSourceScale,     "Scale reactive source RHS and Jacobian directly; use 0 for non-reactive debugging",
+                       DNDS::Config::range(0, 1));
             DNDS_FIELD(constMassForce,          "Constant mass force vector (3D)");
             config.field_section(&T::frameConstRotation, "frameConstRotation",
                                  "Constant-rotation reference frame settings");
             config.field_section(&T::cLDriverSettings,   "cLDriverSettings",
                                  "CL driver settings");
             DNDS_FIELD(cLDriverBCNames,         "Boundary names for CL driver force integration");
-            DNDS_FIELD(farFieldStaticValue,     "Far-field static value vector (size = nVars)");
+            config.field_schema(&T::farFieldStaticValue, "farFieldStaticValue",
+                                "Far-field state value (size = nVars)",
+                                []() { return StateValueSchema("Far-field state value (size = nVars)"); });
             config.template field_array_of<BoxInitializer>(
                 &T::boxInitializers, "boxInitializers",
                 "Box region initializers");
@@ -410,13 +806,52 @@ namespace DNDS::Euler
                 &T::exprtkInitializers, "exprtkInitializers",
                 "Exprtk expression initializers");
             config.field_section(&T::idealGasProperty, "idealGasProperty",
-                                 "Ideal gas thermodynamic properties");
+                                  "Ideal gas thermodynamic properties");
+            auto disabledReactiveFlowSchema = []()
+            {
+                ReactiveFlowSettings::_dnds_ensure_registered();
+                auto schema = ConfigRegistry<ReactiveFlowSettings>::emitSchema();
+                schema["properties"]["enabled"]["const"] = false;
+                schema["properties"]["enabled"]["default"] = false;
+                return schema;
+            };
+            if constexpr (model == NS_EX || model == NS_EX_3D)
+            {
+#ifdef DNDS_USE_CANTERA
+                config.field_section(&T::reactiveFlow, "reactiveFlow",
+                                     "Reactive flow settings (multi-species chemistry)");
+#else
+                config.field_schema(
+                    &T::reactiveFlow, "reactiveFlow",
+                    "Reactive flow settings (multi-species chemistry). reactiveFlow.enabled requires DNDS_USE_CANTERA=ON.",
+                    disabledReactiveFlowSchema);
+#endif
+            }
+            else
+                config.field_schema(
+                    &T::reactiveFlow, "reactiveFlow",
+                    "Reactive flow settings (multi-species chemistry). reactiveFlow.enabled must be false for this model.",
+                    disabledReactiveFlowSchema);
 
             // Cross-field checks
             config.check("useScalarJacobian and useRoeJacobian are mutually exclusive",
                          [](const T &s) { return !(s.useScalarJacobian && s.useRoeJacobian); });
             config.check("ransModel must not be RANS_Unknown",
                          [](const T &s) { return s.ransModel != RANS_Unknown; });
+            config.check_ctx(
+                [](const T &s, const ConfigContext &ctx) -> CheckResult {
+                    if (ctx.modelCode == static_cast<int>(NS_EX) || ctx.modelCode == static_cast<int>(NS_EX_3D))
+                    {
+#ifndef DNDS_USE_CANTERA
+                        if (s.reactiveFlow.enabled)
+                            return {false, "reactiveFlow.enabled requires DNDS_USE_CANTERA=ON"};
+#endif
+                        return {true, ""};
+                    }
+                    if (s.reactiveFlow.enabled)
+                        return {false, "reactiveFlow.enabled is only supported for eulerEX/eulerEX3D models"};
+                    return {true, ""};
+                });
 
             // Post-read hook: finalize derived quantities using stored _nVars
             config.post_read([](T &s) { s.finalize(); });
@@ -445,11 +880,13 @@ namespace DNDS::Euler
             {
                 ransModel = RANSModel::RANS_KOWilcox;
             }
-            farFieldStaticValue.setOnes(nVars);
             DNDS_assert(nVars > I4);
-            farFieldStaticValue(0) = 1;
-            farFieldStaticValue(Eigen::seq(Eigen::fix<0>, Eigen::fix<I4>)).setZero();
-            farFieldStaticValue(I4) = 2.5;
+            farFieldStaticValue.consSensible.setOnes(nVars);
+            farFieldStaticValue.consSensible(0) = 1;
+            farFieldStaticValue.consSensible(Eigen::seq(Eigen::fix<1>, Eigen::fix<dim>)).setZero();
+            farFieldStaticValue.consSensible(I4) = 2.5;
+            farFieldStaticValue.consSensible(Eigen::seq(I4 + 1, nVars - 1)).setZero();
+            farFieldStaticValue.originType = StateValueOrigin::ConsSensible;
         }
 
         /**
@@ -469,8 +906,18 @@ namespace DNDS::Euler
             int nVars = _nVars;
             if (nVars <= 0)
                 return; // skip finalize if nVars not set (e.g. schema emission default-ctor)
+            DNDS_check_throw_info(!reactiveFlow.enabled || model == NS_EX || model == NS_EX_3D,
+                                  "reactiveFlow.enabled is only supported for eulerEX/eulerEX3D models");
+#ifndef DNDS_USE_CANTERA
+            DNDS_check_throw_info(!reactiveFlow.enabled,
+                                  "reactiveFlow.enabled requires DNDS_USE_CANTERA=ON");
+#endif
+            DNDS_check_throw_info(!reactiveFlow.enabled || specialBuiltinInitializer == 0,
+                                  "reactiveFlow.enabled does not support specialBuiltinInitializer; use explicit StateValue/ExprTk initialization");
+            DNDS_check_throw_info(!reactiveFlow.enabled || !reactiveFlow.mechanismFile.empty(),
+                                  "reactiveFlow.mechanismFile must be non-empty when reactiveFlow.enabled is true");
             DNDS_assert(constMassForce.size() == 3);
-            DNDS_assert(farFieldStaticValue.size() == nVars);
+            farFieldStaticValue.checkSize(nVars, "farFieldStaticValue");
             if (constMassForce.norm() || frameConstRotation.enabled ||
                 std::unordered_set<EulerModel>{NS_SA, NS_SA_3D, NS_2EQ, NS_2EQ_3D}.count(model))
                 DNDS_assert_info(!ignoreSourceTerm,
@@ -478,15 +925,25 @@ namespace DNDS::Euler
             if (frameConstRotation.enabled)
                 frameConstRotation.axis.normalize();
             for (auto &box : boxInitializers)
-                DNDS_assert_info(box.v.size() == nVars, "box initial value dimension incorrect");
+                box.v.checkSize(nVars, "box initial value");
             for (auto &plane : planeInitializers)
-                DNDS_assert_info(plane.v.size() == nVars, "plane initial value dimension incorrect");
+                plane.v.checkSize(nVars, "plane initial value");
 
             // Compute reference values
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-            refU = farFieldStaticValue;
+            refU.resize(0);
+            refUPrim.resize(0);
+            if (reactiveFlow.enabled)
+                return; // requires PhysicsProperties/ChemicalSource resolution in EulerEvaluator
+            if (StateValue::filled(farFieldStaticValue.cons))
+                refU = farFieldStaticValue.cons;
+            else if (farFieldStaticValue.originType == StateValueOrigin::ConsSensible &&
+                     StateValue::filled(farFieldStaticValue.consSensible))
+                refU = farFieldStaticValue.consSensible;
+            else
+                return;
             refUPrim = refU;
-            Gas::IdealGasThermalConservative2Primitive<dim>(refU, refUPrim, idealGasProperty.gamma);
+            Gas::IdealGasThermalConservative2Primitive<dim>(refU, refUPrim, idealGasProperty.gamma, 0 /* config, sensible ρE */);
             DNDS_assert(refUPrim(I4) > 0 && refUPrim(0) > 0);
             real a = std::sqrt(idealGasProperty.gamma * refUPrim(I4) / (refUPrim(0) + verySmallReal));
             refU(Seq123).setConstant(refU(Seq123).norm() + a);

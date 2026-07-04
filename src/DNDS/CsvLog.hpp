@@ -7,6 +7,7 @@
 #include <fstream>
 
 #include "Defines.hpp"
+#include "OutputDir.hpp"
 
 namespace DNDS
 {
@@ -75,8 +76,7 @@ namespace DNDS
         int64_t n_line_max = INT64_MAX;
         void update_ofstream(const std::string &fname)
         {
-            std::filesystem::path outFile{fname};
-            std::filesystem::create_directories(outFile.parent_path() / ".");
+            createOutputDir(fname);
             pOs = std::make_unique<std::ofstream>(fname);
             DNDS_check_throw_info(*pOs, "csv file [" + fname + "] did not open");
         }

@@ -20,7 +20,7 @@
         "odeSetting2": 0.0,
         "odeSetting3": 0.0,
         "odeSetting4": 0.0,
-        "partitionMeshOnly": false, // true if this is a mesh-pre-partitioning run
+        "partitionMeshOnly": false, // true if this is a mesh-pre-partitioning run; exits before transforms/solver setup
         "dtIncreaseLimit": 2.0, // max Time Step Size increase ratio for unsteady simulation
         "dtIncreaseAfterCount": 0, // currently only for implicit PP
         "dtCFLLimitScale": 1e+100, // CFL limited Time Step scale, use 1e100 for fixed time step, or 1 for CFL=1 time step
@@ -91,12 +91,13 @@
         "meshElevationNSearch": 30,
         "meshElevationRefDWall": 0.001,
         "meshElevationBoundaryMode": 0,
-        "meshFile": "data/mesh/NACA0012_WIDE_H3.cgns", // path to mesh file
+        "meshFile": "data/mesh/NACA0012_WIDE_H3.cgns", // path to source mesh file
+        "meshFilePartitionedInput": "", // explicit partitioned mesh input for readMeshMode 1/2; empty uses meshFile_part_<current MPI size>; .dnds.h5/.dir suffix optional
         "outPltName": "data/out/debugData_", // output prefix for "plt"/visualization files
         "outLogName": "", // prefix to residual / scalar data logging file, default to outPltName
         "outRestartName": "", // prefix to restart files, default to outPltName
         "outPltMode": 0, // 0 for serial single file output, 1 for parallel multiple file output
-        "readMeshMode": 0, // 0 for reading mesh from "meshFile" (serially), 1 for reading pre-partitioned mesh
+        "readMeshMode": 0, // 0: source mesh and partition, 1: pre-partitioned same MPI size, 2: H5 pre-partitioned with repartition
         "outPltTecplotFormat": true, // write "plt"/visualization files in Tecplot format
         "outPltVTKFormat": true, // write "plt"/visualization files in VTK format
         "outAtPointData": true, // write "plt"/visualization files with point data (only R U V W P M now)

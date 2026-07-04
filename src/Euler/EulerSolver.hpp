@@ -28,6 +28,7 @@
 #include <functional>
 #include <tuple>
 #include <filesystem>
+#include "DNDS/OutputDir.hpp"
 #include <mutex>
 #include <future>
 
@@ -37,6 +38,7 @@
 // #endif
 #include "DNDS/Serializer/JsonUtil.hpp"
 #include "DNDS/Config/ConfigParam.hpp"
+#include "DNDS/EnvReader.hpp"
 #include "DNDS/Serializer/SerializerFactory.hpp"
 #include "DNDS/CsvLog.hpp"
 #include "DNDS/ObjectPool.hpp"
@@ -74,6 +76,8 @@ namespace DNDS::Euler
     class EulerSolver
     {
         int nVars = getNVars(model); ///< Runtime number of conserved variables.
+    public:
+        [[nodiscard]] int NVars() const { return nVars; }
 
     public:
         typedef EulerEvaluator<model> TEval;             ///< Evaluator type for this model.
@@ -112,6 +116,7 @@ namespace DNDS::Euler
         JacobianDiagBlock<nVarsFixed> JD, JD1, JDTmp, JSource, JSource1, JSourceTmp;                                  ///< Diagonal Jacobian blocks for implicit methods.
         ssp<JacobianLocalLU<nVarsFixed>> JLocalLU;                                                                    ///< Local LU factorization for direct preconditioner.
         ArrayDOFV<1> alphaPP, alphaPP1, betaPP, betaPP1, alphaPP_tmp, dTauTmp;                                        ///< Positivity-preserving limiter scalars and time-step buffer.
+        ArrayDOFV<1> cellT_warm_;                                                                                     ///< Per-cell last-known temperature for warm-starting T inversion.
 
         int nOUTS = {-1};   ///< Number of output scalars per cell in volume output.
         int nOUTSPoint{-1}; ///< Number of output scalars per node in point output.
@@ -192,6 +197,7 @@ namespace DNDS::Euler
                 bool useDtPPLimit = false;
                 real dtPPLimitRelax = 0.8;
                 real dtPPLimitScale = 1;
+                int sourceStrangSplitting = 0; ///< 0=off, 1=reactive half-step / flow / reactive half-step; latest RHS is flow-only.
                 DNDS_DECLARE_CONFIG(TimeMarchControl)
                 {
                     // clang-format off
@@ -200,8 +206,8 @@ namespace DNDS::Euler
                     DNDS_FIELD(dtImplicitMin,       "Minimum implicit time step",
                                DNDS::Config::range(0.0));
                     DNDS_FIELD(nTimeStep,           "Max number of time steps",
-                               DNDS::Config::range(1));
-                    DNDS_FIELD(steadyQuit,          "Quit on steady convergence");
+                               DNDS::Config::range(0));
+                    DNDS_FIELD(steadyQuit,          "Quit on steady convergence, automatically sets nTimeStep <= 1 and dtImplicit -> inf");
                     DNDS_FIELD(useRestart,          "Initialize from restart file");
                     DNDS_FIELD(useImplicitPP,       "Use implicit positivity-preserving");
                     DNDS_FIELD(rhsFPPMode,          "RHS flux-positivity-preserving mode");
@@ -210,14 +216,35 @@ namespace DNDS::Euler
                                DNDS::Config::range(0.0, 1.0));
                     DNDS_FIELD(incrementPPRelax,    "Increment PP relaxation factor",
                                DNDS::Config::range(0.0, 1.0));
-                    DNDS_FIELD(odeCode,             "ODE integrator code");
+                    DNDS_FIELD(odeCode,             R"EOF(ODE integrator code:
+    0       : ESDIRK4       | implicit | 5 stages
+    101     : SSP-SDIRK4    | implicit | 3 stages
+    202     : ESIDRK3       | implicit | 3 stages
+    203     : Trapz/C-N     | implicit | 1 stage
+    204     : ESDIRK2       | implicit | 2 stages
+    1/102   : BDF2          | implicit | 1 stage - 2 steps
+    103     : Backward Euler| implicit | 1 stage
+    2       : SSPRK3        | explicit | 3 stages (explicit)
+    401 ↓   : DITR          | implicit | 2 stages (coupled)
+        - c2                     = odeSetting1 
+        - backward-Euler starter = odeSetting2
+        - thetaM1                = odeSetting3
+        - mask                   = odeSetting4
+    411 ↓   : DITR-U2R2     | implicit | 2 stages (coupled)
+    412 ↓   : DITR-U2R1     | implicit | 2 stages (coupled)
+    413 ↓   : DITR-U3R1     | implicit | 2 stages (coupled) - 2 steps
+        - c2                     = odeSetting1 
+        - backward-Euler starter = odeSetting2
+        - thetaM1                = odeSetting3
+        - thetaM2                = odeSetting4
+)EOF");
                     DNDS_FIELD(tEnd,                "End time for unsteady simulation");
                     DNDS_FIELD(odeSetting1,         "ODE parameter 1");
                     DNDS_FIELD(odeSetting2,         "ODE parameter 2");
                     DNDS_FIELD(odeSetting3,         "ODE parameter 3");
                     DNDS_FIELD(odeSetting4,         "ODE parameter 4");
                     config.field_json(&T::odeSettingsExtra, "odeSettingsExtra", "Extra ODE integrator settings (opaque JSON)");
-                    DNDS_FIELD(partitionMeshOnly,   "Only partition mesh, then exit");
+                    DNDS_FIELD(partitionMeshOnly,   "Build and write partitioned mesh, then exit before coordinate transforms and solver setup");
                     DNDS_FIELD(dtIncreaseLimit,     "Max factor for dt increase per step",
                                DNDS::Config::range(1.0));
                     DNDS_FIELD(dtIncreaseAfterCount,"Steps before dt increase allowed",
@@ -228,6 +255,7 @@ namespace DNDS::Euler
                                DNDS::Config::range(0.0, 1.0));
                     DNDS_FIELD(dtPPLimitScale,      "PP dt limiter scale",
                                DNDS::Config::range(0.0));
+                    DNDS_FIELD(sourceStrangSplitting, "Reactive physical-time Strang splitting: 0=off, 1=on. Latest/output RHS is flow-only while enabled.");
                     // clang-format on
                 }
                 bool timeMarchIsTwoStage()
@@ -329,14 +357,16 @@ namespace DNDS::Euler
                     "nLimBeta", "minBeta",
                     "nLimAlpha", "minAlpha",
                     "tWall", "telapsed", "trec", "trhs", "tcomm", "tLim", "tLimiterA", "tLimiterB",
-                    "fluxWall", "CL", "CD", "AoA"};
+                    "fluxWall", "CL", "CD", "AoA",
+                    "uMin", "uMax"};
                 int nPrecisionLog = 10;
                 bool dataOutAtInit = false;
                 bool restartOutAtInit = false;
-                int nDataOut = 10000;
-                int nDataOutC = 50;
+                bool meshOutAtInit = false;
+                int nDataOut = 10;
+                int nDataOutC = 1;
                 int nDataOutInternal = 10000;
-                int nDataOutCInternal = 1;
+                int nDataOutCInternal = 10000;
                 int nRestartOut = INT_MAX;
                 int nRestartOutC = INT_MAX;
                 int nRestartOutInternal = INT_MAX;
@@ -365,6 +395,7 @@ namespace DNDS::Euler
                                DNDS::Config::range(1));
                     DNDS_FIELD(dataOutAtInit,                   "Output data at initialization");
                     DNDS_FIELD(restartOutAtInit,                "Output restart at initialization");
+                    DNDS_FIELD(meshOutAtInit,                   "Output mesh CGNS at initialization");
                     DNDS_FIELD(nDataOut,                        "Data output interval (outer steps)",
                                DNDS::Config::range(1));
                     DNDS_FIELD(nDataOutC,                       "Data output interval (convergence steps)",
@@ -497,12 +528,13 @@ namespace DNDS::Euler
                 int meshFormat = 0;
                 Geom::UnstructuredMeshSerialRW::PartitionOptions meshPartitionOptions;
                 std::string meshFile = "data/mesh/NACA0012_WIDE_H3.cgns";
+                std::string meshFilePartitionedInput = "";
                 std::string outPltName = "data/out/debugData_";
                 std::string outLogName = "";
                 std::string outRestartName = "";
 
                 int outPltMode = 0;   // 0 = serial, 1 = dist plt
-                int readMeshMode = 0; // 0 = serial cgns, 1 = dist json
+                int readMeshMode = 0; // 0 = source mesh, 1 = pre-partitioned, 2 = H5 repartitioned
                 bool outPltTecplotFormat = true;
                 bool outPltVTKFormat = false;
                 bool outPltVTKHDFFormat = false;
@@ -518,6 +550,7 @@ namespace DNDS::Euler
                 bool outBndData = false;
 
                 std::vector<std::string> outCellScalarNames{};
+                std::vector<std::string> outBndScalarNames{};
 
                 bool serializerSaveURec = false;
 
@@ -528,16 +561,25 @@ namespace DNDS::Euler
 
                 Serializer::SerializerFactory restartWriter;
                 Serializer::SerializerFactory meshPartitionedWriter;
-                std::string meshPartitionedReaderType = "JSON";
+                std::string meshPartitionedReaderType = "H5";
 
-                const std::string &getOutLogName()
+                std::string getOutPltName() const
                 {
-                    return outLogName.empty() ? outPltName : outLogName;
+                    return outPltName + DNDS::GetEnvString("DNDS_RUN_COMMENT");
                 }
 
-                const std::string &getOutRestartName()
+                std::string getOutLogName() const
                 {
-                    return outRestartName.empty() ? outPltName : outRestartName;
+                    if (outLogName.empty())
+                        return getOutPltName();
+                    return outLogName + DNDS::GetEnvString("DNDS_RUN_COMMENT");
+                }
+
+                std::string getOutRestartName() const
+                {
+                    if (outRestartName.empty())
+                        return getOutPltName();
+                    return outRestartName + DNDS::GetEnvString("DNDS_RUN_COMMENT");
                 }
 
                 DNDS_DECLARE_CONFIG(DataIOControl)
@@ -568,11 +610,12 @@ namespace DNDS::Euler
                     DNDS_FIELD(meshFormat,                  "Mesh format code");
                     DNDS_FIELD(meshPartitionOptions,        "Mesh partitioning options");
                     DNDS_FIELD(meshFile,                    "Input mesh file path");
+                    DNDS_FIELD(meshFilePartitionedInput,    "Explicit partitioned mesh input path for readMeshMode 1/2; empty uses meshFile_part_<current MPI size>; serializer suffix optional");
                     DNDS_FIELD(outPltName,                  "Output plot file base name");
                     DNDS_FIELD(outLogName,                  "Output log file base name (empty=use outPltName)");
                     DNDS_FIELD(outRestartName,              "Output restart file base name (empty=use outPltName)");
                     DNDS_FIELD(outPltMode,                  "Output mode: 0=serial, 1=distributed");
-                    DNDS_FIELD(readMeshMode,                "Read mesh mode: 0=serial CGNS, 1=distributed JSON");
+                    DNDS_FIELD(readMeshMode,                "Read mesh mode: 0=source mesh and partition, 1=pre-partitioned mesh (same MPI size), 2=H5 pre-partitioned mesh with repartition");
                     DNDS_FIELD(outPltTecplotFormat,         "Output in Tecplot format");
                     DNDS_FIELD(outPltVTKFormat,             "Output in VTK XML format");
                     DNDS_FIELD(outPltVTKHDFFormat,          "Output in VTK HDF format");
@@ -591,6 +634,7 @@ namespace DNDS::Euler
                     DNDS_FIELD(outVolumeData,               "Output volume data");
                     DNDS_FIELD(outBndData,                  "Output boundary data");
                     DNDS_FIELD(outCellScalarNames,          "Additional cell scalar names to output");
+                    DNDS_FIELD(outBndScalarNames,           "Additional bnd scalar names to output (picked from bnd2cell)");
                     DNDS_FIELD(serializerSaveURec,          "Save reconstruction in restart");
                     DNDS_FIELD(allowAsyncPrintData,         "Allow asynchronous data output");
                     DNDS_FIELD(rectifyNearPlane,            "Rectify nodes near planes: bitmask 1=x,2=y,4=z");
@@ -710,6 +754,7 @@ namespace DNDS::Euler
                 int nSgsConsoleCheck = 100;
                 int nGmresConsoleCheck = 100;
                 bool initWithLastURecInc = false;
+                int sourceTauSplitting = 0; ///< 0=off, 1=transport-implicit + pointwise reactive source splitting
                 int multiGridLP = 0;
                 int multiGridLPInnerNIter = 4;
                 int multiGridLPStartIter = 0;
@@ -772,6 +817,7 @@ namespace DNDS::Euler
                     DNDS_FIELD(nGmresConsoleCheck,        "Console check interval for GMRES",
                                DNDS::Config::range(1));
                     DNDS_FIELD(initWithLastURecInc,       "Initialize GMRES with last uRec increment");
+                    DNDS_FIELD(sourceTauSplitting,        "Reactive source pseudo-time splitting: 0=off, 1=on");
                     DNDS_FIELD(multiGridLP,               "Multi-grid levels (0=off)");
                     DNDS_FIELD(multiGridLPInnerNIter,     "Multi-grid inner iterations",
                                DNDS::Config::range(1));
@@ -943,7 +989,8 @@ namespace DNDS::Euler
         /// @brief Destructor. Waits for all async output futures to complete.
         ~EulerSolver()
         {
-            int nBad{0};
+            constexpr int maxWaitIter = 1000000; // ~10s at 10us per iteration
+            int nBad{0}, totalIter{0};
             do
             {
                 nBad = 0;
@@ -955,7 +1002,7 @@ namespace DNDS::Euler
                         nBad++;
                 if (outSeqFuture.valid() && outSeqFuture.wait_for(std::chrono::microseconds(10)) != std::future_status::ready)
                     nBad++;
-            } while (nBad);
+            } while (nBad && ++totalIter < maxWaitIter);
         }
 
         /**
@@ -1036,6 +1083,17 @@ namespace DNDS::Euler
                     }
                 }
                 config.ReadWriteJson(gSetting, nVars, read);
+                for (const auto &failure : config.validate())
+                    DNDS_check_throw_info(failure.passed, failure.message);
+                {
+                    DNDS::ConfigContext ctx;
+                    ctx.nVars = nVars;
+                    ctx.dim = dim;
+                    ctx.gDim = gDim;
+                    ctx.modelCode = static_cast<int>(model);
+                    for (const auto &failure : config.validateWithContext(ctx))
+                        DNDS_check_throw_info(failure.passed, failure.message);
+                }
                 // create from json the pBCHandler
                 pBCHandler = std::make_shared<BoundaryHandler<model>>(nVars);
                 from_json(config.bcSettings, *pBCHandler);
@@ -1053,8 +1111,7 @@ namespace DNDS::Euler
                     gSetting["bcSettings"] = *pBCHandler;
                 if (mpi.rank == 0) // single call for output
                 {
-                    std::filesystem::path outFile{jsonName};
-                    std::filesystem::create_directories(outFile.parent_path() / ".");
+                    createOutputDir(jsonName);
                     auto fIn = std::ofstream(jsonName);
                     DNDS_assert(fIn);
                     fIn << std::setw(4) << gSetting;
@@ -1065,6 +1122,126 @@ namespace DNDS::Euler
             if (mpi.rank == 0)
                 log() << "JSON: Parse " << (read ? "read" : "write")
                       << " Done ===" << std::endl;
+        }
+
+        void validateConfigFiles()
+        {
+            using namespace std::literals;
+
+            const auto &dio = config.dataIOControl;
+            const auto &tmc = config.timeMarchControl;
+            const auto &rst = config.restartState;
+
+            auto normalizePartitionedMeshInput = [](std::string partBase, const std::string &readerType)
+            {
+                if (readerType == "H5")
+                {
+                    const std::string suffix = ".dnds.h5";
+                    if (partBase.size() >= suffix.size() &&
+                        partBase.compare(partBase.size() - suffix.size(), suffix.size(), suffix) == 0)
+                        partBase.resize(partBase.size() - suffix.size());
+                }
+                else if (readerType == "JSON")
+                {
+                    const std::string suffix = ".dir";
+                    if (partBase.size() >= suffix.size() &&
+                        partBase.compare(partBase.size() - suffix.size(), suffix.size(), suffix) == 0)
+                        partBase.resize(partBase.size() - suffix.size());
+                }
+                return partBase;
+            };
+
+            // ---- 1. Mesh file (CGNS/source mesh) ----
+            // readMeshMode 1/2 read serialized partitioned mesh data directly;
+            // meshFile is only a naming seed when meshFilePartitionedInput is empty.
+            if (dio.readMeshMode == 0)
+            {
+                std::filesystem::path meshPath(dio.meshFile);
+                if (meshPath.is_relative())
+                    meshPath = std::filesystem::absolute(meshPath);
+                DNDS_check_throw_info(std::filesystem::exists(meshPath),
+                                      "validateConfigFiles: meshFile not found [" + meshPath.string() + "]");
+                if (mpi.rank == 0)
+                    log() << "validateConfigFiles: meshFile OK [" << meshPath.string() << "]" << std::endl;
+            }
+
+            // ---- 2. Partitioned/distributed mesh ----
+            if (dio.readMeshMode == 1 || dio.readMeshMode == 2)
+            {
+                std::string partBase;
+                if (!dio.meshFilePartitionedInput.empty())
+                    partBase = dio.meshFilePartitionedInput;
+                else
+                {
+                    partBase = dio.meshFile + "_part_" + std::to_string(mpi.size);
+                    if (dio.meshElevation == 1)
+                        partBase += "_elevated";
+                    if (dio.meshDirectBisect > 0)
+                        partBase += "_bisect" + std::to_string(dio.meshDirectBisect);
+                }
+                std::string readerType = dio.meshPartitionedReaderType;
+                std::string suffix = (readerType == "JSON") ? ".dir" : ".dnds.h5";
+                partBase = normalizePartitionedMeshInput(partBase, readerType);
+                std::filesystem::path partPath = partBase + suffix;
+                if (partPath.is_relative())
+                    partPath = std::filesystem::absolute(partPath);
+                DNDS_check_throw_info(std::filesystem::exists(partPath),
+                                      "validateConfigFiles: partitioned mesh not found [" + partPath.string() + "] (readMeshMode=" + std::to_string(dio.readMeshMode) + ")");
+                if (mpi.rank == 0)
+                    log() << "validateConfigFiles: partitioned mesh OK [" << partPath.string() << "]" << std::endl;
+            }
+
+            // ---- 3. Restart file ----
+            if (tmc.useRestart && !rst.lastRestartFile.empty())
+            {
+                std::filesystem::path rstPath(rst.lastRestartFile);
+                if (rstPath.is_relative())
+                    rstPath = std::filesystem::absolute(rstPath);
+                DNDS_check_throw_info(std::filesystem::exists(rstPath),
+                                      "validateConfigFiles: restart file not found [" + rstPath.string() + "]");
+                if (mpi.rank == 0)
+                    log() << "validateConfigFiles: restart file OK [" << rstPath.string() << "]" << std::endl;
+            }
+
+            // ---- 4. Mechanism file ----
+            if (config.eulerSettings.reactiveFlow.enabled)
+            {
+#ifndef DNDS_USE_CANTERA
+                DNDS_check_throw_info(false, "reactiveFlow.enabled requires DNDS_USE_CANTERA=ON");
+#endif
+                const std::string &mechFile = config.eulerSettings.reactiveFlow.mechanismFile;
+                std::filesystem::path mechPath(mechFile);
+                std::filesystem::path mechFSPath;
+                bool shouldValidateMech = true;
+                if (mechPath.is_absolute() || std::filesystem::exists(mechPath))
+                {
+                    mechFSPath = mechPath;
+                }
+                else if (std::string mechPrefix = GetEnvString("DNDS_MECH_PATH", ""); !mechPrefix.empty())
+                {
+                    mechFSPath = std::filesystem::path(mechPrefix) / mechPath;
+                }
+                else if (mechPath.has_parent_path())
+                {
+                    mechFSPath = mechPath;
+                }
+                else
+                {
+                    shouldValidateMech = false;
+                    if (mpi.rank == 0)
+                        log() << "validateConfigFiles: mechanismFile is a bare filename ["
+                              << mechFile << "] — relying on Cantera built-in data dir search" << std::endl;
+                }
+                if (shouldValidateMech)
+                {
+                    if (mechFSPath.is_relative())
+                        mechFSPath = std::filesystem::absolute(mechFSPath);
+                    DNDS_check_throw_info(std::filesystem::exists(mechFSPath),
+                                          "validateConfigFiles: mechanismFile not found [" + mechFSPath.string() + "]");
+                    if (mpi.rank == 0)
+                        log() << "validateConfigFiles: mechanismFile OK [" << mechFSPath.string() << "]" << std::endl;
+                }
+            }
         }
 
         /**
@@ -1108,8 +1285,7 @@ namespace DNDS::Euler
             if (mpi.rank == 0)
             {
                 std::string logConfigFileName = config.dataIOControl.getOutLogName() + "_" + output_stamp + ".config.json";
-                std::filesystem::path outFile{logConfigFileName};
-                std::filesystem::create_directories(outFile.parent_path() / ".");
+                createOutputDir(logConfigFileName);
                 std::ofstream logConfig(logConfigFileName);
                 DNDS_assert(logConfig);
                 gSetting["___Compile_Time_Defines"] = DNDS_Defines_state;
@@ -1158,6 +1334,7 @@ namespace DNDS::Euler
          * @param fnameSeries             Series file name (for VTK time series).
          * @param odeResidualF             Callback returning the ODE residual for each cell.
          * @param additionalCellScalars    Additional per-cell scalar fields to output.
+         * @param additionalBndScalars     Additional per-bnd-face scalar fields to output.
          * @param eval                     Reference to the evaluator (for output field computation).
          * @param TSimu                    Current simulation time (-1 for steady).
          * @param mode                     PrintDataLatest or PrintDataTimeAverage.
@@ -1165,6 +1342,7 @@ namespace DNDS::Euler
         void PrintData(const std::string &fname, const std::string &fnameSeries,
                        const tCellScalarFGet &odeResidualF,
                        tAdditionalCellScalarList &additionalCellScalars,
+                       tAdditionalCellScalarList &additionalBndScalars,
                        TEval &eval, real TSimu = -1.0, PrintDataMode mode = PrintDataLatest);
 
         /// @brief Serialize the solution to a SerializerBase (currently unused standalone path).
@@ -1227,12 +1405,22 @@ namespace DNDS::Euler
             TU initVec;
             initVec.setZero(nVars);
             std::vector<std::string> realNames;
+
             for (auto name : config.outputControl.logfileOutputTitles)
                 if (name == "res" || name == "fluxWall")
                 {
                     FillLogValue(v_map, name, initVec);
                     for (int i = 0; i < nVars; i++)
                         realNames.push_back(name + std::to_string(i));
+                }
+                else if (name == "uMin" || name == "uMax")
+                {
+                    DNDS_assert(pEval);
+                    for (int i = 0; i < nVars; i++)
+                    {
+                        v_map[name + "_" + (*pEval).dofLabel(i)] = initVec[i];
+                        realNames.push_back(name + "_" + (*pEval).dofLabel(i));
+                    }
                 }
                 else
                     FillLogValue(v_map, name, 0.), realNames.push_back(name);
@@ -1322,6 +1510,7 @@ namespace DNDS::Euler
             int dtIncreaseCounter = 0;
 
             tAdditionalCellScalarList addOutList;
+            tAdditionalCellScalarList addBndOutList;
 
 #define DNDS_EULERSOLVER_RUNNINGENV_GET_REF(name) auto &name = runningEnvironment.name
 
@@ -1367,7 +1556,8 @@ namespace DNDS::Euler
                                                                \
     DNDS_EULERSOLVER_RUNNINGENV_GET_REF(dtIncreaseCounter);    \
                                                                \
-    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(addOutList);
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(addOutList);           \
+    DNDS_EULERSOLVER_RUNNINGENV_GET_REF(addBndOutList);
 
             RunningEnvironment(){};
         };
@@ -1450,6 +1640,7 @@ DNDS_EULERSOLVER_INS_EXTERN(NS_2EQ_3D, extern);
             const std::string &fname, const std::string &fnameSeries, \
             const tCellScalarFGet &odeResidualF,                      \
             tAdditionalCellScalarList &additionalCellScalars,         \
+            tAdditionalCellScalarList &additionalBndScalars,          \
             TEval &eval, real tSimu,                                  \
             PrintDataMode mode);                                      \
         ext template void EulerSolver<model>::PrintRestart(           \

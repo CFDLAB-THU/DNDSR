@@ -99,7 +99,7 @@ namespace DNDS
     constexpr MPI_Datatype DNDSToMPITypeFloat()
     {
         static_assert(sizeof(Tbasic) == 8 || sizeof(Tbasic) == 4, "DNDS::Tbasic is not right size");
-        return sizeof(Tbasic) == 8 ? MPI_REAL8 : (sizeof(Tbasic) == 4 ? MPI_REAL4 : MPI_DATATYPE_NULL);
+        return sizeof(Tbasic) == 8 ? MPI_DOUBLE : (sizeof(Tbasic) == 4 ? MPI_FLOAT : MPI_DATATYPE_NULL);
     }
 
     /// @brief MPI datatype matching #index (= `MPI_INT64_T`).

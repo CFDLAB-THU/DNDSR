@@ -41,6 +41,34 @@ namespace DNDS::Geom
         father->ReadSerializer(serializerP, name, offset);
     }
 
+    static std::vector<index> AlltoallvIndexPayloads(
+        const MPIInfo &mpi,
+        const std::vector<std::vector<index>> &sendPayloads)
+    {
+        DNDS_assert(index(sendPayloads.size()) == mpi.size);
+
+        std::vector<MPI_int> sendCounts(mpi.size), recvCounts(mpi.size);
+        for (MPI_int r = 0; r < mpi.size; r++)
+            sendCounts[r] = static_cast<MPI_int>(sendPayloads[r].size());
+        MPI::Alltoall(sendCounts.data(), 1, MPI_INT,
+                      recvCounts.data(), 1, MPI_INT, mpi.comm);
+
+        std::vector<MPI_int> sendDispls, recvDispls;
+        AccumulateRowSize(sendCounts, sendDispls);
+        AccumulateRowSize(recvCounts, recvDispls);
+
+        std::vector<index> sendBuf(sendDispls.back());
+        for (MPI_int r = 0; r < mpi.size; r++)
+            std::copy(sendPayloads[r].begin(), sendPayloads[r].end(),
+                      sendBuf.begin() + sendDispls[r]);
+
+        std::vector<index> recvBuf(recvDispls.back());
+        MPI::Alltoallv(sendBuf.data(), sendCounts.data(), sendDispls.data(), DNDS_MPI_INDEX,
+                       recvBuf.data(), recvCounts.data(), recvDispls.data(), DNDS_MPI_INDEX,
+                       mpi.comm);
+        return recvBuf;
+    }
+
     // =================================================================
     // Top-level orchestrator
     // =================================================================
@@ -305,27 +333,50 @@ namespace DNDS::Geom
 
         if (nPart > 1)
         {
+            DNDS_check_throw_info(partitionOptions.metisType == "KWAY",
+                                  "ReadSerializeAndDistribute: distributed H5 repartition currently supports metisType=KWAY only");
+            DNDS_check_throw_info(partitionOptions.edgeWeightMethod == 0,
+                                  "ReadSerializeAndDistribute: distributed H5 repartition currently supports edgeWeightMethod=0 only");
+            // This redistributed-HDF5 path currently requires each MPI rank to
+            // own at least one cell in the initial even split before calling
+            // ParMETIS. Empty local graphs may be representable by ParMETIS via
+            // vtxdist on some versions, but the surrounding redistribution and
+            // mapping code is not contracted for over-decomposed empty ranks.
+            // Use fewer ranks or read an already partitioned mesh for such cases.
             for (int i = 0; i < mpi.size; i++)
                 DNDS_assert_info(vtxdist[i + 1] - vtxdist[i] > 0,
-                                 "ParMetis requires > 0 cells on each proc");
+                                 "ReadSerializeAndDistribute requires > 0 cells on each proc before ParMETIS repartition");
 
             idx_t nCon{1};
             idx_t wgtflag{0}, numflag{0};
             std::vector<real_t> tpWeights(static_cast<size_t>(nPart) * nCon, 1.0 / nPart);
-            std::array<real_t, 1> ubVec{1.05};
+            std::array<real_t, 1> ubVec{1.0 + real_t(partitionOptions.metisUfactor) / real_t(1000)};
             std::array<idx_t, 3> optsC{1, 0, static_cast<idx_t>(partitionOptions.metisSeed)};
             idx_t objval = 0;
             std::vector<idx_t> partOut(cell2cellFacial->Size());
             if (partOut.empty())
                 partOut.resize(1, 0);
 
-            int ret = ParMETIS_V3_PartKway(
-                vtxdist.data(), xadj.data(), adjncy.data(),
-                nullptr, nullptr, &wgtflag, &numflag,
-                &nCon, &nPart, tpWeights.data(), ubVec.data(), optsC.data(),
-                &objval, partOut.data(), &mpi.comm);
-            DNDS_assert_info(ret == METIS_OK,
-                             fmt::format("ParMETIS_V3_PartKway returned {}", ret));
+            std::vector<idx_t> partCandidate(partOut.size());
+            bool hasBestPart{false};
+            for (int iCut = 0; iCut < std::max(partitionOptions.metisNcuts, 1); iCut++)
+            {
+                optsC[2] = static_cast<idx_t>(partitionOptions.metisSeed + iCut);
+                idx_t objCandidate = 0;
+                int ret = ParMETIS_V3_PartKway(
+                    vtxdist.data(), xadj.data(), adjncy.data(),
+                    nullptr, nullptr, &wgtflag, &numflag,
+                    &nCon, &nPart, tpWeights.data(), ubVec.data(), optsC.data(),
+                    &objCandidate, partCandidate.data(), &mpi.comm);
+                DNDS_assert_info(ret == METIS_OK,
+                                 fmt::format("ParMETIS_V3_PartKway returned {}", ret));
+                if (!hasBestPart || objCandidate < objval)
+                {
+                    hasBestPart = true;
+                    objval = objCandidate;
+                    partOut = partCandidate;
+                }
+            }
 
             for (index i = 0; i < cell2cellFacial->Size(); i++)
                 cellPartition[i] = static_cast<MPI_int>(partOut[i]);
@@ -370,7 +421,12 @@ namespace DNDS::Geom
         result.cellPartition = std::move(cellPartition);
 
         // Node partition: each node goes to the min cell partition that claims it.
+        // The even-split read partitions nodes and cells independently, so the
+        // temporary owner of a node may not own any cells referencing it. Send
+        // candidate cell partitions back to the temporary node owner before
+        // taking the minimum.
         result.nodePartition.assign(coords.father->Size(), static_cast<MPI_int>(INT32_MAX));
+        std::vector<std::vector<index>> nodePartSend(mpi.size);
         for (index iCell = 0; iCell < cell2node.father->Size(); iCell++)
         {
             for (rowsize ic2n = 0; ic2n < cell2node.father->RowSize(iCell); ic2n++)
@@ -383,8 +439,24 @@ namespace DNDS::Geom
                 if (rank == mpi.rank)
                     result.nodePartition[val] = std::min(result.nodePartition[val],
                                                          result.cellPartition.at(iCell));
+                else
+                {
+                    nodePartSend.at(rank).push_back(val);
+                    nodePartSend.at(rank).push_back(static_cast<index>(result.cellPartition.at(iCell)));
+                }
             }
         }
+
+        auto recvBuf = AlltoallvIndexPayloads(mpi, nodePartSend);
+        DNDS_assert(recvBuf.size() % 2 == 0);
+        for (size_t i = 0; i < recvBuf.size(); i += 2)
+        {
+            index iNodeLocal = recvBuf[i];
+            auto candidatePart = static_cast<MPI_int>(recvBuf[i + 1]);
+            DNDS_assert(iNodeLocal >= 0 && iNodeLocal < index(result.nodePartition.size()));
+            result.nodePartition[iNodeLocal] = std::min(result.nodePartition[iNodeLocal], candidatePart);
+        }
+
         for (auto &p : result.nodePartition)
             if (p == static_cast<MPI_int>(INT32_MAX))
                 p = 0;

@@ -186,7 +186,7 @@
                     "rmax += sin(12*phi) * sin(8 * theta) * 0.01; ",
                     "if(r <= rmax) ",
                     "   inRegion := 1; ",
-                    "UPrim[0] -= 0.5; ",
+                    "UExprtk[0] -= 0.5; ",
                     "0"
                 ]
             }

@@ -52,6 +52,11 @@ find_library(DNDS_EXTERNAL_LIB_METIS NAMES libmetis.so metis.lib metis
 find_library(DNDS_EXTERNAL_LIB_PARMETIS NAMES libparmetis.so parmetis.lib parmetis 
     PATHS "${DNDS_CFD_EXTERNALS_LIB}"
     REQUIRED)
+if(DNDS_USE_CANTERA)
+  find_library(DNDS_EXTERNAL_LIB_CANTERA NAMES libcantera_shared.so cantera_shared.lib cantera
+      PATHS "${DNDS_CFD_EXTERNALS_LIB}"
+      REQUIRED)
+endif()
 # find_library(DNDS_EXTERNAL_LIB_TECIO tecio PATHS 
     # "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}" 
     # "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/lib"
@@ -78,6 +83,16 @@ find_path(DNDS_EXTERNAL_INCLUDE_METIS metis.h
 find_path(DNDS_EXTERNAL_INCLUDE_PARMETIS parmetis.h
     PATHS "${DNDS_CFD_EXTERNALS_INC}"
     REQUIRED)
+if(DNDS_USE_CANTERA)
+  find_path(DNDS_EXTERNAL_INCLUDE_CANTERA cantera PATHS
+      "${DNDS_CFD_EXTERNALS_INC}"
+      REQUIRED)
+
+  find_path(DNDS_CANTERA_DATA_DIR gri30.yaml PATHS
+      "${DNDS_CFD_EXTERNALS_INSTALL}/data"
+      REQUIRED)
+  message(STATUS "DNDS_CANTERA_DATA_DIR ${DNDS_CANTERA_DATA_DIR}")
+endif()
 # find_path(DNDS_EXTERNAL_INCLUDE_TECIO TECIO.h PATHS 
 #     "${PROJECT_SOURCE_DIR}/external/tecio/include" 
 #     "${PROJECT_SOURCE_DIR}/external/${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/include"
@@ -250,7 +265,11 @@ set(DNDS_BUNDLED_LIBS
     ${DNDS_EXTERNAL_LIB_PARMETIS}
     ${DNDS_EXTERNAL_LIB_METIS}
     ${DNDS_EXTERNAL_LIB_ZLIB}
-)
+    )
+if(DNDS_USE_CANTERA)
+    list(APPEND DNDS_EXTERNAL_LIBS ${DNDS_EXTERNAL_LIB_CANTERA})
+    add_compile_definitions(DNDS_USE_CANTERA)
+endif()
 
 # -------------------------------------------------------------------
 # Resolve real paths and directories for external libs
@@ -365,6 +384,10 @@ set(DNDS_EXTERNAL_INCLUDES
     ${DNDS_EXTERNAL_INCLUDE_PYBIND11_JSON}
     ${DNDS_EXTERNAL_INCLUDE_FMT}
     CACHE INTERNAL "Project External Includes")
+
+if(DNDS_USE_CANTERA)
+    list(APPEND DNDS_EXTERNAL_INCLUDES ${DNDS_EXTERNAL_INCLUDE_CANTERA})
+endif()
 
 if(DNDS_EXTERNAL_INCLUDE_SUPERLU)
     set(DNDS_EXTERNAL_INCLUDES ${DNDS_EXTERNAL_INCLUDES}

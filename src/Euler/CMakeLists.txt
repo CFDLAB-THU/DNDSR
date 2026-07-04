@@ -9,6 +9,12 @@ dnds
 ${DNDS_EXTERNAL_LIBS}
 )
 
+# Chemical source library (model-independent, shared by all variants)
+dnds_add_lib(euler_library_chemical "Chemistry/ChemicalSource.cpp" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}"
+    OFF ON ON) # SHARED,FAST,EXCLUDE
+target_compile_definitions(euler_library_chemical PUBLIC CT_USE_SYSTEM_FMT=1)
+list(APPEND LINKS euler_library_chemical)
+
 message(STATUS "here!!!! ${DNDS_Euler_Models_List}")
 
 foreach(item IN LISTS DNDS_Euler_Models_List)
@@ -27,6 +33,7 @@ foreach(item IN LISTS DNDS_Euler_Models_List)
     )
     dnds_add_lib(${LIBNAME}_fast_${key} "${CPPS_FAST}" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}"
         OFF ON ON) # SHARED,FAST, EXCLUDE
+    target_compile_definitions(${LIBNAME}_fast_${key} PUBLIC CT_USE_SYSTEM_FMT=1)
     dnds_add_lib(${LIBNAME}_${key}      "${CPPS}" "${LINKS};${LIBNAME}_fast_${key}" "${DNDS_PCH_TARGETS}"
         OFF OFF ON)  # SHARED,FAST, EXCLUDE
 endforeach()

@@ -1,0 +1,145 @@
+{
+    "$schema": "../eulerEX_schema.json",
+    "timeMarchControl": {
+        "dtImplicit": 1e-4,
+        "nTimeStep": 1000,
+        "steadyQuit": false,
+        "tEnd": 1e100,
+        "odeCode": 103,
+        "odeSetting1": 0.5,
+        "rhsFPPMode": 0, //!
+        "rhsFPPScale": 1,
+        "useDtPPLimit": false, //!
+        "dtPPLimitScale": 1
+    },
+    "outputControl": {
+        "nConsoleCheck": 1,
+        "nConsoleCheckInternal": 1,
+        "nDataOutC": 1,
+        "nDataOut": 10,
+        "tDataOut": 3e+200,
+        "dataOutAtInit": true,
+        "consoleMainOutputFormat": [
+            "=== Step {termBold}[{step:4d}]   ",
+            "res {termBold}{termRed}{resRel:.3e}{termReset}   ",
+            "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc}), betaRec({nLimBeta},{minBeta}), alphaRes({nLimAlpha},{minAlpha})]]{termReset}   ",
+            "Time[{telapsed:.3f}] recTime[{trec:.3f}] rhsTime[{trhs:.3f}] commTime[{tcomm:.3f}] limTime[{tLim:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]",
+            "\nuMinMax {termCyan}{uMinMax}{termReset}"
+        ],
+        "consoleMainOutputFormatInternal": [
+            "\t Internal === Step [{step:4d},{iStep:2d},{iter:4d}]   ",
+            "res {termRed}{resRel:.3e}{termReset}   ",
+            "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc:.3g}), betaRec({nLimBeta},{minBeta:.3g}), alphaRes({nLimAlpha},{minAlpha:.3g})]]{termReset}   ",
+            "Time[{telapsedM:.3f}] recTime[{trecM:.3f}] rhsTime[{trhsM:.3f}] commTime[{tcommM:.3f}] limTime[{tLimM:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]",
+            "\nuMinMax {termCyan}{uMinMax}{termReset}"
+        ]
+    },
+    "implicitCFLControl": {
+        "CFL": 1, 
+        "useLocalDt": false
+    },
+    "convergenceControl": {
+        "nTimeStepInternal": 10,
+        "nTimeStepInternalMin": 5,
+        "rhsThresholdInternal": 0.0001,
+        "res_base": 0,
+        "useVolWiseResidual": true
+    },
+    "dataIOControl": {
+        "uniqueStamps": true,
+        // "meshFile": "../data/mesh/UniformSquare_10.cgns",
+        "meshFile": "../data/mesh/IV10_10.cgns",
+        "outPltName": "../data/out/react_test/react_",
+        "outPltMode": 0,
+        "readMeshMode": 0,
+        "outPltTecplotFormat": true,
+        "outPltVTKFormat": true,
+        "outAtPointData": true,
+        "outAtCellData": true,
+        "outCellScalarNames": ["RE"]
+    },
+    "boundaryDefinition": {
+        "PeriodicTranslation1": [
+            10.0,
+            0.0,
+            0.0
+        ],
+        "PeriodicTranslation2": [
+            0.0,
+            10.0,
+            0.0
+        ]
+    },
+    "limiterControl": {
+        "useLimiter": true,
+        "usePPRecLimiter": false, //! 
+        "nPartialLimiterStart": 1000000
+    },
+    "linearSolverControl": {
+        "jacobiCode": 0,
+        "sgsIter": 5,
+        "gmresCode": 0,
+        "nSgsConsoleCheck": 100,
+        "sourceTauSplitting": 0
+    },
+    "implicitReconstructionControl": {
+        "nInternalRecStep": 1,
+        "recLinearScheme": 0
+    },
+    "vfvSettings": {
+        "maxOrder": 1,
+        "intOrder": 1,
+        "jacobiRelax": 0,
+        "SORInstead": true,
+        "smoothThreshold": 0.001,
+        "WBAP_nStd": 10.0,
+        "subs2ndOrder": 0
+    },
+    "eulerSettings": {
+        "ignoreSourceTerm": false,
+        "useScalarJacobian": false,
+        "riemannSolverType": "Roe_M2",
+        "rsMeanValueEig": 1,
+        "uRecAlphaCompressPower": 1.0,
+        "uRecBetaCompressPower": 1.0,
+        "ppEpsIsRelaxed": true,
+        "ransModel": "RANS_None",
+        "reactiveFlow": {
+            "enabled": true,
+            "mechanismFile": "h2o2.yaml"
+        },
+        "farFieldStaticValue": {
+            "type": "primTP_phy",
+            "state": [
+                1365.4504654872383,
+                0.0,
+                0.0,
+                0.0,
+                540392.531295698,
+                0.028,
+                0.0,
+                0.0,
+                0.222,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+            ]
+        },
+        "constMassForce": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "idealGasProperty": {
+            "gamma": 1.4,
+            "Rgas": 287,
+            "muGas": 1e-200,
+            "prGas": 0.72,
+            "U0": 379
+        }
+    },
+    "_/** this test does not exercise BCs (periodic or interior-only domain) */": "",
+    "bcSettings": []
+}

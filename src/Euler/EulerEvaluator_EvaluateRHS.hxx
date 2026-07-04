@@ -28,7 +28,8 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>)
+        template <>
+    )
     /** @brief Evaluate the spatial right-hand side (RHS) of the semi-discrete equations.
      *
      *  This is the core spatial operator. It performs the following steps:
@@ -62,7 +63,8 @@ namespace DNDS::Euler
         ArrayDOFV<1> &cellRHSAlpha,
         bool onlyOnHalfAlpha,
         real t,
-        uint64_t flags)
+        uint64_t flags,
+        OptionalRef<ArrayDOFV<1>> cellTWarm)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         using namespace Geom;
@@ -83,6 +85,8 @@ namespace DNDS::Euler
         const bool direct2ndUseLimiter = flags & RHS_Direct_2nd_Rec_use_limiter;
         const bool direct2ndRec_already_have_uGradBufNoLim = flags & RHS_Direct_2nd_Rec_already_have_uGradBufNoLim;
         const bool recoverIncFScale = flags & RHS_Recover_IncFScale;
+        const bool ignoreReactiveSource = (flags & RHS_Ignore_Reactive_Source) && Traits::isExtended;
+        const bool ignoreReactiveSourceJacobian = (flags & RHS_Ignore_Reactive_Source_Jacobian) && Traits::isExtended;
 
         DNDS_assert(direct2ndRec1stConv ? direct2ndRec : true);
         auto rsType = settings.rsType;
@@ -164,18 +168,28 @@ namespace DNDS::Euler
 
         double t0 = MPI_Wtime();
 
+        TU_Batch fincC;
+        TReal_Batch lam0V, lam123V, lam4V;
+        TU_Batch ULxyV, URxyV;
+        TDiffU_Batch DiffUxyV, DiffUxyPrimV;
+        TVec_Batch unitNormV, vgXYV;
+        TU_Batch FLFix, FRFix;
+        TDiffU faceGradFix;
+        Eigen::Matrix<real, nVarsFixed, 1, Eigen::ColMajor> fluxEs;
+
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp declare reduction(TUAdd:TU : omp_out += omp_in) initializer(omp_priv = omp_orig)
-#    pragma omp parallel for schedule(runtime) reduction(TUAdd : fluxWallSumLocal)
+#    pragma omp parallel for schedule(runtime) reduction(TUAdd : fluxWallSumLocal) private(fincC, lam0V, lam123V, lam4V, ULxyV, URxyV,   \
+                                                                                               DiffUxyV, DiffUxyPrimV, unitNormV, vgXYV, \
+                                                                                               FLFix, FRFix, faceGradFix, fluxEs)
 #endif
         for (index iFace = 0; iFace < mesh->NumFaceProc(); iFace++)
         {
             faceOp(iFace);
             auto f2c = mesh->face2cell[iFace];
             Elem::Quadrature gFace = direct2ndRec ? vfv->GetFaceQuadO1(iFace) : vfv->GetFaceQuad(iFace);
-            Eigen::Matrix<real, nVarsFixed, 1, Eigen::ColMajor> fluxEs(cnvars, 1);
 
-            fluxEs.setZero();
+            fluxEs.setZero(cnvars, 1);
 
             // auto f2n = mesh->face2node[iFace];
             // Geom::tSmallCoords coords;
@@ -184,13 +198,10 @@ namespace DNDS::Euler
             Geom::Elem::SummationNoOp noOp;
             auto faceBndID = mesh->GetFaceZone(iFace);
             auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
-            TU_Batch ULxyV, URxyV;
             ULxyV.resize(u.father->MatRowSize(), gFace.GetNumPoints());
             URxyV.resizeLike(ULxyV);
-            TDiffU_Batch DiffUxyV, DiffUxyPrimV;
             DiffUxyV.resize(dim * gFace.GetNumPoints(), u.father->MatRowSize());
             DiffUxyPrimV.resizeLike(DiffUxyV);
-            TVec_Batch unitNormV, vgXYV;
             unitNormV.resize(dim, gFace.GetNumPoints()), vgXYV.resizeLike(unitNormV);
 
             TVec unitNormCent = vfv->GetFaceNorm(iFace, -1)(Seq012);
@@ -213,11 +224,9 @@ namespace DNDS::Euler
                     t,
                     mesh->GetFaceZone(iFace), false, 0);
             }
-            TU_Batch FLFix, FRFix;
-#ifdef USE_FLUX_BALANCE_TERM                                                                          // todo: decide if the flfix and frfix arguments for fluxface should be completely deleted
-            FLFix.setZero(cnvars, gFace.GetNumPoints()), FRFix.setZero(cnvars, gFace.GetNumPoints()); // todo: finish in faceFlux
+#ifdef USE_FLUX_BALANCE_TERM
+            FLFix.setZero(cnvars, gFace.GetNumPoints()), FRFix.setZero(cnvars, gFace.GetNumPoints());
 #endif
-            TDiffU faceGradFix;
             if (settings.useSourceGradFixGG)
                 faceGradFix.setZero(Eigen::NoChange, u.father->MatRowSize());
 
@@ -230,7 +239,9 @@ namespace DNDS::Euler
                     int nDiff = vfv->GetFaceAtr(iFace).NDIFF;
                     TVec unitNorm = vfv->GetFaceNorm(iFace, iGQ)(Seq012);
                     TMat normBase = Geom::NormBuildLocalBaseV<dim>(unitNorm);
+#ifndef DNDS_DIST_MT_USE_OMP
                     PerformanceTimer::Instance().StartTimer(PerformanceTimer::LimiterB);
+#endif
 
                     TU ULxy = u[f2c[0]];
                     if (direct2ndRec && !direct2ndRec1stConv)
@@ -327,11 +338,11 @@ namespace DNDS::Euler
                             GradURxy *= 0.;
 #endif
                         minVol = std::min(minVol, vfv->GetCellVol(f2c[1]));
-                        distBary = (vfv->GetOtherCellBaryFromCell(f2c[0], f2c[1], iFace) - vfv->GetCellBary(f2c[0])).norm();
+                        distBary = (vfv->GetOtherCellBaryFromCell(f2c[0], f2c[1], iFace, 0) - vfv->GetCellBary(f2c[0])).norm();
                         distBaryPerp =
                             std::abs(
-                                (vfv->GetOtherCellBaryFromCell(f2c[0], f2c[1], iFace) -
-                                 vfv->GetCellBary(f2c[0]))
+                                (vfv->GetOtherCellBaryFromCell(f2c[0], f2c[1], iFace, 0) -
+                                 vfv->GetCellBary(f2c[0]))(Seq012)
                                     .dot(unitNorm));
                     }
                     else if (true) // is bc
@@ -360,11 +371,13 @@ namespace DNDS::Euler
                         distBaryPerp =
                             std::abs(
                                 (vfv->GetFaceQuadraturePPhysFromCell(iFace, f2c[0], 0, -1) -
-                                 vfv->GetCellBary(f2c[0]))
+                                 vfv->GetCellBary(f2c[0]))(Seq012)
                                     .dot(unitNorm)) *
                             2.;
                     }
+#ifndef DNDS_DIST_MT_USE_OMP
                     PerformanceTimer::Instance().StopTimer(PerformanceTimer::LimiterB);
+#endif
 
                     real distGRP = minVol / vfv->GetFaceArea(iFace) * 2;
                     distGRP = std::max(std::min(distBaryPerp, distGRP * 2), distGRP * 0.25); //! USING REAL GEOMETRICAL
@@ -401,23 +414,34 @@ namespace DNDS::Euler
                         GradUMeanXy *= 0.;
 
                     TDiffU GradUMeanXyPrim;
-                    real gamma = settings.idealGasProperty.gamma;
+                    auto eBaseSpecies = phys_.mixtureBaseInternalRhoESpecies();
+                    auto gammaEqFor = [&](const TU &U)
+                    {
+                        real T = phys_.temperature(U);
+                        return phys_.gammaEq(T, U);
+                    };
+                    auto gradCons2Prim = [&](auto &U, auto &GradU, auto &GradUPrim)
+                    {
+                        real gammaEq = gammaEqFor(U);
+                        Gas::GradientCons2Prim_IdealGas<dim>(U, GradU, GradUPrim, gammaEq,
+                                                             eBaseSpecies);
+                    };
                     if (settings.usePrimGradInVisFlux)
                     {
                         TDiffU GradULxyPrim, GradURxyPrim;
                         GradULxyPrim.resizeLike(GradURxy), GradURxyPrim.resizeLike(GradURxy);
-                        Gas::GradientCons2Prim_IdealGas<dim>(ULxy, GradULxy, GradULxyPrim, gamma);
-                        Gas::GradientCons2Prim_IdealGas<dim>(URxy, GradURxy, GradURxyPrim, gamma);
+                        gradCons2Prim(ULxy, GradULxy, GradULxyPrim);
+                        gradCons2Prim(URxy, GradURxy, GradURxyPrim);
                         TU URxyPrim(cnvars), ULxyPrim(cnvars);
-                        Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrim, gamma);
-                        Gas::IdealGasThermalConservative2Primitive<dim>(URxy, URxyPrim, gamma);
+                        Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrim, gammaEqFor(ULxy), phys_.mixtureBaseInternalRhoE(ULxy));
+                        Gas::IdealGasThermalConservative2Primitive<dim>(URxy, URxyPrim, gammaEqFor(URxy), phys_.mixtureBaseInternalRhoE(URxy));
 
                         GradUMeanXyPrim = (GradURxyPrim + GradULxyPrim) * 0.5 +
                                           (1.0 / distGRP) *
                                               (unitNorm * (URxyPrim - ULxyPrim).transpose());
                     }
                     else
-                        Gas::GradientCons2Prim_IdealGas(UMeanXy, GradUMeanXy, GradUMeanXyPrim, gamma);
+                        gradCons2Prim(UMeanXy, GradUMeanXy, GradUMeanXyPrim);
 
 #else
                     TDiffU GradUMeanXy;
@@ -456,23 +480,25 @@ namespace DNDS::Euler
                         settings.noRsOnWall)
                     {
                         TU ULc = ULxy;
+                        real T_noRS = phys_.temperature(ULc);
                         TU ULcPrim;
-                        Gas::IdealGasThermalConservative2Primitive<dim>(ULc, ULcPrim, settings.idealGasProperty.gamma);
+                        Gas::IdealGasThermalConservative2Primitive<dim>(ULc, ULcPrim, phys_.gammaEq(T_noRS, ULc), phys_.mixtureBaseInternalRhoE(ULc));
                         ULcPrim(Seq123).setZero();
-                        Gas::IdealGasThermalPrimitive2Conservative<dim>(ULcPrim, ULc, settings.idealGasProperty.gamma);
+                        Gas::IdealGasThermalPrimitive2Conservative<dim>(ULcPrim, ULc, phys_.gammaEq(T_noRS, ULc), phys_.mixtureBaseInternalRhoE(ULc));
                         if (faceBCType == EulerBCType::BCWallIsothermal)
                         {
                             real temp = pBCHandler->GetValueFromID(mesh->GetFaceZone(iFace))(0);
                             TU ULcPrim;
                             ULcPrim.resizeLike(ULc);
-                            Gas::IdealGasThermalConservative2Primitive<dim>(ULc, ULcPrim, settings.idealGasProperty.gamma);
+                            Gas::IdealGasThermalConservative2Primitive<dim>(ULc, ULcPrim, phys_.gammaEq(T_noRS, ULc), phys_.mixtureBaseInternalRhoE(ULc));
                             DNDS_assert(ULcPrim(0) > 0 && temp > 0);
                             DNDS_assert_info(ULcPrim(0) > 0 && ULcPrim(I4) > 0 && temp > 0, fmt::format("{}, {}, {}", ULcPrim(0), ULcPrim(I4), temp));
-                            // real newPressure = ULcPrim(0) * settings.idealGasProperty.Rgas * temp;
-                            // ULcPrim(I4) = newPressure;
-                            real newDensity = ULcPrim(I4) / temp / settings.idealGasProperty.Rgas;
+                            real newDensity = ULcPrim(I4) / temp / phys_.Rgas(ULc);
                             ULcPrim(0) = newDensity;
-                            Gas::IdealGasThermalPrimitive2Conservative<dim>(ULcPrim, URxy, settings.idealGasProperty.gamma);
+                            if (phys_.hasChemicalSource())
+                                phys_.primToConservative(ULcPrim, ULc);
+                            else
+                                Gas::IdealGasThermalPrimitive2Conservative<dim>(ULcPrim, ULc, phys_.gammaEq(T_noRS, ULc), 0);
                         }
                         ULxy = ULc;
                         URxy = ULc;
@@ -489,9 +515,10 @@ namespace DNDS::Euler
                     unitNormV(EigenAll, iG) = unitNorm;
                     vgXYV(EigenAll, iG) = GetFaceVGrid(iFace, iGQ);
                 });
-            TReal_Batch lam0V, lam123V, lam4V;
-
-            TU_Batch fincC;
+            fincC.resizeLike(ULxyV);
+            lam0V.resize(ULxyV.cols());
+            lam123V.resize(ULxyV.cols());
+            lam4V.resize(ULxyV.cols());
             fluxFace(
                 ULxyV, URxyV,
                 ULMeanXy, URMeanXy,
@@ -506,7 +533,7 @@ namespace DNDS::Euler
                 lam0V, lam123V, lam4V,
                 mesh->GetFaceZone(iFace),
                 rsType,
-                iFace, ignoreVis);
+                iFace, ignoreVis, cellTWarm);
             if (mesh->getMPI().rank == 0)
             {
                 // std::cout << fincC << std::endl;
@@ -521,7 +548,12 @@ namespace DNDS::Euler
                 {
                     finc.resizeLike(fluxEs);
                     finc(EigenAll, 0) = fincC(EigenAll, iG);
-                    finc *= (direct2ndRec ? vfv->GetFaceArea(iFace) / vfv->GetFaceParamArea(iFace) : vfv->GetFaceJacobiDet(iFace, iG)); // !don't forget this
+
+                    // Species diffusion is now handled inside fluxFace (viscous block).
+
+                    real detJac = direct2ndRec ? vfv->GetFaceArea(iFace) / vfv->GetFaceParamArea(iFace)
+                                               : vfv->GetFaceJacobiDet(iFace, iG);
+                    finc *= detJac; // !don't forget this
                 });
 
             if (settings.useRoeJacobian)
@@ -564,8 +596,7 @@ namespace DNDS::Euler
 
             if (settings.useSourceGradFixGG)
 #if defined(DNDS_DIST_MT_USE_OMP)
-// todo: save face value to buffer
-#    pragma omp critical
+#    pragma omp critical(flux_grad_fix)
 #endif
             {
                 TDiffU faceGradFixL{faceGradFix}, faceGradFixR{faceGradFix};
@@ -600,7 +631,7 @@ namespace DNDS::Euler
             if (!dontUpdateIntegration)
                 if (faceBCType == EulerBCType::BCWall || // TODO: update to general
                     faceBCType == EulerBCType::BCWallIsothermal ||
-                    (faceBCType == EulerBCType::BCWallInvis && settings.idealGasProperty.muGas < 1e-99))
+                    (faceBCType == EulerBCType::BCWallInvis && phys_.muRef() < 1e-99))
                 {
                     fluxWallSumLocal -= fluxEs(EigenAll, 0);
                     if (iFace >= mesh->NumFace())
@@ -609,8 +640,8 @@ namespace DNDS::Euler
 
             // integrations
             if (!dontUpdateIntegration)
-#if defined(DNDS_DIST_MT_USE_OMP) // todo: use reduction
-#    pragma omp critical
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp critical(bnd_integration)
 #endif
             {
                 if (pBCHandler->GetFlagFromIDSoft(mesh->GetFaceZone(iFace), "integrationOpt") == 1)
@@ -623,13 +654,14 @@ namespace DNDS::Euler
                     if (settings.frameConstRotation.enabled)
                         this->TransformURotatingFrame(uL, vfv->GetFaceQuadraturePPhys(iFace, -1), 1);
                     TU uLPrim = uL;
-                    auto gamma = settings.idealGasProperty.gamma;
-                    Gas::IdealGasThermalConservative2Primitive<dim>(uL, uLPrim, gamma);
+                    real T_int = phys_.temperature(uL);
+                    auto gammaEq = phys_.gammaEq(T_int, uL);
+                    Gas::IdealGasThermalConservative2Primitive<dim>(uL, uLPrim, gammaEq, phys_.mixtureBaseInternalRhoE(uL));
                     Eigen::Vector<real, Eigen::Dynamic> vInt;
                     vInt.resize(nVars + 2);
                     vInt(Eigen::seq(0, nVars - 1)) = uL;
 
-                    auto [p0, T0] = Gas::IdealGasThermalPrimitiveGetP0T0<dim>(uLPrim, gamma, settings.idealGasProperty.Rgas);
+                    auto [p0, T0] = phys_.primitiveStaticToTotalPT(uLPrim);
                     vInt(nVars) = p0, vInt(nVars + 1) = T0;
                     vInt(0) = 1;
                     bndIntegrations.at(mesh->GetFaceZone(iFace)).Add(vInt * fluxEs(0, 0), fluxEs(0, 0));
@@ -646,7 +678,7 @@ namespace DNDS::Euler
                 for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                 {
                     index iFace = c2f[ic2f];
-                    int if2c = mesh->CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                    int if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
                     TU fluxFaceC = faceFluxBuf[iFace] * (if2c ? -1 : 1);
                     this->UFromFace2Cell(fluxFaceC, iFace, iCell, if2c);
 
@@ -677,127 +709,42 @@ namespace DNDS::Euler
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 cellOp(iCell);
-                auto gCell = direct2ndRec ? vfv->GetCellQuadO1(iCell) : vfv->GetCellQuad(iCell);
 
-                TDiffU cellGrad2nd;
-                if (settings.ransSource2nd || settings.source2nd)
+                TDiffU dummyGrad; // unused in useRecArrays mode
+                TJacobianU cellJac;
+                TU cellSrcRHS;
+                cellSrcRHS.setZero(cnvars);
+                int jacMode = JSource.isBlock() ? 2 : 1;
+                if (ignoreReactiveSource)
+                    EvaluateCellSource(cellSrcRHS, cellJac, u[iCell], dummyGrad,
+                                       iCell, jacMode, SourceFilter::NonReactiveOnly,
+                                       cellRHSAlpha[iCell](0),
+                                       /*useRecArrays=*/true, OptionalRef(u), OptionalRef(uRecUnlim), OptionalRef(uRec),
+                                       direct2ndRec, t, cellTWarm);
+                else if (ignoreReactiveSourceJacobian)
                 {
-                    cellGrad2nd.setZero(Eigen::NoChange, u[iCell].size());
-                    TU uC = u[iCell];
-                    for (index iFace : mesh->cell2face[iCell])
-                    {
-                        index iCellOther = mesh->CellFaceOther(iCell, iFace);
-                        TVec uNorm = vfv->GetFaceNormFromCell(iFace, iCell, -1, -1)(Seq012) *
-                                     (mesh->CellIsFaceBack(iCell, iFace) ? 1 : -1);
-                        TU uR;
-                        if (iCellOther != UnInitIndex)
-                            uR = u[iCellOther], this->UFromOtherCell(uR, iFace, iCell, iCellOther, -1);
-                        else
-                            uR = generateBoundaryValue(
-                                uC, uC, iCell, iFace, -1,
-                                uNorm, Geom::NormBuildLocalBaseV<dim>(uNorm),
-                                vfv->GetFaceQuadraturePPhys(iFace, -1),
-                                t, mesh->GetFaceZone(iFace), true, 0);
-                        cellGrad2nd += vfv->GetFaceArea(iFace) * uNorm * (uR - uC).transpose() * 0.5;
-                    }
-                    cellGrad2nd /= vfv->GetCellVol(iCell);
+                    EvaluateCellSource(cellSrcRHS, cellJac, u[iCell], dummyGrad,
+                                       iCell, jacMode, SourceFilter::NonReactiveOnly,
+                                       cellRHSAlpha[iCell](0),
+                                       /*useRecArrays=*/true, OptionalRef(u), OptionalRef(uRecUnlim), OptionalRef(uRec),
+                                       direct2ndRec, t, cellTWarm);
+                    EvaluateCellSource(cellSrcRHS, cellJac, u[iCell], dummyGrad,
+                                       iCell, 0, SourceFilter::ReactiveOnly,
+                                       cellRHSAlpha[iCell](0),
+                                       /*useRecArrays=*/true, OptionalRef(u), OptionalRef(uRecUnlim), OptionalRef(uRec),
+                                       direct2ndRec, t, cellTWarm);
                 }
-
-                Eigen::Matrix<real, nVarsFixed, Eigen::Dynamic> sourceV; // now includes sourcejacobian diag
-                sourceV.setZero(cnvars, JSource.isBlock() ? cnvars + 1 : 2);
-
-                Geom::Elem::SummationNoOp noOp;
-
-                TDiffU cellGradFix;
-                if (settings.useSourceGradFixGG)
-                    cellGradFix = gradUFix[iCell] / vfv->GetCellVol(iCell);
-
-                gCell.IntegrationSimple(
-                    sourceV,
-                    [&](decltype(sourceV) &finc, int iG)
-                    {
-                        int iGQ = direct2ndRec ? -1 : iG;
-                        TDiffU GradU;
-                        GradU.resize(Eigen::NoChange, cnvars);
-                        GradU.setZero();
-                        PerformanceTimer::Instance().StartTimer(PerformanceTimer::LimiterB);
-                        if (direct2ndRec) // should use limited version here or not?
-                            GradU(SeqG012, EigenAll) = uGradBufNoLim[iCell];
-                        else if (settings.source2nd)
-                            GradU = cellGrad2nd;
-                        else
-                        {
-                            if constexpr (gDim == 2)
-                                GradU({0, 1}, EigenAll) =
-                                    vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iGQ, std::array<int, 2>{1, 2}, 3) *
-                                    uRecUnlim[iCell] * IF_NOT_NOREC; // 2d specific
-                            else
-                                GradU({0, 1, 2}, EigenAll) =
-                                    vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iGQ, std::array<int, 3>{1, 2, 3}, 4) *
-                                    uRecUnlim[iCell] * IF_NOT_NOREC; // 3d specific
-                            if (settings.useSourceGradFixGG)
-                                GradU += cellGradFix;
-                            if (settings.ransSource2nd)
-                            {
-                                if constexpr (Traits::hasSA)
-                                    GradU(EigenAll, I4 + 1) = cellGrad2nd(EigenAll, I4 + 1);
-                                if constexpr (Traits::has2EQ)
-                                    GradU(EigenAll, {I4 + 1, I4 + 2}) = cellGrad2nd(EigenAll, {I4 + 1, I4 + 2});
-                            }
-                        }
-
-                        TU ULxy = u[iCell];
-                        if (!direct2ndRec)
-                            ULxy +=
-                                (vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iGQ, std::array<int, 1>{0}, 1) *
-                                 uRec[iCell])
-                                    .transpose() *
-                                IF_NOT_NOREC;
-
-                        PerformanceTimer::Instance().StopTimer(PerformanceTimer::LimiterB);
-
-                        // bool compressed = false;
-                        // ULxy = CompressRecPart(u[iCell], ULxy, compressed); //! do not forget the mean value
-
-                        finc.resizeLike(sourceV);
-                        TJacobianU jac;
-                        finc(EigenAll, 0) =
-                            source(
-                                ULxy,
-                                GradU,
-                                vfv->GetCellQuadraturePPhys(iCell, iGQ), jac,
-                                iCell, iGQ, 0);
-                        TU sourceJDiag =
-                            source(
-                                ULxy,
-                                GradU,
-                                vfv->GetCellQuadraturePPhys(iCell, iGQ), jac,
-                                iCell, iGQ, JSource.isBlock() ? 2 : 1);
-                        if (JSource.isBlock())
-                            finc(EigenAll, Eigen::seq(Eigen::fix<1>, EigenLast)) = jac;
-                        else
-                            finc(EigenAll, 1) = sourceJDiag;
-
-                        finc *= direct2ndRec ? vfv->GetCellVol(iCell) / vfv->GetCellParamVol(iCell) : vfv->GetCellJacobiDet(iCell, iG); //! don't forget this
-                        if (finc.hasNaN() || (!finc.allFinite()))
-                        {
-                            std::cout << finc.transpose() << std::endl;
-                            std::cout << ULxy.transpose() << std::endl;
-                            std::cout << GradU << std::endl;
-                            DNDS_assert(false);
-                        }
-                    });
-                sourceV *= cellRHSAlpha[iCell](0) / vfv->GetCellVol(iCell); // becomes mean value
-                rhs[iCell] += sourceV(EigenAll, 0);
-                if (JSource.isBlock())
-                    JSource.getBlock(iCell) = sourceV(EigenAll, Eigen::seq(Eigen::fix<1>, EigenLast));
                 else
-                    JSource.getDiag(iCell) = sourceV(EigenAll, 1);
-
-                // if (iCell == 18195)
-                // {
-                //     std::cout << rhs[iCell].transpose() << std::endl;
-                // }
+                    EvaluateCellSource(cellSrcRHS, cellJac, u[iCell], dummyGrad,
+                                       iCell, jacMode, SourceFilter::All,
+                                       cellRHSAlpha[iCell](0),
+                                       /*useRecArrays=*/true, OptionalRef(u), OptionalRef(uRecUnlim), OptionalRef(uRec),
+                                       direct2ndRec, t, cellTWarm);
+                rhs[iCell] += cellSrcRHS;
+                if (JSource.isBlock())
+                    JSource.getBlock(iCell) = cellJac;
+                else
+                    JSource.getDiag(iCell) = cellJac.diagonal();
             }
         }
 

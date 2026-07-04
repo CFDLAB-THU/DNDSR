@@ -14,7 +14,7 @@
 #   DNDS_VERSION_DISTANCE   commits since last tag  e.g. "235"
 #   DNDS_VERSION_FULL       display string:
 #                             release:  "0.0.3"
-#                             dev:      "0.0.3.dev235+gbe407e3"
+#                             dev:      "0.0.3.dev235+be407e3"
 #   DNDS_VERSION_PEP440     PEP 440 string (same as FULL, used by Python)
 
 # -------------------------------------------------------------------
@@ -40,12 +40,13 @@ list(GET _version_parts 2 DNDS_VERSION_PATCH)
 # -------------------------------------------------------------------
 # 2. Query git describe for commit distance and hash
 # -------------------------------------------------------------------
-set(DNDS_VERSION_IS_RELEASE FALSE)
+set(DNDS_VERSION_IS_RELEASE TRUE)
 set(DNDS_VERSION_COMMIT "unknown")
 set(DNDS_VERSION_DISTANCE "0")
 
 find_package(Git QUIET)
 if(GIT_FOUND)
+    set(DNDS_VERSION_IS_RELEASE FALSE)
     # Try git describe with the expected tag for this version
     execute_process(
         COMMAND ${GIT_EXECUTABLE} describe --tags --long --match "v*"
@@ -88,8 +89,8 @@ endif()
 if(DNDS_VERSION_IS_RELEASE)
     set(DNDS_VERSION_FULL "${DNDS_VERSION_BASE}")
 else()
-    # PEP 440: 0.0.3.dev235+gbe407e3
-    set(DNDS_VERSION_FULL "${DNDS_VERSION_BASE}.dev${DNDS_VERSION_DISTANCE}+g${DNDS_VERSION_COMMIT}")
+    # PEP 440: 0.0.3.dev235+be407e3
+    set(DNDS_VERSION_FULL "${DNDS_VERSION_BASE}.dev${DNDS_VERSION_DISTANCE}+${DNDS_VERSION_COMMIT}")
 endif()
 
 set(DNDS_VERSION_PEP440 "${DNDS_VERSION_FULL}")
@@ -107,3 +108,34 @@ set(DNDS_VERSION_IS_RELEASE "${DNDS_VERSION_IS_RELEASE}" CACHE INTERNAL "")
 
 message(STATUS "DNDSR version: ${DNDS_VERSION_FULL}")
 message(STATUS "  base=${DNDS_VERSION_BASE} distance=${DNDS_VERSION_DISTANCE} commit=${DNDS_VERSION_COMMIT} release=${DNDS_VERSION_IS_RELEASE}")
+
+# -------------------------------------------------------------------
+# 4. Git HEAD change detection for auto-reconfigure
+# -------------------------------------------------------------------
+# Write the full HEAD hash to a stamp file and add it to
+# CMAKE_CONFIGURE_DEPENDS so CMake knows to reconfigure when the
+# stamp changes. A build-time checker (see DndsCheckVersion.cmake)
+# updates the stamp when git HEAD differs from the last configure.
+if(GIT_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-parse HEAD
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+        OUTPUT_VARIABLE _dnds_stamp_hash
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+else()
+    set(_dnds_stamp_hash "unknown")
+endif()
+set(_dnds_version_stamp "${CMAKE_BINARY_DIR}/dnds_git_head.txt")
+file(WRITE "${_dnds_version_stamp}" "${_dnds_stamp_hash}")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_dnds_version_stamp}")
+
+add_custom_target(dnds_version_check ALL
+    COMMAND ${CMAKE_COMMAND}
+        -DPROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+        -DCMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
+        -P "${PROJECT_SOURCE_DIR}/cmake/DndsCheckVersion.cmake"
+    COMMENT "Checking DNDSR version for git HEAD changes..."
+    VERBATIM
+)

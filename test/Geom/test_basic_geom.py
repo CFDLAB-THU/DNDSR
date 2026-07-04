@@ -68,6 +68,7 @@ def test_mesh0():
     wallDistOptions.verbose = 10
     wallDistOptions.wallDistExecution = 4
     mesh.BuildNodeWallDist(id_is_wall, wallDistOptions)
+    assert mesh.nodeWallDist.father.Size() == mesh.coords.father.Size()
 
     meshBnd, readerBnd = create_bnd_mesh(mesh)
 
@@ -81,6 +82,8 @@ def test_mesh0():
     try:
         mesh.coords.to_device("CUDA")
         mesh.to_device("CUDA")
+        mesh.to_host()
+        assert mesh.nodeWallDist.father.Size() == mesh.coords.father.Size()
     except RuntimeError:
         pass  # CUDA not available, skip device transfer
     # while True:

@@ -23,7 +23,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Collect wall boundary face triangulations for AABB-based wall distance computation.
      *
      *  Iterates over wall and isothermal-wall boundary faces, decomposes them into triangles
@@ -112,7 +113,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Compute face-averaged wall distances from cell wall distances.
      *
      *  For each face, averages the wall distance of its two adjacent cells (or uses
@@ -134,7 +136,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Compute geometric wall distance using CGAL AABB tree (all-to-all broadcast).
      *
      *  Gathers all wall triangles globally, builds a CGAL AABB tree, and queries the
@@ -245,7 +248,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Compute geometric wall distance using batched CGAL AABB tree queries.
      *
      *  Builds a local AABB tree from wall triangles (using quadrature patches), then
@@ -419,7 +423,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Compute wall distance by solving a Poisson equation with pseudo-time stepping.
      *
      *  Solves a p-Poisson equation (grad^2 phi = -1) with Dirichlet BC (phi=0) on
@@ -429,371 +434,372 @@ namespace DNDS::Euler
      */
     void EulerEvaluator<model>::GetWallDist_Poisson()
     {
-            int nSweep = settings.wallDistNJacobiSweep;
-            int nIter = settings.wallDistIter;
-            int nIterSee = 10;
-            real smoothBias = 0.0;
-            int nGmresSubspace = 10;
-            int nGmresRestart = 1;
-            int useGmres = settings.wallDistLinSolver;
-            real resTh = settings.wallDistResTol;
+        int nSweep = settings.wallDistNJacobiSweep;
+        int nIter = settings.wallDistIter;
+        int nIterSee = 10;
+        real smoothBias = 0.0;
+        int nGmresSubspace = 10;
+        int nGmresRestart = 1;
+        int useGmres = settings.wallDistLinSolver;
+        real resTh = settings.wallDistResTol;
 
-            int nPPoissonStartIter = settings.wallDistIterStart;
-            int nPPoisson = settings.wallDistPoissonP;
+        int nPPoissonStartIter = settings.wallDistIterStart;
+        int nPPoisson = settings.wallDistPoissonP;
 
-            real dTauScale = settings.wallDistDTauScale;
+        real dTauScale = settings.wallDistDTauScale;
 
-            ArrayDOFV<1> phi, rPhi, dPhi, dPhiNew, phiTmp, dTauInv;
-            ArrayDOFV<3> diffPhi;
-            vfv->BuildUDof(phi, 1);
-            vfv->BuildUDof(rPhi, 1);
-            vfv->BuildUDof(dPhi, 1);
-            vfv->BuildUDof(dPhiNew, 1);
-            vfv->BuildUDof(phiTmp, 1);
-            vfv->BuildUDof(dTauInv, 1);
-            vfv->BuildUDof(diffPhi, 3);
-            phi.setConstant(0.0);
-            dTauInv.setConstant(0.0);
+        ArrayDOFV<1> phi, rPhi, dPhi, dPhiNew, phiTmp, dTauInv;
+        ArrayDOFV<3> diffPhi;
+        vfv->BuildUDof(phi, 1);
+        vfv->BuildUDof(rPhi, 1);
+        vfv->BuildUDof(dPhi, 1);
+        vfv->BuildUDof(dPhiNew, 1);
+        vfv->BuildUDof(phiTmp, 1);
+        vfv->BuildUDof(dTauInv, 1);
+        vfv->BuildUDof(diffPhi, 3);
+        phi.setConstant(0.0);
+        dTauInv.setConstant(0.0);
 
-            std::vector<std::vector<real>> coefs;
-            coefs.resize(mesh->NumCell());
-            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-                coefs.at(iCell).resize(mesh->cell2face[iCell].size() + 1);
+        std::vector<std::vector<real>> coefs;
+        coefs.resize(mesh->NumCell());
+        for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            coefs.at(iCell).resize(mesh->cell2face[iCell].size() + 1);
 
-            std::vector<MatrixXR> mGGs;
-            mGGs.resize(mesh->NumCell());
+        std::vector<MatrixXR> mGGs;
+        mGGs.resize(mesh->NumCell());
 
-            // get mGG coefs
+        // get mGG coefs
+        for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+        {
+            Geom::tPoint bary = vfv->GetCellQuadraturePPhys(iCell, -1);
+            auto &mGG = mGGs.at(iCell);
+            mGG.setZero(3 + mesh->cell2face[iCell].size(), 3 + mesh->cell2face[iCell].size());
+            mGG({0, 1, 2}, {0, 1, 2}) = Eigen::Matrix3d::Identity();
+            real sumFaceArea = 0.;
+            for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
+            {
+                index iFace = mesh->cell2face[iCell][ic2f];
+                index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
+                int if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
+                Geom::tPoint uNormOut = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1) * (if2c ? -1 : 1);
+                auto faceBndID = mesh->GetFaceZone(iFace);
+                auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
+                Geom::tPoint baryOther = bary;
+                Geom::tPoint bFace = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1);
+                if (iCellOther != UnInitIndex)
+                {
+                    baryOther = vfv->GetOtherCellPointFromCell(
+                        iCell, iCellOther, iFace, if2c,
+                        vfv->GetCellQuadraturePPhys(iCellOther, -1));
+                }
+                else
+                {
+                    DNDS_assert(faceBCType != BCUnknown);
+                    DNDS_assert(!Geom::FaceIDIsInternal(faceBndID));
+                    baryOther = bFace * 2 - bary;
+                }
+                mGG({0, 1, 2}, 3 + ic2f) = -uNormOut * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell);
+                mGG(3 + ic2f, {0, 1, 2}) = (baryOther + bary - 2 * bFace).transpose();
+                mGG(3 + ic2f, 3 + ic2f) = 2;
+                sumFaceArea += vfv->GetFaceArea(iFace);
+            }
+            diffPhi[iCell] /= vfv->GetCellVol(iCell);
+            auto mGGLU = mGG.fullPivLu();
+            DNDS_assert_info(mGGLU.isInvertible(), fmt::format("[[{}]]\n", Eigen::MatrixFMTSafe<real, -1, -1>(mGG)));
+            MatrixXR mGGInv = mGGLU.inverse();
+            mGG = mGGInv;
+
+            real LCell = vfv->GetCellVol(iCell) / sumFaceArea;
+            dTauInv[iCell](0) = 1. / (1. / std::pow(LCell, 2) * dTauScale);
+        }
+        dTauInv.trans.startPersistentPull();
+        dTauInv.trans.waitPersistentPull();
+
+        auto getDiffPhi = [&](ArrayDOFV<1> &phi, ArrayDOFV<3> &diffPhi)
+        {
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
                 Geom::tPoint bary = vfv->GetCellQuadraturePPhys(iCell, -1);
-                auto &mGG = mGGs.at(iCell);
-                mGG.setZero(3 + mesh->cell2face[iCell].size(), 3 + mesh->cell2face[iCell].size());
-                mGG({0, 1, 2}, {0, 1, 2}) = Eigen::Matrix3d::Identity();
-                real sumFaceArea = 0.;
+                diffPhi[iCell].setZero();
+                Eigen::Vector<real, Eigen::Dynamic> bGG;
+                bGG.setZero(3 + mesh->cell2face[iCell].size());
                 for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
                 {
                     index iFace = mesh->cell2face[iCell][ic2f];
-                    index iCellOther = mesh->CellFaceOther(iCell, iFace);
-                    int if2c = mesh->CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                    index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
+                    int if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
                     Geom::tPoint uNormOut = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1) * (if2c ? -1 : 1);
                     auto faceBndID = mesh->GetFaceZone(iFace);
                     auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
+                    real phiOther = phi[iCell](0);
                     Geom::tPoint baryOther = bary;
-                    Geom::tPoint bFace = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1);
+                    Geom::tPoint bFace = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1);
                     if (iCellOther != UnInitIndex)
                     {
+                        phiOther = phi[iCellOther](0);
                         baryOther = vfv->GetOtherCellPointFromCell(
-                            iCell, iCellOther, iFace,
+                            iCell, iCellOther, iFace, if2c,
                             vfv->GetCellQuadraturePPhys(iCellOther, -1));
                     }
                     else
                     {
                         DNDS_assert(faceBCType != BCUnknown);
                         DNDS_assert(!Geom::FaceIDIsInternal(faceBndID));
+                        if (faceBCType == BCWall || faceBCType == BCWallIsothermal)
+                            phiOther = -phi[iCell](0);
                         baryOther = bFace * 2 - bary;
                     }
-                    mGG({0, 1, 2}, 3 + ic2f) = -uNormOut * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell);
-                    mGG(3 + ic2f, {0, 1, 2}) = (baryOther + bary - 2 * bFace).transpose();
-                    mGG(3 + ic2f, 3 + ic2f) = 2;
-                    sumFaceArea += vfv->GetFaceArea(iFace);
+                    real distThis = (bFace - bary).norm();
+                    real distOther = (bFace - baryOther).norm();
+                    real phiFace = (distOther * phi[iCell](0) + distThis * phiOther) / (distOther + distThis) - phi[iCell](0);
+                    diffPhi[iCell] += uNormOut * vfv->GetFaceArea(iFace) * phiFace;
+                    bGG(3 + ic2f) = phiOther + phi[iCell](0);
                 }
                 diffPhi[iCell] /= vfv->GetCellVol(iCell);
-                auto mGGLU = mGG.fullPivLu();
-                DNDS_assert_info(mGGLU.isInvertible(), fmt::format("[[{}]]\n", Eigen::MatrixFMTSafe<real, -1, -1>(mGG)));
-                MatrixXR mGGInv = mGGLU.inverse();
-                mGG = mGGInv;
-
-                real LCell = vfv->GetCellVol(iCell) / sumFaceArea;
-                dTauInv[iCell](0) = 1. / (1. / std::pow(LCell, 2) * dTauScale);
+                diffPhi[iCell] = (mGGs.at(iCell) * bGG)({0, 1, 2}); // comment to use traditional GG
             }
-            dTauInv.trans.startPersistentPull();
-            dTauInv.trans.waitPersistentPull();
+        };
 
-            auto getDiffPhi = [&](ArrayDOFV<1> &phi, ArrayDOFV<3> &diffPhi)
+        int pPoissonCur = 2;
+
+        auto rhsPhi = [&](ArrayDOFV<1> &phi, ArrayDOFV<3> &diffPhi, ArrayDOFV<1> &rhs, std::vector<std::vector<real>> &coefs, bool updateCoefs)
+        {
+            const real supressRec = 1.0;
+            getDiffPhi(phi, diffPhi);
+            diffPhi.trans.startPersistentPull();
+            diffPhi.trans.waitPersistentPull();
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
-                for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                rhs[iCell](0) = 1.;
+                Geom::tPoint bary = vfv->GetCellQuadraturePPhys(iCell, -1);
+                if (updateCoefs)
+                    coefs.at(iCell).at(0) = 0.;
+                for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
                 {
-                    Geom::tPoint bary = vfv->GetCellQuadraturePPhys(iCell, -1);
-                    diffPhi[iCell].setZero();
-                    Eigen::Vector<real, Eigen::Dynamic> bGG;
-                    bGG.setZero(3 + mesh->cell2face[iCell].size());
-                    for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
+                    index iFace = mesh->cell2face[iCell][ic2f];
+                    index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
+                    int if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
+                    Geom::tPoint uNormOut = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1) * (if2c ? -1 : 1);
+                    auto faceBndID = mesh->GetFaceZone(iFace);
+                    auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
+                    real phiOther = phi[iCell](0);
+                    Geom::tPoint baryOther = bary;
+                    Geom::tPoint bFace = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1);
+                    real phiThisFace = phi[iCell](0) + (bFace - bary).dot(diffPhi[iCell]) * supressRec;
+                    real phiOtherFace = phiThisFace;
+                    real diffPhiNormThis = diffPhi[iCell].dot(uNormOut) * supressRec;
+                    real diffPhiNormOther = diffPhiNormThis;
+                    Geom::tPoint diffPhiFace = diffPhi[iCell] * supressRec;
+                    if (iCellOther != UnInitIndex)
                     {
-                        index iFace = mesh->cell2face[iCell][ic2f];
-                        index iCellOther = mesh->CellFaceOther(iCell, iFace);
-                        int if2c = mesh->CellIsFaceBack(iCell, iFace) ? 0 : 1;
-                        Geom::tPoint uNormOut = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1) * (if2c ? -1 : 1);
-                        auto faceBndID = mesh->GetFaceZone(iFace);
-                        auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
-                        real phiOther = phi[iCell](0);
-                        Geom::tPoint baryOther = bary;
-                        Geom::tPoint bFace = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1);
-                        if (iCellOther != UnInitIndex)
-                        {
-                            phiOther = phi[iCellOther](0);
-                            baryOther = vfv->GetOtherCellPointFromCell(
-                                iCell, iCellOther, iFace,
-                                vfv->GetCellQuadraturePPhys(iCellOther, -1));
-                        }
-                        else
-                        {
-                            DNDS_assert(faceBCType != BCUnknown);
-                            DNDS_assert(!Geom::FaceIDIsInternal(faceBndID));
-                            if (faceBCType == BCWall || faceBCType == BCWallIsothermal)
-                                phiOther = -phi[iCell](0);
-                            baryOther = bFace * 2 - bary;
-                        }
-                        real distThis = (bFace - bary).norm();
-                        real distOther = (bFace - baryOther).norm();
-                        real phiFace = (distOther * phi[iCell](0) + distThis * phiOther) / (distOther + distThis) - phi[iCell](0);
-                        diffPhi[iCell] += uNormOut * vfv->GetFaceArea(iFace) * phiFace;
-                        bGG(3 + ic2f) = phiOther + phi[iCell](0);
-                    }
-                    diffPhi[iCell] /= vfv->GetCellVol(iCell);
-                    diffPhi[iCell] = (mGGs.at(iCell) * bGG)({0, 1, 2}); // comment to use traditional GG
-                }
-            };
-
-            int pPoissonCur = 2;
-
-            auto rhsPhi = [&](ArrayDOFV<1> &phi, ArrayDOFV<3> &diffPhi, ArrayDOFV<1> &rhs, std::vector<std::vector<real>> &coefs, bool updateCoefs)
-            {
-                const real supressRec = 1.0;
-                getDiffPhi(phi, diffPhi);
-                diffPhi.trans.startPersistentPull();
-                diffPhi.trans.waitPersistentPull();
-                for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-                {
-                    rhs[iCell](0) = 1.;
-                    Geom::tPoint bary = vfv->GetCellQuadraturePPhys(iCell, -1);
-                    if (updateCoefs)
-                        coefs.at(iCell).at(0) = 0.;
-                    for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
-                    {
-                        index iFace = mesh->cell2face[iCell][ic2f];
-                        index iCellOther = mesh->CellFaceOther(iCell, iFace);
-                        int if2c = mesh->CellIsFaceBack(iCell, iFace) ? 0 : 1;
-                        Geom::tPoint uNormOut = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1) * (if2c ? -1 : 1);
-                        auto faceBndID = mesh->GetFaceZone(iFace);
-                        auto faceBCType = pBCHandler->GetTypeFromID(faceBndID);
-                        real phiOther = phi[iCell](0);
-                        Geom::tPoint baryOther = bary;
-                        Geom::tPoint bFace = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1);
-                        real phiThisFace = phi[iCell](0) + (bFace - bary).dot(diffPhi[iCell]) * supressRec;
-                        real phiOtherFace = phiThisFace;
-                        real diffPhiNormThis = diffPhi[iCell].dot(uNormOut) * supressRec;
-                        real diffPhiNormOther = diffPhiNormThis;
-                        Geom::tPoint diffPhiFace = diffPhi[iCell] * supressRec;
-                        if (iCellOther != UnInitIndex)
-                        {
-                            phiOther = phi[iCellOther](0);
-                            baryOther = vfv->GetOtherCellPointFromCell(
-                                iCell, iCellOther, iFace,
-                                vfv->GetCellQuadraturePPhys(iCellOther, -1));
-                            phiOtherFace = phiOther + (bFace - baryOther).dot(diffPhi[iCellOther]) * supressRec;
-                            diffPhiNormOther = diffPhi[iCellOther].dot(uNormOut) * supressRec; //! todo: periodic!!
-                            diffPhiFace = 0.5 * (diffPhiFace + diffPhi[iCellOther] * supressRec);
-                        }
-                        else
-                        {
-                            DNDS_assert(faceBCType != BCUnknown);
-                            DNDS_assert(!Geom::FaceIDIsInternal(faceBndID));
-                            if (faceBCType == BCWall || faceBCType == BCWallIsothermal)
-                                phiOther = -phi[iCell](0), phiOtherFace = -phiThisFace;
-                            else
-                            {
-                                diffPhiNormOther = -diffPhiNormThis;
-                                diffPhiFace.setZero();
-                            }
-                            baryOther = bFace * 2 - bary;
-                        }
-                        // real dist = (baryOther - bary).norm();
-                        real dist = std::abs((baryOther - bary).dot(uNormOut));
-
-                        real diffPhiNorm = ((phiOtherFace - phiThisFace) * 1.0 / dist + 0.5 * (diffPhiNormOther + diffPhiNormThis));
-                        diffPhiFace += ((phiOtherFace - phiThisFace) * 1.0 / dist) * uNormOut;
-                        real diffPhiFaceMag = diffPhiFace.norm();
-
-                        // rhs[iCell](0) += (phiOther - phi[iCell](0)) * 1.0 / dist * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell);
-                        rhs[iCell](0) += std::pow(diffPhiFaceMag, pPoissonCur - 2) * diffPhiNorm * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell);
-                        if (updateCoefs)
-                        {
-                            coefs.at(iCell).at(0) -= 1.0 / dist * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * std::pow(diffPhiFaceMag, pPoissonCur - 2) * (pPoissonCur - 1);
-                            coefs.at(iCell).at(1 + ic2f) = 1.0 / dist * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * std::pow(diffPhiFaceMag, pPoissonCur - 2) * (pPoissonCur - 1);
-                        }
-                    }
-                }
-            };
-
-            auto solveDphi = [&](ArrayDOFV<1> &rhsPhi, ArrayDOFV<1> &dphi, ArrayDOFV<1> &dphiNew, std::vector<std::vector<real>> &coefs, ArrayDOFV<1> &dTauInv)
-            {
-                dphi.setConstant(0.0);
-                for (int iSweep = 1; iSweep <= nSweep; iSweep++)
-                {
-                    for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-                    {
-                        dphiNew[iCell] = rhsPhi[iCell];
-                        for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
-                        {
-                            index iFace = mesh->cell2face[iCell][ic2f];
-                            index iCellOther = mesh->CellFaceOther(iCell, iFace);
-                            if (iCellOther != UnInitIndex)
-                                dphiNew[iCell] += coefs[iCell][ic2f + 1] * dphi[iCellOther];
-                        }
-                        dphiNew[iCell] /= -coefs[iCell][0] + dTauInv[iCell](0);
-                    }
-                    dphiNew.trans.startPersistentPull();
-                    dphiNew.trans.waitPersistentPull();
-                    dphi = dphiNew;
-                }
-            };
-            Linear::GMRES_LeftPreconditioned<ArrayDOFV<1>> gmres(
-                nGmresSubspace,
-                [&](ArrayDOFV<1> &v)
-                {
-                    vfv->BuildUDof(v, 1);
-                });
-            for (; pPoissonCur <= nPPoisson; pPoissonCur += 2)
-            {
-
-                real incNormBase{0};
-                real resNormBase{0};
-                for (int iIter = 1; iIter <= nIter; iIter++)
-                {
-                    rhsPhi(phi, diffPhi, rPhi, coefs, true);
-                    real normR = rPhi.norm2();
-                    real normPhi = phi.norm2();
-                    dPhi.setConstant(0.0);
-
-                    if (useGmres == 0)
-                    {
-                        solveDphi(rPhi, dPhi, dPhiNew, coefs, dTauInv);
+                        phiOther = phi[iCellOther](0);
+                        baryOther = vfv->GetOtherCellPointFromCell(
+                            iCell, iCellOther, iFace, if2c,
+                            vfv->GetCellQuadraturePPhys(iCellOther, -1));
+                        phiOtherFace = phiOther + (bFace - baryOther).dot(diffPhi[iCellOther]) * supressRec;
+                        diffPhiNormOther = diffPhi[iCellOther].dot(uNormOut) * supressRec; //! todo: periodic!!
+                        diffPhiFace = 0.5 * (diffPhiFace + diffPhi[iCellOther] * supressRec);
                     }
                     else
                     {
-                        gmres.solve(
-                            [&](ArrayDOFV<1> &x, ArrayDOFV<1> &Ax)
-                            {
-                                real normX = x.norm2();
-                                real ratio = normPhi * 1e-7 / (normX + normPhi * 1e-7 + verySmallReal) + 1e-12;
-                                dPhiNew = phi;
-                                rhsPhi(dPhiNew, diffPhi, phiTmp, coefs, false);
-                                dPhiNew.addTo(x, ratio);
-                                rhsPhi(dPhiNew, diffPhi, Ax, coefs, false);
-                                Ax.addTo(phiTmp, -1.0);
-                                Ax *= -1. / ratio;
-                                phiTmp = x;
-                                phiTmp *= dTauInv;
-                                Ax += phiTmp;
-                                Ax.trans.startPersistentPull();
-                                Ax.trans.waitPersistentPull();
-
-                                // for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
-                                // {
-                                //     Ax[iCell] = -coefs[iCell][0] * x[iCell];
-                                //     for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
-                                //     {
-                                //         index iFace = mesh->cell2face[iCell][ic2f];
-                                //         index iCellOther = mesh->CellFaceOther(iCell, iFace);
-                                //         if (iCellOther != UnInitIndex)
-                                //             Ax[iCell] += -coefs[iCell][ic2f + 1] * x[iCellOther];
-                                //     }
-                                // }
-                                // Ax.trans.startPersistentPull();
-                                // Ax.trans.waitPersistentPull();
-                            },
-                            [&](ArrayDOFV<1> &x, ArrayDOFV<1> &Mx)
-                            {
-                                Mx.setConstant(0.0);
-                                solveDphi(x, Mx, dPhiNew, coefs, dTauInv);
-                                // Mx.trans.startPersistentPull();
-                                // Mx.trans.waitPersistentPull();
-                            },
-                            [&](ArrayDOFV<1> &a, ArrayDOFV<1> &b) -> real
-                            {
-                                return a.dot(b);
-                            },
-                            rPhi,
-                            dPhi,
-                            nGmresRestart,
-                            [&](int iRestart, real res, real resB)
-                            {
-                                // if (res < resB * 1e-6)
-                                //     return true;
-                                return false;
-                            });
+                        DNDS_assert(faceBCType != BCUnknown);
+                        DNDS_assert(!Geom::FaceIDIsInternal(faceBndID));
+                        if (faceBCType == BCWall || faceBCType == BCWallIsothermal)
+                            phiOther = -phi[iCell](0), phiOtherFace = -phiThisFace;
+                        else
+                        {
+                            diffPhiNormOther = -diffPhiNormThis;
+                            diffPhiFace.setZero();
+                        }
+                        baryOther = bFace * 2 - bary;
                     }
+                    // real dist = (baryOther - bary).norm();
+                    real dist = std::abs((baryOther - bary).dot(uNormOut));
 
-                    real incNorm = dPhi.norm2();
-                    DNDS_assert(std::isfinite(incNorm));
-                    phi += dPhi;
-                    phi.trans.startPersistentPull();
-                    phi.trans.waitPersistentPull();
-                    if (iIter == 1)
-                        incNormBase = incNorm;
-                    resNormBase = std::max(resNormBase, normR);
-                    bool nowExit = false;
-                    if ((normR < resNormBase * resTh * std::pow(0.1, pPoissonCur - 2)) && iIter > nPPoissonStartIter)
-                        nowExit = true;
-                    if (iIter % nIterSee == 0 || iIter == nIter || nowExit)
-                        if (phi.father->getMPI().rank == 0)
-                            log() << fmt::format("EulerEvaluator<model>::GetWallDist(): poisson [p={}] [{}] inc:  [{:.4e}] -> [{:.4e}],  res: [{:.4e}] -> [{:.4e}]",
-                                                 pPoissonCur, iIter, incNormBase, incNorm, resNormBase, normR)
-                                  << std::endl;
-                    if (nowExit)
-                        break;
+                    real diffPhiNorm = ((phiOtherFace - phiThisFace) * 1.0 / dist + 0.5 * (diffPhiNormOther + diffPhiNormThis));
+                    diffPhiFace += ((phiOtherFace - phiThisFace) * 1.0 / dist) * uNormOut;
+                    real diffPhiFaceMag = diffPhiFace.norm();
+
+                    // rhs[iCell](0) += (phiOther - phi[iCell](0)) * 1.0 / dist * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell);
+                    rhs[iCell](0) += std::pow(diffPhiFaceMag, pPoissonCur - 2) * diffPhiNorm * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell);
+                    if (updateCoefs)
+                    {
+                        coefs.at(iCell).at(0) -= 1.0 / dist * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * std::pow(diffPhiFaceMag, pPoissonCur - 2) * (pPoissonCur - 1);
+                        coefs.at(iCell).at(1 + ic2f) = 1.0 / dist * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * std::pow(diffPhiFaceMag, pPoissonCur - 2) * (pPoissonCur - 1);
+                    }
                 }
-                getDiffPhi(phi, diffPhi);
-                diffPhi.trans.startPersistentPull();
-                diffPhi.trans.waitPersistentPull();
+            }
+        };
+
+        auto solveDphi = [&](ArrayDOFV<1> &rhsPhi, ArrayDOFV<1> &dphi, ArrayDOFV<1> &dphiNew, std::vector<std::vector<real>> &coefs, ArrayDOFV<1> &dTauInv)
+        {
+            dphi.setConstant(0.0);
+            for (int iSweep = 1; iSweep <= nSweep; iSweep++)
+            {
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
-                    Geom::tPoint gradPhi;
-                    gradPhi.setZero();
-                    gradPhi = diffPhi[iCell];
-                    real nD = 1;
+                    dphiNew[iCell] = rhsPhi[iCell];
                     for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
                     {
                         index iFace = mesh->cell2face[iCell][ic2f];
-                        index iCellOther = mesh->CellFaceOther(iCell, iFace);
+                        index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
                         if (iCellOther != UnInitIndex)
-                        {
-                            gradPhi += diffPhi[iCell];
-                            gradPhi += diffPhi[iCellOther] * smoothBias;
-                            nD += 1. + smoothBias;
-                        }
+                            dphiNew[iCell] += coefs[iCell][ic2f + 1] * dphi[iCellOther];
                     }
-                    gradPhi /= nD;
-                    real gradPhiNorm = gradPhi.norm();
-                    real dEst = std::pow(pPoissonCur / real(pPoissonCur - 1) * phi[iCell](0) + std::pow(gradPhiNorm, pPoissonCur), real(pPoissonCur - 1) / pPoissonCur) - std::pow(gradPhiNorm, pPoissonCur - 1);
-                    // dPhi[iCell](0) = phi[iCell](0);
-                    dPhi[iCell](0) = dEst;
+                    dphiNew[iCell] /= -coefs[iCell][0] + dTauInv[iCell](0);
                 }
-                dPhi.trans.startPersistentPull();
-                dPhi.trans.waitPersistentPull();
-                phi = dPhi;
+                dphiNew.trans.startPersistentPull();
+                dphiNew.trans.waitPersistentPull();
+                dphi = dphiNew;
             }
-
-            auto minval = dPhi.min();
-
-            dWall.resize(mesh->NumCellProc());
-            for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
+        };
+        Linear::GMRES_LeftPreconditioned<ArrayDOFV<1>> gmres(
+            nGmresSubspace,
+            [&](ArrayDOFV<1> &v)
             {
-                auto quadCell = vfv->GetCellQuad(iCell);
-                dWall[iCell].resize(quadCell.GetNumPoints());
-            }
+                vfv->BuildUDof(v, 1);
+            });
+        for (; pPoissonCur <= nPPoisson; pPoissonCur += 2)
+        {
 
-            for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
-                dWall.at(iCell).setConstant(std::max(dPhi[iCell](0), settings.minWallDist));
-            if (phi.father->getMPI().rank == 0)
-                log() << fmt::format("EulerEvaluator<model>::GetWallDist(): poisson min dist [{}]", minval(0)) << std::endl;
+            real incNormBase{0};
+            real resNormBase{0};
+            for (int iIter = 1; iIter <= nIter; iIter++)
+            {
+                rhsPhi(phi, diffPhi, rPhi, coefs, true);
+                real normR = rPhi.norm2();
+                real normPhi = phi.norm2();
+                dPhi.setConstant(0.0);
+
+                if (useGmres == 0)
+                {
+                    solveDphi(rPhi, dPhi, dPhiNew, coefs, dTauInv);
+                }
+                else
+                {
+                    gmres.solve(
+                        [&](ArrayDOFV<1> &x, ArrayDOFV<1> &Ax)
+                        {
+                            real normX = x.norm2();
+                            real ratio = normPhi * 1e-7 / (normX + normPhi * 1e-7 + verySmallReal) + 1e-12;
+                            dPhiNew = phi;
+                            rhsPhi(dPhiNew, diffPhi, phiTmp, coefs, false);
+                            dPhiNew.addTo(x, ratio);
+                            rhsPhi(dPhiNew, diffPhi, Ax, coefs, false);
+                            Ax.addTo(phiTmp, -1.0);
+                            Ax *= -1. / ratio;
+                            phiTmp = x;
+                            phiTmp *= dTauInv;
+                            Ax += phiTmp;
+                            Ax.trans.startPersistentPull();
+                            Ax.trans.waitPersistentPull();
+
+                            // for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                            // {
+                            //     Ax[iCell] = -coefs[iCell][0] * x[iCell];
+                            //     for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
+                            //     {
+                            //         index iFace = mesh->cell2face[iCell][ic2f];
+                            //         index iCellOther = mesh->CellFaceOther(iCell, iFace);
+                            //         if (iCellOther != UnInitIndex)
+                            //             Ax[iCell] += -coefs[iCell][ic2f + 1] * x[iCellOther];
+                            //     }
+                            // }
+                            // Ax.trans.startPersistentPull();
+                            // Ax.trans.waitPersistentPull();
+                        },
+                        [&](ArrayDOFV<1> &x, ArrayDOFV<1> &Mx)
+                        {
+                            Mx.setConstant(0.0);
+                            solveDphi(x, Mx, dPhiNew, coefs, dTauInv);
+                            // Mx.trans.startPersistentPull();
+                            // Mx.trans.waitPersistentPull();
+                        },
+                        [&](ArrayDOFV<1> &a, ArrayDOFV<1> &b) -> real
+                        {
+                            return a.dot(b);
+                        },
+                        rPhi,
+                        dPhi,
+                        nGmresRestart,
+                        [&](int iRestart, real res, real resB)
+                        {
+                            // if (res < resB * 1e-6)
+                            //     return true;
+                            return false;
+                        });
+                }
+
+                real incNorm = dPhi.norm2();
+                DNDS_assert(std::isfinite(incNorm));
+                phi += dPhi;
+                phi.trans.startPersistentPull();
+                phi.trans.waitPersistentPull();
+                if (iIter == 1)
+                    incNormBase = incNorm;
+                resNormBase = std::max(resNormBase, normR);
+                bool nowExit = false;
+                if ((normR < resNormBase * resTh * std::pow(0.1, pPoissonCur - 2)) && iIter > nPPoissonStartIter)
+                    nowExit = true;
+                if (iIter % nIterSee == 0 || iIter == nIter || nowExit)
+                    if (phi.father->getMPI().rank == 0)
+                        log() << fmt::format("EulerEvaluator<model>::GetWallDist(): poisson [p={}] [{}] inc:  [{:.4e}] -> [{:.4e}],  res: [{:.4e}] -> [{:.4e}]",
+                                             pPoissonCur, iIter, incNormBase, incNorm, resNormBase, normR)
+                              << std::endl;
+                if (nowExit)
+                    break;
+            }
+            getDiffPhi(phi, diffPhi);
+            diffPhi.trans.startPersistentPull();
+            diffPhi.trans.waitPersistentPull();
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            {
+                Geom::tPoint gradPhi;
+                gradPhi.setZero();
+                gradPhi = diffPhi[iCell];
+                real nD = 1;
+                for (int ic2f = 0; ic2f < mesh->cell2face[iCell].size(); ic2f++)
+                {
+                    index iFace = mesh->cell2face[iCell][ic2f];
+                    index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
+                    if (iCellOther != UnInitIndex)
+                    {
+                        gradPhi += diffPhi[iCell];
+                        gradPhi += diffPhi[iCellOther] * smoothBias;
+                        nD += 1. + smoothBias;
+                    }
+                }
+                gradPhi /= nD;
+                real gradPhiNorm = gradPhi.norm();
+                real dEst = std::pow(pPoissonCur / real(pPoissonCur - 1) * phi[iCell](0) + std::pow(gradPhiNorm, pPoissonCur), real(pPoissonCur - 1) / pPoissonCur) - std::pow(gradPhiNorm, pPoissonCur - 1);
+                // dPhi[iCell](0) = phi[iCell](0);
+                dPhi[iCell](0) = dEst;
+            }
+            dPhi.trans.startPersistentPull();
+            dPhi.trans.waitPersistentPull();
+            phi = dPhi;
+        }
+
+        auto minval = dPhi.min();
+
+        dWall.resize(mesh->NumCellProc());
+        for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
+        {
+            auto quadCell = vfv->GetCellQuad(iCell);
+            dWall[iCell].resize(quadCell.GetNumPoints());
+        }
+
+        for (index iCell = 0; iCell < mesh->NumCellProc(); iCell++)
+            dWall.at(iCell).setConstant(std::max(dPhi[iCell](0), settings.minWallDist));
+        if (phi.father->getMPI().rank == 0)
+            log() << fmt::format("EulerEvaluator<model>::GetWallDist(): poisson min dist [{}]", minval(0)) << std::endl;
     }
 
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Dispatcher for wall distance computation, selecting method based on settings.
      *
      *  Routes to GetWallDist_AABB (schemes 0,1,20), GetWallDist_BatchedAABB (schemes 2,20),
@@ -818,7 +824,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Estimate the local time step and face spectral radii for CFL-based time stepping.
      *
      *  For each face, evaluates L/R states using 2nd-order reconstruction, computes the
@@ -844,7 +851,8 @@ namespace DNDS::Euler
         real CFL, real &dtMinall, real MaxDt,
         bool UseLocaldt,
         real t,
-        uint64_t flags)
+        uint64_t flags,
+        OptionalRef<ArrayDOFV<1>> cellTWarm)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         DNDS_MPI_InsertCheck(u.father->getMPI(), "EvaluateDt 1");
@@ -869,8 +877,9 @@ namespace DNDS::Euler
             uGradBufNoLim.trans.startPersistentPull();
             uGradBufNoLim.trans.waitPersistentPull();
         }
+        TDiffU GradULxy, GradURxy;
 #if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime) private(GradULxy, GradURxy)
 #endif
         for (index iFace = 0; iFace < mesh->NumFaceProc(); iFace++)
         {
@@ -881,24 +890,21 @@ namespace DNDS::Euler
             TU UL = u[iCellL];
             this->UFromCell2Face(UL, iFace, f2c[0], 0);
             TU uMean = UL;
-            real pL, asqrL, HL, pR, asqrR, HR;
             TVec vL = UL(Seq123) / UL(0);
             TVec vR = vL;
-            Gas::IdealGasThermal(UL(I4), UL(0), vL.squaredNorm(),
-                                 settings.idealGasProperty.gamma,
-                                 pL, asqrL, HL);
-            pR = pL, HR = HL, asqrR = asqrL;
+            TPhysThermalRet thermalL = phys_.conservativeThermal(UL,
+                                                                 cellTWarm ? (*cellTWarm)[iCellL](0) : real(0));
+            TPhysThermalRet thermalR = thermalL;
             if (f2c[1] != UnInitIndex)
             {
                 TU UR = u[f2c[1]];
                 this->UFromCell2Face(UR, iFace, f2c[1], 1);
                 uMean = (uMean + UR) * 0.5;
                 vR = UR(Seq123) / UR(0);
-                Gas::IdealGasThermal(UR(I4), UR(0), vR.squaredNorm(),
-                                     settings.idealGasProperty.gamma,
-                                     pR, asqrR, HR);
+                index iCellR = f2c[1];
+                thermalR = phys_.conservativeThermal(UR,
+                                                     cellTWarm ? (*cellTWarm)[iCellR](0) : real(0));
             }
-            TDiffU GradULxy, GradURxy;
             GradULxy.resize(Eigen::NoChange, nVars);
             GradURxy.resize(Eigen::NoChange, nVars);
             GradULxy.setZero(), GradURxy.setZero();
@@ -948,17 +954,15 @@ namespace DNDS::Euler
             //     e = (e * e + Efix * Efix) / (2 * Efix);
             // uMean(4) = Ek + e;
 
-            real pMean, asqrMean, HMean;
-            Gas::IdealGasThermal(uMean(I4), uMean(0), veloMean.squaredNorm(),
-                                 settings.idealGasProperty.gamma,
-                                 pMean, asqrMean, HMean);
+            auto [T, pMean, asqrMean, HMean, gammaEq, gamma] = phys_.conservativeThermal(uMean);
 
-            pMean = (pL + pR) * 0.5;
-            real aMean = sqrt(settings.idealGasProperty.gamma * pMean / uMean(0)); // paper
+            pMean = (thermalL.p + thermalR.p) * 0.5;
+            real aMean = sqrt(gamma * pMean / uMean(0)); // paper
 
             // DNDS_assert(asqrMean >= 0);
             // real aMean = std::sqrt(asqrMean); // original
             real lambdaConvection = std::abs(veloNMean - vgN) + aMean;
+            real asqrL = thermalL.asqr, asqrR = thermalR.asqr;
             DNDS_assert_info(
                 asqrL >= 0 && asqrR >= 0,
                 fmt::format(" mean value violates PP! asqr: [{} {}]", asqrL, asqrR));
@@ -967,17 +971,25 @@ namespace DNDS::Euler
             lambdaConvection = std::max(aL + std::abs(veloNL - vgN), aR + std::abs(veloNR - vgN));
 
             // ! refvalue:
-            real muRef = settings.idealGasProperty.muGas;
+            real muRef = phys_.muRef();
 
-            real gamma = settings.idealGasProperty.gamma;
-            real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * uMean(0));
-            real muf = muEff(uMean, T);
-            real muPhy = muf;
+            real muf = phys_.mixtureViscosity(T, pMean, uMean);
             real muTurb = this->getMuTur(uMean, GradUMeanXY, muRef, muf, iFace);
             muf += muTurb;
-
-            real lamVis = muf / uMean(0) *
-                          std::max(4. / 3., gamma / settings.idealGasProperty.prGas);
+            real lamVis = muf / uMean(0) * std::max(4. / 3., gamma / phys_.Pr());
+            if (phys_.hasChemicalSource())
+            {
+                // Reactive scalar includes mixture molecular transport, mu_t, and
+                // k_t = Cp*mu_t/Pr_t, matching the face viscous flux closure.
+                // TODO(RMS-AUDIT-047): include max species diffusivity in the
+                // viscous spectral radius. Reactive RHS has species diffusion,
+                // so light-species mixtures can be stiffer than momentum/heat
+                // diffusion alone indicate.
+                // Spectral-radius estimation intentionally remains NS-flow based;
+                // future implicit species blocks should use per-species diffusion radii.
+                real k = phys_.mixtureConductivity(T, pMean, uMean) + phys_.Cp(T, uMean) * muTurb / phys_.PrTurb();
+                lamVis = std::max(4. / 3. * muf / uMean(0), k / (uMean(0) * phys_.Cv(T, uMean)));
+            }
 
             real lamFace = lambdaConvection * vfv->GetFaceArea(iFace);
 
@@ -1052,7 +1064,8 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>)
+        template <>
+    )
     /** @brief Evaluate the numerical flux at a single face for a batch of quadrature points.
      *
      *  Computes the inviscid and viscous numerical flux at a face given batched L/R states,
@@ -1098,7 +1111,8 @@ namespace DNDS::Euler
         TReal_Batch &lam0V, TReal_Batch &lam123V, TReal_Batch &lam4V,
         Geom::t_index btype,
         typename Gas::RiemannSolverType rsType,
-        index iFace, bool ignoreVis)
+        index iFace, bool ignoreVis,
+        OptionalRef<ArrayDOFV<1>> cellTWarm)
     {
         finc.resizeLike(ULxy);
         DNDS_assert(&DiffUxy != &DiffUxyPrim);
@@ -1151,8 +1165,8 @@ namespace DNDS::Euler
         TU_Batch UMeanXy = 0.5 * (ULxy + URxy);
 
         // PerformanceTimer::Instance().StartTimer(PerformanceTimer::LimiterB);
-        real muRef = settings.idealGasProperty.muGas;
-        real TRef = settings.idealGasProperty.TRef;
+        real muRef = phys_.muRef();
+        real TRef = phys_.TRef();
 
         auto f2c = mesh->face2cell[iFace];
         real dLambda = deltaLambdaCell[f2c[0]](0);
@@ -1163,22 +1177,26 @@ namespace DNDS::Euler
         /** viscous flux **/
         TU_Batch visFluxV;
         visFluxV.resizeLike(ULxy);
+        typename PhysicsProperties<model>::MixtureAveragedDiffusionBuffers speciesDiffusionBuffers;
+        EulerBCType bTypeEuler = pBCHandler->GetTypeFromID(btype);
+        bool impermeableWall = bTypeEuler == EulerBCType::BCWall ||
+                               bTypeEuler == EulerBCType::BCWallIsothermal || 
+                               bTypeEuler == EulerBCType::BCWallInvis ||
+                               bTypeEuler == EulerBCType::BCSym;
+        bool adiabaticWall   = bTypeEuler == EulerBCType::BCWall || 
+                               bTypeEuler == EulerBCType::BCWallInvis ||
+                               bTypeEuler == EulerBCType::BCSym;
         for (int iB = 0; iB < nB; iB++)
         {
-            real pMean, asqrMean, Hmean;
-            real gamma = settings.idealGasProperty.gamma;
             TU UMeanXYC = UMeanXy(EigenAll, iB);
             auto seqC = Eigen::seq(iB * dim, iB * dim + dim - 1);
             TDiffU DiffUxyC = DiffUxy(seqC, EigenAll);
             TDiffU DiffUxyPrimC = DiffUxyPrim(seqC, EigenAll);
             TVec uNormC = unitNorm(EigenAll, iB);
-            Gas::IdealGasThermal(UMeanXYC(I4), UMeanXYC(0), (UMeanXYC(Seq123) / UMeanXYC(0)).squaredNorm(),
-                                    gamma, pMean, asqrMean, Hmean);
+            auto [T, pMean, asqrMean, Hmean, gammaEq, gamma] = phys_.conservativeThermal(UMeanXYC);
             DNDS_assert_info(pMean > 0, fmt::format("{}, {}, {}", UMeanXYC(I4), UMeanXYC(0), (UMeanXYC(Seq123) / UMeanXYC(0)).squaredNorm()));
-            real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * UMeanXYC(0));
-            real mufPhy, muf;
-            muf = muEff(UMeanXYC, T);
-            mufPhy = muf;
+            real muf = phys_.mixtureViscosity(T, pMean, UMeanXYC);
+            real mufPhy = muf;
             // PerformanceTimer::Instance().StopTimer(PerformanceTimer::LimiterB);
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
             if (!ignoreVis)
@@ -1186,22 +1204,38 @@ namespace DNDS::Euler
                 real muTurb = this->getMuTur(UMeanXYC, DiffUxyC, muRef, muf, iFace); // TODO: make this accept primitive gradients instead
                 muf += muTurb;
 
-                real k = settings.idealGasProperty.CpGas * muTurb / 0.9 +
-                            settings.idealGasProperty.CpGas * mufPhy / settings.idealGasProperty.prGas;
+                // Reactive RHS face flux uses Cantera mixture molecular k plus
+                // turbulent heat conductivity k_t=Cp*mu_t/Pr_t and a shared
+                // turbulent species diffusivity D_t=mu_t/(rho*Sc_t).
+                real k = phys_.mixtureConductivity(T, pMean, UMeanXYC) +
+                            phys_.Cp(T, UMeanXYC) * muTurb / phys_.PrTurb();
+                real speciesDiffTurb = muTurb / std::max(UMeanXYC(0) * phys_.ScTurb(), verySmallReal);
                 TU VisFlux;
                 VisFlux.resizeLike(ULMeanXy);
                 VisFlux.setZero();
                 Gas::ViscousFlux_IdealGas<dim>(
-                    UMeanXYC, DiffUxyPrimC, uNormC, pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall,
-                    settings.idealGasProperty.gamma,
+                    UMeanXYC, DiffUxyPrimC, uNormC, adiabaticWall,
+                    gammaEq, gamma,
                     muf, muTurb / (muf + verySmallReal), settings.ransUseQCR,
                     k,
-                    settings.idealGasProperty.CpGas,
-                    VisFlux);
+                    phys_.Cp(T, UMeanXYC),
+                    VisFlux,
+                    phys_.mixtureBaseInternalRhoE(UMeanXYC));
+
+                if constexpr (Traits::isExtended)
+                {
+                    if (phys_.hasChemicalSource())
+                    {
+                        phys_.addMixtureAveragedSpeciesDiffusionFlux(
+                            T, pMean, UMeanXYC, DiffUxyPrimC, uNormC, k,
+                            speciesDiffTurb,
+                            adiabaticWall, impermeableWall,
+                            speciesDiffusionBuffers, VisFlux);
+                    }
+                }
 
                 this->visFluxTurVariable(UMeanXYC, DiffUxyPrimC, muRef, mufPhy, muTurb, uNormC, iFace, VisFlux);
-                if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis ||
-                    pBCHandler->GetTypeFromID(btype) == EulerBCType::BCSym)
+                if (bTypeEuler == EulerBCType::BCWallInvis || bTypeEuler == EulerBCType::BCSym)
                 {
                     VisFlux *= 0.0;
                 }
@@ -1226,8 +1260,7 @@ namespace DNDS::Euler
             std::cout << "URM" << URMeanXy.transpose() << std::endl;
         };
 
-        if (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWallInvis ||
-            pBCHandler->GetTypeFromID(btype) == EulerBCType::BCSym)
+        if (bTypeEuler == EulerBCType::BCWallInvis || bTypeEuler == EulerBCType::BCSym)
         {
             // ? normal invert here?
         }
@@ -1236,20 +1269,86 @@ namespace DNDS::Euler
         lam123V.resize(nB);
         lam4V.resize(nB);
 
+        index iCellL = f2c[0];
+        real TguessL = cellTWarm ? (*cellTWarm)[iCellL](0) : real(0);
+        real T_Lm_rs = phys_.temperature(ULMeanXy, TguessL);
+        real gammaEqLm_rs = phys_.gammaEq(T_Lm_rs, ULMeanXy);
+        real gammaLm_rs = phys_.gamma(T_Lm_rs, ULMeanXy);
+        real T_Rm_rs = real(0);
+        real gammaEqRm_rs = real(0);
+        real gammaRm_rs = real(0);
+        if (f2c[1] != UnInitIndex)
+        {
+            index iCellR = f2c[1];
+            real TguessR = cellTWarm ? (*cellTWarm)[iCellR](0) : real(0);
+            T_Rm_rs = phys_.temperature(URMeanXy, TguessR);
+            gammaEqRm_rs = phys_.gammaEq(T_Rm_rs, URMeanXy);
+            gammaRm_rs = phys_.gamma(T_Rm_rs, URMeanXy);
+        }
+        else
+        {
+            T_Rm_rs = phys_.temperature(URMeanXy);
+            gammaEqRm_rs = phys_.gammaEq(T_Rm_rs, URMeanXy);
+            gammaRm_rs = phys_.gamma(T_Rm_rs, URMeanXy);
+        }
+        real gammaEq_rs = gammaEqLm_rs;
+        real gamma_rs = gammaLm_rs;
+
+        TU gammaEqLV, gammaEqRV, gammaLV, gammaRV, rhoEBaseLV, rhoEBaseRV;
+        if (phys_.hasChemicalSource())
+        {
+            gammaEqLV.resize(nB);
+            gammaEqRV.resize(nB);
+            gammaLV.resize(nB);
+            gammaRV.resize(nB);
+            rhoEBaseLV.resize(nB);
+            rhoEBaseRV.resize(nB);
+            for (int iB = 0; iB < nB; ++iB)
+            {
+                TU uL = ULxy(EigenAll, iB);
+                TU uR = URxy(EigenAll, iB);
+                real TL = phys_.temperature(uL);
+                real TR = phys_.temperature(uR);
+                gammaEqLV(iB) = phys_.gammaEq(TL, uL);
+                gammaEqRV(iB) = phys_.gammaEq(TR, uR);
+                gammaLV(iB) = phys_.gamma(TL, uL);
+                gammaRV(iB) = phys_.gamma(TR, uR);
+                rhoEBaseLV(iB) = phys_.mixtureBaseInternalRhoE(uL);
+                rhoEBaseRV(iB) = phys_.mixtureBaseInternalRhoE(uR);
+            }
+        }
+
         auto RSWrapper_XY =
             [&](Gas::RiemannSolverType rsType,
                 auto &&UL, auto &&UR, auto &&ULm, auto &&URm, auto &&vg, auto &&n,
-                real gamma, auto &&finc, real dLambda, real fixScale, real incFScale,
+                real gammaEq, real gamma, auto &&finc, real dLambda, real fixScale, real incFScale,
                 real &lam0, real &lam123, real &lam4)
         {
-            Gas::InviscidFlux_IdealGas_Dispatcher<dim>(rsType, UL, UR, ULm, URm, vg, n, gamma, finc, dLambda, fixScale,  incFScale,exitFun, lam0, lam123, lam4);
+            if (phys_.hasChemicalSource())
+            {
+                real TL = phys_.temperature(UL);
+                real TR = phys_.temperature(UR);
+                real gammaEqL = phys_.gammaEq(TL, UL);
+                real gammaEqR = phys_.gammaEq(TR, UR);
+                real gammaL = phys_.gamma(TL, UL);
+                real gammaR = phys_.gamma(TR, UR);
+                Gas::InviscidFlux_IdealGas_Dispatcher<dim, true>(rsType, UL, UR, ULm, URm, vg, n, gammaEq, gamma, finc, dLambda, fixScale, incFScale, exitFun, lam0, lam123, lam4,
+                    phys_.mixtureBaseInternalRhoE(UL), phys_.mixtureBaseInternalRhoE(UR),
+                    phys_.mixtureBaseInternalRhoE(ULm), phys_.mixtureBaseInternalRhoE(URm),
+                    gammaEqL, gammaEqR, gammaEqLm_rs, gammaEqRm_rs,
+                    gammaL, gammaR, gammaLm_rs, gammaRm_rs);
+            }
+            else
+                Gas::InviscidFlux_IdealGas_Dispatcher<dim>(rsType, UL, UR, ULm, URm, vg, n, gammaEq, gamma, finc, dLambda, fixScale, incFScale, exitFun, lam0, lam123, lam4,
+                    phys_.mixtureBaseInternalRhoE(UL), phys_.mixtureBaseInternalRhoE(UR),
+                    phys_.mixtureBaseInternalRhoE(ULm), phys_.mixtureBaseInternalRhoE(URm));
         };
 
         // TU_Batch finc1;
         // finc1.resizeLike(ULxy);
         if (settings.rsTypeWall != Gas::UnknownRS &&
-            (pBCHandler->GetTypeFromID(btype) == EulerBCType::BCWall ||
-             pBCHandler->GetTypeFromID(btype) == BCWallIsothermal))
+            (bTypeEuler == BCWall ||
+             bTypeEuler == BCWallIsothermal))
         {
             rsType = settings.rsTypeWall;
         }
@@ -1260,11 +1359,23 @@ namespace DNDS::Euler
                 (rsType >= Gas::Roe_M1 && rsType <= Gas::Roe_M5))
             {
                 real lam0{0}, lam123{0}, lam4{0};
-                Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
-                    rsType,
-                    ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, unitNorm, unitNormC,
-                    settings.idealGasProperty.gamma, finc, dLambda, fixScale, incFScale,
-                    exitFun, lam0, lam123, lam4);
+                if (phys_.hasChemicalSource())
+                    Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim, true, true>(
+                        rsType,
+                        ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, unitNorm, unitNormC,
+                        gammaEq_rs, gamma_rs, finc, dLambda, fixScale, incFScale,
+                        exitFun, lam0, lam123, lam4,
+                        phys_.mixtureBaseInternalRhoE(ULMeanXy), phys_.mixtureBaseInternalRhoE(URMeanXy),
+                        rhoEBaseLV, rhoEBaseRV, gammaEqLV, gammaEqRV, gammaEqLm_rs, gammaEqRm_rs,
+                        gammaLV, gammaRV, gammaLm_rs, gammaRm_rs);
+                else
+                    Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
+                        rsType,
+                        ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, unitNorm, unitNormC,
+                        gammaEq_rs, gamma_rs, finc, dLambda, fixScale, incFScale,
+                        exitFun, lam0, lam123, lam4,
+                        phys_.mixtureBaseInternalRhoE(ULMeanXy), phys_.mixtureBaseInternalRhoE(URMeanXy),
+                        nullptr, nullptr, nullptr, nullptr);
                 lam0V.setConstant(lam0);
                 lam123V.setConstant(lam123);
                 lam4V.setConstant(lam4);
@@ -1274,7 +1385,7 @@ namespace DNDS::Euler
                 {
                     RSWrapper_XY(rsType, ULxy(EigenAll, iB), URxy(EigenAll, iB), ULMeanXy, URMeanXy,
                                  vgXY(EigenAll, iB), unitNorm(EigenAll, iB),
-                                 settings.idealGasProperty.gamma, finc(EigenAll, iB), dLambda, fixScale, incFScale,
+                                 gammaEq_rs, gamma_rs, finc(EigenAll, iB), dLambda, fixScale, incFScale,
                                  lam0V(iB), lam123V(iB), lam4V(iB));
                 }
         };
@@ -1348,11 +1459,23 @@ namespace DNDS::Euler
                     (rsTypeAux >= Gas::Roe_M1 && rsTypeAux <= Gas::Roe_M5))
                 {
                     real lam0{0}, lam123{0}, lam4{0};
-                    Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
-                        rsTypeAux,
-                        ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, N1B, N1,
-                        settings.idealGasProperty.gamma, F1, dLambda, fixScale, incFScale,
-                        exitFun, lam0, lam123, lam4);
+                    if (phys_.hasChemicalSource())
+                        Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim, true, true>(
+                            rsTypeAux,
+                            ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, N1B, N1,
+                            gammaEq_rs, gamma_rs, F1, dLambda, fixScale, incFScale,
+                            exitFun, lam0, lam123, lam4,
+                            phys_.mixtureBaseInternalRhoE(ULMeanXy), phys_.mixtureBaseInternalRhoE(URMeanXy),
+                            rhoEBaseLV, rhoEBaseRV, gammaEqLV, gammaEqRV, gammaEqLm_rs, gammaEqRm_rs,
+                            gammaLV, gammaRV, gammaLm_rs, gammaRm_rs);
+                    else
+                        Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
+                            rsTypeAux,
+                            ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, N1B, N1,
+                            gammaEq_rs, gamma_rs, F1, dLambda, fixScale, incFScale,
+                            exitFun, lam0, lam123, lam4,
+                            phys_.mixtureBaseInternalRhoE(ULMeanXy), phys_.mixtureBaseInternalRhoE(URMeanXy),
+                            nullptr, nullptr, nullptr, nullptr);
                     lam0V1.setConstant(lam0);
                     lam123V1.setConstant(lam123);
                     lam4V1.setConstant(lam4);
@@ -1362,7 +1485,7 @@ namespace DNDS::Euler
                     {
                         RSWrapper_XY(rsTypeAux, ULxy(EigenAll, iB), URxy(EigenAll, iB), ULMeanXy, URMeanXy,
                                      vgXY(EigenAll, iB), N1,
-                                     settings.idealGasProperty.gamma, F1(EigenAll, iB), dLambda, fixScale, incFScale,
+                                     gammaEq_rs, gamma_rs, F1(EigenAll, iB), dLambda, fixScale, incFScale,
                                      lam0V1(iB), lam123V1(iB), lam4V1(iB));
                     }
 
@@ -1370,11 +1493,23 @@ namespace DNDS::Euler
                     (rsType >= Gas::Roe_M1 && rsType <= Gas::Roe_M5))
                 {
                     real lam0{0}, lam123{0}, lam4{0};
-                    Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
-                        rsType,
-                        ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, N2, N2C,
-                        settings.idealGasProperty.gamma, finc, dLambda, fixScale, incFScale,
-                        exitFun, lam0, lam123, lam4);
+                    if (phys_.hasChemicalSource())
+                        Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim, true, true>(
+                            rsType,
+                            ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, N2, N2C,
+                            gammaEq_rs, gamma_rs, finc, dLambda, fixScale, incFScale,
+                            exitFun, lam0, lam123, lam4,
+                            phys_.mixtureBaseInternalRhoE(ULMeanXy), phys_.mixtureBaseInternalRhoE(URMeanXy),
+                            rhoEBaseLV, rhoEBaseRV, gammaEqLV, gammaEqRV, gammaEqLm_rs, gammaEqRm_rs,
+                            gammaLV, gammaRV, gammaLm_rs, gammaRm_rs);
+                    else
+                        Gas::InviscidFlux_IdealGas_Batch_Dispatcher<dim>(
+                            rsType,
+                            ULxy, URxy, ULMeanXy, URMeanXy, vgXY, vgC, N2, N2C,
+                            gammaEq_rs, gamma_rs, finc, dLambda, fixScale, incFScale,
+                            exitFun, lam0, lam123, lam4,
+                            phys_.mixtureBaseInternalRhoE(ULMeanXy), phys_.mixtureBaseInternalRhoE(URMeanXy),
+                            nullptr, nullptr, nullptr, nullptr);
                     lam0V.setConstant(lam0);
                     lam123V.setConstant(lam123);
                     lam4V.setConstant(lam4);
@@ -1384,24 +1519,33 @@ namespace DNDS::Euler
                     {
                         RSWrapper_XY(rsType, ULxy(EigenAll, iB), URxy(EigenAll, iB), ULMeanXy, URMeanXy,
                                      vgXY(EigenAll, iB), N2(EigenAll, iB),
-                                     settings.idealGasProperty.gamma, finc(EigenAll, iB), dLambda, fixScale, incFScale,
+                                     gammaEq_rs, gamma_rs, finc(EigenAll, iB), dLambda, fixScale, incFScale,
                                      lam0V(iB), lam123V(iB), lam4V(iB));
                     }
 
                 finc.array().rowwise() *= N2Proj.array();
                 finc.array() += F1.array().rowwise() * N1Proj.array();
 
-                TReal_Batch N12ProjSum = N1Proj.array() + N2Proj.array();
-                lam0V.array() *= N2Proj.array() / N12ProjSum.array();
-                lam4V.array() *= N2Proj.array() / N12ProjSum.array();
-                lam123V.array() *= N2Proj.array() / N12ProjSum.array();
-                lam0V.array() += N1Proj.array() * lam0V1.array() / N12ProjSum.array();
-                lam4V.array() += N1Proj.array() * lam4V1.array() / N12ProjSum.array();
-                lam123V.array() += N1Proj.array() * lam123V1.array() / N12ProjSum.array(); // todo: fix these
+                // Recover acoustic speed a from either direction (isotropic).
+                // a = max(|lam0 - lam123|, |lam4 - lam123|) — exact for all sign combos:
+                //   subsonic: lam0 = a∓un, lam4 = a±un → |lam4−lam123|=a, |lam0−lam123|=a
+                //   supersonic: lam0 = |un|−a, lam4 = |un|+a → both diffs = a
+                TReal_Batch aV;
+                aV.resizeLike(lam0V);
+                aV = (lam0V1 - lam123V1).array().abs().max((lam4V1 - lam123V1).array().abs());
+                // Guard: if N1 direction gives zero (static fluid), recover a from N2.
+                aV = aV.array().max((lam0V - lam123V).array().abs().max((lam4V - lam123V).array().abs()));
 
-                lam0V = lam0V1;
-                lam123V = lam123V1;
-                lam4V = lam4V1;
+                // N1 and N2 are orthogonal → combined normal-velo magnitude:
+                //   un = sqrt(un_n1² + un_n2²) = sqrt(lam123V1² + lam123V²)
+                TReal_Batch unV;
+                unV.resizeLike(lam0V);
+                unV = (lam123V1.array().pow(2) + lam123V.array().pow(2)).sqrt();
+
+                // Reconstruct face-combined eigenvalues.
+                lam0V = (unV - aV).array().abs();   // |un − a| (vanishes at sonic point)
+                lam123V = unV;                       // |un|
+                lam4V = unV + aV;                    // un + a ≥ 0 always
             }
         }
 
@@ -1450,11 +1594,18 @@ namespace DNDS::Euler
             auto vnR = ((URxy(Seq123, EigenAll).array().rowwise() / URxy(0, EigenAll).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
             auto vnL = ((ULxy(Seq123, EigenAll).array().rowwise() / ULxy(0, EigenAll).array() - vgXY.array()) * unitNorm.array()).colwise().sum();
             finc(SeqI52Last, EigenAll) =
-                ((vnL * ULxy(SeqI52Last, EigenAll).array() + vnR * URxy(SeqI52Last, EigenAll).array()) -
-                 (URxy(SeqI52Last, EigenAll).array() - ULxy(SeqI52Last, EigenAll).array()) * lambdaFaceCC.array()) *
+                ((ULxy(SeqI52Last, EigenAll).array().rowwise() * vnL.array() +
+                  URxy(SeqI52Last, EigenAll).array().rowwise() * vnR.array()) -
+                 (URxy(SeqI52Last, EigenAll).array() - ULxy(SeqI52Last, EigenAll).array()).rowwise() * lambdaFaceCC.array()) *
                 0.5;
         }
 
+        if (impermeableWall)
+        { 
+            finc(0, EigenAll).setZero(); // no mass leak even using rs on wall
+            if(phys_.nSpecies() > 1)
+                finc(Eigen::seq(nVars - (phys_.nSpecies() - 1), EigenLast), EigenAll).setZero();
+        }
 #ifndef DNDS_FV_EULEREVALUATOR_IGNORE_VISCOUS_TERM
         if (!ignoreVis)
             finc -= visFluxV;
@@ -1513,7 +1664,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Compute source terms for a cell at a quadrature point.
      *
      *  Evaluates volume source terms including: constant mass force, rotating-frame
@@ -1536,13 +1688,15 @@ namespace DNDS::Euler
         TJacobianU &jacobian,
         index iCell,
         index ig,
-        int Mode) // mode =0: source; mode = 1, diagJacobi; mode = 2,
+        int Mode,
+        SourceFilter filter,
+        OptionalRef<ArrayDOFV<1>> cellTWarm)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         TU ret;
         ret.resizeLike(UMeanXy);
         ret.setZero();
-        real dWallC;
+        real dWallC = real(0);
         if (ig < 0)
             dWallC = dWall[iCell].mean();
         else
@@ -1552,6 +1706,33 @@ namespace DNDS::Euler
 #ifdef DNDS_FV_EULEREVALUATOR_SOURCE_TERM_ZERO
         return ret;
 #endif
+
+        // === Extended models (NS_EX / NS_EX_3D): variant-based contributor dispatch ===
+        if constexpr (Traits::isExtended)
+        {
+            SourceCellAux aux;
+            aux.dWallC = dWallC;
+            aux.hMax = vfv->GetCellMaxLenScale(iCell);
+            real T_guess = cellTWarm ? (*cellTWarm)[iCell](0) : real(0);
+            auto [T, pMean, asqrMean, Hmean, gammaEq, gamma] = phys_.conservativeThermal(UMeanXy, T_guess);
+
+            aux.T = T;
+            aux.gammaEq = gammaEq;
+            aux.p = pMean;
+            aux.pPhys = phys_.toPhysP(pMean);
+            aux.muf = phys_.mixtureViscosity(aux.T, pMean, UMeanXy);
+            if (cellTWarm && phys_.hasChemicalSource())
+                (*cellTWarm)[iCell](0) = T;
+            aux.rhoE_base = phys_.mixtureBaseInternalRhoE(UMeanXy);
+
+            SourceTermVisitor<model> visitor{ret, jacobian, UMeanXy, DiffUxy, pPhy, aux,
+                                             iCell, ig, Mode, filter};
+            for (auto &c : sourceContributors)
+                std::visit(visitor, c);
+            return ret;
+        }
+
+        // === Fixed-size models: existing if-constexpr path (unchanged) ===
         if (Mode == 0)
         {
             ret(Seq123) += settings.constMassForce(Seq012) * UMeanXy(0);
@@ -1594,7 +1775,10 @@ namespace DNDS::Euler
         {
             TU uPrim;
             uPrim.resizeLike(UMeanXy);
-            Gas::IdealGasThermalConservative2Primitive(UMeanXy, uPrim, settings.idealGasProperty.gamma);
+            real T_axi = phys_.temperature(UMeanXy);
+            real gamma_axi = phys_.gammaEq(T_axi, UMeanXy);
+            Gas::IdealGasThermalConservative2Primitive(UMeanXy, uPrim, gamma_axi,
+                                                       phys_.mixtureBaseInternalRhoE(UMeanXy));
             if (Mode == 0)
                 ret(2) += uPrim(I4) / std::max(verySmallReal, pPhy(1)); // y direction force
             if (Mode == 1)
@@ -1607,17 +1791,11 @@ namespace DNDS::Euler
         }
         else if constexpr (Traits::hasSA)
         {
-
-            real pMean, asqrMean, Hmean;
-            real gamma = settings.idealGasProperty.gamma;
-            Gas::IdealGasThermal(UMeanXy(I4), UMeanXy(0), (UMeanXy(Seq123) / UMeanXy(0)).squaredNorm(),
-                                 gamma, pMean, asqrMean, Hmean);
+            auto [T, pMean, asqrMean, Hmean, gammaEq, gamma] = phys_.conservativeThermal(UMeanXy);
             // ! refvalue:
-            real muRef = settings.idealGasProperty.muGas;
-            real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * UMeanXy(0));
-
-            real mufPhy, muf;
-            mufPhy = muf = muEff(UMeanXy, T);
+            real muRef = phys_.muRef();
+            real mufPhy = muEff(UMeanXy, T);
+            real muf = mufPhy;
 
             real d = std::min(dWallC, std::pow(veryLargeReal, 1. / 6.));
             TU retInc;
@@ -1631,7 +1809,7 @@ namespace DNDS::Euler
             lLES = std::min(lLES, std::max({d * cWall, hMax * cWall}));
             auto sourceCaller = [&](int mode)
             {
-                RANS::GetSource_SA<dim>(UMeanXy, DiffUxy, settings.idealGasProperty.muGas, muf,
+                RANS::GetSource_SA<dim>(UMeanXy, DiffUxy, phys_.muRef(), muf,
                                         gamma,
                                         d, lLES, hMax, settings.SADESMode,
                                         retInc,
@@ -1656,16 +1834,11 @@ namespace DNDS::Euler
         }
         else if constexpr (Traits::has2EQ)
         {
-            real pMean, asqrMean, Hmean;
-            real gamma = settings.idealGasProperty.gamma;
-            Gas::IdealGasThermal(UMeanXy(I4), UMeanXy(0), (UMeanXy(Seq123) / UMeanXy(0)).squaredNorm(),
-                                 gamma, pMean, asqrMean, Hmean);
+            auto [T, pMean, asqrMean, Hmean, gammaEq, gamma] = phys_.conservativeThermal(UMeanXy);
             // ! refvalue:
-            real muRef = settings.idealGasProperty.muGas;
-            real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * UMeanXy(0));
-
-            real mufPhy, muf;
-            mufPhy = muf = muEff(UMeanXy, T);
+            real muRef = phys_.muRef();
+            real mufPhy = muEff(UMeanXy, T);
+            real muf = mufPhy;
 
             TU retInc;
             retInc.setZero(UMeanXy.size());
@@ -1708,7 +1881,7 @@ namespace DNDS::Euler
         }
         else
         {
-            DNDS_assert(false);
+            DNDS_check_throw_info(false, fmt::format("Unsupported source evaluation mode [{}]", Mode));
         }
         // if (Mode == 1)
         //     std::cout << ret.transpose() << std::endl;
@@ -1716,9 +1889,161 @@ namespace DNDS::Euler
     }
 
     DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>, )
+    void EulerEvaluator<model>::EvaluateCellSource(
+        TU &cellRHS,
+        TJacobianU &cellJac,
+        const TU &uCell,
+        const TDiffU &cellGradU,
+        index iCell,
+        int jacMode,
+        SourceFilter filter,
+        real cellAlpha,
+        bool useRecArrays,
+        OptionalRef<ArrayDOFV<nVarsFixed>> pU,
+        OptionalRef<ArrayRECV<nVarsFixed>> pURecUnlim,
+        OptionalRef<ArrayRECV<nVarsFixed>> pURec,
+        bool direct2ndRec,
+        real t,
+        OptionalRef<ArrayDOFV<1>> cellTWarm)
+    {
+        DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+        int cnvars = nVars;
+
+        auto gCell = (useRecArrays && !direct2ndRec)
+                         ? vfv->GetCellQuad(iCell)
+                         : vfv->GetCellQuadO1(iCell);
+
+        // Construct 2nd-order cell gradient if needed (source2nd / ransSource2nd)
+        TDiffU cellGrad2nd;
+        if (useRecArrays && (settings.ransSource2nd || settings.source2nd))
+        {
+            DNDS_assert(pU);
+            cellGrad2nd.setZero(Eigen::NoChange, uCell.size());
+            TU uC = uCell;
+            auto c2f = mesh->cell2face[iCell];
+            for (rowsize ic2f = 0; ic2f < c2f.size(); ++ic2f)
+            {
+                index iFace = c2f[ic2f];
+                index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
+                rowsize if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
+                TVec uNorm = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1)(Seq012) *
+                             (if2c ? -1 : 1);
+                TU uR;
+                if (iCellOther != UnInitIndex)
+                    uR = (*pU)[iCellOther], this->UFromOtherCell(uR, iFace, iCell, iCellOther, if2c);
+                else
+                    uR = generateBoundaryValue(
+                        uC, uC, iCell, iFace, -1,
+                        uNorm, Geom::NormBuildLocalBaseV<dim>(uNorm),
+                        vfv->GetFaceQuadraturePPhys(iFace, -1),
+                        t, mesh->GetFaceZone(iFace), true, 0);
+                cellGrad2nd += vfv->GetFaceArea(iFace) * uNorm * (uR - uC).transpose() * 0.5;
+            }
+            cellGrad2nd /= vfv->GetCellVol(iCell);
+        }
+
+        TDiffU cellGradFix;
+        if (useRecArrays && settings.useSourceGradFixGG)
+            cellGradFix = gradUFix[iCell] / vfv->GetCellVol(iCell);
+
+        Eigen::Matrix<real, nVarsFixed, Eigen::Dynamic> sourceV;
+        sourceV.setZero(cnvars, (jacMode == 2) ? cnvars + 1 : 2);
+
+        Geom::Elem::SummationNoOp noOp;
+
+        gCell.IntegrationSimple(
+            sourceV,
+            [&](decltype(sourceV) &finc, int iG)
+            {
+                int iGQ = (useRecArrays && !direct2ndRec) ? iG : -1;
+
+                TDiffU GradU;
+                GradU.resize(Eigen::NoChange, cnvars);
+                GradU.setZero();
+
+                if (!useRecArrays)
+                {
+                    // Simple mode: use caller-provided gradient
+                    GradU = cellGradU;
+                }
+                else if (direct2ndRec)
+                {
+                    GradU(SeqG012, EigenAll) = uGradBuf[iCell];
+                }
+                else if (settings.source2nd)
+                {
+                    GradU = cellGrad2nd;
+                }
+                else
+                {
+                    DNDS_assert(pURec);
+                    if constexpr (gDim == 2)
+                        GradU({0, 1}, EigenAll) =
+                            vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iGQ, std::array<int, 2>{1, 2}, 3) *
+                            (*pURec)[iCell]; // IF_NOT_NOREC = 1
+                    else
+                        GradU({0, 1, 2}, EigenAll) =
+                            vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iGQ, std::array<int, 3>{1, 2, 3}, 4) *
+                            (*pURec)[iCell]; // IF_NOT_NOREC = 1
+                    if (settings.useSourceGradFixGG)
+                        GradU += cellGradFix;
+                    if (settings.ransSource2nd)
+                    {
+                        if constexpr (Traits::hasSA)
+                            GradU(EigenAll, I4 + 1) = cellGrad2nd(EigenAll, I4 + 1);
+                        if constexpr (Traits::has2EQ)
+                            GradU(EigenAll, {I4 + 1, I4 + 2}) = cellGrad2nd(EigenAll, {I4 + 1, I4 + 2});
+                    }
+                }
+
+                TU ULxy = uCell;
+                if (useRecArrays && !direct2ndRec)
+                {
+                    DNDS_assert(pURec);
+                    ULxy +=
+                        (vfv->GetIntPointDiffBaseValue(iCell, -1, -1, iGQ, std::array<int, 1>{0}, 1) *
+                         (*pURec)[iCell])
+                            .transpose(); // IF_NOT_NOREC = 1
+                }
+
+                finc.resizeLike(sourceV);
+                TJacobianU jac;
+                finc(EigenAll, 0) =
+                    source(ULxy, GradU,
+                           vfv->GetCellQuadraturePPhys(iCell, iGQ), jac,
+                           iCell, iGQ, 0, filter, cellTWarm);
+                if (jacMode >= 1)
+                {
+                    TU sourceJDiag =
+                        source(ULxy, GradU,
+                               vfv->GetCellQuadraturePPhys(iCell, iGQ), jac,
+                               iCell, iGQ, (jacMode == 2) ? 2 : 1, filter, cellTWarm);
+                    if (jacMode == 2)
+                        finc(EigenAll, Eigen::seq(Eigen::fix<1>, EigenLast)) = jac;
+                    else
+                        finc(EigenAll, 1) = sourceJDiag;
+                }
+
+                finc *= (useRecArrays && !direct2ndRec)
+                            ? vfv->GetCellJacobiDet(iCell, iG)
+                            : vfv->GetCellVol(iCell) / vfv->GetCellParamVol(iCell);
+                DNDS_assert(finc.allFinite());
+            });
+        sourceV *= cellAlpha / vfv->GetCellVol(iCell); // becomes mean value
+
+        cellRHS += sourceV(EigenAll, 0);
+        if (jacMode == 2)
+            cellJac = sourceV(EigenAll, Eigen::seq(Eigen::fix<1>, EigenLast));
+        else if (jacMode == 1)
+            cellJac.diagonal() = sourceV(EigenAll, 1);
+    }
+
+    DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Dispatcher for boundary ghost-value generation, routing to per-BC-type handlers.
      *
      *  Selects the appropriate boundary value generator based on the BC type (farfield,
@@ -1832,7 +2157,8 @@ namespace DNDS::Euler
         }
         else
         {
-            DNDS_assert(false);
+            DNDS_check_throw_info(false, fmt::format("Unsupported boundary type [{}] for boundary id {}",
+                                                     to_string(bTypeEuler), btype));
         }
         return URxy;
     }
@@ -1844,7 +2170,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Generate ghost state for farfield and back-pressure outlet boundary conditions.
      *
      *  Uses Riemann-invariant-based switching: supersonic outflow extrapolates the
@@ -1881,7 +2208,7 @@ namespace DNDS::Euler
 
         TU far = btype >= Geom::BC_ID_DEFAULT_MAX
                      ? pBCHandler->GetValueFromID(btype)
-                     : TU(settings.farFieldStaticValue);
+                     : TU(settings.farFieldStaticValue.cons);
         if (pCLDriver)
             far(Seq123) = pCLDriver->GetAOARotation()(Seq012, Seq012) * far(Seq123);
 
@@ -1896,10 +2223,12 @@ namespace DNDS::Euler
             TransformURotatingFrame(ULxyStatic, pPhysics, 1);
 
         real un = ULxy(Seq123).dot(uNorm) / ULxy(0); // using relative velo for in/out judgement
-        real gamma = settings.idealGasProperty.gamma;
-        real asqr, H, p;
-        Gas::IdealGasThermal(ULxyStatic(I4), ULxyStatic(0), (ULxyStatic(Seq123) / ULxyStatic(0)).squaredNorm(), gamma, p, asqr, H);
-
+        auto [T, p, asqr, H, gammaEq, gamma] = phys_.conservativeThermal(ULxyStatic);
+        auto gammaEqFromTotal = [&](const TU &U)
+        {
+            real TState = phys_.temperature(U);
+            return phys_.gammaEq(TState, U);
+        };
         DNDS_assert(asqr >= 0);
         real a = std::sqrt(asqr);
 
@@ -1915,8 +2244,9 @@ namespace DNDS::Euler
             TU farPrimitive, ULxyPrimitive;
             farPrimitive.resizeLike(ULxyStatic);
             ULxyPrimitive.resizeLike(URxy);
-            Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gamma);
-            Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gamma);
+            phys_.conservativeToPrimitive(far, farPrimitive);
+            Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gammaEq,
+                                                            phys_.mixtureBaseInternalRhoE(ULxyStatic));
             if (bTypeEuler == EulerBCType::BCOutP && pBCHandler->GetFlagFromID(btype, "anchorOpt") == 1)
             {
                 {
@@ -1924,7 +2254,8 @@ namespace DNDS::Euler
                     if (anchorRecorders.count(btype)) // if doesn't have anchor value yet, use UL as anchor
                         anchorPointRel = anchorRecorders.at(btype).val;
                     TU anchorPointRelPrimitive = anchorPointRel;
-                    Gas::IdealGasThermalConservative2Primitive<dim>(anchorPointRel, anchorPointRelPrimitive, gamma);
+                    Gas::IdealGasThermalConservative2Primitive<dim>(anchorPointRel, anchorPointRelPrimitive, gammaEqFromTotal(anchorPointRel),
+                                                                    phys_.mixtureBaseInternalRhoE(anchorPointRel));
                     farPrimitive(I4) += std::max(ULxyPrimitive(I4) - anchorPointRelPrimitive(I4), -0.95 * farPrimitive(I4));
                 }
             }
@@ -1936,17 +2267,18 @@ namespace DNDS::Euler
                 farPrimitive(I4) += std::max(pInc, -0.95 * farPrimitive(I4));
             }
             ULxyPrimitive(I4) = farPrimitive(I4); // using far pressure
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(ULxyPrimitive, URxy, gamma);
+            phys_.primToConservative(ULxyPrimitive, URxy);
         }
         else if (un - vgN + a > 0) //  subsonic in
         {
             TU farPrimitive, ULxyPrimitive;
             farPrimitive.resizeLike(ULxyStatic);
             ULxyPrimitive.resizeLike(URxy);
-            Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gamma);
-            Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gamma);
+            phys_.conservativeToPrimitive(far, farPrimitive);
+            Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gammaEq,
+                                                            phys_.mixtureBaseInternalRhoE(ULxyStatic));
             farPrimitive(I4) = ULxyPrimitive(I4); // using inner pressure
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma);
+            phys_.primToConservative(farPrimitive, URxy);
         }
         else // full inflow
         {
@@ -1960,7 +2292,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Generate ghost state for special farfield BCs (DMR, Rayleigh-Taylor, etc.).
      *
      *  Handles built-in special boundary conditions identified by reserved BC IDs:
@@ -1987,13 +2320,19 @@ namespace DNDS::Euler
         Geom::t_index btype)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+        DNDS_check_throw_info(!settings.reactiveFlow.enabled,
+                              "Reactive flow does not support built-in special far-field BCs; "
+                              "use explicit reactive farfield/inflow/outflow BCs instead.");
         TU URxy;
         URxy.resizeLike(ULxy);
 
         if (btype == Geom::BC_ID_DEFAULT_SPECIAL_DMR_FAR) // DMR
         {
+            // Shock-tube BC: overwrites fluid components (dim+1) only.
+            // Hardcoded Vector<real,5/4> sizes assume NS models; extended-model
+            // components (SA, 2EQ, species) preserve farFieldStaticValue defaults.
             DNDS_assert(dim > 1);
-            URxy = settings.farFieldStaticValue;
+            URxy = settings.farFieldStaticValue.cons;
             real uShock = 10;
             if constexpr (dim == 3)
             {
@@ -2011,16 +2350,15 @@ namespace DNDS::Euler
                 else
                     URxy({0, 1, 2, 3}) = Eigen::Vector<real, 4>{8, 57.157676649772960, -33, 5.635e2};
             }
+            if (settings.reactiveFlow.enabled)
+                URxy(I4) += phys_.mixtureBaseInternalRhoE(URxy);
         }
         else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_RT_FAR) // Rayleigh-Taylor
         {
             DNDS_assert(dim > 1);
-            Eigen::VectorXd far = settings.farFieldStaticValue;
-            real gamma = settings.idealGasProperty.gamma;
+            Eigen::VectorXd far = settings.farFieldStaticValue.cons;
             real un = ULxy(Seq123).dot(uNorm) / ULxy(0);
-            real vsqr = (ULxy(Seq123) / ULxy(0)).squaredNorm();
-            real asqr, H, p;
-            Gas::IdealGasThermal(ULxy(I4), ULxy(0), vsqr, gamma, p, asqr, H);
+            auto [T, p, asqr, H, gammaEq, gamma] = phys_.conservativeThermal(ULxy);
 
             DNDS_assert(asqr >= 0);
             real a = std::sqrt(asqr);
@@ -2033,7 +2371,7 @@ namespace DNDS::Euler
                 far(0) = rho;
                 far(1) = 0;
                 far(2) = rho * v;
-                far(I4) = 0.5 * rho * sqr(v) + p / (gamma - 1);
+                far(I4) = 0.5 * rho * sqr(v) + p / (gammaEq - 1);
             }
             else
             {
@@ -2042,7 +2380,7 @@ namespace DNDS::Euler
                 far(0) = rho;
                 far(1) = 0;
                 far(2) = rho * v;
-                far(I4) = 0.5 * rho * sqr(v) + p / (gamma - 1);
+                far(I4) = 0.5 * rho * sqr(v) + p / (gammaEq - 1);
             }
 
             if (un - a > 0)
@@ -2052,28 +2390,41 @@ namespace DNDS::Euler
                 TU farPrimitive, ULxyPrimitive;
                 farPrimitive.resizeLike(ULxy);
                 ULxyPrimitive.resizeLike(URxy);
-                Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gamma);
-                Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrimitive, gamma);
+                Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gammaEq, 0 /* config, sensible ρE */);
+                Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrimitive, gammaEq,
+                                                                phys_.mixtureBaseInternalRhoE(ULxy));
                 ULxyPrimitive(I4) = farPrimitive(I4);
-                Gas::IdealGasThermalPrimitive2Conservative<dim>(ULxyPrimitive, URxy, gamma);
+                Gas::IdealGasThermalPrimitive2Conservative<dim>(ULxyPrimitive, URxy, gammaEq,
+                                                                phys_.mixtureBaseInternalRhoE(ULxy));
             }
             else if (un + a > 0)
             {
                 TU farPrimitive, ULxyPrimitive;
                 farPrimitive.resizeLike(ULxy);
                 ULxyPrimitive.resizeLike(URxy);
-                Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gamma);
-                Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrimitive, gamma);
+                Gas::IdealGasThermalConservative2Primitive<dim>(far, farPrimitive, gammaEq, 0 /* config, sensible ρE */);
+                Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrimitive, gammaEq,
+                                                                phys_.mixtureBaseInternalRhoE(ULxy));
                 farPrimitive(I4) = ULxyPrimitive(I4);
-                Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma);
+                Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gammaEq,
+                                                                phys_.mixtureBaseInternalRhoE(far));
             }
             else
+            {
                 URxy = far;
+                if (settings.reactiveFlow.enabled)
+                    URxy(I4) += phys_.mixtureBaseInternalRhoE(URxy);
+            }
         }
         else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_IV_FAR) // Isentropic Vortex
         {
+            DNDS_assert_info(!settings.reactiveFlow.enabled,
+                             "BCSpecial IV: Isentropic Vortex BC does not support reactive flow. "
+                             "Species are zeroed and base internal energy is not included.");
             real chi = 5;
-            real gamma = settings.idealGasProperty.gamma;
+            real T_iv = phys_.temperature(ULxy);
+            real gammaEq = phys_.gammaEq(T_iv, ULxy);
+            real gamma = phys_.gamma(T_iv, ULxy);
             real xc = 5 + t;
             real yc = 5 + t;
             real r = std::sqrt(sqr(pPhysics(0) - xc) + sqr(pPhysics(1) - yc));
@@ -2086,7 +2437,7 @@ namespace DNDS::Euler
             real S = 1;
             real rho = std::pow(T / S, 1 / (gamma - 1));
             real pVal = T * rho;
-            real E = 0.5 * (sqr(ux) + sqr(uy)) * rho + pVal / (gamma - 1);
+            real E = 0.5 * (sqr(ux) + sqr(uy)) * rho + pVal / (gammaEq - 1);
 
             URxy.setZero();
             URxy(0) = rho;
@@ -2096,7 +2447,8 @@ namespace DNDS::Euler
         }
         else if (btype == Geom::BC_ID_DEFAULT_SPECIAL_2DRiemann_FAR) // 2D Riemann
         {
-            real gamma = settings.idealGasProperty.gamma;
+            real T = phys_.temperature(ULxy);
+            real gammaEq = phys_.gammaEq(T, ULxy);
             real bdL = 0.0, bdR = 1.0, bdD = 0.0, bdU = 1.0;
 
             real phi1 = -0.663324958071080;
@@ -2108,7 +2460,8 @@ namespace DNDS::Euler
             TU ULxyPrimitive;
             ULxyPrimitive.resizeLike(ULxy);
 
-            Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrimitive, gamma);
+            Gas::IdealGasThermalConservative2Primitive<dim>(ULxy, ULxyPrimitive, gammaEq,
+                                                            phys_.mixtureBaseInternalRhoE(ULxy));
             real rhoL = ULxyPrimitive(0);
             real uL = ULxyPrimitive(1);
             real vL = ULxyPrimitive(2);
@@ -2152,12 +2505,16 @@ namespace DNDS::Euler
             farPrimitive(0) = rho;
             farPrimitive(1) = u, farPrimitive(2) = v;
             farPrimitive(I4) = pre;
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma);
+            Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gammaEq,
+                                                            phys_.mixtureBaseInternalRhoE(ULxy));
         }
         else if (pBCHandler->GetFlagFromID(btype, "specialOpt") == 3001) // Noh
         {
             TU farPrimitive;
-            Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrimitive, settings.idealGasProperty.gamma);
+            real T_noh = phys_.temperature(settings.farFieldStaticValue.cons);
+            real gamma_noh = phys_.gammaEq(T_noh, settings.farFieldStaticValue.cons);
+            Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue.cons, farPrimitive, gamma_noh,
+                                                            phys_.mixtureBaseInternalRhoE(settings.farFieldStaticValue.cons));
             real pInf = farPrimitive(I4);
             real r = pPhysics.norm();
             TVec velo = -pPhysics(Seq012) / (r + smallReal);
@@ -2165,7 +2522,8 @@ namespace DNDS::Euler
             farPrimitive(0) = rho;
             farPrimitive(Seq123) = velo;
             farPrimitive(I4) = pInf;
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, settings.idealGasProperty.gamma);
+            Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma_noh,
+                                                            phys_.mixtureBaseInternalRhoE(settings.farFieldStaticValue.cons));
         }
         else
             DNDS_assert_info(false, fmt::format(
@@ -2178,7 +2536,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Generate ghost state for inviscid wall (slip wall) and symmetry boundary conditions.
      *
      *  Mirrors the velocity component normal to the wall while preserving the
@@ -2216,7 +2575,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Generate ghost state for viscous (no-slip) wall boundary conditions.
      *
      *  Reverses the velocity to enforce zero velocity at the wall (ghost mirroring).
@@ -2254,7 +2614,7 @@ namespace DNDS::Euler
                 this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, -1);
             if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
                 this->TransformURotatingFrame(URxy, pPhysics, 1);
-            URxy(Seq123) *= -1;
+            URxy(Seq123) *= -1; // TODO: velocity mirroring should be done on primitive state when general moving frame is needed; currently relies on wall being tangential to rotating velocity (same KE)
             if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") == 0)
                 this->TransformURotatingFrame_ABS_VELO(URxy, pPhysics, 1);
             if (settings.frameConstRotation.enabled && pBCHandler->GetFlagFromID(btype, "frameOpt") != 0)
@@ -2269,11 +2629,16 @@ namespace DNDS::Euler
             real temp = pBCHandler->GetValueFromID(btype)(0);
             TU URxyPrim;
             URxyPrim.resizeLike(ULxy);
-            Gas::IdealGasThermalConservative2Primitive<dim>(URxy, URxyPrim, settings.idealGasProperty.gamma);
+            real gammaEq = phys_.gammaEq(temp, URxy);
+            Gas::IdealGasThermalConservative2Primitive<dim>(URxy, URxyPrim, gammaEq,
+                                                            phys_.mixtureBaseInternalRhoE(URxy));
             DNDS_assert_info(URxyPrim(0) > 0 && URxyPrim(I4) > 0 && temp > 0, fmt::format("{}, {}, {}", URxyPrim(0), URxyPrim(I4), temp));
-            real newDensity = URxyPrim(I4) / temp / settings.idealGasProperty.Rgas;
+            real newDensity = URxyPrim(I4) / temp / phys_.Rgas(URxy);
             URxyPrim(0) = newDensity;
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(URxyPrim, URxy, settings.idealGasProperty.gamma);
+            if (phys_.hasChemicalSource())
+                phys_.primToConservative(URxyPrim, URxy);
+            else
+                Gas::IdealGasThermalPrimitive2Conservative<dim>(URxyPrim, URxy, gammaEq, 0);
         }
         if constexpr (Traits::hasSA)
         {
@@ -2294,13 +2659,11 @@ namespace DNDS::Euler
             { // BC for RealizableKe
                 real d1 = dWall[iCell].mean();
                 real k1 = ULMeanXy(I4 + 1) / ULMeanXy(0);
-
-                real pMean, asqrMean, Hmean;
-                real gamma = settings.idealGasProperty.gamma;
-                Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
-                                     gamma, pMean, asqrMean, Hmean);
-                real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * ULMeanXy(0));
-                real mufPhy1 = muEff(ULMeanXy, T);
+                TU uMu = bTypeEuler == EulerBCType::BCWallIsothermal ? URxy : ULMeanXy;
+                real T = bTypeEuler == EulerBCType::BCWallIsothermal
+                             ? pBCHandler->GetValueFromID(btype)(0)
+                             : phys_.temperature(uMu);
+                real mufPhy1 = muEff(uMu, T);
                 real epsWall = 2 * mufPhy1 / ULMeanXy(0) * k1 / sqr(d1);
                 URxy(I4 + 2) = 2 * epsWall * ULxy(0) - ULxy(I4 + 2);
             }
@@ -2308,12 +2671,11 @@ namespace DNDS::Euler
                 settings.ransModel == RANSModel::RANS_KOWilcox)
             { // BC for SST or KOWilcox
                 real d1 = dWall[iCell].mean();
-                real pMean, asqrMean, Hmean;
-                real gamma = settings.idealGasProperty.gamma;
-                Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
-                                     gamma, pMean, asqrMean, Hmean);
-                real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * ULMeanXy(0));
-                real mufPhy1 = muEff(ULMeanXy, T);
+                TU uMu = bTypeEuler == EulerBCType::BCWallIsothermal ? URxy : ULMeanXy;
+                real T = bTypeEuler == EulerBCType::BCWallIsothermal
+                             ? pBCHandler->GetValueFromID(btype)(0)
+                             : phys_.temperature(uMu);
+                real mufPhy1 = muEff(uMu, T);
 
                 real rhoOmegaaaWall = mufPhy1 / sqr(d1) * RANS::kWallOmegaCoeff;
                 URxy(I4 + 2) = 2 * rhoOmegaaaWall - ULxy(I4 + 2);
@@ -2325,7 +2687,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Generate ghost state for supersonic/extrapolation outflow BC.
      *
      *  Simply returns the interior state as the ghost value, allowing all waves to
@@ -2356,7 +2719,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Generate ghost state for prescribed inflow boundary condition.
      *
      *  Sets the ghost state to the BC-prescribed conservative values. Applies
@@ -2385,7 +2749,7 @@ namespace DNDS::Euler
         TU URxy = pBCHandler->GetValueFromID(btype);
         if (pCLDriver)
             URxy(Seq123) = pCLDriver->GetAOARotation()(Seq012, Seq012) * URxy(Seq123);
-        // Note: removed dead code that checked bTypeEuler == BCFar (unreachable in BCIn branch)
+        // BCIn values are resolved conservative-total states.
         if (settings.frameConstRotation.enabled)
             TransformURotatingFrame(URxy, pPhysics, -1);
         return URxy;
@@ -2394,7 +2758,8 @@ namespace DNDS::Euler
     DNDS_SWITCH_INTELLISENSE(
         template <EulerModel model>
         ,
-        template <>)
+        template <>
+    )
     /** @brief Generate ghost state for total-condition (stagnation) inflow BC.
      *
      *  Given prescribed stagnation pressure and temperature, computes the static
@@ -2428,25 +2793,21 @@ namespace DNDS::Euler
         TU ULxyStatic = ULxy;
         if (settings.frameConstRotation.enabled)
             TransformURotatingFrame(ULxyStatic, pPhysics, 1);
-        TU ULxyPrimitive;
-        ULxyPrimitive.resizeLike(ULxy);
-        real gamma = settings.idealGasProperty.gamma;
-        Gas::IdealGasThermalConservative2Primitive<dim>(ULxyStatic, ULxyPrimitive, gamma);
         TVec v = ULxyStatic(Seq123).array() / ULxyStatic(0);
         real vSqr = v.squaredNorm();
         {
-            TU farPrimitive = pBCHandler->GetValueFromID(btype); // primitive passive scalar components like Nu
-
-            real pStag = pBCHandler->GetValueFromID(btype)(0);
-            real tStag = pBCHandler->GetValueFromID(btype)(1);
-            vSqr = std::min(vSqr, tStag * 2 * settings.idealGasProperty.CpGas * 0.95);
-            real tStatic = tStag - 0.5 * vSqr / (settings.idealGasProperty.CpGas);
-            real pStatic = pStag * std::pow(tStatic / tStag, gamma / (gamma - 1));
-            real rStatic = pStatic / (settings.idealGasProperty.Rgas * tStatic);
-            farPrimitive(0) = rStatic;
-            farPrimitive(Seq123) = pBCHandler->GetValueFromID(btype)(Seq234).normalized() * std::sqrt(vSqr);
-            farPrimitive(I4) = pStatic;
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, URxy, gamma);
+            TU bcValue = pBCHandler->GetValueFromID(btype);
+            TU farPrimitive = bcValue; // primitive passive scalar components like species/RANS variables
+            real dirNorm = bcValue(Seq234).norm();
+            DNDS_check_throw_info(std::isfinite(dirNorm) && dirNorm > 1e-14,
+                                  fmt::format("BCInPsTs requires a finite nonzero direction vector for boundary id {}", btype));
+            real dirDotNormal = bcValue(Seq234).dot(uNorm);
+            DNDS_check_throw_info(std::isfinite(dirDotNormal) && dirDotNormal < -1e-14 * dirNorm,
+                                  fmt::format("BCInPsTs direction must point into the domain for boundary id {}; direction dot outward normal = {:.3e}",
+                                              btype, dirDotNormal));
+            farPrimitive(Seq123) = bcValue(Seq234) * (std::sqrt(vSqr) / dirNorm);
+            phys_.totalToStaticPrimitive(bcValue(0), bcValue(1), farPrimitive);
+            phys_.primToConservative(farPrimitive, URxy);
         }
         if (pCLDriver)
             URxy(Seq123) = pCLDriver->GetAOARotation()(Seq012, Seq012) * URxy(Seq123);
@@ -2481,8 +2842,6 @@ namespace DNDS::Euler
         // { return u[iCell](0); };
         outMap["RU"] = [&](index iCell)
         { return u[iCell](1); };
-        outMap["RV"] = [&](index iCell)
-        { return u[iCell](2); };
         outMap["RV"] = [&](index iCell)
         { return u[iCell](I4 - 1); };
         outMap["RE"] = [&](index iCell)
@@ -2524,7 +2883,7 @@ namespace DNDS::Euler
         outMap["mut"] = [&](index iCell)
         {
             real mut = 0;
-            if (model == NS_2EQ || model == NS_2EQ_3D)
+            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
             {
                 TU Uxy = u[iCell];
                 TDiffU GradU;
@@ -2538,15 +2897,10 @@ namespace DNDS::Euler
                     GradU({0, 1, 2}, EigenAll) =
                         vfv->GetIntPointDiffBaseValue(iCell, -1, -1, -1, std::array<int, 3>{1, 2, 3}, 4) *
                         uRec[iCell]; // 3d specific
-                real pMean, asqrMean, Hmean;
-                real gamma = settings.idealGasProperty.gamma;
-                auto ULMeanXy = Uxy;
-                Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
-                                     gamma, pMean, asqrMean, Hmean);
+                auto [T, pMean, asqrMean, Hmean, gammaEq, gamma] = phys_.conservativeThermal(Uxy);
                 // ! refvalue:
-                real muRef = settings.idealGasProperty.muGas;
-                real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * ULMeanXy(0));
-                real mufPhy = muEff(ULMeanXy, T);
+                real muRef = phys_.muRef();
+                real mufPhy = muEff(Uxy, T);
                 if (settings.ransModel == RANSModel::RANS_KOSST)
                     mut = RANS::GetMut_SST<dim>(Uxy, GradU, mufPhy, dWall[iCell].mean());
                 else if (settings.ransModel == RANSModel::RANS_KOWilcox)
@@ -2557,6 +2911,153 @@ namespace DNDS::Euler
 
             return mut;
         };
+
+        // Fluid + extended DOFs with dofLabel names
+        for (int v = 0; v < nVars; ++v)
+            outMap[this->dofLabel(v)] =
+                [&, v](index iCell)
+            { return u[iCell](v); };
+
+        // old indexed convention (RV1, RV2, ...) for extended variables
+        for (int v = I4 + 1; v < nVars; ++v)
+            outMap["RV" + std::to_string(v - I4)] =
+                [&, v](index iCell)
+            { return u[iCell](v); };
+
+        op.setMap(outMap);
+    }
+
+    template <EulerModel model>
+    /** @brief Register available output scalar fields for boundary output in the OutputPicker.
+     *
+     *  Analogous to InitializeOutputPicker, but the registered functors accept a boundary
+     *  index @c iBnd (the index into @c mesh->bnd2cell / @c mesh->bnd2faceV) rather than a
+     *  cell index. Each functor internally maps @c iBnd to the owning cell
+     *  @c iCell = mesh->bnd2cell[iBnd][0] and (where needed) the volume face
+     *  @c iFace = mesh->bnd2faceV.at(iBnd).
+     *
+     *  Includes the same cell-centered quantities as InitializeOutputPicker (conservative
+     *  components, reconstruction coefficients, limiter values, wall distance, cell volume,
+     *  turbulent viscosity, etc.) plus the face-specific @c dWallFace.
+     *
+     *  @param op        OutputPicker to populate with named field extractors (output).
+     *  @param dataRefs  References to the solution arrays (u, uRec, betaPP, alphaPP).
+     */
+    void EulerEvaluator<model>::InitializeOutputPickerBnd(OutputPicker &op, OutputOverlapDataRefs dataRefs)
+    {
+        DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+
+        auto &u = dataRefs.u;
+        auto &uRec = dataRefs.uRec;
+        auto &betaPP = dataRefs.betaPP;
+        auto &alphaPP = dataRefs.alphaPP;
+
+        auto iBnd2Cell = [this](index iBnd) -> index
+        {
+            return mesh->bnd2cell[iBnd][0];
+        };
+        auto iBnd2Face = [this](index iBnd) -> index
+        {
+            return mesh->bnd2faceV.at(iBnd);
+        };
+        auto dWallCellMean = [this](index iCell) -> real
+        {
+            if (iCell >= 0 && iCell < static_cast<index>(dWall.size()) &&
+                dWall.at(iCell).size() > 0)
+                return dWall.at(iCell).mean();
+            return real(0);
+        };
+
+        OutputPicker::tMap outMap;
+        outMap["RU"] = [&, iBnd2Cell](index iBnd)
+        { return u[iBnd2Cell(iBnd)](1); };
+        outMap["RV"] = [&, iBnd2Cell](index iBnd)
+        { return u[iBnd2Cell(iBnd)](I4 - 1); };
+        outMap["RE"] = [&, iBnd2Cell](index iBnd)
+        { return u[iBnd2Cell(iBnd)](I4); };
+        outMap["R_REC_1"] = [&, iBnd2Cell](index iBnd)
+        { return uRec[iBnd2Cell(iBnd)](0, 0); };
+        outMap["RU_REC_1"] = [&, iBnd2Cell](index iBnd)
+        { return uRec[iBnd2Cell(iBnd)](1, 0); };
+
+        outMap["betaPP"] = [&, iBnd2Cell](index iBnd)
+        { return betaPP[iBnd2Cell(iBnd)](0); };
+        outMap["alphaPP"] = [&, iBnd2Cell](index iBnd)
+        { return alphaPP[iBnd2Cell(iBnd)](0); };
+        outMap["ACond"] = [&, iBnd2Cell](index iBnd)
+        {
+            index iCell = iBnd2Cell(iBnd);
+            auto AI = vfv->GetCellRecMatAInv(iCell);
+            Eigen::MatrixXd AIInv = AI;
+            real aCond = HardEigen::EigenLeastSquareInverse(AI, AIInv);
+            return aCond;
+        };
+        outMap["dWall"] = [&, iBnd2Cell, dWallCellMean](index iBnd)
+        {
+            return dWallCellMean(iBnd2Cell(iBnd));
+        };
+        outMap["dWallFace"] = [&, iBnd2Face](index iBnd)
+        {
+            index iFace = iBnd2Face(iBnd);
+            if (iFace >= 0 && iFace < static_cast<index>(dWallFace.size()))
+                return dWallFace.at(iFace);
+            return real(0);
+        };
+        outMap["minJacobiDetRel"] = [&, iBnd2Cell](index iBnd)
+        {
+            index iCell = iBnd2Cell(iBnd);
+            auto eCell = mesh->GetCellElement(iCell);
+            auto qCell = vfv->GetCellQuad(iCell);
+            real minDetJac = veryLargeReal;
+            for (int iG = 0; iG < qCell.GetNumPoints(); iG++)
+                minDetJac = std::min(vfv->GetCellJacobiDet(iCell, iG), minDetJac);
+            return minDetJac * Geom::Elem::ParamSpaceVol(eCell.GetParamSpace()) / vfv->GetCellVol(iCell);
+        };
+        outMap["cellVolume"] = [&, iBnd2Cell](index iBnd)
+        {
+            return vfv->GetCellVol(iBnd2Cell(iBnd));
+        };
+        outMap["mut"] = [&, iBnd2Cell, dWallCellMean](index iBnd)
+        {
+            real mut = 0;
+            if constexpr (model == NS_2EQ || model == NS_2EQ_3D)
+            {
+                index iCell = iBnd2Cell(iBnd);
+                TU Uxy = u[iCell];
+                TDiffU GradU;
+                GradU.resize(Eigen::NoChange, nVars);
+                GradU.setZero();
+                if constexpr (gDim == 2)
+                    GradU({0, 1}, EigenAll) =
+                        vfv->GetIntPointDiffBaseValue(iCell, -1, -1, -1, std::array<int, 2>{1, 2}, 3) *
+                        uRec[iCell];
+                else
+                    GradU({0, 1, 2}, EigenAll) =
+                        vfv->GetIntPointDiffBaseValue(iCell, -1, -1, -1, std::array<int, 3>{1, 2, 3}, 4) *
+                        uRec[iCell];
+                auto [T, pMean, asqrMean, Hmean, gammaEq, gamma] = phys_.conservativeThermal(Uxy);
+                real muRef = phys_.muRef();
+                real mufPhy = muEff(Uxy, T);
+                if (settings.ransModel == RANSModel::RANS_KOSST)
+                    mut = RANS::GetMut_SST<dim>(Uxy, GradU, mufPhy, dWallCellMean(iCell));
+                else if (settings.ransModel == RANSModel::RANS_KOWilcox)
+                    mut = RANS::GetMut_KOWilcox<dim>(Uxy, GradU, mufPhy, dWallCellMean(iCell));
+                else if (settings.ransModel == RANSModel::RANS_RKE)
+                    mut = RANS::GetMut_RealizableKe<dim>(Uxy, GradU, mufPhy, dWallCellMean(iCell));
+            }
+
+            return mut;
+        };
+
+        for (int v = 0; v < nVars; ++v)
+            outMap[this->dofLabel(v)] =
+                [&, iBnd2Cell, v](index iBnd)
+            { return u[iBnd2Cell(iBnd)](v); };
+
+        for (int v = I4 + 1; v < nVars; ++v)
+            outMap["RV" + std::to_string(v - I4)] =
+                [&, iBnd2Cell, v](index iBnd)
+            { return u[iBnd2Cell(iBnd)](v); };
 
         op.setMap(outMap);
     }

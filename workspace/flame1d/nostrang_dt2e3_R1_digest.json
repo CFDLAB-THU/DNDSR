@@ -1,0 +1,114 @@
+{
+  "final_log": {
+    "CFLNow": 10.0,
+    "curDtImplicit": 0.002,
+    "residual_max_abs": 1.3043502308e-06,
+    "step": 250,
+    "tSimu": 0.5
+  },
+  "final_snapshot": {
+    "cell_data_minmax": {
+      "M": {
+        "max": 0.01288323230896894,
+        "min": 0.0016372604468494472
+      },
+      "P": {
+        "max": 0.7173532066635675,
+        "min": 0.7143550181727032
+      },
+      "R": {
+        "max": 0.9155544694001017,
+        "min": 0.12706291698876437
+      },
+      "RE": {
+        "max": -0.32966518180932924,
+        "min": -0.849897479517986
+      },
+      "RHSr": {
+        "max": 3.1358968953501574,
+        "min": -32.54568673160043
+      },
+      "T": {
+        "max": 2365.6928300248223,
+        "min": 282.841855788357
+      },
+      "V1": {
+        "max": 0.02825432970891593,
+        "min": 0.0010720469688867717
+      },
+      "V2": {
+        "max": 0.0017377621392181668,
+        "min": 1.0922343054643485e-30
+      },
+      "V3": {
+        "max": 0.006718674207131821,
+        "min": 1.0922343054643485e-30
+      },
+      "V4": {
+        "max": 0.22692428849580315,
+        "min": 0.007980758106416777
+      },
+      "V5": {
+        "max": 0.010584804475051298,
+        "min": 1.0922343054643485e-30
+      },
+      "V6": {
+        "max": 0.23746087523011827,
+        "min": 1.0922343054643485e-30
+      },
+      "V7": {
+        "max": 0.0004542633732612194,
+        "min": 1.0922343054643485e-30
+      },
+      "V8": {
+        "max": 4.692060848338253e-05,
+        "min": 1.1046863559541428e-30
+      },
+      "V9": {
+        "max": 7.870116818492573e-30,
+        "min": 1.0922343054643485e-30
+      },
+      "Velo": {
+        "max": 0.012944942671271274,
+        "min": -0.03408339657030095
+      },
+      "iPart": {
+        "max": 7.0,
+        "min": 0.0
+      },
+      "ifUseLimiter": {
+        "max": 0.0,
+        "min": 0.0
+      }
+    },
+    "front_temperature": null,
+    "front_x": null,
+    "time": 0.5
+  },
+  "log_file": "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-nostrang-R1/react__.log",
+  "log_rows": 26194,
+  "output_dir": "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-nostrang-R1",
+  "plots": [
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-nostrang-R1/digest_react__/profiles_thermo.png",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-nostrang-R1/digest_react__/profiles_species.png",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-nostrang-R1/digest_react__/profiles_diagnostics.png",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-nostrang-R1/digest_react__/history_residuals.png",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-nostrang-R1/digest_react__/history_state_limiters.png"
+  ],
+  "prefix": "react__",
+  "step_final_rows": 250,
+  "vtu_snapshots_used": [
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-nostrang-R1/react___00000.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-nostrang-R1/react___20.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-nostrang-R1/react___40.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-nostrang-R1/react___70.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-nostrang-R1/react___90.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-nostrang-R1/react___110.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-nostrang-R1/react___140.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-nostrang-R1/react___160.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-nostrang-R1/react___180.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-nostrang-R1/react___210.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-nostrang-R1/react___230.vtu",
+    "/home/harry/projects/DNDSR/data/out/react_1d_premixed_dt2em3_np8-nostrang-R1/react___t_0.500000.vtu"
+  ]
+}

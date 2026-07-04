@@ -53,10 +53,11 @@ dev = [
 
 
 [tool.scikit-build]
+experimental = true
 metadata.version.provider = "version_provider"
 metadata.version.provider-path = "cmake"
 
-cmake.minimum-version = "3.21"
+cmake.version = ">=3.21"
 cmake.build-type = "Release"
 build.targets = [
     "dnds_pybind11",

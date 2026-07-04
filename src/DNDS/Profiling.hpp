@@ -21,6 +21,18 @@ namespace DNDS
      */
     class PerformanceTimer // cxx11 + thread-safe singleton
     {
+        // TODO(perf): The current StartTimer/StopTimer implementation writes
+        // shared global arrays (tStart[], timer[]) without synchronisation.
+        // Under OpenMP all worker threads race on the same slots, producing
+        // corrupted timings and undefined behaviour.  The Start/StopTimer
+        // call sites in the hot face loops are temporarily guarded with
+        // #ifndef DNDS_DIST_MT_USE_OMP.  A proper fix should replace the
+        // flat arrays with per-thread accumulators, e.g.:
+        //
+        //   std::array<std::array<real, Ntype_All>, kMaxThreads> tStartPerThread;
+        //   std::array<std::array<real, Ntype_All>, kMaxThreads> timerPerThread;
+        //
+        // with a reduction merge in getTimer() / getTimerCollective().
     public:
         /// @brief Named timer slots. New categories can be added before `EndTimerType`.
         enum TimerType

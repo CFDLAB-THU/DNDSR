@@ -1,5 +1,11 @@
 # AGENTS.md — DNDSR
 
+> **CRITICAL RULE — NEVER COMMIT WITHOUT AUTHORIZATION.**
+> `git commit`, `git commit --amend`, and `git push` require an explicit
+> "proceed", "go ahead", "authorized", or similar directive from the user.
+> "Looks good", "ok", or passive approval is NOT sufficient.  If in doubt,
+> ask: "Proceed with commit?"
+
 DNDSR is a C++17 / Python CFD (Computational Fluid Dynamics) research code implementing
 Compact Finite Volume methods with MPI parallelism and optional CUDA GPU support.
 
@@ -124,11 +130,64 @@ and reinstall before running Python tests. A `git checkout` changes source
 files but does NOT rebuild binaries — the installed `.so` files will be
 from the previous build and will silently produce wrong behavior.
 
-**CRITICAL: Before running ANY `git checkout`, `git switch`, `git restore`,
-or `git reset` command, ALWAYS run `git status` first.** Verify the working
-tree is clean or that all valuable changes are committed/stashed. These
-commands silently overwrite uncommitted modifications and delete untracked
-files, discarding work with no way to recover it.
+### HARD RULE — never discard changes you did not make
+
+**Every modified tracked file belongs to the user** (or another agent).
+The agent is a visitor in the user's working tree.  It may edit files,
+stage changes, or create new files, but it must **never** destroy the
+user's uncommitted work.
+
+**Prohibited operations on files/state the agent did NOT modify:**
+- `git checkout -- <file>`
+- `git restore <file>`
+- `git checkout <file>`
+- `git reset --hard` / `git clean -f`
+- overwriting a file with `git show <rev>:<path> > <path>`
+- any command whose effect is to discard or revert the user's changes
+
+If a clean working tree is genuinely needed (e.g. for a benchmark
+baseline, or to isolate the agent's own edits from pre-existing noise),
+**push a stash with a brief message first** — a stash is harmless and
+the user can pop it later:
+
+    git stash push -m "baseline: user changes before <task description>"
+
+Always check `git stash list` after popping to confirm the stash was
+consumed.  A popped stash with conflicts or a dirty tree leaves the
+stash intact — the changes are NOT applied.
+
+**Before running ANY `git checkout`, `git switch`, `git restore`,
+`git reset`, `git stash`, `git stash pop`, or `git checkout -- <file>`
+command, ALWAYS run `git status` first.** Verify the working tree is
+clean or that all valuable changes are committed/stashed.
+    Do not guess — a "clang-format: N file(s)" pre-commit message does
+    not guarantee the changes are formatting-only.
+
+### Running Solver Executables
+
+Solver executables (`euler`, `eulerEX`, `eulerSA`, etc.) are run from the
+`build/` directory.  **All file paths in JSON config files (mesh, output,
+mechanism) are relative to the CWD at invocation time** — typically
+`build/`.  Use `../` to reach the project root:
+
+```bash
+# From build/ — typical invocation
+cd build
+DNDS_MECH_PATH=../external/cfd_externals/install/data \
+  ./app/eulerEX.exe 14 ../cases/eulerEX/react_test.json
+```
+
+**Path conventions in configs:**
+- `meshFile`: relative to CWD (e.g. `../data/mesh/IV10_10.cgns`)
+- `outPltName`: relative to CWD (e.g. `../data/out/react_test/react_`)
+- `mechanismFile` (in `reactiveFlow`): relative to `DNDS_MECH_PATH` env var or CWD
+
+**Editing solver JSON configs:** must use the edit tool.  Read and
+understand the file first, then edit in place — never rewrite the
+whole config with Python `json.dump`.  Python is acceptable for
+read-only queries (`json.load`, `json.tool` validation).  Configs may
+contain hand-maintained `caseNotes["/**/"]` sections and inline
+comments that must be preserved across edits.
 
 Tests use **pytest** with **pytest-mpi** and **pytest-timeout**. Test files live under `test/`. A default 120-second timeout is configured in `pyproject.toml` to prevent hung MPI tests from blocking CI.
 
@@ -264,14 +323,22 @@ compatibility.
 Full style guide (naming, formatting, includes, error handling, Doxygen,
 Python conventions): **`docs/guides/style_guide.md`**
 
+When reporting audit or review findings to a human user, use numbered findings
+(`1.`, `2.`, `3.`) rather than bullets so each issue can be referenced
+unambiguously in follow-up discussion.
+
 Quick reference for C++:
 
 - **Braces:** Allman (opening brace on its own line)
 - **Naming:** `PascalCase` classes/methods, `_` prefix for private members,
   `DNDS_ALL_CAPS` macros, `t_` prefix type aliases
 - **Headers:** `#pragma once`, preserve include order (no auto-sort)
-- **Errors:** `DNDS_assert` (debug) / `DNDS_check_throw` (release) from
-  `DNDS/Errors.hpp`; never raw `assert()`
+- **Errors:** `DNDS_assert` / `DNDS_check_throw` from `DNDS/Errors.hpp`; never raw
+  `assert()`.
+- DNDS currently builds with `DNDS_assert*` active by default at the maximum
+  assertion level, including release-style builds. Still prefer
+  `DNDS_check_throw_info` for non-hot user config, file input, CLI, and runtime
+  validation that should report recoverable errors rather than aborting.
 - **Core types:** `real = double`, `index = int64_t`, `rowsize = int32_t`,
   `ssp<T> = std::shared_ptr<T>`
 
@@ -335,6 +402,22 @@ Key concepts agents should know:
 
 ## GitHub CLI (`gh`) Policy
 
+## Git Commit Messages
+
+Prefer verbose commit messages for non-trivial changes. Keep the subject concise
+and conventional, then use the body to explain the problem, the root cause, the
+fix, and the verification performed. Mention subtle behavioral changes,
+edge-cases, and test coverage so future readers can understand why the change
+was made without reconstructing the investigation from the diff.
+
+For very small mechanical changes, a short message is acceptable.
+
+Every commit message must end with a separate trailing line:
+
+    committed by opencode with model <model name>
+
+where `<model name>` is replaced by the actual model identifier (e.g. `deepseek-v4-pro`). This line must appear after a blank line separating it from the body (or subject, if no body).
+
 **Read-only by default.** You may use `gh` freely for read operations (viewing
 issues, PRs, checks, releases, diffs, comments). **Do NOT use `gh` for any
 write operation** (creating/closing issues, creating/merging PRs, posting
@@ -344,6 +427,8 @@ action.** One-time explicit permission does not carry over to other write
 actions — ask each time.
 
 **Operations requiring explicit user authorization (non-exhaustive):**
+- `git commit` / `git commit --amend`
+- `git push` / `git push --force` / `git push --force-with-lease`
 - `gh pr create/merge/close/edit`
 - `gh issue create/close/edit`
 - `gh pr comment` / `gh issue comment`
@@ -351,6 +436,11 @@ actions — ask each time.
 - `gh release create/delete`
 - `gh cache delete`
 - `gh api` with non-GET methods (POST, PUT, PATCH, DELETE)
-- `git push --force` / `git push --force-with-lease`
+
+Explicit authorization means a direct imperative like "commit", "proceed",
+"go ahead", or "authorized".  Passive or ambiguous statements ("looks good",
+"ok", "fine", "nice") are NOT authorization to commit.  A single-commit
+authorization is consumed by the first commit — do NOT commit again without
+a fresh authorization, even for follow-up fixes.
 
 **Draft PR by default** You must use --draft on new prs.

@@ -1198,6 +1198,17 @@ TEST_CASE("BuildVTKConnectivity: arrays populated correctly"){
             CHECK(ct != 0);
     })}
 
+TEST_CASE("BuildVTKConnectivity: repeat call replaces connectivity"){
+    FOR_EACH_MESH_CONFIG({
+        const auto vtkCell2nodeSize = m->vtkCell2node.size();
+        const auto vtkCell2nodeOffsets = m->vtkCell2nodeOffsets;
+        const auto vtkCellType = m->vtkCellType;
+        m->BuildVTKConnectivity();
+        CHECK(m->vtkCell2node.size() == vtkCell2nodeSize);
+        CHECK(m->vtkCell2nodeOffsets == vtkCell2nodeOffsets);
+        CHECK(m->vtkCellType == vtkCellType);
+    })}
+
 // ===========================================================================
 // ReorderLocalCells (config 0 only)
 // ===========================================================================
@@ -2116,3 +2127,117 @@ TEST_CASE("MultiLayerGhost: global cell count preserved across layers")
         CHECK(globalCells == cfg.expectedCells);
     }
 }
+
+// ===========================================================================
+// InterpolateEdge tests (3D only — no small 3D mesh in config, skipped)
+// ===========================================================================
+// Edge interpolation is tested at the DSL level in
+// test_MeshConnectivity_Interpolate.cpp (InterpolateGlobal with edges).
+// The tests below require a 3D mesh; the only 3D config is Ball2 (np=8, ~960K
+// cells) which is too expensive for CI.  When a small 3D mesh is added to the
+// config list, remove the MESSAGE/return guards.
+#if 1
+TEST_CASE("InterpolateEdge: edge count is positive")
+{
+    MESSAGE("Skipped — no small 3D mesh in config; Ball2 too expensive for CI");
+    return;
+    auto &m = *g_full[4];
+    m.InterpolateEdge();
+    m.AdjGlobal2LocalEdge();
+    CHECK(m.cell2edge.father);
+    CHECK(m.edge2node.father);
+    CHECK(m.edge2cell.father);
+    CHECK(m.edgeElemInfo.father);
+    DNDS::index localEdges = m.edge2node.father->Size();
+    CHECK(localEdges > 0);
+    DNDS::index localCells = m.NumCell();
+    for (DNDS::index iC = 0; iC < localCells; iC++)
+    {
+        auto elem = m.GetCellElement(iC);
+        int nEdgeExpected = elem.GetNumEdges();
+        CHECK(m.cell2edge.RowSize(iC) == nEdgeExpected);
+    }
+}
+
+TEST_CASE("InterpolateEdge: edge2node indices in valid range")
+{
+    MESSAGE("Skipped — no small 3D mesh in config");
+    return;
+    auto &m = *g_full[4];
+    DNDS::index totalNodes = m.NumNode() + m.NumNodeGhost();
+    for (DNDS::index iE = 0; iE < m.edge2node.father->Size(); iE++)
+        for (DNDS::rowsize j = 0; j < m.edge2node.RowSize(iE); j++)
+        {
+            DNDS::index iN = m.edge2node(iE, j);
+            CHECK(iN >= 0);
+            CHECK(iN < totalNodes);
+        }
+}
+
+TEST_CASE("InterpolateEdge: edge2cell has at least 1 parent per edge")
+{
+    MESSAGE("Skipped — no small 3D mesh in config");
+    return;
+    auto &m = *g_full[4];
+    DNDS::index totalCells = m.NumCell() + m.NumCellGhost();
+    for (DNDS::index iE = 0; iE < m.edge2cell.father->Size(); iE++)
+    {
+        CHECK(m.edge2cell.RowSize(iE) >= 1);
+        for (DNDS::rowsize j = 0; j < m.edge2cell.RowSize(iE); j++)
+        {
+            DNDS::index iC = m.edge2cell(iE, j);
+            CHECK(iC >= 0);
+            CHECK(iC < totalCells);
+        }
+    }
+}
+
+TEST_CASE("InterpolateEdge: cell2edge row sizes match expected edge count")
+{
+    MESSAGE("Skipped — no small 3D mesh in config");
+    return;
+    auto &m = *g_full[4];
+    for (DNDS::index iC = 0; iC < m.NumCell(); iC++)
+    {
+        auto elem = m.GetCellElement(iC);
+        int nEdgeExpected = elem.GetNumEdges();
+        CHECK(m.cell2edge.RowSize(iC) == nEdgeExpected);
+    }
+}
+
+TEST_CASE("InterpolateEdge: cell2edge entries are valid edge indices")
+{
+    MESSAGE("Skipped — no small 3D mesh in config");
+    return;
+    auto &m = *g_full[4];
+    DNDS::index totalEdges = m.edge2node.father->Size() + m.edge2node.son->Size();
+    for (DNDS::index iC = 0; iC < m.NumCell(); iC++)
+        for (DNDS::rowsize j = 0; j < m.cell2edge.RowSize(iC); j++)
+        {
+            DNDS::index iE = m.cell2edge(iC, j);
+            CHECK(iE >= 0);
+            CHECK(iE < totalEdges);
+        }
+}
+
+TEST_CASE("InterpolateEdge: edge adjacency state is Local after pipeline")
+{
+    MESSAGE("Skipped — no small 3D mesh in config");
+    return;
+    auto &m = *g_full[4];
+    CHECK(m.adjEdgeState == Adj_PointToLocal);
+}
+
+TEST_CASE("InterpolateEdge: edge elem types are valid Line2 or Line3")
+{
+    MESSAGE("Skipped — no small 3D mesh in config");
+    return;
+    auto &m = *g_full[4];
+    for (DNDS::index iE = 0; iE < m.edgeElemInfo.father->Size(); iE++)
+    {
+        auto eType = m.edgeElemInfo(iE, 0).getElemType();
+        auto dim = Elem::Element{eType}.GetDim();
+        CHECK(dim == 1);
+    }
+}
+#endif

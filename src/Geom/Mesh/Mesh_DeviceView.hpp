@@ -170,10 +170,10 @@ namespace DNDS::Geom
         MeshAdjState adjPrimaryState{Adj_Unknown};
         // state of: face2cell, face2node, face2bnd
         MeshAdjState adjFacialState{Adj_Unknown};
-        // state of: cell2face, bnd2face
         MeshAdjState adjC2FState{Adj_Unknown};
-        // state of: node2cell, node2bnd
         MeshAdjState adjN2CBState{Adj_Unknown};
+        MeshAdjState adjEdgeState{Adj_Unknown};
+        bool hasNodeWallDist{false};
         // state of: cell2cellFace
         // MeshAdjState adjC2CFaceState{Adj_Unknown};
 
@@ -190,6 +190,7 @@ namespace DNDS::Geom
         /// periodic only, after reader
         tPbiPair::t_deviceView<B> cell2nodePbi;
         tPbiPair::t_deviceView<B> bnd2nodePbi;
+        tCoordPair::t_deviceView<B> nodeWallDist;
 
         auto device_array_list_primary()
         {
@@ -202,7 +203,8 @@ namespace DNDS::Geom
                 DNDS_MAKE_1_MEMBER_REF(cellElemInfo),
                 DNDS_MAKE_1_MEMBER_REF(bndElemInfo),
                 DNDS_MAKE_1_MEMBER_REF(cell2nodePbi),
-                DNDS_MAKE_1_MEMBER_REF(bnd2nodePbi));
+                DNDS_MAKE_1_MEMBER_REF(bnd2nodePbi),
+                DNDS_MAKE_1_MEMBER_REF(nodeWallDist));
         }
 
         template <class TMain>
@@ -220,6 +222,8 @@ namespace DNDS::Geom
                 DNDS_COPY_MEMBER_VIEW(m_obj, cell2nodePbi);
                 DNDS_COPY_MEMBER_VIEW(m_obj, bnd2nodePbi);
             }
+            if (hasNodeWallDist)
+                DNDS_COPY_MEMBER_VIEW(m_obj, nodeWallDist);
         }
 
         AdjPairTrackedDeviceView<B, tAdjPair::t_arr> node2cell;
@@ -249,13 +253,24 @@ namespace DNDS::Geom
         // std::vector<index> bnd2faceV; // no device
         // std::unordered_map<index, index> face2bndM; // no device
         /// periodic only, after interpolated
+        tPbiPair::t_deviceView<B> cell2facePbi;
         tPbiPair::t_deviceView<B> face2nodePbi;
+
+        /// Edge arrays (interpolated, after BuildGhostEdge / InterpolateEdge)
+        AdjPairTrackedDeviceView<B, tAdjPair::t_arr> cell2edge;
+        AdjPairTrackedDeviceView<B, tAdjPair::t_arr> edge2node;
+        AdjPairTrackedDeviceView<B, tAdjPair::t_arr> edge2cell;
+        tElemInfoArrayPair::t_deviceView<B> edgeElemInfo;
+        /// periodic only
+        tPbiPair::t_deviceView<B> cell2edgePbi;
+        tPbiPair::t_deviceView<B> edge2nodePbi;
 
         DNDS_HOST auto device_array_list_facial()
         {
             return std::make_tuple(
                 DNDS_MAKE_1_MEMBER_REF(face2cell),
                 DNDS_MAKE_1_MEMBER_REF(face2node),
+                DNDS_MAKE_1_MEMBER_REF(cell2facePbi),
                 DNDS_MAKE_1_MEMBER_REF(face2nodePbi),
                 DNDS_MAKE_1_MEMBER_REF(faceElemInfo),
                 DNDS_MAKE_1_MEMBER_REF(face2bnd));
@@ -267,7 +282,10 @@ namespace DNDS::Geom
             DNDS_COPY_MEMBER_VIEW(m_obj, face2cell);
             DNDS_COPY_MEMBER_VIEW(m_obj, face2node);
             if (isPeriodic)
+            {
+                DNDS_COPY_MEMBER_VIEW(m_obj, cell2facePbi);
                 DNDS_COPY_MEMBER_VIEW(m_obj, face2nodePbi);
+            }
             DNDS_COPY_MEMBER_VIEW(m_obj, faceElemInfo);
             DNDS_COPY_MEMBER_VIEW(m_obj, face2bnd);
         }
@@ -286,6 +304,31 @@ namespace DNDS::Geom
             DNDS_COPY_MEMBER_VIEW(m_obj, bnd2face);
         }
 
+        DNDS_HOST auto device_array_list_edge()
+        {
+            return std::make_tuple(
+                DNDS_MAKE_1_MEMBER_REF(cell2edge),
+                DNDS_MAKE_1_MEMBER_REF(edge2node),
+                DNDS_MAKE_1_MEMBER_REF(edge2cell),
+                DNDS_MAKE_1_MEMBER_REF(cell2edgePbi),
+                DNDS_MAKE_1_MEMBER_REF(edge2nodePbi),
+                DNDS_MAKE_1_MEMBER_REF(edgeElemInfo));
+        }
+
+        template <class TMain>
+        DNDS_HOST void create_view_edge(TMain &&m_obj)
+        {
+            DNDS_COPY_MEMBER_VIEW(m_obj, cell2edge);
+            DNDS_COPY_MEMBER_VIEW(m_obj, edge2node);
+            DNDS_COPY_MEMBER_VIEW(m_obj, edge2cell);
+            DNDS_COPY_MEMBER_VIEW(m_obj, edgeElemInfo);
+            if (isPeriodic)
+            {
+                DNDS_COPY_MEMBER_VIEW(m_obj, cell2edgePbi);
+                DNDS_COPY_MEMBER_VIEW(m_obj, edge2nodePbi);
+            }
+        }
+
         template <class TMain>
         DNDS_DEVICE_CALLABLE UnstructuredMeshDeviceView(TMain &mesh, index placeholder)
         {
@@ -297,6 +340,8 @@ namespace DNDS::Geom
             DNDS_COPY_MEMBER(mesh, adjFacialState);
             DNDS_COPY_MEMBER(mesh, adjC2FState);
             DNDS_COPY_MEMBER(mesh, adjN2CBState);
+            DNDS_COPY_MEMBER(mesh, adjEdgeState);
+            hasNodeWallDist = bool(mesh.nodeWallDist.father) && bool(mesh.nodeWallDist.son);
             // DNDS_COPY_MEMBER(mesh, adjC2CFaceState);
 
             if (adjPrimaryState && mesh.cell2node.isBuilt())
@@ -305,6 +350,8 @@ namespace DNDS::Geom
                 create_view_facial(mesh);
             if (adjC2FState && mesh.cell2face.isBuilt())
                 create_view_C2F(mesh);
+            if (adjEdgeState && mesh.cell2edge.isBuilt())
+                create_view_edge(mesh);
         }
 
         DNDS_DEVICE_TRIVIAL_COPY_DEFINE_NO_EMPTY_CTOR(UnstructuredMeshDeviceView, UnstructuredMeshDeviceView)
@@ -460,29 +507,37 @@ namespace DNDS::Geom
             return periodicInfo.GetCoordByBits(coords[face2node(iFace, if2n)], face2nodePbi(iFace, if2n));
         }
 
-        // tPoint GetCoordWallDistOnCell(index iCell, rowsize ic2n)
-        // {
-        //     if (!isPeriodic)
-        //         return nodeWallDist[cell2node(iCell, ic2n)];
-        //     return periodicInfo.GetVectorByBits<3, 1>(nodeWallDist[cell2node(iCell, ic2n)], cell2nodePbi(iCell, ic2n));
-        // }
+        DNDS_DEVICE_CALLABLE tPoint GetCoordWallDistOnCell(index iCell, rowsize ic2n)
+        {
+            DNDS_assert(hasNodeWallDist);
+            if (!isPeriodic)
+                return nodeWallDist[cell2node(iCell, ic2n)];
+            return periodicInfo.GetVectorByBits<3, 1>(nodeWallDist[cell2node(iCell, ic2n)], cell2nodePbi(iCell, ic2n));
+        }
 
-        // tPoint GetCoordWallDistOnFace(index iFace, rowsize if2n)
-        // {
-        //     if (!isPeriodic)
-        //         return nodeWallDist[face2node(iFace, if2n)];
-        //     return periodicInfo.GetVectorByBits<3, 1>(nodeWallDist[face2node(iFace, if2n)], face2nodePbi(iFace, if2n));
-        // }
+        DNDS_DEVICE_CALLABLE tPoint GetCoordWallDistOnFace(index iFace, rowsize if2n)
+        {
+            DNDS_assert(hasNodeWallDist);
+            if (!isPeriodic)
+                return nodeWallDist[face2node(iFace, if2n)];
+            return periodicInfo.GetVectorByBits<3, 1>(nodeWallDist[face2node(iFace, if2n)], face2nodePbi(iFace, if2n));
+        }
 
-        DNDS_DEVICE_CALLABLE [[nodiscard]] bool CellIsFaceBack(index iCell, index iFace) const
+        DNDS_DEVICE_CALLABLE [[nodiscard]] bool CellIsFaceBack(index iCell, index iFace, rowsize ic2f) const
         {
             DNDS_assert(face2cell(iFace, 0) == iCell || face2cell(iFace, 1) == iCell);
+            if (face2cell(iFace, 0) == iCell && face2cell(iFace, 1) == iCell)
+            {
+                DNDS_assert(ic2f >= 0);
+                DNDS_assert(isPeriodic);
+                return !bool(cell2facePbi(iCell, ic2f));
+            }
             return face2cell(iFace, 0) == iCell;
         }
 
-        DNDS_DEVICE_CALLABLE [[nodiscard]] index CellFaceOther(index iCell, index iFace) const
+        DNDS_DEVICE_CALLABLE [[nodiscard]] index CellFaceOther(index iCell, index iFace, rowsize ic2f) const
         {
-            return CellIsFaceBack(iCell, iFace)
+            return CellIsFaceBack(iCell, iFace, ic2f)
                        ? face2cell(iFace, 1)
                        : face2cell(iFace, 0);
         }

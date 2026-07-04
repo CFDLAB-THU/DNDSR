@@ -193,10 +193,11 @@ namespace DNDS::Geom
                 for (index iCell = this->LocalPartStart(iPart); iCell < this->LocalPartEnd(iPart); iCell++)
                 {
                     cell2cellFaceV[iCell].reserve(cell2face.RowSize(iCell)); // do not preserve the diagonal
-                    for (auto iFace : cell2face[iCell])
+                    for (rowsize ic2f = 0; ic2f < cell2face.RowSize(iCell); ++ic2f)
                     {
-                        index iCellOther = this->CellFaceOther(iCell, iFace);
-                        if (iCellOther != UnInitIndex && iCellOther < this->NumCell()) //! must be local not ghost ptrs
+                        index iFace = cell2face(iCell, ic2f);
+                        index iCellOther = this->CellFaceOther(iCell, iFace, ic2f);
+                        if (iCellOther != UnInitIndex && iCellOther != iCell && iCellOther < this->NumCell()) //! must be local not ghost ptrs
                         {
                             if (onLocalPartition)
                                 if (iCellOther < this->LocalPartStart(iPart) || iCellOther >= this->LocalPartEnd(iPart))
@@ -217,6 +218,8 @@ namespace DNDS::Geom
                     std::sort(c2ni.begin(), c2ni.end());
                     for (index iCellOther : cell2cell[iCell])
                     {
+                        if (iCellOther == iCell)
+                            continue;
                         if (iCellOther >= this->NumCell())
                             continue;
                         if (onLocalPartition)

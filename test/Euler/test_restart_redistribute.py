@@ -135,14 +135,14 @@ def work_dir():
     shutil.rmtree(d, ignore_errors=True)
 
 
-def _make_step1_config(work_dir, mesh_file=MESH_SMALL):
+def _make_step1_config(work_dir, mesh_file=MESH_SMALL, dt_implicit=1.25e-3):
     """Config for the initial 20-step run (produces the restart)."""
     cfg = _load_json(BASE_CONFIG)
 
     # Time march: 20 steps, explicit ESDIRK4 (odeCode=0), small dt
     cfg["timeMarchControl"]["nTimeStep"] = 20
     cfg["timeMarchControl"]["tEnd"] = 1e10  # won't hit tEnd, use nTimeStep
-    cfg["timeMarchControl"]["dtImplicit"] = 1.25e-3
+    cfg["timeMarchControl"]["dtImplicit"] = dt_implicit
     cfg["timeMarchControl"]["odeCode"] = 0
     cfg["timeMarchControl"]["steadyQuit"] = False
     cfg["timeMarchControl"]["useRestart"] = False
@@ -187,14 +187,15 @@ def _make_step1_config(work_dir, mesh_file=MESH_SMALL):
 
 
 def _make_step2_config(work_dir, restart_h5_path, tag, np_count,
-                       reorder_cells=False, mesh_bisect=0, mesh_file=MESH_SMALL):
+                       reorder_cells=False, mesh_bisect=0, mesh_file=MESH_SMALL,
+                       dt_implicit=1.25e-3):
     """Config for the 1-step restart run."""
     cfg = _load_json(BASE_CONFIG)
 
     # Time march: 1 step from restart -- load, run one step, and write
     cfg["timeMarchControl"]["nTimeStep"] = 1
     cfg["timeMarchControl"]["tEnd"] = 1e10
-    cfg["timeMarchControl"]["dtImplicit"] = 1.25e-3
+    cfg["timeMarchControl"]["dtImplicit"] = dt_implicit
     cfg["timeMarchControl"]["odeCode"] = 0
     cfg["timeMarchControl"]["steadyQuit"] = False
     cfg["timeMarchControl"]["useRestart"] = True
@@ -285,9 +286,10 @@ def _compare_restart_h5(restart_a, restart_b, tol=1e-10):
     return max_diff, rel_norm
 
 
-def _run_step1(work_dir, np_write, mesh_file=MESH_SMALL):
+def _run_step1(work_dir, np_write, mesh_file=MESH_SMALL, dt_implicit=1.25e-3):
     """Run step 1: initial 20-step run producing a restart."""
-    step1_config, _ = _make_step1_config(work_dir, mesh_file=mesh_file)
+    step1_config, _ = _make_step1_config(
+        work_dir, mesh_file=mesh_file, dt_implicit=dt_implicit)
     result, stdout = _run_solver(np_write, step1_config, work_dir)
     assert result.returncode == 0, f"Step 1 solver failed:\n{stdout[-2000:]}"
     restart_h5 = _find_restart_h5(os.path.join(work_dir, "step1"), "step1")
@@ -295,10 +297,12 @@ def _run_step1(work_dir, np_write, mesh_file=MESH_SMALL):
     return restart_h5
 
 
-def _run_step2(work_dir, restart_h5, tag, np_count, overrides=None, mesh_file=MESH_SMALL):
+def _run_step2(work_dir, restart_h5, tag, np_count, overrides=None,
+               mesh_file=MESH_SMALL, dt_implicit=1.25e-3):
     """Run step 2: load restart and immediately write it back."""
     step2_config, _ = _make_step2_config(
-        work_dir, restart_h5, tag, np_count, mesh_file=mesh_file)
+        work_dir, restart_h5, tag, np_count, mesh_file=mesh_file,
+        dt_implicit=dt_implicit)
     result, stdout = _run_solver(
         np_count, step2_config, work_dir, overrides=overrides)
     assert result.returncode == 0, f"Step 2 ({tag}) solver failed:\n{stdout[-2000:]}"
@@ -384,14 +388,18 @@ def test_restart_redistribute_large_mesh_multi_np(work_dir_large):
         pytest.skip(f"Mesh file not found: {MESH_LARGE}")
 
     np_write = 4
+    dt_implicit = 1.0e-4
 
     print(
         f"\n=== Step 1: 20-step run with np={np_write}, mesh=IV10_20 (400 cells) ===")
-    restart_h5 = _run_step1(work_dir_large, np_write, mesh_file=MESH_LARGE)
+    restart_h5 = _run_step1(
+        work_dir_large, np_write, mesh_file=MESH_LARGE,
+        dt_implicit=dt_implicit)
 
     print(f"\n=== Reference: load with np={np_write} ===")
     restart_ref = _run_step2(work_dir_large, restart_h5,
-                             "ref", np_write, mesh_file=MESH_LARGE)
+                             "ref", np_write, mesh_file=MESH_LARGE,
+                             dt_implicit=dt_implicit)
 
     for np_read in [4, 5, 6, 7, 8]:
         tag = f"np{np_read}"
@@ -406,6 +414,7 @@ def test_restart_redistribute_large_mesh_multi_np(work_dir_large):
         restart_out = _run_step2(
             work_dir_large, restart_h5, tag, np_read,
             overrides=overrides, mesh_file=MESH_LARGE,
+            dt_implicit=dt_implicit,
         )
 
         print(f"=== Comparing np={np_write} vs np={np_read} ===")

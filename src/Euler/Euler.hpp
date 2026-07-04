@@ -92,8 +92,8 @@ namespace DNDS::Euler
     class ArrayDOFV : public CFV::tUDof<nVarsFixed>
     {
     public:
-        using t_self = ArrayDOFV<nVarsFixed>;         ///< Self type alias for CRTP-style forwarding.
-        using t_base = CFV::tUDof<nVarsFixed>;        ///< Base distributed DOF array type.
+        using t_self = ArrayDOFV<nVarsFixed>;                 ///< Self type alias for CRTP-style forwarding.
+        using t_base = CFV::tUDof<nVarsFixed>;                ///< Base distributed DOF array type.
         using t_element_mat = typename t_base::t_element_mat; ///< Per-element Eigen matrix/vector type.
 
         /**
@@ -108,7 +108,7 @@ namespace DNDS::Euler
          * @brief Set all DOF entries to copies of a given vector.
          * @param R Reference vector; each cell's DOF vector is set to this value.
          */
-        void setConstant(const Eigen::Ref<const t_element_mat> &R )
+        void setConstant(const Eigen::Ref<const t_element_mat> &R)
         {
             this->t_base::setConstant(R);
         }
@@ -400,8 +400,8 @@ namespace DNDS::Euler
     class ArrayRECV : public CFV::tURec<nVarsFixed>
     {
     public:
-        using t_self = ArrayRECV<nVarsFixed>;         ///< Self type alias.
-        using t_base = CFV::tURec<nVarsFixed>;        ///< Base distributed reconstruction array type.
+        using t_self = ArrayRECV<nVarsFixed>;  ///< Self type alias.
+        using t_base = CFV::tURec<nVarsFixed>; ///< Base distributed reconstruction array type.
 
         /**
          * @brief Set all reconstruction coefficients to a uniform scalar value.
@@ -642,8 +642,8 @@ namespace DNDS::Euler
     class ArrayGRADV : public CFV::tUGrad<nVarsFixed, gDim>
     {
     public:
-        using t_self = ArrayGRADV<nVarsFixed, gDim>;          ///< Self type alias.
-        using t_base = CFV::tUGrad<nVarsFixed, gDim>;         ///< Base distributed gradient array type.
+        using t_self = ArrayGRADV<nVarsFixed, gDim>;  ///< Self type alias.
+        using t_base = CFV::tUGrad<nVarsFixed, gDim>; ///< Base distributed gradient array type.
 
         /**
          * @brief Set all gradient entries to a uniform scalar value.
@@ -785,15 +785,15 @@ namespace DNDS::Euler
          */
         enum Type
         {
-            Diagonal = 0,       ///< One scalar per variable per cell (diagonal approximation).
-            DiagonalBlock = 1,  ///< One (nVars x nVars) dense block per cell.
-            Full = 2,           ///< Sparse block structure following cell adjacency graph.
+            Diagonal = 0,      ///< One scalar per variable per cell (diagonal approximation).
+            DiagonalBlock = 1, ///< One (nVars x nVars) dense block per cell.
+            Full = 2,          ///< Sparse block structure following cell adjacency graph.
         };
-        ArrayDOFV<nVarsFixed> diag;                                 ///< Diagonal Jacobian values (one vector per cell).
-        ArrayDOFV<nVarsFixed> diagInv;                              ///< Inverse of diagonal Jacobian values.
-        ArrayEigenMatrix<nVarsFixed, nVarsFixed> diagBlock;         ///< Block-diagonal Jacobian (one nVars x nVars matrix per cell).
-        ArrayEigenMatrix<nVarsFixed, nVarsFixed> diagBlockInv;      ///< Inverse of block-diagonal Jacobian.
-        ArrayRECV<nVarsFixed> offDiagBlock;                         ///< Off-diagonal blocks for full Jacobian (sparse, adjacency-based).
+        ArrayDOFV<nVarsFixed> diag;                            ///< Diagonal Jacobian values (one vector per cell).
+        ArrayDOFV<nVarsFixed> diagInv;                         ///< Inverse of diagonal Jacobian values.
+        ArrayEigenMatrix<nVarsFixed, nVarsFixed> diagBlock;    ///< Block-diagonal Jacobian (one nVars x nVars matrix per cell).
+        ArrayEigenMatrix<nVarsFixed, nVarsFixed> diagBlockInv; ///< Inverse of block-diagonal Jacobian.
+        ArrayRECV<nVarsFixed> offDiagBlock;                    ///< Off-diagonal blocks for full Jacobian (sparse, adjacency-based).
 
         /**
          * @brief Initialize storage for diagonal (scalar-per-variable) Jacobian mode.
@@ -896,12 +896,12 @@ namespace DNDS::Euler
      */
     enum RANSModel
     {
-        RANS_Unknown = 0,  ///< Sentinel / uninitialized value.
-        RANS_None,         ///< No turbulence model (laminar or DNS).
-        RANS_SA,           ///< Spalart-Allmaras one-equation model.
-        RANS_KOWilcox,     ///< Wilcox k-omega two-equation model.
-        RANS_KOSST,        ///< Menter k-omega SST two-equation model.
-        RANS_RKE,          ///< Realizable k-epsilon two-equation model.
+        RANS_Unknown = 0, ///< Sentinel / uninitialized value.
+        RANS_None,        ///< No turbulence model (laminar or DNS).
+        RANS_SA,          ///< Spalart-Allmaras one-equation model.
+        RANS_KOWilcox,    ///< Wilcox k-omega two-equation model.
+        RANS_KOSST,       ///< Menter k-omega SST two-equation model.
+        RANS_RKE,         ///< Realizable k-epsilon two-equation model.
     };
 
     DNDS_DEFINE_ENUM_JSON(
@@ -1058,6 +1058,16 @@ namespace DNDS::Euler
     //         model == NS_SA);
     // } // use +/- is ok
 
+    template <int dim>
+    constexpr std::array<int, dim> Get_Seq123()
+    {
+        static_assert(dim >= 2 && dim <= 3, "only support 2,3 dim");
+        if constexpr (dim == 2)
+            return {1, 2};
+        else
+            return {1, 2, 3};
+    }
+
     /**
      * @brief Compile-time traits for EulerModel variants.
      *
@@ -1090,6 +1100,31 @@ namespace DNDS::Euler
         static constexpr int dim = getDim_Fixed(model);
         /// Geometry (mesh) spatial dimension.
         static constexpr int gDim = getGeomDim_Fixed(model);
+        /// Seq123 Array
+        static constexpr std::array<int, dim> Seq123{Get_Seq123<dim>()};
+
+        /// Conservative-state vector type (fixed or dynamic size).
+        using TU = Eigen::VectorFMTSafe<real, nVarsFixed>;
+        /// Full Jacobian matrix type (nVars × nVars).
+        using TJacobianU = Eigen::MatrixFMTSafe<real, nVarsFixed, nVarsFixed>;
+        /// Gradient matrix type (dim × nVars).
+        using TDiffU = Eigen::MatrixFMTSafe<real, dim, nVarsFixed>;
+        /// Spatial vector type (dim components).
+        using TVec = Eigen::VectorFMTSafe<real, dim>;
+        /// Spatial matrix type (dim × dim).
+        using TMat = Eigen::MatrixFMTSafe<real, dim, dim>;
+
+        // ---- Batch types (parameterized by MaxBatch for Eigen SmallMatrix optimisation) ----
+        template <int MaxB = 16>
+        using TVec_Batch = Eigen::MatrixFMTSafe<real, dim, Eigen::Dynamic, Eigen::ColMajor, dim, MaxB>;
+        template <int MaxB = 16>
+        using TU_Batch = Eigen::MatrixFMTSafe<real, nVarsFixed, Eigen::Dynamic, Eigen::ColMajor, nVarsFixed, MaxB>;
+        template <int MaxB = 16>
+        using TReal_Batch = Eigen::MatrixFMTSafe<real, 1, Eigen::Dynamic, Eigen::RowMajor, 1, MaxB>;
+        template <int MaxB = 16>
+        using TMat_Batch = Eigen::MatrixFMTSafe<real, dim, Eigen::Dynamic, Eigen::ColMajor, dim, (MaxB > 0 ? MaxB * 3 : Eigen::Dynamic)>;
+        template <int MaxB = 16>
+        using TDiffU_Batch = Eigen::MatrixFMTSafe<real, Eigen::Dynamic, nVarsFixed, Eigen::ColMajor, (MaxB > 0 ? MaxB * 3 : Eigen::Dynamic)>;
 
         /// True for Spalart-Allmaras models (NS_SA, NS_SA_3D).
         static constexpr bool hasSA = (model == NS_SA || model == NS_SA_3D);
@@ -1104,6 +1139,8 @@ namespace DNDS::Euler
         static constexpr bool isExtended = (model == NS_EX || model == NS_EX_3D);
         /// True for plain NS without turbulence or extensions.
         static constexpr bool isPlainNS = !hasRANS && !isExtended;
+        /// True when reactive flow is enabled (wired via config, default false).
+        static constexpr bool isReactive = false;
         /// True for 2D geometry models.
         static constexpr bool isGeom2D = (gDim == 2);
         /// True for 3D geometry models.

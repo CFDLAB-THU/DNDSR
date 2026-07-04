@@ -22,12 +22,12 @@
                     "type": "integer",
                     "default": 1000000,
                     "description": "Max number of time steps",
-                    "minimum": 1.0
+                    "minimum": 0.0
                 },
                 "steadyQuit": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Quit on steady convergence"
+                    "description": "Quit on steady convergence, automatically sets nTimeStep <= 1 and dtImplicit -> inf"
                 },
                 "useRestart": {
                     "type": "boolean",
@@ -66,7 +66,7 @@
                 "odeCode": {
                     "type": "integer",
                     "default": 0,
-                    "description": "ODE integrator code"
+                    "description": "ODE integrator code:\n    0       : ESDIRK4       | implicit | 5 stages\n    101     : SSP-SDIRK4    | implicit | 3 stages\n    202     : ESIDRK3       | implicit | 3 stages\n    203     : Trapz/C-N     | implicit | 1 stage\n    204     : ESDIRK2       | implicit | 2 stages\n    1/102   : BDF2          | implicit | 1 stage - 2 steps\n    103     : Backward Euler| implicit | 1 stage\n    2       : SSPRK3        | explicit | 3 stages (explicit)\n    401 ↓   : DITR          | implicit | 2 stages (coupled)\n        - c2                     = odeSetting1 \n        - backward-Euler starter = odeSetting2\n        - thetaM1                = odeSetting3\n        - mask                   = odeSetting4\n    411 ↓   : DITR-U2R2     | implicit | 2 stages (coupled)\n    412 ↓   : DITR-U2R1     | implicit | 2 stages (coupled)\n    413 ↓   : DITR-U3R1     | implicit | 2 stages (coupled) - 2 steps\n        - c2                     = odeSetting1 \n        - backward-Euler starter = odeSetting2\n        - thetaM1                = odeSetting3\n        - thetaM2                = odeSetting4\n"
                 },
                 "tEnd": {
                     "type": "number",
@@ -99,7 +99,7 @@
                 "partitionMeshOnly": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Only partition mesh, then exit"
+                    "description": "Build and write partitioned mesh, then exit before coordinate transforms and solver setup"
                 },
                 "dtIncreaseLimit": {
                     "type": "number",
@@ -135,6 +135,11 @@
                     "default": 1.0,
                     "description": "PP dt limiter scale",
                     "minimum": 0.0
+                },
+                "sourceStrangSplitting": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Reactive physical-time Strang splitting: 0=off, 1=on. Latest/output RHS is flow-only while enabled."
                 }
             }
         },
@@ -320,7 +325,9 @@
                         "fluxWall",
                         "CL",
                         "CD",
-                        "AoA"
+                        "AoA",
+                        "uMin",
+                        "uMax"
                     ],
                     "description": "Column titles for CSV log file"
                 },
@@ -340,15 +347,20 @@
                     "default": false,
                     "description": "Output restart at initialization"
                 },
+                "meshOutAtInit": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Output mesh CGNS at initialization"
+                },
                 "nDataOut": {
                     "type": "integer",
-                    "default": 10000,
+                    "default": 10,
                     "description": "Data output interval (outer steps)",
                     "minimum": 1.0
                 },
                 "nDataOutC": {
                     "type": "integer",
-                    "default": 50,
+                    "default": 1,
                     "description": "Data output interval (convergence steps)",
                     "minimum": 1.0
                 },
@@ -360,7 +372,7 @@
                 },
                 "nDataOutCInternal": {
                     "type": "integer",
-                    "default": 1,
+                    "default": 10000,
                     "description": "Data output interval (internal convergence)"
                 },
                 "nRestartOut": {
@@ -651,6 +663,11 @@
                     "default": "data/mesh/NACA0012_WIDE_H3.cgns",
                     "description": "Input mesh file path"
                 },
+                "meshFilePartitionedInput": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Explicit partitioned mesh input path for readMeshMode 1/2; empty uses meshFile_part_<current MPI size>; serializer suffix optional"
+                },
                 "outPltName": {
                     "type": "string",
                     "default": "data/out/debugData_",
@@ -674,7 +691,7 @@
                 "readMeshMode": {
                     "type": "integer",
                     "default": 0,
-                    "description": "Read mesh mode: 0=serial CGNS, 1=distributed JSON"
+                    "description": "Read mesh mode: 0=source mesh and partition, 1=pre-partitioned mesh (same MPI size), 2=H5 pre-partitioned mesh with repartition"
                 },
                 "outPltTecplotFormat": {
                     "type": "boolean",
@@ -754,6 +771,11 @@
                     "default": [],
                     "description": "Additional cell scalar names to output"
                 },
+                "outBndScalarNames": {
+                    "type": "array",
+                    "default": [],
+                    "description": "Additional bnd scalar names to output (picked from bnd2cell)"
+                },
                 "serializerSaveURec": {
                     "type": "boolean",
                     "default": false,
@@ -781,7 +803,7 @@
                     "properties": {
                         "type": {
                             "type": "string",
-                            "default": "JSON",
+                            "default": "H5",
                             "description": "Serializer backend: \"JSON\" or \"H5\"",
                             "enum": [
                                 "JSON",
@@ -798,7 +820,7 @@
                         "hdfChunkSize": {
                             "type": "integer",
                             "default": 0,
-                            "description": "HDF5 chunk size (0=auto)",
+                            "description": "HDF5 chunk size",
                             "minimum": 0.0
                         },
                         "hdfCollOnData": {
@@ -831,7 +853,7 @@
                     "properties": {
                         "type": {
                             "type": "string",
-                            "default": "JSON",
+                            "default": "H5",
                             "description": "Serializer backend: \"JSON\" or \"H5\"",
                             "enum": [
                                 "JSON",
@@ -848,7 +870,7 @@
                         "hdfChunkSize": {
                             "type": "integer",
                             "default": 0,
-                            "description": "HDF5 chunk size (0=auto)",
+                            "description": "HDF5 chunk size",
                             "minimum": 0.0
                         },
                         "hdfCollOnData": {
@@ -877,7 +899,7 @@
                 },
                 "meshPartitionedReaderType": {
                     "type": "string",
-                    "default": "JSON",
+                    "default": "H5",
                     "description": "Partitioned mesh reader type",
                     "enum": [
                         "JSON",
@@ -1089,6 +1111,11 @@
                     "default": false,
                     "description": "Initialize GMRES with last uRec increment"
                 },
+                "sourceTauSplitting": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Reactive source pseudo-time splitting: 0=off, 1=on"
+                },
                 "multiGridLP": {
                     "type": "integer",
                     "default": 0,
@@ -1236,7 +1263,7 @@
                     "properties": {
                         "type": {
                             "type": "string",
-                            "default": "JSON",
+                            "default": "H5",
                             "description": "Serializer backend: \"JSON\" or \"H5\"",
                             "enum": [
                                 "JSON",
@@ -1253,7 +1280,7 @@
                         "hdfChunkSize": {
                             "type": "integer",
                             "default": 0,
-                            "description": "HDF5 chunk size (0=auto)",
+                            "description": "HDF5 chunk size",
                             "minimum": 0.0
                         },
                         "hdfCollOnData": {
@@ -1378,6 +1405,12 @@
                     "type": "boolean",
                     "default": false,
                     "description": "Positivity-preserving epsilon is relaxed"
+                },
+                "RANSTopLimit": {
+                    "type": "number",
+                    "default": 100000.0,
+                    "description": "RANS variable top limit, currently for SA nutilde",
+                    "minimum": 0.0
                 },
                 "RANSBottomLimit": {
                     "type": "number",
@@ -1558,6 +1591,47 @@
                     "default": 0.5,
                     "description": "Central smoothing epsilon"
                 },
+                "pointImplicitSourceUpdateOut": {
+                    "type": "integer",
+                    "default": 0,
+                    "description": "Print point-implicit source-update Newton residual ratio min/max: 0=off, 1=on"
+                },
+                "reactorStepSettings": {
+                    "type": "object",
+                    "description": "Cantera reactor settings for direct source substeps",
+                    "properties": {
+                        "rtol": {
+                            "type": "number",
+                            "default": 1e-10,
+                            "description": "Cantera reactor relative tolerance",
+                            "minimum": 0.0
+                        },
+                        "atol": {
+                            "type": "number",
+                            "default": 1e-18,
+                            "description": "Cantera reactor absolute tolerance",
+                            "minimum": 0.0
+                        },
+                        "maxOrder": {
+                            "type": "integer",
+                            "default": 0,
+                            "description": "Cantera reactor max order; <=0 leaves default"
+                        },
+                        "maxSteps": {
+                            "type": "integer",
+                            "default": 10000000,
+                            "description": "Cantera reactor max internal steps",
+                            "minimum": 1.0
+                        }
+                    }
+                },
+                "reactiveSourceScale": {
+                    "type": "number",
+                    "default": 1.0,
+                    "description": "Scale reactive source RHS and Jacobian directly; use 0 for non-reactive debugging",
+                    "minimum": 0.0,
+                    "maximum": 1.0
+                },
                 "constMassForce": {
                     "type": "array",
                     "default": [
@@ -1720,15 +1794,53 @@
                     "description": "Boundary names for CL driver force integration"
                 },
                 "farFieldStaticValue": {
-                    "type": "array",
-                    "default": [
-                        1.0,
-                        0.0,
-                        0.0,
-                        0.0,
-                        2.5
-                    ],
-                    "description": "Far-field static value vector (size = nVars)"
+                    "description": "Far-field state value (size = nVars) || Far-field state value (size = nVars) Canonical object form is {type, state}. Merge-patch warning: patch type and state together; changing only one reinterprets stale data.",
+                    "default": {
+                        "type": "consSensible",
+                        "state": []
+                    },
+                    "oneOf": [
+                        {
+                            "type": "array",
+                            "items": {
+                                "type": "number"
+                            },
+                            "description": "Legacy plain array; interpreted as consSensible."
+                        },
+                        {
+                            "type": "object",
+                            "required": [
+                                "type",
+                                "state"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": [
+                                        "cons",
+                                        "consSensible",
+                                        "primRhoP",
+                                        "primRhoT",
+                                        "primTP",
+                                        "cons_phy",
+                                        "consSensible_phy",
+                                        "primRhoP_phy",
+                                        "primRhoT_phy",
+                                        "primTP_phy",
+                                        "none",
+                                        "invalid"
+                                    ]
+                                },
+                                "state": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "number"
+                                    }
+                                }
+                            }
+                        }
+                    ]
                 },
                 "boxInitializers": {
                     "type": "array",
@@ -1767,9 +1879,53 @@
                                 "description": "Box z-max"
                             },
                             "v": {
-                                "type": "array",
-                                "default": [],
-                                "description": "Initial value vector (size = nVars)"
+                                "description": "Initial state value (size = nVars) || Initial state value (size = nVars) Canonical object form is {type, state}. Merge-patch warning: patch type and state together; changing only one reinterprets stale data.",
+                                "default": {
+                                    "type": "consSensible",
+                                    "state": []
+                                },
+                                "oneOf": [
+                                    {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "number"
+                                        },
+                                        "description": "Legacy plain array; interpreted as consSensible."
+                                    },
+                                    {
+                                        "type": "object",
+                                        "required": [
+                                            "type",
+                                            "state"
+                                        ],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                            "type": {
+                                                "type": "string",
+                                                "enum": [
+                                                    "cons",
+                                                    "consSensible",
+                                                    "primRhoP",
+                                                    "primRhoT",
+                                                    "primTP",
+                                                    "cons_phy",
+                                                    "consSensible_phy",
+                                                    "primRhoP_phy",
+                                                    "primRhoT_phy",
+                                                    "primTP_phy",
+                                                    "none",
+                                                    "invalid"
+                                                ]
+                                            },
+                                            "state": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "number"
+                                                }
+                                            }
+                                        }
+                                    }
+                                ]
                             }
                         }
                     }
@@ -1801,9 +1957,53 @@
                                 "description": "Plane offset"
                             },
                             "v": {
-                                "type": "array",
-                                "default": [],
-                                "description": "Initial value vector (size = nVars)"
+                                "description": "Initial state value (size = nVars) || Initial state value (size = nVars) Canonical object form is {type, state}. Merge-patch warning: patch type and state together; changing only one reinterprets stale data.",
+                                "default": {
+                                    "type": "consSensible",
+                                    "state": []
+                                },
+                                "oneOf": [
+                                    {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "number"
+                                        },
+                                        "description": "Legacy plain array; interpreted as consSensible."
+                                    },
+                                    {
+                                        "type": "object",
+                                        "required": [
+                                            "type",
+                                            "state"
+                                        ],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                            "type": {
+                                                "type": "string",
+                                                "enum": [
+                                                    "cons",
+                                                    "consSensible",
+                                                    "primRhoP",
+                                                    "primRhoT",
+                                                    "primTP",
+                                                    "cons_phy",
+                                                    "consSensible_phy",
+                                                    "primRhoP_phy",
+                                                    "primRhoT_phy",
+                                                    "primTP_phy",
+                                                    "none",
+                                                    "invalid"
+                                                ]
+                                            },
+                                            "state": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "number"
+                                                }
+                                            }
+                                        }
+                                    }
+                                ]
                             }
                         }
                     }
@@ -1818,6 +2018,22 @@
                                 "type": "array",
                                 "default": [],
                                 "description": "Expression lines (concatenated with newlines)"
+                            },
+                            "stateType": {
+                                "type": "string",
+                                "description": "ExprTk state convention: cons, consSensible, primRhoP, primRhoT, primTP, or *_phy variants. || ExprTk state convention: cons, consSensible, primRhoP, primRhoT, primTP, or *_phy variants.",
+                                "enum": [
+                                    "cons",
+                                    "consSensible",
+                                    "primRhoP",
+                                    "primRhoT",
+                                    "primTP",
+                                    "cons_phy",
+                                    "consSensible_phy",
+                                    "primRhoP_phy",
+                                    "primRhoT_phy",
+                                    "primTP_phy"
+                                ]
                             }
                         }
                     }
@@ -1829,19 +2045,19 @@
                         "gamma": {
                             "type": "number",
                             "default": 1.4,
-                            "description": "Ratio of specific heats",
-                            "minimum": 1.0
+                            "description": "Ratio of specific heats. Must be finite and > 1.",
+                            "minimum": 1.0000000000000002
                         },
                         "Rgas": {
                             "type": "number",
-                            "default": 1.0,
-                            "description": "Specific gas constant",
-                            "minimum": 0.0
+                            "default": 287.0,
+                            "description": "Specific gas constant. Must be finite and > 0.",
+                            "minimum": 2.2250738585072014e-308
                         },
                         "muGas": {
                             "type": "number",
                             "default": 1.0,
-                            "description": "Dynamic viscosity",
+                            "description": "Dynamic viscosity (Pa·s)",
                             "minimum": 0.0
                         },
                         "prGas": {
@@ -1849,6 +2065,18 @@
                             "default": 0.72,
                             "description": "Prandtl number",
                             "minimum": 0.0
+                        },
+                        "prTurb": {
+                            "type": "number",
+                            "default": 0.9,
+                            "description": "Turbulent Prandtl number",
+                            "minimum": 2.2250738585072014e-308
+                        },
+                        "scTurb": {
+                            "type": "number",
+                            "default": 0.9,
+                            "description": "Shared turbulent Schmidt number for species diffusion",
+                            "minimum": 2.2250738585072014e-308
                         },
                         "TRef": {
                             "type": "number",
@@ -1864,8 +2092,92 @@
                             "type": "integer",
                             "default": 1,
                             "description": "Viscosity model: 0=constant, 1=sutherland, 2=constant_nu"
+                        },
+                        "T0": {
+                            "type": "number",
+                            "default": 1.0,
+                            "description": "Reference temperature (K). Must be finite and > 0.",
+                            "minimum": 2.2250738585072014e-308
+                        },
+                        "rho0": {
+                            "type": "number",
+                            "default": 1.0,
+                            "description": "Reference density (kg/m^3). Must be finite and > 0.",
+                            "minimum": 2.2250738585072014e-308
+                        },
+                        "U0": {
+                            "type": "number",
+                            "default": 1.0,
+                            "description": "Reference velocity (m/s). Must be finite and > 0.",
+                            "minimum": 2.2250738585072014e-308
+                        },
+                        "L0": {
+                            "type": "number",
+                            "default": 1.0,
+                            "description": "Reference length (m). Must be finite and > 0.",
+                            "minimum": 2.2250738585072014e-308
                         }
                     }
+                },
+                "reactiveFlow": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Enable reactive flow (multi-species + chemistry)",
+                            "const": false
+                        },
+                        "mechanismFile": {
+                            "type": "string",
+                            "default": "",
+                            "description": "CHEMKIN-format mechanism YAML path"
+                        },
+                        "thermoFile": {
+                            "type": "string",
+                            "default": "",
+                            "description": "Reserved; currently unused. Mechanism YAML supplies thermodynamics."
+                        },
+                        "transportModel": {
+                            "type": "string",
+                            "default": "MixtureAveraged",
+                            "description": "Cantera transport model requested by reactive flow; currently only mixture-averaged is implemented."
+                        },
+                        "CFLScale": {
+                            "type": "number",
+                            "default": 1.0,
+                            "description": "Point-implicit chemistry pseudo-time multiplier",
+                            "minimum": 2.2250738585072014e-308
+                        },
+                        "chemRelaxEps": {
+                            "type": "number",
+                            "default": 0.0,
+                            "description": "Minimum point-implicit chemistry pseudo-time step",
+                            "minimum": 0.0
+                        },
+                        "chemAbsTol": {
+                            "type": "number",
+                            "default": 1e-10,
+                            "description": "Absolute point-implicit chemistry residual tolerance",
+                            "minimum": 0.0
+                        },
+                        "TBase": {
+                            "type": "number",
+                            "default": 0.0,
+                            "description": "Base temperature [K] for reactive sensible-energy bookkeeping; <=0 uses the minimum per-species Cantera bound"
+                        },
+                        "nSpeciesOverride": {
+                            "type": "integer",
+                            "default": 0,
+                            "description": "Reserved; currently unused. Species count is read from mechanism."
+                        },
+                        "useCellTWarmCache": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "Enable per-cell T warm-start cache for temperature inversion"
+                        }
+                    },
+                    "description": "Reactive flow settings (multi-species chemistry). reactiveFlow.enabled must be false for this model."
                 }
             }
         },
@@ -2109,12 +2421,58 @@
                                 "type": "string",
                                 "description": "Boundary zone name"
                             },
+                            "__bcId": {
+                                "type": "integer",
+                                "description": "Internal emitted BC id; ignored on read"
+                            },
                             "value": {
-                                "type": "array",
-                                "items": {
-                                    "type": "number"
+                                "description": "Full BC state; canonical object is {type, state} Canonical object form is {type, state}. Merge-patch warning: patch type and state together; changing only one reinterprets stale data.",
+                                "default": {
+                                    "type": "consSensible",
+                                    "state": []
                                 },
-                                "description": "BC state vector (size = nVars)"
+                                "oneOf": [
+                                    {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "number"
+                                        },
+                                        "description": "Legacy plain array; interpreted as consSensible."
+                                    },
+                                    {
+                                        "type": "object",
+                                        "required": [
+                                            "type",
+                                            "state"
+                                        ],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                            "type": {
+                                                "type": "string",
+                                                "enum": [
+                                                    "cons",
+                                                    "consSensible",
+                                                    "primRhoP",
+                                                    "primRhoT",
+                                                    "primTP",
+                                                    "cons_phy",
+                                                    "consSensible_phy",
+                                                    "primRhoP_phy",
+                                                    "primRhoT_phy",
+                                                    "primTP_phy",
+                                                    "none",
+                                                    "invalid"
+                                                ]
+                                            },
+                                            "state": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "number"
+                                                }
+                                            }
+                                        }
+                                    }
+                                ]
                             },
                             "frameOption": {
                                 "type": "integer",
@@ -2143,7 +2501,8 @@
                             "type",
                             "name",
                             "value"
-                        ]
+                        ],
+                        "additionalProperties": false
                     },
                     {
                         "type": "object",
@@ -2157,12 +2516,58 @@
                                 "type": "string",
                                 "description": "Boundary zone name"
                             },
+                            "__bcId": {
+                                "type": "integer",
+                                "description": "Internal emitted BC id; ignored on read"
+                            },
                             "value": {
-                                "type": "array",
-                                "items": {
-                                    "type": "number"
+                                "description": "Full BC state; canonical object is {type, state} Canonical object form is {type, state}. Merge-patch warning: patch type and state together; changing only one reinterprets stale data.",
+                                "default": {
+                                    "type": "consSensible",
+                                    "state": []
                                 },
-                                "description": "BC state vector (size = nVars)"
+                                "oneOf": [
+                                    {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "number"
+                                        },
+                                        "description": "Legacy plain array; interpreted as consSensible."
+                                    },
+                                    {
+                                        "type": "object",
+                                        "required": [
+                                            "type",
+                                            "state"
+                                        ],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                            "type": {
+                                                "type": "string",
+                                                "enum": [
+                                                    "cons",
+                                                    "consSensible",
+                                                    "primRhoP",
+                                                    "primRhoT",
+                                                    "primTP",
+                                                    "cons_phy",
+                                                    "consSensible_phy",
+                                                    "primRhoP_phy",
+                                                    "primRhoT_phy",
+                                                    "primTP_phy",
+                                                    "none",
+                                                    "invalid"
+                                                ]
+                                            },
+                                            "state": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "number"
+                                                }
+                                            }
+                                        }
+                                    }
+                                ]
                             },
                             "frameOption": {
                                 "type": "integer",
@@ -2191,7 +2596,8 @@
                             "type",
                             "name",
                             "value"
-                        ]
+                        ],
+                        "additionalProperties": false
                     },
                     {
                         "type": "object",
@@ -2205,12 +2611,58 @@
                                 "type": "string",
                                 "description": "Boundary zone name"
                             },
+                            "__bcId": {
+                                "type": "integer",
+                                "description": "Internal emitted BC id; ignored on read"
+                            },
                             "value": {
-                                "type": "array",
-                                "items": {
-                                    "type": "number"
+                                "description": "Full BC state; canonical object is {type, state} Canonical object form is {type, state}. Merge-patch warning: patch type and state together; changing only one reinterprets stale data.",
+                                "default": {
+                                    "type": "consSensible",
+                                    "state": []
                                 },
-                                "description": "BC state vector (size = nVars)"
+                                "oneOf": [
+                                    {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "number"
+                                        },
+                                        "description": "Legacy plain array; interpreted as consSensible."
+                                    },
+                                    {
+                                        "type": "object",
+                                        "required": [
+                                            "type",
+                                            "state"
+                                        ],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                            "type": {
+                                                "type": "string",
+                                                "enum": [
+                                                    "cons",
+                                                    "consSensible",
+                                                    "primRhoP",
+                                                    "primRhoT",
+                                                    "primTP",
+                                                    "cons_phy",
+                                                    "consSensible_phy",
+                                                    "primRhoP_phy",
+                                                    "primRhoT_phy",
+                                                    "primTP_phy",
+                                                    "none",
+                                                    "invalid"
+                                                ]
+                                            },
+                                            "state": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "number"
+                                                }
+                                            }
+                                        }
+                                    }
+                                ]
                             },
                             "frameOption": {
                                 "type": "integer",
@@ -2239,7 +2691,8 @@
                             "type",
                             "name",
                             "value"
-                        ]
+                        ],
+                        "additionalProperties": false
                     },
                     {
                         "type": "object",
@@ -2253,12 +2706,58 @@
                                 "type": "string",
                                 "description": "Boundary zone name"
                             },
+                            "__bcId": {
+                                "type": "integer",
+                                "description": "Internal emitted BC id; ignored on read"
+                            },
                             "value": {
-                                "type": "array",
-                                "items": {
-                                    "type": "number"
+                                "description": "Full BC state; canonical object is {type, state} Canonical object form is {type, state}. Merge-patch warning: patch type and state together; changing only one reinterprets stale data.",
+                                "default": {
+                                    "type": "consSensible",
+                                    "state": []
                                 },
-                                "description": "BC state vector (size = nVars)"
+                                "oneOf": [
+                                    {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "number"
+                                        },
+                                        "description": "Legacy plain array; interpreted as consSensible."
+                                    },
+                                    {
+                                        "type": "object",
+                                        "required": [
+                                            "type",
+                                            "state"
+                                        ],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                            "type": {
+                                                "type": "string",
+                                                "enum": [
+                                                    "cons",
+                                                    "consSensible",
+                                                    "primRhoP",
+                                                    "primRhoT",
+                                                    "primTP",
+                                                    "cons_phy",
+                                                    "consSensible_phy",
+                                                    "primRhoP_phy",
+                                                    "primRhoT_phy",
+                                                    "primTP_phy",
+                                                    "none",
+                                                    "invalid"
+                                                ]
+                                            },
+                                            "state": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "number"
+                                                }
+                                            }
+                                        }
+                                    }
+                                ]
                             },
                             "frameOption": {
                                 "type": "integer",
@@ -2287,7 +2786,8 @@
                             "type",
                             "name",
                             "value"
-                        ]
+                        ],
+                        "additionalProperties": false
                     },
                     {
                         "type": "object",
@@ -2301,12 +2801,40 @@
                                 "type": "string",
                                 "description": "Boundary zone name"
                             },
+                            "__bcId": {
+                                "type": "integer",
+                                "description": "Internal emitted BC id; ignored on read"
+                            },
                             "value": {
-                                "type": "array",
-                                "items": {
-                                    "type": "number"
-                                },
-                                "description": "BC state vector (size = nVars)"
+                                "description": "BCInPsTs payload in physical units with size = nVars: [pTotal (Pa), TTotal (K), direction..., passive/species...]. Converted internally to code units; when U0=T0=L0=1, physical = code.",
+                                "oneOf": [
+                                    {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "number"
+                                        },
+                                        "description": "Legacy raw payload array; size must be nVars."
+                                    },
+                                    {
+                                        "type": "object",
+                                        "required": [
+                                            "type",
+                                            "state"
+                                        ],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                            "type": {
+                                                "const": "nonState"
+                                            },
+                                            "state": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "number"
+                                                }
+                                            }
+                                        }
+                                    }
+                                ]
                             },
                             "frameOption": {
                                 "type": "integer",
@@ -2335,7 +2863,8 @@
                             "type",
                             "name",
                             "value"
-                        ]
+                        ],
+                        "additionalProperties": false
                     },
                     {
                         "type": "object",
@@ -2349,12 +2878,40 @@
                                 "type": "string",
                                 "description": "Boundary zone name"
                             },
+                            "__bcId": {
+                                "type": "integer",
+                                "description": "Internal emitted BC id; ignored on read"
+                            },
                             "value": {
-                                "type": "array",
-                                "items": {
-                                    "type": "number"
-                                },
-                                "description": "BC state vector (optional except for BCWallIsothermal)"
+                                "description": "Raw wall/special payload with size = nVars; BCWallIsothermal uses state[0] as wall temperature (K), converted internally to code units",
+                                "oneOf": [
+                                    {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "number"
+                                        },
+                                        "description": "Legacy raw payload array; size must be nVars."
+                                    },
+                                    {
+                                        "type": "object",
+                                        "required": [
+                                            "type",
+                                            "state"
+                                        ],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                            "type": {
+                                                "const": "nonState"
+                                            },
+                                            "state": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "number"
+                                                }
+                                            }
+                                        }
+                                    }
+                                ]
                             },
                             "frameOption": {
                                 "type": "integer",
@@ -2382,7 +2939,8 @@
                         "required": [
                             "type",
                             "name"
-                        ]
+                        ],
+                        "additionalProperties": false
                     },
                     {
                         "type": "object",
@@ -2396,12 +2954,40 @@
                                 "type": "string",
                                 "description": "Boundary zone name"
                             },
+                            "__bcId": {
+                                "type": "integer",
+                                "description": "Internal emitted BC id; ignored on read"
+                            },
                             "value": {
-                                "type": "array",
-                                "items": {
-                                    "type": "number"
-                                },
-                                "description": "BC state vector (optional except for BCWallIsothermal)"
+                                "description": "Raw wall/special payload with size = nVars; BCWallIsothermal uses state[0] as wall temperature (K), converted internally to code units",
+                                "oneOf": [
+                                    {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "number"
+                                        },
+                                        "description": "Legacy raw payload array; size must be nVars."
+                                    },
+                                    {
+                                        "type": "object",
+                                        "required": [
+                                            "type",
+                                            "state"
+                                        ],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                            "type": {
+                                                "const": "nonState"
+                                            },
+                                            "state": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "number"
+                                                }
+                                            }
+                                        }
+                                    }
+                                ]
                             },
                             "frameOption": {
                                 "type": "integer",
@@ -2429,7 +3015,8 @@
                         "required": [
                             "type",
                             "name"
-                        ]
+                        ],
+                        "additionalProperties": false
                     },
                     {
                         "type": "object",
@@ -2443,12 +3030,40 @@
                                 "type": "string",
                                 "description": "Boundary zone name"
                             },
+                            "__bcId": {
+                                "type": "integer",
+                                "description": "Internal emitted BC id; ignored on read"
+                            },
                             "value": {
-                                "type": "array",
-                                "items": {
-                                    "type": "number"
-                                },
-                                "description": "BC state vector (optional except for BCWallIsothermal)"
+                                "description": "Raw wall/special payload with size = nVars; BCWallIsothermal uses state[0] as wall temperature (K), converted internally to code units",
+                                "oneOf": [
+                                    {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "number"
+                                        },
+                                        "description": "Legacy raw payload array; size must be nVars."
+                                    },
+                                    {
+                                        "type": "object",
+                                        "required": [
+                                            "type",
+                                            "state"
+                                        ],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                            "type": {
+                                                "const": "nonState"
+                                            },
+                                            "state": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "number"
+                                                }
+                                            }
+                                        }
+                                    }
+                                ]
                             },
                             "frameOption": {
                                 "type": "integer",
@@ -2477,7 +3092,8 @@
                             "type",
                             "name",
                             "value"
-                        ]
+                        ],
+                        "additionalProperties": false
                     },
                     {
                         "type": "object",
@@ -2491,12 +3107,40 @@
                                 "type": "string",
                                 "description": "Boundary zone name"
                             },
+                            "__bcId": {
+                                "type": "integer",
+                                "description": "Internal emitted BC id; ignored on read"
+                            },
                             "value": {
-                                "type": "array",
-                                "items": {
-                                    "type": "number"
-                                },
-                                "description": "BC state vector (optional except for BCWallIsothermal)"
+                                "description": "Raw wall/special payload with size = nVars; BCWallIsothermal uses state[0] as wall temperature (K), converted internally to code units",
+                                "oneOf": [
+                                    {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "number"
+                                        },
+                                        "description": "Legacy raw payload array; size must be nVars."
+                                    },
+                                    {
+                                        "type": "object",
+                                        "required": [
+                                            "type",
+                                            "state"
+                                        ],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                            "type": {
+                                                "const": "nonState"
+                                            },
+                                            "state": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "number"
+                                                }
+                                            }
+                                        }
+                                    }
+                                ]
                             },
                             "frameOption": {
                                 "type": "integer",
@@ -2524,7 +3168,8 @@
                         "required": [
                             "type",
                             "name"
-                        ]
+                        ],
+                        "additionalProperties": false
                     },
                     {
                         "type": "object",
@@ -2537,6 +3182,10 @@
                             "name": {
                                 "type": "string",
                                 "description": "Boundary zone name"
+                            },
+                            "__bcId": {
+                                "type": "integer",
+                                "description": "Internal emitted BC id; ignored on read"
                             },
                             "rectifyOption": {
                                 "type": "integer",
@@ -2559,7 +3208,8 @@
                         "required": [
                             "type",
                             "name"
-                        ]
+                        ],
+                        "additionalProperties": false
                     }
                 ]
             }

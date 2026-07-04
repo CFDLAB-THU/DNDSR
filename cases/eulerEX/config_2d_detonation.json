@@ -1,0 +1,236 @@
+{
+    "$schema": "../eulerEX_schema.json",
+    "timeMarchControl": {
+        "dtImplicit": 1e-06,
+        "nTimeStep": 100000,
+        "steadyQuit": false,
+        "tEnd": 0.005,
+        "odeCode": 202,
+        "odeSetting1": 0.5,
+        "sourceStrangSplitting": 1,
+        "rhsFPPMode": 2,
+        "rhsFPPScale": 0.5,
+        "rhsFPPRelax": 0.6,
+        "useDtPPLimit": false,
+        "dtPPLimitScale": 1
+    },
+    "outputControl": {
+        "nConsoleCheck": 1,
+        "nConsoleCheckInternal": 1,
+        "nDataOutC": 1,
+        "nDataOut": 10,
+        "nRestartOut": 10,
+        "tDataOut": 3e+200,
+        "dataOutAtInit": true,
+        "consoleOutputEveryFix": 1,
+        "consoleMainOutputFormat": [
+            "=== Step {termBold}[{step:4d}]   ",
+            "res {termBold}{termRed}{resRel:.3e}{termReset}   ",
+            "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc}), betaRec({nLimBeta},{minBeta}), alphaRes({nLimAlpha},{minAlpha})]]{termReset}   ",
+            "Time[{telapsed:.3f}] recTime[{trec:.3f}] rhsTime[{trhs:.3f}] commTime[{tcomm:.3f}] limTime[{tLim:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]",
+            "\nuMinMax {termCyan}{uMinMax}{termReset}"
+        ],
+        "consoleMainOutputFormatInternal": [
+            "\t Internal === Step [{step:4d},{iStep:2d},{iter:4d}]   ",
+            "res {termRed}{resRel:.3e}{termReset}   ",
+            "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc:.3g}), betaRec({nLimBeta},{minBeta:.3g}), alphaRes({nLimAlpha},{minAlpha:.3g})]]{termReset}   ",
+            "Time[{telapsedM:.3f}] recTime[{trecM:.3f}] rhsTime[{trhsM:.3f}] commTime[{tcommM:.3f}] limTime[{tLimM:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]",
+            "\nuMinMax {termCyan}{uMinMax}{termReset}"
+        ]
+    },
+    "implicitCFLControl": {
+        "CFL": 1,
+        "nSmoothDTau": 2,
+        "useLocalDt": true,
+        "nCFLRampStart": 5,
+        "nCFLRampLength": 5,
+        "CFLRampEnd": 10
+    },
+    "convergenceControl": {
+        "nTimeStepInternal": 100,
+        "nTimeStepInternalMin": 10,
+        "rhsThresholdInternal": 5e-4,
+        "res_base": 0,
+        "useVolWiseResidual": true
+    },
+    "dataIOControl": {
+        "uniqueStamps": false,
+        "meshScale": 5e-3,
+        "meshFile": "../data/mesh/Uniform_10x1_5000.cgns",
+        "outPltName": "../data/out/react_2d_detonation_h2o2_strang_dt2em6-I1/react_",
+        "outPltMode": 1,
+        "readMeshMode": 0,
+        "outCellScalarNames": [
+            "RE"
+        ],
+        "outPltTecplotFormat": false,
+        "outPltVTKFormat": false,
+        "outPltVTKHDFFormat": true,
+        "hdfDeflateLevel": 4,
+        // "hdfChunkSize": 32768,
+        "hdfChunkSize": 131072,
+        "outAtPointData": false,
+        "outAtCellData": true,
+        "outBndData": true,
+        "restartWriter": {
+            "type": "H5",
+            "hdfDeflateLevel": 5,
+            "hdfChunkSize": 4096
+        },
+        "meshPartitionedReaderType": "H5",
+        "meshPartitionedWriter": {
+            "type": "H5",
+            "hdfDeflateLevel": 5,
+            "hdfChunkSize": 4096
+        }
+    },
+    "boundaryDefinition": {
+        "PeriodicTranslation1": [
+            0.0,
+            1,
+            0.0
+        ]
+    },
+    "limiterControl": {
+        "useLimiter": true,
+        "usePPRecLimiter": true,
+        "nPartialLimiterStart": 1000000,
+        "nPartialLimiterStartInternal": 1000000
+    },
+    "linearSolverControl": {
+        "jacobiCode": 1,
+        "sgsIter": 4,
+        "gmresCode": 0,
+        "nGmresIter": 1,
+        "nGmresSpace": 10,
+        "nSgsConsoleCheck": 100,
+        "sourceTauSplitting": 0,
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 2,
+            "orderingCode": 4
+        }
+    },
+    "implicitReconstructionControl": {
+        "nInternalRecStep": 1,
+        "recLinearScheme": 0
+    },
+    "vfvSettings": {
+        "maxOrder": 1,
+        "intOrder": 1,
+        "jacobiRelax": 1.0,
+        "SORInstead": true,
+        "smoothThreshold": 0.001,
+        "WBAP_nStd": 10.0,
+        "subs2ndOrder": 1
+    },
+    "eulerSettings": {
+        "pointImplicitSourceUpdateOut": 1,
+        "reactiveSourceScale": 1,
+        "ignoreSourceTerm": false,
+        "useScalarJacobian": false,
+        "riemannSolverType": "Roe_M8",
+        "rsMeanValueEig": 1,
+        "uRecAlphaCompressPower": 1.0,
+        "uRecBetaCompressPower": 1.0,
+        "ppEpsIsRelaxed": false,
+        "ransModel": "RANS_None",
+        "reactiveFlow": {
+            "enabled": true,
+            "mechanismFile": "../cases/eulerEX/h2o2.yaml"
+        },
+        "farFieldStaticValue": {
+            "type": "primTP_phy",
+            "state": [
+                300.0,
+                0.0,
+                0.0,
+                0.0,
+                101325.0,
+                0.111111,
+                0.0,
+                0.0,
+                0.888889,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+            ]
+        },
+        "exprtkInitializers": [
+            {
+                "exprs": [
+                    "inRegion := 1;",
+                    "var s := 0.5 * (1.0 - tanh(x[0] / 5e-4 - 2));",
+                    "if (s < 1e-4)",
+                    "  s := 0.0;",
+                    "var Ly := 5e-3;",
+                    "var pert_y := cos( 2 * pi * x[1] / Ly);",
+                    "var pert_y_sin := sin( 2 * pi * x[1] / Ly);",
+                    "s *= 0.5 * (pert_y + 1);",
+                    "UExprtk[0] := 300.0 + s * (3500.0 - 300.0);",
+                    "UExprtk[1] := 0.0 * pert_y * s;",
+                    "UExprtk[2] := 40.0 * pert_y_sin * s;",
+                    "UExprtk[3] := 0.0;",
+                    "UExprtk[4] := 101325.0 + s * (2026500.0 - 101325.0);",
+                    "UExprtk[5] := 0.111111 + s * (0.030766 - 0.111111);",
+                    "UExprtk[6] := s * 0.013038;",
+                    "UExprtk[7] := s * 0.102539;",
+                    "UExprtk[8] := 0.888889 + s * (0.136756 - 0.888889);",
+                    "UExprtk[9] := s * 0.229289;",
+                    "UExprtk[10] := s * 0.486934;",
+                    "UExprtk[11] := s * 0.000626;",
+                    "UExprtk[12] := s * 0.000052;",
+                    "UExprtk[13] := 0.0;",
+                    "0"
+                ],
+                "stateType": "primTP_phy"
+            }
+        ],
+        "constMassForce": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "idealGasProperty": {
+            "gamma": 1.4,
+            "Rgas": 287,
+            "muGas": 1e-200,
+            "prGas": 0.72,
+            "T0": 1.0,
+            "rho0": 1.0,
+            "U0": 379.0,
+            "L0": 1.0
+        }
+    },
+    "bcSettings": [
+        {
+            "type": "BCWallInvis",
+            "name": "FAR_L"
+        },
+        {
+            "type": "BCIn",
+            "name": "FAR_R",
+            "value": {
+                "type": "primTP_phy",
+                "state": [
+                    300.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    101325.0,
+                    0.111111,
+                    0.0,
+                    0.0,
+                    0.888889,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ]
+            }
+        }
+    ]
+}

@@ -5,8 +5,7 @@
  * Tests cover:
  *   - IdealGasThermal: pressure, speed-of-sound, enthalpy from conservative
  *   - Conservative2Primitive / Primitive2Conservative round-trip (2D and 3D)
- *   - PrimitiveGetP0T0: stagnation quantities
- *   - EulerGasRightEigenVector / LeftEigenVector: L*R = I orthogonality (3D)
+ *   - EulerGasRightEigenVector / LeftEigenVector: L*R = I orthogonality
  *   - IdealGas_EulerGas{Right,Left}EigenVector convenience wrappers
  *   - IdealGasUIncrement: velocity/pressure increments from conservative increments
  *   - GasInviscidFlux / GasInviscidFlux_XY: inviscid flux computation
@@ -62,7 +61,7 @@ TEST_CASE("IdealGasThermal: standard quiescent air")
     real vSqr = 0.0;
 
     real p, asqr, H;
-    IdealGasThermal(E, rho, vSqr, g_gamma, p, asqr, H);
+    IdealGasThermal(E, rho, vSqr, g_gamma, g_gamma, p, asqr, H);
 
     CHECK(p == doctest::Approx(p_expected).epsilon(1e-14));
     CHECK(asqr == doctest::Approx(1.0).epsilon(1e-14));
@@ -76,12 +75,40 @@ TEST_CASE("IdealGasThermal: Mach 2 flow")
     real E = p_expected / (g_gamma - 1.0) + rho * 0.5 * vSqr;
 
     real p, asqr, H;
-    IdealGasThermal(E, rho, vSqr, g_gamma, p, asqr, H);
+    IdealGasThermal(E, rho, vSqr, g_gamma, g_gamma, p, asqr, H);
 
     CHECK(p == doctest::Approx(p_expected).epsilon(1e-14));
     CHECK(asqr == doctest::Approx(g_gamma * p_expected / rho).epsilon(1e-14));
     real H_expected = (E + p_expected) / rho;
     CHECK(H == doctest::Approx(H_expected).epsilon(1e-14));
+}
+
+TEST_CASE("IdealGasThermal: gammaEq controls pressure and gamma controls acoustic speed")
+{
+    real rho = 2.0;
+    real pExpected = 11.0;
+    real gammaEq = 1.25;
+    real gammaCpCv = 1.40;
+    real vSqr = 9.0;
+    real E = pExpected / (gammaEq - 1.0) + 0.5 * rho * vSqr;
+
+    real p, asqr, H;
+    IdealGasThermal(E, rho, vSqr, gammaEq, gammaCpCv, p, asqr, H);
+
+    CHECK(p == doctest::Approx(pExpected).epsilon(1e-14));
+    CHECK(asqr == doctest::Approx(gammaCpCv * pExpected / rho).epsilon(1e-14));
+    CHECK(std::abs(asqr - gammaEq * pExpected / rho) > 1e-8);
+}
+
+TEST_CASE("Shared enthalpy helper does not double-count base energy")
+{
+    real rho = 2.0;
+    real p = 5.0;
+    real rhoEBase = 7.0;
+    real sensibleRhoE = 23.0;
+    real totalRhoE = sensibleRhoE + rhoEBase;
+
+    CHECK(DNDS::IdealGas::Enthalpy(totalRhoE, rho, p, rhoEBase) == doctest::Approx((totalRhoE + p) / rho).epsilon(1e-14));
 }
 
 // ===================================================================
@@ -120,6 +147,26 @@ TEST_CASE("Cons2Prim and Prim2Cons round-trip: 2D")
     }
 }
 
+TEST_CASE("Cons2Prim and Prim2Cons round-trip preserves base-energy offset")
+{
+    Eigen::Vector<real, 5> prim0;
+    prim0 << 1.7, 12.0, -4.0, 3.0, 9.5;
+    real gammaEq = 1.23;
+    real rhoEBase = 31.0;
+
+    Eigen::Vector<real, 5> U, prim1;
+    IdealGasThermalPrimitive2Conservative<3>(prim0, U, gammaEq, rhoEBase);
+    IdealGasThermalConservative2Primitive<3>(U, prim1, gammaEq, rhoEBase);
+
+    real vSqr = prim0.segment<3>(1).squaredNorm();
+    CHECK(U(4) == doctest::Approx(prim0(4) / (gammaEq - 1.0) + 0.5 * prim0(0) * vSqr + rhoEBase).epsilon(1e-14));
+    for (int i = 0; i < 5; i++)
+    {
+        CAPTURE(i);
+        CHECK(prim1(i) == doctest::Approx(prim0(i)).epsilon(1e-12));
+    }
+}
+
 TEST_CASE("Prim2Cons: known state verification")
 {
     // rho=2, u=3, v=0, w=0, p=10, gamma=1.4
@@ -129,42 +176,11 @@ TEST_CASE("Prim2Cons: known state verification")
     Eigen::Vector<real, 5> U;
     IdealGasThermalPrimitive2Conservative<3>(prim, U, g_gamma);
 
-    CHECK(U(0) == doctest::Approx(2.0));       // rho
-    CHECK(U(1) == doctest::Approx(6.0));       // rho*u
-    CHECK(U(2) == doctest::Approx(0.0));       // rho*v
-    CHECK(U(3) == doctest::Approx(0.0));       // rho*w
-    CHECK(U(4) == doctest::Approx(34.0));      // rho*E
-}
-
-// ===================================================================
-// PrimitiveGetP0T0: stagnation quantities
-// ===================================================================
-
-TEST_CASE("PrimitiveGetP0T0: quiescent gas")
-{
-    // At rest: p0 = p, T0 = T
-    Eigen::Vector<real, 5> prim;
-    prim << 1.0, 0.0, 0.0, 0.0, 100000.0;
-    real Rgas = 287.0;
-
-    auto [p0, T0] = IdealGasThermalPrimitiveGetP0T0<3>(prim, g_gamma, Rgas);
-    real T = prim(4) / (prim(0) * Rgas);
-
-    CHECK(p0 == doctest::Approx(100000.0).epsilon(1e-10));
-    CHECK(T0 == doctest::Approx(T).epsilon(1e-10));
-}
-
-TEST_CASE("PrimitiveGetP0T0: p0 > p for moving gas")
-{
-    Eigen::Vector<real, 5> prim;
-    prim << 1.225, 300.0, 0.0, 0.0, 101325.0;
-    real Rgas = 287.0;
-
-    auto [p0, T0] = IdealGasThermalPrimitiveGetP0T0<3>(prim, g_gamma, Rgas);
-    real T = prim(4) / (prim(0) * Rgas);
-
-    CHECK(p0 > prim(4));
-    CHECK(T0 > T);
+    CHECK(U(0) == doctest::Approx(2.0));  // rho
+    CHECK(U(1) == doctest::Approx(6.0));  // rho*u
+    CHECK(U(2) == doctest::Approx(0.0));  // rho*v
+    CHECK(U(3) == doctest::Approx(0.0));  // rho*w
+    CHECK(U(4) == doctest::Approx(34.0)); // rho*E
 }
 
 // ===================================================================
@@ -225,11 +241,51 @@ TEST_CASE("IdealGas convenience eigenvector wrappers produce L*R=I")
 {
     auto U = primToCons3D(1.225, 100.0, -50.0, 25.0, 101325.0);
 
-    auto R = IdealGas_EulerGasRightEigenVector<3>(U, g_gamma);
-    auto L = IdealGas_EulerGasLeftEigenVector<3>(U, g_gamma);
+    auto R = IdealGas_EulerGasRightEigenVector<3>(U, g_gamma, g_gamma);
+    auto L = IdealGas_EulerGasLeftEigenVector<3>(U, g_gamma, g_gamma);
 
     auto LR = L * R;
     real maxErr = (LR - Eigen::Matrix<real, 5, 5>::Identity()).cwiseAbs().maxCoeff();
+    CHECK(maxErr < 1e-10);
+}
+
+TEST_CASE("EulerGas left eigenvector inverse uses H/a consistency for split gamma")
+{
+    Eigen::Vector3d velo(30.0, -12.0, 7.0);
+    real Vsqr = velo.squaredNorm();
+    real rho = 1.4;
+    real p = 80000.0;
+    real gammaEq = 1.25;
+    real gammaCpCv = 1.37;
+    real E = p / (gammaEq - 1.0) + 0.5 * rho * Vsqr;
+    real H = (E + p) / rho;
+    real a = std::sqrt(gammaCpCv * p / rho);
+
+    Eigen::Matrix<real, 5, 5> R, L;
+    EulerGasRightEigenVector<3>(velo, Vsqr, H, a, R);
+    EulerGasLeftEigenVector<3>(velo, Vsqr, H, a, gammaCpCv, L);
+
+    real maxErr = (L * R - Eigen::Matrix<real, 5, 5>::Identity()).cwiseAbs().maxCoeff();
+    CHECK(maxErr < 1e-10);
+}
+
+TEST_CASE("EulerGas eigenvectors: L*R = I for 2D split gamma")
+{
+    Eigen::Vector2d velo(42.0, -13.0);
+    real Vsqr = velo.squaredNorm();
+    real rho = 0.9;
+    real p = 17.0;
+    real gammaEq = 1.21;
+    real gammaCpCv = 1.36;
+    real E = p / (gammaEq - 1.0) + 0.5 * rho * Vsqr;
+    real H = (E + p) / rho;
+    real a = std::sqrt(gammaCpCv * p / rho);
+
+    Eigen::Matrix<real, 4, 4> R, L;
+    EulerGasRightEigenVector<2>(velo, Vsqr, H, a, R);
+    EulerGasLeftEigenVector<2>(velo, Vsqr, H, a, gammaCpCv, L);
+
+    real maxErr = (L * R - Eigen::Matrix<real, 4, 4>::Identity()).cwiseAbs().maxCoeff();
     CHECK(maxErr < 1e-10);
 }
 
@@ -248,7 +304,7 @@ TEST_CASE("GasInviscidFlux: x-direction, quiescent gas")
     GasInviscidFlux<3>(U, velo, vg, p, F);
 
     CHECK(F(0) == doctest::Approx(0.0).epsilon(1e-14));
-    CHECK(F(1) == doctest::Approx(p).epsilon(1e-14));   // momentum flux = p
+    CHECK(F(1) == doctest::Approx(p).epsilon(1e-14)); // momentum flux = p
     CHECK(F(2) == doctest::Approx(0.0).epsilon(1e-14));
     CHECK(F(3) == doctest::Approx(0.0).epsilon(1e-14));
     CHECK(F(4) == doctest::Approx(0.0).epsilon(1e-14));
@@ -284,7 +340,7 @@ TEST_CASE("GasInviscidFlux_XY: n=(1,0,0) equals GasInviscidFlux")
     real p_val;
     {
         real asqr, H;
-        IdealGasThermal(U(4), U(0), velo.squaredNorm(), g_gamma, p_val, asqr, H);
+        IdealGasThermal(U(4), U(0), velo.squaredNorm(), g_gamma, g_gamma, p_val, asqr, H);
     }
 
     Eigen::Vector<real, 5> Fx, Fn;
@@ -330,8 +386,8 @@ TEST_CASE("IdealGasUIncrement: finite-difference verification")
 
     Eigen::Vector<real, 5> prim1;
     prim1 << prim0(0) + 0.01 * eps, prim0(1) + 0.5 * eps,
-             prim0(2) - 0.3 * eps, prim0(3) + 0.1 * eps,
-             prim0(4) + 100.0 * eps;
+        prim0(2) - 0.3 * eps, prim0(3) + 0.1 * eps,
+        prim0(4) + 100.0 * eps;
     Eigen::Vector<real, 5> U1;
     IdealGasThermalPrimitive2Conservative<3>(prim1, U1, g_gamma);
 
@@ -351,6 +407,24 @@ TEST_CASE("IdealGasUIncrement: finite-difference verification")
     CHECK(dp == doctest::Approx(dpExpected).epsilon(1e-3));
 }
 
+TEST_CASE("IdealGasUIncrement: base-energy increment reduces pressure increment")
+{
+    auto U = primToCons3D(1.2, 8.0, -3.0, 2.0, 19.0);
+    Eigen::Vector<real, 5> dU = Eigen::Vector<real, 5>::Zero();
+    dU(4) = 7.0;
+    Eigen::Vector3d velo = U.segment<3>(1) / U(0);
+    Eigen::Vector3d dVeloNoForm, dVeloForm;
+    real dpNoForm, dpForm;
+    real gammaEq = 1.25;
+    real dRhoHForm = 5.0;
+
+    IdealGasUIncrement<3>(U, dU, velo, gammaEq, dVeloNoForm, dpNoForm);
+    IdealGasUIncrement<3>(U, dU, velo, gammaEq, dVeloForm, dpForm, dRhoHForm);
+
+    CHECK((dVeloForm - dVeloNoForm).norm() == doctest::Approx(0.0).epsilon(1e-14));
+    CHECK(dpForm == doctest::Approx(dpNoForm - (gammaEq - 1.0) * dRhoHForm).epsilon(1e-14));
+}
+
 // ===================================================================
 // GetRoeAverage
 // ===================================================================
@@ -363,11 +437,11 @@ TEST_CASE("GetRoeAverage: identical states give same state")
     real vsqrRoe, aRoe, asqrRoe, HRoe;
     Eigen::Vector<real, 5> URoe;
 
-    GetRoeAverage<3>(U, U, g_gamma, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe, URoe);
+    GetRoeAverage<3>(U, U, g_gamma, g_gamma, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe, URoe);
 
     Eigen::Vector3d velo = U.segment<3>(1) / U(0);
     real p_val, asqr_val, H_val;
-    IdealGasThermal(U(4), U(0), velo.squaredNorm(), g_gamma, p_val, asqr_val, H_val);
+    IdealGasThermal(U(4), U(0), velo.squaredNorm(), g_gamma, g_gamma, p_val, asqr_val, H_val);
 
     for (int i = 0; i < 3; i++)
     {
@@ -376,6 +450,27 @@ TEST_CASE("GetRoeAverage: identical states give same state")
     }
     CHECK(HRoe == doctest::Approx(H_val).epsilon(1e-10));
     CHECK(aRoe == doctest::Approx(std::sqrt(asqr_val)).epsilon(1e-10));
+}
+
+TEST_CASE("GetRoeAverage: split gamma keeps pressure closure separate from acoustic gamma")
+{
+    real rho = 1.7;
+    real p = 90000.0;
+    real gammaEq = 1.25;
+    real gammaCpCv = 1.37;
+    Eigen::Vector<real, 5> prim;
+    prim << rho, 20.0, -10.0, 5.0, p;
+    Eigen::Vector<real, 5> U;
+    IdealGasThermalPrimitive2Conservative<3>(prim, U, gammaEq);
+
+    Eigen::Vector3d veloRoe;
+    real vsqrRoe, aRoe, asqrRoe, HRoe;
+    Eigen::Vector<real, 5> URoe;
+
+    GetRoeAverage<3>(U, U, gammaEq, gammaCpCv, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe, URoe);
+
+    CHECK(asqrRoe == doctest::Approx(gammaCpCv * p / rho).epsilon(1e-12));
+    CHECK(std::abs(asqrRoe - gammaEq * p / rho) > 1e-8);
 }
 
 TEST_CASE("GetRoeAverage: density is geometric mean")
@@ -387,10 +482,32 @@ TEST_CASE("GetRoeAverage: density is geometric mean")
     real vsqrRoe, aRoe, asqrRoe, HRoe;
     Eigen::Vector<real, 5> URoe;
 
-    GetRoeAverage<3>(UL, UR, g_gamma, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe, URoe);
+    GetRoeAverage<3>(UL, UR, g_gamma, g_gamma, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe, URoe);
 
     // Roe-averaged rho = sqrt(rhoL * rhoR) = sqrt(1*4) = 2
     CHECK(URoe(0) == doctest::Approx(2.0).epsilon(1e-10));
+}
+
+TEST_CASE("RoeFluxIncFDiff: entropy wave strength preserves split-gamma identity")
+{
+    Eigen::Vector<real, 5> incU = Eigen::Vector<real, 5>::Zero();
+    incU(4) = 10.0;
+    Eigen::Vector3d n(1.0, 0.0, 0.0);
+    Eigen::Vector3d veloRoe = Eigen::Vector3d::Zero();
+    real gammaEqRoe = 1.25;
+    real gammaCpCvRoe = 1.40;
+    real pOverRho = 8.0;
+    real asqrRoe = gammaCpCvRoe * pOverRho;
+    real aRoe = std::sqrt(asqrRoe);
+    real HRoe = pOverRho * gammaEqRoe / (gammaEqRoe - 1.0);
+    Eigen::Vector<real, 5> incF = Eigen::Vector<real, 5>::Zero();
+
+    RoeFluxIncFDiff<3>(incU, n, veloRoe, 0.0, aRoe, asqrRoe, HRoe,
+                       0.0, 1.0, 0.0, gammaEqRoe, incF);
+
+    real alphaEntropyExpected = -incU(4) / HRoe;
+    CHECK(incF(0) == doctest::Approx(alphaEntropyExpected).epsilon(1e-14));
+    CHECK(std::abs(incF(0) + (gammaEqRoe - 1.0) / asqrRoe * incU(4)) > 1e-8);
 }
 
 // ===================================================================
@@ -403,8 +520,7 @@ TEST_CASE("GradientCons2Prim: zero gradient produces zero")
     Eigen::Matrix<real, 3, 5> GradU = Eigen::Matrix<real, 3, 5>::Zero();
     Eigen::Matrix<real, 3, 5> GradPrim;
 
-    GradientCons2Prim_IdealGas<3>(U, GradU, GradPrim, g_gamma);
-
+    GradientCons2Prim_IdealGas<3>(U, GradU, GradPrim, g_gamma, Eigen::Vector<real, 0>{});
     CHECK(GradPrim.cwiseAbs().maxCoeff() < 1e-12);
 }
 
@@ -428,7 +544,7 @@ TEST_CASE("GradientCons2Prim: finite-difference verification")
     GradU.row(0) = (U1 - U0).transpose() / dx;
 
     Eigen::Matrix<real, 3, 5> GradPrim;
-    GradientCons2Prim_IdealGas<3>(U0, GradU, GradPrim, g_gamma);
+    GradientCons2Prim_IdealGas<3>(U0, GradU, GradPrim, g_gamma, Eigen::Vector<real, 0>{});
 
     // Expected primitive gradient
     Eigen::RowVector<real, 5> dPrimdx_expected = (prim1 - prim0).transpose() / dx;
@@ -438,6 +554,58 @@ TEST_CASE("GradientCons2Prim: finite-difference verification")
         CAPTURE(j);
         CHECK(GradPrim(0, j) == doctest::Approx(dPrimdx_expected(j)).epsilon(1e-4));
     }
+}
+
+TEST_CASE("GradientCons2Prim: species base-energy gradient corrects pressure gradient")
+{
+    constexpr int nVars = 7;
+    real gammaEq = 1.28;
+    Eigen::Vector3d eBaseSpecies(2.0, -1.0, 4.0);
+
+    auto rhoEBase = [&](const Eigen::Vector<real, nVars> &U) -> real
+    {
+        return eBaseSpecies(2) * U(0) + (eBaseSpecies(0) - eBaseSpecies(2)) * U(5) + (eBaseSpecies(1) - eBaseSpecies(2)) * U(6);
+    };
+    auto primToCons = [&](const Eigen::Vector<real, nVars> &prim) -> Eigen::Vector<real, nVars>
+    {
+        Eigen::Vector<real, nVars> U;
+        U(0) = prim(0);
+        U.segment<3>(1) = prim(0) * prim.segment<3>(1);
+        U(5) = prim(0) * prim(5);
+        U(6) = prim(0) * prim(6);
+        real vSqr = prim.segment<3>(1).squaredNorm();
+        U(4) = prim(4) / (gammaEq - 1.0) + 0.5 * prim(0) * vSqr + rhoEBase(U);
+        return U;
+    };
+
+    Eigen::Vector<real, nVars> prim0;
+    prim0 << 1.3, 7.0, -2.0, 1.0, 11.0, 0.2, 0.3;
+    Eigen::Vector<real, nVars> prim1 = prim0;
+    real dx = 1e-7;
+    prim1(0) += 0.4 * dx;
+    prim1(1) -= 0.2 * dx;
+    prim1(2) += 0.5 * dx;
+    prim1(3) += 0.1 * dx;
+    prim1(4) += 3.0 * dx;
+    prim1(5) += 0.07 * dx;
+    prim1(6) -= 0.04 * dx;
+
+    Eigen::Vector<real, nVars> U0 = primToCons(prim0);
+    Eigen::Vector<real, nVars> U1 = primToCons(prim1);
+    Eigen::Matrix<real, 3, nVars> GradU = Eigen::Matrix<real, 3, nVars>::Zero();
+    GradU.row(0) = (U1 - U0).transpose() / dx;
+
+    Eigen::Matrix<real, 3, nVars> GradPrimCorrected, GradPrimRaw;
+    GradientCons2Prim_IdealGas<3>(U0, GradU, GradPrimCorrected, gammaEq, eBaseSpecies);
+    GradientCons2Prim_IdealGas<3>(U0, GradU, GradPrimRaw, gammaEq, Eigen::Vector<real, 0>{});
+
+    Eigen::RowVector<real, nVars> dPrimExpected = (prim1 - prim0).transpose() / dx;
+    for (int j = 0; j < nVars; j++)
+    {
+        CAPTURE(j);
+        CHECK(GradPrimCorrected(0, j) == doctest::Approx(dPrimExpected(j)).epsilon(1e-5));
+    }
+    CHECK(std::abs(GradPrimRaw(0, 4) - GradPrimCorrected(0, 4)) > 1e-3);
 }
 
 // ===================================================================
@@ -451,7 +619,7 @@ TEST_CASE("CompressionRatio: zero increment gives alpha=0 (no compression needed
     auto U = primToCons3D(1.225, 100.0, -50.0, 25.0, 101325.0);
     Eigen::Vector<real, 5> dU = Eigen::Vector<real, 5>::Zero();
 
-    real alpha = IdealGasGetCompressionRatioPressure<3, 0, 5>(U, dU, 0.0);
+    real alpha = IdealGasGetCompressionRatioPressure<3, 0, 5>(U, dU, 0.0, 0, 0);
     CHECK(alpha == doctest::Approx(0.0).epsilon(1e-14));
 }
 
@@ -462,7 +630,7 @@ TEST_CASE("CompressionRatio: alpha in [0,1]")
     Eigen::Vector<real, 5> dU;
     dU << 0, 0, 0, 0, -100.0; // massive energy reduction
 
-    real alpha = IdealGasGetCompressionRatioPressure<3, 0, 5>(U, dU, 0.0);
+    real alpha = IdealGasGetCompressionRatioPressure<3, 0, 5>(U, dU, 0.0, 0, 0);
     CHECK(alpha >= 0.0);
     CHECK(alpha <= 1.0);
     // With alpha, the state should maintain non-negative internal energy
@@ -484,7 +652,7 @@ TEST_CASE("ViscousFlux: zero gradient produces zero flux")
     real mu = 1.8e-5, k = 0.025, Cp = 1005.0;
 
     Eigen::Vector<real, 5> Flux;
-    ViscousFlux_IdealGas<3>(U, GradPrim, norm, false, g_gamma, mu, 0.0, false, k, Cp, Flux);
+    ViscousFlux_IdealGas<3>(U, GradPrim, norm, false, g_gamma, g_gamma, mu, 0.0, false, k, Cp, Flux);
 
     for (int i = 0; i < 5; i++)
     {

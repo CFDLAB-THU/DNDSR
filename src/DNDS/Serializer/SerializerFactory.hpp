@@ -8,6 +8,7 @@
 #include "SerializerH5.hpp"
 #include "JsonUtil.hpp"
 #include "DNDS/Config/ConfigParam.hpp"
+#include "DNDS/OutputDir.hpp"
 
 #include <utility>
 
@@ -23,10 +24,10 @@ namespace DNDS::Serializer
     struct SerializerFactory
     {
         /// @brief Backend selector: `"JSON"` or `"H5"`.
-        std::string type = "JSON";
+        std::string type = "H5";
         /// @brief HDF5 gzip deflate level (0 = off, 9 = max).
         int hdfDeflateLevel = 0;
-        /// @brief HDF5 chunk size (0 = library-chosen auto).
+        /// @brief HDF5 chunk size
         int hdfChunkSize = 0;
         /// @brief Use collective HDF5 I/O for data arrays.
         bool hdfCollOnData = false;
@@ -48,7 +49,7 @@ namespace DNDS::Serializer
                        DNDS::Config::enum_values({"JSON", "H5"}));
             DNDS_FIELD(hdfDeflateLevel,         "HDF5 deflate compression level",
                        DNDS::Config::range(0, 9));
-            DNDS_FIELD(hdfChunkSize,            "HDF5 chunk size (0=auto)",
+            DNDS_FIELD(hdfChunkSize,            "HDF5 chunk size",
                        DNDS::Config::range(0));
             DNDS_FIELD(hdfCollOnData,           "HDF5 collective I/O on data arrays");
             DNDS_FIELD(hdfCollOnMeta,           "HDF5 collective I/O on metadata");
@@ -100,7 +101,7 @@ namespace DNDS::Serializer
                 std::filesystem::path outPath;
                 outPath = {fname + ".dir"};
                 if (!read)
-                    std::filesystem::create_directories(outPath);
+                    DNDS::createOutputDirAsDir(outPath, mpi, OutputDirMode::Fast);
                 std::array<char, 512> BUF{};
                 std::sprintf(BUF.data(), rank_part_fmt.c_str(), mpi.rank);
                 fname = getStringForcePath(outPath / (std::string(BUF.data()) + ".json"));
@@ -112,7 +113,7 @@ namespace DNDS::Serializer
                 fname += ".dnds.h5";
                 std::filesystem::path outPath = fname;
                 if (!read)
-                    std::filesystem::create_directories(outPath.parent_path() / ".");
+                    DNDS::createOutputDir(outPath, mpi, OutputDirMode::Fast);
                 return std::make_tuple(fname, fname);
             }
             else

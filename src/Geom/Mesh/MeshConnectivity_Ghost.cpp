@@ -341,7 +341,11 @@ namespace DNDS::Geom
             }
 
             for (auto entry : adj[localIdx])
+            {
+                if (entry == UnInitIndex)
+                    continue;
                 seen.insert(entry);
+            }
         }
 
         // Convert to sorted vector.
@@ -564,6 +568,8 @@ namespace DNDS::Geom
         }
 
         // --- Collective: determine which EntityKinds have ghosts on ANY rank ---
+        static_assert(static_cast<int>(EntityKind::NUM_KINDS) <= 32,
+                      "Ghost bitmask uses int (32 bits); NUM_KINDS must fit");
         int localMask = 0;
         for (auto &[kind, indices] : result.ghostIndices)
             localMask |= (1 << static_cast<int>(kind));

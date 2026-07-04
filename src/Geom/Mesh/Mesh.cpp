@@ -313,7 +313,7 @@ namespace DNDS::Geom
         }
         int hasBadAll = 0;
         MPI::Allreduce(&hasBad, &hasBadAll, 1, MPI_INT, MPI_SUM, mpi.comm);
-        return hasBad == 0;
+        return hasBadAll == 0;
     }
 
     bool UnstructuredMesh::IsO2()
@@ -341,7 +341,7 @@ namespace DNDS::Geom
         }
         int hasBadAll = 0;
         MPI::Allreduce(&hasBad, &hasBadAll, 1, MPI_INT, MPI_SUM, mpi.comm);
-        return hasBad == 0;
+        return hasBadAll == 0;
     }
 
     void UnstructuredMesh::SetPeriodicGeometry(
@@ -1046,7 +1046,7 @@ namespace DNDS::Geom
             for (rowsize ic2f = 0; ic2f < cell2face[iCell].size(); ic2f++)
             {
                 index iFace = cell2face[iCell][ic2f];
-                index iCellOther = this->CellFaceOther(iCell, iFace);
+                index iCellOther = this->CellFaceOther(iCell, iFace, ic2f);
                 DNDS_assert(iCellOther < this->NumCellProc());
                 cell2cellFace[iCell][ic2f] = this->CellIndexLocal2Global(iCellOther);
             }
@@ -1102,7 +1102,10 @@ namespace DNDS::Geom
         face2cell.InitPair("face2cell", mpi);
         face2node.InitPair("face2node", mpi);
         if (isPeriodic)
+        {
+            cell2facePbi.InitPair("cell2facePbi", mpi);
             face2nodePbi.InitPair("face2nodePbi", mpi);
+        }
         faceElemInfo.InitPair("faceElemInfo", mpi);
         face2bnd.InitPair("face2bnd", mpi);
         bnd2face.InitPair("bnd2face", mpi);
@@ -1242,6 +1245,9 @@ namespace DNDS::Geom
         faceElemInfo.father = globalResult.entityElemInfo.father;
         if (isPeriodic)
             face2nodePbi.father = globalResult.entity2nodePbi.father;
+        cell2facePbi.father = globalResult.parent2entityPbi.father;
+        if (isPeriodic)
+            cell2facePbi.father->Compress();
 
         // Populate cell2face from parent2entity (global face IDs).
         for (index iCell = 0; iCell < nCellAll; iCell++)
@@ -1366,12 +1372,25 @@ namespace DNDS::Geom
         cell2face.trans.BorrowGGIndexing(cell2node.trans);
         cell2face.trans.createMPITypes();
         cell2face.trans.pullOnce();
+        if (isPeriodic && cell2facePbi.father)
+        { // cell2facePbi — cell-indexed PBI, borrows from cell2node (same as cell2face)
+            cell2facePbi.TransAttach();
+            cell2facePbi.trans.BorrowGGIndexing(cell2node.trans);
+            cell2facePbi.trans.createMPITypes();
+            cell2facePbi.trans.pullOnce();
+        }
         bnd2face.TransAttach();
         bnd2face.trans.BorrowGGIndexing(bnd2node.trans);
         bnd2face.trans.createMPITypes();
         bnd2face.trans.pullOnce();
 
-        this->AdjGlobal2LocalC2F();
+        this->AdjGlobal2LocalC2F(); // NOTE: ghost-cell cell2face rows can contain
+                                    // negative encoded face IDs for faces whose
+                                    // ghost mapping is not available locally.
+                                    // Consumers MUST iterate over NumCell() (father-only)
+                                    // when dereferencing cell2face entries, or handle
+                                    // negative encodings explicitly.  See
+                                    // AdjIndexInfo::toLocal() for encoding details.
     }
 
     void UnstructuredMesh::
@@ -1423,6 +1442,287 @@ namespace DNDS::Geom
             }
             DNDS_assert(cCont[iCell] == cell2face.RowSize(iCell));
         }
+    }
+
+    void UnstructuredMesh::
+        InterpolateEdge()
+    {
+        DNDS_assert(dim == 3);
+        DNDS_assert(adjPrimaryState == Adj_PointToLocal);
+        DNDS_assert(cell2node.isLocal() && cell2cell.isLocal() && bnd2node.isLocal());
+        DNDS_assert(adjFacialState != Adj_Unknown && face2node.isBuilt());
+        DNDS_assert(adjC2FState != Adj_Unknown && cell2face.isBuilt());
+
+        cell2edge.InitPair("cell2edge", mpi);
+        edge2cell.InitPair("edge2cell", mpi);
+        edge2node.InitPair("edge2node", mpi);
+        if (isPeriodic)
+        {
+            cell2edgePbi.InitPair("cell2edgePbi", mpi);
+            edge2nodePbi.InitPair("edge2nodePbi", mpi);
+        }
+        edgeElemInfo.InitPair("edgeElemInfo", mpi);
+
+        cell2edge.father->Resize(cell2cell.father->Size());
+        cell2edge.son->Resize(cell2cell.son->Size());
+
+        index nCellAll = cell2cell.Size();
+        index nNodeAll = coords.Size();
+        index nLocalCells = cell2cell.father->Size();
+
+        SubEntityQueryPbi edgeQuery;
+        edgeQuery.numSubEntities = [this](index iParent) -> int
+        {
+            return Elem::Element{cellElemInfo[iParent]->getElemType()}.GetNumEdges();
+        };
+        edgeQuery.describe = [this](index iParent, int iSub) -> SubEntityDesc
+        {
+            auto eParent = Elem::Element{cellElemInfo[iParent]->getElemType()};
+            auto eEdge = eParent.ObtainEdge(iSub);
+            return SubEntityDesc{eEdge.GetNumVertices(), eEdge.GetNumNodes(),
+                                 static_cast<t_index>(eEdge.type)};
+        };
+        edgeQuery.extractNodes = [this](index iParent, int iSub,
+                                        const std::function<index(int)> &parentNodes,
+                                        index *out)
+        {
+            auto eParent = Elem::Element{cellElemInfo[iParent]->getElemType()};
+            auto eEdge = eParent.ObtainEdge(iSub);
+            std::vector<index> pNodes(eParent.GetNumNodes());
+            for (int i = 0; i < eParent.GetNumNodes(); i++)
+                pNodes[i] = parentNodes(i);
+            std::vector<index> eNodes(eEdge.GetNumNodes());
+            eParent.ExtractEdgeNodes(iSub, pNodes, eNodes);
+            for (int i = 0; i < eEdge.GetNumNodes(); i++)
+                out[i] = eNodes[i];
+        };
+        if (isPeriodic)
+        {
+            edgeQuery.matchExtra = [this](index iParent, int iSub,
+                                          index /*iCandEntity*/,
+                                          index candidateParent, int candidateSub) -> bool
+            {
+                auto eParentA = Elem::Element{cellElemInfo[iParent]->getElemType()};
+                auto eEdgeA = eParentA.ObtainEdge(iSub);
+                int nEdgeNodes = eEdgeA.GetNumNodes();
+                std::vector<index> nodesA(nEdgeNodes);
+                eParentA.ExtractEdgeNodes(iSub, cell2node[iParent], nodesA);
+                std::vector<NodePeriodicBits> pbiA(nEdgeNodes);
+                eParentA.ExtractEdgeNodes(iSub, cell2nodePbi[iParent], pbiA);
+                auto eParentB = Elem::Element{cellElemInfo[candidateParent]->getElemType()};
+                std::vector<index> nodesB(nEdgeNodes);
+                eParentB.ExtractEdgeNodes(candidateSub, cell2node[candidateParent], nodesB);
+                std::vector<NodePeriodicBits> pbiB(nEdgeNodes);
+                eParentB.ExtractEdgeNodes(candidateSub, cell2nodePbi[candidateParent], pbiB);
+                using idx_pbi = std::pair<index, NodePeriodicBits>;
+                auto cmp = [](const idx_pbi &L, const idx_pbi &R)
+                { return L.first == R.first ? uint8_t(L.second) < uint8_t(R.second)
+                                            : L.first < R.first; };
+                std::vector<idx_pbi> pairsA(nEdgeNodes), pairsB(nEdgeNodes);
+                for (int i = 0; i < nEdgeNodes; i++)
+                {
+                    pairsA[i] = {nodesA[i], pbiA[i]};
+                    pairsB[i] = {nodesB[i], pbiB[i]};
+                }
+                std::sort(pairsA.begin(), pairsA.end(), cmp);
+                std::sort(pairsB.begin(), pairsB.end(), cmp);
+                auto v0 = pairsA[0].second ^ pairsB[0].second;
+                for (int i = 1; i < nEdgeNodes; i++)
+                    if ((pairsA[i].second ^ pairsB[i].second) != v0)
+                        return false;
+                return true;
+            };
+            edgeQuery.extractPbi = [this](index iParent, int iSub,
+                                          const std::function<NodePeriodicBits(int)> &parentPbi,
+                                          NodePeriodicBits *out)
+            {
+                auto eParent = Elem::Element{cellElemInfo[iParent]->getElemType()};
+                auto eEdge = eParent.ObtainEdge(iSub);
+                std::vector<NodePeriodicBits> pPbi(eParent.GetNumNodes());
+                for (int i = 0; i < eParent.GetNumNodes(); i++)
+                    pPbi[i] = parentPbi(i);
+                std::vector<NodePeriodicBits> ePbi(eEdge.GetNumNodes());
+                eParent.ExtractEdgeNodes(iSub, pPbi, ePbi);
+                for (int i = 0; i < eEdge.GetNumNodes(); i++)
+                    out[i] = ePbi[i];
+            };
+        }
+
+        OwnershipResolverMulti edgeOwnership =
+            [this](const std::vector<index> &parents,
+                   const std::vector<MPI_int> &parentRanks,
+                   index nLocal) -> OwnershipDecision
+        {
+            MPI_int minRank = parentRanks[0];
+            for (size_t i = 1; i < parentRanks.size(); i++)
+                if (parentRanks[i] < minRank)
+                    minRank = parentRanks[i];
+            bool anyLocal = false;
+            for (auto p : parents)
+                if (p < nLocal)
+                    anyLocal = true;
+            if (!anyLocal)
+                return {false, {}};
+            if (minRank != mpi.rank)
+                return {false, {}};
+            std::vector<MPI_int> peers;
+            for (size_t i = 0; i < parents.size(); i++)
+                if (parents[i] >= nLocal && parentRanks[i] != mpi.rank)
+                    peers.push_back(parentRanks[i]);
+            std::sort(peers.begin(), peers.end());
+            peers.erase(std::unique(peers.begin(), peers.end()), peers.end());
+            return {true, std::move(peers)};
+        };
+
+        auto globalResult = CheckedInterpolateGlobal<NonUniformSize, NonUniformSize>(
+            cell2node, isPeriodic ? cell2nodePbi : tPbiPair{},
+            *cell2node.trans.pLGhostMapping,
+            *cell2node.father->pLGlobalMapping,
+            *coords.trans.pLGhostMapping,
+            edgeQuery, nLocalCells, nCellAll, nNodeAll,
+            edgeOwnership, mpi);
+
+        index nOwnedEdges = globalResult.nOwnedEntities;
+
+        edge2node.father = globalResult.entity2node.father;
+        edge2node.TransAttach();
+        edge2node.trans.createFatherGlobalMapping();
+
+        edge2cell.father = globalResult.entity2parent.father;
+
+        edgeElemInfo.father = globalResult.entityElemInfo.father;
+        if (isPeriodic)
+        {
+            edge2nodePbi.father = globalResult.entity2nodePbi.father;
+            cell2edgePbi.father = globalResult.parent2entityPbi.father;
+            cell2edgePbi.father->Compress();
+        }
+
+        for (index iCell = 0; iCell < nCellAll; iCell++)
+        {
+            rowsize nEdges = globalResult.parent2entity.RowSize(iCell);
+            cell2edge.ResizeRow(iCell, nEdges);
+            for (rowsize j = 0; j < nEdges; j++)
+                cell2edge(iCell, j) = globalResult.parent2entity(iCell, j);
+        }
+        cell2edge.father->Compress();
+        cell2edge.son->Compress();
+
+        auto gSize = edge2node.father->globalSize();
+        if (mpi.rank == 0)
+            log() << "UnstructuredMesh === InterpolateEdge: total edges " << gSize << std::endl;
+
+        BuildGhostEdge();
+        AdjGlobal2LocalEdge();
+    }
+
+    void UnstructuredMesh::
+        BuildGhostEdge()
+    {
+        if (!cell2edge.father->pLGlobalMapping)
+            cell2edge.father->pLGlobalMapping = cell2node.father->pLGlobalMapping;
+
+        edge2cell.TransAttach();
+        edge2cell.trans.createFatherGlobalMapping();
+        edgeElemInfo.TransAttach();
+        edgeElemInfo.trans.createFatherGlobalMapping();
+
+        {
+            MeshConnectivity dag;
+            fillRegistry(dag);
+
+            GhostSpec spec;
+            spec.chains.push_back(
+                {EntityKind::Cell,
+                 {Adj::Cell2Edge},
+                 EntityKind::Edge});
+            auto tree = CompiledGhostTree::compile(spec);
+            GhostResult ghostResult = dag.evaluateGhostTree(tree, mpi);
+
+            std::vector<index> gEdges;
+            if (auto itEdge = ghostResult.ghostIndices.find(EntityKind::Edge);
+                itEdge != ghostResult.ghostIndices.end())
+                gEdges = itEdge->second;
+
+            // All ranks must participate in these pullOnce() calls. A rank may
+            // have no ghost edges, but skipping the empty create/pull sequence
+            // would leave peers blocked in collective MPI exchange.
+            edge2cell.trans.createGhostMapping(gEdges);
+            edge2cell.trans.createMPITypes();
+            edge2cell.trans.pullOnce();
+
+            edge2node.trans.createGhostMapping(gEdges);
+            edge2node.trans.createMPITypes();
+            edge2node.trans.pullOnce();
+
+            edgeElemInfo.trans.createGhostMapping(gEdges);
+            edgeElemInfo.trans.createMPITypes();
+            edgeElemInfo.trans.pullOnce();
+
+            if (isPeriodic)
+            {
+                edge2nodePbi.TransAttach();
+                edge2nodePbi.trans.createFatherGlobalMapping();
+                edge2nodePbi.trans.createGhostMapping(gEdges);
+                edge2nodePbi.trans.createMPITypes();
+                edge2nodePbi.trans.pullOnce();
+            }
+        }
+
+        EnsureGhostMapping(edge2node);
+        EnsureGhostMapping(edge2cell);
+
+        cell2edge.idx.wireTargetMapping(edge2node.trans.pLGhostMapping);
+        edge2node.idx.wireTargetMapping(coords.trans.pLGhostMapping);
+        edge2cell.idx.wireTargetMapping(cell2node.trans.pLGhostMapping);
+
+        cell2edge.idx.markGlobal();
+        edge2node.idx.markGlobal();
+        edge2cell.idx.markGlobal();
+
+        // Ghost communication: pull cell2edge and cell2edgePbi using cell2node
+        // ghost indices. Same convention as cell2face in InterpolateFace.
+        cell2edge.TransAttach();
+        cell2edge.trans.BorrowGGIndexing(cell2node.trans);
+        cell2edge.trans.createMPITypes();
+        cell2edge.trans.pullOnce();
+        if (isPeriodic)
+        {
+            cell2edgePbi.TransAttach();
+            cell2edgePbi.trans.BorrowGGIndexing(cell2node.trans);
+            cell2edgePbi.trans.createMPITypes();
+            cell2edgePbi.trans.pullOnce();
+        }
+
+        adjEdgeState = Adj_PointToGlobal;
+    }
+
+    void UnstructuredMesh::
+        AdjGlobal2LocalEdge()
+    {
+        DNDS_assert(adjEdgeState == Adj_PointToGlobal);
+        DNDS_assert(cell2edge.isGlobal() && edge2node.isGlobal() && edge2cell.isGlobal());
+        DNDS_assert_info(cell2edge.idx.isWired(), "cell2edge target mapping not wired");
+        DNDS_assert_info(edge2node.idx.isWired(), "edge2node target mapping not wired");
+        DNDS_assert_info(edge2cell.idx.isWired(), "edge2cell target mapping not wired");
+        cell2edge.toLocalOMP();
+        edge2node.toLocalOMP();
+        edge2cell.toLocalOMP();
+        adjEdgeState = Adj_PointToLocal;
+    }
+
+    void UnstructuredMesh::
+        AdjLocal2GlobalEdge()
+    {
+        DNDS_assert(adjEdgeState == Adj_PointToLocal);
+        DNDS_assert(cell2edge.isLocal() && edge2node.isLocal() && edge2cell.isLocal());
+        DNDS_assert_info(cell2edge.idx.isWired(), "cell2edge target mapping not wired");
+        DNDS_assert_info(edge2node.idx.isWired(), "edge2node target mapping not wired");
+        DNDS_assert_info(edge2cell.idx.isWired(), "edge2cell target mapping not wired");
+        cell2edge.toGlobalOMP();
+        edge2node.toGlobalOMP();
+        edge2cell.toGlobalOMP();
+        adjEdgeState = Adj_PointToGlobal;
     }
 
     void UnstructuredMesh::
@@ -1590,6 +1890,10 @@ namespace DNDS::Geom
         {
             for (index i = 0; i < node2bndNodeGlobal.Size(); i++)
                 node2bndNodeGlobal[i] = 0;
+            // Boundary-node metadata intentionally includes periodic boundary rows.
+            // Periodic boundary elements are skipped below, but retaining their nodes
+            // keeps parent-node/residual geometry information available for periodic
+            // boundary diagnostics and future boundary-mesh features.
             for (index iBnd = 0; iBnd < this->NumBnd(); iBnd++)
                 for (auto iNode : bnd2node.father->operator[](iBnd))
                     node2bndNodeGlobal[iNode]++; // now stores num-reference
@@ -1682,6 +1986,10 @@ namespace DNDS::Geom
         for (index iB = 0; iB < this->NumBnd(); iB++)
         {
             if (FaceIDIsPeriodic(this->bndElemInfo(iB, 0).zone))
+                // Periodic boundary faces are not emitted as boundary-mesh cells.
+                // Nodes touched only by these rows may remain as intentionally
+                // orphaned residual nodes; consumers must not assume every
+                // boundary-mesh node is referenced by an output cell.
                 continue;
             bMesh.cell2parentCell.at(nBndCellUse) = iB;
             bMesh.cell2node.ResizeRow(nBndCellUse, bnd2node.RowSize(iB));
@@ -1775,6 +2083,10 @@ namespace DNDS::Geom
         tryAdj(Adj::Bnd2Face, bnd2face);
         // C2CFace
         tryAdj(Adj::Cell2CellFace, cell2cellFace);
+        // Edge (3D only)
+        tryAdj(Adj::Cell2Edge, cell2edge);
+        tryAdj(Adj::Edge2Node, edge2node);
+        tryAdj(Adj::Edge2Cell, edge2cell);
 
         // --- Register global mappings ---
         // For each entity kind, find the first adj array whose father
@@ -1807,6 +2119,7 @@ namespace DNDS::Geom
         auto nodeMap = coords.father ? coords.father->pLGlobalMapping : nullptr;
         auto bndMap = firstValid({getGM(bnd2node), getGM(bnd2cell), getGM(bnd2face)});
         auto faceMap = firstValid({getGM(face2node), getGM(face2cell), getGM(face2bnd)});
+        auto edgeMap = firstValid({getGM(edge2node), getGM(edge2cell)});
 
         // Register if found; check_throw if any registered adj needs it
         auto regMap = [&](EntityKind kind, const ssp<GlobalOffsetsMapping> &gm)
@@ -1831,6 +2144,7 @@ namespace DNDS::Geom
         regMap(EntityKind::Node, nodeMap);
         regMap(EntityKind::Bnd, bndMap);
         regMap(EntityKind::Face, faceMap);
+        regMap(EntityKind::Edge, edgeMap);
     }
 
     // =================================================================
@@ -1910,6 +2224,17 @@ namespace DNDS::Geom
                 for (rowsize in2c = 0; in2c < node2cell[iN].size(); in2c++)
                     record_iCellNonLocal(node2cell(iN, in2c));
         }
+        if (this->adjEdgeState != Adj_Unknown && this->cell2edge.isBuilt())
+        {
+            DNDS_assert(this->adjEdgeState == Adj_PointToLocal);
+            DNDS_assert(cell2edge.isLocal() && edge2node.isLocal() && edge2cell.isLocal());
+            this->AdjLocal2GlobalEdge();
+            // record non-local cells referenced by edge2cell for old→new cell mapping
+            index nEdges = edge2node.father->Size();
+            for (index iE = 0; iE < nEdges; iE++)
+                for (rowsize ie2c = 0; ie2c < edge2cell[iE].size(); ie2c++)
+                    record_iCellNonLocal(edge2cell(iE, ie2c));
+        }
         this->AdjLocal2GlobalPrimary();
         // see cell2cell
         for (index iC = 0; iC < this->NumCell(); iC++)
@@ -1952,6 +2277,10 @@ namespace DNDS::Geom
         for (index iBnd = 0; iBnd < this->NumBnd(); iBnd++)
             for (index &iCell : bnd2cell[iBnd])
                 iCell = replaceCellIndexToNew(iCell);
+        if (this->adjEdgeState != Adj_Unknown && this->edge2cell.isBuilt())
+            for (index iE = 0; iE < edge2cell.father->Size(); iE++)
+                for (index &iCell : edge2cell[iE])
+                    iCell = replaceCellIndexToNew(iCell);
 
         // Section D: Pull ghost data for xxx2cell
         if (this->adjFacialState != Adj_Unknown && this->face2cell.isBuilt())
@@ -1960,6 +2289,8 @@ namespace DNDS::Geom
             node2cell.trans.pullOnce();
         cell2cell.trans.pullOnce(); // should be unnecessary
         bnd2cell.trans.pullOnce();
+        if (this->adjEdgeState != Adj_Unknown && this->edge2cell.isBuilt())
+            edge2cell.trans.pullOnce();
 
         // Section E: Permute LHS of cell2xxx arrays
         auto cellOld2NewLocal = [&](index iCell) -> index
@@ -1970,8 +2301,16 @@ namespace DNDS::Geom
         PermuteRows(cell2cellOrig, this->NumCell(), cellOld2NewLocal);
         if (this->adjC2FState != Adj_Unknown && this->cell2face.isBuilt())
             PermuteRows(cell2face, this->NumCell(), cellOld2NewLocal);
+        if (this->adjEdgeState != Adj_Unknown && this->cell2edge.isBuilt())
+            PermuteRows(cell2edge, this->NumCell(), cellOld2NewLocal);
+        if (this->adjC2FState != Adj_Unknown && this->cell2face.isBuilt() && this->isPeriodic)
+            PermuteRows(cell2facePbi, this->NumCell(), cellOld2NewLocal);
+        if (this->isPeriodic && this->adjEdgeState != Adj_Unknown && this->cell2edge.isBuilt())
+            PermuteRows(cell2edgePbi, this->NumCell(), cellOld2NewLocal);
         if (this->isPeriodic)
+        {
             PermuteRows(cell2nodePbi, this->NumCell(), cellOld2NewLocal);
+        }
         PermuteRows(cellElemInfo, this->NumCell(), cellOld2NewLocal);
 
         // Section F: Rebuild ghost mappings with new cell indices
@@ -1999,11 +2338,29 @@ namespace DNDS::Geom
             cell2face.trans.createMPITypes();
             cell2face.trans.pullOnce();
         }
+        if (this->adjEdgeState != Adj_Unknown && this->cell2edge.isBuilt())
+        { // cell2edge — same convention as cell2face
+            cell2edge.trans.BorrowGGIndexing(cell2node.trans);
+            cell2edge.trans.createMPITypes();
+            cell2edge.trans.pullOnce();
+        }
         if (this->isPeriodic)
         { // cell2nodePbi
             cell2nodePbi.trans.BorrowGGIndexing(cell2node.trans);
             cell2nodePbi.trans.createMPITypes();
             cell2nodePbi.trans.pullOnce();
+        }
+        if (this->isPeriodic && this->adjC2FState != Adj_Unknown && this->cell2face.isBuilt())
+        { // cell2facePbi — cell-indexed PBI, borrows from cell2node (same as cell2face)
+            cell2facePbi.trans.BorrowGGIndexing(cell2node.trans);
+            cell2facePbi.trans.createMPITypes();
+            cell2facePbi.trans.pullOnce();
+        }
+        if (this->isPeriodic && this->adjEdgeState != Adj_Unknown && this->cell2edge.isBuilt())
+        { // cell2edgePbi — cell-indexed, borrows from cell2node (same as cell2nodePbi)
+            cell2edgePbi.trans.BorrowGGIndexing(cell2node.trans);
+            cell2edgePbi.trans.createMPITypes();
+            cell2edgePbi.trans.pullOnce();
         }
         { // cellElemInfo
             cellElemInfo.trans.BorrowGGIndexing(cell2node.trans);
@@ -2023,6 +2380,7 @@ namespace DNDS::Geom
             bnd2cell.idx.wireTargetMapping(cellGhostMap);
             node2cell.idx.wireTargetMapping(cellGhostMap);
             face2cell.idx.wireTargetMapping(cellGhostMap);
+            edge2cell.idx.wireTargetMapping(cellGhostMap);
             node2bnd.idx.wireTargetMapping(bndGhostMap);
         }
 
@@ -2038,6 +2396,10 @@ namespace DNDS::Geom
         if (this->adjN2CBState != Adj_Unknown && this->node2cell.isBuilt())
         {
             this->AdjGlobal2LocalN2CB();
+        }
+        if (this->adjEdgeState != Adj_Unknown && this->cell2edge.isBuilt())
+        {
+            this->AdjGlobal2LocalEdge();
         }
         this->AdjGlobal2LocalPrimary();
         if (mpi.rank == mRank)

@@ -97,6 +97,11 @@ namespace DNDS
         m.attr("UnInitIndex") = py::int_(UnInitIndex);
         m.attr("UnInitRowsize") = py::int_(UnInitRowsize);
 
+        m.def("setLogFile", &setLogFile, py::arg("path"),
+              "Redirect log() output to a file while duplicating to stdout.");
+        m.def("setLogStreamCout", &setLogStreamCout,
+              "Restore log() output to stdout only.");
+
 #ifdef DNDS_USE_OMP
         m.def("omp_set_num_threads", [](int n)
               { omp_set_num_threads(n); });

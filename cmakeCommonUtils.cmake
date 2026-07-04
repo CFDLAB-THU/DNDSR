@@ -132,6 +132,11 @@ function(dnds_add_py_module LIBNAME CPPS LINKS PCH_TARGET SHARED FAST USE_EXCLUD
             target_link_options(${LIBNAME} PRIVATE -flto=${DNDS_LTO_N} -fuse-linker-plugin)
         endif()
     endif()
+
+    if(NOT TARGET all_pybind11)
+        add_custom_target(all_pybind11)
+    endif()
+    add_dependencies(all_pybind11 ${LIBNAME})
 endfunction(dnds_add_py_module)
 
 macro(dnds_variable_to_parent_scope V)

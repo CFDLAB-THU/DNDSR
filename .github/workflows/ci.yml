@@ -254,7 +254,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: external/cfd_externals/install
-          key: cfd-ext-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}
+          key: cfd-ext-v2-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}
 
       - name: Build cfd_externals
         if: steps.cache-cfd-ext.outputs.cache-hit != 'true'
@@ -275,7 +275,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: external/cfd_externals/install
-          key: cfd-ext-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}
+          key: cfd-ext-v2-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}
 
       # ------------------------------------------------------------------
       # 7. Full Python environment (h5py against cfd_externals HDF5, etc.)
@@ -285,20 +285,26 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: venv
-          key: venv-ci-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}-${{ hashFiles('requirements.txt', 'external/cfd_externals/requirements.txt', 'scripts/install_python_deps.sh') }}
+          key: venv-ci-v2-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}-${{ hashFiles('requirements.txt', 'external/cfd_externals/requirements.txt', 'scripts/install_python_deps.sh') }}
 
       - name: Install Python dependencies (full)
-        if: steps.cache-venv.outputs.cache-hit != 'true'
         run: |
           source venv/bin/activate
-          PIP=$PWD/venv/bin/pip ./scripts/install_python_deps.sh
+          if [ "${{ steps.cache-venv.outputs.cache-hit }}" != "true" ]; then
+            PIP=$PWD/venv/bin/pip ./scripts/install_python_deps.sh
+          elif ! python -m pytest --version >/dev/null 2>&1; then
+            echo "Cached venv is missing pytest; rebuilding Python dependencies"
+            PIP=$PWD/venv/bin/pip ./scripts/install_python_deps.sh
+          else
+            echo "Cached venv contains pytest; keeping restored Python environment"
+          fi
 
       - name: Save Python venv cache
         if: always()
         uses: actions/cache/save@v4
         with:
           path: venv
-          key: venv-ci-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}-${{ hashFiles('requirements.txt', 'external/cfd_externals/requirements.txt', 'scripts/install_python_deps.sh') }}
+          key: venv-ci-v2-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}-${{ hashFiles('requirements.txt', 'external/cfd_externals/requirements.txt', 'scripts/install_python_deps.sh') }}
 
       # ------------------------------------------------------------------
       # 8. ccache
@@ -337,7 +343,7 @@ jobs:
         run: cmake --build build -t all_unit_tests -j$(nproc)
 
       - name: Build Euler solvers
-        run: cmake --build build -t euler euler3D eulerSA eulerSA3D euler2EQ euler2EQ3D eulerEX eulerEX3D -j$(nproc)
+        run: cmake --build build -t euler euler3D eulerSA eulerSA3D euler2EQ euler2EQ3D eulerEX eulerEX3D canteraConstVolTrajectory eulerState -j$(nproc)
 
       # ------------------------------------------------------------------
       # 11. Build pybind11 targets

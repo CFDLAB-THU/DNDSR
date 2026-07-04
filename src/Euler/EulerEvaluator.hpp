@@ -38,7 +38,11 @@
 #include "EulerBC.hpp"
 #include "EulerJacobian.hpp"
 #include "EulerEvaluatorSettings.hpp"
+#include "SourceTermContributor.hpp"
+#include "Physics/PhysicsProperties.hpp"
 #include "DNDS/Serializer/SerializerBase.hpp"
+#include "DNDS/OutputDir.hpp"
+#include "DNDS/OptionalRef.hpp"
 #include "RANS_ke.hpp"
 
 // #ifdef __DNDS_REALLY_COMPILING__HEADER_ON__
@@ -77,7 +81,7 @@ namespace DNDS::Euler
     class EulerEvaluator
     {
     public:
-        using Traits = EulerModelTraits<model>; ///< Compile-time traits: hasSA, has2EQ, etc.
+        using Traits = EulerModelTraits<model>;             ///< Compile-time traits: hasSA, has2EQ, etc.
         static const int nVarsFixed = getnVarsFixed(model); ///< Number of conserved variables (compile-time fixed).
         static const int dim = getDim_Fixed(model);         ///< Spatial dimension (2 or 3).
         static const int gDim = getGeomDim_Fixed(model);    ///< Geometric dimension of the mesh.
@@ -87,24 +91,26 @@ namespace DNDS::Euler
         /// @brief Compute the maximum batch-multiplied column count for batched Eigen matrices.
         static constexpr int MaxBatchMult(int n) { return MaxBatch > 0 ? (n * MaxBatch) : Eigen::Dynamic; }
 
-        typedef Eigen::VectorFMTSafe<real, dim> TVec;           ///< Spatial vector (dim components).
-        typedef Eigen::MatrixFMTSafe<real, dim, Eigen::Dynamic, Eigen::ColMajor, dim, MaxBatch> TVec_Batch; ///< Batch of spatial vectors.
-        typedef Eigen::MatrixFMTSafe<real, dim, dim> TMat;      ///< Spatial matrix (dim x dim).
-        typedef Eigen::MatrixFMTSafe<real, dim, Eigen::Dynamic, Eigen::ColMajor, dim, MaxBatchMult(3)> TMat_Batch; ///< Batch of spatial matrices.
-        typedef Eigen::VectorFMTSafe<real, nVarsFixed> TU;      ///< Conservative variable vector (nVarsFixed components).
-        typedef Eigen::MatrixFMTSafe<real, nVarsFixed, Eigen::Dynamic, Eigen::ColMajor, nVarsFixed, MaxBatch> TU_Batch; ///< Batch of conservative variable vectors.
-        typedef Eigen::MatrixFMTSafe<real, 1, Eigen::Dynamic, Eigen::RowMajor, 1, MaxBatch> TReal_Batch; ///< Batch of scalar values.
-        typedef Eigen::MatrixFMTSafe<real, nVarsFixed, nVarsFixed> TJacobianU;  ///< Jacobian matrix (nVars x nVars) of the flux w.r.t. conserved variables.
-        typedef Eigen::MatrixFMTSafe<real, dim, nVarsFixed> TDiffU;             ///< Gradient of conserved variables (dim x nVars).
-        typedef Eigen::MatrixFMTSafe<real, Eigen::Dynamic, nVarsFixed, Eigen::ColMajor, MaxBatchMult(3)> TDiffU_Batch; ///< Batch of gradient matrices.
-        typedef Eigen::MatrixFMTSafe<real, nVarsFixed, dim> TDiffUTransposed;   ///< Transposed gradient (nVars x dim).
-        typedef ArrayDOFV<nVarsFixed> TDof;     ///< Cell-centered DOF array (mean values).
-        typedef ArrayRECV<nVarsFixed> TRec;     ///< Reconstruction coefficient array (per-cell polynomial coefficients).
-        typedef ArrayRECV<1> TScalar;           ///< Scalar reconstruction coefficient array.
+        using TVec = typename Traits::TVec;                                    ///< Spatial vector (dim components).
+        using TVec_Batch = typename Traits::template TVec_Batch<MaxBatch>;     ///< Batch of spatial vectors.
+        using TMat = typename Traits::TMat;                                    ///< Spatial matrix (dim x dim).
+        using TMat_Batch = typename Traits::template TMat_Batch<MaxBatch>;     ///< Batch of spatial matrices.
+        using TU = typename Traits::TU;                                        ///< Conservative variable vector (nVarsFixed components).
+        using TU_Batch = typename Traits::template TU_Batch<MaxBatch>;         ///< Batch of conservative variable vectors.
+        using TReal_Batch = typename Traits::template TReal_Batch<MaxBatch>;   ///< Batch of scalar values.
+        using TJacobianU = typename Traits::TJacobianU;                        ///< Jacobian matrix (nVars x nVars) of the flux w.r.t. conserved variables.
+        using TDiffU = typename Traits::TDiffU;                                ///< Gradient of conserved variables (dim x nVars).
+        using TDiffU_Batch = typename Traits::template TDiffU_Batch<MaxBatch>; ///< Batch of gradient matrices.
+        using TDiffUTransposed = Eigen::MatrixFMTSafe<real, nVarsFixed, dim>;  ///< Transposed gradient (nVars x dim).
+        using TDof = ArrayDOFV<nVarsFixed>;                                    ///< Cell-centered DOF array (mean values).
+        using TRec = ArrayRECV<nVarsFixed>;                                    ///< Reconstruction coefficient array (per-cell polynomial coefficients).
+        using TScalar = ArrayRECV<1>;                                          ///< Scalar reconstruction coefficient array.
 
-        typedef CFV::VariationalReconstruction<gDim> TVFV;      ///< Variational reconstruction type for this geometric dimension.
-        typedef ssp<CFV::VariationalReconstruction<gDim>> TpVFV; ///< Shared pointer to the variational reconstruction object.
-        typedef ssp<BoundaryHandler<model>> TpBCHandler;         ///< Shared pointer to the boundary condition handler.
+        using TVFV = CFV::VariationalReconstruction<gDim>;       ///< Variational reconstruction type for this geometric dimension.
+        using TpVFV = ssp<CFV::VariationalReconstruction<gDim>>; ///< Shared pointer to the variational reconstruction object.
+        using TpBCHandler = ssp<BoundaryHandler<model>>;         ///< Shared pointer to the boundary condition handler.
+
+        using TPhysThermalRet = typename PhysicsProperties<model>::conservativeThermalReturn; ///< return struct of conservativeThermal
 
     public:
         /**
@@ -157,7 +163,7 @@ namespace DNDS::Euler
         // static const int gdim = 2; //* geometry dim
 
     private:
-        int nVars = 5; ///< Runtime number of conserved variables (may differ from nVarsFixed for dynamic models).
+        int nVars = -1; ///< Runtime number of conserved variables. Always set by constructor initializer; -1 catches accidental use.
 
         bool passiveDiscardSource = false; ///< When true, discard source terms for passive scalar equations.
 
@@ -174,28 +180,28 @@ namespace DNDS::Euler
 
     private:
     public:
-        ssp<Geom::UnstructuredMesh> mesh;                        ///< Shared pointer to the unstructured mesh.
+        ssp<Geom::UnstructuredMesh> mesh;              ///< Shared pointer to the unstructured mesh.
         ssp<CFV::VariationalReconstruction<gDim>> vfv; //! gDim -> 3 for intellisense //!tmptmp  ///< Variational reconstruction object.
-        ssp<BoundaryHandler<model>> pBCHandler;                  ///< Boundary condition handler.
-        int kAv = 0;                                             ///< Artificial viscosity polynomial order (maxOrder + 1).
+        ssp<BoundaryHandler<model>> pBCHandler;        ///< Boundary condition handler.
+        int kAv = 0;                                   ///< Artificial viscosity polynomial order (maxOrder + 1).
 
         // buffer for fdtau
         // std::vector<real> lambdaCell;
-        std::vector<real> lambdaFace;       ///< Per-face spectral radius (inviscid + viscous combined).
-        std::vector<real> lambdaFaceC;      ///< Per-face convective spectral radius.
-        std::vector<real> lambdaFaceVis;    ///< Per-face viscous spectral radius.
-        std::vector<real> lambdaFace0;      ///< Per-face eigenvalue |u·n| (contact wave).
-        std::vector<real> lambdaFace123;    ///< Per-face eigenvalue |u·n + a| (acoustic wave).
-        std::vector<real> lambdaFace4;      ///< Per-face eigenvalue |u·n - a| (acoustic wave).
-        std::vector<real> deltaLambdaFace;  ///< Per-face spectral radius difference for implicit diagonal.
-        ArrayDOFV<1> deltaLambdaCell;       ///< Per-cell accumulated spectral radius difference.
+        std::vector<real> lambdaFace;      ///< Per-face spectral radius (inviscid + viscous combined).
+        std::vector<real> lambdaFaceC;     ///< Per-face convective spectral radius.
+        std::vector<real> lambdaFaceVis;   ///< Per-face viscous spectral radius.
+        std::vector<real> lambdaFace0;     ///< Per-face eigenvalue |u·n| (contact wave).
+        std::vector<real> lambdaFace123;   ///< Per-face eigenvalue |u·n + a| (acoustic wave).
+        std::vector<real> lambdaFace4;     ///< Per-face eigenvalue |u·n - a| (acoustic wave).
+        std::vector<real> deltaLambdaFace; ///< Per-face spectral radius difference for implicit diagonal.
+        ArrayDOFV<1> deltaLambdaCell;      ///< Per-cell accumulated spectral radius difference.
 
         // grad fix
         std::vector<TDiffU> gradUFix; ///< Green-Gauss gradient correction buffer for source term stabilization.
 
         // wall distance
-        std::vector<Eigen::Vector<real, Eigen::Dynamic>> dWall;  ///< Per-cell wall distance (one value per cell node/quadrature point).
-        std::vector<real> dWallFace;                             ///< Per-face wall distance (interpolated from cell values).
+        std::vector<Eigen::Vector<real, Eigen::Dynamic>> dWall; ///< Per-cell wall distance (one value per cell node/quadrature point).
+        std::vector<real> dWallFace;                            ///< Per-face wall distance (interpolated from cell values).
 
         // maps from bc id to various objects
         std::map<Geom::t_index, AnchorPointRecorder<nVarsFixed>> anchorRecorders; ///< Per-BC anchor point recorders for profile extraction.
@@ -203,21 +209,30 @@ namespace DNDS::Euler
         std::map<Geom::t_index, IntegrationRecorder> bndIntegrations;             ///< Per-BC boundary flux/force integration accumulators.
         std::map<Geom::t_index, std::ofstream> bndIntegrationLogs;                ///< Per-BC log file streams for integration output.
 
-        std::set<Geom::t_index> cLDriverBndIDs;  ///< Boundary IDs driven by the CL (lift-coefficient) driver.
-        std::unique_ptr<CLDriver> pCLDriver;     ///< Lift-coefficient driver for AoA adaptation (null if unused).
+        std::set<Geom::t_index> cLDriverBndIDs; ///< Boundary IDs driven by the CL (lift-coefficient) driver.
+        std::unique_ptr<CLDriver> pCLDriver;    ///< Lift-coefficient driver for AoA adaptation (null if unused).
 
         // ArrayVDOF<25> dRdUrec;
         // ArrayVDOF<25> dRdb;
         ArrayGRADV<nVarsFixed, gDim> uGradBuf, uGradBufNoLim; ///< Gradient buffers: limited and unlimited.
 
-        Eigen::Vector<real, -1> fluxWallSum;       ///< Accumulated wall flux integral (force on wall boundaries).
-        std::vector<TU> fluxBnd;                   ///< Per-boundary-face flux values.
-        std::vector<TVec> fluxBndForceT;           ///< Per-boundary-face tangential force.
-        index nFaceReducedOrder = 0;               ///< Count of faces where reconstruction order was reduced.
+        Eigen::Vector<real, -1> fluxWallSum; ///< Accumulated wall flux integral (force on wall boundaries).
+        std::vector<TU> fluxBnd;             ///< Per-boundary-face flux values.
+        std::vector<TVec> fluxBndForceT;     ///< Per-boundary-face tangential force.
+        index nFaceReducedOrder = 0;         ///< Count of faces where reconstruction order was reduced.
 
-        ssp<Direct::SerialSymLUStructure> symLU;   ///< Symmetric LU structure for direct preconditioner.
+        ssp<Direct::SerialSymLUStructure> symLU; ///< Symmetric LU structure for direct preconditioner.
 
-        EulerEvaluatorSettings<model> settings;    ///< Physics and numerics settings for this evaluator.
+        EulerEvaluatorSettings<model> settings; ///< Physics and numerics settings for this evaluator.
+
+        /// @brief Centralized physics property accessor (EOS coefs, transport, kinetics).
+        const PhysicsProperties<model> &phys() const { return phys_; }
+
+        /// @brief Centralized physics property module (EOS coefs, transport, kinetics).
+        PhysicsProperties<model> phys_;
+
+        /// @brief Source term contributors for extended models (NS_EX / NS_EX_3D).
+        std::vector<SourceTermVariant<model>> sourceContributors;
 
         /**
          * @brief Construct an EulerEvaluator and initialize all internal buffers.
@@ -236,7 +251,7 @@ namespace DNDS::Euler
         EulerEvaluator(const decltype(mesh) &Nmesh, const decltype(vfv) &Nvfv, const decltype(pBCHandler) &npBCHandler,
                        const EulerEvaluatorSettings<model> &nSettings,
                        int n_nVars = getNVars(model))
-            : nVars(n_nVars), axisSymmetric(Nvfv->GetAxisSymmetric()), mesh(Nmesh), vfv(Nvfv), pBCHandler(npBCHandler), kAv(Nvfv->getSettings().maxOrder + 1), settings(nSettings)
+            : nVars(n_nVars), axisSymmetric(Nvfv->GetAxisSymmetric()), mesh(Nmesh), vfv(Nvfv), pBCHandler(npBCHandler), kAv(Nvfv->getSettings().maxOrder + 1), settings(nSettings), phys_(nSettings.idealGasProperty)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
             if (getNVars(model) == DynamicSize)
@@ -244,6 +259,10 @@ namespace DNDS::Euler
             else
                 DNDS_assert_info(nVars == getNVars(model), "do not change the nVars for this model");
 
+            if (settings.reactiveFlow.enabled)
+                DNDS_assert_info(nVars > I4 + 1, "reactive flow requires at least one species variable (nVars > dim+2)");
+
+            phys_.setRANS(settings.ransModel);
             vfv->BuildUGrad(uGradBuf, nVars);
             vfv->BuildUGrad(uGradBufNoLim, nVars);
 
@@ -273,14 +292,55 @@ namespace DNDS::Euler
                 v.resize(nVars);
             fluxBndForceT.resize(mesh->NumBnd());
 
+            // Wall distance is purely geometric — no dependency on ChemicalSource.
             this->GetWallDist();
+
+            if constexpr (Traits::isExtended)
+                sourceContributors = buildSourceContributors(settings, phys_, nVars, axisSymmetric);
+
+            // Wire ChemicalSource into physics module (extract from contributor list)
+            for (auto &c : sourceContributors)
+                if (auto *chem = std::get_if<ChemicalContributor<model>>(&c))
+                    if (chem->pool_)
+                        phys_.setChemicalSourcePool(chem->pool_);
+            if (settings.reactiveFlow.enabled && phys_.hasChemicalSource())
+            {
+                int Ns1 = phys_.nSpecies() - 1;
+                int expectedNVars = I4 + 1 + phys_.nRANSVars() + Ns1;
+                DNDS_check_throw_info(nVars == expectedNVars,
+                                      fmt::format("reactive flow nVars {} does not match mechanism species count {}; expected {} (= I4+1+nRANS+Ns1)",
+                                                  nVars, phys_.nSpecies(), expectedNVars));
+            }
+
+            std::ostream *stateLog = mesh->getMPI().rank == 0 ? &DNDS::log() : nullptr;
+            phys_.resolveStateValue(settings.farFieldStaticValue, nVars, stateLog, "eulerSettings/farFieldStaticValue");
+            for (auto i = 0u; i < settings.boxInitializers.size(); ++i)
+                phys_.resolveStateValue(settings.boxInitializers[i].v, nVars, stateLog,
+                                        fmt::format("eulerSettings/boxInitializers[{}]/v", i));
+            for (auto i = 0u; i < settings.planeInitializers.size(); ++i)
+                phys_.resolveStateValue(settings.planeInitializers[i].v, nVars, stateLog,
+                                        fmt::format("eulerSettings/planeInitializers[{}]/v", i));
+            pBCHandler->template ResolveStateValues<dim>(phys_, stateLog);
+            settings.refU = settings.farFieldStaticValue.cons;
+            {
+                TU refCons = settings.refU;
+                TU refPrim(nVars);
+                phys_.conservativeToPrimitive(refCons, refPrim);
+                settings.refUPrim = refPrim;
+                auto [TRefState, pRef, asqrRef, HRef, gammaEqV, gammaV] = phys_.conservativeThermal(refCons);
+                settings.refU(Seq123).setConstant(settings.refU(Seq123).norm() + std::sqrt(std::max(asqrRef, real(0))));
+                settings.refUPrim(Seq123).setConstant(settings.refUPrim(Seq123).norm());
+            }
 
             if (model == NS_2EQ || model == NS_2EQ_3D)
             {
-                TU farPrim = settings.farFieldStaticValue;
-                real gamma = settings.idealGasProperty.gamma;
-                Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrim, gamma);
-                real T = farPrim(I4) / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * farPrim(0));
+                TU farPrim = settings.farFieldStaticValue.cons;
+                real T = phys_.temperature(settings.farFieldStaticValue.cons);
+                real gammaEq = phys_.gammaEq(T, settings.farFieldStaticValue.cons);
+                real gamma = phys_.gamma(T, settings.farFieldStaticValue.cons);
+                Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue.cons, farPrim, gammaEq,
+                                                                phys_.mixtureBaseInternalRhoE(settings.farFieldStaticValue.cons));
+                T = farPrim(I4) / ((gamma - 1) / gamma * phys_.Cp(T, settings.farFieldStaticValue.cons) * farPrim(0));
                 // auto [rhs0, rhs] = RANS::SolveZeroGradEquilibrium<dim>(settings.farFieldStaticValue, this->muEff(settings.farFieldStaticValue, T));
                 // if(mesh->getMPI().rank == 0)
                 //     log()
@@ -334,9 +394,8 @@ namespace DNDS::Euler
         void GetWallDist_ComputeFaceDistances();
 
     public:
-
         /******************************************************/
-        static const uint64_t DT_No_Flags = 0x0ull;                 ///< No flags for EvaluateDt.
+        static const uint64_t DT_No_Flags = 0x0ull;                     ///< No flags for EvaluateDt.
         static const uint64_t DT_Dont_update_lambda01234 = 0x1ull << 0; ///< Skip recomputation of per-face eigenvalues lambda0/123/4.
         /**
          * @brief Estimate the local or global time step for each cell.
@@ -363,19 +422,22 @@ namespace DNDS::Euler
             real CFL, real &dtMinall, real MaxDt,
             bool UseLocaldt,
             real t,
-            uint64_t flags = DT_No_Flags);
+            uint64_t flags = DT_No_Flags,
+            OptionalRef<ArrayDOFV<1>> cellTWarm = {});
 
         /// @name RHS evaluation flags (bitwise OR combinable)
         /// @{
-        static const uint64_t RHS_No_Flags = 0x0ull;                              ///< Default: full RHS evaluation.
-        static const uint64_t RHS_Ignore_Viscosity = 0x1ull << 0;                 ///< Skip viscous flux contribution.
-        static const uint64_t RHS_Dont_Update_Integration = 0x1ull << 1;          ///< Skip boundary integration accumulation.
-        static const uint64_t RHS_Dont_Record_Bud_Flux = 0x1ull << 2;            ///< Skip recording per-boundary flux.
-        static const uint64_t RHS_Direct_2nd_Rec = 0x1ull << 8;                  ///< Use direct 2nd-order reconstruction.
-        static const uint64_t RHS_Direct_2nd_Rec_1st_Conv = 0x1ull << 9;         ///< 2nd-order rec with 1st-order convection.
-        static const uint64_t RHS_Direct_2nd_Rec_use_limiter = 0x1ull << 10;     ///< Apply limiter when using direct 2nd rec.
+        static const uint64_t RHS_No_Flags = 0x0ull;                                        ///< Default: full RHS evaluation.
+        static const uint64_t RHS_Ignore_Viscosity = 0x1ull << 0;                           ///< Skip viscous flux contribution.
+        static const uint64_t RHS_Dont_Update_Integration = 0x1ull << 1;                    ///< Skip boundary integration accumulation.
+        static const uint64_t RHS_Dont_Record_Bud_Flux = 0x1ull << 2;                       ///< Skip recording per-boundary flux.
+        static const uint64_t RHS_Direct_2nd_Rec = 0x1ull << 8;                             ///< Use direct 2nd-order reconstruction.
+        static const uint64_t RHS_Direct_2nd_Rec_1st_Conv = 0x1ull << 9;                    ///< 2nd-order rec with 1st-order convection.
+        static const uint64_t RHS_Direct_2nd_Rec_use_limiter = 0x1ull << 10;                ///< Apply limiter when using direct 2nd rec.
         static const uint64_t RHS_Direct_2nd_Rec_already_have_uGradBufNoLim = 0x1ull << 11; ///< uGradBufNoLim is already computed.
-        static const uint64_t RHS_Recover_IncFScale = 0x1ull << 12;              ///< Recover incremental face scaling.
+        static const uint64_t RHS_Recover_IncFScale = 0x1ull << 12;                         ///< Recover incremental face scaling.
+        static const uint64_t RHS_Ignore_Reactive_Source_Jacobian = 0x1ull << 13;           ///< Evaluate reactive source RHS but omit its JSource part.
+        static const uint64_t RHS_Ignore_Reactive_Source = 0x1ull << 14;                    ///< Omit reactive source RHS and Jacobian.
         /// @}
 
         /**
@@ -406,7 +468,8 @@ namespace DNDS::Euler
             ArrayDOFV<1> &cellRHSAlpha,
             bool onlyOnHalfAlpha,
             real t,
-            uint64_t flags = RHS_No_Flags);
+            uint64_t flags = RHS_No_Flags,
+            OptionalRef<ArrayDOFV<1>> cellTWarm = {});
 
         /**
          * @brief Assemble the diagonal blocks of the implicit Jacobian for LU-SGS / SGS.
@@ -599,7 +662,7 @@ namespace DNDS::Euler
         void MeanValuePrim2Cons(ArrayDOFV<nVarsFixed> &w, ArrayDOFV<nVarsFixed> &u);
 
         using tFCompareField = std::function<TU(const Geom::tPoint &, real)>;         ///< Callback type for analytical comparison field.
-        using tFCompareFieldWeight = std::function<real(const Geom::tPoint &, real)>;  ///< Callback type for comparison weighting function.
+        using tFCompareFieldWeight = std::function<real(const Geom::tPoint &, real)>; ///< Callback type for comparison weighting function.
 
         /**
          * @brief Compute the norm of the RHS residual vector.
@@ -611,6 +674,60 @@ namespace DNDS::Euler
          * @param[in]  average If true, divide by total volume/count.
          */
         void EvaluateNorm(Eigen::Vector<real, -1> &res, ArrayDOFV<nVarsFixed> &rhs, index P = 1, bool volWise = false, bool average = false);
+
+        /**
+         * @brief Compute per-component min and max of a DOF array with MPI reduction.
+         *
+         * @param[out] uMin  Per-component minimum (resized to nVars).
+         * @param[out] uMax  Per-component maximum (resized to nVars).
+         * @param[in]  u     Cell-centered DOF array.
+         */
+        void EvaluateMinMax(Eigen::Vector<real, -1> &uMin, Eigen::Vector<real, -1> &uMax, ArrayDOFV<nVarsFixed> &u,
+                            StateValueOrigin representation = StateValueOrigin::Cons);
+
+        /// Return label string for DOF index v, following StateValueOrigin layout.
+        [[nodiscard]] std::string varLabel(int v, StateValueOrigin layout = StateValueOrigin::Cons) const
+        {
+            const int I4 = dim + 1;
+            const int nR = phys_.nRANSVars();
+            const int Ns1 = phys_.nSpecies() - 1;
+            const int Isp = nVars - Ns1;
+            auto isCons = [](StateValueOrigin lo)
+            {
+                return lo == StateValueOrigin::Cons || lo == StateValueOrigin::ConsSensible ||
+                       lo == StateValueOrigin::ConsPhy || lo == StateValueOrigin::ConsSensiblePhy;
+            };
+            const bool c = isCons(layout);
+
+            if (v == 0)
+                return (layout == StateValueOrigin::PrimTP || layout == StateValueOrigin::PrimTPPhy) ? "T" : "rho";
+            if (v <= dim)
+                return c ? std::string("rho") + char('U' + v - 1)
+                         : std::string("") + char('U' + v - 1);
+            if (v == I4)
+            {
+                if (layout == StateValueOrigin::PrimTP || layout == StateValueOrigin::PrimTPPhy)
+                    return "p";
+                if (layout == StateValueOrigin::PrimRhoT || layout == StateValueOrigin::PrimRhoTPhy)
+                    return "T";
+                if (layout == StateValueOrigin::PrimRhoP || layout == StateValueOrigin::PrimRhoPPhy)
+                    return "p";
+                return "rhoE";
+            }
+            if (v < Isp)
+            {
+                int r = v - I4 - 1;
+                if (r == 0)
+                    return nR == 1 ? (c ? "rho_nuTilde" : "nuTilde")
+                                   : (c ? "rho_k" : "k");
+                return phys_.ransModel() == RANS_RKE ? (c ? "rho_epsilon" : "epsilon")
+                                                     : (c ? "rho_omega" : "omega");
+            }
+            return c ? "rhoY_" + phys_.speciesName(v - Isp)
+                     : "Y_" + phys_.speciesName(v - Isp);
+        }
+        [[nodiscard]] std::string dofLabel(int v) const { return varLabel(v, StateValueOrigin::Cons); }
+        [[nodiscard]] std::string primVarLabel(int v, StateValueOrigin layout = StateValueOrigin::PrimRhoP) const { return varLabel(v, layout); }
 
         /**
          * @brief Compute the reconstruction error norm (optionally against an analytical field).
@@ -638,7 +755,7 @@ namespace DNDS::Euler
 
         /// @name Limiter flags
         /// @{
-        static const uint64_t LIMITER_UGRAD_No_Flags = 0x0ull;                  ///< Default limiter flags.
+        static const uint64_t LIMITER_UGRAD_No_Flags = 0x0ull;                   ///< Default limiter flags.
         static const uint64_t LIMITER_UGRAD_Disable_Shock_Limiter = 0x1ull << 0; ///< Disable shock-detecting component of the limiter.
         /// @}
 
@@ -656,13 +773,13 @@ namespace DNDS::Euler
         void LimiterUGrad(ArrayDOFV<nVarsFixed> &u, ArrayGRADV<nVarsFixed, gDim> &uGrad, ArrayGRADV<nVarsFixed, gDim> &uGradNew,
                           uint64_t flags = LIMITER_UGRAD_No_Flags);
 
-        static const int EvaluateURecBeta_DEFAULT = 0x00;           ///< Default: evaluate beta without compression.
+        static const int EvaluateURecBeta_DEFAULT = 0x00;          ///< Default: evaluate beta without compression.
         static const int EvaluateURecBeta_COMPRESS_TO_MEAN = 0x01; ///< Compress reconstruction toward cell mean to enforce positivity.
         /**
          * @brief Evaluate the positivity-preserving reconstruction limiter (beta).
          *
          * For each cell, computes the maximum compression factor beta such that
-         * u_mean + beta * uRec remains physically realizable (positive density and pressure).
+         * u_mean + beta * uRec remains physically realizable (positive density and sensible internal energy).
          *
          * @param[in]  u          Cell-centered conservative DOFs.
          * @param[in]  uRec       Reconstruction coefficients.
@@ -679,7 +796,7 @@ namespace DNDS::Euler
         /**
          * @brief Assert that all cell-mean values are physically realizable.
          *
-         * Checks that density > 0 and internal energy > 0 for all cells.
+         * Checks that density > 0 and sensible internal energy > 0 for all cells.
          *
          * @param[in] u     Cell-centered conservative DOFs.
          * @param[in] panic If true, abort on first violation; otherwise just report.
@@ -688,7 +805,7 @@ namespace DNDS::Euler
         bool AssertMeanValuePP(
             ArrayDOFV<nVarsFixed> &u, bool panic);
 
-        static const int EvaluateCellRHSAlpha_DEFAULT = 0x00;          ///< Default alpha evaluation mode.
+        static const int EvaluateCellRHSAlpha_DEFAULT = 0x00;        ///< Default alpha evaluation mode.
         static const int EvaluateCellRHSAlpha_MIN_IF_NOT_ONE = 0x01; ///< Take min(alpha, prev) only if prev != 1.
         static const int EvaluateCellRHSAlpha_MIN_ALL = 0x02;        ///< Always take min(alpha, prev).
         /**
@@ -748,31 +865,9 @@ namespace DNDS::Euler
          * @param T Temperature.
          * @return Effective molecular dynamic viscosity.
          */
-        real muEff(const TU &U, real T) // TODO: more than sutherland law
+        real muEff(const TU &U, real T)
         {
-
-            switch (settings.idealGasProperty.muModel)
-            {
-            case 0:
-                return settings.idealGasProperty.muGas;
-            case 1:
-            {
-                real TRel = T / settings.idealGasProperty.TRef;
-                return settings.idealGasProperty.muGas *
-                       TRel * std::sqrt(TRel) *
-                       (settings.idealGasProperty.TRef + settings.idealGasProperty.CSutherland) /
-                       (T + settings.idealGasProperty.CSutherland);
-            }
-            break;
-            case 2:
-            {
-                return settings.idealGasProperty.muGas * U(0);
-            }
-            break;
-            default:
-                DNDS_assert_info(false, "No such muModel");
-            }
-            return std::nan("0");
+            return phys_.mixtureViscosity(T, U[0] * phys_.Rgas(U) * T, U);
         }
 
         /**
@@ -884,8 +979,7 @@ namespace DNDS::Euler
             auto faceID = mesh->GetFaceZone(iFace);
             if (!Geom::FaceIDIsPeriodic(faceID))
                 return;
-            if (if2c < 0)
-                if2c = vfv->CellIsFaceBack(iCell, iFace) ? 0 : 1;
+            DNDS_assert(if2c >= 0);
             if (if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID))
                 u(Seq123) = mesh->periodicInfo.TransVectorBack(Eigen::Vector<real, dim>{u(Seq123)}, faceID);
             if (if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID))
@@ -901,8 +995,7 @@ namespace DNDS::Euler
             auto faceID = mesh->GetFaceZone(iFace);
             if (!Geom::FaceIDIsPeriodic(faceID))
                 return;
-            if (if2c < 0)
-                if2c = vfv->CellIsFaceBack(iCell, iFace) ? 0 : 1;
+            DNDS_assert(if2c >= 0);
             if (if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID))
                 u(Seq123) = mesh->periodicInfo.TransVector(Eigen::Vector<real, dim>{u(Seq123)}, faceID);
             if (if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID))
@@ -914,8 +1007,7 @@ namespace DNDS::Euler
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
             auto faceID = mesh->GetFaceZone(iFace);
-            if (if2c < 0)
-                if2c = vfv->CellIsFaceBack(iCell, iFace) ? 0 : 1;
+            DNDS_assert(if2c >= 0);
             mesh->CellOtherCellPeriodicHandle(
                 iFace, if2c,
                 [&]()
@@ -933,8 +1025,7 @@ namespace DNDS::Euler
             auto faceID = mesh->GetFaceZone(iFace);
             if (!Geom::FaceIDIsPeriodic(faceID))
                 return;
-            if (if2c < 0)
-                if2c = vfv->CellIsFaceBack(iCell, iFace) ? 0 : 1;
+            DNDS_assert(if2c >= 0);
             if ((if2c == 1 && Geom::FaceIDIsPeriodicMain(faceID) && !reverse) ||
                 (if2c == 1 && Geom::FaceIDIsPeriodicDonor(faceID) && reverse))
             {
@@ -994,7 +1085,8 @@ namespace DNDS::Euler
             TReal_Batch &lam0V, TReal_Batch &lam123V, TReal_Batch &lam4V,
             Geom::t_index btype,
             typename Gas::RiemannSolverType rsType,
-            index iFace, bool ignoreVis);
+            index iFace, bool ignoreVis,
+            OptionalRef<ArrayDOFV<1>> cellTWarm = {});
 
         /**
          * @brief Compute the source term at a cell quadrature point.
@@ -1018,84 +1110,91 @@ namespace DNDS::Euler
             TJacobianU &jacobian,
             index iCell,
             index ig,
-            int Mode) // mode =0: source; mode = 1, diagJacobi; mode = 2,
-            ;
+            int Mode,
+            SourceFilter filter = SourceFilter::All,
+            OptionalRef<ArrayDOFV<1>> cellTWarm = {});
 
         /**
-         * @brief inviscid flux approx jacobian (flux term not reconstructed / no riemann)
+         * @brief Evaluate the cell-integrated source term for a single cell.
          *
+         * Performs the same quadrature integration, gradient interpolation, and volume
+         * scaling as the source loop in EvaluateRHS. Two modes of operation:
+         *
+         * **Full mode** (useRecArrays=true): uses reconstruction arrays for high-order
+         * gradient/state interpolation. Called from EvaluateRHS.
+         *
+         * **Simple mode** (useRecArrays=false): uses the provided uCell and cellGradU
+         * directly with O1 quadrature. Called from the pointwise Newton solver.
+         * WARNING: 2nd-order source gradient terms will be missing in simple mode.
+         *
+         * @param[out] cellRHS      Source contribution to the cell RHS (added to, not overwritten).
+         * @param[out] cellJac      Source Jacobian block for this cell (overwritten when jacMode>=1).
+         * @param[in]  uCell        Cell-mean conservative state.
+         * @param[in]  cellGradU    Gradient of conservative variables (used in simple mode;
+         *                          in full mode, gradient is reconstructed internally).
+         * @param[in]  iCell        Cell index.
+         * @param[in]  jacMode      0=no Jacobian, 1=diagonal, 2=full block.
+         * @param[in]  filter       Which source contributors to include.
+         * @param[in]  cellAlpha    PP alpha scaling factor for this cell (default 1).
+         * @param[in]  useRecArrays If true, use uRecUnlim/uRec/uGradBufNoLim for gradient/state
+         *                          interpolation (must be populated). If false, use uCell/cellGradU.
+         * @param[in]  pURecUnlim   Pointer to unlimited reconstruction (used when useRecArrays=true).
+         * @param[in]  pURec        Pointer to limited reconstruction (used when useRecArrays=true).
+         * @param[in]  direct2ndRec Whether to use O1 quadrature (direct 2nd-order rec path).
+         * @param[in]  t            Simulation time (for boundary value generation in 2nd-order gradient).
          */
-        auto fluxJacobian0_Right(
-            TU &UR,
-            const TVec &uNorm,
-            Geom::t_index btype)
-        {
-            DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-            DNDS_assert(dim == 3); // only for 3D!!!!!!!!
-            const TU &U = UR;
-            const TVec &n = uNorm;
-
-            real rhoun = n.dot(U({1, 2, 3}));
-            real rhousqr = U({1, 2, 3}).squaredNorm();
-            real gamma = settings.idealGasProperty.gamma;
-            TJacobianU subFdU;
-            subFdU.resize(nVars, nVars);
-
-            subFdU.setZero();
-            subFdU(0, 1) = n(1 - 1);
-            subFdU(0, 2) = n(2 - 1);
-            subFdU(0, 3) = n(3 - 1);
-            subFdU(1, 0) = -1.0 / (U(1 - 1) * U(1 - 1)) * U(2 - 1) * rhoun + (1.0 / (U(1 - 1) * U(1 - 1)) * n(1 - 1) * (gamma - 1.0) * (rhousqr - U(1 - 1) * U(5 - 1) * 2.0)) / 2.0 + (U(5 - 1) * n(1 - 1) * (gamma - 1.0)) / U(1 - 1);
-            subFdU(1, 1) = (rhoun + U(2 - 1) * n(1 - 1) * 2.0 - U(2 - 1) * gamma * n(1 - 1)) / U(1 - 1);
-            subFdU(1, 2) = (U(2 - 1) * n(2 - 1)) / U(1 - 1) - (U(3 - 1) * n(1 - 1) * (gamma - 1.0)) / U(1 - 1);
-            subFdU(1, 3) = (U(2 - 1) * n(3 - 1)) / U(1 - 1) - (U(4 - 1) * n(1 - 1) * (gamma - 1.0)) / U(1 - 1);
-            subFdU(1, 4) = n(1 - 1) * (gamma - 1.0);
-            subFdU(2, 0) = -1.0 / (U(1 - 1) * U(1 - 1)) * U(3 - 1) * rhoun + (1.0 / (U(1 - 1) * U(1 - 1)) * n(2 - 1) * (gamma - 1.0) * (rhousqr - U(1 - 1) * U(5 - 1) * 2.0)) / 2.0 + (U(5 - 1) * n(2 - 1) * (gamma - 1.0)) / U(1 - 1);
-            subFdU(2, 1) = (U(3 - 1) * n(1 - 1)) / U(1 - 1) - (U(2 - 1) * n(2 - 1) * (gamma - 1.0)) / U(1 - 1);
-            subFdU(2, 2) = (rhoun + U(3 - 1) * n(2 - 1) * 2.0 - U(3 - 1) * gamma * n(2 - 1)) / U(1 - 1);
-            subFdU(2, 3) = (U(3 - 1) * n(3 - 1)) / U(1 - 1) - (U(4 - 1) * n(2 - 1) * (gamma - 1.0)) / U(1 - 1);
-            subFdU(2, 4) = n(2 - 1) * (gamma - 1.0);
-            subFdU(3, 0) = -1.0 / (U(1 - 1) * U(1 - 1)) * U(4 - 1) * rhoun + (1.0 / (U(1 - 1) * U(1 - 1)) * n(3 - 1) * (gamma - 1.0) * (rhousqr - U(1 - 1) * U(5 - 1) * 2.0)) / 2.0 + (U(5 - 1) * n(3 - 1) * (gamma - 1.0)) / U(1 - 1);
-            subFdU(3, 1) = (U(4 - 1) * n(1 - 1)) / U(1 - 1) - (U(2 - 1) * n(3 - 1) * (gamma - 1.0)) / U(1 - 1);
-            subFdU(3, 2) = (U(4 - 1) * n(2 - 1)) / U(1 - 1) - (U(3 - 1) * n(3 - 1) * (gamma - 1.0)) / U(1 - 1);
-            subFdU(3, 3) = (rhoun + U(4 - 1) * n(3 - 1) * 2.0 - U(4 - 1) * gamma * n(3 - 1)) / U(1 - 1);
-            subFdU(3, 4) = n(3 - 1) * (gamma - 1.0);
-            subFdU(4, 0) = 1.0 / (U(1 - 1) * U(1 - 1) * U(1 - 1)) * rhoun * (-rhousqr + (U(2 - 1) * U(2 - 1)) * gamma + (U(3 - 1) * U(3 - 1)) * gamma + (U(4 - 1) * U(4 - 1)) * gamma - U(1 - 1) * U(5 - 1) * gamma);
-            subFdU(4, 1) = 1.0 / (U(1 - 1) * U(1 - 1)) * n(1 - 1) * (-rhousqr + (U(2 - 1) * U(2 - 1)) * gamma + (U(3 - 1) * U(3 - 1)) * gamma + (U(4 - 1) * U(4 - 1)) * gamma - U(1 - 1) * U(5 - 1) * gamma * 2.0) * (-1.0 / 2.0) - 1.0 / (U(1 - 1) * U(1 - 1)) * U(2 - 1) * rhoun * (gamma - 1.0);
-            subFdU(4, 2) = 1.0 / (U(1 - 1) * U(1 - 1)) * n(2 - 1) * (-rhousqr + (U(2 - 1) * U(2 - 1)) * gamma + (U(3 - 1) * U(3 - 1)) * gamma + (U(4 - 1) * U(4 - 1)) * gamma - U(1 - 1) * U(5 - 1) * gamma * 2.0) * (-1.0 / 2.0) - 1.0 / (U(1 - 1) * U(1 - 1)) * U(3 - 1) * rhoun * (gamma - 1.0);
-            subFdU(4, 3) = 1.0 / (U(1 - 1) * U(1 - 1)) * n(3 - 1) * (-rhousqr + (U(2 - 1) * U(2 - 1)) * gamma + (U(3 - 1) * U(3 - 1)) * gamma + (U(4 - 1) * U(4 - 1)) * gamma - U(1 - 1) * U(5 - 1) * gamma * 2.0) * (-1.0 / 2.0) - 1.0 / (U(1 - 1) * U(1 - 1)) * U(4 - 1) * rhoun * (gamma - 1.0);
-            subFdU(4, 4) = (gamma * rhoun) / U(1 - 1);
-
-            real un = rhoun / U(0);
-
-            if constexpr (Traits::hasSA)
-            {
-                subFdU(5, 5) = un;
-                subFdU(5, 0) = -un * U(5) / U(0);
-                subFdU(5, 1) = n(0) * U(5) / U(0);
-                subFdU(5, 2) = n(1) * U(5) / U(0);
-                subFdU(5, 3) = n(2) * U(5) / U(0);
-            }
-            if constexpr (Traits::has2EQ)
-            {
-                subFdU(5, 5) = un;
-                subFdU(5, 0) = -un * U(5) / U(0);
-                subFdU(5, 1) = n(0) * U(5) / U(0);
-                subFdU(5, 2) = n(1) * U(5) / U(0);
-                subFdU(5, 3) = n(2) * U(5) / U(0);
-                subFdU(6, 6) = un;
-                subFdU(6, 0) = -un * U(6) / U(0);
-                subFdU(6, 1) = n(0) * U(6) / U(0);
-                subFdU(6, 2) = n(1) * U(6) / U(0);
-                subFdU(6, 3) = n(2) * U(6) / U(0);
-            }
-            return subFdU;
-        }
+        void EvaluateCellSource(
+            TU &cellRHS,
+            TJacobianU &cellJac,
+            const TU &uCell,
+            const TDiffU &cellGradU,
+            index iCell,
+            int jacMode,
+            SourceFilter filter = SourceFilter::All,
+            real cellAlpha = 1.0,
+            bool useRecArrays = false,
+            OptionalRef<ArrayDOFV<nVarsFixed>> pU = {},
+            OptionalRef<ArrayRECV<nVarsFixed>> pURecUnlim = {},
+            OptionalRef<ArrayRECV<nVarsFixed>> pURec = {},
+            bool direct2ndRec = true,
+            real t = 0,
+            OptionalRef<ArrayDOFV<1>> cellTWarm = {});
 
         /**
-         * @brief inviscid flux approx jacobian (flux term not reconstructed / no riemann)
-         * if lambdaMain == veryLargeReal, then use lambda0~4 for roe-flux type jacobian
+         * @brief Apply a cell-local implicit update for a selected source subset.
          *
+         * Given the latest full residual evaluated at u, solves cell-by-cell for uNew:
+         * res - alphaDiag * source(u) + alphaDiag * source(uNew) + u / dt - uNew / dt = 0.
+         * The source is evaluated at cell means with zero gradient, so this is intended
+         * for pointwise sources such as chemistry.
+         */
+        void PointImplicitSourceUpdate(
+            ArrayDOFV<nVarsFixed> &uNew,
+            const ArrayDOFV<nVarsFixed> &res,
+            const ArrayDOFV<nVarsFixed> &u,
+            real alphaDiag,
+            real dt,
+            int nNewtonSteps = 3,
+            SourceFilter filter = SourceFilter::ReactiveOnly,
+            OptionalRef<ArrayDOFV<1>> cellTWarm = {});
+
+        void ReactiveSourceConstVolumeStep(
+            ArrayDOFV<nVarsFixed> &u,
+            ArrayRECV<nVarsFixed> &uRec,
+            real dt,
+            real t,
+            OptionalRef<ArrayDOFV<1>> cellTWarm = {});
+
+        /**
+         * @brief Inviscid flux approximate Jacobian (no reconstruction, no Riemann solver).
+         *
+         * Two-term structure: a main diagonal term (lambdaMain * dU) and an optional
+         * Roe-flux term (useRoeTerm).  The Roe path branches on hasChemicalSource()
+         * for the Roe-average (reference-energy-aware vs. single-species).  The
+         * dual-term structure is intentional but fragile — any new flux scheme must
+         * handle both reactive and non-reactive GetRoeAverage paths.
+         *
+         * if lambdaMain == veryLargeReal, then use lambda0~4 for roe-flux type jacobian.
          */
         TU fluxJacobian0_Right_Times_du(
             const TU &U,
@@ -1109,13 +1208,17 @@ namespace DNDS::Euler
             int useRoeTerm, int incFsign = -1, int omitF = 0)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-            real gamma = settings.idealGasProperty.gamma;
+            real T = phys_.temperature(U);
+            real gammaEq = phys_.gammaEq(T, U);
+            real gamma = phys_.gamma(T, U);
             TVec velo = U(Seq123) / U(0);
             real p, H, asqr;
-            Gas::IdealGasThermal(U(I4), U(0), velo.squaredNorm(), gamma, p, asqr, H);
+            Gas::IdealGasThermal(U(I4), U(0), velo.squaredNorm(), gammaEq, gamma, p, asqr, H,
+                                 phys_.mixtureBaseInternalRhoE(U));
             TVec dVelo;
             real dp;
-            Gas::IdealGasUIncrement<dim>(U, dU, velo, gamma, dVelo, dp);
+            Gas::IdealGasUIncrement<dim>(U, dU, velo, gammaEq, dVelo, dp,
+                                         phys_.mixtureBaseInternalRhoEIncrement(dU));
             TU dF(U.size());
             if (omitF == 0)
                 Gas::GasInviscidFluxFacialIncrement<dim>(
@@ -1132,8 +1235,22 @@ namespace DNDS::Euler
             {
                 TVec veloRoe;
                 real vsqrRoe{0}, aRoe{0}, asqrRoe{0}, HRoe{0};
+                real gammaEqRoe = gammaEq;
                 TU uMean(U.size());
-                Gas::GetRoeAverage<dim>(U, UOther, gamma, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe, uMean);
+                if (phys_.hasChemicalSource())
+                {
+                    real TOther = phys_.temperature(UOther);
+                    real gammaEqOther = phys_.gammaEq(TOther, UOther);
+                    real sqrtRhoL = std::sqrt(U(0));
+                    real sqrtRhoR = std::sqrt(UOther(0));
+                    gammaEqRoe = (sqrtRhoL * gammaEq + sqrtRhoR * gammaEqOther) / (sqrtRhoL + sqrtRhoR);
+                    Gas::GetRoeAverage<dim, true>(U, UOther, gammaEq, gamma, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe, uMean,
+                                                  phys_.mixtureBaseInternalRhoE(U), phys_.mixtureBaseInternalRhoE(UOther),
+                                                  gammaEq, gammaEqOther,
+                                                  gamma, phys_.gamma(TOther, UOther));
+                }
+                else
+                    Gas::GetRoeAverage<dim>(U, UOther, gammaEq, gamma, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe, uMean);
                 {
                     // TVec dVeloRoe;
                     // real dpRoe;
@@ -1146,9 +1263,26 @@ namespace DNDS::Euler
                     //     dF);
                 }
                 // lambda0 = lambda123 = lambda4 = aRoe + std::abs(veloRoe.dot(n));
+                real contactEnergyJump = 0;
+#ifdef USE_ROE_BASE_ENERGY_CONTACT_FIX
+                if (phys_.hasChemicalSource())
+                {
+                    TVec alpha23V = dU(Seq123) - dU(0) * veloRoe;
+                    TVec alpha23VT = alpha23V - n * alpha23V.dot(n);
+                    real incU4b = dU(I4) - alpha23VT.dot(veloRoe);
+                    TVec dVeloRoe;
+                    real dpRoe = 0;
+                    Gas::IdealGasUIncrement<dim>(
+                        uMean, dU, veloRoe, gammaEqRoe, dVeloRoe, dpRoe,
+                        phys_.mixtureBaseInternalRhoEIncrement(dU));
+                    DNDS_assert_info(gammaEqRoe > 1,
+                                     fmt::format("Roe Jacobian gammaEqRoe must be > 1, got {}", gammaEqRoe));
+                    contactEnergyJump = incU4b - dpRoe / (gammaEqRoe - 1);
+                }
+#endif
                 Gas::RoeFluxIncFDiff<dim>(dU, n, veloRoe, vsqrRoe, aRoe, asqrRoe, HRoe,
-                                          incFsign * lambda0, incFsign * lambda123, incFsign * lambda4, gamma,
-                                          dF);
+                                          incFsign * lambda0, incFsign * lambda123, incFsign * lambda4, gammaEqRoe,
+                                          dF, contactEnergyJump);
                 dF += incFsign * lambdaVis * dU;
             }
             //! now dF(U, dU) (GasInviscidFluxFacialIncrement) part actually treats the SeqI52Last part (as passive scalars)
@@ -1187,13 +1321,17 @@ namespace DNDS::Euler
             const TU &dU)
         {
             DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-            real gamma = settings.idealGasProperty.gamma;
+            real T = phys_.temperature(U);
+            real gammaEq = phys_.gammaEq(T, U);
+            real gamma = phys_.gamma(T, U);
             TVec velo = U(Seq123) / U(0);
             real p, H, asqr;
-            Gas::IdealGasThermal(U(I4), U(0), velo.squaredNorm(), gamma, p, asqr, H);
+            Gas::IdealGasThermal(U(I4), U(0), velo.squaredNorm(), gammaEq, gamma, p, asqr, H,
+                                 phys_.mixtureBaseInternalRhoE(U));
             TVec dVelo;
             real dp;
-            Gas::IdealGasUIncrement<dim>(U, dU, velo, gamma, dVelo, dp);
+            Gas::IdealGasUIncrement<dim>(U, dU, velo, gammaEq, dVelo, dp,
+                                         phys_.mixtureBaseInternalRhoEIncrement(dU));
             TU dF(U.size());
             Gas::GasInviscidFluxFacialIncrement<dim>(
                 U, dU,
@@ -1425,7 +1563,6 @@ namespace DNDS::Euler
         /// @}
 
     public:
-
         /// @brief Write boundary profile data to CSV files (rank 0 only).
         void PrintBCProfiles(const std::string &name, ArrayDOFV<nVarsFixed> &u, ArrayRECV<nVarsFixed> &uRec)
         {
@@ -1436,7 +1573,7 @@ namespace DNDS::Euler
             {
                 std::string fname = name + "_bc[" + pBCHandler->GetNameFormID(id) + "]_profile.csv";
                 std::filesystem::path outFile{fname};
-                std::filesystem::create_directories(outFile.parent_path() / ".");
+                createOutputDir(outFile);
                 std::ofstream fout(fname);
                 DNDS_assert_info(fout, fmt::format("failed to open [{}]", fname));
                 bcProfile.OutProfileCSV(fout);
@@ -1473,6 +1610,7 @@ namespace DNDS::Euler
                 if (!bndIntegrationLogs.count(id))
                 {
                     std::string fname = name + "_bc[" + pBCHandler->GetNameFormID(id) + "]_integrationLog.csv";
+                    createOutputDir(fname);
                     bndIntegrationLogs.emplace(std::make_pair(id, std::ofstream(fname)));
                     DNDS_assert_info(bndIntegrationLogs.at(id), fmt::format("failed to open [{}]", fname));
                     bndIntegrationLogs.at(id) << "step, stage, iter";
@@ -1601,7 +1739,7 @@ namespace DNDS::Euler
             }
 
             real eK = ret(Seq123).squaredNorm() * 0.5 / (verySmallReal + ret(0));
-            real e = ret(I4) - eK;
+            real e = ret(I4) - eK - phys_.mixtureBaseInternalRhoE(ret);
             if (e < 0)
             {
                 // eFixed = true;
@@ -1625,6 +1763,35 @@ namespace DNDS::Euler
                     ret(I4 + 1) = umean(I4 + 1), compressed = true;
                 if (ret(I4 + 2) < 0)
                     ret(I4 + 2) = umean(I4 + 2), compressed = true;
+            }
+
+            if (phys_.hasChemicalSource())
+            {
+                bool reactiveInvalid = false;
+                int Ns = phys_.nSpecies();
+                int Ns1 = Ns - 1;
+                int Isp = static_cast<int>(ret.size()) - Ns1;
+                real sumRhoY = 0;
+                for (int k = 0; k < Ns1; ++k)
+                {
+                    reactiveInvalid = reactiveInvalid || ret(Isp + k) < 0;
+                    sumRhoY += ret(Isp + k);
+                }
+                reactiveInvalid = reactiveInvalid || sumRhoY > ret(0);
+                if (!reactiveInvalid)
+                {
+                    try
+                    {
+                        real T = phys_.temperature(ret);
+                        reactiveInvalid = !std::isfinite(T) || phys_.toPhysT(T) < phys_.temperatureFloor();
+                    }
+                    catch (const std::exception &)
+                    {
+                        reactiveInvalid = true;
+                    }
+                }
+                if (reactiveInvalid)
+                    ret = umean, compressed = true;
             }
 
             return ret;
@@ -1653,6 +1820,9 @@ namespace DNDS::Euler
             {
                 pEps *= verySmallReal, rhoEps *= verySmallReal;
             }
+            real rhoeSensibleEps = pEps;
+            constexpr real rhoYFloor = 1e-30; // tiny positive floor (matches 0D ODE)
+            constexpr real ratio_decay = 0.75;
 
             TU ret = uInc;
 
@@ -1662,61 +1832,46 @@ namespace DNDS::Euler
             {
                 real declineV = ret(0) / (u(0) + verySmallReal);
                 real newrho = u(0) * std::exp(declineV);
-                // newrho = std::max(newrho, rhoEps);
                 newrho = rhoEps;
                 ret *= (newrho - u(0)) / (ret(0) - verySmallReal);
-                // std::cout << (newrho - u(0)) / (ret(0) + verySmallReal) << std::endl;
-                // DNDS_assert(false);
             }
+            real rhoE_base_old = phys_.mixtureBaseInternalRhoE(u);
             real ekOld = 0.5 * u(Seq123).squaredNorm() / (u(0) + verySmallReal);
-            real rhoEinternal = u(I4) - ekOld;
-            DNDS_assert(rhoEinternal > 0);
+            real rhoEinternal_sensible = u(I4) - ekOld - rhoE_base_old;
+            DNDS_assert(rhoEinternal_sensible > 0);
             real ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
-            real rhoEinternalNew = u(I4) + ret(I4) - ek;
-            if (rhoEinternalNew <= pEps)
+            real rhoE_base_new = phys_.mixtureBaseInternalRhoE(TU(u + ret));
+            real rhoEinternalNew_sensible = u(I4) + ret(I4) - ek - rhoE_base_new;
+            if (rhoEinternalNew_sensible <= rhoeSensibleEps)
             {
-                real declineV = (rhoEinternalNew - rhoEinternal) / (rhoEinternal + verySmallReal);
-                real newrhoEinteralNew = (std::exp(declineV) + verySmallReal) * rhoEinternal;
-                real gamma = settings.idealGasProperty.gamma;
-                // newrhoEinteralNew = std::max(pEps / (gamma - 1), newrhoEinteralNew);
-                newrhoEinteralNew = pEps / (gamma - 1);
-                real c0 = 2 * u(I4) * u(0) - u(Seq123).squaredNorm() - 2 * u(0) * newrhoEinteralNew;
-                real c1 = 2 * u(I4) * ret(0) + 2 * u(0) * ret(I4) - 2 * u(Seq123).dot(ret(Seq123)) - 2 * ret(0) * newrhoEinteralNew;
-                real c2 = 2 * ret(I4) * ret(0) - ret(Seq123).squaredNorm();
-                real deltaC = sqr(c1) - 4 * c0 * c2;
-                DNDS_assert(deltaC > 0);
-                real alphaL = (-std::sqrt(deltaC) - c1) / (2 * c2);
-                real alphaR = (std::sqrt(deltaC) - c1) / (2 * c2);
-                // if (c2 > 0)
-                //     DNDS_assert(alphaL > 0);
-                // DNDS_assert(alphaR > 0);
-                // DNDS_assert(alphaL < 1);
-                // if (c2 < 0)
-                //     DNDS_assert(alphaR < 1);
-                real alpha = std::min((c2 > 0 ? alphaL : alphaL), 1.);
-                alpha = std::max(0., alpha);
+                // Use linear-concave compression ratio (scheme=1).
+                // rhoe_sensible(θ) is concave → secant ≤ function, linear estimate safe.
+                real alpha = Gas::IdealGasGetCompressionRatioPressure<dim, 1, nVarsFixed>(
+                    u, ret, rhoeSensibleEps, rhoE_base_old, rhoE_base_new);
                 ret *= alpha * (0.99);
 
+                // Iterative pull-up: concave → rhoe(ret) ≥ linear estimate, may still overshoot.
                 real decay = 1 - 1e-1;
                 for (int iter = 0; iter < 1000; iter++)
                 {
-                    ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
-                    if (ret(I4) + u(I4) - ek < newrhoEinteralNew)
+                    real ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
+                    real rhoEBase_ret = phys_.mixtureBaseInternalRhoE(TU(u + ret));
+                    if (u(I4) + ret(I4) - ek - rhoEBase_ret < rhoeSensibleEps)
                         ret *= decay, alpha *= decay;
                     else
                         break;
                 }
 
-                ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
+                real ek = 0.5 * (u(Seq123) + ret(Seq123)).squaredNorm() / (u(0) + ret(0) + verySmallReal);
+                real rhoEBase_ret = phys_.mixtureBaseInternalRhoE(TU(u + ret));
 
-                if (ret(I4) + u(I4) - ek < newrhoEinteralNew * 0.5)
+                if (u(I4) + ret(I4) - ek - rhoEBase_ret < rhoeSensibleEps * 0.5)
                 {
                     std::cout << std::scientific << std::setprecision(5);
                     std::cout << u(0) << " " << ret(0) << std::endl;
-                    std::cout << rhoEinternalNew << " " << rhoEinternal << std::endl;
-                    std::cout << declineV << std::endl;
-                    std::cout << newrhoEinteralNew << std::endl;
-                    std::cout << ret(I4) + u(I4) - ek << std::endl;
+                    std::cout << rhoEinternalNew_sensible << " " << rhoEinternal_sensible << std::endl;
+                    std::cout << rhoeSensibleEps << std::endl;
+                    std::cout << u(I4) + ret(I4) - ek - rhoEBase_ret << std::endl;
                     std::cout << alpha << std::endl;
                     DNDS_assert(false);
                 }
@@ -1734,8 +1889,6 @@ namespace DNDS::Euler
                     DNDS_assert(u(I4 + 1) >= 0); //! might be bad using gmres, add this to gmres inc!
                     real declineV = ret(I4 + 1) / (u(I4 + 1) + 1e-6);
                     real newu5 = u(I4 + 1) * std::exp(declineV);
-                    // ! refvalue:
-                    real muRef = settings.idealGasProperty.muGas;
                     newu5 = std::max(1e-6, newu5);
                     ret(I4 + 1) = newu5 - u(I4 + 1);
                 }
@@ -1750,8 +1903,6 @@ namespace DNDS::Euler
                     DNDS_assert(u(I4 + 1) >= 0); //! might be bad using gmres, add this to gmres inc!
                     real declineV = ret(I4 + 1) / (u(I4 + 1) + 1e-6);
                     real newu5 = u(I4 + 1) * std::exp(declineV);
-                    // ! refvalue:
-                    real muRef = settings.idealGasProperty.muGas;
                     // newu5 = std::max(1e-10, newu5);
                     ret(I4 + 1) = newu5 - u(I4 + 1);
                 }
@@ -1763,8 +1914,6 @@ namespace DNDS::Euler
                     DNDS_assert(u(I4 + 2) >= 0); //! might be bad using gmres, add this to gmres inc!
                     real declineV = ret(I4 + 2) / (u(I4 + 2) + 1e-6);
                     real newu5 = u(I4 + 2) * std::exp(declineV);
-                    // ! refvalue:
-                    real muRef = settings.idealGasProperty.muGas;
                     // newu5 = std::max(1e-10, newu5);
                     ret(I4 + 2) = newu5 - u(I4 + 2);
                 }
@@ -1800,20 +1949,46 @@ namespace DNDS::Euler
             real alpha_fix_min = 1.0;
             for (index iCell = 0; iCell < cxInc.Size(); iCell++)
             {
-                TU compressedInc = this->CompressInc(cx[iCell], cxInc[iCell] * alpha);
+                const TU uOld = cx[iCell];
+                const TU rawInc = cxInc[iCell] * alpha;
+                TU compressedInc = this->CompressInc(uOld, rawInc);
                 real newAlpha = std::abs(compressedInc(0)) /
-                                (std::abs((cxInc[iCell] * alpha)(0)));
-                if (std::abs((cxInc[iCell] * alpha)(0)) < verySmallReal)
+                                (std::abs(rawInc(0)));
+                if (std::abs(rawInc(0)) < verySmallReal)
                     newAlpha = 1.; //! old inc could be zero, so compresion alpha is always 1
-                alpha_fix_min = std::min(
-                    alpha_fix_min,
-                    newAlpha);
+                alpha_fix_min = std::min(alpha_fix_min, newAlpha);
                 // if (newAlpha < 1.0 - 1e-14)
                 //     std::cout << "KL\n"
                 //               << std::scientific << std::setprecision(5)
                 //               << this->CompressInc(cx[iCell], cxInc[iCell] * alpha).transpose() << "\n"
                 //               << cxInc[iCell].transpose() * alpha << std::endl;
                 cx[iCell] += compressedInc;
+
+                // --- Species positivity clipping (reactive flow) ---
+                if (phys_.hasChemicalSource())
+                {
+                    int Ns = phys_.nSpecies();
+                    int Ns1 = Ns - 1; // number of transported (independent) species
+                    int nV = static_cast<int>(cx[iCell].size());
+                    int Isp = nV - Ns1;               // first transported species index
+                    constexpr real rhoYFloor = 1e-30; // tiny positive floor (matches 0D ODE)
+
+                    // (1) Clip each rhoY_k >= rhoYFloor
+                    for (int k = 0; k < Ns1; ++k)
+                        cx[iCell](Isp + k) = std::max(cx[iCell](Isp + k), rhoYFloor);
+
+                    // (2) Enforce rho - sum(rhoY_k) > 0  (dependent species > 0)
+                    real sumRhoY = 0;
+                    for (int k = 0; k < Ns1; ++k)
+                        sumRhoY += cx[iCell](Isp + k);
+                    if (sumRhoY > cx[iCell](0))
+                    {
+                        real scale = cx[iCell](0) / sumRhoY * (1.0 - 1e-14);
+                        for (int k = 0; k < Ns1; ++k)
+                            cx[iCell](Isp + k) *= scale;
+                    }
+                }
+
                 // wall fix in not needed
                 // if (model == NS_2EQ || model == NS_2EQ_3D)
                 //     if (iCell < mesh->NumCell())
@@ -1829,24 +2004,29 @@ namespace DNDS::Euler
                 //                 // cx[iCell](I4 + 1) = 0.; // superfix, actually works
                 //                 // real d1 = dWall[iCell].minCoeff();
                 //                 real pMean, asqrMean, Hmean;
-                //                 real gamma = settings.idealGasProperty.gamma;
+                //                 real gamma = phys_.gamma();
                 //                 auto ULMeanXy = cx[iCell];
                 //                 Gas::IdealGasThermal(ULMeanXy(I4), ULMeanXy(0), (ULMeanXy(Seq123) / ULMeanXy(0)).squaredNorm(),
                 //                                      gamma, pMean, asqrMean, Hmean);
                 //                 // ! refvalue:
-                //                 real muRef = settings.idealGasProperty.muGas;
-                //                 real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * ULMeanXy(0));
+                //                 real muRef = phys_.muRef();
+                //                 real T = pMean / ((gamma - 1) / gamma * phys_.Cp() * ULMeanXy(0));
                 //                 real mufPhy1 = muEff(ULMeanXy, T);
 
                 //                 real rhoOmegaaaWall = mufPhy1 / sqr(d1) * 800;
                 //                 // cx[iCell](I4 + 2) = rhoOmegaaaWall * 0.5; // this is bad
                 //             }
 
-                if (model == NS_2EQ || model == NS_2EQ_3D)
+                if constexpr (Traits::has2EQ || Traits::isExtended)
                 { // for SST or KOWilcox
-                    if (settings.ransModel == RANSModel::RANS_KOSST ||
-                        settings.ransModel == RANSModel::RANS_KOWilcox)
-                        cx[iCell](I4 + 2) = std::max(cx[iCell](I4 + 2), settings.RANSBottomLimit * settings.farFieldStaticValue(I4 + 2));
+                    if (phys_.ransModel() == RANSModel::RANS_KOSST ||
+                        phys_.ransModel() == RANSModel::RANS_KOWilcox)
+                        cx[iCell](I4 + 2) = std::max(cx[iCell](I4 + 2), settings.RANSBottomLimit * settings.farFieldStaticValue.cons(I4 + 2));
+                }
+                if constexpr (Traits::hasSA || Traits::isExtended)
+                { // for SA
+                    if (Traits::hasSA || phys_.ransModel() == RANS_SA)
+                        cx[iCell](I4 + 1) = std::min(cx[iCell](I4 + 1), settings.RANSTopLimit * 1.0 * cx[iCell][0]);
                 }
             }
             real alpha_fix_min_c = alpha_fix_min;
@@ -1855,59 +2035,6 @@ namespace DNDS::Euler
                 if (cx.father->getMPI().rank == 0)
                     log() << TermColor::Magenta << "Increment fixed " << std::scientific << std::setprecision(5) << alpha_fix_min << TermColor::Reset << std::endl;
         }
-
-        // void AddFixedIncrement(
-        //     ArrayDOFV<nVarsFixed> &cx,
-        //     ArrayDOFV<nVarsFixed> &cxInc, real alpha = 1.0)
-        // {
-        //     real alpha_fix_min = 1.0;
-        //     for (index iCell = 0; iCell < cxInc.Size(); iCell++)
-        //     {
-        //         TU compressedInc = this->CompressInc(cx[iCell], cxInc[iCell] * alpha);
-        //         real newAlpha = std::abs(compressedInc(0)) /
-        //                         (std::abs((cxInc[iCell] * alpha)(0)));
-        //         if (std::abs((cxInc[iCell] * alpha)(0)) < verySmallReal)
-        //             newAlpha = 1.; //! old inc could be zero, so compresion alpha is always 1
-        //         alpha_fix_min = std::min(
-        //             alpha_fix_min,
-        //             newAlpha);
-        //         // if (newAlpha < 1.0 - 1e-14)
-        //         //     std::cout << "KL\n"
-        //         //               << std::scientific << std::setprecision(5)
-        //         //               << this->CompressInc(cx[iCell], cxInc[iCell] * alpha).transpose() << "\n"
-        //         //               << cxInc[iCell].transpose() * alpha << std::endl;
-        //         // cx[iCell] += compressedInc;
-        //     }
-        //     real alpha_fix_min_c = alpha_fix_min;
-        //     MPI::Allreduce(&alpha_fix_min_c, &alpha_fix_min, 1, DNDS_MPI_REAL, MPI_MIN, cx.father->getMPI().comm);
-        //     if (alpha_fix_min < 1.0)
-        //         if (cx.father->getMPI().rank == 0)
-        //             std::cout << "Increment fixed " << std::scientific << std::setprecision(5) << alpha_fix_min << std::endl;
-
-        //     // for (index iCell = 0; iCell < cxInc.Size(); iCell++)
-        //     //     cx[iCell] += alpha_fix_min * alpha * cxInc[iCell];
-        //     index nFixed = 0;
-        //     for (index iCell = 0; iCell < cxInc.Size(); iCell++)
-        //     {
-        //         TU compressedInc = this->CompressInc(cx[iCell], cxInc[iCell] * alpha);
-        //         real newAlpha = std::abs(compressedInc(0)) /
-        //                         (std::abs((cxInc[iCell] * alpha)(0)));
-        //         if (std::abs((cxInc[iCell] * alpha)(0)) < verySmallReal)
-        //             newAlpha = 1.; //! old inc could be zero, so compresion alpha is always 1
-
-        //         // if (newAlpha < 1.0 - 1e-14)
-        //         //     std::cout << "KL\n"
-        //         //               << std::scientific << std::setprecision(5)
-        //         //               << this->CompressInc(cx[iCell], cxInc[iCell] * alpha).transpose() << "\n"
-        //         //               << cxInc[iCell].transpose() * alpha << std::endl;
-        //         cx[iCell] += (newAlpha < 1 ? nFixed ++,alpha_fix_min : 1) * alpha * cxInc[iCell];
-        //     }
-        //     index nFixed_c = nFixed;
-        //     MPI::Allreduce(&nFixed_c, &nFixed, 1, DNDS_MPI_INDEX, MPI_SUM, cx.father->getMPI().comm);
-        //     if (alpha_fix_min < 1.0)
-        //         if (cx.father->getMPI().rank == 0)
-        //             std::cout << "Increment fixed number " << nFixed_c << std::endl;
-        // }
 
         /**
          * @brief Apply Laplacian smoothing to a residual field.
@@ -1936,7 +2063,7 @@ namespace DNDS::Euler
                     for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                     {
                         index iFace = c2f[ic2f];
-                        index iCellOther = vfv->CellFaceOther(iCell, iFace);
+                        index iCellOther = vfv->CellFaceOther(iCell, iFace, ic2f);
                         if (iCellOther != UnInitIndex)
                         {
                             div += epsC;
@@ -1969,14 +2096,23 @@ namespace DNDS::Euler
          */
         struct OutputOverlapDataRefs
         {
-            ArrayDOFV<nVarsFixed> &u;      ///< Cell-centered conservative DOFs.
-            ArrayRECV<nVarsFixed> &uRec;   ///< Reconstruction coefficients.
-            ArrayDOFV<1> &betaPP;          ///< PP reconstruction limiter beta.
-            ArrayDOFV<1> &alphaPP;         ///< PP RHS limiter alpha.
+            ArrayDOFV<nVarsFixed> &u;    ///< Cell-centered conservative DOFs.
+            ArrayRECV<nVarsFixed> &uRec; ///< Reconstruction coefficients.
+            ArrayDOFV<1> &betaPP;        ///< PP reconstruction limiter beta.
+            ArrayDOFV<1> &alphaPP;       ///< PP RHS limiter alpha.
         };
 
         /// @brief Initialize an OutputPicker with field callbacks for VTK/HDF5 output.
         void InitializeOutputPicker(OutputPicker &op, OutputOverlapDataRefs dataRefs);
+
+        /// @brief Initialize an OutputPicker for boundary output with field callbacks.
+        ///
+        /// Like InitializeOutputPicker, but the registered functors accept a boundary
+        /// index @c iBnd (into @c mesh->bnd2cell) and internally map to the owning cell
+        /// via @c mesh->bnd2cell[iBnd][0]. Includes cell-centered quantities (wallDist,
+        /// conservative components, limiter values, etc.) plus the face-specific
+        /// @c dWallFace.
+        void InitializeOutputPickerBnd(OutputPicker &op, OutputOverlapDataRefs dataRefs);
     };
 }
 
@@ -2034,7 +2170,7 @@ namespace DNDS::Euler
             ArrayDOFV<nVarsFixed> &uIncNew,                                                                               \
             JacobianDiagBlock<nVarsFixed> &JDiag,                                                                         \
             bool forward, bool gsUpdate, TU &sumInc,                                                                      \
-            bool uIncIsZero);                                                                     \
+            bool uIncIsZero);                                                                                             \
         ext template void EulerEvaluator<model>::UpdateSGSWithRec(                                                        \
             real alphaDiag,                                                                                               \
             real t,                                                                                                       \
@@ -2063,6 +2199,21 @@ namespace DNDS::Euler
                                                                                                                           \
         ext template void EulerEvaluator<model>::FixUMaxFilter(                                                           \
             ArrayDOFV<nVarsFixed> &u);                                                                                    \
+        ext template void EulerEvaluator<model>::PointImplicitSourceUpdate(                                               \
+            ArrayDOFV<nVarsFixed> &uNew,                                                                                  \
+            const ArrayDOFV<nVarsFixed> &res,                                                                             \
+            const ArrayDOFV<nVarsFixed> &u,                                                                               \
+            real alphaDiag,                                                                                               \
+            real dt,                                                                                                      \
+            int nNewtonSteps,                                                                                             \
+            SourceFilter filter,                                                                                          \
+            OptionalRef<ArrayDOFV<1>> cellTWarm);                                                                         \
+        ext template void EulerEvaluator<model>::ReactiveSourceConstVolumeStep(                                           \
+            ArrayDOFV<nVarsFixed> &u,                                                                                     \
+            ArrayRECV<nVarsFixed> &uRec,                                                                                  \
+            real dt,                                                                                                      \
+            real t,                                                                                                       \
+            OptionalRef<ArrayDOFV<1>> cellTWarm);                                                                         \
                                                                                                                           \
         ext template void EulerEvaluator<model>::TimeAverageAddition(                                                     \
             ArrayDOFV<nVarsFixed> &w, ArrayDOFV<nVarsFixed> &wAveraged, real dt, real &tCur);                             \
@@ -2073,6 +2224,10 @@ namespace DNDS::Euler
                                                                                                                           \
         ext template void EulerEvaluator<model>::EvaluateNorm(                                                            \
             Eigen::Vector<real, -1> &res, ArrayDOFV<nVarsFixed> &rhs, index P, bool volWise, bool average);               \
+                                                                                                                          \
+        ext template void EulerEvaluator<model>::EvaluateMinMax(                                                          \
+            Eigen::Vector<real, -1> &uMin, Eigen::Vector<real, -1> &uMax, ArrayDOFV<nVarsFixed> &u,                       \
+            StateValueOrigin representation);                                                                             \
                                                                                                                           \
         ext template void EulerEvaluator<model>::EvaluateRecNorm(                                                         \
             Eigen::Vector<real, -1> &res,                                                                                 \
@@ -2125,88 +2280,109 @@ DNDS_EulerEvaluator_INS_EXTERN(NS_3D, extern);
 DNDS_EulerEvaluator_INS_EXTERN(NS_SA_3D, extern);
 DNDS_EulerEvaluator_INS_EXTERN(NS_2EQ_3D, extern);
 
-#define DNDS_EulerEvaluator_EvaluateDt_INS_EXTERN(model, ext)                                                              \
-    namespace DNDS::Euler                                                                                                  \
-    {                                                                                                                      \
-        ext template void EulerEvaluator<model>::GetWallDist();                                                            \
-        ext template void EulerEvaluator<model>::GetWallDist_CollectTriangles(                                             \
-            bool, std::vector<Eigen::Matrix<real, 3, 3>> &);                                                               \
-        ext template void EulerEvaluator<model>::GetWallDist_AABB();                                                       \
-        ext template void EulerEvaluator<model>::GetWallDist_BatchedAABB();                                                \
-        ext template void EulerEvaluator<model>::GetWallDist_Poisson();                                                    \
-        ext template void EulerEvaluator<model>::GetWallDist_ComputeFaceDistances();                                       \
-        ext template void EulerEvaluator<model>::EvaluateDt(                                                               \
-            ArrayDOFV<1> &dt,                                                                                              \
-            ArrayDOFV<nVarsFixed> &u,                                                                                      \
-            ArrayRECV<nVarsFixed> &uRec,                                                                                   \
-            real CFL, real &dtMinall, real MaxDt,                                                                          \
-            bool UseLocaldt,                                                                                               \
-            real t,                                                                                                        \
-            uint64_t flags);                                                                                               \
-        ext template void                                                                                                  \
-        EulerEvaluator<model>::fluxFace(                                                                                   \
-            const TU_Batch &ULxy,                                                                                          \
-            const TU_Batch &URxy,                                                                                          \
-            const TU &ULMeanXy,                                                                                            \
-            const TU &URMeanXy,                                                                                            \
-            const TDiffU_Batch &DiffUxy,                                                                                   \
-            const TDiffU_Batch &DiffUxyPrim,                                                                               \
-            const TVec_Batch &unitNorm,                                                                                    \
-            const TVec_Batch &vg,                                                                                          \
-            const TVec &unitNormC,                                                                                         \
-            const TVec &vgC,                                                                                               \
-            TU_Batch &FLfix,                                                                                               \
-            TU_Batch &FRfix,                                                                                               \
-            TU_Batch &finc,                                                                                                \
-            TReal_Batch &lam0V, TReal_Batch &lam123V, TReal_Batch &lam4V,                                                  \
-            Geom::t_index btype,                                                                                           \
-            typename Gas::RiemannSolverType rsType,                                                                        \
-            index iFace, bool ignoreVis);                                                                                  \
-        ext template                                                                                                       \
-            typename EulerEvaluator<model>::TU                                                                             \
-            EulerEvaluator<model>::source(                                                                                 \
-                const TU &UMeanXy,                                                                                         \
-                const TDiffU &DiffUxy,                                                                                     \
-                const Geom::tPoint &pPhy,                                                                                  \
-                TJacobianU &jacobian,                                                                                      \
-                index iCell,                                                                                               \
-                index ig,                                                                                                  \
-                int Mode);                                                                                                 \
-        ext template                                                                                                       \
-            typename EulerEvaluator<model>::TU                                                                             \
-            EulerEvaluator<model>::generateBoundaryValue(                                                                  \
-                TU &ULxy,                                                                                                  \
-                const TU &ULMeanXy,                                                                                        \
-                index iCell, index iFace, int iG,                                                                          \
-                const TVec &uNorm,                                                                                         \
-                const TMat &normBase,                                                                                      \
-                const Geom::tPoint &pPhysics,                                                                              \
-                real t,                                                                                                    \
-                Geom::t_index btype,                                                                                       \
-                bool fixUL,                                                                                                \
-                int geomMode, int linMode);                                                                                \
-        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_FarField(                        \
-            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                              \
-            const Geom::tPoint &, real, Geom::t_index, bool, int);                                                        \
-        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_SpecialFar(                      \
-            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                              \
-            const Geom::tPoint &, real, Geom::t_index);                                                                   \
-        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_InviscidWall(                    \
-            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                              \
-            const Geom::tPoint &, real, Geom::t_index);                                                                   \
-        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_ViscousWall(                     \
-            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                              \
-            const Geom::tPoint &, real, Geom::t_index, bool, int);                                                        \
-        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_Outflow(                         \
-            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                              \
-            const Geom::tPoint &, real, Geom::t_index);                                                                   \
-        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_Inflow(                          \
-            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                              \
-            const Geom::tPoint &, real, Geom::t_index);                                                                   \
-        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_TotalConditionInflow(            \
-            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                              \
-            const Geom::tPoint &, real, Geom::t_index);                                                                   \
-        ext template void EulerEvaluator<model>::InitializeOutputPicker(OutputPicker &op, OutputOverlapDataRefs dataRefs); \
+#define DNDS_EulerEvaluator_EvaluateDt_INS_EXTERN(model, ext)                                                                 \
+    namespace DNDS::Euler                                                                                                     \
+    {                                                                                                                         \
+        ext template void EulerEvaluator<model>::GetWallDist();                                                               \
+        ext template void EulerEvaluator<model>::GetWallDist_CollectTriangles(                                                \
+            bool, std::vector<Eigen::Matrix<real, 3, 3>> &);                                                                  \
+        ext template void EulerEvaluator<model>::GetWallDist_AABB();                                                          \
+        ext template void EulerEvaluator<model>::GetWallDist_BatchedAABB();                                                   \
+        ext template void EulerEvaluator<model>::GetWallDist_Poisson();                                                       \
+        ext template void EulerEvaluator<model>::GetWallDist_ComputeFaceDistances();                                          \
+        ext template void EulerEvaluator<model>::EvaluateDt(                                                                  \
+            ArrayDOFV<1> &dt,                                                                                                 \
+            ArrayDOFV<nVarsFixed> &u,                                                                                         \
+            ArrayRECV<nVarsFixed> &uRec,                                                                                      \
+            real CFL, real &dtMinall, real MaxDt,                                                                             \
+            bool UseLocaldt,                                                                                                  \
+            real t,                                                                                                           \
+            uint64_t flags,                                                                                                   \
+            OptionalRef<ArrayDOFV<1>> cellTWarm);                                                                             \
+        ext template void                                                                                                     \
+        EulerEvaluator<model>::fluxFace(                                                                                      \
+            const TU_Batch &ULxy,                                                                                             \
+            const TU_Batch &URxy,                                                                                             \
+            const TU &ULMeanXy,                                                                                               \
+            const TU &URMeanXy,                                                                                               \
+            const TDiffU_Batch &DiffUxy,                                                                                      \
+            const TDiffU_Batch &DiffUxyPrim,                                                                                  \
+            const TVec_Batch &unitNorm,                                                                                       \
+            const TVec_Batch &vg,                                                                                             \
+            const TVec &unitNormC,                                                                                            \
+            const TVec &vgC,                                                                                                  \
+            TU_Batch &FLfix,                                                                                                  \
+            TU_Batch &FRfix,                                                                                                  \
+            TU_Batch &finc,                                                                                                   \
+            TReal_Batch &lam0V, TReal_Batch &lam123V, TReal_Batch &lam4V,                                                     \
+            Geom::t_index btype,                                                                                              \
+            typename Gas::RiemannSolverType rsType,                                                                           \
+            index iFace, bool ignoreVis,                                                                                      \
+            OptionalRef<ArrayDOFV<1>> cellTWarm);                                                                             \
+        ext template                                                                                                          \
+            typename EulerEvaluator<model>::TU                                                                                \
+            EulerEvaluator<model>::source(                                                                                    \
+                const TU &UMeanXy,                                                                                            \
+                const TDiffU &DiffUxy,                                                                                        \
+                const Geom::tPoint &pPhy,                                                                                     \
+                TJacobianU &jacobian,                                                                                         \
+                index iCell,                                                                                                  \
+                index ig,                                                                                                     \
+                int Mode,                                                                                                     \
+                SourceFilter filter,                                                                                          \
+                OptionalRef<ArrayDOFV<1>> cellTWarm);                                                                         \
+        ext template void EulerEvaluator<model>::EvaluateCellSource(                                                          \
+            TU &cellRHS,                                                                                                      \
+            TJacobianU &cellJac,                                                                                              \
+            const TU &uCell,                                                                                                  \
+            const TDiffU &cellGradU,                                                                                          \
+            index iCell,                                                                                                      \
+            int jacMode,                                                                                                      \
+            SourceFilter filter,                                                                                              \
+            real cellAlpha,                                                                                                   \
+            bool useRecArrays,                                                                                                \
+            OptionalRef<ArrayDOFV<nVarsFixed>> pU,                                                                            \
+            OptionalRef<ArrayRECV<nVarsFixed>> pURecUnlim,                                                                    \
+            OptionalRef<ArrayRECV<nVarsFixed>> pURec,                                                                         \
+            bool direct2ndRec,                                                                                                \
+            real t,                                                                                                           \
+            OptionalRef<ArrayDOFV<1>> cellTWarm);                                                                             \
+        ext template                                                                                                          \
+            typename EulerEvaluator<model>::TU                                                                                \
+            EulerEvaluator<model>::generateBoundaryValue(                                                                     \
+                TU &ULxy,                                                                                                     \
+                const TU &ULMeanXy,                                                                                           \
+                index iCell, index iFace, int iG,                                                                             \
+                const TVec &uNorm,                                                                                            \
+                const TMat &normBase,                                                                                         \
+                const Geom::tPoint &pPhysics,                                                                                 \
+                real t,                                                                                                       \
+                Geom::t_index btype,                                                                                          \
+                bool fixUL,                                                                                                   \
+                int geomMode, int linMode);                                                                                   \
+        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_FarField(                           \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                                  \
+            const Geom::tPoint &, real, Geom::t_index, bool, int);                                                            \
+        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_SpecialFar(                         \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                                  \
+            const Geom::tPoint &, real, Geom::t_index);                                                                       \
+        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_InviscidWall(                       \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                                  \
+            const Geom::tPoint &, real, Geom::t_index);                                                                       \
+        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_ViscousWall(                        \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                                  \
+            const Geom::tPoint &, real, Geom::t_index, bool, int);                                                            \
+        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_Outflow(                            \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                                  \
+            const Geom::tPoint &, real, Geom::t_index);                                                                       \
+        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_Inflow(                             \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                                  \
+            const Geom::tPoint &, real, Geom::t_index);                                                                       \
+        ext template typename EulerEvaluator<model>::TU EulerEvaluator<model>::generateBV_TotalConditionInflow(               \
+            TU &, const TU &, index, index, int, const TVec &, const TMat &,                                                  \
+            const Geom::tPoint &, real, Geom::t_index);                                                                       \
+        ext template void EulerEvaluator<model>::InitializeOutputPicker(OutputPicker &op, OutputOverlapDataRefs dataRefs);    \
+        ext template void EulerEvaluator<model>::InitializeOutputPickerBnd(OutputPicker &op, OutputOverlapDataRefs dataRefs); \
     }
 
 DNDS_EulerEvaluator_EvaluateDt_INS_EXTERN(NS, extern);
@@ -2230,7 +2406,8 @@ DNDS_EulerEvaluator_EvaluateDt_INS_EXTERN(NS_2EQ_3D, extern);
             ArrayDOFV<1> &cellRHSAlpha,                        \
             bool onlyOnHalfAlpha,                              \
             real t,                                            \
-            uint64_t flags);                                   \
+            uint64_t flags,                                    \
+            OptionalRef<ArrayDOFV<1>> cellTWarm);              \
     }
 
 DNDS_EulerEvaluator_EvaluateRHS_INS_EXTERN(NS, extern);

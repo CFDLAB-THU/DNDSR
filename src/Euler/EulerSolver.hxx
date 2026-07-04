@@ -19,6 +19,7 @@
 #include "Solver/ODE.hpp"
 #include "Solver/Linear.hpp"
 #include "SpecialFields.hpp"
+#include "Geom/Mesh/Mesh_Helpers.hpp"
 // #ifdef __DNDS_REALLY_COMPILING__HEADER_ON__
 // #undef __DNDS_REALLY_COMPILING__
 // #endif
@@ -37,7 +38,8 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>)
+        template <>
+    )
     /** @brief Main implicit time-marching loop for the compressible Navier-Stokes solver.
      *
      *  Performs the following at each time step:
@@ -77,7 +79,7 @@ namespace DNDS::Euler
         {
             if (mpi.rank == 0)
             {
-                log() << "Mesh Is not altered; partitioning done" << std::endl;
+                log() << "Partitioned mesh write complete; solver setup skipped" << std::endl;
             }
             return;
         }
@@ -100,6 +102,8 @@ namespace DNDS::Euler
         /*******************************************************/
 
         eval.InitializeUDOF(u);
+        for (index i = 0; i < mesh->NumCell(); ++i)
+            cellT_warm_[i](0) = eval.phys().temperature(u[i]);
         if (config.timeAverageControl.enabled)
             wAveraged.setConstant(0.0);
         if (config.timeMarchControl.useRestart)
@@ -116,6 +120,10 @@ namespace DNDS::Euler
         OutputPicker outputPicker;
         eval.InitializeOutputPicker(outputPicker, {u, uRec, betaPP, alphaPP});
         addOutList = outputPicker.getSubsetList(config.dataIOControl.outCellScalarNames);
+
+        OutputPicker outputPickerBnd;
+        eval.InitializeOutputPickerBnd(outputPickerBnd, {u, uRec, betaPP, alphaPP});
+        addBndOutList = outputPickerBnd.getSubsetList(config.dataIOControl.outBndScalarNames);
 
         /*******************************************************/
         /*                 TEMPORARY Us                        */
@@ -143,6 +151,35 @@ namespace DNDS::Euler
         /*******************************************************/
         /*                   DEFINE LAMBDAS                    */
         /*******************************************************/
+
+        const bool sourceTauSplittingRequested = config.linearSolverControl.sourceTauSplitting &&
+                                                 TEval::Traits::isExtended &&
+                                                 eval.settings.reactiveFlow.enabled;
+        // The experimental tau split rebuilds a residual around the source
+        // substep and is not identity-preserving in the S -> 0 limit. Bypass
+        // it completely when the reactive source is scaled to zero so debug
+        // runs recover the unsplit zero-source equations exactly.
+        const bool sourceTauSplittingEnabled = sourceTauSplittingRequested &&
+                                               eval.settings.reactiveSourceScale > 0;
+        const bool sourceStrangSplittingEnabled = config.timeMarchControl.sourceStrangSplitting &&
+                                                  TEval::Traits::isExtended &&
+                                                  eval.settings.reactiveFlow.enabled;
+        DNDS_check_throw_info(!(sourceTauSplittingEnabled && sourceStrangSplittingEnabled),
+                              "sourceTauSplitting and sourceStrangSplitting cannot both be enabled");
+        const uint64_t sourceTauSplittingRHSFlag = sourceStrangSplittingEnabled
+                                                       ? TEval::RHS_Ignore_Reactive_Source
+                                                   : sourceTauSplittingEnabled
+                                                       ? TEval::RHS_Ignore_Reactive_Source_Jacobian
+                                                       : TEval::RHS_No_Flags;
+
+        // Warm-start T cache: initialized per-cell from IC, refreshed by
+        // source() (via EvaluateCellSource in RHS), ReactiveSourceConstVolumeStep
+        // (Strang), and PointImplicitSourceUpdate.  Face loops (EvaluateDt,
+        // fluxFace) read the cache as TGuess for conservativeThermal() and
+        // temperature() calls.  Controlled by eulerSettings.useCellTWarmCache.
+        auto warmT = (eval.settings.reactiveFlow.useCellTWarmCache && eval.phys().hasChemicalSource())
+                         ? OptionalRef<ArrayDOFV<1>>(cellT_warm_)
+                         : OptionalRef<ArrayDOFV<1>>{};
 
         auto frhsOuter =
             [&](
@@ -211,7 +248,7 @@ namespace DNDS::Euler
                 alphaPP_tmp.setConstant(1.0);
                 uRecNew.setConstant(0.0);
                 eval.EvaluateRHS(crhs, JSourceC, cx, uRecNew, uRecNew, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit,
-                                 TEval::RHS_Ignore_Viscosity); // TODO: test with viscosity // TODO: RHS_Direct_2nd_Rec_1st_Conv?
+                                 TEval::RHS_Ignore_Viscosity | sourceTauSplittingRHSFlag, warmT); // TODO: test with viscosity // TODO: RHS_Direct_2nd_Rec_1st_Conv?
                 // vfv->DoReconstruction2nd(uRecOld, cx, FBoundary, 1, std::vector<int>());
                 // eval.EvaluateRHS(crhs, JSourceC, cx, uRecOld, uRecNew, betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit,
                 //                  0); // TEval::RHS_Ignore_Viscosity
@@ -468,11 +505,15 @@ namespace DNDS::Euler
                                const Eigen::Ref<tLimitBatch> &data) -> tLimitBatch
                 {
                     Timer().StartTimer(PerformanceTimer::LimiterA);
-                    Eigen::Vector<real, I4 + 1> UC = (UL + UR)(Seq01234) * 0.5;
+                    TU UMean = (UL + UR) * 0.5;
                     Eigen::Matrix<real, dim, dim> normBase = Geom::NormBuildLocalBaseV<dim>(n(Seq012));
-                    UC(Seq123) = normBase.transpose() * UC(Seq123);
+                    UMean(Seq123) = normBase.transpose() * UMean(Seq123);
+                    Eigen::Vector<real, I4 + 1> UC = UMean(Seq01234);
 
-                    auto M = Gas::IdealGas_EulerGasLeftEigenVector<dim>(UC, eval.settings.idealGasProperty.gamma);
+                    real T = eval.phys().temperature(UMean);
+                    real gammaEq = eval.phys().gammaEq(T, UMean);
+                    real gamma = eval.phys().gamma(T, UMean);
+                    auto M = Gas::IdealGas_EulerGasLeftEigenVector<dim>(UC, gammaEq, gamma, eval.phys().mixtureBaseInternalRhoE(UMean));
                     M(EigenAll, Seq123) *= normBase.transpose();
 
                     Eigen::Matrix<real, nVarsFixed, nVarsFixed> ret(nVars, nVars);
@@ -486,11 +527,15 @@ namespace DNDS::Euler
                                const Eigen::Ref<tLimitBatch> &data) -> tLimitBatch
                 {
                     Timer().StartTimer(PerformanceTimer::LimiterA);
-                    Eigen::Vector<real, I4 + 1> UC = (UL + UR)(Seq01234) * 0.5;
+                    TU UMean = (UL + UR) * 0.5;
                     Eigen::Matrix<real, dim, dim> normBase = Geom::NormBuildLocalBaseV<dim>(n(Seq012));
-                    UC(Seq123) = normBase.transpose() * UC(Seq123);
+                    UMean(Seq123) = normBase.transpose() * UMean(Seq123);
+                    Eigen::Vector<real, I4 + 1> UC = UMean(Seq01234);
 
-                    auto M = Gas::IdealGas_EulerGasRightEigenVector<dim>(UC, eval.settings.idealGasProperty.gamma);
+                    real T = eval.phys().temperature(UMean);
+                    real gammaEq = eval.phys().gammaEq(T, UMean);
+                    real gamma = eval.phys().gamma(T, UMean);
+                    auto M = Gas::IdealGas_EulerGasRightEigenVector<dim>(UC, gammaEq, gamma, eval.phys().mixtureBaseInternalRhoE(UMean));
                     M(Seq123, EigenAll) = normBase * M(Seq123, EigenAll);
 
                     Eigen::Matrix<real, nVarsFixed, nVarsFixed> ret(nVars, nVars);
@@ -519,7 +564,9 @@ namespace DNDS::Euler
                                 v.setConstant(-veryLargeReal * v(I4));
                                 return;
                             }
-                            Gas::IdealGasThermalConservative2Primitive<dim>(cons, prim, eval.settings.idealGasProperty.gamma);
+                            real T = eval.phys().temperature(cons);
+                            real gammaEq = eval.phys().gammaEq(T, cons);
+                            Gas::IdealGasThermalConservative2Primitive<dim>(cons, prim, gammaEq, eval.phys().mixtureBaseInternalRhoE(cons));
                             v.setConstant(prim(I4));
                             return;
                         });
@@ -620,17 +667,19 @@ namespace DNDS::Euler
             if (config.implicitReconstructionControl.useExplicit)
                 eval.EvaluateRHS(crhs, JSourceC, cx, uRecC /* dummy*/, uRecC /* dummy*/,
                                  betaPPC /* dummy*/, alphaPP_tmp /* dummy*/, false, tSimu + ct * curDtImplicit,
-                                 TEval::RHS_Direct_2nd_Rec | (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags));
+                                 TEval::RHS_Direct_2nd_Rec | (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags) |
+                                     sourceTauSplittingRHSFlag,
+                                 warmT);
             else if (config.limiterControl.useLimiter || config.limiterControl.usePPRecLimiter) // todo: opt to using limited for uRecUnlim
                 eval.EvaluateRHS(crhs, JSourceC, cx, config.limiterControl.useViscousLimited ? uRecLimited : uRecC, uRecLimited,
-                                 betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit);
+                                 betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit, sourceTauSplittingRHSFlag, warmT);
             else
                 eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, uRecC,
-                                 betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit);
+                                 betaPPC, alphaPP_tmp, false, tSimu + ct * curDtImplicit, sourceTauSplittingRHSFlag, warmT);
 
             crhs.trans.startPersistentPull();
             crhs.trans.waitPersistentPull();
-            if (getNVars(model) > (I4 + 1) && iter <= config.others.nFreezePassiveInner)
+            if (nVars > (I4 + 1) && iter <= config.others.nFreezePassiveInner)
             {
                 for (int i = 0; i < crhs.Size(); i++)
                     crhs[i](Eigen::seq(I4 + 1, EigenLast)).setZero();
@@ -655,7 +704,9 @@ namespace DNDS::Euler
                 return eval.EvaluateRHS(crhs, JSource, cx, uRecNew, uRecNew, betaPP, alphaPP_tmp, false, tSimu + ct * curDtImplicit,
                                         TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration |
                                             TEval::RHS_Direct_2nd_Rec_already_have_uGradBufNoLim | //! uGradBufNoLim already existent in fdtau
-                                            (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags));
+                                            (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags) |
+                                            sourceTauSplittingRHSFlag,
+                                        warmT);
                 //! note: in HM3 IV test for TPMG, this O1 version makes convergence slower compared to the O2 one, why?
                 // static const int use_1st_conv = 1;
                 // static const int use_1st_conv_ignore_vis = 0;
@@ -679,7 +730,7 @@ namespace DNDS::Euler
             // uRec.trans.startPersistentPull();
             // uRec.trans.waitPersistentPull();
             auto &uRecC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRec1 : uRec;
-            eval.EvaluateDt(dTau, cx, uRecC, CFLNow, curDtMin, 1e100, config.implicitCFLControl.useLocalDt, tSimu);
+            eval.EvaluateDt(dTau, cx, uRecC, CFLNow, curDtMin, 1e100, config.implicitCFLControl.useLocalDt, tSimu, 0, warmT);
             for (int iS = 1; iS <= config.implicitCFLControl.nSmoothDTau; iS++)
             {
                 // ArrayDOFV<1> dTauNew = dTau; //TODO: copying is still unusable; consider doing copiers on the level of ArrayDOFV and ArrayRecV
@@ -728,7 +779,7 @@ namespace DNDS::Euler
             {
                 if (config.implicitCFLControl.RANSRelax != 1)
                     for (index i = 0; i < uTemp.Size(); i++)
-                        uTemp[i]({I4, I4 + 1}) *= config.implicitCFLControl.RANSRelax;
+                        uTemp[i]({I4 + 1, I4 + 2}) *= config.implicitCFLControl.RANSRelax;
             }
             Timer().StopTimer(PerformanceTimer::Positivity);
             eval.AddFixedIncrement(cx, uTemp, alpha);
@@ -819,6 +870,46 @@ namespace DNDS::Euler
             cxInc.setConstant(0.0);
             this->solveLinear(alphaDiag, tSimu, cres, cx, cxInc, uRecC, uRecIncC,
                               JDC, *gmres, !isTPMGLevel ? 0 : 1); //! here we borrow PMG's level1 setting into TPMG
+
+            // ----------------------------------------------------------------
+            // Source time splitting: rebuild residual, then apply pointwise source update.
+            // NOTE: tau-splitting is experimental. A single pass is performed per nonlinear
+            // iteration with no outer convergence check on the source update — correctness
+            // relies on the internal guards in PointImplicitSourceUpdate (species repair,
+            // validPointSourceState check, pseudo-time fallback). If the source update
+            // silently fails to converge, cxInc may be corrupted.
+            // ----------------------------------------------------------------
+            if (sourceTauSplittingEnabled && !eval.settings.ignoreSourceTerm)
+            {
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(uStar)
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(rhsRebuilt)
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(resRebuilt)
+                DNDS_EULER_SOLVER_GET_TEMP_UDOF(uSourceUpdated)
+
+                // Apply the transport/pseudo-time linear increment first, so the
+                // source update sees the actual state used in the nonlinear residual.
+                uStar = cx;
+                fincrement(uStar, cxInc, 1.0, uPos);
+
+                fdtau(uStar, dTau, alphaDiag, uPos);
+                frhs(rhsRebuilt, uStar, dTau, iter, ct, uPos);
+
+                resRebuilt = rhsRebuilt;
+                resRebuilt *= alphaDiag;
+                resRebuilt.addTo(uStar, -1.0 / dt);
+                resRebuilt += resOther;
+
+                eval.PointImplicitSourceUpdate(uSourceUpdated, resRebuilt, uStar,
+                                               alphaDiag, dt, 3, SourceFilter::ReactiveOnly, warmT);
+                eval.FixUMaxFilter(uSourceUpdated);
+
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp parallel for
+#endif
+                for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+                    cxInc[iCell] = uSourceUpdated[iCell] - cx[iCell];
+            }
+
             // cxInc: in: full increment from previous level; out: full increment form current level
             const auto solve_multigrid = [&](TDof &x_upper, TDof &xIncBuf, TDof &rhsBuf, const TDof &resOther, int mgLevelInit, int mgLevelMax)
             {
@@ -887,7 +978,9 @@ namespace DNDS::Euler
                                              TEval::RHS_Direct_2nd_Rec | TEval::RHS_Dont_Record_Bud_Flux | TEval::RHS_Dont_Update_Integration |
                                                  TEval::RHS_Direct_2nd_Rec_already_have_uGradBufNoLim | //! uGradBufNoLim already existent in fdtau
                                                  (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags) |
-                                                 TEval::RHS_Recover_IncFScale);
+                                                 TEval::RHS_Recover_IncFScale |
+                                                 sourceTauSplittingRHSFlag,
+                                             warmT);
                         else if (mgLevel == 2)
                             eval.EvaluateRHS(rhsTemp, JSourceTmp, uMG1,
                                              config.limiterControl.useViscousLimited ? uRecNew : uRec /*dummy*/, uRec /*dummy*/,
@@ -899,7 +992,9 @@ namespace DNDS::Euler
                                                  (TEval::RHS_Ignore_Viscosity * use_1st_conv_ignore_vis) |
                                                  TEval::RHS_Direct_2nd_Rec_already_have_uGradBufNoLim | //! uGradBufNoLim already existent in fdtau
                                                  (config.limiterControl.useLimiter ? TEval::RHS_Direct_2nd_Rec_use_limiter : TEval::RHS_No_Flags) |
-                                                 TEval::RHS_Recover_IncFScale);
+                                                 TEval::RHS_Recover_IncFScale |
+                                                 sourceTauSplittingRHSFlag,
+                                             warmT);
                         else
                             DNDS_assert(false);
                     };
@@ -972,6 +1067,10 @@ namespace DNDS::Euler
 
             if (config.linearSolverControl.multiGridLP >= 1 && iter > config.linearSolverControl.multiGridLPStartIter)
             {
+                // TODO: sourceTimeSplitting is not yet supported with multigrid.
+                //       When splitting is enabled, the multigrid correction should
+                //       only handle transport terms; pointwise source correction
+                //       should happen after the multigrid cycle completes.
                 DNDS_assert(config.linearSolverControl.multiGridLP <= 2);
                 DNDS_EULER_SOLVER_GET_TEMP_UDOF(cxTemp)
                 DNDS_EULER_SOLVER_GET_TEMP_UDOF(resTemp)
@@ -986,7 +1085,7 @@ namespace DNDS::Euler
             }
             // eval.FixIncrement(cx, cxInc);
             // !freeze something
-            if (getNVars(model) > I4 + 1 && iter <= config.others.nFreezePassiveInner)
+            if (nVars > I4 + 1 && iter <= config.others.nFreezePassiveInner)
             {
                 for (int i = 0; i < cres.Size(); i++)
                     cxInc[i](Eigen::seq(I4 + 1, EigenLast)).setZero();
@@ -1018,14 +1117,14 @@ namespace DNDS::Euler
             auto &JSourceC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? JSource1 : JSource;
             auto &uRecC = config.timeMarchControl.timeMarchIsTwoStage() && uPos == 1 ? uRec1 : uRec;
             // TODO: use "update spectral radius" procedure? or force update in fsolve
-            eval.EvaluateDt(dTau, cx1, uRecC, CFLNow, curDtMin, 1e100, config.implicitCFLControl.useLocalDt, tSimu);
+            eval.EvaluateDt(dTau, cx1, uRecC, CFLNow, curDtMin, 1e100, config.implicitCFLControl.useLocalDt, tSimu, 0, warmT);
             dTau *= Coefs[2];
             eval.LUSGSMatrixInit(JD1, JSource1,
                                  dTau, dt * Coefs[2], alphaDiag,
                                  cx1, uRec,
                                  0,
                                  tSimu);
-            eval.EvaluateDt(dTau, cx, uRecC, CFLNow, curDtMin, 1e100, config.implicitCFLControl.useLocalDt, tSimu);
+            eval.EvaluateDt(dTau, cx, uRecC, CFLNow, curDtMin, 1e100, config.implicitCFLControl.useLocalDt, tSimu, 0, warmT);
             dTau *= Coefs[3] * veryLargeReal;
             eval.LUSGSMatrixInit(JD, JSource,
                                  dTau, dt * Coefs[3], alphaDiag,
@@ -1115,7 +1214,7 @@ namespace DNDS::Euler
             }
             // eval.FixIncrement(cx, cxInc);
             // !freeze something
-            if (getNVars(model) > I4 + 1 && iter <= config.others.nFreezePassiveInner)
+            if (nVars > I4 + 1 && iter <= config.others.nFreezePassiveInner)
             {
                 for (int i = 0; i < crhs.Size(); i++)
                     cxInc[i](Eigen::seq(I4 + 1, EigenLast)).setZero();
@@ -1165,10 +1264,10 @@ namespace DNDS::Euler
             alphaPPC = alphaPP_tmp;
             if (config.limiterControl.useLimiter || config.limiterControl.usePPRecLimiter)
                 eval.EvaluateRHS(crhs, JSourceC, cx, config.limiterControl.useViscousLimited ? uRecLimited : uRecC, uRecLimited,
-                                 betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
+                                 betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit, sourceTauSplittingRHSFlag, warmT);
             else
                 eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, uRecC,
-                                 betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
+                                 betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit, sourceTauSplittingRHSFlag, warmT);
             // rhs now last-fixed
             crhs.trans.startPersistentPull();
             crhs.trans.waitPersistentPull();
@@ -1193,10 +1292,10 @@ namespace DNDS::Euler
                 alphaPPC = alphaPP_tmp;
                 if (config.limiterControl.useLimiter || config.limiterControl.usePPRecLimiter)
                     eval.EvaluateRHS(crhs, JSourceC, cx, config.limiterControl.useViscousLimited ? uRecLimited : uRecC, uRecLimited,
-                                     betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
+                                     betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit, sourceTauSplittingRHSFlag, warmT);
                 else
                     eval.EvaluateRHS(crhs, JSourceC, cx, uRecC, uRecC,
-                                     betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit);
+                                     betaPPC, alphaPPC, false, tSimu + ct * curDtImplicit, sourceTauSplittingRHSFlag, warmT);
                 crhs.trans.startPersistentPull();
                 crhs.trans.waitPersistentPull();
             }
@@ -1229,18 +1328,31 @@ namespace DNDS::Euler
         if (config.outputControl.dataOutAtInit)
         {
             PrintData(
-                config.dataIOControl.outPltName + "_" + output_stamp + "_" + "00000",
+                config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + "00000",
                 "",
                 [&](index iCell)
                 { return ode->getLatestRHS()[iCell](0); },
                 addOutList,
+                addBndOutList,
                 eval, tSimu);
-            eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + "00000",
+            eval.PrintBCProfiles(config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + "00000",
                                  u, uRec);
         }
         if (config.outputControl.restartOutAtInit)
         {
             PrintRestart(config.dataIOControl.getOutRestartName() + "_" + output_stamp + "_" + "00000");
+        }
+        if (config.outputControl.meshOutAtInit)
+        {
+            auto meshOutDir = std::filesystem::path(config.dataIOControl.getOutPltName()).parent_path();
+            if (meshOutDir.empty())
+                meshOutDir = ".";
+            auto meshFileName = std::filesystem::path(config.dataIOControl.meshFile).filename().string();
+            std::string meshOutName = Geom::MeshH5Path(
+                (meshOutDir / meshFileName).string(), mpi.size,
+                config.dataIOControl.meshElevation,
+                config.dataIOControl.meshDirectBisect);
+            Geom::SerializeMesh(*mesh, meshOutName, config.dataIOControl.meshPartitionedWriter);
         }
 
         for (step = 1; step <= config.timeMarchControl.nTimeStep; step++)
@@ -1287,6 +1399,12 @@ namespace DNDS::Euler
             {
                 ifOutT = true;
                 curDtImplicit = std::max(0.0, nextTout - tSimu);
+            }
+
+            if (sourceStrangSplittingEnabled)
+            {
+                eval.ReactiveSourceConstVolumeStep(u, uRec, 0.5 * curDtImplicit, tSimu, warmT);
+                ode->ResetFreshStart();
             }
 
             if (config.timeMarchControl.useImplicitPP)
@@ -1375,6 +1493,11 @@ namespace DNDS::Euler
                         config.convergenceControl.nTimeStepInternal,
                         fstop, fincrement,
                         curDtImplicit + verySmallReal);
+            if (sourceStrangSplittingEnabled)
+            {
+                eval.ReactiveSourceConstVolumeStep(u, uRec, 0.5 * curDtImplicit, tSimu + curDtImplicit, warmT);
+                ode->ResetFreshStart();
+            }
             curDtImplicitHistory.push_back(curDtImplicit);
             if (fmainloop())
                 break;
@@ -1386,7 +1509,8 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>)
+        template <>
+    )
     /** @brief Dispatch the linear solve for implicit time stepping.
      *
      *  Solves the linearized system using either SGS sweeps (gmresCode=0) or
@@ -1583,7 +1707,8 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>)
+        template <>
+    )
     /** @brief Apply the preconditioner for the GMRES linear solver.
      *
      *  Depending on jacobiCode: applies symmetric SGS sweeps (code 0/1) or
@@ -1662,7 +1787,8 @@ namespace DNDS::Euler
         template <EulerModel model>
         ,
         // the intellisense friendly definition
-        template <>)
+        template <>
+    )
     /** @brief Initialize the running environment for the time-marching loop.
      *
      *  Sets up the ODE solver, error logging stream, temporary arrays, signal handlers,
@@ -1705,10 +1831,10 @@ namespace DNDS::Euler
             if (mpi.rank == 0)
                 log() << "Using steady!" << std::endl;
             config.timeMarchControl.odeCode = 1; // To bdf;
-            config.timeMarchControl.nTimeStep = 1;
-            config.timeMarchControl.dtImplicit = 1e100;
+            config.timeMarchControl.nTimeStep = std::min(1, config.timeMarchControl.nTimeStep);
+            config.timeMarchControl.dtImplicit = 1e200;
             config.timeMarchControl.useDtPPLimit = false;
-            config.timeMarchControl.dtCFLLimitScale = 1e110;
+            config.timeMarchControl.dtCFLLimitScale = 1e210;
             config.outputControl.tDataOut = 1e300; // no t-out steps
         }
         switch (config.timeMarchControl.odeCode)
@@ -1808,6 +1934,17 @@ namespace DNDS::Euler
         if (config.timeMarchControl.useImplicitPP)
         {
             DNDS_assert(config.timeMarchControl.odeCode == 1 || config.timeMarchControl.odeCode == 102);
+        }
+        if (config.timeMarchControl.sourceStrangSplitting)
+        {
+            DNDS_check_throw_info(TEval::Traits::isExtended && eval.settings.reactiveFlow.enabled,
+                                  "sourceStrangSplitting requires reactive extended Euler physics");
+            DNDS_check_throw_info(!ode->IsMultistep(),
+                                  "sourceStrangSplitting only supports single-step ODE methods");
+            DNDS_check_throw_info(!config.timeMarchControl.useImplicitPP,
+                                  "sourceStrangSplitting is not supported with useImplicitPP");
+            if (mpi.rank == 0)
+                log() << "=== Source splitting: Strang reactive source; latest/output RHS is flow-only" << std::endl;
         }
 
         // std::cout << fmt::format("nVars {}, here100", nVars);

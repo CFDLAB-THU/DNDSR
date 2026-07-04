@@ -17,6 +17,10 @@ cgal_AABBTest
 mpi_test
 )
 
+if(DNDS_USE_CANTERA)
+  list(APPEND DNDS_APPS_EXTERNAL cantera_Test)
+endif()
+
 set(DNDS_APPS_EXTERNAL_CU
 cuda_test
 )
@@ -104,7 +108,8 @@ function(ADD_EXE_APP EXES MAIN_DIR LIBS USE_EXCLUDE_FROM_ALL SRC_SUFFIX)
             set_property(TARGET ${EXE} PROPERTY CXX_COMPILER_LAUNCHER ${DNDS_CCACHE_EXEC})
             set_property(TARGET ${EXE} PROPERTY CUDA_COMPILER_LAUNCHER ${DNDS_CCACHE_EXEC})
         endif()
-    endforeach()
+endforeach()
+
 endfunction(ADD_EXE_APP)
 
 # -------------------------------------------------------------------
@@ -120,6 +125,10 @@ endfunction(ADD_EXE_APP)
 
 ## Mind That the TOPOLOGICAL ORDER should be obeyed!
 ADD_EXE_APP("${DNDS_APPS_EXTERNAL}" "app/external" ";" ON cpp)
+if(DNDS_USE_CANTERA AND DNDS_CANTERA_DATA_DIR)
+    target_compile_definitions(cantera_Test PRIVATE CT_USE_SYSTEM_FMT=1)
+    target_compile_definitions(cantera_Test PRIVATE DNDS_CANTERA_DATA_DIR="${DNDS_CANTERA_DATA_DIR}")
+endif()
 ADD_EXE_APP("${DNDS_APPS_DNDS}" "app/DNDS" "dnds;" ON cpp)
 if(DNDS_USE_CUDA)
     ADD_EXE_APP("${DNDS_APPS_EXTERNAL_CU}" "app/external" ";" ON cu)
@@ -146,3 +155,21 @@ foreach(item IN LISTS DNDS_Euler_Models_List)
     ## This works because cmake detects dependency and reorders the libraries
     # ADD_EXE_APP("${EXE_NAME}" "app/Euler" "dnds;geom;cfv;euler_library_fast_${key};euler_library_${key};")
 endforeach()
+
+ADD_EXE_APP("eulerState" "app/Euler" "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds;" ON cpp)
+set(DNDS_EULER_EXTRA_APPS eulerState)
+if(DNDS_USE_CANTERA)
+    ADD_EXE_APP("canteraConstVolTrajectory" "app/Euler" "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds;" ON cpp)
+    list(APPEND DNDS_EULER_EXTRA_APPS canteraConstVolTrajectory)
+    target_compile_definitions(canteraConstVolTrajectory PRIVATE CT_USE_SYSTEM_FMT=1)
+    if(DNDS_CANTERA_DATA_DIR)
+        target_compile_definitions(canteraConstVolTrajectory PRIVATE DNDS_CANTERA_DATA_DIR="${DNDS_CANTERA_DATA_DIR}")
+    endif()
+endif()
+
+# -------------------------------------------------------------------
+# Aggregate convenience targets
+# -------------------------------------------------------------------
+
+add_custom_target(all_euler)
+add_dependencies(all_euler ${DNDS_APPS_Euler_Models} ${DNDS_EULER_EXTRA_APPS})

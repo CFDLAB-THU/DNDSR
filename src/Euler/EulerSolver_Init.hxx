@@ -2,11 +2,11 @@
  *  @brief Template implementation of EulerSolver::ReadMeshAndInitialize, the full
  *         solver initialization pipeline from mesh reading to evaluator setup.
  *
- *  Covers CGNS/OpenFOAM mesh reading, periodic boundary deduplication, mesh
- *  partitioning (ParMetis), O1-to-O2 elevation, h-refinement bisection, boundary
- *  mesh extraction for wall distance, VFV (VariationalReconstruction) construction,
- *  BC handler configuration, wall distance computation, evaluator initialization,
- *  restart loading, and initial VTK output.
+ *  Covers source-mesh reading, periodic boundary deduplication, partitioning,
+ *  optional O1-to-O2 elevation and h-refinement bisection, optional partitioned
+ *  mesh serialization, boundary mesh extraction, coordinate transforms,
+ *  VFV (VariationalReconstruction) construction, wall distance computation,
+ *  evaluator initialization, restart loading, and initial output.
  */
 #pragma once
 
@@ -22,18 +22,18 @@ namespace DNDS::Euler
     /** @brief Read the mesh, partition it, build solver data structures, and initialize the evaluator.
      *
      *  Complete initialization pipeline:
-     *  1. Read mesh from CGNS or OpenFOAM format (serial, parallel, or distributed mode).
-     *  2. Handle periodic boundary deduplication and mesh topology (cell2cell, node2cell).
-     *  3. Optionally elevate mesh order (O1 to O2) and apply h-refinement bisection.
-     *  4. Partition with ParMetis and redistribute across MPI ranks.
-     *  5. Build ghost layers, adjacency, and coordinate structures.
-     *  6. Extract boundary mesh for wall distance computation.
-     *  7. Construct VFV (VariationalReconstruction) with configured settings.
-     *  8. Configure BC handlers from JSON settings.
-     *  9. Compute wall distance (CGAL or Poisson).
-     *  10. Initialize the EulerEvaluator (arrays, face data, etc.).
-     *  11. Load restart if configured.
-     *  12. Write initial VTK output.
+     *  1. Read the source mesh and partition it, or read a pre-partitioned mesh.
+     *     Mode 1 requires the same MPI size; mode 2 repartitions H5 input.
+     *  2. For source reads, optionally elevate mesh order (O1 to O2) and apply
+     *     h-refinement bisection before solver preparation.
+     *  3. Build primary ghost layers, faces, ghost N2CB, and optional serial output.
+     *  4. Optionally smooth elevated nodes and build wall distance.
+     *  5. If partitionMeshOnly is set, write the partitioned mesh and return
+     *     before coordinate transforms, boundary mesh extraction, and solver setup.
+     *  6. Extract boundary mesh, apply coordinate transforms/rectification, and
+     *     build periodic/VTK connectivity.
+     *  7. Construct VFV, initialize the EulerEvaluator, allocate arrays, and
+     *     prepare restart/output state.
      */
     void EulerSolver<model>::ReadMeshAndInitialize()
     {
@@ -54,8 +54,34 @@ namespace DNDS::Euler
 
         DNDS_MAKE_SSP(reader, mesh, 0);
         DNDS_MAKE_SSP(readerBnd, meshBnd, 0);
-        DNDS_assert(config.dataIOControl.readMeshMode == 0 || config.dataIOControl.readMeshMode == 1 || config.dataIOControl.readMeshMode == 2);
-        DNDS_assert(config.dataIOControl.outPltMode == 0 || config.dataIOControl.outPltMode == 1);
+        DNDS_check_throw_info(config.dataIOControl.readMeshMode == 0 || config.dataIOControl.readMeshMode == 1 || config.dataIOControl.readMeshMode == 2,
+                              "readMeshMode must be 0 (CGNS), 1 (HDF5 partitioned), or 2 (HDF5 distributed)");
+        DNDS_check_throw_info(config.dataIOControl.outPltMode == 0 || config.dataIOControl.outPltMode == 1,
+                              "outPltMode must be 0 or 1");
+        auto getPartitionedMeshInput = [&]() -> std::string
+        {
+            std::string meshInput = config.dataIOControl.meshFilePartitionedInput.empty()
+                                        ? Geom::MeshH5Path(
+                                              config.dataIOControl.meshFile, mpi.size,
+                                              config.dataIOControl.meshElevation,
+                                              config.dataIOControl.meshDirectBisect)
+                                        : config.dataIOControl.meshFilePartitionedInput;
+            if (config.dataIOControl.meshPartitionedReaderType == "H5")
+            {
+                const std::string suffix = ".dnds.h5";
+                if (meshInput.size() >= suffix.size() &&
+                    meshInput.compare(meshInput.size() - suffix.size(), suffix.size(), suffix) == 0)
+                    meshInput.resize(meshInput.size() - suffix.size());
+            }
+            else if (config.dataIOControl.meshPartitionedReaderType == "JSON")
+            {
+                const std::string suffix = ".dir";
+                if (meshInput.size() >= suffix.size() &&
+                    meshInput.compare(meshInput.size() - suffix.size(), suffix.size(), suffix) == 0)
+                    meshInput.resize(meshInput.size() - suffix.size());
+            }
+            return meshInput;
+        };
         mesh->periodicInfo.translation[1].map() = config.boundaryDefinition.PeriodicTranslation1;
         mesh->periodicInfo.translation[2].map() = config.boundaryDefinition.PeriodicTranslation2;
         mesh->periodicInfo.translation[3].map() = config.boundaryDefinition.PeriodicTranslation3;
@@ -109,7 +135,8 @@ namespace DNDS::Euler
                     mesh->AdjGlobal2LocalPrimary();
                     mesh->AdjGlobal2LocalN2CB();
                 }
-                DNDS_assert(config.dataIOControl.meshDirectBisect <= 4);
+                DNDS_check_throw_info(config.dataIOControl.meshDirectBisect <= 4,
+                                      "meshDirectBisect must be <= 4");
                 for (int iter = 1; iter <= config.dataIOControl.meshDirectBisect; iter++)
                 {
                     DNDS::ssp<DNDS::Geom::UnstructuredMesh> meshO2;
@@ -153,10 +180,7 @@ namespace DNDS::Euler
         }
         else if (config.dataIOControl.readMeshMode == 1)
         {
-            std::string meshOutName = Geom::MeshH5Path(
-                config.dataIOControl.meshFile, mpi.size,
-                config.dataIOControl.meshElevation,
-                config.dataIOControl.meshDirectBisect);
+            std::string meshOutName = getPartitionedMeshInput();
             Geom::ReadMeshFromH5Parallel(
                 *mesh,
                 Serializer::SerializerFactory(config.dataIOControl.meshPartitionedReaderType),
@@ -164,10 +188,7 @@ namespace DNDS::Euler
         }
         else if (config.dataIOControl.readMeshMode == 2)
         {
-            std::string meshOutName = Geom::MeshH5Path(
-                config.dataIOControl.meshFile, mpi.size,
-                config.dataIOControl.meshElevation,
-                config.dataIOControl.meshDirectBisect);
+            std::string meshOutName = getPartitionedMeshInput();
             Geom::ReadMeshFromH5(
                 *mesh,
                 Serializer::SerializerFactory(config.dataIOControl.meshPartitionedReaderType),
@@ -224,11 +245,19 @@ namespace DNDS::Euler
                     log() << " WARNING !!! Not Smoothing internal, abandoning boundary smooth displacements" << std::endl;
             }
             else
-                DNDS_assert(false);
+                DNDS_check_throw_info(false, "meshElevationInternalSmoother must be -1, 0, 1, or 2");
         }
 
         if (config.dataIOControl.meshBuildWallDist)
         {
+            // Wall distance is built before partition-only serialization and
+            // before solver-only coordinate transforms so serialized meshes keep
+            // a distance field in the same frame as the stored coordinates.
+            // Runtime transforms below are currently limited to rotations,
+            // uniform scaling, and optional coordinate snapping. Rotations
+            // preserve distance magnitudes; uniform scaling is applied to the
+            // running distance vectors below; non-orthogonal future transforms
+            // must invalidate or rebuild nodeWallDist instead of reusing it.
             mesh->BuildNodeWallDist(
                 [pBCHandler = pBCHandler](Geom::t_index id)
                 {
@@ -245,7 +274,7 @@ namespace DNDS::Euler
                 config.dataIOControl.meshElevation,
                 config.dataIOControl.meshDirectBisect);
             Geom::SerializeMesh(*mesh, meshOutName, config.dataIOControl.meshPartitionedWriter);
-            return; //** mesh preprocess only (without transformation)
+            return; // Partition-only output intentionally skips coordinate transforms and solver setup.
         }
 
         Geom::BuildBndMesh(*mesh, *meshBnd, *readerBnd,
@@ -284,6 +313,13 @@ namespace DNDS::Euler
                 [&](const Geom::tPoint &p)
                 { return p * scale; });
 
+            if (mesh->nodeWallDist.father)
+                for (index iNode = 0; iNode < mesh->nodeWallDist.father->Size(); iNode++)
+                    (*mesh->nodeWallDist.father)[iNode] *= scale;
+            if (mesh->nodeWallDist.son)
+                for (index iNode = 0; iNode < mesh->nodeWallDist.son->Size(); iNode++)
+                    (*mesh->nodeWallDist.son)[iNode] *= scale;
+
             for (auto &i : mesh->periodicInfo.translation)
                 i.map() *= scale;
             for (auto &i : mesh->periodicInfo.rotationCenter)
@@ -291,6 +327,10 @@ namespace DNDS::Euler
         }
         if (config.dataIOControl.rectifyNearPlane)
         {
+            // Coordinate snapping is a solver-side cleanup transform, not a
+            // general geometry transform. If a prebuilt directional
+            // nodeWallDist field is later used with snapping enabled, callers
+            // must treat that field as pre-snap metadata or rebuild it.
             auto fTrans = [&](const Geom::tPoint &p)
             {
                 Geom::tPoint ret = p;
@@ -309,6 +349,9 @@ namespace DNDS::Euler
             meshBnd->TransformCoords(fTrans);
         }
         { //* symBnd's rectifying: !  altering mesh
+            // Like rectifyNearPlane, symmetry-boundary rectification snaps
+            // coordinates after serialized mesh loading. It intentionally does
+            // not reinterpret serialized wall-distance metadata.
             for (index iB = 0; iB < mesh->NumBnd(); iB++)
             {
                 index iFace = mesh->bnd2faceV.at(iB);
@@ -358,7 +401,7 @@ namespace DNDS::Euler
         if (config.others.printRecMatrix)
         {
             auto serializerP = config.others.recMatrixWriter.BuildSerializer(mpi);
-            std::string fName = config.dataIOControl.outPltName + "_RecMatrix";
+            std::string fName = config.dataIOControl.getOutPltName() + "_RecMatrix";
             auto [fNameMod, partPath] = config.others.recMatrixWriter.ModifyFilePath(fName, mpi, "part_%d", true);
             serializerP->OpenFile(partPath, false);
             vfv->WriteSerializeRecMatrix(serializerP);
@@ -390,6 +433,7 @@ namespace DNDS::Euler
         vfv->BuildUDof(alphaPP, 1);
         vfv->BuildUDof(alphaPP_tmp, 1);
         vfv->BuildUDof(dTauTmp, 1);
+        vfv->BuildUDof(cellT_warm_, 1);
         betaPP.setConstant(1.0);
         alphaPP.setConstant(1.0);
         if (config.timeMarchControl.timeMarchIsTwoStage())
@@ -412,26 +456,45 @@ namespace DNDS::Euler
         DNDS_MAKE_SSP(pEval, mesh, vfv, pBCHandler, config.eulerSettings, nVars);
         EulerEvaluator<model> &eval = *pEval;
 
-        JD.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
-        JSource.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
+        if (mpi.rank == 0)
+            eval.phys().printInfo(log());
+
+        // Reactive flow requires full-block Jacobian for chemical coupling
+        int jacMode = eval.settings.useScalarJacobian ? 0 : 1;
+        if (eval.settings.reactiveFlow.enabled)
+        {
+            DNDS_check_throw_info(!eval.settings.useScalarJacobian,
+                                  "reactive flow requires useScalarJacobian=false");
+            jacMode = 1;
+        }
+
+        JD.SetModeAndInit(jacMode, nVars, u);
+        JSource.SetModeAndInit(jacMode, nVars, u);
         if (config.timeMarchControl.timeMarchIsTwoStage())
         {
-            JD1.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
-            JSource1.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
+            JD1.SetModeAndInit(jacMode, nVars, u);
+            JSource1.SetModeAndInit(jacMode, nVars, u);
         }
-        JDTmp.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
-        JSourceTmp.SetModeAndInit(eval.settings.useScalarJacobian ? 0 : 1, nVars, u);
+        JDTmp.SetModeAndInit(jacMode, nVars, u);
+        JSourceTmp.SetModeAndInit(jacMode, nVars, u);
         /*******************************/
         // ** initialize output Array
 
         DNDS_MPI_InsertCheck(mpi, "ReadMeshAndInitialize 3 nvars " + std::to_string(nVars));
 
         // update output number
-        DNDS_assert(config.dataIOControl.outCellScalarNames.size() < 128);
+        DNDS_check_throw_info(config.dataIOControl.outCellScalarNames.size() < 128,
+                              "outCellScalarNames must have fewer than 128 entries");
         nOUTS += config.dataIOControl.outCellScalarNames.size();
 
-        DNDS_assert(config.dataIOControl.outAtCellData || config.dataIOControl.outAtPointData);
-        DNDS_assert(config.dataIOControl.outPltVTKFormat || config.dataIOControl.outPltTecplotFormat || config.dataIOControl.outPltVTKHDFFormat);
+        DNDS_check_throw_info(config.dataIOControl.outBndScalarNames.size() < 128,
+                              "outBndScalarNames must have fewer than 128 entries");
+        nOUTSBnd += config.dataIOControl.outBndScalarNames.size();
+
+        DNDS_check_throw_info(config.dataIOControl.outAtCellData || config.dataIOControl.outAtPointData,
+                              "at least one of outAtCellData or outAtPointData must be enabled");
+        DNDS_check_throw_info(config.dataIOControl.outPltVTKFormat || config.dataIOControl.outPltTecplotFormat || config.dataIOControl.outPltVTKHDFFormat,
+                              "at least one output format must be enabled");
         DNDS_MAKE_SSP(outDistBnd, mpi);
         outDistBnd->Resize(meshBnd->NumCell(), nOUTSBnd);
 
@@ -540,6 +603,31 @@ namespace DNDS::Euler
         auto [CLCur, CDCur, AOACur] = eval.CLDriverGetIntegrationUpdate(iter);
         if (iter % config.outputControl.nConsoleCheckInternal == 0 || iter > config.convergenceControl.nTimeStepInternal || ifStop)
         {
+            // Compute per-component min/max of u (MPI collective, all ranks)
+            Eigen::VectorFMTSafe<real, -1> uMinVec(nVars), uMaxVec(nVars);
+            eval.EvaluateMinMax(uMinVec, uMaxVec, u);
+
+            // Build console string only if format references {uMinMax}
+            std::string uMinMaxStr;
+            {
+                std::string fmtScan;
+                for (auto &s : config.outputControl.consoleMainOutputFormatInternal)
+                    fmtScan += s;
+                if (fmtScan.find("{uMinMax}") != std::string::npos && mpi.rank == 0)
+                {
+                    std::ostringstream oss;
+                    oss << std::scientific << std::setprecision(10) << "[";
+                    for (int v = 0; v < nVars; v++)
+                    {
+                        if (v)
+                            oss << ", ";
+                        oss << eval.dofLabel(v) << ":" << uMinVec(v) << "|" << uMaxVec(v);
+                    }
+                    oss << "]";
+                    uMinMaxStr = oss.str();
+                }
+            }
+
             double tWall = MPI_Wtime();
             real telapsed = MPI_Wtime() - tstartInternal;
             bool useCollectiveTimer = config.outputControl.useCollectiveTimer;
@@ -602,7 +690,8 @@ namespace DNDS::Euler
                                      fmt::arg("termCyan", TermColor::Cyan),
                                      fmt::arg("termYellow", TermColor::Yellow),
                                      fmt::arg("termBold", TermColor::Bold),
-                                     fmt::arg("termReset", TermColor::Reset));
+                                     fmt::arg("termReset", TermColor::Reset),
+                                     fmt::arg("uMinMax", uMinMaxStr));
                 log() << std::endl;
                 log().setf(fmt);
 
@@ -662,6 +751,11 @@ namespace DNDS::Euler
                 DNDS_FILL_IN_LOG_ERR_VAL(tLimiterB);
 
                 DNDS_FILL_IN_LOG_ERR_VAL(fluxWall);
+                for (int v = 0; v < nVars; v++)
+                {
+                    logErrVal["uMin_" + eval.dofLabel(v)] = uMinVec(v);
+                    logErrVal["uMax_" + eval.dofLabel(v)] = uMaxVec(v);
+                }
                 real CL{CLCur}, CD{CDCur}, AoA(AOACur);
                 DNDS_FILL_IN_LOG_ERR_VAL(CL);
                 DNDS_FILL_IN_LOG_ERR_VAL(CD);
@@ -685,13 +779,14 @@ namespace DNDS::Euler
         {
             eval.FixUMaxFilter(u);
             PrintData(
-                config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step) + "_" + std::to_string(iter),
-                config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step), // internal series
+                config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + std::to_string(step) + "_" + std::to_string(iter),
+                config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + std::to_string(step), // internal series
                 [&](index iCell)
                 { return ode->getLatestRHS()[iCell](0); },
                 addOutList,
+                addBndOutList,
                 eval, tSimu);
-            eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step),
+            eval.PrintBCProfiles(config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + std::to_string(step),
                                  u, uRec);
         }
         if ((iter % config.outputControl.nDataOutCInternal == 0) &&
@@ -699,13 +794,14 @@ namespace DNDS::Euler
         {
             eval.FixUMaxFilter(u);
             PrintData(
-                config.dataIOControl.outPltName + "_" + output_stamp + "_" + "C",
+                config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + "C",
                 "",
                 [&](index iCell)
                 { return ode->getLatestRHS()[iCell](0); },
                 addOutList,
+                addBndOutList,
                 eval, tSimu);
-            eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + "C",
+            eval.PrintBCProfiles(config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + "C",
                                  u, uRec);
         }
         if (iter % config.outputControl.nRestartOutInternal == 0)
@@ -782,6 +878,32 @@ namespace DNDS::Euler
             trec = tInternalStats["v"].update(trec).getSum();
             tLim = tInternalStats["l"].update(tLim).getSum();
             auto tPPr = tInternalStats["p"].getSum() + Timer().getTimerColOrLoc(PerformanceTimer::PositivityOuter, mpi, useCollectiveTimer);
+
+            // Compute per-component min/max of u (MPI collective, all ranks)
+            Eigen::VectorFMTSafe<real, -1> uMinVec(nVars), uMaxVec(nVars);
+            eval.EvaluateMinMax(uMinVec, uMaxVec, u);
+
+            // Build console string only if format references {uMinMax}
+            std::string uMinMaxStr;
+            {
+                std::string fmtScan;
+                for (auto &s : config.outputControl.consoleMainOutputFormat)
+                    fmtScan += s;
+                if (fmtScan.find("{uMinMax}") != std::string::npos && mpi.rank == 0)
+                {
+                    std::ostringstream oss;
+                    oss << std::scientific << std::setprecision(10) << "[";
+                    for (int v = 0; v < nVars; v++)
+                    {
+                        if (v)
+                            oss << ", ";
+                        oss << eval.dofLabel(v) << ":" << uMinVec(v) << "|" << uMaxVec(v);
+                    }
+                    oss << "]";
+                    uMinMaxStr = oss.str();
+                }
+            }
+
             if (mpi.rank == 0)
             {
                 auto format = log().flags();
@@ -823,7 +945,8 @@ namespace DNDS::Euler
                                      fmt::arg("termCyan", TermColor::Cyan),
                                      fmt::arg("termYellow", TermColor::Yellow),
                                      fmt::arg("termBold", TermColor::Bold),
-                                     fmt::arg("termReset", TermColor::Reset));
+                                     fmt::arg("termReset", TermColor::Reset),
+                                     fmt::arg("uMinMax", uMinMaxStr));
                 log() << std::endl;
                 log().setf(format);
                 auto &fluxWall = eval.fluxWallSum;
@@ -856,6 +979,11 @@ namespace DNDS::Euler
                 DNDS_FILL_IN_LOG_ERR_VAL(tLimiterB);
 
                 DNDS_FILL_IN_LOG_ERR_VAL(fluxWall);
+                for (int v = 0; v < nVars; v++)
+                {
+                    logErrVal["uMin_" + eval.dofLabel(v)] = uMinVec(v);
+                    logErrVal["uMax_" + eval.dofLabel(v)] = uMaxVec(v);
+                }
                 real CL{CLCur}, CD{CDCur}, AoA(AOACur);
                 DNDS_FILL_IN_LOG_ERR_VAL(CL);
                 DNDS_FILL_IN_LOG_ERR_VAL(CD);
@@ -879,13 +1007,14 @@ namespace DNDS::Euler
             {
                 eval.FixUMaxFilter(u);
                 PrintData(
-                    config.dataIOControl.outPltName + "_" + output_stamp + "_" + "C",
+                    config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + "C",
                     "",
                     [&](index iCell)
                     { return ode->getLatestRHS()[iCell](0); },
                     addOutList,
+                    addBndOutList,
                     eval, tSimu);
-                eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + "C",
+                eval.PrintBCProfiles(config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + "C",
                                      u, uRec);
             }
             nextStepOutC += config.outputControl.nDataOutC;
@@ -894,13 +1023,14 @@ namespace DNDS::Euler
         {
             eval.FixUMaxFilter(u);
             PrintData(
-                config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step),
-                config.dataIOControl.outPltName + "_" + output_stamp, // physical ts series
+                config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + std::to_string(step),
+                config.dataIOControl.getOutPltName() + "_" + output_stamp, // physical ts series
                 [&](index iCell)
                 { return ode->getLatestRHS()[iCell](0); },
                 addOutList,
+                addBndOutList,
                 eval, tSimu);
-            eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + std::to_string(step),
+            eval.PrintBCProfiles(config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + std::to_string(step),
                                  u, uRec);
             nextStepOut += config.outputControl.nDataOut;
         }
@@ -912,11 +1042,12 @@ namespace DNDS::Euler
                 eval.MeanValuePrim2Cons(wAveraged, uAveraged);
                 eval.FixUMaxFilter(uAveraged);
                 PrintData(
-                    config.dataIOControl.outPltName + "_TimeAveraged_" + output_stamp + "_" + "C",
+                    config.dataIOControl.getOutPltName() + "_TimeAveraged_" + output_stamp + "_" + "C",
                     "",
                     [&](index iCell)
                     { return ode->getLatestRHS()[iCell](0); },
                     addOutList,
+                    addBndOutList,
                     eval, tSimu,
                     PrintDataTimeAverage);
             }
@@ -928,11 +1059,12 @@ namespace DNDS::Euler
             eval.MeanValuePrim2Cons(wAveraged, uAveraged);
             eval.FixUMaxFilter(uAveraged);
             PrintData(
-                config.dataIOControl.outPltName + "_TimeAveraged_" + output_stamp + "_" + std::to_string(step),
-                config.dataIOControl.outPltName + "_TimeAveraged_" + output_stamp, // time average series
+                config.dataIOControl.getOutPltName() + "_TimeAveraged_" + output_stamp + "_" + std::to_string(step),
+                config.dataIOControl.getOutPltName() + "_TimeAveraged_" + output_stamp, // time average series
                 [&](index iCell)
                 { return ode->getLatestRHS()[iCell](0); },
                 addOutList,
+                addBndOutList,
                 eval, tSimu,
                 PrintDataTimeAverage);
             nextStepOutAverage += config.outputControl.nTimeAverageOut;
@@ -958,13 +1090,14 @@ namespace DNDS::Euler
         {
             eval.FixUMaxFilter(u);
             PrintData(
-                config.dataIOControl.outPltName + "_" + output_stamp + "_" + "t_" + std::to_string(nextTout),
-                config.dataIOControl.outPltName + "_" + output_stamp, // physical ts series
+                config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + "t_" + std::to_string(nextTout),
+                config.dataIOControl.getOutPltName() + "_" + output_stamp, // physical ts series
                 [&](index iCell)
                 { return ode->getLatestRHS()[iCell](0); },
                 addOutList,
+                addBndOutList,
                 eval, tSimu);
-            eval.PrintBCProfiles(config.dataIOControl.outPltName + "_" + output_stamp + "_" + "t_" + std::to_string(nextTout),
+            eval.PrintBCProfiles(config.dataIOControl.getOutPltName() + "_" + output_stamp + "_" + "t_" + std::to_string(nextTout),
                                  u, uRec);
             nextTout += config.outputControl.tDataOut;
             if (nextTout >= config.timeMarchControl.tEnd)

@@ -23,6 +23,7 @@ from __future__ import annotations
 import dataclasses
 import os
 import warnings
+from collections.abc import Mapping
 from typing import Callable
 
 from DNDSR import DNDS, Geom
@@ -55,7 +56,7 @@ class BndMeshResult:
 
 _DEFAULT_PARTITION_OPTIONS: dict = {
     "metisType": "KWAY",
-    "metisUfactor": 5,
+    "metisUfactor": 20,
     "metisSeed": 0,
     "metisNcuts": 3,
 }
@@ -317,7 +318,13 @@ def prepare_mesh(
 
     # 4. Wall distance (optional)
     if wall_dist_predicate is not None:
-        opts = wall_dist_options if wall_dist_options is not None else {}
+        opts = Geom.UnstructuredMesh.WallDistOptions()
+        if wall_dist_options is not None:
+            if isinstance(wall_dist_options, Mapping):
+                for key, value in wall_dist_options.items():
+                    setattr(opts, key, value)
+            else:
+                opts = wall_dist_options
         mesh.BuildNodeWallDist(wall_dist_predicate, opts)
 
     # 5. Serial output (optional)

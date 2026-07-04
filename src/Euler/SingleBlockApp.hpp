@@ -144,15 +144,6 @@ namespace DNDS::Euler
             if (nVars == DynamicSize)
                 nVars = mainParser.get<int>("field_n_variables");
 
-            // Build a default-initialized solver to get the full default config JSON.
-            // Then emit a basic JSON Schema inferred from the defaults, enriched with
-            // metadata from any sections that have been migrated to DNDS_PARAM.
-            Euler::EulerSolver<model> solver(mpi, nVars);
-
-            // Write defaults to generate the full default config
-            std::string schemaDefaultFile = "/tmp/dnds_schema_defaults_" + std::to_string(mpi.rank) + ".json";
-            solver.ConfigureFromJson(schemaDefaultFile, false);
-
             // Build schema: Configuration is fully registered via DNDS_DECLARE_CONFIG,
             // so emitSchema() produces the complete recursive schema.
             if (mpi.rank == 0)
@@ -163,11 +154,8 @@ namespace DNDS::Euler
                 schema["$schema"] = "http://json-schema.org/draft-07/schema#";
                 schema["title"] = schema["description"];
                 std::cout << schema.dump(4) << std::endl;
-                std::filesystem::remove(schemaDefaultFile);
             }
             MPI::Barrier(mpi.comm);
-            if (mpi.rank != 0)
-                std::filesystem::remove(schemaDefaultFile);
             return 0;
         }
 
@@ -187,6 +175,24 @@ namespace DNDS::Euler
             }
             solver.ConfigureFromJson(defaultConfJson, false);
             solver.ConfigureFromJson(defaultConfJson, true, confJson, overwriteKeys, overwriteValues);
+            solver.validateConfigFiles();
+            {
+                // Ensure all output directories exist (safe collective mode)
+                const auto &dio = solver.config.dataIOControl;
+                auto ensureDir = [&](const std::string &path)
+                {
+                    createOutputDir(path, mpi, OutputDirMode::Safe);
+                };
+                ensureDir(dio.getOutPltName());
+                if (!dio.outLogName.empty())
+                    ensureDir(dio.getOutLogName());
+                if (!dio.outRestartName.empty())
+                    ensureDir(dio.getOutRestartName());
+
+                std::string logFileName = solver.config.dataIOControl.getOutLogName() + ".logstr.txt";
+                createOutputDir(logFileName);
+                DNDS::setLogFile(logFileName);
+            }
             solver.ReadMeshAndInitialize();
             solver.RunImplicitEuler();
         }

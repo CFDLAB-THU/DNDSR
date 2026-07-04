@@ -76,18 +76,24 @@ namespace DNDS::CFV
         {
             // dim=2 NDOF per order: 1, 2, 3, 4  cumulative: 1, 3, 6, 10
             DNDS_assert(cnDiffs == 10 || cnDiffs == 6 || cnDiffs == 3 || cnDiffs == 1);
-            if (cnDiffs >= 10) accumOrder(std::integral_constant<int, 3>{}, std::integral_constant<int, 6>{}, std::integral_constant<int, 4>{}, 3);
-            if (cnDiffs >= 6)  accumOrder(std::integral_constant<int, 2>{}, std::integral_constant<int, 3>{}, std::integral_constant<int, 3>{}, 2);
-            if (cnDiffs >= 3)  accumOrder(std::integral_constant<int, 1>{}, std::integral_constant<int, 1>{}, std::integral_constant<int, 2>{}, 1);
+            if (cnDiffs >= 10)
+                accumOrder(std::integral_constant<int, 3>{}, std::integral_constant<int, 6>{}, std::integral_constant<int, 4>{}, 3);
+            if (cnDiffs >= 6)
+                accumOrder(std::integral_constant<int, 2>{}, std::integral_constant<int, 3>{}, std::integral_constant<int, 3>{}, 2);
+            if (cnDiffs >= 3)
+                accumOrder(std::integral_constant<int, 1>{}, std::integral_constant<int, 1>{}, std::integral_constant<int, 2>{}, 1);
             accumOrder(std::integral_constant<int, 0>{}, std::integral_constant<int, 0>{}, std::integral_constant<int, 1>{}, 0);
         }
         else
         {
             // dim=3 NDOF per order: 1, 3, 6, 10  cumulative: 1, 4, 10, 20
             DNDS_assert(cnDiffs == 20 || cnDiffs == 10 || cnDiffs == 4 || cnDiffs == 1);
-            if (cnDiffs >= 20) accumOrder(std::integral_constant<int, 3>{}, std::integral_constant<int, 10>{}, std::integral_constant<int, 10>{}, 3);
-            if (cnDiffs >= 10) accumOrder(std::integral_constant<int, 2>{}, std::integral_constant<int, 4>{},  std::integral_constant<int, 6>{},  2);
-            if (cnDiffs >= 4)  accumOrder(std::integral_constant<int, 1>{}, std::integral_constant<int, 1>{},  std::integral_constant<int, 3>{},  1);
+            if (cnDiffs >= 20)
+                accumOrder(std::integral_constant<int, 3>{}, std::integral_constant<int, 10>{}, std::integral_constant<int, 10>{}, 3);
+            if (cnDiffs >= 10)
+                accumOrder(std::integral_constant<int, 2>{}, std::integral_constant<int, 4>{}, std::integral_constant<int, 6>{}, 2);
+            if (cnDiffs >= 4)
+                accumOrder(std::integral_constant<int, 1>{}, std::integral_constant<int, 1>{}, std::integral_constant<int, 3>{}, 1);
             accumOrder(std::integral_constant<int, 0>{}, std::integral_constant<int, 0>{}, std::integral_constant<int, 1>{}, 0);
         }
     }
@@ -184,8 +190,8 @@ namespace DNDS::CFV
          */
         struct VRCoefficients
         {
-            tMatsPair matrixAB;        /// @brief A and B blocks per face, used during ConstructRecCoeff
-            tVecsPair vectorB;         /// @brief B vector per cell
+            tMatsPair matrixAB; /// @brief A and B blocks per face, used during ConstructRecCoeff
+            tVecsPair vectorB;  /// @brief B vector per cell
             bool needOriginalMatrix = false;
             tMatsPair matrixAAInvB;    /// @brief A^{-1}B blocks per cell (main reconstruction matrix)
             tMatsPair vectorAInvB;     /// @brief A^{-1}b vectors per cell
@@ -369,11 +375,16 @@ namespace DNDS::CFV
         }
 
         /**
-         * @brief if if2c < 0, then calculated, if maxDiff == 255, then seen as all diffs
-         * if iFace < 0, then seen as cell int points; if iG < 1, then seen as center
-         * @todo : divide GetIntPointDiffBaseValue into different calls
-         * @warning maxDiff is max(diffList) + 1 not len(difflist)
-         * @todo:  //TODO add support for rotational periodic boundary!
+         * @brief Diff-basis matrix for a cell-interior or face quadrature point.
+         *
+         * Face-point calls require a valid face side: iFace >= 0, if2c in {0, 1}.
+         * Cell-interior calls pass iFace = -1; the if2c parameter is ignored
+         * (callers conventionally pass -1, the sentinel value for "not a face").
+         *
+         * @param maxDiff pass 255 (UINT8_MAX) to request all available diffs.
+         *        A smaller value selects the first maxDiff diffs only.
+         * @warning maxDiff is max(diffList) + 1, not len(diffList).
+         * @todo   add support for rotational periodic boundary.
          */
         template <class TList>
         MatrixXR
@@ -385,8 +396,7 @@ namespace DNDS::CFV
             if (iFace >= 0)
             {
                 maxDiff = std::min(maxDiff, GetFaceAtr(iFace).NDIFF);
-                if (if2c < 0)
-                    if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                DNDS_assert(if2c >= 0);
                 if (settings.cacheDiffBase && maxDiff <= settings.cacheDiffBaseSize)
                 {
                     // auto gFace = this->GetFaceQuad(iFace);
@@ -442,13 +452,15 @@ namespace DNDS::CFV
         }
 
         /**
-         * @brief if if2c < 0, then calculated with iCell hen seen as all diffs
+         * @brief Face-side column slice of the pairwise secondary matrix.
+         *
+         * if2c selects face side 0 or 1; caller must resolve it from ic2f
+         * via CellIsFaceBack() before calling this function.
          */
         auto
         GetMatrixSecondary(index iCell, index iFace, index if2c)
         {
-            if (if2c < 0)
-                if2c = CellIsFaceBack(iCell, iFace) ? 0 : 1;
+            DNDS_assert(if2c >= 0);
             int maxNDOFM1 = coefficients_.matrixSecondary[iFace].cols() / 2;
             return coefficients_.matrixSecondary[iFace](
                 EigenAll, Eigen::seq(
@@ -594,7 +606,7 @@ namespace DNDS::CFV
                         if (mesh->face2cell(iFace, 1) != UnInitIndex)
                         {
                             norm = this->GetOtherCellBaryFromCell(mesh->face2cell(iFace, 0),
-                                                                  mesh->face2cell(iFace, 1), iFace) -
+                                                                  mesh->face2cell(iFace, 1), iFace, 0) -
                                    this->GetCellBary(mesh->face2cell(iFace, 0));
                             norm.normalize();
                         }

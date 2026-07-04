@@ -1,0 +1,272 @@
+{
+    "$schema": "../eulerEX_schema.json",
+    "caseNotes": {
+        "purpose": "One-dimensional stoichiometric premixed H2/air reactive-flow propagation test for eulerEX.",
+        "reference": {
+            "mechanism": "h2o2.yaml",
+            "canteraCase": "scripts/reaction/reference/react_test_stoich_air_profile.csv",
+            "canteraFreeFlameSpeed_m_per_s": 2.2593232249,
+            "unburnedState": "T=300 K, p=101325 Pa, Y_H2=0.028, Y_O2=0.222, derived Y_N2=0.75",
+            "burnedState": "Cantera FreeFlame outlet at T=2358.8904590776 K and p=101325 Pa"
+        },
+        "physics": [
+            "The initialized burned gas is on the left and the fresh unburned mixture is on the right.",
+            "A physically propagating premixed flame should move the thermal/reaction front rightward into the unburned mixture.",
+            "The ExprTk initializer uses primTP_phy: UExprtk[0] is temperature in K, UExprtk[4] is pressure in Pa, and species entries are mass fractions for transported species; N2 is derived by closure.",
+            "Reactive transport uses Cantera mixture-averaged viscosity, conductivity, and species diffusivity through h2o2.yaml; idealGasProperty.muGas is not used for reactive transport.",
+            "BCIn on both ends with zero velocity imposes burned gas on left and unburned on right. Marker speed is lab-frame, not Su. For quantitative Su: measure marker_speed - u_gas_local_unburned.",
+            "Cantera free-flame: Su=2.2593232249 m/s, burned T=2358.8905K, unburned T=300K, 6-cm domain, burned on left."
+        ],
+        "solverNotes": [
+            "dt=0.01 code units for large physical evolution over 2000 steps. CFL=10 with SGS/Jacobi (jacobiCode=1).",
+            "Wider domain meshScale=0.06 gives 6-cm domain for the 400-cell mesh, centering the flame at x=0.03.",
+            "Species diffusion enabled with mixture-averaged correction velocity. Viscous flux sign convention is -J_k.",
+            "Remaining robustness: species-diffusion timestep bounds, positivity-preserving limiting, Cantera-valid line search."
+        ],
+        "latestRun": {
+            "commandContext": "Run from build/ with DNDS_MECH_PATH and CANTERA_DATA pointing to external/cfd_externals/repos/cantera/data; mpirun -np 4 ./app/eulerEX.exe 14 ../cases/eulerEX/config_1d_premixed_stoichiometric.json.",
+            "status": "Pending: Cantera-profile-initialized run.",
+            "dtImplicitCode": 0.01,
+            "physicalSteps": 2000,
+            "internalPseudoSteps": 400,
+            "outputEverySteps": 200,
+            "outputDirectory": "../data/out/react_1d_premixed_freeflame_dt1e3_np4/",
+            "frontMarker": "T = 0.5 * (300 + 2358.8904590776) K",
+            "postProcessing": "Use workspace/flame1d/plot_output_digest.py for visualization and speed computation."
+        },
+        "/**/": {
+            "currentSetup": [
+                "Cantera free-flame profile injected via ExprTk piecewise-linear interpolation.",
+                "Strang splitting with Cantera CVODE chemistry, meshScale=0.02, dt=1e-3.",
+                "50 interpolation points per variable, ~48K chars total expression length."
+            ]
+        }
+    },
+    "timeMarchControl": {
+        "dtImplicit": 2e-3,
+        "nTimeStep": 1000,
+        "steadyQuit": false,
+        "tEnd": 0.5,
+        "odeCode": 204,
+        "odeSetting1": 0.5,
+        "sourceStrangSplitting": 1,
+        "rhsFPPMode": 0,
+        "rhsFPPScale": 1,
+        "useDtPPLimit": false,
+        "dtPPLimitScale": 1
+    },
+    "outputControl": {
+        "nConsoleCheck": 1,
+        "nConsoleCheckInternal": 1,
+        "nDataOutC": 1,
+        "nDataOut": 10,
+        "tDataOut": 3e+200,
+        "dataOutAtInit": true,
+        "consoleOutputEveryFix": 1,
+        "consoleMainOutputFormat": [
+            "=== Step {termBold}[{step:4d}]   ",
+            "res {termBold}{termRed}{resRel:.3e}{termReset}   ",
+            "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc}), betaRec({nLimBeta},{minBeta}), alphaRes({nLimAlpha},{minAlpha})]]{termReset}   ",
+            "Time[{telapsed:.3f}] recTime[{trec:.3f}] rhsTime[{trhs:.3f}] commTime[{tcomm:.3f}] limTime[{tLim:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]",
+            "\nuMinMax {termCyan}{uMinMax}{termReset}"
+        ],
+        "consoleMainOutputFormatInternal": [
+            "\t Internal === Step [{step:4d},{iStep:2d},{iter:4d}]   ",
+            "res {termRed}{resRel:.3e}{termReset}   ",
+            "t,dT,dTaumin,CFL,nFix {termGreen}[{tSimu:.3e},{curDtImplicit:.3e},{curDtMin:.3e},{CFLNow:.3e},[alphaInc({nLimInc},{alphaMinInc:.3g}), betaRec({nLimBeta},{minBeta:.3g}), alphaRes({nLimAlpha},{minAlpha:.3g})]]{termReset}   ",
+            "Time[{telapsedM:.3f}] recTime[{trecM:.3f}] rhsTime[{trhsM:.3f}] commTime[{tcommM:.3f}] limTime[{tLimM:.3f}] limTimeA[{tLimiterA:.3f}] limTimeB[{tLimiterB:.3f}]",
+            "\nuMinMax {termCyan}{uMinMax}{termReset}"
+        ]
+    },
+    "implicitCFLControl": {
+        "CFL": 10,
+        "nSmoothDTau": 4,
+        "useLocalDt": true,
+        "nCFLRampStart": 20,
+        "nCFLRampLength": 20,
+        "CFLRampEnd": 1000
+    },
+    "convergenceControl": {
+        "nTimeStepInternal": 200,
+        "nTimeStepInternalMin": 20,
+        "rhsThresholdInternal": 0.001,
+        "res_base": 0,
+        "useVolWiseResidual": true
+    },
+    "dataIOControl": {
+        "uniqueStamps": false,
+        "meshScale": 0.02,
+        "meshFile": "../data/mesh/Uniform_01_400.cgns",
+        "outPltName": "../data/out/react_1d_premixed_dt2em3_np8-strang-R1/react_",
+        "outPltMode": 0,
+        "readMeshMode": 0,
+        "outPltTecplotFormat": false,
+        "outPltVTKFormat": true,
+        "outAtPointData": true,
+        "outAtCellData": true,
+        "outCellScalarNames": [
+            "RE"
+        ]
+    },
+    "boundaryDefinition": {
+        "PeriodicTranslation1": [
+            0.0,
+            2.5e-3,
+            0.0
+        ]
+    },
+    "limiterControl": {
+        "useLimiter": false,
+        "usePPRecLimiter": true,
+        "nPartialLimiterStart": 1000000
+    },
+    "linearSolverControl": {
+        "jacobiCode": 2,
+        "sgsIter": 2,
+        "gmresCode": 0,
+        "nGmresIter": 1,
+        "nGmresSpace": 10,
+        "nSgsConsoleCheck": 100,
+        "sourceTauSplitting": 0,
+        "directPrecControl": {
+            "useDirectPrec": true,
+            "iluCode": 2,
+            "orderingCode": 4
+        }
+    },
+    "implicitReconstructionControl": {
+        "nInternalRecStep": 1,
+        "recLinearScheme": 0
+    },
+    "vfvSettings": {
+        "maxOrder": 1,
+        "intOrder": 1,
+        "jacobiRelax": 0,
+        "SORInstead": true,
+        "smoothThreshold": 0.001,
+        "WBAP_nStd": 10.0,
+        "subs2ndOrder": 1
+    },
+    "eulerSettings": {
+        "pointImplicitSourceUpdateOut": 1,
+        "reactiveSourceScale": 1,
+        "ignoreSourceTerm": false,
+        "useScalarJacobian": false,
+        "riemannSolverType": "Roe_M2",
+        "rsMeanValueEig": 1,
+        "uRecAlphaCompressPower": 1.0,
+        "uRecBetaCompressPower": 1.0,
+        "ppEpsIsRelaxed": false,
+        "ransModel": "RANS_None",
+        "reactiveFlow": {
+            "enabled": true,
+            "mechanismFile": "h2o2.yaml"
+        },
+        "farFieldStaticValue": {
+            "type": "primTP_phy",
+            "state": [
+                300.0,
+                0.0,
+                0.0,
+                0.0,
+                101325.0,
+                0.028,
+                0.0,
+                0.0,
+                0.222,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+            ]
+        },
+        "exprtkInitializers": [
+            {
+                "exprs": [
+                    "var s := 0.5 * (1.0 - tanh((x[0] - 0.005) / 0.001));",
+                    "inRegion := 1;",
+                    "UExprtk[0] := 300.0 + s * (2358.8904590776 - 300.0);",
+                    "UExprtk[1] := 0.0;",
+                    "UExprtk[2] := 0.0;",
+                    "UExprtk[3] := 0.0;",
+                    "UExprtk[4] := 101325.0;",
+                    "UExprtk[5] := 0.028 + s * (0.001061565674892 - 0.028);",
+                    "UExprtk[6] := s * 0.00006621330517904;",
+                    "UExprtk[7] := s * 0.0003825283859186;",
+                    "UExprtk[8] := 0.222 + s * (0.007934232649315 - 0.222);",
+                    "UExprtk[9] := s * 0.004832392833227;",
+                    "UExprtk[10] := s * 0.2356811456395;",
+                    "UExprtk[11] := s * 0.000001707665029496;",
+                    "UExprtk[12] := s * 0.0000001821124199213;",
+                    "UExprtk[13] := 0.0;",
+                    "0"
+                ],
+                "stateType": "primTP_phy"
+            }
+        ],
+        "constMassForce": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "idealGasProperty": {
+            "gamma": 1.4,
+            "Rgas": 287,
+            "muGas": 1e-200,
+            "prGas": 0.72,
+            "T0": 1.0,
+            "rho0": 1.0,
+            "U0": 379.0,
+            "L0": 1.0
+        }
+    },
+    "bcSettings": [
+        {
+            "type": "BCIn",
+            "name": "FAR_L",
+            "value": {
+                "type": "primTP_phy",
+                "state": [
+                    2358.8904590776,
+                    0.0,
+                    0.0,
+                    0.0,
+                    101325.0,
+                    0.001061565674892,
+                    6.621330517904e-05,
+                    0.0003825283859186,
+                    0.007934232649315,
+                    0.004832392833227,
+                    0.2356811456395,
+                    1.707665029496e-06,
+                    1.821124199213e-07,
+                    0.0
+                ]
+            }
+        },
+        {
+            "type": "BCIn",
+            "name": "FAR_R",
+            "value": {
+                "type": "primTP_phy",
+                "state": [
+                    300.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    101325.0,
+                    0.028,
+                    0.0,
+                    0.0,
+                    0.222,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ]
+            }
+        }
+    ]
+}

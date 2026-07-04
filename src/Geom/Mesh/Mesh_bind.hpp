@@ -68,7 +68,15 @@ namespace DNDS::Geom
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(cell2face)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(face2cell)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(face2node)
-            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(faceElemInfo);
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(faceElemInfo)
+            // edge connectivity
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(cell2edge)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(edge2cell)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(edge2node)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(edgeElemInfo)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(cell2edgePbi)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(edge2nodePbi)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_READONLY_MEMBER(nodeWallDist);
 
         UnstructuredMesh_
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(RecoverNode2CellAndNode2Bnd)
@@ -82,11 +90,14 @@ namespace DNDS::Geom
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(AdjLocal2GlobalFacial)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(AdjGlobal2LocalC2F)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(AdjLocal2GlobalC2F)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(AdjGlobal2LocalEdge)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(AdjLocal2GlobalEdge)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(BuildGhostN2CB)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(AdjGlobal2LocalN2CB)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(AdjLocal2GlobalN2CB)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(AssertOnN2CB)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(InterpolateFace)
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(InterpolateEdge)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(AssertOnFaces)
             .def("ConstructBndMesh", [](UnstructuredMesh &self, ssp<UnstructuredMesh> &pbMesh)
                  { self.ConstructBndMesh(*pbMesh); }, py::arg("bndMesh"))
@@ -119,7 +130,9 @@ namespace DNDS::Geom
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(IsO1)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(IsO2)
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(RecreatePeriodicNodes)
-            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(BuildVTKConnectivity);
+            .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(BuildVTKConnectivity)
+            .def("PrintMeshCGNS", &UnstructuredMesh::PrintMeshCGNS,
+                 py::arg("fname"), py::arg("fbcid2name"), py::arg("allNames"));
 
         UnstructuredMesh_
             .DNDS_GEOM_UNSTRUCTURED_MESH_PY_DEF_SIMP_FUNC(getArrayBytes);
@@ -160,10 +173,18 @@ namespace DNDS::Geom
                               py::arg("eulerAngles3") = Geom::tPoint{0, 0, 0});
 
         UnstructuredMesh_
-            .def("CellFaceOther", &UnstructuredMesh::CellFaceOther,
-                 py::arg("iCell"), py::arg("iFace"))
-            .def("CellIsFaceBack", &UnstructuredMesh::CellIsFaceBack,
-                 py::arg("iCell"), py::arg("iFace"));
+            .def(
+                "CellFaceOther",
+                [](const UnstructuredMesh &self, index iCell, index iFace, rowsize ic2f)
+                { return self.CellFaceOther(iCell, iFace, ic2f); },
+                py::arg("iCell"), py::arg("iFace"), py::arg("ic2f") = rowsize(-1),
+                "Return the cell on the opposite side of iFace. ic2f is only required for self-periodic faces.")
+            .def(
+                "CellIsFaceBack",
+                [](const UnstructuredMesh &self, index iCell, index iFace, rowsize ic2f)
+                { return self.CellIsFaceBack(iCell, iFace, ic2f); },
+                py::arg("iCell"), py::arg("iFace"), py::arg("ic2f") = rowsize(-1),
+                "Return whether iCell is face2cell(iFace,0). ic2f is only required for self-periodic faces.");
 
         auto WallDistOptions_ = py_class_ssp<UnstructuredMesh::WallDistOptions>(UnstructuredMesh_, "WallDistOptions");
         WallDistOptions_.def(py::init());

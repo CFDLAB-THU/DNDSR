@@ -18,10 +18,49 @@
 #include "DNDS/Defines.hpp" // for correct  DNDS_SWITCH_INTELLISENSE
 #include "Euler.hpp"
 #include "DNDS/ArrayDerived/ArrayEigenUniMatrixBatch.hpp"
+#include "DNDS/HardEigen.hpp"
 #include "Solver/Direct.hpp"
 
 namespace DNDS::Euler
 {
+    /**
+     * @brief Try to invert a block using partial-pivot LU.
+     *
+     * Falls back to SVD pseudo-inverse (HardEigen) if the matrix is
+     * near-singular — @p rcond below 1e-10 — or if the solve produces
+     * NaN / inf.  PartialPivLU is ~2x faster than FullPivLU and avoids
+     * the expensive ComplexSchur decomposition.
+     *
+     * @return true on success (AI is a usable inverse), false if SVD
+     *         fallback or NaN/inf produced.
+     */
+    template <typename tMat>
+    static bool invertBlockPartialPivLU(const tMat &A, tMat &AI)
+    {
+        Eigen::PartialPivLU<tMat> lu(A);
+        if (lu.rcond() < 1e-7)
+            return false;
+        AI = lu.solve(tMat::Identity(A.rows(), A.cols()));
+        return AI.allFinite() && !AI.hasNaN();
+    }
+
+    template <typename tMat>
+    static void invertBlockSVD(const tMat &A, tMat &AI)
+    {
+        // HardEigen uses Eigen::MatrixXd (dynamic); fixed-size tMat
+        // (e.g. Matrix<double, 6, 6> for NS_SA) cannot bind to MatrixXd&.
+        Eigen::MatrixXd Ad = A;
+        Eigen::MatrixXd AId;
+        HardEigen::EigenLeastSquareInverse_Filtered(Ad, AId, 0, 0);
+        DNDS_assert_info(AId.allFinite() && !AId.hasNaN(), [&]()
+                         {
+            std::ostringstream oss;
+            oss << "invertBlockSVD produced NaN/inf.\n"
+                << "A = \n" << Ad << "\n\n";
+            return oss.str(); }());
+        AI = AId;
+    }
+
     /**
      * @brief Per-cell diagonal or block-diagonal Jacobian storage for implicit time stepping.
      *
@@ -32,8 +71,8 @@ namespace DNDS::Euler
      *   Matrix-vector products are dense matrix multiplies.
      *
      * Both modes support lazy inversion via GetInvert(). The scalar mode inverts
-     * element-wise; the matrix mode uses diagonal-preconditioned full-pivot LU
-     * (InvertDiag pattern) for robustness on ill-conditioned blocks.
+     * element-wise; the matrix mode uses diagonal-preconditioned partial-pivot LU
+     * with SVD fallback (invertBlockPartialPivLU / invertBlockSVD).
      *
      * @tparam nVarsFixed  Compile-time number of conservative variables
      *                     (or Eigen::Dynamic).
@@ -42,19 +81,19 @@ namespace DNDS::Euler
     class JacobianDiagBlock
     {
     public:
-        using TU = Eigen::Vector<real, nVarsFixed>;                  ///< State vector type.
+        using TU = Eigen::Vector<real, nVarsFixed>;                     ///< State vector type.
         using tComponent = Eigen::Matrix<real, nVarsFixed, nVarsFixed>; ///< Full block matrix type.
-        using tComponentDiag = Eigen::Vector<real, nVarsFixed>;      ///< Diagonal vector type.
+        using tComponentDiag = Eigen::Vector<real, nVarsFixed>;         ///< Diagonal vector type.
 
     private:
-        ArrayDOFV<nVarsFixed> _dataDiag, _dataDiagInvert;           ///< Diagonal data and its inverse (scalar mode).
+        ArrayDOFV<nVarsFixed> _dataDiag, _dataDiagInvert;                                   ///< Diagonal data and its inverse (scalar mode).
         DNDS::ArrayPair<DNDS::ArrayEigenMatrix<nVarsFixed, nVarsFixed>> _data, _dataInvert; ///< Block data and its inverse (matrix mode).
-        bool hasInvert{false};                                      ///< True after GetInvert() has computed the inverse.
-        int _mode{0};                                               ///< Storage mode: 0 = scalar-diagonal, nonzero = matrix-block.
+        bool hasInvert{false};                                                              ///< True after GetInvert() has computed the inverse.
+        int _mode{0};                                                                       ///< Storage mode: 0 = scalar-diagonal, nonzero = matrix-block.
 
     public:
         /// @brief Default constructor; mode and storage are uninitialized until SetModeAndInit().
-        JacobianDiagBlock() {}
+        JacobianDiagBlock() = default;
 
         /**
          * @brief Select the storage mode and allocate arrays matching @p mock's layout.
@@ -143,8 +182,8 @@ namespace DNDS::Euler
         /**
          * @brief Compute and cache the inverse of every cell's Jacobian block.
          *
-         * In matrix-block mode, uses diagonal-preconditioned full-pivot LU
-         * (the InvertDiag pattern) for robustness on ill-conditioned blocks.
+         * In matrix-block mode, uses diagonal-preconditioned partial-pivot LU
+         * with SVD fallback via invertBlockPartialPivLU / invertBlockSVD.
          * In scalar-diagonal mode, inverts element-wise.
          *
          * This is a lazy operation: subsequent calls are no-ops until clearValues()
@@ -155,26 +194,17 @@ namespace DNDS::Euler
             if (!hasInvert)
             {
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
                 for (index iCell = 0; iCell < Size(); iCell++)
                     if (isBlock())
                     {
                         DNDS_assert(_data[iCell].diagonal().array().abs().minCoeff() != 0);
                         tComponent preCon = _data[iCell].diagonal().array().inverse().matrix().asDiagonal() * _data[iCell];
-                        auto luDiag = preCon.fullPivLu();
-                        DNDS_assert(luDiag.isInvertible());
-                        _dataInvert[iCell] = luDiag.inverse() * _data[iCell].diagonal().array().inverse().matrix().asDiagonal();
-                        if (!_dataInvert[iCell].allFinite() || _dataInvert[iCell].hasNaN())
-                        {
-                            std::cout << "xxxx"
-                                      << "\n";
-                            std::cout << _data[iCell] << "\n";
-                            std::cout << preCon << "\n";
-                            std::cout << luDiag.inverse() << "\n";
-                            std::cout << std::endl;
-                            DNDS_assert(false);
-                        }
+                        tComponent AI;
+                        if (!invertBlockPartialPivLU(preCon, AI))
+                            invertBlockSVD(preCon, AI);
+                        _dataInvert[iCell] = AI * _data[iCell].diagonal().array().inverse().matrix().asDiagonal();
                     }
                     else
                     {
@@ -226,7 +256,7 @@ namespace DNDS::Euler
             if (isBlock())
             {
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
                 for (index i = 0; i < _data.Size(); i++)
                     _data[i].setZero();
@@ -234,7 +264,7 @@ namespace DNDS::Euler
             else
             {
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
                 for (index i = 0; i < _dataDiag.Size(); i++)
                     _dataDiag[i].setZero();
@@ -272,12 +302,12 @@ namespace DNDS::Euler
               ArrayDOFV<nVarsFixed>>
     {
         using tLocalMat = ArrayEigenUniMatrixBatch<nVarsFixed, nVarsFixed>; ///< Batch storage for nVars×nVars blocks.
-        using tComponent = Eigen::Matrix<real, nVarsFixed, nVarsFixed>;    ///< Single block matrix type.
-        using tVec = ArrayDOFV<nVarsFixed>;                               ///< Distributed vector type.
+        using tComponent = Eigen::Matrix<real, nVarsFixed, nVarsFixed>;     ///< Single block matrix type.
+        using tVec = ArrayDOFV<nVarsFixed>;                                 ///< Distributed vector type.
         using tBase = Direct::LocalLUBase<
             JacobianLocalLU<nVarsFixed>,
             Eigen::Matrix<real, nVarsFixed, nVarsFixed>,
-            ArrayDOFV<nVarsFixed>>;                                       ///< CRTP base providing decompose/solve.
+            ArrayDOFV<nVarsFixed>>; ///< CRTP base providing decompose/solve.
         // using tIndices = Geom::UnstructuredMesh::tLocalMatStruct;
         /**
          * @brief Sparse row storage for D, L, U blocks.
@@ -314,7 +344,7 @@ namespace DNDS::Euler
         {
             tBase::isDecomposed = false;
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(runtime)
+#    pragma omp parallel for schedule(runtime)
 #endif
             for (index iCell = 0; iCell < tBase::symLU->Num(); iCell++)
                 for (auto &v : LDU[iCell])
@@ -357,11 +387,12 @@ namespace DNDS::Euler
         }
 
         /**
-         * @brief Invert a diagonal block using diagonal-preconditioned full-pivot LU.
+         * @brief Invert a diagonal block using diagonal-preconditioned partial-pivot LU.
          *
          * Preconditions the matrix by scaling rows with the inverse of the diagonal,
-         * then applies Eigen's fullPivLu(). This two-step approach improves numerical
-         * stability for ill-conditioned Jacobian blocks.
+         * then applies Eigen's PartialPivLu() (~2x faster than FullPivLU).  If the
+         * rcond estimate is below 1e-10 (near-singular), falls back to SVD
+         * pseudo-inverse via HardEigen::EigenLeastSquareInverse_Filtered.
          *
          * @param v  The nVars×nVars block matrix to invert.
          * @return The inverse matrix v^{-1}.
@@ -369,23 +400,11 @@ namespace DNDS::Euler
         tComponent InvertDiag(const tComponent &v)
         {
             tComponent AI;
-            {
-                DNDS_assert(v.diagonal().array().abs().minCoeff() != 0);
-                tComponent preCon = v.diagonal().array().inverse().matrix().asDiagonal() * v;
-                auto luDiag = preCon.fullPivLu();
-                DNDS_assert_info(luDiag.isInvertible(), [&]()
-                                 {
-                    std::cerr << v << "\n\n" << preCon << "\n\n";
-                    return "=== error info ==="; }());
-                AI = luDiag.inverse() * v.diagonal().array().inverse().matrix().asDiagonal();
-            }
-            {
-                // Eigen::MatrixXd A = v;
-                // Eigen::MatrixXd AII;
-                // HardEigen::EigenLeastSquareInverse(A, AII, 0.0);
-                // AI = AII;
-            }
-            return AI;
+            DNDS_assert(v.diagonal().array().abs().minCoeff() != 0);
+            tComponent preCon = v.diagonal().array().inverse().matrix().asDiagonal() * v;
+            if (!invertBlockPartialPivLU(preCon, AI))
+                invertBlockSVD(preCon, AI);
+            return AI * v.diagonal().array().inverse().matrix().asDiagonal();
         }
     };
 
@@ -413,12 +432,12 @@ namespace DNDS::Euler
               ArrayDOFV<nVarsFixed>>
     {
         using tLocalMat = ArrayEigenUniMatrixBatch<nVarsFixed, nVarsFixed>; ///< Batch storage for nVars×nVars blocks.
-        using tComponent = Eigen::Matrix<real, nVarsFixed, nVarsFixed>;    ///< Single block matrix type.
-        using tVec = ArrayDOFV<nVarsFixed>;                               ///< Distributed vector type.
+        using tComponent = Eigen::Matrix<real, nVarsFixed, nVarsFixed>;     ///< Single block matrix type.
+        using tVec = ArrayDOFV<nVarsFixed>;                                 ///< Distributed vector type.
         using tBase = Direct::LocalLDLTBase<
             JacobianLocalLDLT<nVarsFixed>,
             Eigen::Matrix<real, nVarsFixed, nVarsFixed>,
-            ArrayDOFV<nVarsFixed>>;                                       ///< CRTP base providing decompose/solve.
+            ArrayDOFV<nVarsFixed>>; ///< CRTP base providing decompose/solve.
         // using tIndices = Geom::UnstructuredMesh::tLocalMatStruct;
         /**
          * @brief Sparse row storage for D and L blocks.
@@ -457,7 +476,7 @@ namespace DNDS::Euler
         {
             tBase::isDecomposed = false;
 #if defined(DNDS_DIST_MT_USE_OMP)
-#pragma omp parallel for schedule(static)
+#    pragma omp parallel for schedule(static)
 #endif
             for (index iCell = 0; iCell < tBase::symLU->Num(); iCell++)
                 for (auto &v : LDU[iCell])
@@ -493,10 +512,10 @@ namespace DNDS::Euler
         }
 
         /**
-         * @brief Invert a diagonal block using diagonal-preconditioned full-pivot LU.
+         * @brief Invert a diagonal block using diagonal-preconditioned partial-pivot LU.
          *
          * Same algorithm as JacobianLocalLU::InvertDiag: preconditions with the
-         * diagonal inverse, then applies Eigen's fullPivLu().
+         * diagonal inverse, then applies Eigen's PartialPivLu() with SVD fallback.
          *
          * @param v  The nVars×nVars block matrix to invert.
          * @return The inverse matrix v^{-1}.
@@ -504,20 +523,11 @@ namespace DNDS::Euler
         tComponent InvertDiag(const tComponent &v)
         {
             tComponent AI;
-            {
-                DNDS_assert(v.diagonal().array().abs().minCoeff() != 0);
-                tComponent preCon = v.diagonal().array().inverse().matrix().asDiagonal() * v;
-                auto luDiag = preCon.fullPivLu();
-                DNDS_assert(luDiag.isInvertible());
-                AI = luDiag.inverse() * v.diagonal().array().inverse().matrix().asDiagonal();
-            }
-            {
-                // Eigen::MatrixXd A = v;
-                // Eigen::MatrixXd AII;
-                // HardEigen::EigenLeastSquareInverse(A, AII, 0.0);
-                // AI = AII;
-            }
-            return AI;
+            DNDS_assert(v.diagonal().array().abs().minCoeff() != 0);
+            tComponent preCon = v.diagonal().array().inverse().matrix().asDiagonal() * v;
+            if (!invertBlockPartialPivLU(preCon, AI))
+                invertBlockSVD(preCon, AI);
+            return AI * v.diagonal().array().inverse().matrix().asDiagonal();
         }
     };
 }

@@ -3,7 +3,7 @@
     "timeMarchControl": {
         // "dtImplicit": 0.005,
         // "dtImplicit": 0.10,
-        "dtImplicit": 0.1,
+        "dtImplicit": 0.05,
         "nTimeStep": 20000,
         // "steadyQuit": true,
         // "odeCode": 0,
@@ -58,6 +58,8 @@
         "nDataOutInternal": 1000000000,
         "nRestartOutC": 100,
         "nRestartOut": 1000,
+        "nTimeAverageOut": 1000000,
+        "nTimeAverageOutC": 1000,
         "tDataOut": 3e+200,
         // "consoleMainOutputFormatInternal": [
         //     "\t Internal === Step [{step:4d},{iStep:2d},{iter:4d},{iterAll:4d}]   ",
@@ -83,7 +85,7 @@
         "meshReorderCells": true,
         "meshFile": "../data/mesh/CylinderB1_L8U2.cgns",
         // "outPltName": "../data/out/CylinderB1_L8_RANSTest/CylinderB1_L8_Rawstart2_PdT5_RM8",
-        "outPltName": "../data/out/CylinderB1_L8U2_ILESTest/CylinderB1_L8U2_Raw4dT05_TH3_ILES_dF02R_O4_GW2_res0",
+        "outPltName": "../data/out/CylinderB1_L8U2_ILESTest_01/CylinderB1_L8U2_Raw4dT05_TH3_ILES_dF02R_O4_GW2_O45_res0_JC1it0_dT05_TH3_DWPM02_dF02UU_RIJOR_MG3_A",
         "outPltMode": 0,
         "readMeshMode": 0,
         "outPltTecplotFormat": true,
@@ -129,7 +131,7 @@
     },
     "vfvSettings": {
         "maxOrder": 3,
-        "intOrder": 3,
+        "intOrder": 5,
         "jacobiRelax": 1,
         "SORInstead": false,
         "smoothThreshold": 1e-3,
@@ -144,17 +146,25 @@
         "functionalSettings": {
             "scaleType": "BaryDiff",
             "scaleMultiplier": 1.0,
-            "dirWeightScheme": "HQM_OPT",
+            // "dirWeightScheme": "HQM_OPT",
+            // PAN MIX0.2
+            "dirWeightScheme": "ManualDirWeight",
+            "manualDirWeights": [
+                1.0,
+                0.5059,
+                0.14234000000000002,
+                0.059006666666666666
+            ],
             "geomWeightScheme": "HQM_SD",
-            "geomWeightPower": 0.0,
+            // "geomWeightPower": 0.5,
             "geomWeightBias": 1.0,
-            // "geomWeightPower": 0.0,
+            "geomWeightPower": 0.0,
             "_tail": 0
         }
     },
     "linearSolverControl": {
-        "jacobiCode": 0,
-        "sgsIter": 4,
+        "jacobiCode": 1,
+        "sgsIter": 0,
         "sgsWithRec": 0,
         "nSgsConsoleCheck": 100,
         "gmresCode": 0,
@@ -162,11 +172,11 @@
         "nGmresSpace": 5,
         "nGmresIter": 1,
         // "nGmresConsoleCheck": 1,
-        "multiGridLP": 0,
+        "multiGridLP": 1,
         "coarseGridLinearSolverControlList": {
             "1": {
-                "jacobiCode": 0,
-                "sgsIter": 4,
+                "jacobiCode": 1,
+                "sgsIter": 0,
                 "gmresCode": 0,
                 "gmresScale": 0,
                 "nGmresIter": 2,
@@ -185,6 +195,9 @@
     },
     "others": {
         "nFreezePassiveInner": 0
+    },
+    "timeAverageControl": {
+        "enabled": true
     },
     "eulerSettings": {
         "ignoreSourceTerm": false,
@@ -235,7 +248,7 @@
             //         "for (var j := 0; j < As[]; j += 1)   {",
             //         "for (var k := 0; k < As[]; k += 1)   {",
             //         "   var ampC := amp * pow(As[i] * As[j] * As[k], 1.0/3.0);",
-            //         "   UPrim[2] += cos(x[2] / lam * (k+1) * pi * 2 ",
+            //         "   UExprtk[2] += cos(x[2] / lam * (k+1) * pi * 2 ",
             //         "             + x[1] / lam * (j+1) * pi * 2  ",
             //         "             + x[0] / lam * (i+1) * pi * 2 + phis[iPsi]) * ampC; ",
             //         "   iPsi += 1;",
@@ -250,7 +263,7 @@
             //         "var rmax := 2; ",
             //         "if(r <= rmax) ",
             //         "   inRegion := 1; ",
-            //         "UPrim[1] += cos(x[2] / 4.0 * pi * 2 ) * 0.05; ",
+            //         "UExprtk[1] += cos(x[2] / 4.0 * pi * 2 ) * 0.05; ",
             //         "0"
             //     ]
             // }
@@ -261,7 +274,7 @@
             //         "var rmax := 2; ",
             //         "if(r <= rmax) ",
             //         "   inRegion := 1; ",
-            //         "UPrim[2] += cos(x[0] / 0.5 * 2 * pi) * cos(x[1] / 0.5 * 2 * pi) * 0.05; ",
+            //         "UExprtk[2] += cos(x[0] / 0.5 * 2 * pi) * cos(x[1] / 0.5 * 2 * pi) * 0.05; ",
             //         "0"
             //     ]
             // }

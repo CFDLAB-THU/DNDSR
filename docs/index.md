@@ -21,15 +21,16 @@ CUDA GPU support.
 ```sh
 # 1. Build external dependencies
 git submodule update --init --recursive --depth=1
+python3.12 -m venv venv && source venv/bin/activate
+pip install -r external/cfd_externals/requirements.txt
 cd external/cfd_externals && CC=mpicc CXX=mpicxx python cfd_externals_build.py && cd ../..
+bash scripts/install_python_deps.sh
 
 # 2. Build C++ solvers
 cmake --preset release-test
 cmake --build build -t euler -j32
 
 # 3. Install Python package (editable)
-python3.12 -m venv venv && source venv/bin/activate
-pip install numpy scipy pytest pytest-mpi pytest-timeout mpi4py pybind11 pybind11-stubgen scikit-build-core ninja
 CC=mpicc CXX=mpicxx CMAKE_BUILD_PARALLEL_LEVEL=32 pip install -e .
 
 # 4. Run tests

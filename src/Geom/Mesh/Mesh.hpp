@@ -50,6 +50,8 @@ namespace DNDS::Geom
         MeshAdjState adjN2CBState{Adj_Unknown};
         // state of: cell2cellFace
         MeshAdjState adjC2CFaceState{Adj_Unknown};
+        // state of: cell2edge, edge2node, edge2cell
+        MeshAdjState adjEdgeState{Adj_Unknown};
         Periodicity periodicInfo;
         index nNodeO1{-1};
         MeshElevationState elevState = Elevation_Untouched;
@@ -79,7 +81,8 @@ namespace DNDS::Geom
                 DNDS_MAKE_1_MEMBER_REF(cellElemInfo),
                 DNDS_MAKE_1_MEMBER_REF(bndElemInfo),
                 DNDS_MAKE_1_MEMBER_REF(cell2nodePbi),
-                DNDS_MAKE_1_MEMBER_REF(bnd2nodePbi));
+                DNDS_MAKE_1_MEMBER_REF(bnd2nodePbi),
+                DNDS_MAKE_1_MEMBER_REF(nodeWallDist));
         }
 
         /// inverse relations
@@ -104,6 +107,7 @@ namespace DNDS::Geom
         std::vector<index> bnd2faceV;               // no device
         std::unordered_map<index, index> face2bndM; // no device
         /// periodic only, after interpolated
+        tPbiPair cell2facePbi;
         tPbiPair face2nodePbi;
 
         auto device_array_list_facial()
@@ -111,6 +115,7 @@ namespace DNDS::Geom
             return std::make_tuple(
                 DNDS_MAKE_1_MEMBER_REF(face2cell),
                 DNDS_MAKE_1_MEMBER_REF(face2node),
+                DNDS_MAKE_1_MEMBER_REF(cell2facePbi),
                 DNDS_MAKE_1_MEMBER_REF(face2nodePbi),
                 DNDS_MAKE_1_MEMBER_REF(faceElemInfo),
                 DNDS_MAKE_1_MEMBER_REF(face2bnd));
@@ -121,6 +126,26 @@ namespace DNDS::Geom
             return std::make_tuple(
                 DNDS_MAKE_1_MEMBER_REF(cell2face),
                 DNDS_MAKE_1_MEMBER_REF(bnd2face));
+        }
+
+        /// interpolated edges (3D only)
+        AdjPairTracked<tAdjPair> cell2edge; // → Edge
+        AdjPairTracked<tAdjPair> edge2node; // → Node
+        AdjPairTracked<tAdjPair> edge2cell; // → Cell (variable-width, N-parent)
+        tElemInfoArrayPair edgeElemInfo;
+        /// periodic only, after edge interpolation
+        tPbiPair cell2edgePbi;
+        tPbiPair edge2nodePbi;
+
+        auto device_array_list_edge()
+        {
+            return std::make_tuple(
+                DNDS_MAKE_1_MEMBER_REF(cell2edge),
+                DNDS_MAKE_1_MEMBER_REF(edge2cell),
+                DNDS_MAKE_1_MEMBER_REF(edge2node),
+                DNDS_MAKE_1_MEMBER_REF(cell2edgePbi),
+                DNDS_MAKE_1_MEMBER_REF(edge2nodePbi),
+                DNDS_MAKE_1_MEMBER_REF(edgeElemInfo));
         }
 
         /// constructed on demand
@@ -488,6 +513,11 @@ namespace DNDS::Geom
         void InterpolateFaceLegacy();
         void AssertOnFaces();
 
+        void InterpolateEdge();
+        void BuildGhostEdge();
+        void AdjGlobal2LocalEdge();
+        void AdjLocal2GlobalEdge();
+
         void ConstructBndMesh(UnstructuredMesh &bMesh);
 
         // =================================================================
@@ -528,6 +558,10 @@ namespace DNDS::Geom
          * companion arrays (coords, cellElemInfo, pbi, etc.).
          * Skips adjacencies involving destroyKinds.
          *
+         * Adj remap callbacks intentionally rewrite owned/father rows only.
+         * Ghost/son rows are pre-reorder cache data and are rebuilt by the
+         * caller's normal ghost-building pipeline after ReorderEntities().
+         *
          * External code may extend the returned registry with its own arrays
          * before passing to ReorderPlan::build.
          */
@@ -561,10 +595,20 @@ namespace DNDS::Geom
         /**
          * \brief Augment a ReorderInput with default follows and compute follow maps.
          *
+         * The \p follower2leader adjacency in each FollowSpec must be a
+         * follower→leader direction (e.g. Bnd→Cell via \ref Bnd2Cell, Face→Node
+         * via \ref Face2Node).  The target rank for each follower is the minimum
+         * valid leader target rank over all non-UnInitIndex support entries.
+         * If a follower has no valid leaders it stays on the current rank.
+         *
          * When `input.follows` is empty and Cell is explicitly reordered,
-         * default follows (Node/Bnd follow Cell) are added automatically.
-         * Returns a finalised ReorderInput with all follows resolved to
-         * explicit maps (ready for ReorderPlan::build).
+         * default follows (Node/Bnd follow Cell via \ref Node2Cell / \ref Bnd2Cell)
+         * are added automatically.  Face/Edge follows and non-Cell leader follows
+         * must always be explicit.
+         *
+         * Supported follower→leader adjacency pairs:
+         *   - Node→Cell, Bnd→Cell, Face→Cell, Edge→Cell
+         *   - Cell→Node, Bnd→Node, Face→Node, Edge→Node
          *
          * \param input    Original input (may have empty follows).
          * \param reg      Registry with global mappings and adj data.
@@ -836,15 +880,22 @@ namespace DNDS::Geom
             return periodicInfo.GetVectorByBits<3, 1>(nodeWallDist[face2node(iFace, if2n)], face2nodePbi(iFace, if2n));
         }
 
-        bool CellIsFaceBack(index iCell, index iFace) const
+        bool CellIsFaceBack(index iCell, index iFace, rowsize ic2f) const
         {
             DNDS_assert(face2cell(iFace, 0) == iCell || face2cell(iFace, 1) == iCell);
+            if (face2cell(iFace, 0) == iCell && face2cell(iFace, 1) == iCell)
+            {
+                DNDS_assert(ic2f >= 0);
+                DNDS_assert_info(isPeriodic,
+                                 "CellIsFaceBack(): self-periodic face with ic2f requires periodic mesh");
+                return !bool(cell2facePbi(iCell, ic2f));
+            }
             return face2cell(iFace, 0) == iCell;
         }
 
-        index CellFaceOther(index iCell, index iFace) const
+        index CellFaceOther(index iCell, index iFace, rowsize ic2f) const
         {
-            return CellIsFaceBack(iCell, iFace)
+            return CellIsFaceBack(iCell, iFace, ic2f)
                        ? face2cell(iFace, 1)
                        : face2cell(iFace, 0);
         }
@@ -981,6 +1032,11 @@ namespace DNDS::Geom
             hdf5OutSetting.coll_on_meta = coll_on_meta;
         }
 
+        /// @brief Parallel CGNS mesh export utility.
+        ///
+        /// This uses CGNS parallel write calls and is intended for diagnostics / mesh
+        /// interchange. Solver partitioned-mesh workflows use SerializeMesh + H5
+        /// instead, because that path supports same-partition and redistributed reads.
         void PrintMeshCGNS(std::string fname, const t_FBCID_2_Name &fbcid2name, const std::vector<std::string> &allNames);
 
         struct WallDistOptions
@@ -1021,6 +1077,8 @@ namespace DNDS::Geom
                 for_each_member_list(this->device_array_list_C2F(), f);
             if (adjN2CBState && node2cell.isBuilt())
                 for_each_member_list(this->device_array_list_N2CB(), f);
+            if (adjEdgeState && cell2edge.isBuilt())
+                for_each_member_list(this->device_array_list_edge(), f);
         }
 
         template <typename F>
@@ -1051,18 +1109,7 @@ namespace DNDS::Geom
                 if (v.ref.son)
                     bytes += v.ref.son->FullSizeBytes();
             };
-            for_each_member_list(
-                this->device_array_list_primary(),
-                acuumulate_bytes_arr);
-            for_each_member_list(
-                this->device_array_list_facial(),
-                acuumulate_bytes_arr);
-            for_each_member_list(
-                this->device_array_list_C2F(),
-                acuumulate_bytes_arr);
-            for_each_member_list(
-                this->device_array_list_N2CB(),
-                acuumulate_bytes_arr);
+            op_on_device_arrays(acuumulate_bytes_arr);
             MPI::AllreduceOneIndex(bytes, MPI_SUM, mpi);
             return bytes;
         }

@@ -7,7 +7,7 @@
         "useRestart": false,
         "odeCode": 1, //0 = SDIRK4, 1 = BDF2, 2 = SSPRK3
         "tEnd": 3e+200,
-        "partitionMeshOnly": false, //save partioned mesh
+        "partitionMeshOnly": false, //save partitioned mesh
         "_tail": 0
     },
     "convergenceControl": {
@@ -28,6 +28,7 @@
         "nRestartOut": 100,
         "nRestartOutCInternal": 10000,
         "nRestartOutInternal": 1000000000,
+        "dataOutAtInit": true,
         "tDataOut": 3e+200
     },
     "implicitCFLControl": {
@@ -61,6 +62,9 @@
         "outCellScalarNames": [
             // "minJacobiDetRel",
             // "cellVolume",
+            "dWall"
+        ],
+        "outBndScalarNames": [
             "dWall"
         ],
         "_tail": 0

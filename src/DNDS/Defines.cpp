@@ -9,6 +9,8 @@
 // #define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
 // #endif
 #include <codecvt>
+#include <cstring>
+#include <fstream>
 #include <boost/stacktrace.hpp>
 #include <utility>
 // #include <cpptrace.hpp>
@@ -34,12 +36,79 @@ extern "C" void DNDS_signal_handler(int signal)
 
 namespace DNDS
 {
+    class TeeStreamBuf : public std::streambuf
+    {
+    public:
+        TeeStreamBuf(std::ostream *a, std::ostream *b, bool aIsTTY, bool bIsTTY)
+            : _a(a), _b(b), _aIsTTY(aIsTTY), _bIsTTY(bIsTTY) {}
+
+        bool anyBranchTTY() const { return _aIsTTY || _bIsTTY; }
+
+    protected:
+        int_type overflow(int_type c) override
+        {
+            if (c == traits_type::eof())
+                return traits_type::not_eof(c);
+            char ch = traits_type::to_char_type(c);
+            bool wa = writeChar(_a, _aIsTTY, ch);
+            bool wb = writeChar(_b, _bIsTTY, ch);
+            return (!wa || !wb)
+                       ? traits_type::eof()
+                       : c;
+        }
+
+        int sync() override
+        {
+            _a->flush();
+            _b->flush();
+            return (_a->good() && _b->good()) ? 0 : -1;
+        }
+
+        std::streamsize xsputn(const char_type *s, std::streamsize n) override
+        {
+            bool hasCR = n > 0 && std::memchr(s, '\r', n) != nullptr;
+            auto wa = writeBranch(_a, _aIsTTY || !hasCR, s, n);
+            auto wb = writeBranch(_b, _bIsTTY || !hasCR, s, n);
+            return std::min(wa, wb);
+        }
+
+    private:
+        static bool writeChar(std::ostream *os, bool isTTY, char ch)
+        {
+            os->put(isTTY ? ch : (ch == '\r' ? '\n' : ch));
+            return os->good();
+        }
+
+        static std::streamsize writeBranch(std::ostream *os, bool keepCR, const char_type *s, std::streamsize n)
+        {
+            if (keepCR)
+            {
+                os->write(s, n);
+                return os->good() ? n : 0;
+            }
+            std::streamsize written = 0;
+            for (; written < n && os->good(); written++)
+                os->put(s[written] == '\r' ? '\n' : s[written]);
+            return written;
+        }
+
+        std::ostream *_a;
+        std::ostream *_b;
+        bool _aIsTTY;
+        bool _bIsTTY;
+    };
+
+    static ssp<std::ofstream> logFileStream;
+    static ssp<TeeStreamBuf> logTeeBuf;
+
     bool ostreamIsTTY(std::ostream &ostream)
     {
         if (&ostream == &std::cout)
             return _isatty(fileno(stdout));
         if (&ostream == &std::cerr)
             return _isatty(fileno(stderr));
+        if (auto *tee = dynamic_cast<TeeStreamBuf *>(ostream.rdbuf()))
+            return tee->anyBranchTTY();
         return false;
     }
 
@@ -49,11 +118,36 @@ namespace DNDS
 
     std::ostream &log() { return useCout ? std::cout : *logStream; }
 
-    bool logIsTTY() { return ostreamIsTTY(*logStream); }
+    bool logIsTTY() { return useCout ? ostreamIsTTY(std::cout) : ostreamIsTTY(*logStream); }
 
-    void setLogStream(ssp<std::ostream> nstream) { useCout = false, logStream = std::move(nstream); }
+    void setLogStream(ssp<std::ostream> nstream)
+    {
+        logTeeBuf.reset();
+        logFileStream.reset();
+        useCout = false;
+        logStream = std::move(nstream);
+    }
 
-    void setLogStreamCout() { useCout = true, logStream.reset(); }
+    void setLogFile(const std::string &path)
+    {
+        auto file = std::make_shared<std::ofstream>(path);
+        DNDS_check_throw_info(file->is_open(), "failed to open log file: " + path);
+        auto tee = std::make_shared<TeeStreamBuf>(&std::cout, file.get(),
+                                                  _isatty(fileno(stdout)), false);
+        auto stream = std::make_shared<std::ostream>(tee.get());
+        logFileStream = std::move(file);
+        logTeeBuf = std::move(tee);
+        useCout = false;
+        logStream = std::move(stream);
+    }
+
+    void setLogStreamCout()
+    {
+        useCout = true;
+        logStream.reset();
+        logTeeBuf.reset();
+        logFileStream.reset();
+    }
 
     int get_terminal_width()
     {
@@ -83,24 +177,29 @@ namespace DNDS
 
         int pos = static_cast<int>(bar_width * progress);
 
-        if (ostreamIsTTY(os))
+        auto buildBar = [&]() -> std::string
         {
-            os << "\r[";
+            std::string bar = "[";
             for (int i = 0; i < bar_width; ++i)
             {
                 if (i < pos)
-                    os << "=";
+                    bar += "=";
                 else if (i == pos)
-                    os << ">";
+                    bar += ">";
                 else
-                    os << " ";
+                    bar += " ";
             }
-            os << "] " << std::setw(3) << static_cast<int>(progress * 100) << "% " << std::flush;
+            bar += fmt::format("] {:3d}%", static_cast<int>(progress * 100));
+            return bar;
+        };
+
+        if (ostreamIsTTY(os))
+        {
+            os << "\r" << buildBar() << " " << std::flush;
         }
         else
         {
-            os << "[" << std::string(pos, '=') << ">" << std::string(bar_width - pos, ' ')
-               << "] " << std::setw(3) << static_cast<int>(progress * 100) << "%" << std::endl;
+            os << buildBar() << std::endl;
         }
     }
 

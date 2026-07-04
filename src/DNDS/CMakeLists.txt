@@ -28,6 +28,7 @@ ${DNDS_EXTERNAL_LIBS}
 set(CPPS
 MPI.cpp
 Defines.cpp
+EnvReader.cpp
 Device/DeviceStorage.cpp
 Profiling.cpp
 HardEigen.cpp

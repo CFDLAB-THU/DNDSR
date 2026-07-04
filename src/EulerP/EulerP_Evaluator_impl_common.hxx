@@ -156,10 +156,11 @@ namespace DNDS::EulerP
             auto c2f = mesh.cell2face[iCell];
             TU uI = u[iCell];
 
-            for (long iFace : c2f)
+            for (rowsize ic2f = 0; ic2f < c2f.size(); ++ic2f)
             {
-                index iCellOther = mesh.CellFaceOther(iCell, iFace);
-                rowsize if2c = mesh.CellIsFaceBack(iCell, iFace) ? 0 : 1;
+                index iFace = c2f[ic2f];
+                index iCellOther = mesh.CellFaceOther(iCell, iFace, ic2f);
+                rowsize if2c = mesh.CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
                 tPoint norm = 0.5 * fv.GetFaceNormFromCell(iFace, iCell, if2c, -1) *
                               ((if2c ? -1.0 : 1.0) * fv.GetFaceArea(iFace) / fv.GetCellVol(iCell));
                 // ! the 0.5 is because we use arithmetic mean
@@ -294,9 +295,10 @@ namespace DNDS::EulerP
             for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
             {
                 index iFace = c2f[ic2f];
-                index iCellOther = mesh.CellFaceOther(iCell, iFace);
+                index iCellOther = mesh.CellFaceOther(iCell, iFace, ic2f);
+                rowsize if2c = mesh.CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
                 TU uIncPoint = grad.transpose() *
-                               (fv.GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) -
+                               (fv.GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1) -
                                 fv.GetCellQuadraturePPhys(iCell, -1));
                 tPoint uIncPoint_mag;
                 uIncPoint_mag << uIncPoint(0), uIncPoint(I4), U123(uIncPoint).norm();
@@ -332,9 +334,10 @@ namespace DNDS::EulerP
             for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
             {
                 index iFace = c2f[ic2f];
-                index iCellOther = mesh.CellFaceOther(iCell, iFace);
+                index iCellOther = mesh.CellFaceOther(iCell, iFace, ic2f);
+                rowsize if2c = mesh.CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
                 TU uIncPoint = grad.transpose() *
-                               (fv.GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) -
+                               (fv.GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1) -
                                 fv.GetCellQuadraturePPhys(iCell, -1));
                 uIncPoint += uI;
                 real EOther = phy.Cons2EInternal(uIncPoint, nVarsFlow);
@@ -435,10 +438,12 @@ namespace DNDS::EulerP
             uIIncMin.setConstant(0.0);
             uOtherMax = uOtherMin = uI;
 
-            for (auto iFace : c2f)
+            for (rowsize ic2f = 0; ic2f < c2f.size(); ++ic2f)
             {
-                index iCellOther = mesh.CellFaceOther(iCell, iFace);
-                tPoint p = (fv.GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) -
+                auto iFace = c2f[ic2f];
+                index iCellOther = mesh.CellFaceOther(iCell, iFace, ic2f);
+                rowsize if2c = mesh.CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
+                tPoint p = (fv.GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1) -
                             fv.GetCellQuadraturePPhys(iCell, -1));
                 for (int iVarS = 0; iVarS < nCur; iVarS++)
                 {
@@ -936,7 +941,7 @@ namespace DNDS::EulerP
                 // relative to cellR!
                 xrel_R = (fv.GetFaceQuadraturePPhysFromCell(iFace, iCellR, 1, -1) -
                           fv.GetCellQuadraturePPhys(iCellR, -1));
-                faceLScale = (fv.GetOtherCellBaryFromCell(iCellL, iCellR, iFace) - fv.GetCellBary(iCellL)).norm();
+                faceLScale = (fv.GetOtherCellBaryFromCell(iCellL, iCellR, iFace, 0) - fv.GetCellBary(iCellL)).norm();
             }
 
             uFL[iFace].noalias() = u[iCellL] + uGrad[iCellL].transpose() * xrel_L;
@@ -1241,9 +1246,10 @@ namespace DNDS::EulerP
         {
             rhsC = rhs[iCell];
             auto c2f = mesh.cell2face.father[iCell];
-            for (auto iFace : c2f)
+            for (rowsize ic2f = 0; ic2f < c2f.size(); ++ic2f)
             {
-                real face_sign = mesh.CellIsFaceBack(iCell, iFace) ? 1 : -1;
+                auto iFace = c2f[ic2f];
+                real face_sign = mesh.CellIsFaceBack(iCell, iFace, ic2f) ? 1 : -1;
                 real face_coef = -fv.GetFaceArea(iFace) / fv.GetCellVol(iCell) * face_sign;
                 rhsC += fluxFF[iFace] * face_coef;
                 for (int iVarS = 0; iVarS < nVarsScalar; iVarS++)

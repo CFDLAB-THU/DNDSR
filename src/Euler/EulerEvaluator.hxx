@@ -8,6 +8,8 @@
 #include "DNDS/Defines.hpp" // for correct  DNDS_SWITCH_INTELLISENSE
 #include "EulerEvaluator.hpp"
 #include "DNDS/HardEigen.hpp"
+#include <sstream>
+#include <iomanip>
 #include "SpecialFields.hpp"
 #include "DNDS/ExprtkWrapper.hpp"
 
@@ -63,15 +65,14 @@ namespace DNDS::Euler
             for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
             {
                 index iFace = c2f[ic2f];
+                auto if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
                 fpDivisor += (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) * lambdaFace[iFace] / vfv->GetCellVol(iCell);
                 if (!settings.useRoeJacobian)
                     continue;
                 // roe term jacobi
-                auto f2c = mesh->face2cell[iFace];
-                index iCellOther = f2c[0] == iCell ? f2c[1] : f2c[0];
-                rowsize iCellAtFace = f2c[0] == iCell ? 0 : 1;
-                TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, iCellAtFace, -1)(Seq012) *
-                                (iCellAtFace ? -1 : 1); // faces out
+                index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
+                TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1)(Seq012) *
+                                (if2c ? -1 : 1); // faces out
                 TU uj;
                 if (iCellOther == UnInitIndex) // handle BC
                 {
@@ -87,14 +88,14 @@ namespace DNDS::Euler
                 else
                     uj = u[iCellOther];
                 if (iCellOther != UnInitIndex)
-                    this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
+                    this->UFromOtherCell(uj, iFace, iCell, iCellOther, if2c);
                 TJacobianU jacII = fluxJacobian0_Right_Times_du_AsMatrix( // unitnorm and uj are both respect with this cell
                     u[iCell], uj,
-                    unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
+                    unitNorm, GetFaceVGridFromCell(iFace, iCell, if2c, -1),
                     mesh->GetFaceZone(iFace),
                     lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
-                    iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
-                    // swap lambda0 and lambda4 if iCellAtFace==1
+                    if2c ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], if2c ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                    // swap lambda0 and lambda4 if if2c==1
                     true, +1, 1);              // for this is diff(uthis) not diff(uthat)
                 if (iCellOther == UnInitIndex) // handle BC
                 {
@@ -114,11 +115,11 @@ namespace DNDS::Euler
                     }
                     TJacobianU jacIJ = fluxJacobian0_Right_Times_du_AsMatrix( // unitnorm and uj are both respect with this cell
                         uj, u[iCell],
-                        unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
+                        unitNorm, GetFaceVGridFromCell(iFace, iCell, if2c, -1),
                         mesh->GetFaceZone(iFace),
                         lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
-                        iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
-                        // swap lambda0 and lambda4 if iCellAtFace==1
+                        if2c ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], if2c ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                        // swap lambda0 and lambda4 if if2c==1
                         true, -1, 0);
                     JDiag.getBlock(iCell) += (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * (jacIJ * JBC);
                 }
@@ -144,7 +145,12 @@ namespace DNDS::Euler
             if (!settings.ignoreSourceTerm)
             {
                 if (JDiag.isBlock())
-                    JDiag.getBlock(iCell) += alphaDiag * JSource.getBlock(iCell);
+                {
+                    auto js = JSource.getBlock(iCell);
+                    if (!js.allFinite())
+                        fprintf(stderr, "[JSource] cell=%ld hasNonFinite\n", long(iCell));
+                    JDiag.getBlock(iCell) += alphaDiag * js;
+                }
                 else
                     JDiag.getDiag(iCell) += alphaDiag * JSource.getDiag(iCell);
             }
@@ -184,7 +190,7 @@ namespace DNDS::Euler
         DNDS_MPI_InsertCheck(u.father->getMPI(), "LUSGSMatrixVec 1");
         int cnvars = nVars;
 
-        auto cellOp = [&](index iCell) __attribute__((always_inline)) {
+        auto cellOp = [&](index iCell) __attribute__((always_inline)){
 
         };
 
@@ -211,11 +217,14 @@ namespace DNDS::Euler
                 for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                 {
                     index iFace = c2f[ic2f];
-                    auto f2c = mesh->face2cell[iFace];
-                    index iCellOther = f2c[0] == iCell ? f2c[1] : f2c[0];
-                    index iCellAtFace = f2c[0] == iCell ? 0 : 1;
-                    TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, iCellAtFace, -1)(Seq012) *
-                                    (iCellAtFace ? -1 : 1); // faces out
+                    // A self-periodic face can have face2cell = (iCell, iCell),
+                    // so face2cell alone cannot identify the side. Use the
+                    // cell-local incidence slot to recover if2c before forming
+                    // geometry, periodic transforms, and the diagonal LU block.
+                    index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
+                    auto if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
+                    TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1)(Seq012) *
+                                    (if2c ? -1 : 1); // faces out
                     if (iCellOther != UnInitIndex)
                     {
 
@@ -223,8 +232,8 @@ namespace DNDS::Euler
                         {
                             TU uINCj = uInc[iCellOther];
                             TU uj = u[iCellOther];
-                            this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, iCellAtFace);
-                            this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
+                            this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, if2c);
+                            this->UFromOtherCell(uj, iFace, iCell, iCellOther, if2c);
                             TU fInc;
                             {
 
@@ -235,11 +244,11 @@ namespace DNDS::Euler
                                 //        uInc[iCellOther]; //! always inner here
                                 fInc = fluxJacobian0_Right_Times_du(
                                     uj, u[iCell],
-                                    unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
+                                    unitNorm, GetFaceVGridFromCell(iFace, iCell, if2c, -1),
                                     Geom::BC_ID_INTERNAL, uINCj,
                                     lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
-                                    iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
-                                    // swap lambda0 and lambda4 if iCellAtFace==1
+                                    if2c ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], if2c ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                                    // swap lambda0 and lambda4 if if2c==1
                                     settings.useRoeJacobian); //! always inner here
                             }
 
@@ -304,39 +313,34 @@ namespace DNDS::Euler
             for (index iScan = mesh->LocalPartStart(iPart); iScan < mesh->LocalPartEnd(iPart); iScan++)
             {
                 index iCell = iScan;
+                jacLU.GetDiag(iCell) = JDiag.getValue(iCell);
                 auto c2f = mesh->cell2face[iCell];
                 for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                 {
                     index iFace = c2f[ic2f];
-                    auto f2c = mesh->face2cell[iFace];
-                    index iCellOther = f2c[0] == iCell ? f2c[1] : f2c[0];
-                    rowsize iCellAtFace = f2c[0] == iCell ? 0 : 1;
-                    TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, iCellAtFace, -1)(Seq012) *
-                                    (iCellAtFace ? -1 : 1); // faces out
-                    if (iCellOther != UnInitIndex && iCellOther != iCell &&
+                    index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
+                    auto if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
+                    TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1)(Seq012) *
+                                    (if2c ? -1 : 1); // faces out
+                    if (iCellOther != UnInitIndex &&
                         iCellOther < mesh->LocalPartEnd(iPart) && iCellOther >= mesh->LocalPartStart(iPart))
                     {
                         TU uj = u[iCellOther];
-                        this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
-                        int iC2CInLocal = -1;
-                        for (int ic2c = 0; ic2c < mesh->cell2cellFaceVLocalParts[iCell].size(); ic2c++)
-                            if (iCellOther == mesh->cell2cellFaceVLocalParts[iCell][ic2c])
-                                iC2CInLocal = ic2c; // TODO: pre-search this
-                        DNDS_assert(iC2CInLocal != -1);
+                        this->UFromOtherCell(uj, iFace, iCell, iCellOther, if2c);
                         TJacobianU jacIJ;
                         {
                             jacIJ = fluxJacobian0_Right_Times_du_AsMatrix( // unitnorm and uj are both respect with this cell
                                 uj, u[iCell],
-                                unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
+                                unitNorm, GetFaceVGridFromCell(iFace, iCell, if2c, -1),
                                 Geom::BC_ID_INTERNAL,
                                 lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
-                                iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
-                                // swap lambda0 and lambda4 if iCellAtFace==1
+                                if2c ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], if2c ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                                // swap lambda0 and lambda4 if if2c==1
                                 settings.useRoeJacobian); //! always inner here
                         }
                         auto faceID = mesh->GetFaceZone(iFace);
                         mesh->CellOtherCellPeriodicHandle(
-                            iFace, iCellAtFace,
+                            iFace, if2c,
                             [&]()
                             { jacIJ(EigenAll, Seq123) =
                                   mesh->periodicInfo.TransVectorBack<dim, nVarsFixed>(
@@ -347,11 +351,22 @@ namespace DNDS::Euler
                                   mesh->periodicInfo.TransVector<dim, nVarsFixed>(
                                                         jacIJ(EigenAll, Seq123).transpose(), faceID)
                                       .transpose(); });
-                        jacLU.LDU(iCell, symLU->cell2cellFaceVLocal2FullRowPos[iCell][iC2CInLocal]) =
-                            (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * jacIJ;
+                        auto jacBlock = (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * jacIJ;
+                        if (iCellOther == iCell)
+                        {
+                            jacLU.GetDiag(iCell) += jacBlock;
+                        }
+                        else
+                        {
+                            int iC2CInLocal = -1;
+                            for (int ic2c = 0; ic2c < mesh->cell2cellFaceVLocalParts[iCell].size(); ic2c++)
+                                if (iCellOther == mesh->cell2cellFaceVLocalParts[iCell][ic2c])
+                                    iC2CInLocal = ic2c; // TODO: pre-search this
+                            DNDS_assert(iC2CInLocal != -1);
+                            jacLU.LDU(iCell, symLU->cell2cellFaceVLocal2FullRowPos[iCell][iC2CInLocal]) += jacBlock;
+                        }
                     }
                 }
-                jacLU.GetDiag(iCell) = JDiag.getValue(iCell);
             }
         // TODO: make below OMP-ed
         jacLU.InPlaceDecompose();
@@ -403,11 +418,10 @@ namespace DNDS::Euler
             for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
             {
                 index iFace = c2f[ic2f];
-                auto f2c = mesh->face2cell[iFace];
-                index iCellOther = f2c[0] == iCell ? f2c[1] : f2c[0];
-                index iCellAtFace = f2c[0] == iCell ? 0 : 1;
-                TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, iCellAtFace, -1)(Seq012) *
-                                (iCellAtFace ? -1 : 1); // faces out
+                index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
+                auto if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
+                TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1)(Seq012) *
+                                (if2c ? -1 : 1); // faces out
                 if (iCellOther != UnInitIndex)
                 {
                     index iScanOther = iCellOther;
@@ -415,15 +429,15 @@ namespace DNDS::Euler
                     {
                         TU uINCj = uInc[iCellOther];
                         TU uj = u[iCellOther];
-                        this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, iCellAtFace);
-                        this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
+                        this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, if2c);
+                        this->UFromOtherCell(uj, iFace, iCell, iCellOther, if2c);
 
                         TU fInc = fluxJacobian0_Right_Times_du(
                             uj, u[iCell],
-                            unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
+                            unitNorm, GetFaceVGridFromCell(iFace, iCell, if2c, -1),
                             Geom::BC_ID_INTERNAL, uINCj,
                             lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
-                            iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                            if2c ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], if2c ? lambdaFace0[iFace] : lambdaFace4[iFace],
                             settings.useRoeJacobian);
 
                         uIncNewBuf -= (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) *
@@ -494,11 +508,10 @@ namespace DNDS::Euler
             for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
             {
                 index iFace = c2f[ic2f];
-                auto f2c = mesh->face2cell[iFace];
-                index iCellOther = f2c[0] == iCell ? f2c[1] : f2c[0];
-                index iCellAtFace = f2c[0] == iCell ? 0 : 1;
-                TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, iCellAtFace, -1)(Seq012) *
-                                (iCellAtFace ? -1 : 1); // faces out
+                index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
+                auto if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
+                TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1)(Seq012) *
+                                (if2c ? -1 : 1); // faces out
                 if (iCellOther != UnInitIndex)
                 {
                     index iScanOther = iCellOther;
@@ -506,15 +519,15 @@ namespace DNDS::Euler
                     {
                         TU uINCj = uInc[iCellOther];
                         TU uj = u[iCellOther];
-                        this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, iCellAtFace);
-                        this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
+                        this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, if2c);
+                        this->UFromOtherCell(uj, iFace, iCell, iCellOther, if2c);
 
                         TU fInc = fluxJacobian0_Right_Times_du(
                             uj, u[iCell],
-                            unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
+                            unitNorm, GetFaceVGridFromCell(iFace, iCell, if2c, -1),
                             Geom::BC_ID_INTERNAL, uINCj,
                             lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
-                            iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                            if2c ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], if2c ? lambdaFace0[iFace] : lambdaFace4[iFace],
                             settings.useRoeJacobian);
 
                         uIncNewBuf -= (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) *
@@ -585,11 +598,10 @@ namespace DNDS::Euler
                 {
                     index iFace = c2f[ic2f];
                     auto btype = mesh->GetFaceZone(iFace);
-                    auto f2c = mesh->face2cell[iFace];
-                    index iCellOther = f2c[0] == iCell ? f2c[1] : f2c[0];
-                    index iCellAtFace = f2c[0] == iCell ? 0 : 1;
-                    TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, iCellAtFace, -1)(Seq012) *
-                                    (iCellAtFace ? -1 : 1); // faces out
+                    index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
+                    auto if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
+                    TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1)(Seq012) *
+                                    (if2c ? -1 : 1); // faces out
                     if (iCellOther != UnInitIndex)
                     {
                         if (iCell != iCellOther)
@@ -605,17 +617,17 @@ namespace DNDS::Euler
 
                             TU uINCj = gsUseNew ? uIncNew[iCellOther] : uInc[iCellOther];
                             TU uj = u[iCellOther];
-                            this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, iCellAtFace);
-                            this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
+                            this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, if2c);
+                            this->UFromOtherCell(uj, iFace, iCell, iCellOther, if2c);
 
                             {
                                 fInc = fluxJacobian0_Right_Times_du(
                                     uj, u[iCell],
-                                    unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
+                                    unitNorm, GetFaceVGridFromCell(iFace, iCell, if2c, -1),
                                     Geom::BC_ID_INTERNAL, uINCj,
                                     lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
-                                    iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
-                                    // swap lambda0 and lambda4 if iCellAtFace==1
+                                    if2c ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], if2c ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                                    // swap lambda0 and lambda4 if if2c==1
                                     settings.useRoeJacobian); //! always inner here
                             }
 
@@ -634,7 +646,7 @@ namespace DNDS::Euler
                     // else if (pBCHandler->GetTypeFromID(btype) == BCWall || pBCHandler->GetTypeFromID(btype) == BCWallIsothermal)
                     // {
                     //     TMat normBase = Geom::NormBuildLocalBaseV<dim>(unitNorm);
-                    //     Geom::tPoint pPhysics = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, iCellAtFace, -1);
+                    //     Geom::tPoint pPhysics = vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1);
                     //     TU uThis = u[iCell];
                     //     TU uINCj = uInc[iCell];
                     //     //! using t = 0 in generateBoudnaryValue!
@@ -647,11 +659,11 @@ namespace DNDS::Euler
                     //         uINCj({I4 + 1, I4 + 2}).setZero();
                     //     TU fInc = fluxJacobian0_Right_Times_du(
                     //         uj, u[iCell],
-                    //         unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
+                    //         unitNorm, GetFaceVGridFromCell(iFace, iCell, if2c, -1),
                     //         Geom::BC_ID_INTERNAL, uINCj,
                     //         lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
-                    //         iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
-                    //                // swap lambda0 and lambda4 if iCellAtFace==1
+                    //         if2c ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], if2c ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                    //                // swap lambda0 and lambda4 if if2c==1
                     //         settings.useRoeJacobian); //! treat as inner here
 
                     //     uIncNewBuf -= (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) *
@@ -744,11 +756,10 @@ namespace DNDS::Euler
             for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
             {
                 index iFace = c2f[ic2f];
-                auto f2c = mesh->face2cell[iFace];
-                index iCellOther = f2c[0] == iCell ? f2c[1] : f2c[0];
-                index iCellAtFace = f2c[0] == iCell ? 0 : 1;
-                TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, iCellAtFace, -1)(Seq012) *
-                                (iCellAtFace ? -1 : 1); // faces out
+                index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
+                auto if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
+                TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1)(Seq012) *
+                                (if2c ? -1 : 1); // faces out
                 if (iCellOther != UnInitIndex)
                 {
                     index iScanOther = forward ? iCellOther : nCellDist - 1 - iCellOther; // TODO: add rb-sor
@@ -759,24 +770,24 @@ namespace DNDS::Euler
                         {
                             fInc = fluxJacobian0_Right_Times_du(
                                 u[iCellOther], u[iCell], //! TODO periodic here
-                                unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
+                                unitNorm, GetFaceVGridFromCell(iFace, iCell, if2c, -1),
                                 Geom::BC_ID_INTERNAL, uINCj,
                                 lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
-                                iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
-                                // swap lambda0 and lambda4 if iCellAtFace==1
+                                if2c ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], if2c ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                                // swap lambda0 and lambda4 if if2c==1
                                 settings.useRoeJacobian); //! always inner here
                         }
                         {
                             TU uRecSLInc =
-                                (vfv->GetIntPointDiffBaseValue(iCell, iFace, iCellAtFace, -1, std::array<int, 1>{0}, 1) *
+                                (vfv->GetIntPointDiffBaseValue(iCell, iFace, if2c, -1, std::array<int, 1>{0}, 1) *
                                  uRecInc[iCell])
                                     .transpose();
                             TU uRecSRInc =
-                                (vfv->GetIntPointDiffBaseValue(iCellOther, iFace, 1 - iCellAtFace, -1, std::array<int, 1>{0}, 1) *
+                                (vfv->GetIntPointDiffBaseValue(iCellOther, iFace, 1 - if2c, -1, std::array<int, 1>{0}, 1) *
                                  uRecInc[iCellOther]) //! TODO periodic here
                                     .transpose();
-                            TU fIncSL = fluxJacobianC_Right_Times_du(u[iCell], unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1), Geom::BC_ID_INTERNAL, uRecSLInc);
-                            TU fIncSR = fluxJacobianC_Right_Times_du(u[iCellOther], unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1), Geom::BC_ID_INTERNAL, uRecSRInc);
+                            TU fIncSL = fluxJacobianC_Right_Times_du(u[iCell], unitNorm, GetFaceVGridFromCell(iFace, iCell, if2c, -1), Geom::BC_ID_INTERNAL, uRecSLInc);
+                            TU fIncSR = fluxJacobianC_Right_Times_du(u[iCellOther], unitNorm, GetFaceVGridFromCell(iFace, iCell, if2c, -1), Geom::BC_ID_INTERNAL, uRecSRInc);
                             fIncS = fIncSL + fIncSR + lambdaFaceC[iFace] * (uRecSLInc - uRecSRInc);
                         }
 
@@ -876,11 +887,10 @@ namespace DNDS::Euler
                 for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                 {
                     index iFace = c2f[ic2f];
-                    auto f2c = mesh->face2cell[iFace];
-                    index iCellOther = f2c[0] == iCell ? f2c[1] : f2c[0];
-                    index iCellAtFace = f2c[0] == iCell ? 0 : 1;
-                    TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, iCellAtFace, -1)(Seq012) *
-                                    (iCellAtFace ? -1 : 1); // faces out
+                    index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
+                    auto if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
+                    TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1)(Seq012) *
+                                    (if2c ? -1 : 1); // faces out
                     if (iCellOther != UnInitIndex && iCell != iCellOther
                         // if is a ghost neighbour
                         && iCellOther >= mesh->NumCell())
@@ -888,17 +898,17 @@ namespace DNDS::Euler
                         TU fInc;
                         TU uINCj = uInc[iCellOther];
                         TU uj = u[iCellOther];
-                        this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, iCellAtFace);
-                        this->UFromOtherCell(uj, iFace, iCell, iCellOther, iCellAtFace);
+                        this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, if2c);
+                        this->UFromOtherCell(uj, iFace, iCell, iCellOther, if2c);
                         {
 
                             fInc = fluxJacobian0_Right_Times_du(
                                 uj, u[iCell],
-                                unitNorm, GetFaceVGridFromCell(iFace, iCell, iCellAtFace, -1),
+                                unitNorm, GetFaceVGridFromCell(iFace, iCell, if2c, -1),
                                 Geom::BC_ID_INTERNAL, uINCj,
                                 lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
-                                iCellAtFace ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], iCellAtFace ? lambdaFace0[iFace] : lambdaFace4[iFace],
-                                // swap lambda0 and lambda4 if iCellAtFace==1
+                                if2c ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], if2c ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                                // swap lambda0 and lambda4 if if2c==1
                                 settings.useRoeJacobian); //! always inner here
                         }
 
@@ -940,7 +950,7 @@ namespace DNDS::Euler
     void EulerEvaluator<model>::InitializeUDOF(ArrayDOFV<nVarsFixed> &u)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-        Eigen::VectorXd initConstVal = this->settings.farFieldStaticValue;
+        Eigen::VectorXd initConstVal = this->settings.farFieldStaticValue.cons;
         u.setConstant(initConstVal);
         if (model == EulerModel::NS_SA || model == NS_SA_3D)
         {
@@ -975,12 +985,8 @@ namespace DNDS::Euler
                     // if (pBCHandler->GetTypeFromID(mesh->GetFaceZone(c2f[ic2f])) == EulerBCType::BCWall ||
                     // pBCHandler->GetTypeFromID(mesh->GetFaceZone(c2f[ic2f])) == EulerBCType::BCWallIsothermal)
                     {
-                        real pMean, asqrMean, Hmean;
-                        real gamma = settings.idealGasProperty.gamma;
-                        Gas::IdealGasThermal(u[iCell](I4), u[iCell](0), (u[iCell](Seq123) / u[iCell](0)).squaredNorm(),
-                                             gamma, pMean, asqrMean, Hmean);
-                        real muRef = settings.idealGasProperty.muGas;
-                        real T = pMean / ((gamma - 1) / gamma * settings.idealGasProperty.CpGas * u[iCell](0));
+                        auto [T, pMean, asqrMean, Hmean, gammaEq, gamma] = phys_.conservativeThermal(u[iCell]);
+                        real muRef = phys_.muRef();
                         real mufPhy1 = muEff(u[iCell], T);
                         real rhoOmegaaaWall = mufPhy1 / sqr(d) * RANS::kWallOmegaCoeff * 0.1;
 
@@ -1003,7 +1009,9 @@ namespace DNDS::Euler
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
                     Geom::tPoint pos = vfv->GetCellBary(iCell);
-                    real gamma = settings.idealGasProperty.gamma;
+                    real T = phys_.temperature(u[iCell]);
+                    real gammaEq = phys_.gammaEq(T, u[iCell]);
+                    real gamma = phys_.gamma(T, u[iCell]);
                     real rho = 2;
                     real p = 1 + 2 * pos(1);
                     if (pos(1) >= 0.5)
@@ -1013,9 +1021,9 @@ namespace DNDS::Euler
                     }
                     real v = -0.025 * sqrt(gamma * p / rho) * std::cos(8 * pi * pos(0));
                     if constexpr (dim == 3)
-                        u[iCell] = Eigen::Vector<real, 5>{rho, 0, rho * v, 0, 0.5 * rho * sqr(v) + p / (gamma - 1)};
+                        u[iCell] = Eigen::Vector<real, 5>{rho, 0, rho * v, 0, 0.5 * rho * sqr(v) + p / (gammaEq - 1)};
                     else
-                        u[iCell] = Eigen::Vector<real, 4>{rho, 0, rho * v, 0.5 * rho * sqr(v) + p / (gamma - 1)};
+                        u[iCell] = Eigen::Vector<real, 4>{rho, 0, rho * v, 0.5 * rho * sqr(v) + p / (gammaEq - 1)};
                 }
             else if constexpr (model == NS_3D)
 #if defined(DNDS_DIST_MT_USE_OMP)
@@ -1024,7 +1032,9 @@ namespace DNDS::Euler
                 for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
                 {
                     Geom::tPoint pos = vfv->GetCellBary(iCell);
-                    real gamma = settings.idealGasProperty.gamma;
+                    real T = phys_.temperature(u[iCell]);
+                    real gammaEq = phys_.gammaEq(T, u[iCell]);
+                    real gamma = phys_.gamma(T, u[iCell]);
                     real rho = 2;
                     real p = 1 + 2 * pos(1);
                     if (pos(1) >= 0.5)
@@ -1033,7 +1043,7 @@ namespace DNDS::Euler
                         p = 1.5 + pos(1);
                     }
                     real v = -0.025 * sqrt(gamma * p / rho) * std::cos(8 * pi * pos(0)) * std::cos(8 * pi * pos(2));
-                    u[iCell] = Eigen::Vector<real, 5>{rho, 0, rho * v, 0, 0.5 * rho * sqr(v) + p / (gamma - 1)};
+                    u[iCell] = Eigen::Vector<real, 5>{rho, 0, rho * v, 0, 0.5 * rho * sqr(v) + p / (gammaEq - 1)};
                 }
             break;
         case 2:   // for IV10 problem
@@ -1106,7 +1116,9 @@ namespace DNDS::Euler
                 {
                     Geom::tPoint pos = vfv->GetCellBary(iCell);
                     real M0 = 0.1;
-                    real gamma = settings.idealGasProperty.gamma;
+                    real T_cell = phys_.temperature(u[iCell]);
+                    real gammaEq = phys_.gammaEq(T_cell, u[iCell]);
+                    real gamma = phys_.gamma(T_cell, u[iCell]);
                     auto c2n = mesh->cell2node[iCell];
                     auto gCell = vfv->GetCellQuad(iCell);
                     TU um;
@@ -1126,7 +1138,7 @@ namespace DNDS::Euler
                             real uy = -std::cos(x) * std::sin(y) * std::cos(z);
                             real p = 1. / (gamma * sqr(M0)) + 1. / 16 * ((std::cos(2 * x) + std::cos(2 * y)) * (2 + std::cos(2 * z)));
                             real rho = gamma * sqr(M0) * p;
-                            real E = 0.5 * (sqr(ux) + sqr(uy)) * rho + p / (gamma - 1);
+                            real E = 0.5 * (sqr(ux) + sqr(uy)) * rho + p / (gammaEq - 1);
 
                             // std::cout << T << " " << rho << std::endl;
                             inc.setZero();
@@ -1150,7 +1162,8 @@ namespace DNDS::Euler
             {
                 Geom::tPoint pos = vfv->GetCellBary(iCell);
                 real M0 = 0.1;
-                real gamma = settings.idealGasProperty.gamma;
+                real T_far = phys_.temperature(settings.farFieldStaticValue.cons);
+                real gamma_far = phys_.gammaEq(T_far, settings.farFieldStaticValue.cons);
                 auto c2n = mesh->cell2node[iCell];
                 auto gCell = vfv->GetCellQuad(iCell);
                 TU um;
@@ -1160,13 +1173,14 @@ namespace DNDS::Euler
                 // mesh->GetCoords(c2n, coords);
                 gCell.IntegrationSimple(
                     um,
-                    [&](TU &inc, int ig)
+                    [&, gamma_far](TU &inc, int ig)
                     {
                         // std::cout << coords<< std::endl << std::endl;
                         // std::cout << DiNj << std::endl;
                         Geom::tPoint pPhysics = vfv->GetCellQuadraturePPhys(iCell, ig);
                         TU farPrimitive;
-                        Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue, farPrimitive, settings.idealGasProperty.gamma);
+                        Gas::IdealGasThermalConservative2Primitive<dim>(settings.farFieldStaticValue.cons, farPrimitive, gamma_far,
+                                                                        phys_.mixtureBaseInternalRhoE(settings.farFieldStaticValue.cons));
                         real pInf = farPrimitive(I4);
                         real r = pPhysics.norm();
                         TVec velo = -pPhysics(Seq012) / (r + smallReal);
@@ -1174,7 +1188,7 @@ namespace DNDS::Euler
                         farPrimitive(0) = 1;
                         farPrimitive(Seq123) = velo;
 
-                        Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, inc, settings.idealGasProperty.gamma);
+                        Gas::IdealGasThermalPrimitive2Conservative<dim>(farPrimitive, inc, gamma_far, 0 /* config, sensible ρE */);
                         inc *= vfv->GetCellJacobiDet(iCell, ig); // don't forget this
                     });
                 u[iCell] = um / vfv->GetCellVol(iCell); // mean value
@@ -1214,7 +1228,7 @@ namespace DNDS::Euler
                     pos(1) > i.y0 && pos(1) < i.y1 &&
                     pos(2) > i.z0 && pos(2) < i.z1)
                 {
-                    u[iCell] = i.v;
+                    u[iCell] = i.v.cons;
                 }
             }
         }
@@ -1232,25 +1246,52 @@ namespace DNDS::Euler
                 {
                     // std::cout << pos << std::endl << i.a << i.b << std::endl << i.h <<std::endl;
                     // DNDS_assert(false);
-                    u[iCell] = i.v;
+                    u[iCell] = i.v.cons;
                 }
             }
         }
 
         for (auto &i : settings.exprtkInitializers)
         {
+            StateValueOrigin stateOrigin = StateValueOriginFromName(i.stateType);
+            DNDS_check_throw_info(stateOrigin != StateValueOrigin::None &&
+                                      stateOrigin != StateValueOrigin::NonState &&
+                                      stateOrigin != StateValueOrigin::Invalid,
+                                  fmt::format("unsupported exprtkInitializers stateType [{}]", i.stateType));
             auto exprStr = i.GetExpr();
-            ExprtkWrapperEvaluator exprtkEval;
-            exprtkEval.AddScalar("inRegion");
-            exprtkEval.AddScalar("iCell");
-            exprtkEval.AddVector("x", dim);
-            exprtkEval.AddVector("UPrim", nVars);
-            exprtkEval.Compile(exprStr);
+            auto makeExprtkEvaluator = [&]()
+            {
+                auto eval = std::make_unique<ExprtkWrapperEvaluator>();
+                eval->AddScalar("inRegion");
+                eval->AddScalar("iCell");
+                eval->AddVector("x", dim);
+                eval->AddVector("UExprtk", nVars);
+                eval->Compile(exprStr);
+                return eval;
+            };
+            auto exprtkEvalCheck = makeExprtkEvaluator();
+            int nExprtkEvaluators = 1;
+#if defined(DNDS_DIST_MT_USE_OMP)
+            nExprtkEvaluators = omp_get_max_threads();
+#endif
+            std::vector<std::unique_ptr<ExprtkWrapperEvaluator>> exprtkEvals;
+            exprtkEvals.reserve(nExprtkEvaluators);
+            for (int iEval = 0; iEval < nExprtkEvaluators; ++iEval)
+                exprtkEvals.push_back(makeExprtkEvaluator());
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(runtime)
 #endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
+                int exprtkTid = 0;
+#if defined(DNDS_DIST_MT_USE_OMP)
+                exprtkTid = omp_get_thread_num();
+#endif
+                DNDS_check_throw_info(exprtkTid < static_cast<int>(exprtkEvals.size()),
+                                      fmt::format("ExprTk evaluator pool has {} entries but OpenMP thread {} requested one",
+                                                  exprtkEvals.size(), exprtkTid));
+                auto &exprtkEval = *exprtkEvals[exprtkTid];
+
                 Geom::tPoint pos = vfv->GetCellBary(iCell);
                 auto c2n = mesh->cell2node[iCell];
                 auto gCell = vfv->GetCellQuad(iCell);
@@ -1273,9 +1314,10 @@ namespace DNDS::Euler
                             exprtkEval.VarVec("x", 2) = pPhysics(2);
 
                         TU uPrimitive;
-                        Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], uPrimitive, settings.idealGasProperty.gamma);
+                        uPrimitive.resizeLike(u[iCell]);
+                        phys_.conservativeToStateValueOrigin(u[iCell], uPrimitive, stateOrigin);
                         for (int i = 0; i < nVars; i++)
-                            exprtkEval.VarVec("UPrim", i) = uPrimitive(i);
+                            exprtkEval.VarVec("UExprtk", i) = uPrimitive(i);
 
                         real ret = exprtkEval.Evaluate();
 
@@ -1284,9 +1326,15 @@ namespace DNDS::Euler
                         someIn = someIn || exprtkEval.Var("inRegion");
 
                         if (exprtkEval.Var("inRegion"))
+                        {
                             for (int i = 0; i < nVars; i++)
-                                uPrimitive(i) = exprtkEval.VarVec("UPrim", i);
-                        Gas::IdealGasThermalPrimitive2Conservative<dim>(uPrimitive, inc, settings.idealGasProperty.gamma);
+                                uPrimitive(i) = exprtkEval.VarVec("UExprtk", i);
+                            phys_.stateValueOriginToConservative(uPrimitive, inc, stateOrigin);
+                        }
+                        else
+                        {
+                            inc = u[iCell];
+                        }
                         if (!inc.allFinite())
                         {
                             std::ostringstream oss0, oss1, oss2;
@@ -1305,6 +1353,8 @@ namespace DNDS::Euler
                     u[iCell] = um / vfv->GetCellVol(iCell); // mean value
             }
         }
+        // All configured state values and ExprTk products are resolved to
+        // conservative-total states before storage.
     }
 
     template <EulerModel model>
@@ -1320,6 +1370,518 @@ namespace DNDS::Euler
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         // TODO: make spacial filter jacobian
         return; // ! nofix shortcut
+    }
+
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>, )
+    void EulerEvaluator<model>::PointImplicitSourceUpdate(
+        ArrayDOFV<nVarsFixed> &uNew,
+        const ArrayDOFV<nVarsFixed> &res,
+        const ArrayDOFV<nVarsFixed> &u,
+        real alphaDiag,
+        real dt,
+        int nNewtonSteps,
+        SourceFilter filter,
+        OptionalRef<ArrayDOFV<1>> cellTWarm)
+    {
+        DNDS_check_throw_info(dt > 0, "PointImplicitSourceUpdate requires positive dt");
+        DNDS_check_throw_info(nNewtonSteps >= 0, "PointImplicitSourceUpdate requires non-negative nNewtonSteps");
+
+        // Pseudo-time march C + alphaDiag*S(u) - u/dt to steady state.
+        // The reactive split owns only transported rhoY equations; rho, momentum,
+        // and rhoE remain fixed during this point solve.
+
+        TDiffU zeroGrad;
+        zeroGrad.resize(Eigen::NoChange, nVars);
+        zeroGrad.setZero();
+
+        uNew = u;
+        const bool reactiveSpeciesOnly = filter == SourceFilter::ReactiveOnly && phys_.hasChemicalSource();
+        const int Ns1Point = reactiveSpeciesOnly ? phys_.nSpecies() - 1 : nVars;
+        const int iVarBegPoint = reactiveSpeciesOnly ? nVars - Ns1Point : 0;
+        const int nPointVars = reactiveSpeciesOnly ? Ns1Point : nVars;
+        const int nPseudoSteps = std::max(nNewtonSteps, 8);
+        const real chemPseudoTimeScale = reactiveSpeciesOnly ? settings.reactiveFlow.CFLScale : real(1);
+        const real chemPseudoTimeFloor = reactiveSpeciesOnly ? settings.reactiveFlow.chemRelaxEps : real(0);
+        const real chemResidualAbsTol = reactiveSpeciesOnly ? settings.reactiveFlow.chemAbsTol : smallReal;
+        DNDS_check_throw_info(std::isfinite(chemPseudoTimeScale) && chemPseudoTimeScale > 0,
+                              "PointImplicitSourceUpdate requires positive finite reactiveFlow.CFLScale");
+        DNDS_check_throw_info(std::isfinite(chemPseudoTimeFloor) && chemPseudoTimeFloor >= 0,
+                              "PointImplicitSourceUpdate requires non-negative finite reactiveFlow.chemRelaxEps");
+        DNDS_check_throw_info(std::isfinite(chemResidualAbsTol) && chemResidualAbsTol >= 0,
+                              "PointImplicitSourceUpdate requires non-negative finite reactiveFlow.chemAbsTol");
+        // Local experiment switch:
+        // 0: local pseudo-time linearized march; 1: Cantera affine reactor;
+        // 2: single linear source-Jacobian smoother, (I/dt + I/dtau + JS)^-1.
+        static constexpr int pointImplicitSourceUpdatePath = 2;
+        const bool outputResidualRatio = settings.pointImplicitSourceUpdateOut == 1;
+        std::vector<real> localRatioMin(std::max(nPseudoSteps, 0) * nVars, veryLargeReal);
+        std::vector<real> localRatioMax(std::max(nPseudoSteps, 0) * nVars, 0.0);
+        auto repairReactiveSpecies = [&](TU &state)
+        {
+            if (!phys_.hasChemicalSource())
+                return;
+            int Ns = phys_.nSpecies();
+            int Ns1 = Ns - 1;
+            int nV = static_cast<int>(state.size());
+            int Isp = nV - Ns1;
+            constexpr real rhoYFloor = 0.0;
+            real rhoEBaseBeforeClip = phys_.mixtureBaseInternalRhoERaw(state);
+            bool speciesClipped = false;
+            for (int k = 0; k < Ns1; ++k)
+            {
+                real rhoYOld = state(Isp + k);
+                state(Isp + k) = std::max(rhoYOld, rhoYFloor);
+                speciesClipped = speciesClipped || (state(Isp + k) != rhoYOld);
+            }
+            real sumRhoY = 0;
+            for (int k = 0; k < Ns1; ++k)
+                sumRhoY += state(Isp + k);
+            if (sumRhoY > state(0))
+            {
+                real scale = state(0) / sumRhoY * (1.0 - 1e-14);
+                for (int k = 0; k < Ns1; ++k)
+                    state(Isp + k) *= scale;
+                speciesClipped = true;
+            }
+            if (speciesClipped)
+            {
+                real rhoEBaseAfterClip = phys_.mixtureBaseInternalRhoERaw(state);
+                state(I4) += rhoEBaseAfterClip - rhoEBaseBeforeClip;
+            }
+        };
+        auto validPointSourceState = [&](const TU &state) -> bool
+        {
+            if (!state.allFinite() || state(0) <= 0)
+                return false;
+            real rhoInv = 1.0 / state(0);
+            real kinetic = 0;
+            for (int iDim = 1; iDim <= dim; iDim++)
+                kinetic += state(iDim) * state(iDim);
+            kinetic *= 0.5 * rhoInv;
+            real rhoESensible = state(I4) - kinetic - phys_.mixtureBaseInternalRhoE(state);
+            if (!std::isfinite(rhoESensible) || rhoESensible <= 0)
+                return false;
+            try
+            {
+                real T = phys_.temperature(state);
+                real p = state(0) * phys_.Rgas(state) * T;
+                return std::isfinite(T) && std::isfinite(p) && p > 0 && phys_.toPhysT(T) >= phys_.temperatureFloor();
+            }
+            catch (const std::exception &)
+            {
+                return false;
+            }
+        };
+        auto activeResidualNorm = [&](const TU &residualIn) -> real
+        {
+            real ret = 0;
+            for (int iVar = iVarBegPoint; iVar < iVarBegPoint + nPointVars; iVar++)
+                ret = std::max(ret, std::abs(residualIn(iVar)));
+            return ret;
+        };
+        auto recordResidualRatio = [&](int iPseudo, const TU &residualIn, const TU &res0Abs)
+        {
+            if (!outputResidualRatio)
+                return;
+            TU ratio = residualIn.cwiseAbs().cwiseQuotient(res0Abs);
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp critical(DNDSPointImplicitSourceRatio)
+#endif
+            {
+                for (int iVar = 0; iVar < nVars; iVar++)
+                {
+                    if (reactiveSpeciesOnly && iVar < iVarBegPoint)
+                        ratio(iVar) = 0.0;
+                    const index iOut = static_cast<index>(iPseudo) * nVars + iVar;
+                    localRatioMin[iOut] = std::min(localRatioMin[iOut], ratio(iVar));
+                    localRatioMax[iOut] = std::max(localRatioMax[iOut], ratio(iVar));
+                }
+            }
+        };
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp parallel for schedule(guided)
+#endif
+        for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+        {
+            TU sourceAtU;
+            sourceAtU.setZero(nVars);
+            TJacobianU sourceJac;
+            EvaluateCellSource(sourceAtU, sourceJac, u[iCell], zeroGrad,
+                               iCell, 0, filter, 1.0, false, {}, {}, {}, true, 0, cellTWarm);
+            auto refreshCellTWarm = [&](const TU &state)
+            {
+                if (!cellTWarm || !phys_.hasChemicalSource())
+                    return;
+                (*cellTWarm)[iCell](0) = phys_.temperature(state, (*cellTWarm)[iCell](0));
+            };
+            auto sourceResidual = [&](TU &residualOut, const TU &state, const TU &sourceAtState)
+            {
+                residualOut = res[iCell];
+                residualOut -= alphaDiag * sourceAtU;
+                residualOut += alphaDiag * sourceAtState;
+                residualOut += (1.0 / dt) * u[iCell];
+                residualOut -= (1.0 / dt) * state;
+            };
+            TU res0Abs = res[iCell].cwiseAbs();
+            for (int iVar = 0; iVar < nVars; iVar++)
+                if (!reactiveSpeciesOnly || iVar >= iVarBegPoint)
+                    res0Abs(iVar) += smallReal;
+                else
+                    res0Abs(iVar) = 1.0;
+
+            if constexpr (pointImplicitSourceUpdatePath == 2)
+            {
+                // Recompute JS locally for now. This could be saved directly from
+                // the manual frhs/EvaluateRHS source-Jacobian assembly site, but
+                // doing so needs clearer control wiring for the split-source path.
+                TU sourceAtUNew;
+                sourceAtUNew.setZero(nVars);
+                sourceJac.setZero(nVars, nVars);
+                EvaluateCellSource(sourceAtUNew, sourceJac, uNew[iCell], zeroGrad,
+                                   iCell, 2, filter, 1.0, false, {}, {}, {}, true, 0, cellTWarm);
+
+                // This uses the real rebuilt residual to preserve the fixed point
+                // of the full dual-time system. Consequently, this split form is
+                // ill-formed in the S -> 0 limit: it does not recover identity even
+                // when reactiveSourceScale is zero.
+                TU residualLocal;
+                sourceResidual(residualLocal, uNew[iCell], sourceAtUNew);
+                real sourceJacScale = 0.0;
+                for (int iRow = iVarBegPoint; iRow < iVarBegPoint + nPointVars; iRow++)
+                    for (int iCol = iVarBegPoint; iCol < iVarBegPoint + nPointVars; iCol++)
+                        sourceJacScale = std::max(sourceJacScale, std::abs(alphaDiag * sourceJac(iRow, iCol)));
+                real pseudoDtau = std::max(chemPseudoTimeFloor,
+                                           chemPseudoTimeScale / (1.0 / dt + sourceJacScale + smallReal));
+
+                TU delta;
+                delta.setZero(nVars);
+                if (reactiveSpeciesOnly)
+                {
+                    Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> lhs =
+                        alphaDiag * sourceJac(Eigen::seq(iVarBegPoint, EigenLast), Eigen::seq(iVarBegPoint, EigenLast));
+                    lhs.diagonal().array() += 1.0 / dt + 1.0 / pseudoDtau;
+                    Eigen::Vector<real, Eigen::Dynamic> rhs = residualLocal(Eigen::seq(iVarBegPoint, EigenLast));
+                    delta(Eigen::seq(iVarBegPoint, EigenLast)) = lhs.partialPivLu().solve(rhs.eval());
+                }
+                else
+                {
+                    TJacobianU lhs = alphaDiag * sourceJac;
+                    lhs.diagonal().array() += 1.0 / dt + 1.0 / pseudoDtau;
+                    delta = lhs.partialPivLu().solve(residualLocal.eval());
+                }
+
+                TU candidate = uNew[iCell] + delta;
+                repairReactiveSpecies(candidate);
+                if (validPointSourceState(candidate))
+                {
+                    TU sourceAtCandidate;
+                    sourceAtCandidate.setZero(nVars);
+                    EvaluateCellSource(sourceAtCandidate, sourceJac, candidate, zeroGrad,
+                                       iCell, 0, filter, 1.0, false, {}, {}, {}, true, 0, cellTWarm);
+                    TU residualCandidate;
+                    sourceResidual(residualCandidate, candidate, sourceAtCandidate);
+                    uNew[iCell] = candidate;
+                    refreshCellTWarm(uNew[iCell]);
+                    for (int iPseudo = 0; iPseudo < nPseudoSteps; iPseudo++)
+                        recordResidualRatio(iPseudo, residualCandidate, res0Abs);
+                    continue;
+                }
+            }
+
+            if constexpr (pointImplicitSourceUpdatePath == 1)
+            {
+                if (reactiveSpeciesOnly)
+                {
+                    try
+                    {
+                        std::vector<double> Y(static_cast<size_t>(phys_.nSpecies()), 0.0);
+                        real rhoInv = 1.0 / std::max(uNew[iCell](0), real(1e-60));
+                        real sumY = 0.0;
+                        for (int k = 0; k < Ns1Point; ++k)
+                        {
+                            Y[static_cast<size_t>(k)] = std::max(real(0), uNew[iCell](iVarBegPoint + k) * rhoInv);
+                            sumY += Y[static_cast<size_t>(k)];
+                        }
+                        Y[static_cast<size_t>(Ns1Point)] = std::max(real(0), 1.0 - sumY);
+
+                        std::vector<double> constantTerm(static_cast<size_t>(phys_.nSpecies()), 0.0);
+                        real sumC = 0.0;
+                        for (int k = 0; k < Ns1Point; ++k)
+                        {
+                            int iVar = iVarBegPoint + k;
+                            constantTerm[static_cast<size_t>(k)] =
+                                (res[iCell](iVar) - alphaDiag * sourceAtU(iVar) + u[iCell](iVar) / dt) * rhoInv;
+                            sumC += constantTerm[static_cast<size_t>(k)];
+                        }
+                        constantTerm[static_cast<size_t>(Ns1Point)] = 1.0 / dt - sumC;
+
+                        TU candidate = uNew[iCell];
+                        real T = phys_.temperature(candidate, cellTWarm ? (*cellTWarm)[iCell](0) : real(0));
+                        phys_.advanceAffineConstVolumeY(
+                            T, candidate(0),
+                            Chemistry::SpeciesBufferView{Y.data(), static_cast<int>(Y.size())},
+                            alphaDiag, dt,
+                            Chemistry::ConstSpeciesBufferView{constantTerm.data(), static_cast<int>(constantTerm.size())},
+                            1.0 * dt,
+                            1e-4, 1e-4, 0, 2000);
+                        for (int k = 0; k < Ns1Point; ++k)
+                            candidate(iVarBegPoint + k) = candidate(0) * Y[static_cast<size_t>(k)];
+                        repairReactiveSpecies(candidate);
+
+                        if (validPointSourceState(candidate))
+                        {
+                            TU sourceAtCandidate;
+                            sourceAtCandidate.setZero(nVars);
+                            EvaluateCellSource(sourceAtCandidate, sourceJac, candidate, zeroGrad,
+                                               iCell, 0, filter, 1.0, false, {}, {}, {}, true, 0, cellTWarm);
+                            TU residualCandidate;
+                            sourceResidual(residualCandidate, candidate, sourceAtCandidate);
+                            uNew[iCell] = candidate;
+                            refreshCellTWarm(uNew[iCell]);
+                            for (int iPseudo = 0; iPseudo < nPseudoSteps; iPseudo++)
+                                recordResidualRatio(iPseudo, residualCandidate, res0Abs);
+                            continue;
+                        }
+                    }
+                    catch (const std::exception &)
+                    {
+                        // Fall through to the local pseudo-time linearized update.
+                    }
+                }
+            }
+
+            real pseudoDtauScale = 1.0;
+            for (int iPseudo = 0; iPseudo < nPseudoSteps; iPseudo++)
+            {
+                TU sourceAtUNew;
+                sourceAtUNew.setZero(nVars);
+                sourceJac.setZero(nVars, nVars);
+                EvaluateCellSource(sourceAtUNew, sourceJac, uNew[iCell], zeroGrad,
+                                   iCell, 2, filter, 1.0, false, {}, {}, {}, true, 0, cellTWarm);
+
+                TU residualLocal;
+                sourceResidual(residualLocal, uNew[iCell], sourceAtUNew);
+                const real oldResidualNorm = activeResidualNorm(residualLocal);
+                if (oldResidualNorm <= chemResidualAbsTol)
+                {
+                    recordResidualRatio(iPseudo, residualLocal, res0Abs);
+                    break;
+                }
+
+                real sourceJacScale = 0.0;
+                for (int iRow = iVarBegPoint; iRow < iVarBegPoint + nPointVars; iRow++)
+                    for (int iCol = iVarBegPoint; iCol < iVarBegPoint + nPointVars; iCol++)
+                        sourceJacScale = std::max(sourceJacScale, std::abs(alphaDiag * sourceJac(iRow, iCol)));
+                real pseudoDtau = std::max(chemPseudoTimeFloor,
+                                           chemPseudoTimeScale * pseudoDtauScale / (1.0 / dt + sourceJacScale + smallReal));
+
+                // sourceJac stores -d(source)/dU. Therefore
+                // (I / dtau + I / dt + alphaDiag * sourceJac) * delta = residualLocal.
+                TU delta;
+                delta.setZero(nVars);
+                if (reactiveSpeciesOnly)
+                {
+                    Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic> lhs =
+                        alphaDiag * sourceJac(Eigen::seq(iVarBegPoint, EigenLast), Eigen::seq(iVarBegPoint, EigenLast));
+                    lhs.diagonal().array() += 1.0 / dt + 1.0 / pseudoDtau;
+                    Eigen::Vector<real, Eigen::Dynamic> rhs = residualLocal(Eigen::seq(iVarBegPoint, EigenLast));
+                    delta(Eigen::seq(iVarBegPoint, EigenLast)) = lhs.partialPivLu().solve(rhs.eval());
+                }
+                else
+                {
+                    TJacobianU lhs = alphaDiag * sourceJac;
+                    lhs.diagonal().array() += 1.0 / dt + 1.0 / pseudoDtau;
+                    delta = lhs.partialPivLu().solve(residualLocal.eval());
+                }
+                TU accepted = uNew[iCell];
+                TU acceptedResidual = residualLocal;
+                real acceptedResidualNorm = oldResidualNorm;
+                bool acceptedValid = false;
+                for (int iRelax = 0; iRelax < 8; iRelax++)
+                {
+                    TU deltaTry = this->CompressInc(uNew[iCell], delta);
+                    TU candidate = uNew[iCell] + deltaTry;
+                    repairReactiveSpecies(candidate);
+                    if (!validPointSourceState(candidate))
+                    {
+                        pseudoDtau *= 0.5;
+                        delta *= 0.5;
+                        continue;
+                    }
+                    TU sourceAtCandidate;
+                    sourceAtCandidate.setZero(nVars);
+                    EvaluateCellSource(sourceAtCandidate, sourceJac, candidate, zeroGrad,
+                                       iCell, 0, filter, 1.0, false, {}, {}, {}, true, 0, cellTWarm);
+                    TU residualCandidate;
+                    sourceResidual(residualCandidate, candidate, sourceAtCandidate);
+                    real candidateResidualNorm = activeResidualNorm(residualCandidate);
+                    if (candidateResidualNorm <= oldResidualNorm)
+                    {
+                        accepted = candidate;
+                        acceptedResidual = residualCandidate;
+                        acceptedResidualNorm = candidateResidualNorm;
+                        acceptedValid = true;
+                        break;
+                    }
+                    pseudoDtau *= 0.5;
+                    delta *= 0.5;
+                }
+                if (!acceptedValid)
+                {
+                    recordResidualRatio(iPseudo, residualLocal, res0Abs);
+                    break;
+                }
+                uNew[iCell] = accepted;
+                refreshCellTWarm(uNew[iCell]);
+                recordResidualRatio(iPseudo, acceptedResidual, res0Abs);
+                pseudoDtauScale = acceptedResidualNorm < oldResidualNorm * 0.8
+                                      ? std::min(pseudoDtauScale * 1.5, 100.0)
+                                      : std::max(pseudoDtauScale * 0.7, 1e-6);
+            }
+        }
+        if (outputResidualRatio && nPseudoSteps > 0)
+        {
+            std::vector<real> ratioMin(localRatioMin.size(), 0.0);
+            std::vector<real> ratioMax(localRatioMax.size(), 0.0);
+            MPI::Allreduce(localRatioMin.data(), ratioMin.data(), localRatioMin.size(), DNDS_MPI_REAL, MPI_MIN, u.father->getMPI().comm);
+            MPI::Allreduce(localRatioMax.data(), ratioMax.data(), localRatioMax.size(), DNDS_MPI_REAL, MPI_MAX, u.father->getMPI().comm);
+            if (u.father->getMPI().rank == 0)
+            {
+                log() << std::scientific;
+                // Print column label header (rho, rhoU, rhoV, (rhoW), rhoE, ..., species...)
+                {
+                    log() << "PointImplicitSourceUpdate pseudo col labels:";
+                    for (int iVar = 0; iVar < nVars; iVar++)
+                    {
+                        if (iVar < I4)
+                            log() << (iVar == 0 ? " rho" : iVar == 1 ? " rhoU"
+                                                       : iVar == 2   ? " rhoV"
+                                                                     : " rhoW");
+                        else if (iVar == I4)
+                            log() << " rhoE";
+                        else if (phys_.hasChemicalSource() && iVar >= I4 + 1)
+                        {
+                            int Isp = nVars - (phys_.nSpecies() - 1);
+                            if (iVar >= Isp && iVar - Isp < phys_.nSpecies() - 1)
+                                log() << " " << phys_.speciesName(iVar - Isp);
+                            else if (iVar < Isp)
+                                log() << " v" << iVar;
+                            else
+                                log() << " " << phys_.speciesName(phys_.nSpecies() - 1);
+                        }
+                        else
+                            log() << " v" << iVar;
+                    }
+                    log() << std::endl;
+                }
+                for (int iPseudo = 0; iPseudo < nPseudoSteps; iPseudo++)
+                {
+                    log() << "PointImplicitSourceUpdate pseudo [" << iPseudo + 1 << "] res/res0 min [";
+                    for (int iVar = 0; iVar < nVars; iVar++)
+                        log() << (iVar ? "," : "") << ratioMin[static_cast<index>(iPseudo) * nVars + iVar];
+                    log() << "] max [";
+                    for (int iVar = 0; iVar < nVars; iVar++)
+                        log() << (iVar ? "," : "") << ratioMax[static_cast<index>(iPseudo) * nVars + iVar];
+                    log() << "]" << std::endl;
+                }
+            }
+        }
+    }
+
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>, )
+    void EulerEvaluator<model>::ReactiveSourceConstVolumeStep(
+        ArrayDOFV<nVarsFixed> &u,
+        ArrayRECV<nVarsFixed> &uRec,
+        real dt,
+        real t,
+        OptionalRef<ArrayDOFV<1>> cellTWarm)
+    {
+        (void)uRec;
+        (void)t;
+        DNDS_check_throw_info(dt >= 0, "ReactiveSourceConstVolumeStep requires non-negative dt");
+        if (dt == 0)
+            return;
+        DNDS_check_throw_info(Traits::isExtended && settings.reactiveFlow.enabled && phys_.hasChemicalSource(),
+                              "ReactiveSourceConstVolumeStep requires reactive extended Euler physics");
+        DNDS_check_throw_info(std::isfinite(settings.reactiveSourceScale) && settings.reactiveSourceScale >= 0,
+                              "ReactiveSourceConstVolumeStep requires non-negative finite reactiveSourceScale");
+        if (settings.reactiveSourceScale == 0.0)
+            return;
+
+        const int Ns = phys_.nSpecies();
+        const int Ns1 = Ns - 1;
+        const int Isp = nVars - Ns1;
+        DNDS_check_throw_info(Isp >= I4 + 1,
+                              "ReactiveSourceConstVolumeStep requires Isp >= I4+1 (RANS gap tolerated, frozen)");
+
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp parallel for schedule(guided)
+#endif
+        for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+        {
+            auto state = u[iCell];
+            DNDS_check_throw_info(std::isfinite(state(0)) && state(0) > 0,
+                                  fmt::format("ReactiveSourceConstVolumeStep invalid density at cell {}", iCell));
+            const real rho = state(0);
+            const real rhoInv = 1.0 / rho;
+
+            std::vector<double> Y(static_cast<size_t>(Ns), 0.0);
+            real sumY = 0.0;
+            for (int k = 0; k < Ns1; ++k)
+            {
+                Y[static_cast<size_t>(k)] = std::max(real(0), state(Isp + k) * rhoInv);
+                sumY += Y[static_cast<size_t>(k)];
+            }
+            Y[static_cast<size_t>(Ns1)] = std::max(real(0), 1.0 - sumY);
+            real yNorm = 0.0;
+            for (double y : Y)
+                yNorm += y;
+            DNDS_check_throw_info(yNorm > 0,
+                                  fmt::format("ReactiveSourceConstVolumeStep zero species mass at cell {}", iCell));
+            for (double &y : Y)
+                y /= yNorm;
+
+            real T = phys_.temperature(state, cellTWarm ? (*cellTWarm)[iCell](0) : real(0));
+            if (cellTWarm)
+                (*cellTWarm)[iCell](0) = T;
+            phys_.advanceConstVolumeY(
+                T, rho,
+                Chemistry::SpeciesBufferView{Y.data(), Ns},
+                settings.reactiveSourceScale,
+                dt,
+                settings.reactorStepSettings.rtol,
+                settings.reactorStepSettings.atol,
+                settings.reactorStepSettings.maxOrder,
+                settings.reactorStepSettings.maxSteps);
+
+            real sumYIndependent = 0.0;
+            for (int k = 0; k < Ns1; ++k)
+            {
+                real yk = std::max(real(0), static_cast<real>(Y[static_cast<size_t>(k)]));
+                sumYIndependent += yk;
+                state(Isp + k) = rho * yk;
+            }
+            if (sumYIndependent >= 1.0)
+            {
+                const real scale = (1.0 - 1e-14) / sumYIndependent;
+                for (int k = 0; k < Ns1; ++k)
+                    state(Isp + k) *= scale;
+            }
+
+            real TCheck = phys_.temperature(state, T);
+            if (cellTWarm)
+                (*cellTWarm)[iCell](0) = TCheck;
+            real pCheck = rho * phys_.Rgas(state) * TCheck;
+            DNDS_check_throw_info(std::isfinite(TCheck) && std::isfinite(pCheck) &&
+                                      phys_.toPhysT(TCheck) >= phys_.chem().baseTemperature() && pCheck > 0,
+                                  fmt::format("ReactiveSourceConstVolumeStep invalid post-step state at cell {}: T={} K, p_code={}",
+                                              iCell, phys_.toPhysT(TCheck), pCheck));
+        }
+
+        u.trans.startPersistentPull();
+        u.trans.waitPersistentPull();
     }
 
     template <EulerModel model>
@@ -1352,9 +1914,11 @@ namespace DNDS::Euler
 #endif
         for (index iCell = 0; iCell < u.Size(); iCell++)
         {
-            real gamma = settings.idealGasProperty.gamma;
+            real T_cell = phys_.temperature(u[iCell]);
+            real gammaEq = phys_.gammaEq(T_cell, u[iCell]);
             TU out;
-            Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], out, gamma);
+            Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], out, gammaEq,
+                                                            phys_.mixtureBaseInternalRhoE(u[iCell]));
             w[iCell] = out;
         }
     }
@@ -1372,9 +1936,8 @@ namespace DNDS::Euler
 #endif
         for (index iCell = 0; iCell < w.Size(); iCell++)
         {
-            real gamma = settings.idealGasProperty.gamma;
             TU out;
-            Gas::IdealGasThermalPrimitive2Conservative<dim>(w[iCell], out, gamma);
+            phys_.primToConservative(w[iCell], out);
             u[iCell] = out;
         }
     }
@@ -1436,6 +1999,66 @@ namespace DNDS::Euler
                 resc = resc.array().max(rhs[iCell].array().abs()).matrix();
             MPI::Allreduce(resc.data(), res.data(), res.size(), DNDS_MPI_REAL, MPI_MAX, rhs.father->getMPI().comm);
         }
+    }
+
+    DNDS_SWITCH_INTELLISENSE(
+        template <EulerModel model>, )
+    void EulerEvaluator<model>::EvaluateMinMax(
+        Eigen::Vector<real, -1> &uMin, Eigen::Vector<real, -1> &uMax, ArrayDOFV<nVarsFixed> &u,
+        StateValueOrigin representation)
+    {
+        const int nV = nVars;
+        uMin.resize(nV);
+        uMax.resize(nV);
+        TU localMin, localMax;
+        localMin.setConstant(nV, std::numeric_limits<real>::max());
+        localMax.setConstant(nV, std::numeric_limits<real>::lowest());
+
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp declare reduction(TUMin:TU : omp_out = omp_out.array().min(omp_in.array())) initializer(omp_priv = omp_orig)
+#    pragma omp declare reduction(TUMax:TU : omp_out = omp_out.array().max(omp_in.array())) initializer(omp_priv = omp_orig)
+#    pragma omp parallel for schedule(static) reduction(TUMin : localMin) reduction(TUMax : localMax)
+#endif
+        for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+        {
+            if (representation == StateValueOrigin::Cons)
+            {
+                localMin = localMin.array().min(u[iCell].array()).matrix();
+                localMax = localMax.array().max(u[iCell].array()).matrix();
+            }
+            else if (representation == StateValueOrigin::ConsPhy)
+            {
+                TU src = u[iCell];
+                TU buf(nV);
+                phys_.consCodeToPhys(src, buf);
+                localMin = localMin.array().min(buf.array()).matrix();
+                localMax = localMax.array().max(buf.array()).matrix();
+            }
+            else if (representation == StateValueOrigin::PrimTP)
+            {
+                TU buf(nV);
+                phys_.conservativeToPrimTP(u[iCell], buf);
+                localMin = localMin.array().min(buf.array()).matrix();
+                localMax = localMax.array().max(buf.array()).matrix();
+            }
+            else if (representation == StateValueOrigin::PrimTPPhy)
+            {
+                TU buf(nV);
+                TU tmp(nV);
+                phys_.conservativeToPrimTP(u[iCell], tmp);
+                phys_.primTPCodeToPhys(tmp, buf);
+                localMin = localMin.array().min(buf.array()).matrix();
+                localMax = localMax.array().max(buf.array()).matrix();
+            }
+            else
+            {
+                DNDS_assert_info(false, "EvaluateMinMax: unsupported StateValueOrigin");
+                localMin = localMin.array().min(u[iCell].array()).matrix();
+                localMax = localMax.array().max(u[iCell].array()).matrix();
+            }
+        }
+        MPI::Allreduce(localMin.data(), uMin.data(), nV, DNDS_MPI_REAL, MPI_MIN, u.father->getMPI().comm);
+        MPI::Allreduce(localMax.data(), uMax.data(), nV, DNDS_MPI_REAL, MPI_MAX, u.father->getMPI().comm);
     }
 
     template <class TU>
@@ -1540,8 +2163,9 @@ namespace DNDS::Euler
         uint64_t flags)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
-        static const real safetyRatio = 1 - 1e-2;
-        static const real E_lb_eps = smallReal;
+        static constexpr real safetyRatio = 1 - 1e-2;
+        static constexpr real E_lb_eps = 1e-2;
+        static constexpr real ratio_decay = 0.75;
 
         bool disable_shock_limiter = flags & LIMITER_UGRAD_Disable_Shock_Limiter;
 
@@ -1557,21 +2181,22 @@ namespace DNDS::Euler
             uFaceInc.setZero(nVars, c2f.size() * 2); // j < c2f.size(): faceInc; j > c2f.size(): baryInc
             TU uOtherMin = u[iCell];
             TU uOtherMax = u[iCell];
-            auto fEInternal = [](const TU &u) -> real
-            { return u(I4) - 0.5 * u(Seq123).squaredNorm() / (u(0) + verySmallReal); };
-            real eOtherMin, eOtherMax;
+            auto fEInternal = [this](const TU &u) -> real
+            { return u(I4) - 0.5 * u(Seq123).squaredNorm() / (u(0) + verySmallReal) - phys_.mixtureBaseInternalRhoE(u); };
+            real eOtherMin{0}, eOtherMax{0};
             eOtherMin = eOtherMax = fEInternal(u[iCell]);
             for (rowsize ic2f = 0; ic2f < c2f.size(); ic2f++)
             {
                 index iFace = c2f[ic2f];
+                auto if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
                 uFaceInc(EigenAll, ic2f) =
                     uGrad[iCell].transpose() *
-                    (vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, -1, -1) - vfv->GetCellQuadraturePPhys(iCell, -1))(SeqG012);
-                index iCellOther = mesh->CellFaceOther(iCell, iFace);
+                    (vfv->GetFaceQuadraturePPhysFromCell(iFace, iCell, if2c, -1) - vfv->GetCellQuadraturePPhys(iCell, -1))(SeqG012);
+                index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
                 if (iCellOther != UnInitIndex)
                 {
                     uOtherMin = uOtherMin.array().min(u[iCellOther].array());
-                    uOtherMax = uOtherMin.array().max(u[iCellOther].array());
+                    uOtherMax = uOtherMax.array().max(u[iCellOther].array());
                     eOtherMin = std::min(eOtherMin, fEInternal(u[iCellOther]));
                     eOtherMax = std::max(eOtherMax, fEInternal(u[iCellOther]));
                     // ! adding bary value if the other cell exists
@@ -1581,14 +2206,14 @@ namespace DNDS::Euler
                 }
             }
 
-            TU uFaceIncMax = uFaceInc.array().rowwise().maxCoeff();
-            TU uFaceIncMin = uFaceInc.array().rowwise().minCoeff();
+            TU uFaceIncMax = uFaceInc.array().rowwise().maxCoeff().array().max(0.0).matrix();
+            TU uFaceIncMin = uFaceInc.array().rowwise().minCoeff().array().min(0.0).matrix();
             if (!disable_shock_limiter)
             {
                 TU alpha0;
                 alpha0.setConstant(nVars, 1.0);
-                alpha0 = alpha0.array().min(((uOtherMax - u[iCell]).array().abs() / (uFaceIncMax.array().abs() + verySmallReal)));
-                alpha0 = alpha0.array().min(((uOtherMin - u[iCell]).array().abs() / (uFaceIncMin.array().abs() + verySmallReal)));
+                alpha0 = alpha0.array().min(((uOtherMax - u[iCell]).array() / (uFaceIncMax.array() + verySmallReal)));
+                alpha0 = alpha0.array().min(((u[iCell] - uOtherMin).array() / (-uFaceIncMin.array() + verySmallReal)));
                 uGradNew[iCell].array().rowwise() *= alpha0.array().transpose();
                 uFaceInc.array().colwise() *= alpha0.array();
             }
@@ -1600,17 +2225,14 @@ namespace DNDS::Euler
                 alphaPP_Rho = std::min(alphaPP_Rho, u[iCell][0] / (std::abs(uFaceIncMin(0)) + smallReal * u[iCell][0]));
                 if (alphaPP_Rho < 1.0)
                     alphaPP_Rho *= safetyRatio;
-                uGradNew[iCell].array() *= alphaPP_Rho;
-                uFaceInc.array() *= alphaPP_Rho;
             }
 
-            TU_Batch uFaceAlpha0 = uFaceInc.colwise() + u[iCell];
+            TU_Batch uFaceAlpha0 = (uFaceInc * alphaPP_Rho).colwise() + u[iCell];
             for (int j = 0; j < uFaceAlpha0.cols(); j++)
                 DNDS_assert(uFaceAlpha0(0, j) > 0);
-            real minEFace =
-                (uFaceAlpha0(I4, EigenAll).array() -
-                 0.5 * uFaceAlpha0(Seq123, EigenAll).colwise().squaredNorm().array() / (uFaceAlpha0(0, EigenAll).array() + verySmallReal))
-                    .minCoeff();
+            real minEFace = veryLargeReal;
+            for (int j = 0; j < uFaceAlpha0.cols(); j++)
+                minEFace = std::min(minEFace, fEInternal(uFaceAlpha0(EigenAll, j)));
             real eC = fEInternal(u[iCell]);
             real deltaEFaceMin = minEFace - eC;
             real alphaPP_E = 1.0;
@@ -1618,7 +2240,47 @@ namespace DNDS::Euler
                 alphaPP_E = std::min(alphaPP_E, std::abs(eC * (1 - E_lb_eps)) / (verySmallReal - deltaEFaceMin));
             if (alphaPP_E < 1.0)
                 alphaPP_E *= safetyRatio;
-            uGradNew[iCell](EigenAll, Seq01234) *= alphaPP_E;
+
+            int i_decay = 0;
+            for (; i_decay < 1000; i_decay++)
+            {
+                uFaceAlpha0 = (uFaceInc * (alphaPP_Rho * alphaPP_E)).colwise() + u[iCell];
+                real minEFaceDecay = veryLargeReal;
+                for (int j = 0; j < uFaceAlpha0.cols(); j++)
+                    minEFaceDecay = std::min(minEFaceDecay, fEInternal(uFaceAlpha0(EigenAll, j)));
+                if (minEFaceDecay >= eC * (1 - E_lb_eps))
+                    break;
+                alphaPP_E *= ratio_decay;
+            }
+            if (i_decay >= 1000)
+            {
+                std::ostringstream oss;
+                oss << std::scientific << std::setprecision(4);
+                oss << "LimiterUGrad: species PP decay exhausted on cell " << iCell << "\n";
+                oss << "  alphaPP_Rho=" << alphaPP_Rho << " alphaPP_E=" << alphaPP_E
+                    << " eC=" << eC << " E_lb_eps=" << E_lb_eps << "\n";
+                oss << "  u[cell] = " << u[iCell].transpose() << "\n";
+                oss << "  uGrad[cell] = \n"
+                    << uGrad[iCell] << "\n";
+                oss << "  uFaceInc (nVars x nFace) = \n"
+                    << uFaceInc << "\n";
+                oss << "  The sensible-energy positivity check against mixtureBaseInternalRhoE\n"
+                    << "  could not be satisfied even after 1000 decay iterations.  This\n"
+                    << "  indicates the cell-mean itself has invalid species that the\n"
+                    << "  gradient limiter cannot repair.";
+                DNDS_assert_info(false, oss.str());
+            }
+
+            uGradNew[iCell](EigenAll, Seq01234) *= alphaPP_Rho * alphaPP_E;
+            if constexpr (Traits::isExtended)
+            {
+                if (phys_.hasChemicalSource())
+                {
+                    int Ns1 = phys_.nSpecies() - 1;
+                    int Isp = nVars - Ns1;
+                    uGradNew[iCell](EigenAll, Eigen::seq(Isp, EigenLast)) *= alphaPP_Rho * alphaPP_E;
+                }
+            }
         }
     }
 
@@ -1628,7 +2290,7 @@ namespace DNDS::Euler
      *
      *  Computes a scalar beta in [0,1] for each cell such that the reconstructed
      *  solution at all face and (optionally) volume quadrature points maintains
-     *  positive density and pressure. Uses bisection to find the maximum allowable beta.
+     *  positive density and sensible internal energy. Uses bisection to find the maximum allowable beta.
      *  Reports the total number of limited cells and the global minimum beta.
      *
      *  @param u         Conservative variable DOF array.
@@ -1655,22 +2317,22 @@ namespace DNDS::Euler
         if (settings.ppEpsIsRelaxed)
         {
             real rhoMin = veryLargeReal;
-            real pMin = veryLargeReal;
+            real rhoEiMin = veryLargeReal;
 #if defined(DNDS_DIST_MT_USE_OMP)
-#    pragma omp parallel for schedule(runtime) reduction(min : rhoMin, pMin)
+#    pragma omp parallel for schedule(runtime) reduction(min : rhoMin, rhoEiMin)
 #endif
             for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
             {
-                TU UPrim;
-                Gas::IdealGasThermalConservative2Primitive<dim>(u[iCell], UPrim, settings.idealGasProperty.gamma);
-                rhoMin = std::min(rhoMin, UPrim(0));
-                pMin = std::min(pMin, UPrim(I4));
+                rhoMin = std::min(rhoMin, u[iCell](0));
+                real rhoEi_cell = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureBaseInternalRhoE(u[iCell]);
+                rhoEiMin = std::min(rhoEiMin, rhoEi_cell);
             }
             MPI::AllreduceOneReal(rhoMin, MPI_MIN, mesh->getMPI());
-            MPI::AllreduceOneReal(pMin, MPI_MIN, mesh->getMPI());
+            MPI::AllreduceOneReal(rhoEiMin, MPI_MIN, mesh->getMPI());
             rhoEps = std::min(rhoEps, minRatio * rhoMin);
-            pEps = std::min(pEps, minRatio * pMin);
+            pEps = std::min(pEps, minRatio * rhoEiMin);
         }
+        real rhoeSensibleEps = pEps;
 
         index nLimLocal = 0;
         real minBetaLocal = 1;
@@ -1696,22 +2358,54 @@ namespace DNDS::Euler
             }
             for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
             {
-                auto gFace = vfv->GetFaceQuad(c2f[ic2f]);
+                auto iFace = c2f[ic2f];
+                auto if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
+                auto gFace = vfv->GetFaceQuad(iFace);
                 for (int iG = 0; iG < gFace.GetNumPoints(); iG++)
-                    quadBase(nPoint + iG, EigenAll) = vfv->GetIntPointDiffBaseValue(iCell, c2f[ic2f], -1, iG, 0, 1);
+                    quadBase(nPoint + iG, EigenAll) = vfv->GetIntPointDiffBaseValue(iCell, iFace, if2c, iG, 0, 1);
                 nPoint += gFace.GetNumPoints();
             }
             /***********/
             DNDS_assert_info(u[iCell](0) >= rhoEps, fmt::format("rhoMean {}, {}", u[iCell](0), rhoEps));
-            real gamma = settings.idealGasProperty.gamma;
-            real pCent = (gamma - 1) * (u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0));
-            DNDS_assert_info(pCent >= pEps, fmt::format("pMean {}, {}", pCent, pEps));
+            real T_cell = phys_.temperature(u[iCell]);
+            // real gamma = phys_.gammaEq(T_cell, u[iCell]);
+            real rhoE_base_cell = phys_.mixtureBaseInternalRhoE(u[iCell]);
+            real rhoeSensibleCent = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - rhoE_base_cell;
+            DNDS_assert_info(rhoeSensibleCent >= rhoeSensibleEps, fmt::format("rhoeSensibleMean {}, {}", rhoeSensibleCent, rhoeSensibleEps));
+
+            if constexpr (Traits::isExtended)
+            {
+                if (phys_.hasChemicalSource())
+                {
+                    int Ns1 = phys_.nSpecies() - 1;
+                    int Isp = nVars - Ns1;
+                    for (int k = 0; k < Ns1; ++k)
+                    {
+                        real rhoYk = u[iCell](Isp + k);
+                        DNDS_assert_info(rhoYk >= 0,
+                                         fmt::format("cell mean rhoY[{}] = {:.3e} < 0", k, rhoYk));
+                    }
+                    DNDS_assert_info(u[iCell](Eigen::seqN(Isp, Ns1)).sum() <= u[iCell](0) + smallReal * u[iCell](0),
+                                     "sumRhoY exceeds rho at cell mean");
+                }
+            }
+
+            auto rhoE_base_perQ = [&](const Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> &rec)
+            {
+                Eigen::Vector<real, Eigen::Dynamic> hf(rec.rows());
+                for (int ig = 0; ig < rec.rows(); ++ig)
+                {
+                    typename EulerEvaluator<model>::TU tmp = rec.row(ig);
+                    hf(ig) = phys_.mixtureBaseInternalRhoERaw(tmp);
+                }
+                return hf;
+            };
 
             // alter uRec if necessary
             int curOrder = vfv->GetCellOrder(iCell);
             Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> uRecBase = uRec[iCell];
             Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> recBase; // * has to call checkRecBaseGood() to hold valid value
-            auto checkRecBaseGood = [&]()
+            auto checkRecBaseGood = [&]() -> bool
             {
                 recBase = (quadBase * uRecBase).rowwise() + u[iCell].transpose();
                 if (recBase(EigenAll, 0).minCoeff() < rhoEps) // TODO: add relaxation to eps values
@@ -1724,9 +2418,26 @@ namespace DNDS::Euler
                         return false;
                 Eigen::Vector<real, Eigen::Dynamic> ek =
                     0.5 * (recBase(EigenAll, Seq123).array().square().rowwise().sum()) / recBase(EigenAll, 0).array();
-                Eigen::Vector<real, Eigen::Dynamic> eInternalS = (recBase(EigenAll, I4) - ek);
-                if (eInternalS.minCoeff() < pEps)
+                Eigen::Vector<real, Eigen::Dynamic> rhoE_base_q = rhoE_base_perQ(recBase);
+                Eigen::Vector<real, Eigen::Dynamic> eInternalS = (recBase(EigenAll, I4) - ek - rhoE_base_q);
+                if (eInternalS.minCoeff() < rhoeSensibleEps)
                     return false;
+                // Species positivity: required because mixtureBaseInternalRhoE (used by
+                // gammaEq in fluxFace) clips negative rhoY_k, increasing base energy and
+                // lowering sensible energy relative to mixtureBaseInternalRhoERaw.
+                if constexpr (Traits::isExtended)
+                {
+                    if (phys_.hasChemicalSource())
+                    {
+                        int Ns1 = phys_.nSpecies() - 1;
+                        int Isp = nVars - Ns1;
+                        auto speciesBlock = recBase(EigenAll, Eigen::seqN(Isp, Ns1));
+                        if (speciesBlock.minCoeff() < 0)
+                            return false;
+                        if ((speciesBlock.rowwise().sum().array() > recBase(EigenAll, 0).array()).any())
+                            return false;
+                    }
+                }
                 return true;
             };
             if (checkRecBaseGood())
@@ -1748,7 +2459,7 @@ namespace DNDS::Euler
             Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed>
                 recInc = quadBase * (uRec[iCell] - uRecBase);
             Eigen::Vector<real, Eigen::Dynamic> rhoS = recInc(EigenAll, 0) + recBase(EigenAll, 0);
-            Eigen::Index rhoMinIdx;
+            Eigen::Index rhoMinIdx{-1};
             real rhoMin = rhoS.minCoeff(&rhoMinIdx);
             real theta1 = 1;
             if (rhoMin < rhoEps)
@@ -1793,30 +2504,68 @@ namespace DNDS::Euler
                 }
             }
 
-            if constexpr (Traits::hasRANS)
-                recInc(EigenAll, Seq01234) *= theta1; // to leave SA unchanged
-            else
-                recInc *= theta1;
+            // only compresses main flow part and rhoY_i species, avoiding RANS part
+            recInc(EigenAll, Seq01234) *= theta1;
+            if constexpr (Traits::isExtended)
+            {
+                if (phys_.hasChemicalSource())
+                {
+                    int Ns1 = phys_.nSpecies() - 1;
+                    int Isp = nVars - Ns1;
+                    recInc(EigenAll, Eigen::seq(Isp, EigenLast)) *= theta1;
+                }
+            }
+
             Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed>
                 recVRhoG = recInc + recBase;
 
             Eigen::Vector<real, Eigen::Dynamic> ek = 0.5 * (recVRhoG(EigenAll, Seq123).array().square().rowwise().sum()) / recVRhoG(EigenAll, 0).array();
-            Eigen::Vector<real, Eigen::Dynamic> eInternalS = recVRhoG(EigenAll, I4) - ek;
+            Eigen::Vector<real, Eigen::Dynamic> rhoE_base_VR = rhoE_base_perQ(recVRhoG);
+            Eigen::Vector<real, Eigen::Dynamic> eInternalS = recVRhoG(EigenAll, I4) - ek - rhoE_base_VR;
             real thetaP = 1.0;
+            Eigen::Vector<real, Eigen::Dynamic> rhoE_base_B = rhoE_base_perQ(recBase);
 
-            if (pCent <= 2 * pEps)
+            if (rhoeSensibleCent <= 2 * rhoeSensibleEps)
                 thetaP = 0;
             else
                 for (int iG = 0; iG < rhoS.size(); iG++)
                 {
-                    if (eInternalS(iG) < 2 * pEps / (gamma - 1))
+                    if (eInternalS(iG) < 2 * rhoeSensibleEps)
                     {
-                        real thetaThis = Gas::IdealGasGetCompressionRatioPressure<dim, 0, nVarsFixed>(
+                        real thetaThis = Gas::IdealGasGetCompressionRatioPressure<dim, 1, nVarsFixed>(
                             recBase(iG, EigenAll).transpose(), recInc(iG, EigenAll).transpose(),
-                            pEps);
+                            rhoeSensibleEps, rhoE_base_B(iG), rhoE_base_VR(iG));
                         thetaP = std::min(thetaP, thetaThis);
                     }
                 }
+
+            // --- species-aware PP check ---
+            // thetaP was computed using raw base energy (mixtureBaseInternalRhoERaw).
+            // gammaEq in fluxFace uses mixtureBaseInternalRhoE which clips negative
+            // rhoY_k to 0, potentially increasing rhoE_base and making e_sensible go
+            // negative.  Post-check using mixtureBaseInternalRhoE directly so the
+            // computed sensible energy matches what gammaEq will see.  If violated,
+            // zero the entire reconstruction increment (thetaP = 0), forcing
+            // fallback to uRecBase which passed checkRecBaseGood.
+            if constexpr (Traits::isExtended)
+            {
+                if (phys_.hasChemicalSource())
+                {
+                    Eigen::Vector<real, Eigen::Dynamic> ekC =
+                        0.5 * (recVRhoG(EigenAll, Seq123).array().square().rowwise().sum()) / recVRhoG(EigenAll, 0).array();
+                    Eigen::Vector<real, Eigen::Dynamic> rhoE_base_VC(nPoint);
+                    for (int iG = 0; iG < nPoint; ++iG)
+                    {
+                        typename EulerEvaluator<model>::TU tmp = recVRhoG.row(iG);
+                        rhoE_base_VC(iG) = phys_.mixtureBaseInternalRhoE(tmp);
+                    }
+                    Eigen::Vector<real, Eigen::Dynamic> eInternalSC =
+                        recVRhoG(EigenAll, I4) - ekC - rhoE_base_VC;
+
+                    if (eInternalSC.minCoeff() < rhoeSensibleEps)
+                        thetaP = 0;
+                }
+            }
 
             uRecBeta[iCell](0) = theta1 * thetaP;
             // if (uRecBeta[iCell](0) < 1)
@@ -1836,17 +2585,31 @@ namespace DNDS::Euler
                 std::cout << fmt::format("theta1 {}, thetaP {}", theta1, thetaP) << std::endl;
                 DNDS_assert(false);
             }
+            // only compresses main flow part and rhoY_i species, avoiding RANS part
             if (uRecBeta[iCell](0) < 1)
-                uRec[iCell] = (uRec[iCell] - uRecBase) * uRecBeta[iCell](0) + uRecBase;
+            {
+                uRec[iCell](EigenAll, Seq01234) = (uRec[iCell](EigenAll, Seq01234) - uRecBase(EigenAll, Seq01234)) * uRecBeta[iCell](0) + uRecBase(EigenAll, Seq01234);
+                if constexpr (Traits::isExtended)
+                {
+                    if (phys_.hasChemicalSource())
+                    {
+                        int Ns1 = phys_.nSpecies() - 1;
+                        int Isp = nVars - Ns1;
+                        auto seqSpecies = Eigen::seq(Isp, EigenLast);
+                        uRec[iCell](EigenAll, seqSpecies) = (uRec[iCell](EigenAll, seqSpecies) - uRecBase(EigenAll, seqSpecies)) * uRecBeta[iCell](0) + uRecBase(EigenAll, seqSpecies);
+                    }
+                }
+            }
 
             // validation:
             recInc = quadBase * uRec[iCell];
             recVRhoG = recInc.rowwise() + u[iCell].transpose();
             ek = 0.5 * (recVRhoG(EigenAll, Seq123).array().square().rowwise().sum()) / recVRhoG(EigenAll, 0).array();
-            eInternalS = (recVRhoG(EigenAll, I4) - ek);
+            rhoE_base_VR = rhoE_base_perQ(recVRhoG);
+            eInternalS = (recVRhoG(EigenAll, I4) - ek - rhoE_base_VR);
             for (int iG = 0; iG < eInternalS.size(); iG++)
             {
-                if (eInternalS(iG) < pEps)
+                if (eInternalS(iG) < rhoeSensibleEps)
                 {
                     std::cout << std::scientific;
                     std::cout << eInternalS.transpose() << std::endl;
@@ -1871,13 +2634,14 @@ namespace DNDS::Euler
         real pEps = smallReal * settings.refUPrim(I4) * 1e-1;
         if (settings.ppEpsIsRelaxed)
             rhoEps *= 0, pEps *= 0;
+        real rhoeSensibleEps = pEps;
         bool ret{true};
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(runtime)
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
-            real gamma = settings.idealGasProperty.gamma;
+            real T_cell = phys_.temperature(u[iCell]);
             real alphaRho = 1;
             if (u[iCell](0) < rhoEps)
             {
@@ -1895,22 +2659,72 @@ namespace DNDS::Euler
 #endif
                 ret = false;
             }
-            real rhoEi = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0);
-            if (rhoEi < pEps / (gamma - 1))
+            real rhoeSensible = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureBaseInternalRhoE(u[iCell]);
+            if (rhoeSensible < rhoeSensibleEps)
             {
                 if (panic)
                     DNDS_assert_info(
                         false,
                         fmt::format(
-                            "AssertMeanValuePP Failed on cell {} rhoEi\n",
+                            "AssertMeanValuePP Failed on cell {} rhoeSensible\n",
                             iCell) +
                             fmt::format(
                                 " eps={}, value={}",
-                                pEps / (gamma - 1), rhoEi));
+                                rhoeSensibleEps, rhoeSensible));
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp critical
 #endif
                 ret = false;
+            }
+
+            // TODO: reactivate this
+            // --- Species positivity assertion (reactive flow) ---
+            if (phys_.hasChemicalSource())
+            {
+                int Ns = phys_.nSpecies();
+                int Ns1 = Ns - 1;
+                int nV = nVars;
+                int Isp = nV - Ns1;
+
+                for (int k = 0; k < Ns1; ++k)
+                {
+                    if (u[iCell](Isp + k) < 0)
+                    {
+                        if (panic)
+                            DNDS_assert_info(
+                                false,
+                                fmt::format(
+                                    "AssertMeanValuePP Failed on cell {} rhoY_{}\n",
+                                    iCell, k) +
+                                    fmt::format(
+                                        " value={}",
+                                        u[iCell](Isp + k)));
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp critical
+#endif
+                        ret = false;
+                    }
+                }
+
+                real sumRhoY = 0;
+                for (int k = 0; k < Ns1; ++k)
+                    sumRhoY += u[iCell](Isp + k);
+                if (sumRhoY > u[iCell](0))
+                {
+                    if (panic)
+                        DNDS_assert_info(
+                            false,
+                            fmt::format(
+                                "AssertMeanValuePP Failed on cell {} rhoY_last (dependent)\n",
+                                iCell) +
+                                fmt::format(
+                                    " rho={}, sumRhoY={}",
+                                    u[iCell](0), sumRhoY));
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp critical
+#endif
+                    ret = false;
+                }
             }
         }
 
@@ -1923,6 +2737,10 @@ namespace DNDS::Euler
      *  Determines the largest alpha in [0,1] such that u + alpha*res remains physically
      *  realizable (positive density and pressure) at all quadrature points. Used for
      *  under-relaxation to preserve positivity during explicit or implicit updates.
+     *
+     *  NOTE: uses mixtureBaseInternalRhoE (not Raw) for the sensible-energy
+     *  check, matching gammaEq's species clipping in fluxFace.
+     *
      *
      *  @param u             Conservative variable DOF array.
      *  @param uRec          Reconstruction coefficients.
@@ -1955,6 +2773,7 @@ namespace DNDS::Euler
             pEps *= 0, rhoEps *= 0;
             DNDS_assert_info(relax < 1, "Relaxed eps only for using relaxation in alpha");
         }
+        real rhoeSensibleEps = pEps;
 
         index nLimLocal = 0;
         real alphaMinLocal = 1;
@@ -1963,7 +2782,8 @@ namespace DNDS::Euler
 #endif
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
-            real gamma = settings.idealGasProperty.gamma;
+            real T_cell = phys_.temperature(u[iCell]);
+            // real gamma = phys_.gammaEq(T_cell, u[iCell]);
             real alphaRho = 1;
             TU inc = res[iCell];
             DNDS_assert(u[iCell](0) >= rhoEps);
@@ -2003,18 +2823,19 @@ namespace DNDS::Euler
             inc *= alphaRho;
 
             TU uNew = u[iCell] + inc;
-            real pNew = (uNew(I4) - 0.5 * uNew(Seq123).squaredNorm() / uNew(0)) * (gamma - 1);
-            real pOld = (u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0)) * (gamma - 1);
-            real relaxedP = pEps;
-            if (pNew < pOld)
-                relaxedP = pEps + (pOld - pEps) * (1 - relax);
+            real rhoE_base_new = phys_.mixtureBaseInternalRhoE(uNew);
+            real rhoeSensibleNew = uNew(I4) - 0.5 * uNew(Seq123).squaredNorm() / uNew(0) - rhoE_base_new;
+            real rhoeSensibleOld = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureBaseInternalRhoE(u[iCell]);
+            real relaxedRhoeSensible = rhoeSensibleEps;
+            if (rhoeSensibleNew < rhoeSensibleOld)
+                relaxedRhoeSensible = rhoeSensibleEps + (rhoeSensibleOld - rhoeSensibleEps) * (1 - relax);
 
             real alphaP = 1;
-            if (pNew < relaxedP)
+            if (rhoeSensibleNew < relaxedRhoeSensible)
             {
                 // todo: use high order accurate (add control switch)
-                real alphaC = Gas::IdealGasGetCompressionRatioPressure<dim, 0, nVarsFixed>(
-                    u[iCell], inc, relaxedP / (gamma - 1));
+                real alphaC = Gas::IdealGasGetCompressionRatioPressure<dim, 1, nVarsFixed>(
+                    u[iCell], inc, relaxedRhoeSensible, phys_.mixtureBaseInternalRhoE(u[iCell]), rhoE_base_new);
                 alphaP = std::min(alphaP, alphaC);
             }
             cellRHSAlpha[iCell](0) = alphaRho * alphaP;
@@ -2068,10 +2889,34 @@ namespace DNDS::Euler
         ArrayDOFV<nVarsFixed> &res,
         ArrayDOFV<1> &cellRHSAlpha, index &nLim, real alphaMin)
     {
+        static const real minRatio = 0.5;
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
         real rhoEps = smallReal * settings.refUPrim(0) * 1e-1;
         real pEps = smallReal * settings.refUPrim(I4) * 1e-1;
 
+        if (settings.ppEpsIsRelaxed)
+        {
+            real rhoMin = veryLargeReal;
+            real rhoEiMin = veryLargeReal;
+#if defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp parallel for schedule(runtime) reduction(min : rhoMin, rhoEiMin)
+#endif
+            for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
+            {
+                rhoMin = std::min(rhoMin, u[iCell](0));
+                real rhoEi_cell = u[iCell](I4) - 0.5 * u[iCell](Seq123).squaredNorm() / u[iCell](0) - phys_.mixtureBaseInternalRhoE(u[iCell]);
+                rhoEiMin = std::min(rhoEiMin, rhoEi_cell);
+            }
+            MPI::AllreduceOneReal(rhoMin, MPI_MIN, mesh->getMPI());
+            MPI::AllreduceOneReal(rhoEiMin, MPI_MIN, mesh->getMPI());
+            rhoEps = std::min(rhoEps, minRatio * rhoMin);
+            pEps = std::min(pEps, minRatio * rhoEiMin);
+        }
+        real rhoeSensibleEps = pEps;
+
+        // Unused — kept for reference if alpha-expansion smoothing is ever re-enabled.
+        // The calling loop at line ~2283 was commented out; see SEVERE #8-10 fixes
+        // which replaced this expansion strategy with the current direct-limiting approach.
         auto cellIsHalfAlpha = [&](index iCell) -> bool // iCell should be internal
         {
             bool ret = false;
@@ -2080,7 +2925,7 @@ namespace DNDS::Euler
                 auto c2f = mesh->cell2face[iCell];
                 for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                 {
-                    index iCellOther = vfv->CellFaceOther(iCell, c2f[ic2f]);
+                    index iCellOther = vfv->CellFaceOther(iCell, c2f[ic2f], ic2f);
                     if (iCellOther != UnInitIndex)
                         if (cellRHSAlpha[iCellOther](0) != 1.0)
                             ret = true;
@@ -2089,13 +2934,13 @@ namespace DNDS::Euler
             return ret;
         };
 
-        auto cellAdjAlphaMin = [&](index iCell) -> real // iCell should be internal
+        auto cellAdjAlphaMin = [&](index iCell) -> real // iCell should be internal (unused, same reason as cellIsHalfAlpha above)
         {
             real ret = 1;
             auto c2f = mesh->cell2face[iCell];
             for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
             {
-                index iCellOther = vfv->CellFaceOther(iCell, c2f[ic2f]);
+                index iCellOther = vfv->CellFaceOther(iCell, c2f[ic2f], ic2f);
                 if (iCellOther != UnInitIndex)
                     ret = std::min(ret, cellRHSAlpha[iCellOther](0));
             }
@@ -2110,20 +2955,21 @@ namespace DNDS::Euler
 
         index nLimLocal = 0;
         index nLimAdd = 0;
-        // for (index iCell : InterCells)
+        // only check cells not already limited (α > alphaMin)
         for (index iCell = 0; iCell < mesh->NumCell(); iCell++)
         {
-            real gamma = settings.idealGasProperty.gamma;
+            if (cellRHSAlpha[iCell](0) <= alphaMin)
+                continue;
+
             TU inc = res[iCell];
 
             TU uNew = u[iCell] + inc;
-            real pNew = (uNew(I4) - 0.5 * uNew(Seq123).squaredNorm() / uNew(0)) * (gamma - 1);
+            real rhoeSensibleNew = uNew(I4) - 0.5 * uNew(Seq123).squaredNorm() / uNew(0) - phys_.mixtureBaseInternalRhoE(uNew);
 
-            if (pNew < pEps || uNew(0) < rhoEps)
+            if (rhoeSensibleNew < rhoeSensibleEps || uNew(0) < rhoEps)
             {
-                // cellRHSAlpha[iCell](0) = cellAdjAlphaMin(iCell);
-                // DNDS_assert(cellRHSAlpha[iCell](0) == alphaMin);
                 cellRHSAlpha[iCell](0) = alphaMin;
+                nLimLocal++;
             }
             if constexpr (Traits::hasSA)
             {
@@ -2167,9 +3013,10 @@ namespace DNDS::Euler
             auto c2f = mesh->cell2face[iCell];
             real nAdj = 0.;
             real dTMean = 0.;
-            for (index iFace : c2f)
+            for (rowsize ic2f = 0; ic2f < c2f.size(); ++ic2f)
             {
-                index iCellOther = vfv->CellFaceOther(iCell, iFace);
+                index iFace = c2f[ic2f];
+                index iCellOther = vfv->CellFaceOther(iCell, iFace, ic2f);
                 if (iCellOther != UnInitIndex)
                 {
                     nAdj += 1.;

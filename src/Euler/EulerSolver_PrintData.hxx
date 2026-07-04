@@ -17,6 +17,15 @@
 namespace DNDS::Euler
 {
     static const auto model = NS;
+
+    template <typename TOut, typename TRecU>
+    static inline void writeExtendedVariables(TRecU &&recu, TOut &&outRow,
+                                              int I4, int nVars, int colOffset)
+    {
+        for (int i = I4 + 1; i < nVars; ++i)
+            outRow[colOffset + i] = recu(i) / recu(0);
+    }
+
     DNDS_SWITCH_INTELLISENSE(template <EulerModel model>, )
     /** @brief Write volume and boundary surface data to VTK-HDF5 or legacy VTK files.
      *
@@ -38,6 +47,7 @@ namespace DNDS::Euler
      *  @param fnameSeries            Filename for VTK time series metadata.
      *  @param odeResidualF           Functor returning per-cell ODE residual scalar.
      *  @param additionalCellScalars  List of additional named cell scalar fields to output.
+     *  @param additionalBndScalars   List of additional named bnd-face scalar fields to output.
      *  @param eval                   Reference to the EulerEvaluator.
      *  @param tSimu                  Current simulation time for time-series annotation.
      *  @param mode                   Output mode (normal or time-averaged).
@@ -47,6 +57,7 @@ namespace DNDS::Euler
         const std::string &fnameSeries,
         const tCellScalarFGet &odeResidualF,
         tAdditionalCellScalarList &additionalCellScalars,
+        tAdditionalCellScalarList &additionalBndScalars,
         TEval &eval, real tSimu, PrintDataMode mode)
     {
         DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
@@ -89,11 +100,9 @@ namespace DNDS::Euler
                             eval.TransformURotatingFrame_ABS_VELO(recu, vfv->GetCellQuadraturePPhys(iCell, -1), -1);
                         TVec velo = (recu(Seq123).array() / recu(0)).matrix();
                         real vsqr = velo.squaredNorm();
-                        real asqr, p, H;
-                        Gas::IdealGasThermal(recu(I4), recu(0), vsqr, eval.settings.idealGasProperty.gamma, p, asqr, H);
+                        auto [T, p, asqr, H, gammaEq, gamma] = eval.phys().conservativeThermal(recu);
                         // DNDS_assert(asqr > 0);
                         real M = std::sqrt(std::abs(vsqr / asqr));
-                        real T = p / recu(0) / eval.settings.idealGasProperty.Rgas;
 
                         (*outDist)[iCell][0] = recu(0);
                         for (int i = 0; i < dim; i++)
@@ -113,10 +122,7 @@ namespace DNDS::Euler
                         // }
                         // (*outDist)[iCell][8] = (*vfv->SOR_iCell2iScan)[iCell];//!using SOR rb seq instead
 
-                        for (int i = I4 + 1; i < nVars; i++)
-                        {
-                            (*outDist)[iCell][4 + i] = recu(i) / recu(0); // 4 is additional amount offset, not Index of last flow variable (I4)
-                        }
+                        writeExtendedVariables(recu, (*outDist)[iCell], I4, nVars, 4);
                         int iCur = 4 + nVars;
                         for (auto &out : additionalCellScalars)
                         {
@@ -179,11 +185,9 @@ namespace DNDS::Euler
 
                         TVec velo = (recu(Seq123).array() / recu(0)).matrix();
                         real vsqr = velo.squaredNorm();
-                        real asqr, p, H;
-                        Gas::IdealGasThermal(recu(I4), recu(0), vsqr, eval.settings.idealGasProperty.gamma, p, asqr, H);
+                        auto [T, p, asqr, H, gammaEq, gamma] = eval.phys().conservativeThermal(recu);
                         // DNDS_assert(asqr > 0);
                         real M = std::sqrt(std::abs(vsqr / asqr));
-                        real T = p / recu(0) / eval.settings.idealGasProperty.Rgas;
 
                         outDistPointPair[iN][0] = recu(0);
                         for (int i = 0; i < dim; i++)
@@ -192,10 +196,7 @@ namespace DNDS::Euler
                         outDistPointPair[iN][I4 + 1] = T;
                         outDistPointPair[iN][I4 + 2] = M;
 
-                        for (int i = I4 + 1; i < nVars; i++)
-                        {
-                            outDistPointPair[iN][2 + i] = recu(i) / recu(0); // 2 is additional amount offset
-                        }
+                        writeExtendedVariables(recu, outDistPointPair[iN], I4, nVars, 2);
                     }
                     outDistPointPair.trans.startPersistentPull();
                     outDistPointPair.trans.waitPersistentPull();
@@ -236,8 +237,8 @@ namespace DNDS::Euler
                     "R", "U", "V", "W", "P", "T", "M"};
             for (int i = I4 + 1; i < nVars; i++)
             {
-                names.push_back("V" + std::to_string(i - I4));
-                namesPoint.push_back("V" + std::to_string(i - I4));
+                names.push_back(eval.primVarLabel(i));
+                namesPoint.push_back(eval.primVarLabel(i));
             }
             for (auto &out : additionalCellScalars)
             {
@@ -507,6 +508,7 @@ namespace DNDS::Euler
             {
                 std::lock_guard<std::mutex> outBndLock(outBndArraysMutex);
                 DNDS_MPI_InsertCheck(mpi, "EulerSolver<model>::PrintData === bnd enter");
+                int nOUTSBndBase = nOUTSBnd - static_cast<int>(additionalBndScalars.size());
                 for (index iB = 0; iB < meshBnd->NumCell(); iB++)
                 {
                     // TU recu =
@@ -519,8 +521,8 @@ namespace DNDS::Euler
                     index iFace = mesh->bnd2faceV.at(iBnd);
                     if (iFace == -1)
                     {
-                        DNDS_assert(mesh->isPeriodic);                              // only internal bnd is valid, periodic bnd should be omitted
-                        (*outDistBnd)[iB](nOUTSBnd - 4) = meshBnd->GetCellZone(iB); // add this to enable blanking
+                        DNDS_assert(mesh->isPeriodic);                                  // only internal bnd is valid, periodic bnd should be omitted
+                        (*outDistBnd)[iB](nOUTSBndBase - 4) = meshBnd->GetCellZone(iB); // add this to enable blanking
                         continue;
                     }
                     TU recu = uOut[iCell];
@@ -528,11 +530,9 @@ namespace DNDS::Euler
                         eval.TransformURotatingFrame_ABS_VELO(recu, vfv->GetCellQuadraturePPhys(iCell, -1), -1);
                     TVec velo = (recu(Seq123).array() / recu(0)).matrix();
                     real vsqr = velo.squaredNorm();
-                    real asqr, p, H;
-                    Gas::IdealGasThermal(recu(I4), recu(0), vsqr, eval.settings.idealGasProperty.gamma, p, asqr, H);
+                    auto [T, p, asqr, H, gammaEq, gamma] = eval.phys().conservativeThermal(recu);
                     // DNDS_assert(asqr > 0);
                     real M = std::sqrt(std::abs(vsqr / asqr));
-                    real T = p / recu(0) / eval.settings.idealGasProperty.Rgas;
 
                     (*outDistBnd)[iB][0] = recu(0);
                     for (int i = 0; i < dim; i++)
@@ -540,10 +540,7 @@ namespace DNDS::Euler
                     (*outDistBnd)[iB][I4 + 0] = p;
                     (*outDistBnd)[iB][I4 + 1] = T;
                     (*outDistBnd)[iB][I4 + 2] = M;
-                    for (int i = I4 + 1; i < nVars; i++)
-                    {
-                        (*outDistBnd)[iB][2 + i] = recu(i) / recu(0); // 4 is additional amount offset, not Index of last flow variable (I4)
-                    }
+                    writeExtendedVariables(recu, (*outDistBnd)[iB], I4, nVars, 2);
                     // if(iFace < 0)
                     // {
                     //     std::cout << iFace << std::endl;
@@ -555,9 +552,16 @@ namespace DNDS::Euler
                     fluxT.setZero();
                     fluxT(Seq012) = eval.fluxBndForceT.at(iBnd);
                     (*outDistBnd)[iB](Eigen::seq(nVars + 2 + nVars, nVars + 2 + nVars + 3 - 1)) = fluxT;
-                    // (*outDistBnd)[iB](nOUTSBnd - 4) = mesh->GetFaceZone(iFace);
-                    (*outDistBnd)[iB](nOUTSBnd - 4) = meshBnd->GetCellZone(iB);
-                    (*outDistBnd)[iB](Eigen::seq(nOUTSBnd - 3, nOUTSBnd - 1)) = vfv->GetFaceNorm(iFace, 0) * vfv->GetFaceArea(iFace);
+                    // (*outDistBnd)[iB](nOUTSBndBase - 4) = mesh->GetFaceZone(iFace);
+                    (*outDistBnd)[iB](nOUTSBndBase - 4) = meshBnd->GetCellZone(iB);
+                    (*outDistBnd)[iB](Eigen::seq(nOUTSBndBase - 3, nOUTSBndBase - 1)) = vfv->GetFaceNorm(iFace, 0) * vfv->GetFaceArea(iFace);
+
+                    int iCurBnd = nOUTSBndBase;
+                    for (auto &out : additionalBndScalars)
+                    {
+                        (*outDistBnd)[iB][iCurBnd] = std::get<1>(out)(iBnd);
+                        iCurBnd++;
+                    }
 
                     // (*outDist)[iCell][8] = (*vfv->SOR_iCell2iScan)[iCell];//!using SOR rb seq instead
                 }
@@ -590,8 +594,8 @@ namespace DNDS::Euler
             int currentTop = dim + 4;
             for (int i = I4 + 1; i < nVars; i++)
             {
-                names.push_back("V" + std::to_string(i - I4));
-                namesScalar.push_back("V" + std::to_string(i - I4));
+                names.push_back(eval.primVarLabel(i));
+                namesScalar.push_back(eval.primVarLabel(i));
                 offsetsScalar.push_back(currentTop++);
             }
             for (int i = 0; i < nVars; i++)
@@ -613,6 +617,13 @@ namespace DNDS::Euler
             names.push_back("N2");
             namesVector.push_back("Norm");
             offsetsVector.push_back(currentTop), currentTop += 3;
+
+            for (auto &out : additionalBndScalars)
+            {
+                names.push_back(std::get<0>(out));
+                namesScalar.push_back(std::get<0>(out));
+                offsetsScalar.push_back(currentTop++);
+            }
 
             if (config.dataIOControl.outPltTecplotFormat)
             {
@@ -889,7 +900,7 @@ namespace DNDS::Euler
         {
             std::filesystem::path outPath;
             outPath = {fname + "_p" + std::to_string(mpi.size) + "_restart.dir"};
-            std::filesystem::create_directories(outPath);
+            createOutputDirAsDir(outPath, mpi, OutputDirMode::Fast);
             char BUF[512];
             std::sprintf(BUF, "%04d", mpi.rank);
             fname = getStringForcePath(outPath / (std::string(BUF) + ".json"));
@@ -899,7 +910,7 @@ namespace DNDS::Euler
         {
             fname += "_p" + std::to_string(mpi.size) + ".restart.dnds.h5";
             std::filesystem::path outPath = fname;
-            std::filesystem::create_directories(outPath.parent_path() / ".");
+            createOutputDir(outPath, mpi, OutputDirMode::Fast);
             config.restartState.lastRestartFile = fname;
         }
         else

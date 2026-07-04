@@ -415,11 +415,11 @@ that compose multiple mesh-build steps:
 |--------|-------------|
 | `BuildGhostPrimary(mesh, nLayers)` | 5-step: recover N2C/C2C + ghost + G2L |
 | `ReadMeshFromCGNS(...)` | Full CGNS read + partition + elevation + bisection |
-| `ReadMeshFromH5(...)` | H5 distributed read with ParMetis repartition |
-| `ReadMeshFromH5Parallel(...)` | H5 pre-partitioned read (exact np match) |
+| `ReadMeshFromH5(...)` | H5 pre-partitioned read with even-split + ParMetis repartition |
+| `ReadMeshFromH5Parallel(...)` | Direct H5 pre-partitioned read (exact np match) |
 | `PrepareMesh(...)` | Cell reorder + face interp + ghost N2CB + serial out |
 | `BuildBndMesh(...)` | Extract boundary surface mesh |
-| `SerializeMesh(...)` | Write partitioned mesh to H5 |
+| `SerializeMesh(...)` | Write partitioned mesh to H5; redistributable only with collective H5 |
 | `MeshH5Path(...)` | Build conventional H5 filename |
 
 ---
