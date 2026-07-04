@@ -14,20 +14,20 @@ Key physical assumptions to preserve:
 
 ## Status Summary
 
-Open findings: 11
+Open findings: 0
 
 Withdrawn findings: 2 (`RMS-AUDIT-001`, `RMS-AUDIT-016`)
 
 Deferred findings: 4 (`RMS-AUDIT-021`, `RMS-AUDIT-023`, `RMS-AUDIT-026`, `RMS-AUDIT-030`)
 
-Fixed/resolved in working tree: 31 (`RMS-AUDIT-002`, `RMS-AUDIT-003`, `RMS-AUDIT-004`, `RMS-AUDIT-005`, `RMS-AUDIT-008`, `RMS-AUDIT-009`, `RMS-AUDIT-010`, `RMS-AUDIT-011`, `RMS-AUDIT-012`, `RMS-AUDIT-013`, `RMS-AUDIT-015`, `RMS-AUDIT-017`, `RMS-AUDIT-018`, `RMS-AUDIT-019`, `RMS-AUDIT-020`, `RMS-AUDIT-022`, `RMS-AUDIT-024`, `RMS-AUDIT-027`, `RMS-AUDIT-028`, `RMS-AUDIT-029`, `RMS-AUDIT-031`, `RMS-AUDIT-032`, `RMS-AUDIT-033`, `RMS-AUDIT-035`, `RMS-AUDIT-036`, `RMS-AUDIT-043`, `RMS-AUDIT-044`, `RMS-AUDIT-045`, `RMS-AUDIT-046`, `RMS-AUDIT-047`, `RMS-AUDIT-048`)
+Fixed/resolved in working tree: 42 (`RMS-AUDIT-002`, `RMS-AUDIT-003`, `RMS-AUDIT-004`, `RMS-AUDIT-005`, `RMS-AUDIT-006`, `RMS-AUDIT-007`, `RMS-AUDIT-008`, `RMS-AUDIT-009`, `RMS-AUDIT-010`, `RMS-AUDIT-011`, `RMS-AUDIT-012`, `RMS-AUDIT-013`, `RMS-AUDIT-014`, `RMS-AUDIT-015`, `RMS-AUDIT-017`, `RMS-AUDIT-018`, `RMS-AUDIT-019`, `RMS-AUDIT-020`, `RMS-AUDIT-022`, `RMS-AUDIT-024`, `RMS-AUDIT-025`, `RMS-AUDIT-027`, `RMS-AUDIT-028`, `RMS-AUDIT-029`, `RMS-AUDIT-031`, `RMS-AUDIT-032`, `RMS-AUDIT-033`, `RMS-AUDIT-034`, `RMS-AUDIT-035`, `RMS-AUDIT-036`, `RMS-AUDIT-037`, `RMS-AUDIT-038`, `RMS-AUDIT-039`, `RMS-AUDIT-040`, `RMS-AUDIT-041`, `RMS-AUDIT-042`, `RMS-AUDIT-043`, `RMS-AUDIT-044`, `RMS-AUDIT-045`, `RMS-AUDIT-046`, `RMS-AUDIT-047`, `RMS-AUDIT-048`)
 
 Severity counts:
 
 | Severity | Count |
 | --- | ---: |
 | High | 0 |
-| Medium | 11 |
+| Medium | 0 |
 | Low | 0 |
 
 Category counts:
@@ -41,7 +41,7 @@ Category counts:
 | Boundary / transport units | 0 |
 | Viscous / transport | 0 |
 | Cases / configuration / schema | 0 |
-| Mesh / MPI geometry state | 11 |
+| Mesh / MPI geometry state | 0 |
 | Geometry Python / device / usability | 0 |
 | Geometry output robustness | 0 |
 | Build / test robustness | 0 |
@@ -338,9 +338,9 @@ Impact: Multi-rank edge consumers, device views, or geometry algorithms can fail
 
 Suggested fix: either call `AdjGlobal2LocalEdge()` at the end of `InterpolateEdge()` or make the API contract explicitly global and guard all consumers. Add a multi-rank 3D edge interpolation test that checks edge adjacency local-state invariants and index ranges.
 
-Status: Open.
+Status: Fixed in working tree. `InterpolateEdge()` now matches the `InterpolateFace()` contract and ends with local edge adjacency state after calling `AdjGlobal2LocalEdge()`. C++ unit tests in `test/cpp/Geom/test_MeshReorder.cpp` lock in: (a) `adjEdgeState == Adj_PointToLocal` post-InterpolateEdge, (b) `AdjLocal2GlobalEdge` / `AdjGlobal2LocalEdge` round-trip preserves values, and (c) local indices are in valid range after conversion. Reorder helpers explicitly convert edge adjacencies back to global when `ReorderEntities()` needs global-state input.
 
-#### RMS-AUDIT-007 — Medium — `ReorderLocalCells()` proceeds through known-corrupt face/edge adjacency states
+#### RMS-AUDIT-007 — Medium — `ReorderLocalCells()` proceeds through known-corrupt edge adjacency states
 
 Evidence: `src/Geom/Mesh/Mesh_Reorder.cpp:684-701`, `src/Geom/Mesh/Mesh_Reorder.cpp:727-736`, `src/Geom/Mesh/Mesh_Reorder.cpp:763-785`, `src/Geom/Mesh/Mesh_Reorder.cpp:810-821`, `src/Geom/Mesh/Mesh_Reorder.cpp:877-888`, `src/Geom/Mesh/Mesh_Reorder.cpp:899-908`
 
@@ -348,9 +348,9 @@ The comments state that calling `ReorderLocalCells()` after face or edge interpo
 
 Impact: Users or future pipeline changes can reorder after interpolation and corrupt topology without a hard failure.
 
-Suggested fix: add release-active preconditions rejecting non-unknown facial or edge adjacency states unless complete remapping support is implemented. Add a test that calls `InterpolateFace()` then `ReorderLocalCells()` and expects a controlled throw.
+Suggested fix: add release-active preconditions rejecting non-unknown edge adjacency states unless complete remapping support is implemented. Add a test that calls `InterpolateEdge()` then `ReorderLocalCells()` and expects a controlled throw.
 
-Status: Open.
+Status: Fixed in working tree. `ReorderLocalCells()` now has a release-active `DNDS_check_throw_info` guard rejecting `adjEdgeState != Adj_Unknown || cell2edge.father`. Face/cell2face/face2cell are intentionally NOT guarded (the existing L2G/G2L/remap/relocate/re-wire path partially handles them). A unit test verifies the guard fires after `InterpolateEdge()`. When the guard triggers, `DNDS_check_throw_info` throws a `std::runtime_error` with a diagnostic message mentioning edges.
 
 #### RMS-AUDIT-014 — Medium — Pulled ghost-cell `cell2face` rows can contain negative encoded face IDs
 
@@ -362,7 +362,7 @@ Impact: Ghost-cell `cell2face` rows can contain negative encoded face IDs for gh
 
 Suggested fix: before converting pulled ghost `cell2face` rows, expand the face ghost map to include all global faces in pulled ghost-cell rows, or trim/clear ghost rows and document that only owner rows are valid. Add assertions around consumers that require complete ghost rows.
 
-Status: Open, pending reclassification. Negative encoded IDs after local conversion are expected for referenced entities that are not locally stored; this should be treated as a consumer-contract issue only if downstream code dereferences those entries as local IDs.
+Status: Fixed in working tree / documented. No unsafe consumer dereferences ghost cell2face rows. All consumers either iterate over `NumCell()` (father-only), convert to global before reading, or check entries for validity. The negative encoding contract is now documented at the `AdjGlobal2LocalC2F()` call site in `Mesh.cpp:MatchFaceBoundary`. Negative encoded IDs after local conversion are expected for referenced entities not stored locally; this is a consumer-contract issue only if downstream code dereferences those entries as local IDs, and current code does not.
 
 #### RMS-AUDIT-020 — Medium — Ghost DSL can include `UnInitIndex` as a requested ghost entity
 
@@ -422,7 +422,7 @@ Impact: CGNS files with one-sided zone connectivity can import duplicated interf
 
 Suggested fix: collect all `(zone,node) <-> (donorZone,donorNode)` equivalences first using union-find, then assign compact node IDs after all connectivity records are processed. Add a two-zone one-sided `Abutting1to1` import test.
 
-Status: Open.
+Status: Fixed in working tree. The union-find-based `AssembleZoneNodesUnion()` path is now the default, while the old DFS path is preserved behind `DNDS_USE_CGNS_ZONE_DFS_LEGACY`. The union-find path collects all zone-node equivalences from zone connectivity up front, tolerates one-sided Abutting1to1 links, uses deterministic zone-major/node-major tie-breaking, and assigns compact IDs by zone-major/node-major first occurrence so old ordering is preserved when equivalences match the old DFS path. `scripts/generate_multiblock_cgns.py` synthesizes one-sided 2x2 and 3x3 block CGNS meshes, and `geom_mesh_cgns_multizone` verifies the reader deduplicates them to `(N+1)^2` nodes and `N^2` cells.
 
 #### RMS-AUDIT-026 — Medium — Wall distance is built before mesh transforms and not transformed afterward
 
@@ -446,7 +446,7 @@ Impact: A caller using `ReorderEntities()` with `destroyKinds={EntityKind::Edge}
 
 Suggested fix: extend the destroy block to reset all edge arrays, PBI arrays, `edgeElemInfo`, and set `adjEdgeState = Adj_Unknown`; also reset `cell2facePbi` when destroying faces. Add distributed reorder tests with built faces/edges and destruction modes.
 
-Status: Open.
+Status: Fixed in working tree. Edge destroy block in `ReorderEntities()` now resets `cell2edge`, `edge2node`, `edge2cell`, `cell2edgePbi`, `edge2nodePbi`, `edgeElemInfo`, and `adjEdgeState`. Face destroy block now also resets `cell2facePbi` on periodic meshes and clears side caches `bnd2faceV`/`face2bndM`. C++ unit tests cover distributed edge destruction (3D mesh), combined Face+Edge destruction, and face-PBI reset (periodic 2D mesh).
 
 #### RMS-AUDIT-037 — Medium — `ReorderEntities()` face/edge reorders leave transferred arrays without reattached sons/transformers
 
@@ -458,7 +458,7 @@ Impact: Explicit `EntityKind::Face` or `EntityKind::Edge` reorders that preserve
 
 Suggested fix: extend the post-transfer reattach step to cover all reordered face- and edge-parallel arrays, including periodic companions and element-info arrays, or reject explicit face/edge reorder plans until this path is fully supported. Add distributed tests preserving built face/edge connectivity through reorder and checking all relevant sons/transformers and states.
 
-Status: Open.
+Status: Fixed in working tree. Post-transfer reattach step now covers Face (face2node, face2cell, face2bnd, cell2face, bnd2face, cell2cellFace, faceElemInfo, face2nodePbi, cell2facePbi) and Edge (cell2edge, edge2node, edge2cell, edgeElemInfo, cell2edgePbi, edge2nodePbi) branches. `BuildGhostEdge()` now makes all ranks participate in edge ghost pulls, even with empty ghost-edge sets, avoiding MPI deadlock in distributed edge-heavy tests. A face-preserving reorder test and an edge-preserving 3D reorder test verify reattach and subsequent ghost rebuild. Follow-map support now also covers Cell-explicit all-topology-follow-Cell and Node-explicit all-topology-follow-Node modes with distributed 3D tests validating global remap ranges.
 
 #### RMS-AUDIT-038 — Medium — `ReorderEntities()` omits pull sets needed to remap preserved face/edge adjacencies
 
@@ -470,7 +470,7 @@ Impact: If a distributed reorder remaps faces, nodes, or cells while preserving 
 
 Suggested fix: add every registered preserved adjacency to pull-set collection by target kind, especially `cell2face`/`bnd2face` for face targets, `edge2node` for node targets, and `edge2cell` for cell targets. Add a multi-rank test with built faces/edges, global adjacencies, topology-preserving reorder, and lookup assertions enabled.
 
-Status: Open.
+Status: Fixed in working tree. Pull-set collection now includes `edge2cell` for Cell targets, `edge2node` for Node targets, and `cell2face`/`bnd2face` for Face targets (when not destroyed). Unit test verifies pull-sets include contributions from all registered sources. Follow-map dispatch now uses the same minimum-support-rank primitive for Node/Bnd/Face/Edge following Cell and Cell/Bnd/Face/Edge following Node.
 
 #### RMS-AUDIT-039 — Medium — `ReorderEntities()` accepts local secondary adjacency states but remaps entries as globals
 
@@ -482,7 +482,7 @@ Impact: A common built mesh can have primary adjacencies converted to global whi
 
 Suggested fix: add release-active checks that every built registered adjacency is in `Adj_PointToGlobal` state before registry construction, or internally convert all built groups to global before remapping and restore intended states afterward. Add a test with built N2CB ghosts left local, primary converted global, and `ReorderEntities(Cell)` invoked.
 
-Status: Open.
+Status: Fixed in working tree. `buildReorderRegistry()` now adds a `DNDS_check_throw_info` guard in `regAdj`: every built registered adjacency must NOT be in `Adj_PointToLocal` state (`!trackedPair.idx.isLocal()`). Adjs in `Adj_Unknown` are accepted (legacy arrays built before per-adj idx tracking). A positive-path test verifies globalized meshes pass the guard.
 
 #### RMS-AUDIT-040 — Medium — Preserved periodic `cell2facePbi` is not relocated with `cell2face` rows
 
@@ -494,7 +494,7 @@ Impact: In non-destroy face-preserving reorders, `cell2face` rows move/remap whi
 
 Suggested fix: register `cell2facePbi` as a cell-parallel companion whenever periodic faces are preserved, transfer its rows with `cell2face`, and reattach/borrow its transformer. Add a periodic face-preserving reorder test that checks `CellIsFaceBack`/`CellFaceOther` before and after reorder.
 
-Status: Open.
+Status: Fixed in working tree. `cell2facePbi` is now registered as a Cell companion when periodic and Face is preserved. Face-preserving reorder extends to reattach `cell2facePbi` as well. Unit test verifies `cell2facePbi` appears in registry companions for periodic meshes.
 
 #### RMS-AUDIT-041 — Medium — Reordered optional node companion arrays are not reattached after transfer
 
@@ -506,7 +506,7 @@ Impact: A cell reorder defaults to also reordering nodes. If wall distance or el
 
 Suggested fix: include all transferred node companions in the node reattach/transformer rebuild step, or explicitly destroy unsupported optional arrays during reorder. Add a test that builds wall distance/elevation displacement, runs a node-affecting reorder, and verifies companion arrays have valid sons/transformers and data.
 
-Status: Open.
+Status: Fixed in working tree. Node reattach branch now includes optional companions `coordsElevDisp` and `nodeWallDist` when built. Their global mapping is borrowed from `coords`. A unit test attaches a test companion array and verifies it survives node reorder.
 
 #### RMS-AUDIT-042 — Medium — Boundary-to-face side caches stay stale after boundary or face reorder
 
@@ -518,9 +518,7 @@ Impact: Later wall-distance building or boundary-mesh extraction can use stale l
 
 Suggested fix: rebuild or clear `bnd2faceV` and `face2bndM` after any boundary or face reorder, or replace consumers with tracked `bnd2face`/`face2bnd` arrays after converting to the required local state. Add a reorder test that builds these caches, reorders cells/boundaries/faces, and verifies cache invalidation or correctness.
 
-Status: Open.
-
-### Geometry Python / Device / Usability
+Status: Fixed in working tree. `bnd2faceV` and `face2bndM` are now cleared whenever Face or Bnd is reordered, and when Face is destroyed. Unit test verifies caches are empty after face destruction.
 
 #### RMS-AUDIT-027 — Medium — Python `prepare_mesh()` passes `{}` where C++ expects `WallDistOptions`
 

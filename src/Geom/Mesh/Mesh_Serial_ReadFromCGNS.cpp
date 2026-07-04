@@ -9,6 +9,21 @@
 
 #include <set>
 
+// Multi-zone CGNS node deduplication uses a union-find path by default so
+// one-sided zone connectivity (e.g. Abutting1to1 records present in only one
+// zone) is supported. The legacy DFS path can be restored by defining
+// DNDS_USE_CGNS_ZONE_DFS_LEGACY; that path requires connectivity to be present
+// in both zones and assigns IDs in DFS visit order. The union-find path
+// collects all equivalences first, resolves them deterministically via
+// zone-major / node-major tie-breaking, then assigns compact IDs in the same
+// zone-major / node-major scan order.
+//
+// WARNING: Compared with DNDS_USE_CGNS_ZONE_DFS_LEGACY, the default union path
+// can change valid node numbering, reorder cells, and invalidate downstream
+// data keyed by node numbering (such as externally-patched boundary data).
+// Define DNDS_USE_CGNS_ZONE_DFS_LEGACY only when exact legacy numbering is
+// required and one-sided connectivity support is not needed.
+
 namespace DNDS::Geom
 {
     // =================================================================
@@ -28,6 +43,7 @@ namespace DNDS::Geom
          * \return     NodeOld2New mapping from concatenated zone-local indices to
          *             assembled (deduplicated) global indices, plus ZoneNodeStarts.
          */
+#ifdef DNDS_USE_CGNS_ZONE_DFS_LEGACY
         std::pair<std::vector<DNDS::index>, std::vector<DNDS::index>>
         AssembleZoneNodes(
             const std::vector<tCoord> &ZoneCoords,
@@ -107,6 +123,144 @@ namespace DNDS::Geom
 
             return {std::move(NodeOld2New), std::move(ZoneNodeStarts)};
         }
+#endif // DNDS_USE_CGNS_ZONE_DFS_LEGACY
+
+#ifndef DNDS_USE_CGNS_ZONE_DFS_LEGACY
+        /**
+         * \brief Union-find helper: find with path compression.
+         *
+         * Operates on a flat index space (concatenated zone-local nodes).
+         */
+        static DNDS::index uf_find(std::vector<DNDS::index> &parent, DNDS::index x)
+        {
+            DNDS::index root = x;
+            while (parent[root] != root)
+                root = parent[root];
+            while (parent[x] != x)
+            {
+                DNDS::index next = parent[x];
+                parent[x] = root;
+                x = next;
+            }
+            return root;
+        }
+
+        /// Union-find helper: union by the deterministic zone-major/node-major rule.
+        /// The representative with the smaller flat index wins.
+        static void uf_union(std::vector<DNDS::index> &parent, DNDS::index a, DNDS::index b)
+        {
+            DNDS::index ra = uf_find(parent, a);
+            DNDS::index rb = uf_find(parent, b);
+            if (ra != rb)
+            {
+                // Tie-break: smaller flat index is the representative.
+                // This preserves the same representative order as the old DFS
+                // path when equivalences are symmetric and zones are visited
+                // in ascending zone index order.
+                if (ra < rb)
+                    parent[rb] = ra;
+                else
+                    parent[ra] = rb;
+            }
+        }
+
+        /**
+         * \brief Union-find variant of AssembleZoneNodes.
+         *
+         * Differs from the old DFS path in two ways:
+         * 1. Collects all (zone,node) <-> (donorZone,donorNode) equivalences
+         *    from ALL zone connectivity records up front, so one-sided
+         *    Abutting1to1 links are tolerated.
+         * 2. Uses deterministic union-find (smaller flat index wins) rather
+         *    than DFS visit order for deduplication.
+         *
+         * Compact IDs are assigned by a zone-major / node-major scan over the
+         * union-find representatives, so when the old DFS path already
+         * deduplicated correctly, the new numbering matches the old numbering.
+         *
+         * \warning The legacy DFS path can be restored by defining
+         *          DNDS_USE_CGNS_ZONE_DFS_LEGACY.  This union path may change
+         *          valid node numbering in CGNS files that were previously
+         *          processed correctly by the DFS path.  This can reorder cells
+         *          and invalidate downstream data keyed by node numbering.
+         */
+        std::pair<std::vector<DNDS::index>, std::vector<DNDS::index>>
+        AssembleZoneNodesUnion(
+            const std::vector<tCoord> &ZoneCoords,
+            const std::vector<std::vector<std::vector<cgsize_t>>> &ZoneConnect,
+            const std::vector<std::vector<std::vector<cgsize_t>>> &ZoneConnectDonor,
+            const std::vector<std::vector<int>> &ZoneConnectTargetIZone,
+            tCoord &coordSerial,
+            int dim)
+        {
+            std::vector<DNDS::index> ZoneNodeSizes(ZoneCoords.size());
+            std::vector<DNDS::index> ZoneNodeStarts(ZoneCoords.size() + 1);
+            ZoneNodeStarts[0] = 0;
+            for (size_t i = 0; i < ZoneNodeSizes.size(); i++)
+                ZoneNodeStarts[i + 1] = ZoneNodeStarts[i] + (ZoneNodeSizes[i] = ZoneCoords[i]->Size());
+
+            DNDS::index totalRawNodes = ZoneNodeStarts.back();
+            std::vector<DNDS::index> parent(totalRawNodes);
+            for (DNDS::index i = 0; i < totalRawNodes; i++)
+                parent[i] = i;
+
+            // Collect all equivalences from zone connectivity.
+            for (size_t iGZ = 0; iGZ < ZoneConnect.size(); iGZ++)
+            {
+                for (size_t iOther = 0; iOther < ZoneConnect[iGZ].size(); iOther++)
+                {
+                    int iGZOther = ZoneConnectTargetIZone[iGZ][iOther];
+                    for (size_t iNode = 0; iNode < ZoneConnect[iGZ][iOther].size(); iNode++)
+                    {
+                        DNDS::index flatA = ZoneNodeStarts[iGZ] + ZoneConnect[iGZ][iOther][iNode] - 1; // 1-based → 0-based
+                        DNDS::index flatB = ZoneNodeStarts[iGZOther] + ZoneConnectDonor[iGZ][iOther][iNode] - 1;
+                        DNDS_assert(flatA >= 0 && flatA < totalRawNodes);
+                        DNDS_assert(flatB >= 0 && flatB < totalRawNodes);
+                        uf_union(parent, flatA, flatB);
+                    }
+                }
+            }
+
+            // Assign compact IDs by zone-major / node-major scan.
+            // Each representative gets a compact ID on first encounter.
+            std::vector<DNDS::index> NodeOld2New(totalRawNodes, -1);
+            DNDS::index cTop = 0;
+            for (size_t iGZ = 0; iGZ < ZoneNodeSizes.size(); iGZ++)
+            {
+                for (DNDS::index iNode = ZoneNodeStarts[iGZ]; iNode < ZoneNodeStarts[iGZ + 1]; iNode++)
+                {
+                    DNDS::index rep = uf_find(parent, iNode);
+                    if (NodeOld2New[rep] < 0)
+                    {
+                        NodeOld2New[rep] = cTop;
+                        cTop++;
+                    }
+                    NodeOld2New[iNode] = NodeOld2New[rep];
+                }
+            }
+
+            DNDS::log() << "CGNS === (Union-Find) Assembled Zones have NNodes " << cTop << std::endl;
+
+            coordSerial->Resize(cTop);
+            for (DNDS::index i = 0; i < coordSerial->Size(); i++)
+                coordSerial->operator[](i).setConstant(DNDS::UnInitReal);
+
+            for (size_t iGZ = 0; iGZ < ZoneNodeSizes.size(); iGZ++)
+            {
+                for (DNDS::index iNode = ZoneNodeStarts[iGZ]; iNode < ZoneNodeStarts[static_cast<int>(iGZ) + 1]; iNode++)
+                {
+                    auto coordC = (*ZoneCoords[iGZ])[iNode - ZoneNodeStarts[iGZ]];
+                    real dist = ((*coordSerial)[NodeOld2New[iNode]] - coordC).norm();
+                    if (!DNDS::IsUnInitReal((*coordSerial)[NodeOld2New[iNode]][0]))
+                        DNDS_assert_info(dist < 1e-10,
+                                         "Not same points on the connection, distance is " + std::to_string(dist));
+                    (*coordSerial)[NodeOld2New[iNode]] = coordC;
+                }
+            }
+
+            return {std::move(NodeOld2New), std::move(ZoneNodeStarts)};
+        }
+#endif // !DNDS_USE_CGNS_ZONE_DFS_LEGACY
 
         /**
          * \brief Separate zone elements into volume cells and boundary faces.
@@ -596,7 +750,11 @@ namespace DNDS::Geom
 
         /***************************************************************************/
         // ASSEMBLE: deduplicate shared nodes across zones
+#ifdef DNDS_USE_CGNS_ZONE_DFS_LEGACY
         auto [NodeOld2New, ZoneNodeStarts] = AssembleZoneNodes(
+#else
+        auto [NodeOld2New, ZoneNodeStarts] = AssembleZoneNodesUnion(
+#endif
             ZoneCoords, ZoneConnect, ZoneConnectDonor, ZoneConnectTargetIZone,
             coordSerial, mesh->dim);
 

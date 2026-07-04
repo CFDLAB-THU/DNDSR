@@ -58,3 +58,4 @@ stubs/
 workspace
 /.opencode/**/local
 /session_backup
+.slim/deepwork/
