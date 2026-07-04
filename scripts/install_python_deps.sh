@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # install_python_deps.sh — Install ALL Python dependencies for DNDSR.
 #
+# This script must be run AFTER building cfd_externals (HDF5, zlib, etc.).
+# The Cantera build deps (scons, packaging, ruamel.yaml, patchelf) should
+# already be installed from external/cfd_externals/requirements.txt before
+# running cfd_externals_build.py.
+#
 # This is the single entry point for setting up the Python environment.
 # It installs:
 #   1. Binary-wheel packages from requirements.txt  (numpy, scipy, pytest, …)
@@ -11,9 +16,11 @@
 # h5py and mpi4py MUST be compiled from source.  Binary wheels from PyPI
 # bundle their own HDF5/MPI libraries, which conflict with the versions
 # linked by the DNDSR pybind11 modules and cause crashes at import time.
+# --no-build-isolation avoids pip creating temporary venvs that would
+# reinstall build deps (including mpi4py when building h5py).
 #
 # Usage:
-#   ./scripts/install_python_deps.sh          # uses venv/bin/pip, auto-detect jobs
+#   ./scripts/install_python_deps.sh          # uses venv/bin/pip, auto-detect -j
 #   JOBS=8 ./scripts/install_python_deps.sh   # limit parallel compilation
 #   PIP=path/to/pip ./scripts/install_python_deps.sh
 #
@@ -72,7 +79,7 @@ echo "--- Installing mpi4py (from source, CC=$MPI_CC, -j$JOBS) ---"
 CC="$MPI_CC" \
     MAKEFLAGS="-j$JOBS" \
     CMAKE_BUILD_PARALLEL_LEVEL="$JOBS" \
-    "$PIP" install --no-binary mpi4py mpi4py --force-reinstall \
+    "$PIP" install --no-binary mpi4py --no-build-isolation mpi4py --force-reinstall \
     --verbose
 
 # ---- 4. h5py — compiled against the project's HDF5 (MPI-enabled) ---------
@@ -83,7 +90,7 @@ CC="$MPI_CC" \
     HDF5_MPI="ON" \
     MAKEFLAGS="-j$JOBS" \
     CMAKE_BUILD_PARALLEL_LEVEL="$JOBS" \
-    "$PIP" install --no-binary h5py h5py --force-reinstall \
+    "$PIP" install --no-binary h5py --no-build-isolation h5py --force-reinstall \
     --verbose
 
 echo ""
