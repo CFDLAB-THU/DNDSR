@@ -377,6 +377,7 @@ class WaveTester:
                     **rhsParamsGeneral,
                 )
             ) / eps
+            J_top = J_top.reshape(-1, 1)
         else:
             J_top = J
 
@@ -392,8 +393,25 @@ class WaveTester:
                     kx, ky, u_free=0j + 1 - eps, rhsOptions=options, **rhsParamsGeneral
                 )
             ) / eps
+            J_p1 = J_p1.reshape(-1, 1)
         else:
             J_p1 = J
+
+        if use_diff_Jacobi:
+            eps = 1e-6
+            options = eval.EvaluateRHSOptions()
+            options.direct2ndRec = True
+            options.direct2ndRec1stConv = True
+            J_p0 = (
+                self.test_one_wave(
+                    kx, ky, rhsOptions=options, **rhsParamsGeneral)
+                - self.test_one_wave(
+                    kx, ky, u_free=0j + 1 - eps, rhsOptions=options, **rhsParamsGeneral
+                )
+            ) / eps
+            J_p0 = J_p0.reshape(-1, 1)
+        else:
+            J_p0 = J
 
         np.array(u_real[self.iCellFree], copy=False)[:] = 1
         np.array(u_imag[self.iCellFree], copy=False)[:] = 0
@@ -471,7 +489,7 @@ class WaveTester:
                 - self.get_uFreeComplex() / dT
                 - rhs0_init
                 + rhs_1 * multigrid_res_fact[1]
-            ) / (-J + 1.0 / (dTau * multigrid_dtau_fact[1]) + 1.0 / dT)
+            ) / (-J_p0 + 1.0 / (dTau * multigrid_dtau_fact[1]) + 1.0 / dT)
             self.set_uFree(np.real(uFreeNew), np.imag(uFreeNew))
             self.uSync(kx, ky)
             eval.EvaluateRHS(rhs_real, u_real, uRec_real,
