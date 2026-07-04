@@ -1,3 +1,162 @@
+# 🚀 DNDSR v0.3.0 — Reactive Flows, Mesh Hardening & Developer Tooling
+
+210 commits · 227 files changed · 44,184 insertions · 3,301 deletions
+
+This release brings reactive compressible flow capabilities (multi-species transport, stiff chemistry, Cantera integration), mesh robustness hardening, core library improvements, CI modernization, and a suite of developer skills and tooling.
+
+---
+
+## 🔥 Reactive Compressible Flows (`src/Euler/` — 22 files, +8,831 / −1,804)
+
+The headline feature: full multi-species reactive Navier-Stokes with Cantera-based thermodynamics and chemical kinetics.
+
+### Species Transport & Thermodynamics
+
+- **Multi-species advection-diffusion**: species mass fractions transported alongside compressible flow variables
+- **Cantera thermodynamics**: `ChemicalSource` computes reaction rates, species properties, and transport coefficients via Cantera's `ThermoPhase` and `Kinetics` APIs
+- **Temperature bounds**: replaced hardcoded 200K/300K guard rails with `dynamic baseTemperature` derived from the initial flow state and mechanism data
+- **`useCellTWarmCache`**: per-cell temperature warm-start cache for reactive cells — avoids redundant chemical equilibrium solves; backed by `OptionalRef` utility for zero-overhead optional references
+- **Soft Cantera dependency**: graceful fallback when `DNDS_USE_CANTERA=OFF` — all reactive codepaths compile out, non-reactive solvers unaffected
+- **Mechanism data**: `DNDS_MECH_PATH` and `CANTERA_DATA` env vars for YAML mechanism and thermo-data lookup
+
+### Riemann Solver & Reactive Stability
+
+- **Reactive Roe (Roe_M7)**: stabilized contact wave handling for stiff source terms — prevents spurious oscillations at species interfaces
+- **Roe_M1 (cLLF-M)**: central Lax-Friedrichs variant tuned for rotating turbomachinery — validated on Rotor37
+- **Species diffusion at walls**: corrected wall boundary treatment for species mass fractions in viscous flows
+- **Rotated Riemann solvers**: RM2 and RM9 added for improved shear-layer resolution in detonation problems
+
+### Positivity Preservation & Reconstruction
+
+- **Species-aware positivity preservation**: Barth slope limiter extended to respect species mass fraction bounds alongside density and pressure positivity
+- **Energy decay correction**: reconstruction limiter enforces monotone energy profiles to prevent negative temperatures in near-vacuum regions
+- **CompressInc**: compressibility increment positivity enforcement — corrected an earlier faulty fix and restored stable operation
+- **Convex `URecBeta` estimation**: improved variable-exponent beta limiter for stabilization on Sedov blast-wave problems
+- **Relaxed alpha limiting**: configurable limiter relaxation for steady-state convergence
+
+### Chemistry & Jacobian Infrastructure
+
+- **Chemical Jacobian filtering**: selective Jacobian evaluation for stiff ODE terms — up to 2× speedup by skipping near-zero rate contributions
+- **`ChemicalSource::printInfo()`** and **`PhysicsProperties::printInfo()`**: runtime introspection of chemical state, species properties, and thermodynamic conditions
+- **`EvaluateMinMax` with `StateValueOrigin`**: debug tooling to trace extreme state values back to their source (reconstruction vs. flux vs. source term)
+- **4-vector state debug**: per-cell resolved state logging at Jacobian evaluation time for pathological-cell diagnosis
+- **`canteraConstVolTrajectory`**: standalone constant-volume reactor trajectory executable for mechanism validation
+- **`eulerState`**: standalone state evaluation executable for all Euler model variants
+
+### Solver & Physics Refactoring
+
+- **`PhysicsProperties` refactored** with composable design: `[[nodiscard]]` on all getters, `constexpr dim` optimization, per-model physics passed to source-term builders
+- **Reactive controls and scaling**: unified non-dimensionalization for reactive source terms with configurable reference scales
+- **Reactive energy handling**: corrected total energy updates under multi-species enthalpy contributions
+- **`recomputeDerived()`**: re-audited derived quantity computation — fixes for formation enthalpy, species diffusion Jacobian, and gas constant composition
+- **Cantera-free build support**: conditional compilation guards on all Cantera-dependent TU paths
+
+---
+
+## 🔗 Mesh Hardening (`src/Geom/` — 14 files, +1,139 / −140)
+
+### Distributed Reorder Robustness
+
+- **Ghost convention fixes**: `cell2facePbi` and `cell2edgePbi` ghost mapping corrected to use consistent send/receive side conventions
+- **Edge pipeline hardening**: `ReorderLocalCellsLegacy` edge handling fixed for distributed meshes with non-trivial partition cuts
+- **Cell2EdgePbi ghost mapping**: corrected mapping for periodic-adjacent edges in multi-rank configurations
+- **Derive redistributed node partitions globally**: eliminated local-only derivation that produced inconsistent ghost-layer ownership
+
+### Mesh Utility Contracts
+
+- **`mesh_helpers` clarifications**: documented preconditions for mesh read/prepare/build workflows; added guard assertions
+- **`build_bnd_mesh`**: periodic boundary faces now correctly omitted from boundary mesh construction
+- **`BuildCell2Cell` progress bar flushing**: long-running connectivity builds now produce regular progress output
+- **Periodic mesh fixes**: `ReorderLocalCellsLegacy` properly handles cells adjacent to periodic boundary pairs
+
+### Wall Distance & Boundary Handling
+
+- **`wallDistScheme=1`**: improved curved-mesh wall distance computation using nearest-face projection
+- **`rectifyNearPlane`**: near-wall cell geometry correction for curved boundaries
+- **`BCSym`**: symmetry boundary condition with mirrored velocity for inviscid wall treatment
+
+---
+
+## 🧮 Core Library (`src/DNDS/` — 18 files, +951 / −120)
+
+- **RM9 limiter**: 9th-order monotonicity-preserving reconstruction — extends the VR framework with a new high-order limiter family
+- **RCM ordering**: Reverse Cuthill-McKee matrix bandwidth reduction — `orderingCode = 3` for improved ILU preconditioner quality
+- **`ddP` chain rule**: corrected dual-density-pressure chain rule in Jacobian assembly for all derived thermodynamic quantities
+- **Output directory centralization**: `OutputDir.hpp` — single source of truth for solver output path construction
+- **StateValue JSON tolerance**: `_xxx` suffixed keys accepted in StateValue JSON for forward compatibility
+- **`nTimeStep = 0` support**: mesh-only solver runs now allowed (serialize mesh at initialization, no time advancement)
+- **`meshOutAtInit`**: serializes the mesh at solver initialization for verification workflows
+- **Array serializer cross-Array support**: partial implementation of cross-format Array conversion; SA restarts readable by 2EQ solver
+- **`SingelBlockApp`**: single-block solver mode for small-scale validation cases
+- **Permutation transfer bugfix**: now correctly skips periodic boundaries during entity reordering
+- **Move semantics**: proper move constructors for all array transform types
+- **`MPI_REAL4` compatibility**: removed Fortran-era MPI_REAL4 usage causing cross-vendor MPI failures
+
+---
+
+## 📐 CFV Reconstruction (`src/CFV/` — 10 files, +162 / −145)
+
+- **Precise p0 FD Jacobian**: replaced approximate pressure Jacobian with finite-difference evaluation in VR limiter — eliminates O(h) errors in limit sensing
+- **Cell-face incidence disambiguation**: clarified left/right cell-face adjacency for limiters operating across element boundaries
+- **ILU periodic self-edges**: corrected ILU factorization for periodic cells with self-referencing edge connectivity
+- **SVD filtering control**: configurable `svdTolerance` strategy for VR pseudo-inverse stability
+
+---
+
+## ⚙️ CI/CD Modernization (`.github/workflows/ci.yml` — +45 / −24)
+
+- **2-stage Python venv**: minimal venv for Cantera build dependencies → full venv with HDF5-aware packages
+- **Cantera build integration**: `cfd_externals` submodule bumped to include Cantera v3.2.0; `cc=mpicc cxx=mpicxx python3 cfd_externals_build.py`
+- **Cantera data env vars**: `DNDS_MECH_PATH` and `CANTERA_DATA` injected into test environment
+- **Doxygen build & publish**: VulcanLogic Doxygen documentation built in CI
+- **600s test timeouts**: prevents hung MPI tests from blocking CI pipeline
+- **eulerEX targets**: `eulerEX` and `eulerEX3D` added to CI solver build matrix
+- **`--no-build-isolation` for mpi4py/h5py**: prevents pip from building against system MPI/HDF5 instead of cfd_externals install
+- **Python 3.12**: upgraded from Python 3.10 to 3.12 for both CI and self-hosted runners
+
+---
+
+## 🛠️ Developer Tooling & Skills
+
+### Skills (`.opencode/skills/` — 13 files, +2,962)
+
+- **`cj-detonation`**: Chapman-Jouguet detonation speed estimation, ZND structure profiles, induction length calculation — backed by SDToolbox with exprtk variable-expression generator
+- **`cantera-cxx`**: Cantera C++ API reference with PIMPL isolation pattern, `setState_TP` / `newSolution` idioms, Jacobian assembly conventions
+- **`pyvista-post`**: VTKHDF CFD visualization pipeline — tiled-strip rendered layouts, DPI scaling, cube-axes control, `--cpu-render` flag, spectral perturbation mode, frame-velocity support, ffmpeg video combination
+
+### Configs & Cases
+
+- **Detonation benchmarks**: 1D ZND profiles, 2D detonation cells (largeS1, NoDilI8), DPWW1
+- **EulerEX reactive cases**: 0D constant-volume ignition, 1D detonation tube, 2D detonation cell splitting
+- **Fan flow integration**: rotor/stator axial turbomachinery configuration
+- **KOWilcox 2EQ turbulence**: k-omega Wilcox 2006 model with `RANSBottomLimit` omega floor
+
+### Developer Experience
+
+- **Progress bar flushing**: `BuildCell2Cell` and `TeeStreamBuf` now produce live progress output
+- **`EvaluateRHS` periodic fix**: corrected residual assembly for periodic boundary pairs in implicit solvers
+- **LUSGS with rot-periodic**: rotating-frame periodic boundaries now compatible with LUSGS implicit scheme
+- **Anchor pressure control**: configurable pressure-anchoring for turbomachinery with `ABS_VELO_IN_ROTATION`
+- **`rsRotateScheme`**: primary laminar variables (rho, u, v, w, p) used for turbulent convective flux in rotating frames
+
+---
+
+## 📊 By the Numbers
+
+| Metric | v0.2.1 → v0.3.0 |
+|---|---|
+| Commits | 210 |
+| Files changed | 227 |
+| Insertions | 44,184 |
+| Deletions | 3,301 |
+| New C++ files (Euler) | 7 (ChemicalSource, SourceTermContributor, Physics refactors) |
+| New skills | 3 (cj-detonation, cantera-cxx, pyvista-post) |
+| New solver targets | 5 (eulerEX, eulerEX3D, eulerState, canteraConstVolTrajectory, euler2EQ3D) |
+| New reconstruction limiters | 2 (RM1, RM9) |
+| CI workflow changes | +45 / −24 lines |
+
+---
+
 # 🚀 DNDSR v0.2.1 — Geom Module Quality Release
 
 15 commits · 183 files changed
