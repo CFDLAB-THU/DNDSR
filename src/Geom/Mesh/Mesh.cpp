@@ -1384,7 +1384,13 @@ namespace DNDS::Geom
         bnd2face.trans.createMPITypes();
         bnd2face.trans.pullOnce();
 
-        this->AdjGlobal2LocalC2F();
+        this->AdjGlobal2LocalC2F(); // NOTE: ghost-cell cell2face rows can contain
+                                    // negative encoded face IDs for faces whose
+                                    // ghost mapping is not available locally.
+                                    // Consumers MUST iterate over NumCell() (father-only)
+                                    // when dereferencing cell2face entries, or handle
+                                    // negative encodings explicitly.  See
+                                    // AdjIndexInfo::toLocal() for encoding details.
     }
 
     void UnstructuredMesh::
@@ -1607,6 +1613,7 @@ namespace DNDS::Geom
             log() << "UnstructuredMesh === InterpolateEdge: total edges " << gSize << std::endl;
 
         BuildGhostEdge();
+        AdjGlobal2LocalEdge();
     }
 
     void UnstructuredMesh::
@@ -1632,30 +1639,33 @@ namespace DNDS::Geom
             auto tree = CompiledGhostTree::compile(spec);
             GhostResult ghostResult = dag.evaluateGhostTree(tree, mpi);
 
-            auto itEdge = ghostResult.ghostIndices.find(EntityKind::Edge);
-            if (itEdge != ghostResult.ghostIndices.end())
+            std::vector<index> gEdges;
+            if (auto itEdge = ghostResult.ghostIndices.find(EntityKind::Edge);
+                itEdge != ghostResult.ghostIndices.end())
+                gEdges = itEdge->second;
+
+            // All ranks must participate in these pullOnce() calls. A rank may
+            // have no ghost edges, but skipping the empty create/pull sequence
+            // would leave peers blocked in collective MPI exchange.
+            edge2cell.trans.createGhostMapping(gEdges);
+            edge2cell.trans.createMPITypes();
+            edge2cell.trans.pullOnce();
+
+            edge2node.trans.createGhostMapping(gEdges);
+            edge2node.trans.createMPITypes();
+            edge2node.trans.pullOnce();
+
+            edgeElemInfo.trans.createGhostMapping(gEdges);
+            edgeElemInfo.trans.createMPITypes();
+            edgeElemInfo.trans.pullOnce();
+
+            if (isPeriodic)
             {
-                auto &gEdges = itEdge->second;
-                edge2cell.trans.createGhostMapping(gEdges);
-                edge2cell.trans.createMPITypes();
-                edge2cell.trans.pullOnce();
-
-                edge2node.trans.createGhostMapping(gEdges);
-                edge2node.trans.createMPITypes();
-                edge2node.trans.pullOnce();
-
-                edgeElemInfo.trans.createGhostMapping(gEdges);
-                edgeElemInfo.trans.createMPITypes();
-                edgeElemInfo.trans.pullOnce();
-
-                if (isPeriodic)
-                {
-                    edge2nodePbi.TransAttach();
-                    edge2nodePbi.trans.createFatherGlobalMapping();
-                    edge2nodePbi.trans.createGhostMapping(gEdges);
-                    edge2nodePbi.trans.createMPITypes();
-                    edge2nodePbi.trans.pullOnce();
-                }
+                edge2nodePbi.TransAttach();
+                edge2nodePbi.trans.createFatherGlobalMapping();
+                edge2nodePbi.trans.createGhostMapping(gEdges);
+                edge2nodePbi.trans.createMPITypes();
+                edge2nodePbi.trans.pullOnce();
             }
         }
 

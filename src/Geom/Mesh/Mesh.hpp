@@ -558,6 +558,10 @@ namespace DNDS::Geom
          * companion arrays (coords, cellElemInfo, pbi, etc.).
          * Skips adjacencies involving destroyKinds.
          *
+         * Adj remap callbacks intentionally rewrite owned/father rows only.
+         * Ghost/son rows are pre-reorder cache data and are rebuilt by the
+         * caller's normal ghost-building pipeline after ReorderEntities().
+         *
          * External code may extend the returned registry with its own arrays
          * before passing to ReorderPlan::build.
          */
@@ -591,10 +595,20 @@ namespace DNDS::Geom
         /**
          * \brief Augment a ReorderInput with default follows and compute follow maps.
          *
+         * The \p follower2leader adjacency in each FollowSpec must be a
+         * follower→leader direction (e.g. Bnd→Cell via \ref Bnd2Cell, Face→Node
+         * via \ref Face2Node).  The target rank for each follower is the minimum
+         * valid leader target rank over all non-UnInitIndex support entries.
+         * If a follower has no valid leaders it stays on the current rank.
+         *
          * When `input.follows` is empty and Cell is explicitly reordered,
-         * default follows (Node/Bnd follow Cell) are added automatically.
-         * Returns a finalised ReorderInput with all follows resolved to
-         * explicit maps (ready for ReorderPlan::build).
+         * default follows (Node/Bnd follow Cell via \ref Node2Cell / \ref Bnd2Cell)
+         * are added automatically.  Face/Edge follows and non-Cell leader follows
+         * must always be explicit.
+         *
+         * Supported follower→leader adjacency pairs:
+         *   - Node→Cell, Bnd→Cell, Face→Cell, Edge→Cell
+         *   - Cell→Node, Bnd→Node, Face→Node, Edge→Node
          *
          * \param input    Original input (may have empty follows).
          * \param reg      Registry with global mappings and adj data.

@@ -94,6 +94,33 @@ namespace DNDS::Geom
         return followMap;
     }
 
+    /// Shorthand for computing a follow map from a follower→leader adjacency.
+    ///
+    /// Calls ComputeFollowMapFromAdj(), automatically extracting the row-size
+    /// template parameter and forwarding the follower→leader base class.
+    /// `UnInitIndex` entries in the support adjacency are skipped.
+    ///
+    /// @tparam AdjPair  Concrete AdjPairTracked type (e.g., AdjPairTracked<tAdjPair>).
+    /// @param f2l      Follower→leader adjacency, entries must be global.
+    /// @param nFollower  Number of father follower entities.
+    /// @param leaderGM   Global mapping for the leader entity kind.
+    /// @param leaderTargetRanks  Explicit target rank vector for leaders.
+    /// @param mpi       MPI communicator.
+    /// @return  Per-follower target rank vector, size == nFollower.
+    template <class AdjPair>
+    static std::vector<MPI_int> followVia(
+        const AdjPair &f2l,
+        index nFollower,
+        const ssp<GlobalOffsetsMapping> &leaderGM,
+        const std::vector<MPI_int> &leaderTargetRanks,
+        const MPIInfo &mpi)
+    {
+        constexpr rowsize Rs = std::remove_reference_t<AdjPair>::t_arr::rs;
+        return ComputeFollowMapFromAdj(
+            static_cast<const ArrayAdjacencyPair<Rs> &>(f2l),
+            nFollower, leaderGM, leaderTargetRanks, mpi);
+    }
+
     // =================================================================
     // ReorderPlan::build
     // =================================================================
@@ -240,8 +267,23 @@ namespace DNDS::Geom
             if (!trackedPair.father || shouldSkip(kind))
                 return;
 
+            // Require every built registered adjacency to NOT be in local state.
+            // Local entries get treated as globals during follow/remap lookup
+            // resolution, corrupting topology.  Adj_Unknown is acceptable
+            // (legacy adjs built before per-adj idx tracking was added).
+            DNDS_check_throw_info(
+                !trackedPair.idx.isLocal(),
+                fmt::format("buildReorderRegistry: {} entries must NOT be "
+                            "Adj_PointToLocal before reorder (currently {})",
+                            adjKindName(kind), int(trackedPair.idx.state())));
+
             AdjRemapFn remap = [&trackedPair](const PermutationTransfer::LookupResult &lookup)
             {
+                // Remap owned source rows only. Ghost/son rows describe the
+                // pre-reorder ghost layout and are rebuilt by the normal
+                // BuildGhost* pipeline after ReorderEntities(); resolving them
+                // here would require extra pull sets and can map stale ghost
+                // topology through the wrong lookup.
                 index nRows = trackedPair.father->Size();
                 for (index i = 0; i < nRows; i++)
                     for (rowsize j = 0; j < trackedPair.RowSize(i); j++)
@@ -301,7 +343,11 @@ namespace DNDS::Geom
             regComp(EntityKind::Cell, cell2nodePbi, "cell2nodePbi");
             regComp(EntityKind::Bnd, bnd2nodePbi, "bnd2nodePbi");
             if (!destroyKinds.count(EntityKind::Face))
+            {
                 regComp(EntityKind::Face, face2nodePbi, "face2nodePbi");
+                if (cell2facePbi.father)
+                    regComp(EntityKind::Cell, cell2facePbi, "cell2facePbi");
+            }
             if (!destroyKinds.count(EntityKind::Edge))
             {
                 regComp(EntityKind::Edge, edge2nodePbi, "edge2nodePbi");
@@ -365,26 +411,37 @@ namespace DNDS::Geom
                 }
         };
 
-        // Cell as target (from: bnd2cell, face2cell, node2cell, cell2cell)
+        // Cell as target (from: bnd2cell, face2cell, node2cell, cell2cell, edge2cell)
         auto cellGM = reg.getGlobalMapping(EntityKind::Cell);
         collectPS(EntityKind::Cell, bnd2cell, cellGM);
         collectPS(EntityKind::Cell, node2cell, cellGM);
         collectPS(EntityKind::Cell, cell2cell, cellGM);
         if (!shouldSkip(Adj::Face2Cell))
             collectPS(EntityKind::Cell, face2cell, cellGM);
+        if (!shouldSkip(Adj::Edge2Cell))
+            collectPS(EntityKind::Cell, edge2cell, cellGM);
 
-        // Node as target (from: cell2node, bnd2node, face2node)
+        // Node as target (from: cell2node, bnd2node, face2node, edge2node)
         auto nodeGM = reg.getGlobalMapping(EntityKind::Node);
         collectPS(EntityKind::Node, cell2node, nodeGM);
         collectPS(EntityKind::Node, bnd2node, nodeGM);
         if (!shouldSkip(Adj::Face2Node))
             collectPS(EntityKind::Node, face2node, nodeGM);
+        if (!shouldSkip(Adj::Edge2Node))
+            collectPS(EntityKind::Node, edge2node, nodeGM);
 
         // Bnd as target (from: node2bnd, face2bnd)
         auto bndGM = reg.getGlobalMapping(EntityKind::Bnd);
         collectPS(EntityKind::Bnd, node2bnd, bndGM);
         if (!shouldSkip(Adj::Face2Bnd))
             collectPS(EntityKind::Bnd, face2bnd, bndGM);
+
+        // Face as target (from: cell2face, bnd2face) when face arrays are built
+        auto faceGM = reg.getGlobalMapping(EntityKind::Face);
+        if (!shouldSkip(Adj::Cell2Face))
+            collectPS(EntityKind::Face, cell2face, faceGM);
+        if (!shouldSkip(Adj::Bnd2Face))
+            collectPS(EntityKind::Face, bnd2face, faceGM);
 
         // Edge as target (from: cell2edge)
         auto edgeGM = reg.getGlobalMapping(EntityKind::Edge);
@@ -452,32 +509,65 @@ namespace DNDS::Geom
             index nFollower = followerGM->RLengths()[mpi.rank];
 
             std::vector<MPI_int> followMap;
+            // ── Follower → Cell ──
             if (spec.follower2leader == Adj::Node2Cell && node2cell.father)
             {
-                followMap = ComputeFollowMapFromAdj(
-                    static_cast<const tAdjPair &>(node2cell),
-                    nFollower, reg.getGlobalMapping(spec.leader),
-                    leaderIt->second, mpi);
+                followMap = followVia(
+                    node2cell, nFollower,
+                    reg.getGlobalMapping(spec.leader), leaderIt->second, mpi);
             }
             else if (spec.follower2leader == Adj::Bnd2Cell && bnd2cell.father)
             {
-                followMap = ComputeFollowMapFromAdj(
-                    static_cast<const tAdj2Pair &>(bnd2cell),
-                    nFollower, reg.getGlobalMapping(spec.leader),
-                    leaderIt->second, mpi);
+                followMap = followVia(
+                    bnd2cell, nFollower,
+                    reg.getGlobalMapping(spec.leader), leaderIt->second, mpi);
             }
-            else if (spec.follower2leader == Adj::Node2Bnd && node2bnd.father)
+            else if (spec.follower2leader == Adj::Face2Cell && face2cell.father)
             {
-                followMap = ComputeFollowMapFromAdj(
-                    static_cast<const tAdjPair &>(node2bnd),
-                    nFollower, reg.getGlobalMapping(spec.leader),
-                    leaderIt->second, mpi);
+                followMap = followVia(
+                    face2cell, nFollower,
+                    reg.getGlobalMapping(spec.leader), leaderIt->second, mpi);
+            }
+            else if (spec.follower2leader == Adj::Edge2Cell && edge2cell.father)
+            {
+                followMap = followVia(
+                    edge2cell, nFollower,
+                    reg.getGlobalMapping(spec.leader), leaderIt->second, mpi);
+            }
+            // ── Follower → Node ──
+            else if (spec.follower2leader == Adj::Cell2Node && cell2node.father)
+            {
+                followMap = followVia(
+                    cell2node, nFollower,
+                    reg.getGlobalMapping(spec.leader), leaderIt->second, mpi);
+            }
+            else if (spec.follower2leader == Adj::Bnd2Node && bnd2node.father)
+            {
+                followMap = followVia(
+                    bnd2node, nFollower,
+                    reg.getGlobalMapping(spec.leader), leaderIt->second, mpi);
+            }
+            else if (spec.follower2leader == Adj::Face2Node && face2node.father)
+            {
+                followMap = followVia(
+                    face2node, nFollower,
+                    reg.getGlobalMapping(spec.leader), leaderIt->second, mpi);
+            }
+            else if (spec.follower2leader == Adj::Edge2Node && edge2node.father)
+            {
+                followMap = followVia(
+                    edge2node, nFollower,
+                    reg.getGlobalMapping(spec.leader), leaderIt->second, mpi);
             }
             else
             {
                 DNDS_assert_info(false,
-                                 fmt::format("resolveFollows: unsupported follow adj {}",
-                                             adjKindName(spec.follower2leader)));
+                                 fmt::format("resolveFollows: unsupported or missing "
+                                             "follow adjacency {} (follower {} → leader {}).  "
+                                             "The follower→leader adj must be built.",
+                                             adjKindName(spec.follower2leader),
+                                             entityKindName(spec.follower),
+                                             entityKindName(spec.leader)));
             }
 
             allMaps[spec.follower] = std::move(followMap);
@@ -542,10 +632,31 @@ namespace DNDS::Geom
                 {
                     face2nodePbi.father.reset();
                     face2nodePbi.son.reset();
+                    cell2facePbi.father.reset();
+                    cell2facePbi.son.reset();
                 }
                 adjFacialState = Adj_Unknown;
                 adjC2FState = Adj_Unknown;
                 adjC2CFaceState = Adj_Unknown;
+                // Invalidate side caches
+                bnd2faceV.clear();
+                face2bndM.clear();
+            }
+            if (kind == EntityKind::Edge)
+            {
+                destroyAdj(cell2edge);
+                destroyAdj(edge2node);
+                destroyAdj(edge2cell);
+                edgeElemInfo.father.reset();
+                edgeElemInfo.son.reset();
+                if (isPeriodic)
+                {
+                    cell2edgePbi.father.reset();
+                    cell2edgePbi.son.reset();
+                    edge2nodePbi.father.reset();
+                    edge2nodePbi.son.reset();
+                }
+                adjEdgeState = Adj_Unknown;
             }
         }
 
@@ -565,6 +676,12 @@ namespace DNDS::Geom
                     cellElemInfo.father->pLGlobalMapping = cell2node.father->pLGlobalMapping;
                 if (cell2cellOrig.father)
                     cell2cellOrig.father->pLGlobalMapping = cell2node.father->pLGlobalMapping;
+                if (cell2face.father)
+                    cell2face.father->pLGlobalMapping = cell2node.father->pLGlobalMapping;
+                if (cell2cellFace.father)
+                    cell2cellFace.father->pLGlobalMapping = cell2node.father->pLGlobalMapping;
+                if (cell2edge.father)
+                    cell2edge.father->pLGlobalMapping = cell2node.father->pLGlobalMapping;
             }
             else if (kind == EntityKind::Node && coords.father)
             {
@@ -585,12 +702,18 @@ namespace DNDS::Geom
                 face2node.father->createGlobalMapping();
                 if (faceElemInfo.father)
                     faceElemInfo.father->pLGlobalMapping = face2node.father->pLGlobalMapping;
+                if (face2cell.father)
+                    face2cell.father->pLGlobalMapping = face2node.father->pLGlobalMapping;
+                if (face2bnd.father)
+                    face2bnd.father->pLGlobalMapping = face2node.father->pLGlobalMapping;
             }
             else if (kind == EntityKind::Edge && edge2node.father)
             {
                 edge2node.father->createGlobalMapping();
                 if (edgeElemInfo.father)
                     edgeElemInfo.father->pLGlobalMapping = edge2node.father->pLGlobalMapping;
+                if (edge2cell.father)
+                    edge2cell.father->pLGlobalMapping = edge2node.father->pLGlobalMapping;
             }
         }
 
@@ -617,11 +740,35 @@ namespace DNDS::Geom
                 reattach(cell2cellOrig);
                 if (isPeriodic)
                     reattach(cell2nodePbi);
+                if (cell2face.father)
+                    reattach(cell2face);
+                if (cell2cellFace.father)
+                    reattach(cell2cellFace);
+                if (cell2edge.father)
+                    reattach(cell2edge);
+                if (isPeriodic)
+                {
+                    if (cell2facePbi.father)
+                        reattach(cell2facePbi);
+                    if (cell2edgePbi.father)
+                        reattach(cell2edgePbi);
+                }
             }
             else if (kind == EntityKind::Node)
             {
                 reattach(coords);
                 reattach(node2nodeOrig);
+                // Optional node companions
+                if (coordsElevDisp.father)
+                {
+                    reattach(coordsElevDisp);
+                    coordsElevDisp.father->pLGlobalMapping = coords.father->pLGlobalMapping;
+                }
+                if (nodeWallDist.father)
+                {
+                    reattach(nodeWallDist);
+                    nodeWallDist.father->pLGlobalMapping = coords.father->pLGlobalMapping;
+                }
             }
             else if (kind == EntityKind::Bnd)
             {
@@ -631,6 +778,36 @@ namespace DNDS::Geom
                 reattach(bnd2bndOrig);
                 if (isPeriodic)
                     reattach(bnd2nodePbi);
+                if (bnd2face.father)
+                    reattach(bnd2face);
+            }
+            else if (kind == EntityKind::Face)
+            {
+                reattach(face2node);
+                reattach(face2cell);
+                reattach(face2bnd);
+                reattach(cell2face);
+                reattach(bnd2face);
+                reattach(cell2cellFace);
+                reattach(faceElemInfo);
+                if (isPeriodic)
+                {
+                    reattach(face2nodePbi);
+                    if (cell2facePbi.father)
+                        reattach(cell2facePbi);
+                }
+            }
+            else if (kind == EntityKind::Edge)
+            {
+                reattach(cell2edge);
+                reattach(edge2node);
+                reattach(edge2cell);
+                reattach(edgeElemInfo);
+                if (isPeriodic)
+                {
+                    reattach(cell2edgePbi);
+                    reattach(edge2nodePbi);
+                }
             }
         }
         // Also reattach inverse adjacencies if they exist
@@ -638,6 +815,39 @@ namespace DNDS::Geom
             reattach(node2cell);
         if (node2bnd.father)
             reattach(node2bnd);
+
+        // Re-wire target mappings after reattach/recreate. Reorder can replace
+        // the source/target transformers while preserving adjacencies; stale
+        // AdjIndexInfo target mappings would make later toLocal/toGlobal use old
+        // ghost mappings.
+        if (cell2node.father && coords.trans.pLGhostMapping)
+            cell2node.idx.wireTargetMapping(coords.trans.pLGhostMapping);
+        if (cell2cell.father && cell2node.trans.pLGhostMapping)
+            cell2cell.idx.wireTargetMapping(cell2node.trans.pLGhostMapping);
+        if (bnd2cell.father && cell2node.trans.pLGhostMapping)
+            bnd2cell.idx.wireTargetMapping(cell2node.trans.pLGhostMapping);
+        if (bnd2node.father && coords.trans.pLGhostMapping)
+            bnd2node.idx.wireTargetMapping(coords.trans.pLGhostMapping);
+        if (node2cell.father && cell2node.trans.pLGhostMapping)
+            node2cell.idx.wireTargetMapping(cell2node.trans.pLGhostMapping);
+        if (node2bnd.father && bnd2node.trans.pLGhostMapping)
+            node2bnd.idx.wireTargetMapping(bnd2node.trans.pLGhostMapping);
+        if (cell2face.father && face2node.trans.pLGhostMapping)
+            cell2face.idx.wireTargetMapping(face2node.trans.pLGhostMapping);
+        if (bnd2face.father && face2node.trans.pLGhostMapping)
+            bnd2face.idx.wireTargetMapping(face2node.trans.pLGhostMapping);
+        if (face2node.father && coords.trans.pLGhostMapping)
+            face2node.idx.wireTargetMapping(coords.trans.pLGhostMapping);
+        if (face2cell.father && cell2node.trans.pLGhostMapping)
+            face2cell.idx.wireTargetMapping(cell2node.trans.pLGhostMapping);
+        if (face2bnd.father && bnd2node.trans.pLGhostMapping)
+            face2bnd.idx.wireTargetMapping(bnd2node.trans.pLGhostMapping);
+        if (cell2edge.father && edge2node.trans.pLGhostMapping)
+            cell2edge.idx.wireTargetMapping(edge2node.trans.pLGhostMapping);
+        if (edge2node.father && coords.trans.pLGhostMapping)
+            edge2node.idx.wireTargetMapping(coords.trans.pLGhostMapping);
+        if (edge2cell.father && cell2node.trans.pLGhostMapping)
+            edge2cell.idx.wireTargetMapping(cell2node.trans.pLGhostMapping);
 
         // Step 6: Update idx states
         auto markGlobalIfBuilt = [](auto &trackedPair)
@@ -675,6 +885,15 @@ namespace DNDS::Geom
         vtkCell2node.clear();
         nodeRecreated2nodeLocal.clear();
         localPartitionStarts.clear();
+        cell2cellFaceVLocalParts.clear();
+
+        // Invalidate side caches when Face or Bnd was reordered (or destroyed above)
+        if (plan.reorderedKinds.count(EntityKind::Face) ||
+            plan.reorderedKinds.count(EntityKind::Bnd))
+        {
+            bnd2faceV.clear();
+            face2bndM.clear();
+        }
     }
 
     // =================================================================
@@ -683,6 +902,21 @@ namespace DNDS::Geom
 
     void UnstructuredMesh::ReorderLocalCells(int nParts, int nPartsInner)
     {
+        // Guard against edge-interpolated state.
+        // ReorderLocalCells runs before InterpolateFace and InterpolateEdge in
+        // the standard pipeline.  Calling it after edge interpolation would
+        // silently corrupt cell2edge, edge2cell, PBI arrays, and edge mappings
+        // because none of the edge local/global conversions, row transfers, or
+        // re-wire operations are implemented here.
+        // Face/cell2face/face2cell/C2CFace have partial handling (L2G/G2L,
+        // remap, relocate, re-wire) and are intentionally NOT rejected by this
+        // guard — see the TODO comment below for remaining face gaps.
+        DNDS_check_throw_info(
+            adjEdgeState == Adj_Unknown && !cell2edge.father,
+            "ReorderLocalCells: edges are built (adjEdgeState=" + std::to_string(int(adjEdgeState)) + ").  ReorderLocalCells does not handle edge adjacency "
+                                                                                                      "remapping; call it before InterpolateEdge.  "
+                                                                                                      "If you need to reorder after edge interpolation, use "
+                                                                                                      "ReorderEntities instead.");
         // TODO(reorder-edges): this function does not handle cell2face/face2cell
         // or edge adjacencies (cell2edge, cell2edgePbi, edge2cell).  In the
         // standard pipeline ReorderLocalCells runs before InterpolateFace and
