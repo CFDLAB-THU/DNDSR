@@ -158,7 +158,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            cmake ninja-build ccache \
+            cmake ninja-build ccache doxygen \
             libopenmpi-dev openmpi-bin
 
       # ------------------------------------------------------------------
@@ -172,8 +172,10 @@ jobs:
           python-version: "3.12"
 
       # ------------------------------------------------------------------
-      # Clean cached directories so actions/cache is the sole source of
-      # truth (matters on self-hosted runners with persistent filesystems)
+      # 4. Clean cached directories so actions/cache is the sole source
+      #    of truth (matters on self-hosted runners with persistent
+      #    filesystems).  Must happen before cfd_externals build so the
+      #    install/ directory is clean for caching.
       # ------------------------------------------------------------------
       - name: Clean cached directories
         run: |
@@ -183,10 +185,20 @@ jobs:
                  external/nanoflann external/nlohmann external/pybind11 \
                  external/pybind11_json
           rm -rf external/cfd_externals/install
-          rm -rf venv
 
       # ------------------------------------------------------------------
-      # 4. Header-only externals (Eigen, Boost, CGAL, fmt, pybind11, ...)
+      # 4b. Minimal Python venv for cfd_externals build (Cantera deps)
+      # ------------------------------------------------------------------
+      - name: Create minimal Python venv
+        run: |
+          git submodule update --init --depth=1 external/cfd_externals
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install -r external/cfd_externals/requirements.txt
+
+      # ------------------------------------------------------------------
+      # 5. Header-only externals (Eigen, Boost, CGAL, fmt, pybind11, ...)
       # ------------------------------------------------------------------
       - name: Restore header-only externals cache
         id: cache-headeronlys
@@ -235,7 +247,7 @@ jobs:
           key: headeronlys-v1
 
       # ------------------------------------------------------------------
-      # 5. cfd_externals (zlib, hdf5, cgns, parmetis)
+      # 6. cfd_externals (zlib, hdf5, cgns, parmetis)
       # ------------------------------------------------------------------
       - name: Restore cfd_externals cache
         id: cache-cfd-ext
@@ -265,21 +277,19 @@ jobs:
           key: cfd-ext-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}
 
       # ------------------------------------------------------------------
-      # 6. Python venv
+      # 7. Full Python environment (h5py against cfd_externals HDF5, etc.)
       # ------------------------------------------------------------------
       - name: Restore Python venv cache
         id: cache-venv
         uses: actions/cache/restore@v4
         with:
           path: venv
-          key: venv-ci-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}-${{ hashFiles('requirements.txt', 'scripts/install_python_deps.sh') }}
+          key: venv-ci-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}-${{ hashFiles('requirements.txt', 'external/cfd_externals/requirements.txt', 'scripts/install_python_deps.sh') }}
 
-      - name: Install Python dependencies
+      - name: Install Python dependencies (full)
         if: steps.cache-venv.outputs.cache-hit != 'true'
         run: |
-          python3 -m venv venv
           source venv/bin/activate
-          pip install --upgrade pip
           PIP=$PWD/venv/bin/pip ./scripts/install_python_deps.sh
 
       - name: Save Python venv cache
@@ -287,10 +297,10 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: venv
-          key: venv-ci-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}-${{ hashFiles('requirements.txt', 'scripts/install_python_deps.sh') }}
+          key: venv-ci-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}-${{ hashFiles('requirements.txt', 'external/cfd_externals/requirements.txt', 'scripts/install_python_deps.sh') }}
 
       # ------------------------------------------------------------------
-      # 7. ccache
+      # 8. ccache
       # ------------------------------------------------------------------
       - name: Restore ccache
         if: needs.resolve.outputs.cache-ccache == 'true'
@@ -307,7 +317,7 @@ jobs:
         run: ccache --max-size=5G
 
       # ------------------------------------------------------------------
-      # 8. CMake configure
+      # 9. CMake configure
       # ------------------------------------------------------------------
       - name: CMake configure
         run: |
@@ -320,16 +330,16 @@ jobs:
           DNDS_TEST_MPIEXTRA: "--oversubscribe"
 
       # ------------------------------------------------------------------
-      # 9. Build C++ tests and solver executables
+      # 10. Build C++ tests and solver executables
       # ------------------------------------------------------------------
       - name: Build C++ unit tests
         run: cmake --build build -t all_unit_tests -j$(nproc)
 
       - name: Build Euler solvers
-        run: cmake --build build -t euler euler3D eulerSA eulerSA3D euler2EQ euler2EQ3D -j$(nproc)
+        run: cmake --build build -t euler euler3D eulerSA eulerSA3D euler2EQ euler2EQ3D eulerEX eulerEX3D -j$(nproc)
 
       # ------------------------------------------------------------------
-      # 10. Build pybind11 targets
+      # 11. Build pybind11 targets
       # ------------------------------------------------------------------
       - name: Build pybind11 modules
         run: |
@@ -346,13 +356,17 @@ jobs:
           cmake --install build --component py
 
       # ------------------------------------------------------------------
-      # 11. Run C++ tests
+      # 12. Run C++ tests
       # ------------------------------------------------------------------
       - name: Run C++ tests
-        run: ctest --test-dir build --output-on-failure --timeout 300
+        timeout-minutes: 30
+        run: ctest --test-dir build --output-on-failure --timeout 600
+        env:
+          DNDS_MECH_PATH: ${{ github.workspace }}/external/cfd_externals/install/data
+          CANTERA_DATA: ${{ github.workspace }}/external/cfd_externals/install/data
 
       # ------------------------------------------------------------------
-      # 12. Run Python tests
+      # 13. Run Python tests
       # ------------------------------------------------------------------
       - name: Run Python tests
         run: |
