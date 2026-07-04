@@ -254,7 +254,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: external/cfd_externals/install
-          key: cfd-ext-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}
+          key: cfd-ext-v2-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}
 
       - name: Build cfd_externals
         if: steps.cache-cfd-ext.outputs.cache-hit != 'true'
@@ -275,7 +275,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: external/cfd_externals/install
-          key: cfd-ext-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}
+          key: cfd-ext-v2-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}
 
       # ------------------------------------------------------------------
       # 7. Full Python environment (h5py against cfd_externals HDF5, etc.)
