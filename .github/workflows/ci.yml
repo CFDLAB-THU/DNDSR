@@ -266,6 +266,7 @@ jobs:
           fi
           rm -rf external/cfd_externals
           git submodule update --init --recursive --depth=1
+          source venv/bin/activate
           cd external/cfd_externals
           CC=mpicc CXX=mpicxx python3 cfd_externals_build.py
 
