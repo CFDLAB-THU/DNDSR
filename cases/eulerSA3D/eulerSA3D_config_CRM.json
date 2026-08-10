@@ -14,7 +14,7 @@
         "_tail": 0
     },
     "convergenceControl": {
-        "nTimeStepInternal": 15000,
+        "nTimeStepInternal": 50000,
         "rhsThresholdInternal": 1e-7,
         "res_base": 0.0,
         "useVolWiseResidual": true
@@ -30,7 +30,7 @@
         "nRestartOutC": 10,
         "nRestartOut": 100,
         "nRestartOutCInternal": 1000,
-        "nRestartOutInternal": 1000000000,
+        "nRestartOutInternal": 5000,
         "dataOutAtInit": true,
         "tDataOut": 3e+200
     },
@@ -55,9 +55,10 @@
         // "rectifyNearPlane": 2,
         // "rectifyNearPlaneThres": 1e-4,
         "meshFile": "../data/mesh/CARDC.ZhangYB.WB.ae2.75deg.Unstructured.C_DNDSR.cgns",
-        "outPltName": "../data/out/CRM_0/O4_0_NoDriVRes",
+        "meshFilePartitionedInput": "../data/mesh/CARDC.ZhangYB.WB.ae2.75deg.Unstructured.C_DNDSR.cgns_part_560.dnds.h5",
+        "outPltName": "../data/out/CRM_0R/out",
         "outPltMode": 1,
-        "readMeshMode": 1,
+        "readMeshMode": 2,
         "outPltTecplotFormat": false,
         "outPltVTKFormat": false,
         "outPltVTKHDFFormat": true,
@@ -237,7 +238,7 @@
             "targetCL": 0.5,
             "CLIncrementRelax": 0.25,
             "nIterStartDrive": 1000000,
-            "nIterConvergeMin": 500,
+            "nIterConvergeMin": 5000000,
             "CLconvergeThreshold": 0.001,
             "CLconvergeWindow": 50
         },
@@ -256,9 +257,9 @@
     "bcSettings": [],
     "restartState": {
         "iStep": 1,
-        "iStepInternal": 5000,
+        "iStepInternal": 10000,
         "odeCodePrev": -1,
-        "lastRestartFile": "../data/out/CRM_0/O2_starter__C_p2800_restart.dir",
+        "lastRestartFile": "../data/out/CRM_0R/out-O2-starter__1_10000_p2800.restart.dnds.h5",
         "otherRestartFile": "",
         "otherRestartStoreDim": [
             0
