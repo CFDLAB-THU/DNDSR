@@ -216,6 +216,7 @@ namespace DNDS::Euler
         int SADESMode = 1;
         int SAVersion = 0;
         int ransSARotCorrection = 1;
+        RANS::SAConfig saConfig;
 
         void evaluate(TU &ret, TJac &jac, const TU &U, const TDiffU &GradU,
                       const Geom::tPoint &, const SourceCellAux &aux,
@@ -231,7 +232,8 @@ namespace DNDS::Euler
             {
                 RANS::GetSource_SA<Traits::dim>(U, GradU, muGas, aux.muf, aux.gammaEq,
                                                 d, lLES, aux.hMax, SADESMode,
-                                                retInc, ransSARotCorrection, mode, SAVersion);
+                                                retInc, ransSARotCorrection, mode,
+                                                saConfig, SAVersion);
             };
             if (Mode == 0)
                 call(0);
@@ -256,6 +258,7 @@ namespace DNDS::Euler
 
         real muGas = 1;
         real SADESScale = veryLargeReal;
+        RANS::KOmegaSSTConfig config;
 
         void evaluate(TU &ret, TJac &jac, const TU &U, const TDiffU &GradU,
                       const Geom::tPoint &, const SourceCellAux &aux,
@@ -266,7 +269,7 @@ namespace DNDS::Euler
             auto call = [&](int mode)
             {
                 RANS::GetSource_SST<Traits::dim>(U, GradU, aux.muf, aux.dWallC,
-                                                 aux.hMax * SADESScale, retInc, mode);
+                                                 aux.hMax * SADESScale, retInc, mode, config);
             };
             if (Mode == 0)
                 call(0);
@@ -288,6 +291,7 @@ namespace DNDS::Euler
         using TU = typename Traits::TU;
         using TJac = typename Traits::TJacobianU;
         using TDiffU = typename Traits::TDiffU;
+        RANS::KOmegaConfig config;
 
         void evaluate(TU &ret, TJac &jac, const TU &U, const TDiffU &GradU,
                       const Geom::tPoint &, const SourceCellAux &aux,
@@ -297,7 +301,7 @@ namespace DNDS::Euler
             retInc.setZero(U.size());
             auto call = [&](int mode)
             {
-                RANS::GetSource_KOWilcox<Traits::dim>(U, GradU, aux.muf, aux.dWallC, retInc, mode);
+                RANS::GetSource_KOWilcox<Traits::dim>(U, GradU, aux.muf, aux.dWallC, retInc, mode, config);
             };
             if (Mode == 0)
                 call(0);
@@ -319,6 +323,7 @@ namespace DNDS::Euler
         using TU = typename Traits::TU;
         using TJac = typename Traits::TJacobianU;
         using TDiffU = typename Traits::TDiffU;
+        RANS::RKEConfig config;
 
         void evaluate(TU &ret, TJac &jac, const TU &U, const TDiffU &GradU,
                       const Geom::tPoint &, const SourceCellAux &aux,
@@ -328,7 +333,7 @@ namespace DNDS::Euler
             retInc.setZero(U.size());
             auto call = [&](int mode)
             {
-                RANS::GetSource_RealizableKe<Traits::dim>(U, GradU, aux.muf, aux.dWallC, retInc, mode);
+                RANS::GetSource_RealizableKe<Traits::dim>(U, GradU, aux.muf, aux.dWallC, retInc, mode, config);
             };
             if (Mode == 0)
                 call(0);
@@ -604,18 +609,20 @@ namespace DNDS::Euler
             contribs.push_back(SASourceContributor<model>{
                 muGasCode,
                 settings.SADESScale,
-                settings.SADESMode, settings.SAVersion, settings.ransSARotCorrection});
+                settings.SADESMode, settings.SAVersion, settings.ransSARotCorrection,
+                settings.saConfig});
             break;
         case RANS_KOSST:
             contribs.push_back(SSTSourceContributor<model>{
                 muGasCode,
-                settings.SADESScale});
+                settings.SADESScale,
+                settings.kOmegaSSTConfig});
             break;
         case RANS_KOWilcox:
-            contribs.push_back(WilcoxSourceContributor<model>{});
+            contribs.push_back(WilcoxSourceContributor<model>{settings.kOmegaConfig});
             break;
         case RANS_RKE:
-            contribs.push_back(RKESourceContributor<model>{});
+            contribs.push_back(RKESourceContributor<model>{settings.rkeConfig});
             break;
         default:
             break;

@@ -24,6 +24,7 @@
 #include "Euler.hpp"
 #include "Gas.hpp"
 #include "CLDriver.hpp"
+#include "RANS_ke.hpp"
 #include <cmath>
 #include <unordered_set>
 #include <string>
@@ -366,8 +367,12 @@ namespace DNDS::Euler
         bool ppEpsIsRelaxed = false;       ///< Use relaxed positivity-preserving epsilon.
         /// @}
 
-        real RANSTopLimit = 1e5;     ///< Upper clamp for SA nutilde
-        real RANSBottomLimit = 0.01; ///< Lower clamp for RANS turbulence variables.
+        RANS::SAConfig saConfig;               ///< Spalart-Allmaras kernel configuration.
+        RANS::KOmegaConfig kOmegaConfig;       ///< Wilcox k-omega kernel configuration.
+        RANS::KOmegaSSTConfig kOmegaSSTConfig; ///< Menter k-omega SST kernel configuration.
+        RANS::RKEConfig rkeConfig;             ///< Realizable k-epsilon kernel configuration.
+        real RANSTopLimit = 1e5;               ///< Upper clamp for SA nutilde
+        real RANSBottomLimit = 0.01;           ///< Lower clamp for RANS turbulence variables.
 
         /// @name Riemann Solver Configuration
         /// @{
@@ -734,6 +739,14 @@ namespace DNDS::Euler
             DNDS_FIELD(uRecBetaCompressPower,   "uRec beta compression power");
             DNDS_FIELD(forceVolURecBeta,        "Force volume uRec beta");
             DNDS_FIELD(ppEpsIsRelaxed,          "Positivity-preserving epsilon is relaxed");
+            config.field_section(&T::saConfig, "SAConfig",
+                                 "Spalart-Allmaras hard-limit settings");
+            config.field_section(&T::kOmegaConfig, "KOmegaConfig",
+                                 "Wilcox k-omega kernel settings");
+            config.field_section(&T::kOmegaSSTConfig, "KOmegaSSTConfig",
+                                 "Menter k-omega SST kernel settings");
+            config.field_section(&T::rkeConfig, "RKEConfig",
+                                 "Realizable k-epsilon kernel settings");
             DNDS_FIELD(RANSTopLimit,         "RANS variable top limit, currently for SA nutilde",
                        DNDS::Config::range(0.0));
             DNDS_FIELD(RANSBottomLimit,         "RANS variable bottom limit",

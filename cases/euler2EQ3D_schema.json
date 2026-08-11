@@ -1406,6 +1406,66 @@
                     "default": false,
                     "description": "Positivity-preserving epsilon is relaxed"
                 },
+                "SAConfig": {
+                    "type": "object",
+                    "description": "Spalart-Allmaras hard-limit settings",
+                    "properties": {
+                        "productionLimit": {
+                            "type": "number",
+                            "default": 100000.0,
+                            "description": "SA production-to-destruction limit multiplier",
+                            "minimum": 0.0
+                        }
+                    }
+                },
+                "KOmegaConfig": {
+                    "type": "object",
+                    "description": "Wilcox k-omega kernel settings",
+                    "properties": {
+                        "turbulentViscosityLimit": {
+                            "type": "number",
+                            "default": 100000.0,
+                            "description": "Wilcox k-omega turbulent-viscosity limit multiplier",
+                            "minimum": 0.0
+                        },
+                        "productionLimit": {
+                            "type": "number",
+                            "default": 20.0,
+                            "description": "Wilcox k-omega production limit multiplier",
+                            "minimum": 0.0
+                        }
+                    }
+                },
+                "KOmegaSSTConfig": {
+                    "type": "object",
+                    "description": "Menter k-omega SST kernel settings",
+                    "properties": {
+                        "turbulentViscosityLimit": {
+                            "type": "number",
+                            "default": 100000.0,
+                            "description": "SST turbulent-viscosity limit multiplier",
+                            "minimum": 0.0
+                        },
+                        "productionLimit": {
+                            "type": "number",
+                            "default": 20.0,
+                            "description": "SST production limit multiplier",
+                            "minimum": 0.0
+                        }
+                    }
+                },
+                "RKEConfig": {
+                    "type": "object",
+                    "description": "Realizable k-epsilon kernel settings",
+                    "properties": {
+                        "turbulentViscosityLimit": {
+                            "type": "number",
+                            "default": 100000.0,
+                            "description": "Realizable k-epsilon turbulent-viscosity limit multiplier",
+                            "minimum": 0.0
+                        }
+                    }
+                },
                 "RANSTopLimit": {
                     "type": "number",
                     "default": 100000.0,

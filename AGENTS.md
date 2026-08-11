@@ -323,6 +323,9 @@ compatibility.
 Full style guide (naming, formatting, includes, error handling, Doxygen,
 Python conventions): **`docs/guides/style_guide.md`**
 
+Formatting is handled by the pre-commit hook; do not run formatters manually.
+If an explicit formatting run is needed, use `scripts/run-clang-format.sh`.
+
 When reporting audit or review findings to a human user, use numbered findings
 (`1.`, `2.`, `3.`) rather than bullets so each issue can be referenced
 unambiguously in follow-up discussion.
@@ -414,9 +417,11 @@ For very small mechanical changes, a short message is acceptable.
 
 Every commit message must end with a separate trailing line:
 
-    committed by opencode with model <model name>
+    committed by <agent harness> with model <model name>
 
-where `<model name>` is replaced by the actual model identifier (e.g. `deepseek-v4-pro`). This line must appear after a blank line separating it from the body (or subject, if no body).
+Use the actual agent harness name (for example, `codex` or `opencode`) and model
+identifier. This line must appear after a blank line separating it from the body
+(or subject, if no body).
 
 **Read-only by default.** You may use `gh` freely for read operations (viewing
 issues, PRs, checks, releases, diffs, comments). **Do NOT use `gh` for any
