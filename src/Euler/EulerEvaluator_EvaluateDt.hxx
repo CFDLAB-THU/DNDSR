@@ -1814,6 +1814,7 @@ namespace DNDS::Euler
                                         d, lLES, hMax, settings.SADESMode,
                                         retInc,
                                         settings.ransSARotCorrection, mode,
+                                        settings.saConfig,
                                         settings.SAVersion);
             };
 
@@ -1857,11 +1858,11 @@ namespace DNDS::Euler
             auto sourceCaller = [&](int mode)
             {
                 if (settings.ransModel == RANSModel::RANS_KOSST)
-                    RANS::GetSource_SST<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWallC, vfv->GetCellMaxLenScale(iCell) * settings.SADESScale, retInc, mode);
+                    RANS::GetSource_SST<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWallC, vfv->GetCellMaxLenScale(iCell) * settings.SADESScale, retInc, mode, settings.kOmegaSSTConfig);
                 else if (settings.ransModel == RANSModel::RANS_KOWilcox)
-                    RANS::GetSource_KOWilcox<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWallC, retInc, mode);
+                    RANS::GetSource_KOWilcox<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWallC, retInc, mode, settings.kOmegaConfig);
                 else if (settings.ransModel == RANSModel::RANS_RKE)
-                    RANS::GetSource_RealizableKe<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWallC, retInc, mode);
+                    RANS::GetSource_RealizableKe<dim>(UMeanXyFixed, DiffUxy, mufPhy, dWallC, retInc, mode, settings.rkeConfig);
             };
 
             if (Mode == 0)
@@ -2902,11 +2903,11 @@ namespace DNDS::Euler
                 real muRef = phys_.muRef();
                 real mufPhy = muEff(Uxy, T);
                 if (settings.ransModel == RANSModel::RANS_KOSST)
-                    mut = RANS::GetMut_SST<dim>(Uxy, GradU, mufPhy, dWall[iCell].mean());
+                    mut = RANS::GetMut_SST<dim>(Uxy, GradU, mufPhy, dWall[iCell].mean(), settings.kOmegaSSTConfig);
                 else if (settings.ransModel == RANSModel::RANS_KOWilcox)
-                    mut = RANS::GetMut_KOWilcox<dim>(Uxy, GradU, mufPhy, dWall[iCell].mean());
+                    mut = RANS::GetMut_KOWilcox<dim>(Uxy, GradU, mufPhy, dWall[iCell].mean(), settings.kOmegaConfig);
                 else if (settings.ransModel == RANSModel::RANS_RKE)
-                    mut = RANS::GetMut_RealizableKe<dim>(Uxy, GradU, mufPhy, dWall[iCell].mean());
+                    mut = RANS::GetMut_RealizableKe<dim>(Uxy, GradU, mufPhy, dWall[iCell].mean(), settings.rkeConfig);
             }
 
             return mut;
@@ -3039,11 +3040,11 @@ namespace DNDS::Euler
                 real muRef = phys_.muRef();
                 real mufPhy = muEff(Uxy, T);
                 if (settings.ransModel == RANSModel::RANS_KOSST)
-                    mut = RANS::GetMut_SST<dim>(Uxy, GradU, mufPhy, dWallCellMean(iCell));
+                    mut = RANS::GetMut_SST<dim>(Uxy, GradU, mufPhy, dWallCellMean(iCell), settings.kOmegaSSTConfig);
                 else if (settings.ransModel == RANSModel::RANS_KOWilcox)
-                    mut = RANS::GetMut_KOWilcox<dim>(Uxy, GradU, mufPhy, dWallCellMean(iCell));
+                    mut = RANS::GetMut_KOWilcox<dim>(Uxy, GradU, mufPhy, dWallCellMean(iCell), settings.kOmegaConfig);
                 else if (settings.ransModel == RANSModel::RANS_RKE)
-                    mut = RANS::GetMut_RealizableKe<dim>(Uxy, GradU, mufPhy, dWallCellMean(iCell));
+                    mut = RANS::GetMut_RealizableKe<dim>(Uxy, GradU, mufPhy, dWallCellMean(iCell), settings.rkeConfig);
             }
 
             return mut;

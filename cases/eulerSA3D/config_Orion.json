@@ -253,6 +253,9 @@ pInf = 0.01738424785487074
         "rsMeanValueEig": 1,
         // "ransEigScheme": 1,
         "ransForce2nd": 1,
+        "SAConfig": {
+            "productionLimit": 100
+        },
         "RANSTopLimit": 1e4,//!
         // "source2nd": 1,
         // "ransSource2nd": 1,

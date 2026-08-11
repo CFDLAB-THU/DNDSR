@@ -902,11 +902,11 @@ namespace DNDS::Euler
             {
                 real mut = 0;
                 if (settings.ransModel == RANSModel::RANS_KOSST)
-                    mut = RANS::GetMut_SST<dim>(uMean, GradUMeanXY, muf, dWallFace[iFace]);
+                    mut = RANS::GetMut_SST<dim>(uMean, GradUMeanXY, muf, dWallFace[iFace], settings.kOmegaSSTConfig);
                 else if (settings.ransModel == RANSModel::RANS_KOWilcox)
-                    mut = RANS::GetMut_KOWilcox<dim>(uMean, GradUMeanXY, muf, dWallFace[iFace]);
+                    mut = RANS::GetMut_KOWilcox<dim>(uMean, GradUMeanXY, muf, dWallFace[iFace], settings.kOmegaConfig);
                 else if (settings.ransModel == RANSModel::RANS_RKE)
-                    mut = RANS::GetMut_RealizableKe<dim>(uMean, GradUMeanXY, muf, dWallFace[iFace]);
+                    mut = RANS::GetMut_RealizableKe<dim>(uMean, GradUMeanXY, muf, dWallFace[iFace], settings.rkeConfig);
                 muTur = mut;
             }
             return muTur;
@@ -952,11 +952,11 @@ namespace DNDS::Euler
             if constexpr (Traits::has2EQ)
             {
                 if (settings.ransModel == RANSModel::RANS_KOSST)
-                    RANS::GetVisFlux_SST<dim>(UMeanXYC, DiffUxyPrimC, uNormC, muTur, dWallFace[iFace], mufPhy, VisFlux);
+                    RANS::GetVisFlux_SST<dim>(UMeanXYC, DiffUxyPrimC, uNormC, muTur, dWallFace[iFace], mufPhy, VisFlux, settings.kOmegaSSTConfig);
                 else if (settings.ransModel == RANSModel::RANS_KOWilcox)
-                    RANS::GetVisFlux_KOWilcox<dim>(UMeanXYC, DiffUxyPrimC, uNormC, muTur, dWallFace[iFace], mufPhy, VisFlux);
+                    RANS::GetVisFlux_KOWilcox<dim>(UMeanXYC, DiffUxyPrimC, uNormC, muTur, dWallFace[iFace], mufPhy, VisFlux, settings.kOmegaConfig);
                 else if (settings.ransModel == RANSModel::RANS_RKE)
-                    RANS::GetVisFlux_RealizableKe<dim>(UMeanXYC, DiffUxyPrimC, uNormC, muTur, dWallFace[iFace], mufPhy, VisFlux);
+                    RANS::GetVisFlux_RealizableKe<dim>(UMeanXYC, DiffUxyPrimC, uNormC, muTur, dWallFace[iFace], mufPhy, VisFlux, settings.rkeConfig);
             }
         }
 
