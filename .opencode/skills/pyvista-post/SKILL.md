@@ -2,7 +2,6 @@
 name: pyvista-post
 description: Use when rendering CFD VTKHDF output with pyvista. Covers camera control, layout design, colormaps, headless rendering, multiprocessing strategy, and video combination via ffmpeg. Trigger on pyvista, VTKHDF, render, screenshot, colormap, video, mp4, combine, or post-processing visualization.
 license: MIT
-compatibility: opencode
 ---
 
 # PyVista Post-Processing Skill

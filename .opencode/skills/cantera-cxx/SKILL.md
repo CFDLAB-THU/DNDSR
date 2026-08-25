@@ -2,7 +2,6 @@
 name: cantera-cxx
 description: Use when writing or modifying C++ code that uses Cantera for chemical kinetics, thermodynamics, and transport. Covers Solution creation, ThermoPhase state setting, Kinetics/Transport access, the established PIMPL isolation pattern, Jacobian assembly, and project-specific linkage/includes. Trigger on Cantera, ChemicalSource, chemical kinetics, reaction rates, setState_TP, newSolution, or YAML mechanisms.
 license: MIT
-compatibility: opencode
 ---
 
 # Cantera C++ API
