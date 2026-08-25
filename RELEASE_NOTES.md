@@ -1,3 +1,45 @@
+# 🚀 DNDSR v0.3.1 — Reactive-State Repair, RANS Controls & Shared Skills
+
+5 commits · 31 files changed · 1,412 insertions · 569 deletions
+
+This patch release hardens reactive-flow initialization and chemistry source evaluation, makes RANS model safety limits configurable, adds a periodic wave-mesh generator for Fourier studies, and shares repository-local skills between OpenCode and Codex.
+
+---
+
+## 🔥 Reactive-Flow Robustness
+
+- **Cell-mean species repair**: reactive species densities are projected back into a valid simplex after initialization and restart loading, using the same conservative correction policy as fixed-increment solution updates.
+- **Physical-state validation**: repaired cell means now report recoverable errors for non-finite states, invalid density, non-positive sensible internal energy, or temperature below the mechanism floor.
+- **Chemistry source-state repair**: reconstructed quadrature-point compositions are repaired in a temporary buffer before chemical source evaluation, while convective and diffusive transported species remain unprojected.
+- **MPI evaluator coverage**: added focused reactive cell-mean repair tests and registered them for the repository's multi-rank CTest matrix.
+
+---
+
+## 🌪️ Configurable RANS Hard Limits
+
+- **Spalart-Allmaras production cap**: introduced `SAConfig.productionLimit`; the default increases from 100 to `1e5` to recover ordinary-SA convergence, while the Orion case explicitly retains 100.
+- **Two-equation model controls**: exposed the existing production and turbulent-viscosity limits for Wilcox k-omega, SST, and realizable k-epsilon models without changing their historical defaults.
+- **End-to-end configuration wiring**: concrete RANS config objects now flow through viscosity, source, and viscous-flux kernels and are represented in all eight Euler JSON schemas.
+- **Focused regression coverage**: expanded RANS tests for defaults, JSON round-trips, and the physical effect of the SA production limit.
+
+---
+
+## 📐 Fourier Meshes & Case Records
+
+- **Periodic wave-mesh generator**: added `scripts/generate_8x8_wave_cgns.py`, parameterized by cell count, domain length, and origin so h/2h/4h meshes can share an aligned physical core.
+- **Configuration refresh**: recorded selected high-speed-cylinder and CRM configuration updates.
+- **Legacy plotting cleanup**: removed the superseded MATLAB and Tecplot helpers under `data/outUnsteady/`.
+
+---
+
+## 🛠️ Shared Agent Skills
+
+- **Codex discovery**: `.codex/skills` now points to `.opencode/skills`, keeping one maintained repository-local skill source for both agent environments.
+- **Codex-compatible metadata**: removed OpenCode-only frontmatter fields from the Cantera C++ and PyVista post-processing skills.
+- **Canonical PyVista renderer**: the post-processing skill now links to `workspace/detonation2d/render_detonation.py` instead of carrying a stale duplicate.
+
+---
+
 # 🚀 DNDSR v0.3.0 — Reactive Flows, Mesh Hardening & Developer Tooling
 
 210 commits · 227 files changed · 44,184 insertions · 3,301 deletions
