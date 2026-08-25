@@ -1931,6 +1931,107 @@ namespace DNDS::Euler
                 cxInc[iCell] = this->CompressInc(cx[iCell], cxInc[iCell] * alpha);
         }
 
+    private:
+        /**
+         * @brief Enforce the transported-species simplex constraints on one cell mean.
+         *
+         * Only species densities are modified. Density, momentum, and total energy
+         * are left unchanged. A small dependent-species margin is retained so that
+         * reconstructing the final mass fraction as one minus the transported sum
+         * remains robust to floating-point roundoff.
+         */
+        template <class TState>
+        void RepairCellMeanSpecies(TState &&uCell) const
+        {
+            if (!phys_.hasChemicalSource())
+                return;
+
+            const int Ns1 = phys_.nSpecies() - 1;
+            const int Isp = static_cast<int>(uCell.size()) - Ns1;
+            constexpr real rhoYFloor = 1e-30;
+            constexpr real dependentSpeciesFractionFloor = 1e-14;
+
+            for (int k = 0; k < Ns1; ++k)
+                uCell(Isp + k) = std::max(uCell(Isp + k), rhoYFloor);
+
+            real sumRhoY = 0;
+            for (int k = 0; k < Ns1; ++k)
+                sumRhoY += uCell(Isp + k);
+
+            const real sumRhoYMax = uCell(0) * (1.0 - dependentSpeciesFractionFloor);
+            if (sumRhoY > sumRhoYMax)
+            {
+                const real scale = sumRhoYMax / sumRhoY;
+                for (int k = 0; k < Ns1; ++k)
+                    uCell(Isp + k) *= scale;
+            }
+        }
+
+    public:
+        /**
+         * @brief Repair reactive species in cell means and validate thermodynamic state.
+         *
+         * Density, momentum, and total energy must already be valid; this operation
+         * only repairs transported species. Invalid density or post-repair
+         * temperature is reported as a recoverable runtime error with the cell index.
+         * Ghost values are refreshed after all owned cell means are processed.
+         */
+        void RepairCellMeanState(ArrayDOFV<nVarsFixed> &u)
+        {
+            DNDS_FV_EULEREVALUATOR_GET_FIXED_EIGEN_SEQS
+            for (index iCell = 0; iCell < mesh->NumCell(); ++iCell)
+            {
+                auto uCell = u[iCell];
+                DNDS_check_throw_info(
+                    uCell.allFinite(),
+                    fmt::format("RepairCellMeanState non-finite conservative state at cell {}", iCell));
+                DNDS_check_throw_info(
+                    std::isfinite(uCell(0)) && uCell(0) > 0,
+                    fmt::format("RepairCellMeanState invalid density at cell {}: rho={}", iCell, uCell(0)));
+
+                RepairCellMeanSpecies(uCell);
+
+                if (phys_.hasChemicalSource())
+                {
+                    const int Ns = phys_.nSpecies();
+                    const int Ns1 = Ns - 1;
+                    const int Isp = static_cast<int>(uCell.size()) - Ns1;
+                    std::vector<double> Y(static_cast<size_t>(Ns));
+                    phys_.chem().massFractions(
+                        uCell(0), {uCell.data() + Isp, Ns1}, {Y.data(), Ns});
+                }
+
+                const real rhoEBase = phys_.mixtureBaseInternalRhoE(uCell);
+                const real rhoEKinetic = 0.5 * uCell(Seq123).squaredNorm() / uCell(0);
+                const real rhoEInternalSensible = uCell(I4) - rhoEKinetic - rhoEBase;
+                DNDS_check_throw_info(
+                    std::isfinite(rhoEInternalSensible) && rhoEInternalSensible > 0,
+                    fmt::format("RepairCellMeanState invalid sensible internal energy at cell {}: rhoe_sensible={}",
+                                iCell, rhoEInternalSensible));
+
+                real T = 0;
+                try
+                {
+                    T = phys_.temperature(uCell);
+                }
+                catch (const std::exception &e)
+                {
+                    DNDS_check_throw_info(
+                        false,
+                        fmt::format("RepairCellMeanState failed to calculate temperature at cell {}: {}", iCell, e.what()));
+                }
+                const real TPhys = phys_.toPhysT(T);
+                DNDS_check_throw_info(
+                    std::isfinite(T) && T > 0 && std::isfinite(TPhys) &&
+                        TPhys >= phys_.temperatureFloor(),
+                    fmt::format("RepairCellMeanState invalid temperature at cell {}: T_code={}, T_phys={} K, floor={} K",
+                                iCell, T, TPhys, phys_.temperatureFloor()));
+            }
+
+            u.trans.startPersistentPull();
+            u.trans.waitPersistentPull();
+        }
+
         /**
          * @brief Add a positivity-compressed increment to the solution.
          *
@@ -1964,30 +2065,7 @@ namespace DNDS::Euler
                 //               << cxInc[iCell].transpose() * alpha << std::endl;
                 cx[iCell] += compressedInc;
 
-                // --- Species positivity clipping (reactive flow) ---
-                if (phys_.hasChemicalSource())
-                {
-                    int Ns = phys_.nSpecies();
-                    int Ns1 = Ns - 1; // number of transported (independent) species
-                    int nV = static_cast<int>(cx[iCell].size());
-                    int Isp = nV - Ns1;               // first transported species index
-                    constexpr real rhoYFloor = 1e-30; // tiny positive floor (matches 0D ODE)
-
-                    // (1) Clip each rhoY_k >= rhoYFloor
-                    for (int k = 0; k < Ns1; ++k)
-                        cx[iCell](Isp + k) = std::max(cx[iCell](Isp + k), rhoYFloor);
-
-                    // (2) Enforce rho - sum(rhoY_k) > 0  (dependent species > 0)
-                    real sumRhoY = 0;
-                    for (int k = 0; k < Ns1; ++k)
-                        sumRhoY += cx[iCell](Isp + k);
-                    if (sumRhoY > cx[iCell](0))
-                    {
-                        real scale = cx[iCell](0) / sumRhoY * (1.0 - 1e-14);
-                        for (int k = 0; k < Ns1; ++k)
-                            cx[iCell](Isp + k) *= scale;
-                    }
-                }
+                RepairCellMeanSpecies(cx[iCell]);
 
                 // wall fix in not needed
                 // if (model == NS_2EQ || model == NS_2EQ_3D)

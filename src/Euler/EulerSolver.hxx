@@ -102,8 +102,6 @@ namespace DNDS::Euler
         /*******************************************************/
 
         eval.InitializeUDOF(u);
-        for (index i = 0; i < mesh->NumCell(); ++i)
-            cellT_warm_[i](0) = eval.phys().temperature(u[i]);
         if (config.timeAverageControl.enabled)
             wAveraged.setConstant(0.0);
         if (config.timeMarchControl.useRestart)
@@ -117,6 +115,9 @@ namespace DNDS::Euler
             if (!config.restartState.otherRestartFile.empty())
                 ReadRestartOtherSolver(config.restartState.otherRestartFile, config.restartState.otherRestartStoreDim);
         }
+        eval.RepairCellMeanState(u);
+        for (index i = 0; i < mesh->NumCell(); ++i)
+            cellT_warm_[i](0) = eval.phys().temperature(u[i]);
         OutputPicker outputPicker;
         eval.InitializeOutputPicker(outputPicker, {u, uRec, betaPP, alphaPP});
         addOutList = outputPicker.getSubsetList(config.dataIOControl.outCellScalarNames);

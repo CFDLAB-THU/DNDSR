@@ -435,7 +435,11 @@ namespace DNDS::Euler
 
             std::vector<double> &Ybuf = bufY_[tid];
             Chemistry::SpeciesBufferView Yv{Ybuf.data(), Ns};
-            c.massFractions(rho, {&U[Isp], Ns1}, Yv);
+            // Source quadrature states are reconstructed values and may lie just
+            // outside the species simplex. Repair only the temporary composition
+            // passed to chemistry; the transported conservative rhoY state remains
+            // unchanged, consistent with the face thermo/transport property path.
+            Chemistry::RepairMassFractions(rho, {&U[Isp], Ns1}, Yv);
             Chemistry::ConstSpeciesBufferView Yc{Ybuf.data(), Ns};
             auto &bufOmega = bufOmega_[tid];
 
