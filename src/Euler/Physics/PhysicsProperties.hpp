@@ -1114,6 +1114,12 @@ namespace DNDS::Euler
 
             mixtureDiffusivity(T, p, U, buffers.D);
 
+            // Deliberately keep the composition used by the flux operator unprojected:
+            // convection transports the reconstructed rhoY variables, and diffusion uses
+            // their reconstructed Y and gradients (including the derived last species).
+            // Only property evaluation, such as h_k and D_k above, repairs a temporary Y
+            // onto the simplex because the thermodynamic/transport models require it.
+            // Repairing buffers.Y here would instead change the conservative species flux.
             real rhoFace = U(0);
             real rhoInvFace = 1.0 / std::max(rhoFace, verySmallReal);
             std::fill(buffers.Y.begin(), buffers.Y.end(), real(0));

@@ -413,6 +413,8 @@ if(DNDS_USE_CANTERA)
     euler_add_unit_test(physics_properties "Euler/test_PhysicsProperties.cpp" "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds")
     euler_add_unit_test(chem_ode "Euler/test_ChemODE.cpp" "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds")
     target_compile_definitions(euler_test_chem_ode PRIVATE CT_USE_SYSTEM_FMT=1)
+    euler_add_mpi_test(evaluator_reactive "Euler/test_EulerEvaluatorReactive.cpp"
+        "euler_library_NS_EX;euler_library_fast_NS_EX;cfv;geom;dnds")
 endif()
 
 # EulerEvaluator pipeline test: needs full Euler libraries for NS, NS_SA, NS_3D
@@ -435,7 +437,8 @@ if(DNDS_USE_CANTERA)
         euler_test_source_chemical
         euler_test_uv
         euler_test_physics_properties
-        euler_test_chem_ode)
+        euler_test_chem_ode
+        euler_test_evaluator_reactive)
 endif()
 foreach(T ${EULER_TEST_TARGETS})
     add_dependencies(euler_unit_tests ${T})
