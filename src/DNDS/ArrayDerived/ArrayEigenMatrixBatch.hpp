@@ -51,6 +51,28 @@ namespace DNDS
             this->operator=(R);
         }
 
+        void CheckSwapData(const t_self &R) const
+        {
+            this->t_base::CheckSwapData(R);
+            for (index i = 0; i < this->Size(); ++i)
+            {
+                if (this->RowSize(i) == 0)
+                    continue;
+                MatrixBatch<const real> a(this->t_base::operator[](i), this->RowSize(i));
+                MatrixBatch<const real> b(R.t_base::operator[](i), R.RowSize(i));
+                DNDS_check_throw_info(a.Size() == b.Size(), "SwapData requires identical matrix batch sizes");
+                for (rowsize j = 0; j < a.Size(); ++j)
+                    DNDS_check_throw_info(a.getNRow(j) == b.getNRow(j) && a.getNCol(j) == b.getNCol(j),
+                                          "SwapData requires identical matrix batch shapes");
+            }
+        }
+
+        void SwapData(t_self &R)
+        {
+            CheckSwapData(R);
+            this->t_base::SwapData(R);
+        }
+
         template <class t_matrices_elem>
         void InitializeWriteRow(index i, const std::vector<t_matrices_elem> &matrices)
         {

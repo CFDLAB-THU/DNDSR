@@ -126,24 +126,22 @@ namespace DNDS // Array
                 "getRowStart",
                 [](TArray &self)
                 {
-                    if (!self.getRowStart())
-                        return py::memoryview::from_buffer<index>((index *)(&self), {0}, {sizeof(index)}, true);
-                    auto &rs = *self.getRowStart();
-                    return py::memoryview::from_buffer<index>(rs.data(), {rs.size()}, {sizeof(index)}, true);
-                },
-                py::keep_alive<0, 1>() /* remember to keep alive */);
+                    auto rs = self.getRowStart();
+                    if (!rs)
+                        return py_owned_buffer<const index>({}, nullptr, {0}, {sizeof(index)});
+                    return py_owned_buffer(rs->hostLease(), rs->data(), {rs->size()}, {sizeof(index)});
+                });
 
         Array_
             .def(
                 "getRowSizes",
                 [](TArray &self)
                 {
-                    if (!self.getRowSizes())
-                        return py::memoryview::from_buffer<rowsize>((rowsize *)(&self), {0}, {sizeof(rowsize)}, true);
-                    auto &rs = *self.getRowSizes();
-                    return py::memoryview::from_buffer<rowsize>(rs.data(), {rs.size()}, {sizeof(rowsize)}, true);
-                },
-                py::keep_alive<0, 1>() /* remember to keep alive */);
+                    auto rs = self.getRowSizes();
+                    if (!rs)
+                        return py_owned_buffer<const rowsize>({}, nullptr, {0}, {sizeof(rowsize)});
+                    return py_owned_buffer(rs->hostLease(), rs->data(), {rs->size()}, {sizeof(rowsize)}, true);
+                });
 
         Array_
             .def(
@@ -151,8 +149,8 @@ namespace DNDS // Array
                 [](TArray &self)
                 {
                     if constexpr (std::is_arithmetic_v<T>)
-                        return py::memoryview::from_buffer<T>(
-                            self.DataSize() ? self.data() : (T *)(&self), // for null buffer
+                        return py_owned_buffer<T>(
+                            self.dataLease(), self.DataSize() ? self.data() : nullptr,
                             {self.DataSize()}, {TArray::sizeof_T});
                     else // todo: determine if have pybind11_buffer_format()
                     {
@@ -160,14 +158,13 @@ namespace DNDS // Array
                         buf_format.reserve(32);
                         for (size_t i = 0; i < TArray::sizeof_T; i++)
                             buf_format += "c"; // now we use a untyped byte data
-                        return py::memoryview::from_buffer(
-                            self.DataSize() ? self.data() : (T *)(&self), // for null buffer
+                        return py_owned_buffer(
+                            self.dataLease(), self.DataSize() ? self.data() : nullptr,
                             TArray::sizeof_T,
                             buf_format.c_str(),
                             {self.DataSize()}, {TArray::sizeof_T});
                     }
-                },
-                py::keep_alive<0, 1>() /* remember to keep alive */);
+                });
 
         Array_
             .def("Rowsize", py::overload_cast<index>(&TArray::RowSize, py::const_), py::arg("iRow"));

@@ -20,6 +20,7 @@
 
 #include "Defines.hpp"
 #include "MPI.hpp"
+#include "CheckedSize.hpp"
 
 namespace DNDS
 { // mapping from rank-main place to global indices
@@ -63,7 +64,7 @@ namespace DNDS
                 return 0;
         }
 
-        /// @brief Broadcast each rank's length, then compute the global prefix sums.
+        /// @brief Gather each rank's length, then compute the global prefix sums.
         /// @details Collective call. After it returns, every rank holds the full
         /// #RLengths / #ROffsets tables. Called by
         /// `ParArray::createGlobalMapping` during mesh/array setup.
@@ -71,23 +72,13 @@ namespace DNDS
         /// @param myLength  Number of rows owned by the calling rank.
         void setMPIAlignBcast(const MPIInfo &mpi, index myLength)
         {
-            RankLengths.resize(mpi.size);
-            RankOffsets.resize(mpi.size + 1);
-            RankLengths[mpi.rank] = myLength;
-
-            // tMPI_reqVec bcastReqs(mpi.size); // for Ibcast
-
-            for (MPI_int r = 0; r < mpi.size; r++)
-            {
-                // std::cout << mpi.rank << '\t' << myLength << std::endl;
-                MPI::Bcast(RankLengths.data() + r, sizeof(index), MPI_BYTE, r, mpi.comm);
-            }
-            RankOffsets[0] = 0;
-            for (size_t i = 0; i < RankLengths.size(); i++)
-            {
-                RankOffsets[i + 1] = RankOffsets[i] + RankLengths[i];
-                DNDS_assert(RankOffsets[i + 1] >= 0);
-            }
+            t_IndexVec lengths(mpi.size), offsets(size_t(mpi.size) + 1, 0);
+            MPI::Allgather(&myLength, 1, DNDS_MPI_INDEX, lengths.data(), 1, DNDS_MPI_INDEX, mpi.comm);
+            // Every rank validates the same gathered values before publishing.
+            for (size_t i = 0; i < lengths.size(); i++)
+                offsets[i + 1] = CheckedSize::Add(offsets[i], lengths[i]);
+            RankLengths.swap(lengths);
+            RankOffsets.swap(offsets);
         }
 
         /// @brief Convert a (rank, local) pair to a global index.
@@ -100,13 +91,13 @@ namespace DNDS
             //     PrintVec(RankOffsets, std::cout);
             //     std::cout << rank << " KK " << val << std::endl;
             // }
-            DNDS_assert((rank >= 0 && rank <= RankLengths.size()) &&
-                        (val >= 0 && val <= RankOffsets[rank + 1] - RankOffsets[rank]));
+            DNDS_check_throw((rank >= 0 && size_t(rank) < RankLengths.size()) &&
+                             (val >= 0 && val <= RankOffsets[rank + 1] - RankOffsets[rank]));
             return RankOffsets[rank] + val;
         }
 
         /// @brief Convert a global index to `(rank, local)`. Returns `false` if out of range.
-        /// @details Uses `std::lower_bound` on the offsets table (O(log nRanks)).
+        /// @details Uses `std::upper_bound` on the offsets table (O(log nRanks)).
         /// @param globalQuery Global index.
         /// @param[out] rank   Owning rank on success.
         /// @param[out] val    Local offset within the owner.
@@ -118,10 +109,10 @@ namespace DNDS
             //                 Rank = {0,1,2,3,4,5,6}
             // query 5 should be rank 7, which is out-of bound, returns false
             // query 4 should be rank 5, query 3 should be rank 3, query 2 should be rank 1
-            if (RankOffsets.empty()) // in case the communicator is of size 0 ??
+            if (RankOffsets.empty() || globalQuery < 0 || globalQuery >= RankOffsets.back())
                 return false;
-            auto place = std::lower_bound(RankOffsets.begin(), RankOffsets.end(), globalQuery, std::less_equal<index>());
-            rank = static_cast<MPI_int>(place - 1 - RankOffsets.begin()); // ! could overflow
+            auto place = std::upper_bound(RankOffsets.begin(), RankOffsets.end(), globalQuery);
+            rank = static_cast<MPI_int>(place - RankOffsets.begin() - 1);
             if (rank < RankLengths.size() && rank >= 0)
             {
                 val = globalQuery - RankOffsets[rank];

@@ -379,6 +379,8 @@ namespace DNDS
         //! a situation: the data pointer should remain static as long as initPersistentPuxx is done
         void SwapDataFatherSon(t_self &R)
         {
+            father->CheckSwapData(*R.father);
+            son->CheckSwapData(*R.son);
             father->SwapData(*R.father);
             son->SwapData(*R.son);
             trans.reInitPersistentPullPush();

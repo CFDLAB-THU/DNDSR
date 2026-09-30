@@ -20,7 +20,8 @@ def get_rstart_data():
 
 def test_all_reduce_scalar(mpi: DNDS.MPIInfo):
     scalarBuf = np.zeros((), dtype=np.int64)
-    DNDS.MPI.Allreduce(np.array(1, dtype=np.int64), scalarBuf, "MPI_SUM", mpi)  # type: ignore
+    DNDS.MPI.Allreduce(np.array(1, dtype=np.int64),
+                       scalarBuf, "MPI_SUM", mpi)  # type: ignore
     # print(f"reduced scalar {scalarBuf}")
     assert scalarBuf == mpi.size
 
@@ -43,7 +44,8 @@ def test_array_trans(mpi: DNDS.MPIInfo, mode: str = "global"):
     if mode == "left":
         pullIdx = np.array([0, 1, 2, 3], dtype=np.int64)
         rank_pull = (mpi.rank - 1) % mpi.size
-        np.vectorize(lambda x: arrayR3.getLGlobalMapping()(rank_pull, x))(pullIdx)
+        np.vectorize(lambda x: arrayR3.getLGlobalMapping()
+                     (rank_pull, x))(pullIdx)
 
     arrayR3Trans.createGhostMapping(pullIdx)
     arrayR3Trans.createMPITypes()
@@ -92,6 +94,11 @@ def test_arrayRU(mpi: DNDS.MPIInfo):
     rsize = np.linspace(3, 10, 32, dtype=np.int32)
     arrayRU.Resize(32, rsize)
 
+    row_starts = arrayRU.getRowStart()
+    assert row_starts.readonly
+    with pytest.raises(TypeError):
+        row_starts[0] = 1
+
     # print(arrayRU.Size())
     assert not (np.diff(np.array(arrayRU.getRowStart())) - rsize).any()
 
@@ -116,7 +123,7 @@ def test_arrayRU(mpi: DNDS.MPIInfo):
     del arrayRU_rstart_ret
     if mpi.rank == 0:
         print(
-            f"if corrupted: { np.any(gt - arrayRU_rstart_ret_np)}"
+            f"if corrupted: {np.any(gt - arrayRU_rstart_ret_np)}"
         )  # should be corrupted
 
 
@@ -224,13 +231,15 @@ def test_ArrayEigenUniMatrixBatch(mpi: DNDS.MPIInfo):
     arr = DNDS.ArrayEigenUniMatrixBatch("D", "D", (mpi,))
     arr_son = DNDS.ArrayEigenUniMatrixBatch("D", "D", (mpi,))
     arr.Resize(32, 4, 5)
-    arr_son.Resize(0, 4, 5)  #! warning: trans does not automatically do this for now!
+    # ! warning: trans does not automatically do this for now!
+    arr_son.Resize(0, 4, 5)
     rs = RandomState(MT19937(SeedSequence(123456789)))
     val0 = rs.rand(4, 5)
 
     for irow in range(arr.Size()):
         arr.ResizeRow(irow, irow % 3 + 1)
-        cDat = np.concatenate((val0.reshape((1, 4, 5)),) * arr.BatchSize(irow), axis=0)
+        cDat = np.concatenate((val0.reshape((1, 4, 5)),)
+                              * arr.BatchSize(irow), axis=0)
         arr[irow] = cDat
     arr.Compress()
 

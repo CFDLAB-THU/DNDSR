@@ -47,7 +47,7 @@ static MPIInfo worldMPI()
 /// vector-space operations which only touch father data.
 template <int M, int N>
 static ArrayDof<M, N> makeDof(const MPIInfo &mpi, DNDS::index nCells,
-                               DNDS::rowsize mRow = M, DNDS::rowsize nCol = N)
+                              DNDS::rowsize mRow = M, DNDS::rowsize nCol = N)
 {
     ArrayDof<M, N> dof;
     dof.InitPair("dof::arr", mpi);
@@ -58,6 +58,23 @@ static ArrayDof<M, N> makeDof(const MPIInfo &mpi, DNDS::index nCells,
 }
 
 // ---------------------------------------------------------------------------
+TEST_CASE("Audit regression: difference norm retains shape on empty ranks")
+{
+    auto mpi = worldMPI();
+    for (bool allEmpty : {true, false})
+    {
+        auto count = DNDS::index(allEmpty || mpi.rank == 0 ? 0 : 1);
+        auto a = makeDof<DynamicSize, 1>(mpi, count, 3, 1);
+        auto b = makeDof<DynamicSize, 1>(mpi, count, 3, 1);
+        a.setConstant(2);
+        b.setConstant(1);
+        auto difference = a.componentWiseNorm1(b);
+        REQUIRE(difference.rows() == 3);
+        REQUIRE(difference.cols() == 1);
+        CHECK(difference.isConstant(allEmpty ? 0 : mpi.size - 1));
+    }
+}
+
 TEST_CASE("ArrayDOF setup and setConstant")
 {
     MPIInfo mpi = worldMPI();
@@ -595,7 +612,7 @@ TYPE_TO_STRING(DofTag<5>);
 TYPE_TO_STRING(DofTag<DNDS::DynamicSize>);
 
 TEST_CASE_TEMPLATE("ArrayDOF parametric over nVars", T,
-                    DofTag<1>, DofTag<3>, DofTag<5>, DofTag<DNDS::DynamicSize>)
+                   DofTag<1>, DofTag<3>, DofTag<5>, DofTag<DNDS::DynamicSize>)
 {
     MPIInfo mpi = worldMPI();
     constexpr DNDS::index N = 64;

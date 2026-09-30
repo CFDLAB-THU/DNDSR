@@ -79,6 +79,7 @@
 #include <functional>
 #include <optional>
 #include <stdexcept>
+#include <mutex>
 
 #include <fmt/core.h>
 
@@ -231,35 +232,86 @@ namespace DNDS
     template <typename T>
     class ConfigRegistry
     {
+        struct Descriptor
+        {
+            std::vector<FieldMeta> fields;
+            std::vector<CrossFieldCheck> checks;
+            std::vector<ContextualCheck> contextualChecks;
+            std::function<void(T &)> postRead;
+        };
+
+        static Descriptor &descriptor()
+        {
+            static Descriptor value;
+            return value;
+        }
+
+        static Descriptor *&pendingDescriptor()
+        {
+            static thread_local Descriptor *value = nullptr;
+            return value;
+        }
+
+        static Descriptor &mutableDescriptor()
+        {
+            return pendingDescriptor() ? *pendingDescriptor() : descriptor();
+        }
+
+        static std::once_flag &registrationFlag()
+        {
+            static std::once_flag value;
+            return value;
+        }
+
         /// @brief Mutable access to the field list (used only during static init).
         static std::vector<FieldMeta> &fieldsMut()
         {
-            static std::vector<FieldMeta> fs;
-            return fs;
+            return mutableDescriptor().fields;
         }
 
         /// @brief Mutable access to the context-free check list.
         static std::vector<CrossFieldCheck> &checksMut()
         {
-            static std::vector<CrossFieldCheck> cs;
-            return cs;
+            return mutableDescriptor().checks;
         }
 
         /// @brief Mutable access to the context-aware check list.
         static std::vector<ContextualCheck> &ctxChecksMut()
         {
-            static std::vector<ContextualCheck> cs;
-            return cs;
+            return mutableDescriptor().contextualChecks;
         }
 
         /// @brief Optional post-read hook called after readFromJson completes.
         static std::function<void(T &)> &postReadHookMut()
         {
-            static std::function<void(T &)> hook;
-            return hook;
+            return mutableDescriptor().postRead;
         }
 
     public:
+        /// Publish a complete descriptor once; failed registration is retryable.
+        /// Recursion into the same type is rejected instead of exposing a partial
+        /// registry or deadlocking. Ordinary nested sections use distinct types.
+        template <class F>
+        static void ensureRegistered(F &&registerFields)
+        {
+            DNDS_check_throw_info(!pendingDescriptor(), "Recursive config registration for the same type");
+            std::call_once(registrationFlag(), [&]
+                           {
+                Descriptor pending;
+                pendingDescriptor() = &pending;
+                try
+                {
+                    registerFields();
+                    descriptor() = std::move(pending);
+                    pendingDescriptor() = nullptr;
+                }
+                catch (...)
+                {
+                    pendingDescriptor() = nullptr;
+                    throw;
+                } });
+        }
+
         // ================================================================
         // Registration API (called by ConfigSectionBuilder during lazy init)
         // ================================================================

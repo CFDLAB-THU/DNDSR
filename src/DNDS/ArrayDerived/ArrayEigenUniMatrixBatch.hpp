@@ -71,6 +71,18 @@ namespace DNDS
             this->operator=(R);
         }
 
+        void CheckSwapData(const t_self &R) const
+        {
+            this->t_base::CheckSwapData(R);
+            DNDS_check_throw_info(Rows() == R.Rows() && Cols() == R.Cols(), "SwapData requires identical matrix batch shapes");
+        }
+
+        void SwapData(t_self &R)
+        {
+            CheckSwapData(R);
+            this->t_base::SwapData(R);
+        }
+
         /**
          * @brief resizes all matrices to be used;
          * -1 means no change
@@ -79,21 +91,23 @@ namespace DNDS
          */
         void ResizeMatrix(int r = -1, int c = -1)
         {
+            DNDS_check_throw(r >= -1 && c >= -1);
             if constexpr (_n_row >= 0)
-                DNDS_assert(r == -1 || r == _n_row);
+                DNDS_check_throw(r == -1 || r == _n_row);
             if constexpr (_n_col >= 0)
-                DNDS_assert(c == -1 || c == _n_col);
+                DNDS_check_throw(c == -1 || c == _n_col);
+            const int size = CheckedSize::Multiply(r == -1 ? Rows() : r, c == -1 ? Cols() : c);
+            this->t_base::Resize(0);
             if (r >= 0)
                 _row_dynamic = r;
             if (c >= 0)
                 _col_dynamic = c;
-            // TODO: multiplication overflow detect
-            _m_size = this->Rows() * this->Cols();
-            this->t_base::Resize(0);
+            _m_size = size;
         }
 
         void Resize(index n_size, int r, int c)
         {
+            DNDS_check_throw(n_size >= 0);
             this->ResizeMatrix(r, c);
             this->t_base::Resize(n_size);
         }
@@ -109,9 +123,13 @@ namespace DNDS
         template <class TFRowSize>
         void Resize(index n_size, int r, int c, TFRowSize &&rsf)
         {
+            DNDS_check_throw(n_size >= 0);
             this->ResizeMatrix(r, c);
             this->t_base::Resize(n_size, [&](index i)
-                                 { return rsf(i) * this->MSize(); });
+                                 {
+                                     auto count = rsf(i);
+                                     DNDS_check_throw(count >= 0 && count <= std::numeric_limits<rowsize>::max());
+                                     return CheckedSize::Multiply(rowsize(count), rowsize(this->MSize())); });
         }
 
     public:
@@ -133,12 +151,12 @@ namespace DNDS
 
         void ResizeBatch(index i, rowsize b_size)
         {
-            this->t_base::ResizeRow(i, b_size * MSize());
+            this->t_base::ResizeRow(i, CheckedSize::Multiply(b_size, rowsize(MSize())));
         }
 
         void ResizeRow(index i, rowsize b_size)
         {
-            this->t_base::ResizeRow(i, b_size * MSize());
+            this->t_base::ResizeRow(i, CheckedSize::Multiply(b_size, rowsize(MSize())));
         }
 
         [[nodiscard]] rowsize BatchSize(index i) const

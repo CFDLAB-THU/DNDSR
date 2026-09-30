@@ -20,6 +20,34 @@
 
 namespace DNDS
 {
+    namespace detail
+    {
+        inline void RedistributionCheck(const MPIInfo &mpi, bool valid, const char *message)
+        {
+            int local = valid, all = 0;
+            MPI_Allreduce(&local, &all, 1, MPI_INT, MPI_MIN, mpi.comm);
+            DNDS_check_throw_info(all, message);
+        }
+
+        // Limits apply to the interleaved MPI payload, not just entry counts.
+        inline std::vector<int> RedistributionDisplacements(const MPIInfo &mpi,
+                                                            const std::vector<int> &counts, int width)
+        {
+            index total = 0;
+            bool valid = width > 0 && counts.size() == size_t(mpi.size);
+            const index limit = width > 0 ? std::numeric_limits<int>::max() / width : 0;
+            for (int count : counts)
+            {
+                valid = valid && count >= 0 && count <= limit - total;
+                if (valid)
+                    total += count;
+            }
+            RedistributionCheck(mpi, valid, "redistribution counts/displacements exceed MPI int range");
+            std::vector<int> displacements(counts.size() + 1, 0);
+            std::partial_sum(counts.begin(), counts.end(), displacements.begin() + 1);
+            return displacements;
+        }
+    }
 
     // EvenSplitRange is defined in Defines.hpp
 
@@ -88,8 +116,21 @@ namespace DNDS
         //   3. Directory ranks look up and reply with globalReadIdx.
 
         const int nRanks = mpi.size;
+        detail::RedistributionCheck(mpi, bool(readGlobalMapping), "redistribution requires a global mapping");
         index nGlobal = readGlobalMapping->globalSize();
-        DNDS_assert_info(nGlobal > 0, "Redistribution requires nGlobal > 0");
+        auto validKeys = [&](const std::vector<index> &keys)
+        {
+            return std::all_of(keys.begin(), keys.end(), [&](index key)
+                               { return key >= 0 && key <= std::numeric_limits<index>::max() / nRanks; });
+        };
+        const auto &lengths = readGlobalMapping->RLengths();
+        detail::RedistributionCheck(mpi,
+                                    nGlobal > 0 && lengths.size() == size_t(nRanks) &&
+                                        readOrigIndex.size() <= size_t(std::numeric_limits<int>::max() / 2) &&
+                                        newOrigIndex.size() <= size_t(std::numeric_limits<int>::max()) &&
+                                        lengths[mpi.rank] == index(readOrigIndex.size()) &&
+                                        validKeys(readOrigIndex) && validKeys(newOrigIndex),
+                                    "invalid redistribution lengths or original indices");
         auto directoryRank = [&](index origIdx) -> int
         {
             if (nGlobal == 0)
@@ -108,8 +149,7 @@ namespace DNDS
             sendCounts[dr]++;
         }
 
-        std::vector<int> sendDisps(nRanks + 1, 0);
-        std::partial_sum(sendCounts.begin(), sendCounts.end(), sendDisps.begin() + 1);
+        auto sendDisps = detail::RedistributionDisplacements(mpi, sendCounts, 2);
 
         // Pack send buffers (origIdx, globalReadIdx) interleaved
         std::vector<index> sendBuf(index(sendDisps[nRanks]) * 2);
@@ -127,8 +167,7 @@ namespace DNDS
         std::vector<int> recvCounts(nRanks, 0);
         MPI_Alltoall(sendCounts.data(), 1, MPI_INT, recvCounts.data(), 1, MPI_INT, mpi.comm);
 
-        std::vector<int> recvDisps(nRanks + 1, 0);
-        std::partial_sum(recvCounts.begin(), recvCounts.end(), recvDisps.begin() + 1);
+        auto recvDisps = detail::RedistributionDisplacements(mpi, recvCounts, 2);
 
         // Alltoallv to send pairs
         // Multiply counts/disps by 2 for the interleaved pairs
@@ -150,10 +189,12 @@ namespace DNDS
         // Step 4: Build directory lookup: origIdx -> globalReadIdx
         std::unordered_map<index, index> directoryMap;
         directoryMap.reserve(recvDisps[nRanks]);
+        bool unique = true;
         for (index i = 0; i < recvDisps[nRanks]; i++)
         {
-            directoryMap[recvBuf[i * 2]] = recvBuf[i * 2 + 1];
+            unique = directoryMap.emplace(recvBuf[i * 2], recvBuf[i * 2 + 1]).second && unique;
         }
+        detail::RedistributionCheck(mpi, unique, "duplicate original index in redistribution directory");
 
         // Step 5: Send queries from newOrigIndex to directory, get back globalReadIdx.
         // Count queries per directory rank
@@ -164,8 +205,7 @@ namespace DNDS
             querySendCounts[dr]++;
         }
 
-        std::vector<int> querySendDisps(nRanks + 1, 0);
-        std::partial_sum(querySendCounts.begin(), querySendCounts.end(), querySendDisps.begin() + 1);
+        auto querySendDisps = detail::RedistributionDisplacements(mpi, querySendCounts, 1);
 
         // Pack query send buffer and record the order mapping
         std::vector<index> querySendBuf(querySendDisps[nRanks]);
@@ -185,8 +225,7 @@ namespace DNDS
         std::vector<int> queryRecvCounts(nRanks, 0);
         MPI_Alltoall(querySendCounts.data(), 1, MPI_INT, queryRecvCounts.data(), 1, MPI_INT, mpi.comm);
 
-        std::vector<int> queryRecvDisps(nRanks + 1, 0);
-        std::partial_sum(queryRecvCounts.begin(), queryRecvCounts.end(), queryRecvDisps.begin() + 1);
+        auto queryRecvDisps = detail::RedistributionDisplacements(mpi, queryRecvCounts, 1);
 
         // Alltoallv queries
         std::vector<index> queryRecvBuf(queryRecvDisps[nRanks]);
@@ -196,13 +235,15 @@ namespace DNDS
 
         // Step 6: Directory ranks look up and reply with globalReadIdx.
         std::vector<index> queryReplyBuf(queryRecvDisps[nRanks]);
+        bool found = true;
         for (index i = 0; i < queryRecvDisps[nRanks]; i++)
         {
             auto it = directoryMap.find(queryRecvBuf[i]);
-            DNDS_assert_info(it != directoryMap.end(),
-                             fmt::format("origIdx {} not found in directory on rank {}", queryRecvBuf[i], mpi.rank));
-            queryReplyBuf[i] = it->second;
+            found = found && it != directoryMap.end();
+            if (it != directoryMap.end())
+                queryReplyBuf[i] = it->second;
         }
+        detail::RedistributionCheck(mpi, found, "original index not found in redistribution directory");
 
         // Alltoallv replies back (reverse direction)
         std::vector<index> replyRecvBuf(querySendDisps[nRanks]);

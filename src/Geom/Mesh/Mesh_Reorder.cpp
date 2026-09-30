@@ -1052,6 +1052,8 @@ namespace DNDS::Geom
             cellTransfer.transferRows(cell2cellFace, mpi);
         if (isPeriodic && cell2nodePbi.father)
             cellTransfer.transferRows(cell2nodePbi, mpi);
+        if (isPeriodic && cell2facePbi.father)
+            cellTransfer.transferRows(cell2facePbi, mpi);
 
         // --- Rebuild global mapping ---
         cell2node.father->createGlobalMapping();
@@ -1106,6 +1108,8 @@ namespace DNDS::Geom
                 borrowAndPull(cell2cellFace);
             if (isPeriodic && cell2nodePbi.father)
                 borrowAndPull(cell2nodePbi);
+            if (isPeriodic && cell2facePbi.father)
+                borrowAndPull(cell2facePbi);
         }
 
         // --- Re-wire target mappings ---

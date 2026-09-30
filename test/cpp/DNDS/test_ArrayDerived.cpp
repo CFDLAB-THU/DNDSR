@@ -47,6 +47,34 @@ static MPIInfo worldMPI()
     return mpi;
 }
 
+TEST_CASE("Audit regression: cloned matrix row shapes detach on resize")
+{
+    auto mpi = worldMPI();
+    ArrayEigenMatrix<NonUniformSize, 1> original(mpi), clone(mpi);
+    original.Resize(2, 2, 1);
+    original[0].setConstant(7);
+    original[1].setConstant(8);
+    clone.clone(original);
+    clone.ResizeRow(0, 3, 1);
+    CHECK(original.MatRowSize(0) == 2);
+    CHECK(original.RowSize(0) == 2);
+    CHECK(clone.MatRowSize(0) == 3);
+    CHECK(clone.RowSize(0) == 3);
+    CHECK(original[1].isConstant(8));
+    original.ResizeRow(1, 4, 1);
+    CHECK(clone.MatRowSize(1) == 2);
+
+    ArrayEigenMatrix<NonUniformSize, 1, 4, 1> padded(mpi), paddedCopy(mpi);
+    padded.Resize(1, 4, 1);
+    padded.ResizeRow(0, 2, 1);
+    paddedCopy = padded;
+    paddedCopy.ResizeRow(0, 3, 1);
+    CHECK(padded.MatRowSize(0) == 2);
+    CHECK(padded.RowSize(0) == 2);
+    CHECK(paddedCopy.MatRowSize(0) == 3);
+    CHECK(paddedCopy.RowSize(0) == 3);
+}
+
 /// Build a vector of global indices: first `nPer` elements from each
 /// non-local rank, for use as ghost pull indices.
 static std::vector<DNDS::index> pullFirstNFromOthers(
@@ -784,7 +812,7 @@ TYPE_TO_STRING(AdjTag<8>);
 TYPE_TO_STRING(AdjTag<NonUniformSize>);
 
 TEST_CASE_TEMPLATE("ArrayAdjacency parametric", Tag,
-                    AdjTag<2>, AdjTag<5>, AdjTag<8>, AdjTag<NonUniformSize>)
+                   AdjTag<2>, AdjTag<5>, AdjTag<8>, AdjTag<NonUniformSize>)
 {
     constexpr DNDS::rowsize RS = Tag::rs;
     MPIInfo mpi = worldMPI();
@@ -873,7 +901,7 @@ TYPE_TO_STRING(VecTag<7>);
 TYPE_TO_STRING(VecTag<DynamicSize>);
 
 TEST_CASE_TEMPLATE("ArrayEigenVector parametric", Tag,
-                    VecTag<1>, VecTag<3>, VecTag<7>, VecTag<DynamicSize>)
+                   VecTag<1>, VecTag<3>, VecTag<7>, VecTag<DynamicSize>)
 {
     constexpr DNDS::rowsize VS = Tag::vs;
     MPIInfo mpi = worldMPI();
@@ -962,8 +990,8 @@ TYPE_TO_STRING(MatTag<1, 7>);
 TYPE_TO_STRING(MatTag<DynamicSize, DynamicSize>);
 
 TEST_CASE_TEMPLATE("ArrayEigenMatrix parametric", Tag,
-                    MatTag<2, 3>, MatTag<4, 5>, MatTag<1, 7>,
-                    MatTag<DynamicSize, DynamicSize>)
+                   MatTag<2, 3>, MatTag<4, 5>, MatTag<1, 7>,
+                   MatTag<DynamicSize, DynamicSize>)
 {
     constexpr DNDS::rowsize NI = Tag::ni;
     constexpr DNDS::rowsize NJ = Tag::nj;

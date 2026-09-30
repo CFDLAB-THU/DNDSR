@@ -40,8 +40,8 @@ namespace DNDS
     auto pybind11_ArrayEigenVector_getitem(TArrayEigenVector &self, index index_)
     {
         auto row = self[index_];
-        return py::memoryview::from_buffer<real>(
-            row.data(),
+        return py_owned_buffer<real>(
+            self.rowLease(index_), row.data(),
             {row.size()},
             {sizeof(real)},
             false);
@@ -101,8 +101,7 @@ namespace DNDS
                 [](TArrayEigenVector &self, index index_)
                 {
                     return pybind11_ArrayEigenVector_getitem(self, index_);
-                },
-                py::keep_alive<0, 1>())
+                })
             .def(
                 "__setitem__",
                 [](TArrayEigenVector &self, index index_, const py::buffer &row)
@@ -169,8 +168,7 @@ namespace DNDS
                 {
                     return self.runFunctionAppendedIndex(index_, [&](auto &ar, index iC) //*note the auto&& reference here!!!
                                                          { return pybind11_ArrayEigenVector_getitem(ar, iC); });
-                },
-                py::keep_alive<0, 1>())
+                })
             .def(
                 "__setitem__",
                 [](TPair &self, index index_, const py::buffer &row)

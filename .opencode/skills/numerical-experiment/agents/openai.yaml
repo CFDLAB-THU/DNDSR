@@ -1,0 +1,4 @@
+interface:
+  display_name: "Numerical Experiment"
+  short_description: "Plan and run bounded CFD numerical experiments"
+  default_prompt: "Use $numerical-experiment to plan and execute a bounded DNDSR numerical experiment."

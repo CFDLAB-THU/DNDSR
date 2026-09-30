@@ -5,6 +5,8 @@
 This guide walks through the DNDSR array infrastructure from the
 perspective of someone writing a new module or solver on top of it.
 For the design rationale see @ref array_infrastructure.
+For Python memoryviews and long-lived C++ buffer leases, see
+[Array views and allocation lifetime](python_array_views.md).
 
 ## When to Use Which Array Type
 
@@ -72,7 +74,7 @@ adj.Compress();        // pack back into flat buffer
 ```
 
 **Why compress/decompress?**  The decompressed form uses a
-`vector<vector<T>>` which allows arbitrary per-row resizing but is
+`vector<RowStorage<T>>` with independently allocated, lease-aware rows. It allows arbitrary per-row resizing but is
 scattered in memory.  The compressed form is a single contiguous
 allocation, which is required for MPI communication (the MPI datatype
 describes offsets into one buffer) and for CUDA device transfer.

@@ -49,7 +49,6 @@ namespace DNDS::Geom
                     Geom::tSmallCoords coords;
                     GetCoordsOnFace(iFace, coords);
                     Eigen::Matrix<real, 3, 3> tri;
-                    GetCoordsOnFace(iFace, coords);
                     tri(EigenAll, 0) = coords(EigenAll, 0);
                     tri(EigenAll, 1) = coords(EigenAll, 1);
                     tri(EigenAll, 2) = coords(EigenAll, 1) + Geom::tPoint{0., 0., 1.0};
@@ -95,6 +94,7 @@ namespace DNDS::Geom
                     v,
                     [&](auto &vInc, int iG, const tPoint &pParam, const Elem::tD01Nj &DiNj)
                     {
+                        vInc = 0; // This quadrature only collects points.
                         tPoint pPhy = Elem::PPhysicsCoordD01Nj(coords, DiNj);
                         faceQuadraturePPhysics.emplace_back(pPhy);
                     });

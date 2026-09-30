@@ -110,12 +110,16 @@ namespace DNDS::Geom
 
         // --- Special members (cppcoreguidelines-special-member-functions) ---
         // NodePeriodicBitsRow is a non-owning view (pointer + size).
-        // The copy-assignment operator deep-copies the pointed-to contents;
-        // all other special members are shallow (trivially copyable members).
+        // Assignment copies the pointed-to contents, including for rvalues;
+        // construction only copies the non-owning view.
         ~NodePeriodicBitsRow() = default;
         NodePeriodicBitsRow(const NodePeriodicBitsRow &) = default;
         NodePeriodicBitsRow(NodePeriodicBitsRow &&) = default;
-        NodePeriodicBitsRow &operator=(NodePeriodicBitsRow &&) = default;
+        NodePeriodicBitsRow &operator=(NodePeriodicBitsRow &&r)
+        {
+            this->operator=(static_cast<const NodePeriodicBitsRow &>(r));
+            return *this;
+        }
 
         NodePeriodicBits &operator[](rowsize j)
         {

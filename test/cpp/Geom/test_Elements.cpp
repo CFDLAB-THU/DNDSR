@@ -25,6 +25,8 @@
 
 #include "Geom/Elements.hpp"
 #include "Geom/Quadrature.hpp"
+#include "Geom/PeriodicInfo.hpp"
+#include "Geom/OpenFOAMMesh.hpp"
 
 #include <cmath>
 #include <random>
@@ -34,6 +36,39 @@
 
 using namespace DNDS::Geom;
 using namespace DNDS::Geom::Elem;
+
+TEST_CASE("Audit regression: periodic row rvalue assignment copies values")
+{
+    NodePeriodicBits destination[2]{{0}, {0}}, source[2]{{1}, {4}};
+    NodePeriodicBitsRow dst(destination, 2);
+    dst = NodePeriodicBitsRow(source, 2);
+    CHECK(destination[0]._v == 1);
+    CHECK(destination[1]._v == 4);
+    dst[0] = NodePeriodicBits{2};
+    CHECK(destination[0]._v == 2);
+    CHECK(source[0]._v == 1);
+    NodePeriodicBitsRow(destination, 2) = NodePeriodicBitsRow(source, 2);
+    CHECK(destination[0]._v == 1);
+    CHECK(destination[1]._v == 4);
+}
+
+TEST_CASE("Audit regression: OpenFOAM comments preserve the following token")
+{
+    for (const auto *prefix : {"/**/", "/***/", "/* ***/", "/* plain */", "// line\n"})
+    {
+        CAPTURE(prefix);
+        std::istringstream input(std::string(prefix) + "42");
+        CHECK(OpenFOAM::passOpenFOAMSpaces(input) > 0);
+        int value = 0;
+        input >> value;
+        CHECK(value == 42);
+    }
+    std::istringstream adjacent("/* ***/ // next\n/**/17");
+    OpenFOAM::passOpenFOAMSpaces(adjacent);
+    int value = 0;
+    adjacent >> value;
+    CHECK(value == 17);
+}
 
 // Convenience: 3D point from 1–3 coords, rest zeroed.
 static tPoint MakePoint(t_real x, t_real y = 0, t_real z = 0)
@@ -134,16 +169,16 @@ TEST_CASE("ElementTraits: basic identification fields are consistent")
     {
         Element e{t};
         CAPTURE(t);
-        
+
         // Basic sanity checks
         CHECK(e.GetDim() >= 1);
         CHECK(e.GetDim() <= 3);
         CHECK(e.GetNumNodes() >= e.GetNumVertices());
-        CHECK(e.GetNumVertices() >= 2);  // At least a line
-        
+        CHECK(e.GetNumVertices() >= 2); // At least a line
+
         // Order should be 1 or 2 for supported elements
         CHECK((e.GetOrder() == 1 || e.GetOrder() == 2));
-        
+
         // ParamSpace volume should be positive (accessed via helper)
         CHECK(ParamSpaceVolume(e.GetParamSpace()) > 0);
     }
@@ -156,13 +191,13 @@ TEST_CASE("ElementTraits: standard coordinates have correct dimensions")
         auto coords = NodeCoords(t);
         Element e{t};
         CAPTURE(t);
-        
+
         // Should have 3 rows (x, y, z)
         CHECK(coords.rows() == 3);
-        
+
         // Should have numNodes columns
         CHECK(coords.cols() == e.GetNumNodes());
-        
+
         // For 1D elements, y and z should be zero
         if (e.GetDim() == 1)
         {
@@ -172,7 +207,7 @@ TEST_CASE("ElementTraits: standard coordinates have correct dimensions")
                 CHECK(coords(2, i) == doctest::Approx(0.0));
             }
         }
-        
+
         // For 2D elements, z should be zero
         if (e.GetDim() == 2)
         {
@@ -190,17 +225,17 @@ TEST_CASE("ElementTraits: face definitions are consistent for 2D elements")
     {
         Element e{t};
         CAPTURE(t);
-        
+
         int numFaces = e.GetNumFaces();
         CHECK(numFaces > 0);
-        
+
         for (int iFace = 0; iFace < numFaces; iFace++)
         {
             Element faceElem = e.ObtainFace(iFace);
-            
+
             // Face should have consistent dimensionality
             CHECK(faceElem.GetDim() == e.GetDim() - 1);
-            
+
             // Face should be a line element
             CHECK(faceElem.GetDim() == 1);
         }
@@ -213,17 +248,17 @@ TEST_CASE("ElementTraits: face definitions are consistent for 3D elements")
     {
         Element e{t};
         CAPTURE(t);
-        
+
         int numFaces = e.GetNumFaces();
         CHECK(numFaces > 0);
-        
+
         for (int iFace = 0; iFace < numFaces; iFace++)
         {
             Element faceElem = e.ObtainFace(iFace);
-            
+
             // Face should have consistent dimensionality
             CHECK(faceElem.GetDim() == e.GetDim() - 1);
-            
+
             // Face should be a 2D element
             CHECK(faceElem.GetDim() == 2);
         }
@@ -235,31 +270,31 @@ TEST_CASE("ElementTraits: ExtractFaceNodes works correctly")
     // Test Tri3 face extraction
     {
         Element e{Tri3};
-        std::vector<DNDS::index> nodes = {0, 1, 2};  // 3 nodes
+        std::vector<DNDS::index> nodes = {0, 1, 2}; // 3 nodes
         std::array<DNDS::index, 2> faceNodes;
-        
+
         // Edge 0: should extract nodes 0 and 1
         e.ExtractFaceNodes(0, nodes, faceNodes);
         CHECK(faceNodes[0] == 0);
         CHECK(faceNodes[1] == 1);
-        
+
         // Edge 1: should extract nodes 1 and 2
         e.ExtractFaceNodes(1, nodes, faceNodes);
         CHECK(faceNodes[0] == 1);
         CHECK(faceNodes[1] == 2);
-        
+
         // Edge 2: should extract nodes 2 and 0
         e.ExtractFaceNodes(2, nodes, faceNodes);
         CHECK(faceNodes[0] == 2);
         CHECK(faceNodes[1] == 0);
     }
-    
+
     // Test Quad4 face extraction
     {
         Element e{Quad4};
-        std::vector<DNDS::index> nodes = {0, 1, 2, 3};  // 4 nodes
+        std::vector<DNDS::index> nodes = {0, 1, 2, 3}; // 4 nodes
         std::array<DNDS::index, 2> faceNodes;
-        
+
         // Each face should have 2 nodes
         for (int i = 0; i < 4; i++)
         {
@@ -278,18 +313,18 @@ TEST_CASE("ElementTraits: order elevation data is consistent for O1 elements")
     {
         Element e{t};
         CAPTURE(t);
-        
+
         Element elevated = e.ObtainElevatedElem();
-        
+
         // Elevated element should exist
         CHECK(elevated.type != UnknownElem);
-        
+
         // Elevated element should have more nodes
         CHECK(elevated.GetNumNodes() > e.GetNumNodes());
-        
+
         // Elevated element should have same dimension
         CHECK(elevated.GetDim() == e.GetDim());
-        
+
         // Should have elevation nodes defined
         CHECK(e.GetNumElev_O1O2() > 0);
     }
@@ -301,32 +336,32 @@ TEST_CASE("ElementTraits: order elevation data for specific elements")
     {
         Element e{Line2};
         CHECK(e.ObtainElevatedElem().type == Line3);
-        CHECK(e.GetNumElev_O1O2() == 1);  // One edge midpoint
-        
+        CHECK(e.GetNumElev_O1O2() == 1); // One edge midpoint
+
         // Check elevation span type
         Element spanElem = e.ObtainElevNodeSpan(0);
-        CHECK(spanElem.type == Line2);  // Edge span
+        CHECK(spanElem.type == Line2); // Edge span
     }
-    
+
     // Tri3 -> Tri6
     {
         Element e{Tri3};
         CHECK(e.ObtainElevatedElem().type == Tri6);
-        CHECK(e.GetNumElev_O1O2() == 3);  // Three edge midpoints
+        CHECK(e.GetNumElev_O1O2() == 3); // Three edge midpoints
     }
-    
+
     // Quad4 -> Quad9
     {
         Element e{Quad4};
         CHECK(e.ObtainElevatedElem().type == Quad9);
-        CHECK(e.GetNumElev_O1O2() == 5);  // 4 edges + 1 face center
+        CHECK(e.GetNumElev_O1O2() == 5); // 4 edges + 1 face center
     }
-    
+
     // Hex8 -> Hex27
     {
         Element e{Hex8};
         CHECK(e.ObtainElevatedElem().type == Hex27);
-        CHECK(e.GetNumElev_O1O2() == 19);  // 12 edges + 6 faces + 1 center
+        CHECK(e.GetNumElev_O1O2() == 19); // 12 edges + 6 faces + 1 center
     }
 }
 
@@ -337,7 +372,7 @@ TEST_CASE("ElementTraits: O2 elements do not have further elevation")
     {
         Element e{t};
         CAPTURE(t);
-        
+
         Element elevated = e.ObtainElevatedElem();
         CHECK(elevated.type == UnknownElem);
         CHECK(e.GetNumElev_O1O2() == 0);
@@ -349,14 +384,14 @@ TEST_CASE("ElementTraits: ExtractElevNodeSpanNodes works correctly")
     // Test Tri3 elevation spans
     {
         Element e{Tri3};
-        std::vector<DNDS::index> nodes = {0, 1, 2};  // Parent nodes
+        std::vector<DNDS::index> nodes = {0, 1, 2}; // Parent nodes
         std::array<DNDS::index, 2> spanNodes;
-        
+
         // Each elevation span should connect 2 parent nodes
         for (int i = 0; i < e.GetNumElev_O1O2(); i++)
         {
             e.ExtractElevNodeSpanNodes(i, nodes, spanNodes);
-            CHECK(spanNodes[0] < 3);  // References valid parent node
+            CHECK(spanNodes[0] < 3); // References valid parent node
             CHECK(spanNodes[1] < 3);
         }
     }
@@ -368,48 +403,48 @@ TEST_CASE("ElementTraits: bisection data is valid for O2 elements")
     {
         Element e{Line3};
         CHECK(e.GetO2NumBisect() == 2);
-        
+
         // Each sub-element should be Line2
         for (int i = 0; i < e.GetO2NumBisect(); i++)
         {
             CHECK(e.ObtainO2BisectElem(i).type == Line2);
         }
     }
-    
+
     // Tri6 bisection
     {
         Element e{Tri6};
-        CHECK(e.GetO2NumBisect() == 4);  // 4 sub-triangles
+        CHECK(e.GetO2NumBisect() == 4); // 4 sub-triangles
         for (int i = 0; i < e.GetO2NumBisect(); i++)
         {
             CHECK(e.ObtainO2BisectElem(i).type == Tri3);
         }
     }
-    
+
     // Tet10 bisection
     {
         Element e{Tet10};
-        CHECK(e.GetO2NumBisect() == 8);  // 8 sub-tets
+        CHECK(e.GetO2NumBisect() == 8); // 8 sub-tets
         for (int i = 0; i < e.GetO2NumBisect(); i++)
         {
             CHECK(e.ObtainO2BisectElem(i).type == Tet4);
         }
     }
-    
+
     // Hex27 bisection
     {
         Element e{Hex27};
-        CHECK(e.GetO2NumBisect() == 8);  // 8 sub-hexes
+        CHECK(e.GetO2NumBisect() == 8); // 8 sub-hexes
         for (int i = 0; i < e.GetO2NumBisect(); i++)
         {
             CHECK(e.ObtainO2BisectElem(i).type == Hex8);
         }
     }
-    
+
     // Prism18 bisection
     {
         Element e{Prism18};
-        CHECK(e.GetO2NumBisect() == 8);  // 8 sub-prisms
+        CHECK(e.GetO2NumBisect() == 8); // 8 sub-prisms
         for (int i = 0; i < e.GetO2NumBisect(); i++)
         {
             CHECK(e.ObtainO2BisectElem(i).type == Prism6);
@@ -424,18 +459,18 @@ TEST_CASE("ElementTraits: VTK conversion works correctly")
     {
         Element e{t};
         CAPTURE(t);
-        
+
         // Create dummy node data
         std::vector<t_real> nodes(e.GetNumNodes());
         for (int i = 0; i < e.GetNumNodes(); i++)
             nodes[i] = static_cast<t_real>(i);
-        
+
         // Convert to VTK
         auto [vtkCellType, vtkNodes] = ToVTKVertsAndData(e, nodes);
-        
+
         // VTK cell type should be valid
         CHECK(vtkCellType > 0);
-        
+
         // VTK nodes should have correct size
         CHECK(vtkNodes.size() <= e.GetNumNodes());
         CHECK(vtkNodes.size() > 0);
@@ -445,16 +480,17 @@ TEST_CASE("ElementTraits: VTK conversion works correctly")
 TEST_CASE("ElementTraits: VTK node order is a valid permutation for simple elements")
 {
     // Test VTK node ordering produces valid permutations
-    DispatchElementType(Line2, [](auto traits) {
+    DispatchElementType(Line2, [](auto traits)
+                        {
         std::set<int> seen;
         for (size_t i = 0; i < 2; i++)
             seen.insert(traits.vtkNodeOrder[i]);
         CHECK(seen.size() == 2);  // All unique
         CHECK(*seen.begin() == 0);
-        CHECK(*seen.rbegin() == 1);
-    });
-    
-    DispatchElementType(Line3, [](auto traits) {
+        CHECK(*seen.rbegin() == 1); });
+
+    DispatchElementType(Line3, [](auto traits)
+                        {
         std::set<int> seen;
         for (size_t i = 0; i < 3; i++)
             seen.insert(traits.vtkNodeOrder[i]);
@@ -462,23 +498,24 @@ TEST_CASE("ElementTraits: VTK node order is a valid permutation for simple eleme
         // VTK uses different ordering: 0, 2, 1 (midpoint last)
         CHECK(traits.vtkNodeOrder[0] == 0);
         CHECK(traits.vtkNodeOrder[1] == 2);
-        CHECK(traits.vtkNodeOrder[2] == 1);
-    });
-    
-    DispatchElementType(Tri6, [](auto traits) {
-        std::set<int> seen;
-        for (size_t i = 0; i < 6; i++)
-            seen.insert(traits.vtkNodeOrder[i]);
-        CHECK(seen.size() == 6);  // All unique
-    });
-    
-    DispatchElementType(Hex8, [](auto traits) {
-        std::set<int> seen;
-        for (size_t i = 0; i < 8; i++)
-            seen.insert(traits.vtkNodeOrder[i]);
-        CHECK(seen.size() == 8);  // All unique
-        CHECK(traits.vtkCellType == 12);  // VTK_HEXAHEDRON
-    });
+        CHECK(traits.vtkNodeOrder[2] == 1); });
+
+    DispatchElementType(Tri6, [](auto traits)
+                        {
+                            std::set<int> seen;
+                            for (size_t i = 0; i < 6; i++)
+                                seen.insert(traits.vtkNodeOrder[i]);
+                            CHECK(seen.size() == 6); // All unique
+                        });
+
+    DispatchElementType(Hex8, [](auto traits)
+                        {
+                            std::set<int> seen;
+                            for (size_t i = 0; i < 8; i++)
+                                seen.insert(traits.vtkNodeOrder[i]);
+                            CHECK(seen.size() == 8);         // All unique
+                            CHECK(traits.vtkCellType == 12); // VTK_HEXAHEDRON
+                        });
 }
 
 // ===================================================================
@@ -632,16 +669,16 @@ TEST_CASE("Shape functions: all derivatives are finite")
 {
     // Verify shape function derivatives don't produce NaN or Inf
     std::mt19937 rng(789);
-    
+
     for (auto t : AllTypes)
     {
         Element e{t};
         auto p = RandomInteriorPoint(t, rng);
         CAPTURE(t);
-        
+
         tDiNj DiNj;
         e.GetDiNj(p, DiNj, 3);
-        
+
         // Check all entries are finite
         for (DNDS::index i = 0; i < DiNj.rows(); i++)
         {

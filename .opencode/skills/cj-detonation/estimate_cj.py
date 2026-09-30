@@ -27,7 +27,7 @@ from sdtoolbox.thermo import soundspeed_eq, soundspeed_fr
 
 
 def parse_composition(comp: str) -> str:
-    """Convert "H2:2, O2:1" to "H2:2 O2:1" for SDToolbox."""
+    """Convert "H2:2, O2:1" to a Cantera composition string."""
     return comp.replace(",", " ").strip()
 
 
@@ -53,6 +53,11 @@ def main():
         gas1.TPX = T1, P1, q
     else:
         gas1.TPY = T1, P1, q
+    # SDToolbox's CJspeed/PostShock APIs always assign their composition with
+    # Cantera's TPX, so they accept mole fractions regardless of this CLI's
+    # input basis. Let Cantera parse and normalize the requested basis first,
+    # then pass the resulting mole-fraction vector to every SDToolbox call.
+    q_sdt = gas1.X.copy()
     rho1 = gas1.density
     MW1 = gas1.mean_molecular_weight
     gamma1 = gas1.cp / gas1.cv
@@ -64,10 +69,10 @@ def main():
     print(f"  Mechanism: {mech}")
 
     # CJ speed (minimum wave speed method)
-    cj_speed = CJspeed(P1, T1, q, mech)
+    cj_speed = CJspeed(P1, T1, q_sdt, mech)
 
     # CJ equilibrium state
-    gas_cj = PostShock_eq(cj_speed, P1, T1, q, mech)
+    gas_cj = PostShock_eq(cj_speed, P1, T1, q_sdt, mech)
     rho_cj = gas_cj.density
     ae = soundspeed_eq(gas_cj)
     w2 = cj_speed * rho1 / rho_cj  # particle velocity in wave frame
@@ -79,7 +84,7 @@ def main():
           f"rho_CJ={rho_cj:.4f} kg/m3 ({rho_cj/rho1:.2f}x)")
 
     # von Neumann (frozen shock) state
-    gas_vn = PostShock_fr(cj_speed, P1, T1, q, mech)
+    gas_vn = PostShock_fr(cj_speed, P1, T1, q_sdt, mech)
     rho_vn = gas_vn.density
     u_vn = cj_speed * (1 - rho1 / rho_vn)
     a_vn = soundspeed_fr(gas_vn)

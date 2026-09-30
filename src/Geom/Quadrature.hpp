@@ -50,7 +50,7 @@ namespace DNDS::Geom::Elem
 
         // Precomputed Shape Function Buffers at Quadrature Points
         // =========================================================================
-        static struct TNBufferAtQuadrature
+        struct TNBufferAtQuadrature
         {
             std::array<std::array<std::vector<tD01Nj>, INT_ORDER_MAX + 1>, ElemType_NUM> buf;
 
@@ -75,8 +75,10 @@ namespace DNDS::Geom::Elem
                     }
                 }
             }
+        };
 
-        } NBufferAtQuadrature{};
+        // One cache across translation units (C++17 inline variable).
+        inline TNBufferAtQuadrature NBufferAtQuadrature{};
 
     } // namespace detail
 

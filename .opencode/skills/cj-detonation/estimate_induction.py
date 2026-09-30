@@ -113,7 +113,7 @@ def plot_znd_profile(znd_out, gas, cj_speed, overdrive, plot_path,
 
 
 def parse_composition(comp: str) -> str:
-    """Convert "H2:2, O2:1" to "H2:2 O2:1" for SDToolbox."""
+    """Convert "H2:2, O2:1" to a Cantera composition string."""
     return comp.replace(",", " ").strip()
 
 
@@ -151,16 +151,21 @@ def main():
         gas1.TPX = T1, P1, q
     else:
         gas1.TPY = T1, P1, q
+    # SDToolbox's CJspeed/PostShock APIs always assign their composition with
+    # Cantera's TPX, so they accept mole fractions regardless of this CLI's
+    # input basis. Let Cantera parse and normalize the requested basis first,
+    # then pass the resulting mole-fraction vector to every SDToolbox call.
+    q_sdt = gas1.X.copy()
     rho1 = gas1.density
     a1 = np.sqrt(gas1.cp / gas1.cv * ct.gas_constant /
                  gas1.mean_molecular_weight * T1)
 
     # CJ speed
-    cj_speed = CJspeed(P1, T1, q, mech)
+    cj_speed = CJspeed(P1, T1, q_sdt, mech)
     U = args.overdrive * cj_speed
 
     # VN state at the overdriven speed
-    gas = PostShock_fr(U, P1, T1, q, mech)
+    gas = PostShock_fr(U, P1, T1, q_sdt, mech)
 
     print(f"CJ speed: {cj_speed:.1f} m/s")
     print(f"  Overdrive factor: {args.overdrive:.3f} -> U={U:.1f} m/s")

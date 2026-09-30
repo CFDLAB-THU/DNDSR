@@ -638,7 +638,6 @@ namespace DNDS::Geom
                         std::vector<cgsize_t> pts(nPts);
                         std::vector<double> normalBuf(normalListSize); // should have checked normalDataType, but it is not used here so not checked
                         DNDS_CGNS_CALL_EXIT(cg_boco_read(cgns_file, iBase, iZone, iBC, pts.data(), normalBuf.data()));
-                        DNDS_assert(pts[0] >= 1 && pts[1] <= ZoneElems.back()->Size());
 
                         t_index BCCode = FBCName_2_ID(std::string(boconame.data()));
                         if (BCCode == BC_ID_NULL)
@@ -647,13 +646,20 @@ namespace DNDS::Geom
                         }
                         if (pType == PointRange)
                         {
+                            DNDS_check_throw_info(pts.size() == 2 && pts[0] >= 1 &&
+                                                      pts[0] <= pts[1] && pts[1] <= ZoneElems.back()->Size(),
+                                                  "Invalid CGNS boundary PointRange");
                             for (DNDS::index i = pts[0] - 1; i < pts[1]; i++)
                                 ZoneElemInfos.back()->operator()(i, 0).zone = BCCode; //! setting BC code
                         }
                         else if (pType == PointList)
                         {
                             for (auto i : pts)
+                            {
+                                DNDS_check_throw_info(i >= 1 && i <= ZoneElems.back()->Size(),
+                                                      "Invalid CGNS boundary PointList index");
                                 ZoneElemInfos.back()->operator()(i - 1, 0).zone = BCCode; //* note that pts is 1-based
+                            }
                         }
                         else
                             DNDS_assert(false);

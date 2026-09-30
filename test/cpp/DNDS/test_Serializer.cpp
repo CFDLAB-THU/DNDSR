@@ -95,6 +95,322 @@ struct FileGuard
     }
 };
 
+TEST_CASE("Audit batch 2: shared read cache owns output independently")
+{
+    MPIInfo mpi(MPI_COMM_WORLD);
+    for (bool h5 : {false, true})
+    {
+        auto path = h5 ? TmpH5("audit_owned") : TmpJSON("audit_owned");
+        FileGuard guard(path, h5);
+        S::SerializerBaseSSP ser;
+        if (h5)
+            ser = std::make_shared<S::SerializerH5>(mpi);
+        else
+            ser = std::make_shared<S::SerializerJSON>();
+        auto indices = std::make_shared<host_device_vector<DNDS::index>>(2, 42);
+        auto rows = std::make_shared<host_device_vector<DNDS::rowsize>>(2, 17);
+        ser->OpenFile(path, false);
+        for (const char *name : {"a", "b", "c"})
+            ser->WriteSharedIndexVector(name, indices, S::ArrayGlobalOffset_Parts);
+        for (const char *name : {"r", "s"})
+            ser->WriteSharedRowsizeVector(name, rows, S::ArrayGlobalOffset_Parts);
+        ser->CloseFile();
+        for (int session = 0; session < 2; ++session)
+        {
+            ser->OpenFile(path, true);
+            auto offset = S::ArrayGlobalOffset_Unknown;
+            ssp<host_device_vector<DNDS::index>> first, second;
+            ser->ReadSharedIndexVector("a", first, offset);
+            first = std::make_shared<host_device_vector<DNDS::index>>(2, 777);
+            offset = S::ArrayGlobalOffset_Unknown;
+            ser->ReadSharedIndexVector("b", second, offset);
+            REQUIRE(second->size() == 2);
+            CHECK((*second)[0] == 42);
+            second.reset();
+            offset = S::ArrayGlobalOffset_Unknown;
+            ser->ReadSharedIndexVector("c", second, offset);
+            CHECK((*second)[0] == 42);
+            ssp<host_device_vector<DNDS::rowsize>> r, s;
+            offset = S::ArrayGlobalOffset_Unknown;
+            ser->ReadSharedRowsizeVector("r", r, offset);
+            r = std::make_shared<host_device_vector<DNDS::rowsize>>(2, 888);
+            offset = S::ArrayGlobalOffset_Unknown;
+            ser->ReadSharedRowsizeVector("s", s, offset);
+            REQUIRE(s->size() == 2);
+            CHECK((*s)[0] == 17);
+            offset = S::ArrayGlobalOffset_Unknown;
+            CHECK_THROWS(ser->ReadSharedRowsizeVector("a", s, offset));
+            ser->CloseFile();
+        }
+    }
+}
+
+TEST_CASE("Audit batch 2: HDF5 shared reads respect regions and offsets")
+{
+    MPIInfo mpi(MPI_COMM_WORLD);
+    auto path = TmpH5("audit_region");
+    FileGuard guard(path, true);
+    S::SerializerH5 ser(mpi);
+    auto values = std::make_shared<host_device_vector<DNDS::index>>(2);
+    (*values)[0] = mpi.rank * 10 + 42;
+    (*values)[1] = mpi.rank * 10 + 99;
+    ser.OpenFile(path, false);
+    ser.WriteSharedIndexVector("a", values, S::ArrayGlobalOffset_Parts);
+    ser.WriteSharedIndexVector("b", values, S::ArrayGlobalOffset_Parts);
+    ser.CloseFile();
+    ser.OpenFile(path, true);
+    ssp<host_device_vector<DNDS::index>> a, b, c;
+    auto offset = S::ArrayGlobalOffset{1, mpi.rank * 2};
+    ser.ReadSharedIndexVector("a", a, offset);
+    offset = S::ArrayGlobalOffset{1, mpi.rank * 2 + 1};
+    ser.ReadSharedIndexVector("b", b, offset);
+    CHECK((*a)[0] == mpi.rank * 10 + 42);
+    CHECK((*b)[0] == mpi.rank * 10 + 99);
+    offset = S::ArrayGlobalOffset_Unknown;
+    ser.ReadSharedIndexVector("a", c, offset);
+    CHECK(offset == S::ArrayGlobalOffset(2, mpi.rank * 2));
+    REQUIRE(c->size() == 2);
+    CHECK((*c)[1] == mpi.rank * 10 + 99);
+    auto saved = c;
+    offset = S::ArrayGlobalOffset_Unknown;
+    ser.ReadSharedIndexVector("b", c, offset);
+    CHECK(offset == S::ArrayGlobalOffset(2, mpi.rank * 2));
+    CHECK(c == saved);
+    // Only rank zero has a cached region: all ranks must still participate.
+    offset = S::ArrayGlobalOffset{mpi.rank == 0 ? 1 : 0, mpi.rank * 2};
+    ser.ReadSharedIndexVector("b", c, offset);
+    CHECK(c->size() == (mpi.rank == 0 ? 1 : 0));
+    ser.CloseFile();
+}
+
+TEST_CASE("Audit batch 2: repeated distributed CSR reads retain global offsets")
+{
+    MPIInfo mpi(MPI_COMM_WORLD);
+    auto path = TmpH5("audit_csr_reread");
+    FileGuard guard(path, true);
+    auto ser = std::make_shared<S::SerializerH5>(mpi);
+    ParArray<DNDS::index, NonUniformSize> source(mpi), first(mpi), second(mpi);
+    source.Resize(1);
+    source.ResizeRow(0, 2);
+    source(0, 0) = 100 + mpi.rank * 10;
+    source(0, 1) = 101 + mpi.rank * 10;
+    source.Compress();
+    ser->OpenFile(path, false);
+    source.WriteSerializer(ser, "array", S::ArrayGlobalOffset_Parts);
+    ser->CloseFile();
+    ser->OpenFile(path, true);
+    auto offset = S::ArrayGlobalOffset_Unknown;
+    first.ReadSerializer(ser, "array", offset);
+    offset = S::ArrayGlobalOffset_Unknown;
+    second.ReadSerializer(ser, "array", offset);
+    CHECK(first(0, 0) == 100 + mpi.rank * 10);
+    CHECK(second(0, 0) == first(0, 0));
+    CHECK(second(0, 1) == first(0, 1));
+    ser->CloseFile();
+}
+
+TEST_CASE("CSR sharing: array round trip retains shared structure")
+{
+    MPIInfo mpi(MPI_COMM_WORLD);
+    for (bool h5 : {false, true})
+    {
+        auto path = h5 ? TmpH5("csr_shared") : TmpJSON("csr_shared");
+        FileGuard guard(path, h5);
+        S::SerializerBaseSSP ser;
+        if (h5)
+            ser = std::make_shared<S::SerializerH5>(mpi);
+        else
+            ser = std::make_shared<S::SerializerJSON>();
+        ParArray<DNDS::index, NonUniformSize> source(mpi), alias(mpi);
+        source.Resize(2, [](DNDS::index i)
+                      { return DNDS::rowsize(i + 2); });
+        for (DNDS::index i = 0; i < 2; ++i)
+            for (DNDS::rowsize j = 0; j < source.RowSize(i); ++j)
+                source(i, j) = 100 * mpi.rank + 10 * i + j;
+        alias.clone(source);
+        REQUIRE(source.getRowStart() == alias.getRowStart());
+        ser->OpenFile(path, false);
+        source.WriteSerializer(ser, "a", S::ArrayGlobalOffset_Parts);
+        alias.WriteSerializer(ser, "b", S::ArrayGlobalOffset_Parts);
+        ser->CloseFile();
+        ssp<const host_device_vector<DNDS::index>> previous;
+        for (int session = 0; session < 2; ++session)
+        {
+            ser->OpenFile(path, true);
+            ParArray<DNDS::index, NonUniformSize> a(mpi), b(mpi), again(mpi);
+            auto offset = S::ArrayGlobalOffset_Unknown;
+            a.ReadSerializer(ser, "a", offset);
+            offset = S::ArrayGlobalOffset_Unknown;
+            b.ReadSerializer(ser, "b", offset);
+            offset = S::ArrayGlobalOffset_Unknown;
+            again.ReadSerializer(ser, "a", offset);
+            CHECK(a.getRowStart() == b.getRowStart());
+            CHECK(a.getRowStart() == again.getRowStart());
+            CHECK(a.getRowStart() != previous);
+            for (DNDS::index i = 0; i < 2; ++i)
+                for (DNDS::rowsize j = 0; j < source.RowSize(i); ++j)
+                    CHECK(b(i, j) == source(i, j));
+            previous = b.getRowStart();
+            a.Decompress();
+            a.ResizeRow(0, 4);
+            a.Compress();
+            CHECK(a.getRowStart() != b.getRowStart());
+            CHECK(b.RowSize(0) == 2);
+            ser->CloseFile();
+            CHECK(previous->at(2) == 5);
+        }
+    }
+}
+
+// Expose only cache eviction to reproduce unequal per-rank cache histories.
+class RowStartCacheProbe : public S::SerializerH5
+{
+public:
+    using S::SerializerH5::SerializerH5;
+    void ForgetDecoded() { rowStartReads.clear(); }
+};
+
+TEST_CASE("CSR sharing: explicit API separates raw values and rejects changed slices")
+{
+    MPIInfo mpi(MPI_COMM_WORLD);
+    auto path = TmpH5("csr_api");
+    FileGuard guard(path, true);
+    RowStartCacheProbe ser(mpi);
+    ser.SetCollectiveRW(true, true);
+    auto local = std::make_shared<host_device_vector<DNDS::index>>(3);
+    (*local)[0] = 0;
+    (*local)[1] = 2;
+    (*local)[2] = 5;
+    ser.OpenFile(path, false);
+    ser.WriteSharedRowStartVector("a", local, {5, mpi.rank * 5});
+    ser.WriteSharedRowStartVector("b", local, {5, mpi.rank * 5});
+    CHECK_THROWS(ser.WriteSharedRowStartVector("bad", local, {5, mpi.rank * 5 + (mpi.rank == 0)}));
+    CHECK((*local)[0] == 0);
+    CHECK((*local)[2] == 5);
+    ser.CloseFile();
+    ser.OpenFile(path, true);
+    std::string ref;
+    ser.ReadString("b::ref", ref);
+    CHECK(ref == "/a");
+    ssp<host_device_vector<DNDS::index>> raw, decoded, alias;
+    auto region = S::ArrayGlobalOffset{3, mpi.rank * 2};
+    ser.ReadSharedIndexVector("b", raw, region);
+    CHECK((*raw)[0] == mpi.rank * 5);
+    auto data = ser.ReadSharedRowStartVector("a", decoded, {2, mpi.rank * 2});
+    CHECK(data == S::ArrayGlobalOffset(5, mpi.rank * 5));
+    CHECK(decoded != raw);
+    CHECK((*decoded)[0] == 0);
+    CHECK((*raw)[0] == mpi.rank * 5);
+    data = ser.ReadSharedRowStartVector("b", alias, {2, mpi.rank * 2});
+    CHECK(alias == decoded);
+    CHECK(data == S::ArrayGlobalOffset(5, mpi.rank * 5));
+    // A mismatch on just one rank must throw on every rank, before data I/O.
+    CHECK_THROWS(ser.ReadSharedRowStartVector("b", alias, {mpi.rank == 0 ? 1 : 2, mpi.rank * 2}));
+    CHECK(alias == decoded);
+    if (mpi.rank != 0)
+        ser.ForgetDecoded();
+    data = ser.ReadSharedRowStartVector("b", alias, {2, mpi.rank * 2});
+    CHECK(data == S::ArrayGlobalOffset(5, mpi.rank * 5));
+    if (mpi.rank == 0)
+        CHECK(alias == decoded); // a remote miss must not replace our allocation
+    region = S::ArrayGlobalOffset{3, mpi.rank * 2};
+    ser.ReadSharedIndexVector("a", raw, region);
+    CHECK((*raw)[0] == mpi.rank * 5);
+    ser.CloseFile();
+    CHECK((*decoded)[2] == 5);
+    ser.OpenFile(path, true);
+    // Different slices are permitted in a new session, not in the previous one.
+    data = ser.ReadSharedRowStartVector("b", alias, {1, mpi.rank * 2 + 1});
+    CHECK(data == S::ArrayGlobalOffset(3, mpi.rank * 5 + 2));
+    CHECK(alias != decoded);
+    CHECK((*alias)[1] == 3);
+    ser.CloseFile();
+}
+
+TEST_CASE("CSR sharing: empty ranks retain their terminal offset")
+{
+    MPIInfo mpi(MPI_COMM_WORLD);
+    for (int owner : {-1, 0, mpi.size - 1})
+    {
+        auto path = TmpH5("csr_empty_" + std::to_string(owner));
+        FileGuard guard(path, true);
+        auto ser = std::make_shared<S::SerializerH5>(mpi);
+        ser->SetCollectiveRW(true, true);
+        ParArray<DNDS::index, NonUniformSize> source(mpi), a(mpi), b(mpi);
+        source.Resize(mpi.rank == owner ? 1 : 0, [](DNDS::index)
+                      { return DNDS::rowsize(2); });
+        if (mpi.rank == owner)
+            source(0, 0) = 41, source(0, 1) = 42;
+        ser->OpenFile(path, false);
+        source.WriteSerializer(ser, "a", S::ArrayGlobalOffset_Parts);
+        source.WriteSerializer(ser, "b", S::ArrayGlobalOffset_Parts);
+        ser->CloseFile();
+        ser->OpenFile(path, true);
+        auto offset = S::ArrayGlobalOffset_Unknown;
+        a.ReadSerializer(ser, "a", offset);
+        offset = S::ArrayGlobalOffset_Unknown;
+        b.ReadSerializer(ser, "b", offset);
+        CHECK(a.getRowStart() == b.getRowStart());
+        REQUIRE(a.getRowStart()->size() == size_t(a.Size() + 1));
+        CHECK(a.getRowStart()->at(0) == 0);
+        if (mpi.rank == owner)
+            CHECK(b(0, 1) == 42);
+        ser->CloseFile();
+    }
+}
+
+TEST_CASE("CSR sharing: mixed writer identities do not create inconsistent references")
+{
+    MPIInfo mpi(MPI_COMM_WORLD);
+    auto path = TmpH5("csr_mixed");
+    FileGuard guard(path, true);
+    S::SerializerH5 ser(mpi);
+    auto a = std::make_shared<host_device_vector<DNDS::index>>(2);
+    (*a)[0] = 0;
+    (*a)[1] = 2;
+    auto b = std::make_shared<host_device_vector<DNDS::index>>(*a);
+    ser.OpenFile(path, false);
+    ser.WriteSharedRowStartVector("a", a, {2, mpi.rank * 2});
+    ser.WriteSharedRowStartVector("b", b, {2, mpi.rank * 2});
+    // All ranks have a hit, but their candidate reference paths differ.
+    ser.WriteSharedRowStartVector("c", mpi.rank == 0 ? a : b, {2, mpi.rank * 2});
+    ser.CloseFile();
+    ser.OpenFile(path, true);
+    ssp<host_device_vector<DNDS::index>> c;
+    auto data = ser.ReadSharedRowStartVector("c", c, {1, mpi.rank});
+    CHECK(data == S::ArrayGlobalOffset(2, mpi.rank * 2));
+    CHECK((*c)[1] == 2);
+    ser.CloseFile();
+}
+
+TEST_CASE("CSR sharing: reads legacy raw-vector row-start encoding")
+{
+    MPIInfo mpi(MPI_COMM_WORLD);
+    auto path = TmpH5("csr_legacy");
+    FileGuard guard(path, true);
+    S::SerializerH5 ser(mpi);
+    ser.SetCollectiveRW(true, true);
+    // Legacy ParArray wrote nRows entries except for the final rank's sentinel.
+    auto global = std::make_shared<host_device_vector<DNDS::index>>(mpi.rank == mpi.size - 1 ? 2 : 1);
+    (*global)[0] = mpi.rank * 3;
+    if (mpi.rank == mpi.size - 1)
+        (*global)[1] = mpi.size * 3;
+    ser.OpenFile(path, false);
+    ser.WriteSharedIndexVector("a", global, S::ArrayGlobalOffset_Parts);
+    ser.WriteSharedIndexVector("b", global, S::ArrayGlobalOffset_Parts);
+    ser.CloseFile();
+    ser.OpenFile(path, true);
+    ssp<host_device_vector<DNDS::index>> a, b;
+    auto data = ser.ReadSharedRowStartVector("a", a, {1, mpi.rank});
+    CHECK(data == S::ArrayGlobalOffset(3, mpi.rank * 3));
+    data = ser.ReadSharedRowStartVector("b", b, {1, mpi.rank});
+    CHECK(data == S::ArrayGlobalOffset(3, mpi.rank * 3));
+    CHECK(a == b);
+    CHECK((*a)[0] == 0);
+    CHECK((*a)[1] == 3);
+    ser.CloseFile();
+}
+
 // ===================================================================
 // SerializerJSON — scalar round-trip
 // ===================================================================

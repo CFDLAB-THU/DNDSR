@@ -122,7 +122,7 @@ namespace DNDS
         //* compressed data
         using t_Data = host_device_vector<value_type>;
         //* uncompressed data (only for CSR)
-        using t_DataUncompressed = std::vector<std::vector<value_type>>;
+        using t_DataUncompressed = std::vector<RowStorage<value_type>>;
 
         //* non uniform data: CSR
         using t_RowStart = host_device_vector<index>;
@@ -133,6 +133,14 @@ namespace DNDS
         using t_pRowSizes = ssp<t_RowSizes>;
 
     protected:
+        static void CheckSerializedInput(const Serializer::SerializerBaseSSP &serializer, bool valid)
+        {
+            int all = valid;
+            if (!serializer->IsPerRank())
+                MPI_Allreduce(MPI_IN_PLACE, &all, 1, MPI_INT, MPI_MIN, serializer->getMPI().comm);
+            DNDS_check_throw_info(all, "serialized array shape, size, or payload is inconsistent");
+        }
+
         t_pRowStart _pRowStart; // CSR   in number of T
         t_pRowSizes _pRowSizes; // TABLE in number of T
         t_Data _data;
@@ -146,10 +154,23 @@ namespace DNDS
         /// @brief Shared pointer to the row-start index (CSR layout only).
         /// @details `_pRowStart->at(i)` gives the flat-buffer offset of row `i`.
         /// Size is `Size()+1`; the sentinel at the end equals `DataSize()`.
-        t_pRowStart getRowStart() { return _pRowStart; }
+        /// The returned owning handle cannot modify offsets or rebind this array's pointer.
+        ssp<const t_RowStart> getRowStart() const { return _pRowStart; }
         /// @brief Shared pointer to the per-row size vector (TABLE_Max / TABLE_StaticMax).
         /// @details For padded layouts, records the number of "used" columns in each row.
         t_pRowSizes getRowSizes() { return _pRowSizes; }
+
+        /// Own the exact host allocation behind an exported row. Ordinary
+        /// element access stays borrowed; only long-lived consumers need leases.
+        std::shared_ptr<const void> rowLease(index iRow) const
+        {
+            DNDS_check_throw(iRow >= 0 && iRow < _size);
+            if constexpr (isCSR)
+                if (!IfCompressed())
+                    return _dataUncompressed.at(iRow).lease();
+            return _data.hostLease();
+        }
+        std::shared_ptr<const void> dataLease() const { return _data.hostLease(); }
 
     public:
         /// @brief Default-constructed array: empty, no storage.
@@ -325,17 +346,15 @@ namespace DNDS
         {
             if (IfCompressed())
                 return;
-            _pRowStart = std::make_shared<
-                typename decltype(_pRowStart)::element_type>(_size + 1, 0);
-            _pRowStart->at(0) = 0;
+            auto starts = std::make_shared<
+                typename decltype(_pRowStart)::element_type>(CheckedSize::Add(_size, index(1)), 0);
             for (index i = 0; i < _size; i++)
             {
-                index rsI = _pRowStart->at(i);
-                index rsIP = rsI + static_cast<index>(_dataUncompressed.at(i).size());
-                DNDS_check_throw(rsIP >= rsI);
-                _pRowStart->at(i + 1) = rsIP;
+                DNDS_check_throw(_dataUncompressed.at(i).size() <= size_t(std::numeric_limits<rowsize>::max()));
+                starts->at(i + 1) = CheckedSize::Add(starts->at(i), index(_dataUncompressed.at(i).size()));
             }
-            _data.resize(_pRowStart->at(_size));
+            _data.resize(starts->at(_size));
+            _pRowStart = std::move(starts);
             for (index i = 0; i < _size; i++)
             {
                 // // _dataUncompressed[i].resize( - _pRowStart->at(i));
@@ -394,23 +413,29 @@ namespace DNDS
          */
         void Resize(index nSize, rowsize nRow_size_dynamic)
         {
+            DNDS_check_throw(nSize >= 0 && nRow_size_dynamic >= 0);
+            if constexpr (_dataLayout == TABLE_StaticFixed)
+                DNDS_check_throw(nRow_size_dynamic == rs);
+            if constexpr (_dataLayout == TABLE_StaticMax)
+                DNDS_check_throw(nRow_size_dynamic == rm);
+            const index flatSize = CheckedSize::Multiply(nSize, index(nRow_size_dynamic));
             if constexpr (_dataLayout == CSR) // to un compressed
             {
                 DNDS_check_throw_info(!IfCompressed(), "Need to decompress before auto resizing");
-                _size = nSize;
                 // _dataUncompressed.resize(nSize, typename decltype(_dataUncompressed)::value_type(nRow_size_dynamic));
                 // _dataUncompressed.resize(nSize);
                 _dataUncompressed.assign(nSize, typename decltype(_dataUncompressed)::value_type(nRow_size_dynamic));
+                _size = nSize;
             }
             else
             {
-                _size = nSize;
                 if constexpr (_dataLayout == TABLE_Fixed || _dataLayout == TABLE_Max)
-                    _data.resize(nSize * nRow_size_dynamic), _row_size_dynamic = nRow_size_dynamic;
+                    _data.resize(flatSize), _row_size_dynamic = nRow_size_dynamic;
                 else if constexpr (_dataLayout == TABLE_StaticFixed)
-                    _data.resize(nSize * rs), DNDS_check_throw(nRow_size_dynamic == rs);
+                    _data.resize(flatSize);
                 else if constexpr (_dataLayout == TABLE_StaticMax)
-                    _data.resize(nSize * rm), DNDS_check_throw(nRow_size_dynamic == rm);
+                    _data.resize(flatSize);
+                _size = nSize;
 
                 if constexpr (_dataLayout == TABLE_Max || _dataLayout == TABLE_StaticMax)
                 {
@@ -431,21 +456,22 @@ namespace DNDS
         /// @param nSize New number of rows.
         void Resize(index nSize)
         {
+            DNDS_check_throw(nSize >= 0);
             if constexpr (_dataLayout == CSR)
             {
                 DNDS_check_throw_info(!IfCompressed(), "Need to decompress before auto resizing");
-                _size = nSize;
                 _dataUncompressed.resize(nSize);
+                _size = nSize;
             }
             else if constexpr (_dataLayout == TABLE_StaticFixed)
             {
+                _data.resize(CheckedSize::Multiply(nSize, index(rs)));
                 _size = nSize;
-                _data.resize(nSize * rs);
             }
             else if constexpr (_dataLayout == TABLE_StaticMax)
             {
+                _data.resize(CheckedSize::Multiply(nSize, index(rm)));
                 _size = nSize;
-                _data.resize(nSize * rm);
                 if (_pRowSizes.use_count() == 1)
                     _pRowSizes->resize(nSize, 0);
                 else
@@ -478,13 +504,18 @@ namespace DNDS
         {
             if constexpr (_dataLayout == CSR)
             {
+                auto starts = std::make_shared<typename decltype(_pRowStart)::element_type>(CheckedSize::Add(nSize, index(1)));
+                (*starts)[0] = 0;
+                for (index i = 0; i < nSize; i++)
+                {
+                    auto width = FRowSize(i);
+                    DNDS_check_throw(width >= 0 && width <= std::numeric_limits<rowsize>::max());
+                    (*starts)[i + 1] = CheckedSize::Add((*starts)[i], index(width));
+                }
+                _data.resize(starts->at(nSize));
+                _pRowStart = std::move(starts);
                 _size = nSize;
                 _pRowSizes.reset(), _dataUncompressed.clear(); //*directly to compressed
-                _pRowStart = std::make_shared<typename decltype(_pRowStart)::element_type>(nSize + 1);
-                _pRowStart->operator[](0) = 0;
-                for (index i = 0; i < nSize; i++)
-                    (*_pRowStart)[i + 1] = (*_pRowStart)[i] + FRowSize(i);
-                _data.resize(_pRowStart->at(nSize));
             }
             static_assert(_dataLayout == CSR, "Only Non Uniform, CSR for now");
             static_assert(std::is_invocable_r_v<rowsize, TFRowSize, index>, "Call invalid");
@@ -503,6 +534,7 @@ namespace DNDS
          */
         void ResizeRow(index iRow, rowsize nRowSize)
         {
+            DNDS_check_throw(nRowSize >= 0);
             if constexpr (_dataLayout == CSR)
             {
                 DNDS_check_throw_info(!IfCompressed(), "Need to decompress before auto resizing row");
@@ -535,6 +567,7 @@ namespace DNDS
         /// CSR-only, decompressed-only.
         void ReserveRow(index iRow, rowsize nRowSize)
         {
+            DNDS_check_throw(nRowSize >= 0);
             if constexpr (_dataLayout == CSR)
             {
                 DNDS_check_throw_info(!IfCompressed(), "Need to decompress before auto resizing row");
@@ -753,7 +786,9 @@ namespace DNDS
                 if (IfCompressed())
                     hashData = vector_hash<T>()(_data.begin(), _data.end());
                 else
-                    hashData = vector_hash<std::vector<T>>()(_dataUncompressed);
+                    for (auto &row : _dataUncompressed)
+                        if (row.size())
+                            hashData ^= vector_hash<T>()(row.data(), row.data() + row.size());
             }
             else
                 hashData = vector_hash<T>()(_data.begin(), _data.end());
@@ -761,7 +796,7 @@ namespace DNDS
             if (_pRowSizes)
                 hashSize = vector_hash<rowsize>()(_pRowSizes->begin(), _pRowSizes->end());
             if (_pRowStart)
-                hashSize = vector_hash<index>()(_pRowSizes->begin(), _pRowSizes->end());
+                hashSize = vector_hash<index>()(_pRowStart->begin(), _pRowStart->end());
             return array_hash<std::size_t, 3>()(std::array<std::size_t, 3>{std::size_t(_size), hashSize, hashData});
         }
 
@@ -823,22 +858,52 @@ namespace DNDS
             this->clone(R);
         }
 
-        /// @brief Move constructor: shallow transfer of storage.
-        /// All members (host_device_vector, shared_ptrs, PODs) have correct
-        /// move semantics. Source is left in a valid empty state.
-        Array(self_type &&) noexcept = default;
-        self_type &operator=(self_type &&) noexcept = default;
+        /// @brief Transfer storage, resetting the source's structural state.
+        Array(self_type &&R) noexcept
+            : ObjectNaming(std::move(R)),
+              _pRowStart(std::move(R._pRowStart)), _pRowSizes(std::move(R._pRowSizes)),
+              _data(std::move(R._data)), deviceBackend(std::exchange(R.deviceBackend, DeviceBackend::Unknown)),
+              _dataUncompressed(std::move(R._dataUncompressed)),
+              _size(std::exchange(R._size, 0)), _row_size_dynamic(std::exchange(R._row_size_dynamic, 0))
+        {
+            R._dataUncompressed.clear();
+        }
+        self_type &operator=(self_type &&R) noexcept
+        {
+            if (this == &R)
+                return *this;
+            ObjectNaming::operator=(std::move(R));
+            _pRowStart = std::move(R._pRowStart);
+            _pRowSizes = std::move(R._pRowSizes);
+            _data = std::move(R._data);
+            deviceBackend = std::exchange(R.deviceBackend, DeviceBackend::Unknown);
+            _dataUncompressed = std::move(R._dataUncompressed);
+            R._dataUncompressed.clear();
+            _size = std::exchange(R._size, 0);
+            _row_size_dynamic = std::exchange(R._row_size_dynamic, 0);
+            return *this;
+        }
         ~Array() = default;
 
-        /// @brief Swap the storage of two arrays in-place.
-        /// @details Both arrays must already have identical logical size and
-        /// flat-buffer size. Swaps only what the current layout uses (flat buffer
-        /// plus structural pointers, or the nested vectors for CSR decompressed).
+        /// @brief Check the identical-shape contract without changing either array.
+        void CheckSwapData(const self_type &R) const
+        {
+            DNDS_check_throw_info(R.Size() == this->Size(), "SwapData requires identical row counts");
+            DNDS_check_throw_info(R._data.size() == _data.size(), "SwapData requires identical flat sizes");
+            if constexpr (_dataLayout == CSR)
+                DNDS_check_throw_info(IfCompressed() == R.IfCompressed(), "SwapData requires identical compression states");
+            else
+                DNDS_check_throw_info(DataStride() == R.DataStride(), "SwapData requires identical strides");
+            if constexpr (_dataLayout == CSR || isTABLE_Max(_dataLayout))
+                for (index i = 0; i < Size(); ++i)
+                    DNDS_check_throw_info(RowSize(i) == R.RowSize(i), "SwapData requires identical row lengths");
+        }
+
+        /// @brief Swap values only between identical row layouts and shapes.
         // TODO: SwapData on device?
         void SwapData(self_type &R)
         {
-            DNDS_check_throw(R.Size() == this->Size());
-            DNDS_check_throw(R._data.size() == _data.size());
+            CheckSwapData(R);
             if constexpr (_dataLayout == CSR)
             {
                 if (IfCompressed())
@@ -890,11 +955,14 @@ namespace DNDS
                 Serializer::ArrayGlobalOffset localOffset = offset;
                 if (localOffset.isDist())
                 {
+                    CheckSerializedInput(serializerP, localOffset.size() >= 0 &&
+                                                          localOffset.size() <= std::numeric_limits<index>::max() / index(sizeof_T) &&
+                                                          localOffset.offset() <= std::numeric_limits<index>::max() / index(sizeof_T));
                     localOffset = localOffset * index(sizeof_T);
                 }
                 index bufferSize{0};
                 serializerP->ReadUint8Array("data", nullptr, bufferSize, localOffset);
-                DNDS_check_throw(bufferSize % sizeof_T == 0);
+                CheckSerializedInput(serializerP, bufferSize >= 0 && bufferSize % sizeof_T == 0);
                 _data.resize(bufferSize / sizeof_T);
                 uint8_t dummy{};
                 serializerP->ReadUint8Array("data", bufferSize == 0 ? &dummy : (uint8_t *)_data.data(), bufferSize, localOffset);
@@ -941,8 +1009,8 @@ namespace DNDS
         ///                       pRowStart in local coordinates.
         ///                     - Collective CSR: must be isDist() = {localDataCount,
         ///                       globalDataStart}, computed by ParArray via MPI_Scan.
-        ///                       Array skips pRowStart (ParArray writes it separately
-        ///                       in global coordinates). Asserted for collective CSR.
+        ///                       The shared row-start API encodes global coordinates
+        ///                       without changing the local structure. Asserted for collective CSR.
         void WriteSerializer(Serializer::SerializerBaseSSP serializerP, const std::string &name,
                              Serializer::ArrayGlobalOffset offset,
                              Serializer::ArrayGlobalOffset dataOffset = Serializer::ArrayGlobalOffset_Unknown)
@@ -969,17 +1037,9 @@ namespace DNDS
                 if (!this->IfCompressed())
                     this->Compress();
                 // For collective serializers, dataOffset must be isDist() (set by ParArray).
-                // ParArray writes pRowStart in global coordinates; Array only writes for per-rank.
                 DNDS_assert_info(serializerP->IsPerRank() || dataOffset.isDist(),
                                  "CSR collective write requires isDist dataOffset from ParArray");
-                if (dataOffset.isDist())
-                {
-                    // ParArray handles pRowStart write in global coords
-                }
-                else
-                {
-                    serializerP->WriteSharedIndexVector("pRowStart", _pRowStart, offset);
-                }
+                serializerP->WriteSharedRowStartVector("pRowStart", _pRowStart, dataOffset);
             }
             else if constexpr (_dataLayout == TABLE_Max || _dataLayout == TABLE_StaticMax)
             {
@@ -1073,12 +1133,47 @@ namespace DNDS
             if (_row_max == DynamicSize && rmR >= 0)
                 _row_size_dynamic = rmR; // TODO: fix this! need a _row_max_dynamic ?
 
+            bool validShape = _size >= 0;
+            if constexpr (_dataLayout != CSR)
+            {
+                const index stride = this->DataStride();
+                validShape = validShape && stride >= 0 &&
+                             (stride == 0 || _size <= std::numeric_limits<index>::max() / stride);
+                if (offset.isDist())
+                    validShape = validShape && offset.size() >= 0 &&
+                                 (stride == 0 || (offset.size() <= std::numeric_limits<index>::max() / stride &&
+                                                  offset.offset() <= std::numeric_limits<index>::max() / stride));
+            }
+            else
+                validShape = validShape && _size < std::numeric_limits<index>::max();
+            CheckSerializedInput(serializerP, validShape);
+
             // --- Phase 2: Read structural data and resolve dataOffset ---
             ReadSerializerStructuralAndResolveDataOffset(serializerP, offset, dataOffset);
 
             // --- Phase 3: Read flat data and propagate offsets ---
             ReadSerializerDataAndPropagateOffset(serializerP, offset, dataOffset);
-            // TODO: check data validity
+            bool validPayload = false;
+            if constexpr (_dataLayout == CSR)
+            {
+                validPayload = _pRowStart && _pRowStart->size() == size_t(_size) + 1 &&
+                               _pRowStart->at(_size) >= 0 && size_t(_pRowStart->at(_size)) == _data.size();
+                if (validPayload)
+                    for (index i = 0; i < _size; ++i)
+                        validPayload = validPayload && (*_pRowStart)[i + 1] - (*_pRowStart)[i] <= std::numeric_limits<rowsize>::max();
+            }
+            else
+            {
+                validPayload = _data.size() == size_t(_size * index(this->DataStride()));
+                if constexpr (_dataLayout == TABLE_Max || _dataLayout == TABLE_StaticMax)
+                {
+                    validPayload = validPayload && _pRowSizes && _pRowSizes->size() == size_t(_size);
+                    if (validPayload)
+                        for (rowsize width : *_pRowSizes)
+                            validPayload = validPayload && width >= 0 && width <= this->DataStride();
+                }
+            }
+            CheckSerializedInput(serializerP, validPayload);
 
             serializerP->GoToPath(cwd);
         }
@@ -1143,19 +1238,10 @@ namespace DNDS
             {
                 DNDS_assert_info(serializerP->IsPerRank() || offset.isDist(),
                                  "CSR collective read requires isDist offset from ParArray");
-                if (offset.isDist())
-                {
-                    auto prsOffset = Serializer::ArrayGlobalOffset{_size + 1, offset.offset()};
-                    serializerP->ReadSharedIndexVector("pRowStart", _pRowStart, prsOffset);
-                    index globalDataStart = _pRowStart->at(0);
-                    for (index i = _size; i >= 0; i--)
-                        _pRowStart->at(i) -= globalDataStart;
-                    dataOffset = Serializer::ArrayGlobalOffset{_pRowStart->at(_size), globalDataStart};
-                }
-                else
-                {
-                    serializerP->ReadSharedIndexVector("pRowStart", _pRowStart, offset);
-                }
+                // ParArray has resolved the row slice; the explicit CSR API returns
+                // shared local offsets together with the original flat-data region.
+                auto rows = Serializer::ArrayGlobalOffset{_size, offset.isDist() ? offset.offset() : 0};
+                dataOffset = serializerP->ReadSharedRowStartVector("pRowStart", _pRowStart, rows);
             }
             else if constexpr (_dataLayout == TABLE_Max || _dataLayout == TABLE_StaticMax)
             {
@@ -1194,8 +1280,11 @@ namespace DNDS
             {
                 if (dataOffset.isDist())
                 {
-                    dataOffset.CheckMultipleOf(this->DataStride());
-                    offset = dataOffset / this->DataStride();
+                    // Zero-width rows have no invertible element-to-row offset.
+                    const index stride = this->DataStride();
+                    CheckSerializedInput(serializerP, stride == 0 ? dataOffset.size() == 0 : dataOffset.size() % stride == 0 && dataOffset.offset() % stride == 0);
+                    if (stride != 0)
+                        offset = dataOffset / stride;
                 }
             }
         }

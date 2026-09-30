@@ -36,6 +36,8 @@ namespace DNDS::Serializer
 
         MPIInfo mpi; // NULL
 
+        std::string ResolveSharedIndexPath(const std::string &name);
+
     public:
         // Rule-of-five closure. Owns `fstream` + JSON DOM; copy / move
         // are inherited-deleted from SerializerBase but must be re-declared
@@ -71,6 +73,8 @@ namespace DNDS::Serializer
         void WriteRealVector(const std::string &name, const std::vector<real> &v, ArrayGlobalOffset offset) override;
         void WriteSharedIndexVector(const std::string &name, const ssp<host_device_vector<index>> &v, ArrayGlobalOffset offset) override;
         void WriteSharedRowsizeVector(const std::string &name, const ssp<host_device_vector<rowsize>> &v, ArrayGlobalOffset offset) override;
+        void WriteSharedRowStartVector(const std::string &name, const ssp<const host_device_vector<index>> &v, ArrayGlobalOffset data) override;
+        ArrayGlobalOffset ReadSharedRowStartVector(const std::string &name, ssp<host_device_vector<index>> &v, ArrayGlobalOffset rows) override;
 
         void WriteUint8Array(const std::string &name, const uint8_t *data, index size, ArrayGlobalOffset offset) override;
 

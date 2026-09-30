@@ -92,8 +92,27 @@ namespace DNDS
             this->operator=(R);
         }
 
+        void CheckSwapData(const t_self &R) const
+        {
+            this->t_base::CheckSwapData(R);
+            if constexpr (_mat_ni == DynamicSize)
+                DNDS_check_throw_info(_mat_nRow_dynamic == R._mat_nRow_dynamic, "SwapData requires identical matrix shapes");
+            if constexpr (_mat_ni == NonUniformSize)
+                for (index i = 0; i < this->Size(); ++i)
+                    DNDS_check_throw_info(MatRowSize(i) == R.MatRowSize(i), "SwapData requires identical matrix shapes");
+        }
+
+        void SwapData(t_self &R)
+        {
+            CheckSwapData(R);
+            this->t_base::SwapData(R);
+        }
+
         void Resize(index nSize, rowsize nSizeRowDynamic, rowsize nSizeColDynamic)
         {
+            DNDS_check_throw(nSize >= 0);
+            const rowsize width = CheckedSize::Multiply(nSizeRowDynamic, nSizeColDynamic);
+            CheckedSize::Multiply(nSize, index(width));
             if constexpr (_mat_ni >= 0)
                 DNDS_check_throw(nSizeRowDynamic == _mat_ni);
             if constexpr (_mat_nj >= 0)
@@ -103,12 +122,11 @@ namespace DNDS
             if constexpr (_mat_nj_max >= 0)
                 DNDS_check_throw(nSizeColDynamic <= _mat_nj_max);
 
+            this->t_base::Resize(nSize, width);
             if constexpr (_mat_ni == NonUniformSize)
                 _mat_nRows = std::make_shared<host_device_vector<rowsize>>(nSize, nSizeRowDynamic);
             else if constexpr (_mat_ni == DynamicSize)
                 _mat_nRow_dynamic = nSizeRowDynamic;
-
-            this->t_base::Resize(nSize, nSizeRowDynamic * nSizeColDynamic);
         }
 
         [[nodiscard]] rowsize MatRowSize(index iMat = 0) const
@@ -140,8 +158,20 @@ namespace DNDS
 
         void ResizeRow(index iMat, rowsize nSizeRow, rowsize nSizeCol)
         {
+            const rowsize width = CheckedSize::Multiply(nSizeRow, nSizeCol);
+            if constexpr (_mat_nj >= 0)
+                DNDS_check_throw(nSizeCol == _mat_nj);
+            if constexpr (_mat_ni_max >= 0)
+                DNDS_check_throw(nSizeRow <= _mat_ni_max);
+            if constexpr (_mat_nj_max >= 0)
+                DNDS_check_throw(nSizeCol <= _mat_nj_max);
             if constexpr (_mat_ni == NonUniformSize)
-                this->t_base::ResizeRow(iMat, nSizeRow * nSizeCol), (*_mat_nRows)[iMat] = nSizeRow;
+            {
+                this->t_base::ResizeRow(iMat, width);
+                if (_mat_nRows.use_count() > 1)
+                    _mat_nRows = std::make_shared<host_device_vector<rowsize>>(*_mat_nRows);
+                (*_mat_nRows)[iMat] = nSizeRow;
+            }
             else if constexpr (_mat_ni == DynamicSize)
                 DNDS_check_throw_info(false, "Invalid call");
         }

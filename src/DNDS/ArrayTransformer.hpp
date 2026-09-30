@@ -97,10 +97,9 @@ namespace DNDS
         /// Delegates to Array::WriteSerializer for metadata, structure, and data.
         /// Additionally for collective (H5) serializers:
         /// - Writes `sizeGlobal` (sum of all ranks' _size) as a scalar attribute.
-        /// - For CSR: computes global data offsets via MPI_Scan and writes pRowStart
-        ///   in global data coordinates as a contiguous (nRowsGlobal+1) dataset.
-        ///   Non-last ranks write nRows entries (dropping the redundant tail),
-        ///   last rank writes nRows+1 (including the global data total).
+        /// - For CSR: computes global data offsets via MPI_Scan. Array passes
+        ///   them and the original shared local structure to the serializer's
+        ///   row-start API, which owns encoding and shared-reference handling.
         ///
         /// Asserts MPI context consistency with the serializer.
         ///
@@ -117,8 +116,8 @@ namespace DNDS
                                 mpi.rank, mpi.size, serializerP->GetMPIRank(), serializerP->GetMPISize()));
             }
 
-            // For collective CSR, compute global data offset and pass to Array
-            // so it skips its own pRowStart write.
+            // For collective CSR, compute the flat-data region for the explicit
+            // shared row-start API invoked by Array.
             Serializer::ArrayGlobalOffset dataOffset = Serializer::ArrayGlobalOffset_Unknown;
             if constexpr (_dataLayout == CSR)
             {
@@ -145,23 +144,6 @@ namespace DNDS
                 index sizeGlobal = 0;
                 MPI::Allreduce(&this->_size, &sizeGlobal, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
                 serializerP->WriteIndex("sizeGlobal", sizeGlobal);
-
-                // For CSR, write pRowStart in global data coordinates.
-                // Non-last ranks write nRows entries; last rank writes nRows+1.
-                // Total = nRowsGlobal + 1 (no overlap, contiguous).
-                if constexpr (_dataLayout == CSR)
-                {
-                    if (dataOffset.isDist())
-                    {
-                        index globalDataStart = dataOffset.offset();
-                        index nWrite = (mpi.rank == mpi.size - 1) ? (this->_size + 1) : this->_size;
-                        auto prsGlobal = std::make_shared<host_device_vector<index>>(nWrite);
-                        for (index i = 0; i < nWrite; i++)
-                            prsGlobal->at(i) = this->_pRowStart->at(i) + globalDataStart;
-                        serializerP->WriteSharedIndexVector("pRowStart", prsGlobal,
-                                                            Serializer::ArrayGlobalOffset_Parts);
-                    }
-                }
 
                 serializerP->GoToPath(cwd);
             }
@@ -531,9 +513,9 @@ namespace DNDS
             // ! check comm aux info status and correctly duplicate them
             // ! cannot share because point to different data
             if (R.PullReqVec)
-                this->initPersistentPull();
+                this->initPersistentPull(R.pullDevice);
             if (R.PushReqVec)
-                this->initPersistentPush();
+                this->initPersistentPush(R.pushDevice);
 
             // these are createMPITypes() temporaries,
             // TODO: maybe remove from member?
@@ -1117,11 +1099,13 @@ namespace DNDS
                         if constexpr (_dataLayout == CSR)
                             nPush = father->RowSizeField(loc);
                         if constexpr (isTABLE_Max(_dataLayout)) //! init sizes
-                            nPush = father->RowSize(loc);
+                            nPush = father->DataStride();
                         if constexpr (isTABLE_Fixed(_dataLayout))
                             nPush = father->RowSizeField();
                         nPushData += nPush;
                     }
+                    if (nPushData == 0)
+                        continue;
                     inSituBuffer.emplace_back(nPushData);
                     PushReqVec->emplace_back(MPI_REQUEST_NULL);
                     MPI_Irecv(inSituBuffer.back().data(), nPushData * father->getTypeMult(), father->getDataType(),
@@ -1132,6 +1116,8 @@ namespace DNDS
             for (MPI_int r = 0; r < mpi.size; r++)
             {
                 // pull
+                if (pLGhostMapping->ghostStart[r + 1] == pLGhostMapping->ghostStart[r] || son->DataSize() == 0)
+                    continue;
                 MPI_Aint pullDisp = UnInitMPIAint;
                 MPI_int pullSize = UnInitMPIInt; // same as pushSizes
                 auto gRPtr = son->operator[](index(pLGhostMapping->ghostStart[r + 1]));
@@ -1189,6 +1175,8 @@ namespace DNDS
             for (MPI_int r = 0; r < mpi.size; r++)
             {
                 // pull
+                if (pLGhostMapping->ghostStart[r + 1] == pLGhostMapping->ghostStart[r] || son->DataSize() == 0)
+                    continue;
                 MPI_Aint pullDisp = UnInitMPIAint;
                 MPI_int pullSize = UnInitMPIInt; // same as pushSizes
                 auto gRPtr = son->operator[](index(pLGhostMapping->ghostStart[r + 1]));
@@ -1218,11 +1206,13 @@ namespace DNDS
                         if constexpr (_dataLayout == CSR)
                             nPush = father->RowSizeField(loc);
                         if constexpr (isTABLE_Max(_dataLayout)) //! init sizes
-                            nPush = father->RowSize(loc);
+                            nPush = father->DataStride();
                         if constexpr (isTABLE_Fixed(_dataLayout))
                             nPush = father->RowSizeField();
                         nPushData += nPush;
                     }
+                    if (nPushData == 0)
+                        continue;
                     inSituBuffer.emplace_back(nPushData);
                     nPushData = 0;
                     for (index i = 0; i < pushNumber; i++)
@@ -1232,10 +1222,13 @@ namespace DNDS
                         if constexpr (_dataLayout == CSR)
                             nPush = father->RowSizeField(loc);
                         if constexpr (isTABLE_Max(_dataLayout)) //! init sizes
-                            nPush = father->RowSize(loc);
+                            nPush = father->DataStride();
                         if constexpr (isTABLE_Fixed(_dataLayout))
                             nPush = father->RowSizeField();
-                        std::copy((*father)[loc], (*father)[loc] + nPush, inSituBuffer.back().begin() + nPushData);
+                        // Padded rows travel at storage stride; padding need not
+                        // be read from the source's uninitialized entries.
+                        if (father->RowSize(loc) > 0)
+                            std::copy((*father)[loc], (*father)[loc] + father->RowSize(loc), inSituBuffer.back().begin() + nPushData);
                         nPushData += nPush;
                     }
                     PullReqVec->emplace_back(MPI_REQUEST_NULL);
@@ -1318,10 +1311,9 @@ namespace DNDS
                 if (!PushReqVec->empty())
                     MPI::WaitallAuto(PushReqVec->size(), PushReqVec->data(), PushStatVec.data());
                 auto bufferVec = inSituBuffer.begin();
-                for (MPI_int r = 0; r < mpi.size; r++)
+                for (MPI_int r = 0; !PushReqVec->empty() && r < mpi.size; r++)
                 {
                     // push
-                    DNDS_check_throw(bufferVec < inSituBuffer.end());
                     MPI_int pushNumber = pLGhostMapping->pushIndexSizes[r];
                     // std::cout << "PN" << pushNumber << std::endl;
                     if (pushNumber > 0)
@@ -1334,13 +1326,19 @@ namespace DNDS
                             if constexpr (_dataLayout == CSR)
                                 nPush = father->RowSizeField(loc);
                             if constexpr (isTABLE_Max(_dataLayout)) //! init sizes
-                                nPush = father->RowSize(loc);
+                                nPush = father->DataStride();
                             if constexpr (isTABLE_Fixed(_dataLayout))
                                 nPush = father->RowSizeField();
-                            std::copy(bufferVec->begin() + nPushData, bufferVec->begin() + nPushData + nPush, (*father)[loc]);
+                            if (nPush > 0)
+                            {
+                                DNDS_check_throw(bufferVec < inSituBuffer.end());
+                                if (father->RowSize(loc) > 0)
+                                    std::copy(bufferVec->begin() + nPushData, bufferVec->begin() + nPushData + father->RowSize(loc), (*father)[loc]);
+                            }
                             nPushData += nPush;
                         }
-                        bufferVec++;
+                        if (nPushData > 0)
+                            bufferVec++;
                     }
                 }
                 inSituBuffer.clear();
@@ -1464,22 +1462,20 @@ namespace DNDS
         void reInitPersistentPullPush()
         {
             bool clearedPull{false}, clearedPush{false};
-            if (!PullReqVec->empty())
+            if (PullReqVec && !PullReqVec->empty())
             {
                 clearedPull = true;
-                waitPersistentPull();
                 clearPersistentPull();
             }
-            if (!PushReqVec->empty())
+            if (PushReqVec && !PushReqVec->empty())
             {
                 clearedPush = true;
-                waitPersistentPush();
                 clearPersistentPush();
             }
             if (clearedPull)
-                initPersistentPull();
+                initPersistentPull(pullDevice);
             if (clearedPush)
-                initPersistentPush();
+                initPersistentPush(pushDevice);
         }
     };
 

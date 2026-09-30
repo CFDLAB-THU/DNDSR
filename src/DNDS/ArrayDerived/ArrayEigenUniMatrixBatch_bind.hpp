@@ -36,8 +36,8 @@ namespace DNDS
     {
         using tElem = real;
         auto mat = self(std::get<0>(index_), std::get<1>(index_));
-        return py::memoryview::from_buffer<tElem>(
-            mat.data(),
+        return py_owned_buffer<tElem>(
+            self.rowLease(std::get<0>(index_)), mat.data(),
             {mat.rows(), mat.cols()},
             {sizeof(tElem) * mat.rowStride(), sizeof(tElem) * mat.colStride()},
             false);
@@ -72,8 +72,8 @@ namespace DNDS
         using tElem = real;
         auto mat0 = self(index_, 0);
         //! warning, assume mat0.rowStride() applies to following matrices
-        return py::memoryview::from_buffer<tElem>(
-            mat0.data(),
+        return py_owned_buffer<tElem>(
+            self.rowLease(index_), mat0.data(),
             std::array<index, 3>{self.BatchSize(index_), mat0.rows(), mat0.cols()},
             std::array<index, 3>{static_cast<index>(sizeof(tElem)) * self.MSize(), static_cast<index>(sizeof(tElem)) * mat0.rowStride(), static_cast<index>(sizeof(tElem)) * mat0.colStride()},
             false);
@@ -174,8 +174,7 @@ namespace DNDS
                 [](TArrayEigenUniMatrixBatch &self, std::tuple<index, rowsize> index_)
                 {
                     return pybind11_ArrayEigenUniMatrixBatch_getitem(self, index_);
-                },
-                py::keep_alive<0, 1>())
+                })
             .def(
                 "__setitem__",
                 [](TArrayEigenUniMatrixBatch &self, std::tuple<index, rowsize> index_, const py::buffer &row)
@@ -187,8 +186,7 @@ namespace DNDS
                 [](TArrayEigenUniMatrixBatch &self, index index_)
                 {
                     return pybind11_ArrayEigenUniMatrixBatch_getitem_row(self, index_);
-                },
-                py::keep_alive<0, 1>())
+                })
             .def(
                 "__setitem__",
                 [](TArrayEigenUniMatrixBatch &self, index index_, const py::buffer &row)
@@ -248,8 +246,7 @@ namespace DNDS
                 {
                     return self.runFunctionAppendedIndex(std::get<0>(index_), [&](auto &ar, index iC) //*note the auto&& reference here!!!
                                                          { return pybind11_ArrayEigenUniMatrixBatch_getitem(ar, std::make_tuple(iC, std::get<1>(index_))); });
-                },
-                py::keep_alive<0, 1>())
+                })
             .def(
                 "__setitem__",
                 [](TPair &self, std::tuple<index, rowsize> index_, const py::buffer &row)
@@ -263,8 +260,7 @@ namespace DNDS
                 {
                     return self.runFunctionAppendedIndex(index_, [&](auto &ar, index iC) //*note the auto&& reference here!!!
                                                          { return pybind11_ArrayEigenUniMatrixBatch_getitem_row(ar, iC); });
-                },
-                py::keep_alive<0, 1>())
+                })
             .def(
                 "__setitem__",
                 [](TPair &self, index index_, const py::buffer &row)

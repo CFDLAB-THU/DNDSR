@@ -336,6 +336,54 @@ static std::string meshPath(const std::string &name)
     return f + "/data/mesh/" + name;
 }
 
+TEST_CASE("Audit regression: local cell reorder retains periodic face rows")
+{
+    auto mpi = worldMPI();
+    auto mesh = make_ssp<UnstructuredMesh>(mpi, 2);
+    tPoint zero{0, 0, 0};
+    mesh->SetPeriodicGeometry({10, 0, 0}, zero, zero, {0, 10, 0}, zero, zero, zero, zero, zero);
+    UnstructuredMeshSerialRW reader(mesh, 0);
+    reader.ReadFromCGNSSerial(meshPath("IV10_10.cgns"));
+    reader.Deduplicate1to1Periodic(1e-8);
+    reader.BuildCell2Cell();
+    UnstructuredMeshSerialRW::PartitionOptions options;
+    options.metisType = "KWAY";
+    options.metisSeed = 42;
+    options.metisNcuts = 1;
+    reader.MeshPartitionCell2Cell(options);
+    reader.PartitionReorderToMeshCell2Cell();
+    mesh->RecoverNode2CellAndNode2Bnd();
+    mesh->RecoverCell2CellAndBnd2Cell();
+    mesh->BuildGhostPrimary();
+    mesh->AdjGlobal2LocalPrimary();
+    mesh->AdjGlobal2LocalN2CB();
+    mesh->InterpolateFace();
+    std::map<DNDS::index, std::vector<uint8_t>> before;
+    std::map<DNDS::index, DNDS::index> oldSlot;
+    for (DNDS::index i = 0; i < mesh->cell2cellOrig.Size(); ++i)
+    {
+        auto id = mesh->cell2cellOrig(i, 0);
+        oldSlot[id] = i;
+        for (auto bit : mesh->cell2facePbi[i])
+            before[id].push_back(bit._v);
+    }
+    mesh->ReorderLocalCells(2, 1);
+    DNDS::index moved = 0;
+    for (DNDS::index i = 0; i < mesh->cell2cellOrig.Size(); ++i)
+    {
+        auto id = mesh->cell2cellOrig(i, 0);
+        if (i < mesh->NumCell())
+            moved += oldSlot.at(id) != i;
+        std::vector<uint8_t> after;
+        for (auto bit : mesh->cell2facePbi[i])
+            after.push_back(bit._v);
+        CHECK(after == before.at(id));
+    }
+    MPI::AllreduceOneIndex(moved, MPI_SUM, mpi);
+    CHECK(moved > 0);
+    CHECK(mesh->cell2facePbi.trans.pLGhostMapping == mesh->cell2node.trans.pLGhostMapping);
+}
+
 /// Build a mesh through the primary pipeline (up to ghost + local indices).
 /// Returns mesh in Adj_PointToLocal state with ghost layers.
 static ssp<UnstructuredMesh> buildMeshPrimary(

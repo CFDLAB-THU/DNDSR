@@ -50,8 +50,8 @@ namespace DNDS
     auto pybind11_ArrayAdjacency_getitem(TArray &self, index index_)
     {
         AdjacencyRow row = self[index_];
-        return py::memoryview::from_buffer<index>(
-            row.begin(),
+        return py_owned_buffer<index>(
+            self.rowLease(index_), row.begin(),
             {row.size()},
             {sizeof(index)},
             false);
@@ -101,8 +101,7 @@ namespace DNDS
                 [](TArrayAdjacency &self, index index_)
                 {
                     return pybind11_ArrayAdjacency_getitem(self, index_);
-                },
-                py::keep_alive<0, 1>())
+                })
             .def(
                 "__setitem__",
                 [](TArrayAdjacency &self, index index_, const py::buffer &row)
@@ -176,8 +175,7 @@ namespace DNDS
                 {
                     return self.runFunctionAppendedIndex(index_, [&](auto &ar, index iC) //* note the reference here!!!
                                                          { return pybind11_ArrayAdjacency_getitem(ar, iC); });
-                },
-                py::keep_alive<0, 1>())
+                })
             .def(
                 "__setitem__",
                 [](TPair &self, index index_, const py::buffer &row)

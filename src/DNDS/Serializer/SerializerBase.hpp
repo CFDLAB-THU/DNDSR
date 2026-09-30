@@ -6,6 +6,7 @@
 #include "DNDS/MPI.hpp"
 #include <limits>
 #include <set>
+#include <variant>
 #include "DNDS/Device/DeviceStorage.hpp"
 #include "DNDS/Vector.hpp"
 
@@ -158,8 +159,72 @@ namespace DNDS::Serializer
         /// freed and its address reused, which would cause false dedup hits.
         std::map<void *, std::pair<std::shared_ptr<void>, std::string>> ptr_2_pth;
 
-        /// Reverse map for read-side dedup: path -> raw pointer to the ssp local variable.
-        std::map<std::string, void *> pth_2_ssp;
+        using SharedReadValue = std::variant<ssp<host_device_vector<index>>, ssp<host_device_vector<rowsize>>>;
+        struct SharedReadEntry
+        {
+            ArrayGlobalOffset region;
+            SharedReadValue value;
+        };
+        /// Session-owned, typed read results, indexed by resolved file region.
+        std::map<std::string, std::vector<SharedReadEntry>> pth_2_ssp;
+
+        using RowStartVector = host_device_vector<index>;
+        struct RowStartReadEntry
+        {
+            ArrayGlobalOffset rows;
+            ArrayGlobalOffset data;
+            ssp<RowStartVector> local;
+        };
+        struct RowStartWriteEntry
+        {
+            ssp<const RowStartVector> local; // retain source identity for the session
+            ArrayGlobalOffset data;
+            size_t size;
+            std::string path;
+        };
+        // Decoded CSR storage must never alias the raw-vector read cache.
+        std::map<std::string, RowStartReadEntry> rowStartReads;
+        std::map<const RowStartVector *, RowStartWriteEntry> rowStartWrites;
+
+        /// Collective agreement for H5; local check for JSON.
+        void RowStartCheck(bool valid, const std::string &message);
+        bool RowStartAll(bool value);
+        bool RowStartSamePath(const std::string &path);
+        void ValidateRowStartWrite(const ssp<const RowStartVector> &v, ArrayGlobalOffset data);
+        void ValidateRowStartRead(const std::string &path, ArrayGlobalOffset rows);
+        ArrayGlobalOffset NormalizeRowStarts(RowStartVector &v, bool distributed);
+
+        template <class T>
+        bool sharedReadLookup(const std::string &path, ArrayGlobalOffset region, ssp<T> &value)
+        {
+            auto found = pth_2_ssp.find(path);
+            if (found == pth_2_ssp.end())
+                return false;
+            for (const auto &entry : found->second)
+            {
+                auto typed = std::get_if<ssp<T>>(&entry.value);
+                DNDS_check_throw_info(typed, "Shared-vector read type differs from the cached type");
+                if (entry.region == region)
+                {
+                    value = *typed;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        template <class T>
+        void sharedReadRegister(const std::string &path, ArrayGlobalOffset region, const ssp<T> &value)
+        {
+            auto &entries = pth_2_ssp[path];
+            for (auto &entry : entries)
+                if (entry.region == region)
+                {
+                    entry.value = value;
+                    return;
+                }
+            entries.push_back({region, value});
+        }
 
         /// Check if a shared pointer was already written; if so return its path.
         template <class T>
@@ -186,6 +251,8 @@ namespace DNDS::Serializer
         {
             ptr_2_pth.clear();
             pth_2_ssp.clear();
+            rowStartReads.clear();
+            rowStartWrites.clear();
         }
 
     public:
@@ -242,6 +309,24 @@ namespace DNDS::Serializer
         virtual void WriteSharedIndexVector(const std::string &name, const ssp<host_device_vector<index>> &v, ArrayGlobalOffset offset) = 0;
         /// @brief Write a shared rowsize vector; deduplicated across multiple writes.
         virtual void WriteSharedRowsizeVector(const std::string &name, const ssp<host_device_vector<rowsize>> &v, ArrayGlobalOffset offset) = 0;
+
+        /// Write immutable local CSR offsets (nRows+1, first=0). Distributed data
+        /// is {local element count, global element start}; JSON uses Unknown.
+        /// Shared identity is the original vector, not its encoded temporary.
+        /// Do not mutate the source structure during this writer session.
+        virtual void WriteSharedRowStartVector(const std::string &name,
+                                               const ssp<const host_device_vector<index>> &v,
+                                               ArrayGlobalOffset data) = 0;
+
+        /// Read CSR structure for an explicit resolved {row count, row start}.
+        /// JSON requires row start zero and the complete local row count.
+        /// Returns the flat-data region (Unknown for JSON) and shared normalized
+        /// offsets. All aliases of one stored dataset must use the same row slice
+        /// per rank in this session. H5 calls are collective, including cache hits.
+        /// Returned vectors survive CloseFile; structural mutation must detach.
+        virtual ArrayGlobalOffset ReadSharedRowStartVector(const std::string &name,
+                                                           ssp<host_device_vector<index>> &v,
+                                                           ArrayGlobalOffset rows) = 0;
         /// @brief Write a raw byte buffer under `name`. `offset.isDist()` = true
         /// means the caller provides the exact per-rank slab; otherwise the
         /// buffer is treated according to the offset's sentinel.

@@ -152,6 +152,7 @@ namespace DNDS::Geom
     struct PointCloudKDTreeCoordPair
     {
         tCoord ref;
+        using coord_t = real;
         PointCloudKDTreeCoordPair(tCoord &v) : ref(v) {}
 
         [[nodiscard]] size_t kdtree_get_point_count() const

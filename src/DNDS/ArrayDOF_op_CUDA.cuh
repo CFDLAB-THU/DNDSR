@@ -160,7 +160,7 @@ namespace DNDS
         index iData = tid;
         index iRow = iData / elem_size;
         rowsize i_inElem = iData % elem_size;
-        if (iData > N_d)
+        if (iData >= N_d)
             return;
         self.data()[iData] = F_real_binary(self.data()[iData], mat.map()(i_inElem));
     }
@@ -327,7 +327,7 @@ namespace DNDS
         index tid = blockIdx.x * blockDim.x + threadIdx.x;
         index iData = tid;
         index iRow = iData / elem_size;
-        if (iData > N_d)
+        if (iData >= N_d)
             return;
 
         self.data()[iData] *= R[iRow](0);
@@ -340,7 +340,7 @@ namespace DNDS
     {
         index N = self.Size();
         index tid = blockIdx.x * blockDim.x + threadIdx.x;
-        if (tid > N)
+        if (tid >= N)
             return;
         self[tid] *= R[tid](0);
     }

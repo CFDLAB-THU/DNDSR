@@ -71,9 +71,9 @@ namespace DNDS::Geom
     static const t_FBCName_2_ID FBC_Name_2_ID_Default = [](const std::string &name) -> t_index
     {
         // if (name == "PERIODI
-        auto n2id_map = GetFaceName2IDDefault();
-        if (n2id_map.count(name))
-            return n2id_map.at(name);
+        static const auto n2id_map = GetFaceName2IDDefault();
+        if (auto found = n2id_map.find(name); found != n2id_map.end())
+            return found->second;
         return BC_ID_NULL;
     };
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cluster Run"
+  short_description: "Prepare, submit, and monitor Slurm cluster jobs"
+  default_prompt: "Use $cluster-run to prepare and execute this job through the selected cluster scheduler."

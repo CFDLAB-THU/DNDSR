@@ -22,8 +22,156 @@
 #include <cstdio>
 #include <filesystem>
 #include <string>
+#include <numeric>
+#include <type_traits>
 
 using namespace DNDS;
+
+TEST_CASE("Ownership: host and Host-device leases retain fixed allocations")
+{
+    host_device_vector<DNDS::real> a(3, 4);
+    auto host = a.hostLease();
+    std::weak_ptr<DNDS::real> life = host;
+    a.to_device(DeviceBackend::Host);
+    auto device = a.deviceLease();
+    CHECK(host.get() == a.data());
+    CHECK(device.get() == host.get());
+    *host = 9;
+    CHECK(a[0] == 9);
+    auto copy = a;
+    CHECK(copy.data() != host.get());
+    a.resize(6, 2);
+    CHECK(a.data() != host.get());
+    CHECK(a.dataDevice() == a.data());
+    CHECK(*device == 9);
+    *host = 7;
+    CHECK(a[0] == 2);
+    CHECK(copy[0] == 9);
+    a.clear();
+    host.reset();
+    CHECK_FALSE(life.expired());
+    device.reset();
+    CHECK(life.expired());
+    a.resize(2, 11);
+    auto movedLease = a.hostLease();
+    auto b = std::move(a);
+    CHECK(b.data() == movedLease.get());
+    b.swap(copy);
+    CHECK(copy.data() == movedLease.get());
+    copy = host_device_vector<DNDS::real>(1, 1);
+    CHECK(*movedLease == 11);
+}
+
+TEST_CASE("Ownership: CSR row leases survive reserve compression and deletion")
+{
+    std::shared_ptr<const void> owner;
+    std::weak_ptr<const void> weak;
+    const DNDS::index *old = nullptr;
+    {
+        Array<DNDS::index, NonUniformSize> a;
+        a.Resize(1, 2);
+        a(0, 0) = 12;
+        a(0, 1) = 15;
+        owner = a.rowLease(0);
+        weak = owner;
+        old = static_cast<const DNDS::index *>(owner.get());
+        a.ReserveRow(0, 100);
+        CHECK(a(0, 0) == 12);
+        CHECK(old[1] == 15);
+        a.ResizeRow(0, 3);
+        CHECK(a(0, 1) == 15);
+        CHECK(a(0, 2) == 0);
+        a(0, 0) = 42;
+        CHECK(old[0] == 12);
+        auto row = a.rowLease(0);
+        a.Compress();
+        CHECK(static_cast<const DNDS::index *>(row.get())[0] == 42);
+        auto flat = a.dataLease();
+        a.Decompress();
+        CHECK(static_cast<const DNDS::index *>(flat.get())[0] == 42);
+        CHECK(a(0, 0) == 42);
+    }
+    CHECK(old[0] == 12);
+    CHECK_FALSE(weak.expired());
+    owner.reset();
+    CHECK(weak.expired());
+}
+
+TEST_CASE("Ownership: uncompressed row hashing preserves non-arithmetic values")
+{
+    Array<std::array<DNDS::index, 2>, NonUniformSize> a;
+    a.Resize(2, 0);
+    a.ResizeRow(0, 1);
+    a(0, 0) = {12, 15};
+    auto b = a;
+    CHECK(a.hash() == b.hash());
+    b(0, 0)[0] = 42;
+    CHECK(a(0, 0)[0] == 12);
+    CHECK(a.hash() != b.hash());
+    a.Compress();
+    b = a;
+    CHECK(a.hash() == b.hash());
+}
+
+TEST_CASE("CSR sharing: public row starts and const iterators are read only")
+{
+    using Vector = host_device_vector<DNDS::index>;
+    using CSRArray = Array<DNDS::index, NonUniformSize>;
+    static_assert(std::is_same_v<decltype(std::declval<const Vector &>().begin()), const DNDS::index *>);
+    static_assert(std::is_same_v<decltype(std::declval<const Vector &>().end()), const DNDS::index *>);
+    static_assert(std::is_same_v<decltype(std::declval<Vector &>().cbegin()), const DNDS::index *>);
+    static_assert(std::is_same_v<decltype(std::declval<Vector &>().cend()), const DNDS::index *>);
+    static_assert(std::is_same_v<decltype(std::declval<const CSRArray &>().getRowStart()), ssp<const Vector>>);
+    static_assert(std::is_same_v<decltype(std::declval<Vector &>().begin()), DNDS::index *>);
+    static_assert(std::is_same_v<decltype(std::declval<const Vector &>()[0]), const DNDS::index &>);
+    CHECK((std::is_same_v<decltype(std::declval<const Vector &>().begin()), const DNDS::index *>));
+    CHECK((std::is_same_v<decltype(std::declval<const Vector &>().end()), const DNDS::index *>));
+    CHECK((std::is_same_v<decltype(std::declval<Vector &>().cbegin()), const DNDS::index *>));
+    CHECK((std::is_same_v<decltype(std::declval<Vector &>().cend()), const DNDS::index *>));
+    CHECK((std::is_same_v<decltype(std::declval<CSRArray &>().getRowStart()), ssp<const Vector>>));
+    Vector values(3, 7);
+    *values.begin() = 4;
+    const auto &readOnly = values;
+    CHECK(std::accumulate(readOnly.begin(), readOnly.end(), DNDS::index(0)) == 18);
+    CSRArray a;
+    a.Resize(1, [](DNDS::index)
+             { return DNDS::rowsize(2); });
+    auto handle = a.getRowStart();
+    handle.reset();
+    CHECK(a.getRowStart()->at(1) == 2);
+}
+
+TEST_CASE("Audit regression: compressed CSR hash includes row offsets")
+{
+    Array<int, NonUniformSize> a, b;
+    a.Resize(2, [](DNDS::index i)
+             { return DNDS::rowsize(i + 1); });
+    b.Resize(2, [](DNDS::index i)
+             { return DNDS::rowsize(2 - i); });
+    std::fill(a.RawDataVector().begin(), a.RawDataVector().end(), 7);
+    std::fill(b.RawDataVector().begin(), b.RawDataVector().end(), 7);
+    auto copy = a;
+    CHECK(a.hash() == copy.hash());
+    CHECK(a.hash() != b.hash());
+    Array<int, NonUniformSize> empty;
+    empty.Resize(0, [](DNDS::index)
+                 { return DNDS::rowsize(0); });
+    CHECK(empty.hash() == empty.hash());
+}
+
+TEST_CASE("Audit regression: host mirror publishes the current allocation")
+{
+    host_device_vector<int> values(2, 7);
+    values.to_device(DeviceBackend::Host);
+    CHECK(values.dataDevice() == values.data());
+    values.resize(4, 9);
+    values.to_device(DeviceBackend::Host);
+    REQUIRE(values.dataDevice() == values.data());
+    CHECK(values.dataDevice()[3] == 9);
+    values.clear_device();
+    values.to_device(DeviceBackend::Host);
+    CHECK(values.dataDevice() == values.data());
+}
 
 // ===================================================================
 // TABLE_StaticFixed: Array<real, 3> — compile-time fixed row size
@@ -568,9 +716,15 @@ TEST_CASE("Array hash")
 // Parametric: Array resize-write-read across types and layouts
 // ===================================================================
 
-struct LayoutStaticFixed {};
-struct LayoutDynamic {};
-struct LayoutCSR {};
+struct LayoutStaticFixed
+{
+};
+struct LayoutDynamic
+{
+};
+struct LayoutCSR
+{
+};
 
 template <class T, class Layout, DNDS::rowsize RS>
 struct ArrayTag
@@ -627,49 +781,43 @@ ARRAY_TAG_STR(uint8_t, LayoutCSR, 0);
 #undef ARRAY_TAG_STR
 
 // Full cross-product: 5 types x (2 fixed layouts x 3 RS + 1 CSR) = 35 cases
-#define ARRAY_ALL_TAGS                                      \
-    /* real x StaticFixed */                                \
-    ArrayTag<DNDS::real, LayoutStaticFixed, 1>,             \
-    ArrayTag<DNDS::real, LayoutStaticFixed, 3>,             \
-    ArrayTag<DNDS::real, LayoutStaticFixed, 7>,             \
-    /* real x Dynamic */                                    \
-    ArrayTag<DNDS::real, LayoutDynamic, 1>,                 \
-    ArrayTag<DNDS::real, LayoutDynamic, 3>,                 \
-    ArrayTag<DNDS::real, LayoutDynamic, 7>,                 \
-    /* real x CSR */                                        \
-    ArrayTag<DNDS::real, LayoutCSR, 0>,                     \
-    /* index */                                             \
-    ArrayTag<DNDS::index, LayoutStaticFixed, 1>,            \
-    ArrayTag<DNDS::index, LayoutStaticFixed, 3>,            \
-    ArrayTag<DNDS::index, LayoutStaticFixed, 7>,            \
-    ArrayTag<DNDS::index, LayoutDynamic, 1>,                \
-    ArrayTag<DNDS::index, LayoutDynamic, 3>,                \
-    ArrayTag<DNDS::index, LayoutDynamic, 7>,                \
-    ArrayTag<DNDS::index, LayoutCSR, 0>,                    \
-    /* uint16_t */                                          \
-    ArrayTag<uint16_t, LayoutStaticFixed, 1>,               \
-    ArrayTag<uint16_t, LayoutStaticFixed, 3>,               \
-    ArrayTag<uint16_t, LayoutStaticFixed, 7>,               \
-    ArrayTag<uint16_t, LayoutDynamic, 1>,                   \
-    ArrayTag<uint16_t, LayoutDynamic, 3>,                   \
-    ArrayTag<uint16_t, LayoutDynamic, 7>,                   \
-    ArrayTag<uint16_t, LayoutCSR, 0>,                       \
-    /* int32_t */                                           \
-    ArrayTag<int32_t, LayoutStaticFixed, 1>,                \
-    ArrayTag<int32_t, LayoutStaticFixed, 3>,                \
-    ArrayTag<int32_t, LayoutStaticFixed, 7>,                \
-    ArrayTag<int32_t, LayoutDynamic, 1>,                    \
-    ArrayTag<int32_t, LayoutDynamic, 3>,                    \
-    ArrayTag<int32_t, LayoutDynamic, 7>,                    \
-    ArrayTag<int32_t, LayoutCSR, 0>,                        \
-    /* uint8_t */                                           \
-    ArrayTag<uint8_t, LayoutStaticFixed, 1>,                \
-    ArrayTag<uint8_t, LayoutStaticFixed, 3>,                \
-    ArrayTag<uint8_t, LayoutStaticFixed, 7>,                \
-    ArrayTag<uint8_t, LayoutDynamic, 1>,                    \
-    ArrayTag<uint8_t, LayoutDynamic, 3>,                    \
-    ArrayTag<uint8_t, LayoutDynamic, 7>,                    \
-    ArrayTag<uint8_t, LayoutCSR, 0>
+#define ARRAY_ALL_TAGS                                                   \
+    /* real x StaticFixed */                                             \
+    ArrayTag<DNDS::real, LayoutStaticFixed, 1>,                          \
+        ArrayTag<DNDS::real, LayoutStaticFixed, 3>,                      \
+        ArrayTag<DNDS::real, LayoutStaticFixed, 7>, /* real x Dynamic */ \
+        ArrayTag<DNDS::real, LayoutDynamic, 1>,                          \
+        ArrayTag<DNDS::real, LayoutDynamic, 3>,                          \
+        ArrayTag<DNDS::real, LayoutDynamic, 7>, /* real x CSR */         \
+        ArrayTag<DNDS::real, LayoutCSR, 0>,     /* index */              \
+        ArrayTag<DNDS::index, LayoutStaticFixed, 1>,                     \
+        ArrayTag<DNDS::index, LayoutStaticFixed, 3>,                     \
+        ArrayTag<DNDS::index, LayoutStaticFixed, 7>,                     \
+        ArrayTag<DNDS::index, LayoutDynamic, 1>,                         \
+        ArrayTag<DNDS::index, LayoutDynamic, 3>,                         \
+        ArrayTag<DNDS::index, LayoutDynamic, 7>,                         \
+        ArrayTag<DNDS::index, LayoutCSR, 0>, /* uint16_t */              \
+        ArrayTag<uint16_t, LayoutStaticFixed, 1>,                        \
+        ArrayTag<uint16_t, LayoutStaticFixed, 3>,                        \
+        ArrayTag<uint16_t, LayoutStaticFixed, 7>,                        \
+        ArrayTag<uint16_t, LayoutDynamic, 1>,                            \
+        ArrayTag<uint16_t, LayoutDynamic, 3>,                            \
+        ArrayTag<uint16_t, LayoutDynamic, 7>,                            \
+        ArrayTag<uint16_t, LayoutCSR, 0>, /* int32_t */                  \
+        ArrayTag<int32_t, LayoutStaticFixed, 1>,                         \
+        ArrayTag<int32_t, LayoutStaticFixed, 3>,                         \
+        ArrayTag<int32_t, LayoutStaticFixed, 7>,                         \
+        ArrayTag<int32_t, LayoutDynamic, 1>,                             \
+        ArrayTag<int32_t, LayoutDynamic, 3>,                             \
+        ArrayTag<int32_t, LayoutDynamic, 7>,                             \
+        ArrayTag<int32_t, LayoutCSR, 0>, /* uint8_t */                   \
+        ArrayTag<uint8_t, LayoutStaticFixed, 1>,                         \
+        ArrayTag<uint8_t, LayoutStaticFixed, 3>,                         \
+        ArrayTag<uint8_t, LayoutStaticFixed, 7>,                         \
+        ArrayTag<uint8_t, LayoutDynamic, 1>,                             \
+        ArrayTag<uint8_t, LayoutDynamic, 3>,                             \
+        ArrayTag<uint8_t, LayoutDynamic, 7>,                             \
+        ArrayTag<uint8_t, LayoutCSR, 0>
 
 TEST_CASE_TEMPLATE("Array resize-write-read", Tag, ARRAY_ALL_TAGS)
 {
@@ -682,63 +830,63 @@ TEST_CASE_TEMPLATE("Array resize-write-read", Tag, ARRAY_ALL_TAGS)
         CAPTURE(N);
 
         if constexpr (std::is_same_v<L, LayoutStaticFixed>)
-    {
-        Array<T, RS> a;
-        a.Resize(N);
-
-        REQUIRE(a.Size() == N);
-        REQUIRE(a.RowSize() == RS);
-
-        for (DNDS::index i = 0; i < a.Size(); i++)
-            for (DNDS::rowsize j = 0; j < a.RowSize(); j++)
-                a(i, j) = static_cast<T>(i * 100 + j * 3 + 7);
-
-        for (DNDS::index i = 0; i < a.Size(); i++)
-            for (DNDS::rowsize j = 0; j < a.RowSize(); j++)
-                CHECK(a(i, j) == static_cast<T>(i * 100 + j * 3 + 7));
-    }
-    else if constexpr (std::is_same_v<L, LayoutDynamic>)
-    {
-        Array<T, DynamicSize> a;
-        a.Resize(N, RS);
-
-        REQUIRE(a.Size() == N);
-        REQUIRE(a.RowSize() == RS);
-
-        for (DNDS::index i = 0; i < a.Size(); i++)
-            for (DNDS::rowsize j = 0; j < a.RowSize(); j++)
-                a(i, j) = static_cast<T>(i * 100 + j * 3 + 7);
-
-        for (DNDS::index i = 0; i < a.Size(); i++)
-            for (DNDS::rowsize j = 0; j < a.RowSize(); j++)
-                CHECK(a(i, j) == static_cast<T>(i * 100 + j * 3 + 7));
-    }
-    else // LayoutCSR
-    {
-        Array<T, NonUniformSize> a;
-
-        a.Resize(N, [](DNDS::index i) -> DNDS::rowsize
-                 { return static_cast<DNDS::rowsize>(i % 5 + 1); });
-
-        REQUIRE(a.Size() == N);
-        CHECK(a.IfCompressed());
-
-        // Verify row sizes
-        for (DNDS::index i = 0; i < a.Size(); i++)
-            CHECK(a.RowSize(i) == static_cast<DNDS::rowsize>(i % 5 + 1));
-
-        // Fill with data
-        for (DNDS::index i = 0; i < a.Size(); i++)
-            for (DNDS::rowsize j = 0; j < a.RowSize(i); j++)
-                a(i, j) = static_cast<T>(i * 100 + j * 3 + 7);
-
-        // Read back and verify
-        for (DNDS::index i = 0; i < a.Size(); i++)
         {
-            CHECK(a.RowSize(i) == static_cast<DNDS::rowsize>(i % 5 + 1));
-            for (DNDS::rowsize j = 0; j < a.RowSize(i); j++)
-                CHECK(a(i, j) == static_cast<T>(i * 100 + j * 3 + 7));
+            Array<T, RS> a;
+            a.Resize(N);
+
+            REQUIRE(a.Size() == N);
+            REQUIRE(a.RowSize() == RS);
+
+            for (DNDS::index i = 0; i < a.Size(); i++)
+                for (DNDS::rowsize j = 0; j < a.RowSize(); j++)
+                    a(i, j) = static_cast<T>(i * 100 + j * 3 + 7);
+
+            for (DNDS::index i = 0; i < a.Size(); i++)
+                for (DNDS::rowsize j = 0; j < a.RowSize(); j++)
+                    CHECK(a(i, j) == static_cast<T>(i * 100 + j * 3 + 7));
         }
-    }
+        else if constexpr (std::is_same_v<L, LayoutDynamic>)
+        {
+            Array<T, DynamicSize> a;
+            a.Resize(N, RS);
+
+            REQUIRE(a.Size() == N);
+            REQUIRE(a.RowSize() == RS);
+
+            for (DNDS::index i = 0; i < a.Size(); i++)
+                for (DNDS::rowsize j = 0; j < a.RowSize(); j++)
+                    a(i, j) = static_cast<T>(i * 100 + j * 3 + 7);
+
+            for (DNDS::index i = 0; i < a.Size(); i++)
+                for (DNDS::rowsize j = 0; j < a.RowSize(); j++)
+                    CHECK(a(i, j) == static_cast<T>(i * 100 + j * 3 + 7));
+        }
+        else // LayoutCSR
+        {
+            Array<T, NonUniformSize> a;
+
+            a.Resize(N, [](DNDS::index i) -> DNDS::rowsize
+                     { return static_cast<DNDS::rowsize>(i % 5 + 1); });
+
+            REQUIRE(a.Size() == N);
+            CHECK(a.IfCompressed());
+
+            // Verify row sizes
+            for (DNDS::index i = 0; i < a.Size(); i++)
+                CHECK(a.RowSize(i) == static_cast<DNDS::rowsize>(i % 5 + 1));
+
+            // Fill with data
+            for (DNDS::index i = 0; i < a.Size(); i++)
+                for (DNDS::rowsize j = 0; j < a.RowSize(i); j++)
+                    a(i, j) = static_cast<T>(i * 100 + j * 3 + 7);
+
+            // Read back and verify
+            for (DNDS::index i = 0; i < a.Size(); i++)
+            {
+                CHECK(a.RowSize(i) == static_cast<DNDS::rowsize>(i % 5 + 1));
+                for (DNDS::rowsize j = 0; j < a.RowSize(i); j++)
+                    CHECK(a(i, j) == static_cast<T>(i * 100 + j * 3 + 7));
+            }
+        }
     } // for N
 }

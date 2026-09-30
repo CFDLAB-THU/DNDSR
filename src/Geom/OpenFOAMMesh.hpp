@@ -40,15 +40,13 @@ namespace DNDS::Geom::OpenFOAM
                     }
                     else if (c == '*') // block comment
                     {
-                        while (!in.eof())
+                        in.get(); // consume the opening '*', not part of the body
+                        while (in.get(c))
                         {
-                            c = in.get();
-                            // std::cout << c << " : ";
-                            if (c == '*')
+                            if (c == '*' && in.peek() == '/')
                             {
-                                c = in.get();
-                                if (c == '/')
-                                    break;
+                                in.get();
+                                break;
                             }
                         }
                     }
