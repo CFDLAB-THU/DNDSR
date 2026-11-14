@@ -145,3 +145,22 @@ at setup; float-float requires the optional CCCL headers. New policies validate
 selected output rows before guarded commit; nonfinite arithmetic sets retained
 device status without exception recovery or a new host wait. This validation
 pass is absent from the unchanged default/mixed policies.
+
+## Measured dispatch guidance
+
+The uncached 64³ P3/degree-5 TGV assessment completed both thread/warp shared
+staging sweeps on A100 and A5000. Every variant passed its frozen short-pilot
+numerical budget. Shared banks did not beat unbuffered thread-per-face on either
+device. A 32 KiB double bank fits only nine faces for this five-component,
+19-mode shared reconstruction/viscous input; thread-per-face therefore leaves
+most loader lanes idle while computing. Warp consumers use more lanes, but
+retain the heavy point arithmetic and add bank synchronization. More queued
+blocks do not guarantee more resident blocks under register/shared limits.
+
+Keep defaults unchanged. For this measured shape, unbuffered 256-thread RHS
+plus FP64 tensor reconstruction is a qualified A100 candidate; tiled input
+access benefits A5000. Whole-update quantized FP32 and float-float pass their
+declared budgets but do not accelerate this case. The full tables, numerical
+limits, compiler/runtime hashes and per-operator timeline belong in the separate
+Plan 61-2 evidence record, not a universal kernel-selection rule. These two-step
+pilots retain one capped nonlinear stage and do not establish long-time accuracy.
