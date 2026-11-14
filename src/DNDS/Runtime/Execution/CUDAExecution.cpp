@@ -1,4 +1,5 @@
 #include "DNDS/Runtime/Execution/CUDAExecution.hpp"
+#include "DNDS/Diagnostics/Timeline.hpp"
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
@@ -326,6 +327,7 @@ namespace DNDS::Runtime
         if (kind != CommandKind::Cleanup && (!_state->error || kind == CommandKind::OrderedRelease))
             try
             {
+                const TimelineScope timeline("Runtime/CUDA/Launch");
                 command.work(Context());
             }
             catch (...)

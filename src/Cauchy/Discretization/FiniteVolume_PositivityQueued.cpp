@@ -1,4 +1,5 @@
 #include "Cauchy/Discretization/FiniteVolumePositivityInternal.hpp"
+#include "DNDS/Diagnostics/Timeline.hpp"
 #include "Cauchy/Discretization/CPU/FiniteVolumePositivityKernels.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumePositivityKernels.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeStateKernels.hpp"
@@ -49,6 +50,7 @@ namespace DNDS::Cauchy
         R::EagerEngine &engine, const R::ExecutionStream &stream,
         const EquationDofs &input, const EquationDofs &unlimited, EquationDofs &flux, bool refresh)
     {
+        const TimelineScope timeline("Cauchy/FV/PolynomialPP");
         const auto pin = state;
         auto &data = *pin;
         const auto &n = data.owner->settings.numerics;

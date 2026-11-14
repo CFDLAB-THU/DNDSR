@@ -1,4 +1,5 @@
 #include "Cauchy/Discretization/FiniteVolumeWorkspaceInternal.hpp"
+#include "DNDS/Diagnostics/Timeline.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeStateKernels.hpp"
 #include "Cauchy/Core/NumericalFailure.hpp"
@@ -156,6 +157,7 @@ namespace DNDS::Cauchy
                                                   const EquationDofs &state, EquationDofs &output, CFV::ReconstructionRegion region, real time,
                                                   OptionalRef<const AuxiliaryValues> auxiliary, OptionalRef<const R::Array<real>> incoming)
     {
+        const TimelineScope timeline("Cauchy/FV/RHS/Submit");
 #ifdef DNDS_USE_CUDA
         DNDS_check_throw_info(deviceFlux && deviceFlux->pending && engine.Owns(stream) && stream.Context().device == owner->metrics.Device(),
                               "device flux needs an initialized status segment and matching stream");

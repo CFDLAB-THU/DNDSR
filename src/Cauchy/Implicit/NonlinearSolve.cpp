@@ -1,4 +1,5 @@
 #include "Cauchy/Implicit/NonlinearSolve.hpp"
+#include "DNDS/Diagnostics/Timeline.hpp"
 #include "Cauchy/Implicit/ResidualConvergence.hpp"
 
 #include <algorithm>
@@ -189,6 +190,7 @@ namespace DNDS::Cauchy
                                   coupledStage < CoupledStageNumber(),
                               "nonlinear coupled-stage update is out of order");
         auto &data = *_data;
+        const TimelineScope timeline("Cauchy/NonlinearUpdate", data.currentIteration);
         data.problem.advanceStage(coupledStage, data.report, !data.held);
         ++data.nextCoupledStage;
         if (data.nextCoupledStage == CoupledStageNumber())
@@ -200,6 +202,7 @@ namespace DNDS::Cauchy
 
     void NonlinearSession::Observe()
     {
+        const TimelineScope timeline("Cauchy/Nonlinear/ObserveResidual");
         DNDS_check_throw_info(_data && _data->phase == Data::Phase::Observing,
                               "nonlinear residual observation is out of order");
         auto &data = *_data;

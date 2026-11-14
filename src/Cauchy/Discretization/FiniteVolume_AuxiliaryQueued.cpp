@@ -1,4 +1,5 @@
 #include "Cauchy/Discretization/FiniteVolumeAuxiliaryInternal.hpp"
+#include "DNDS/Diagnostics/Timeline.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeAuxiliaryKernels.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeStateKernels.hpp"
 #include "Cauchy/Core/NumericalFailure.hpp"
@@ -257,6 +258,7 @@ namespace DNDS::Cauchy
     }
     void FiniteVolume::AuxiliaryPreparation::ApplyQueued(R::EagerEngine &engine, const R::ExecutionStream &stream, CFV::ReconstructionRegion region)
     {
+        const TimelineScope timeline("Cauchy/FV/Auxiliary/Submit");
         DNDS_check_throw_info(region == CFV::ReconstructionRegion::All || region == CFV::ReconstructionRegion::Core ||
                                   region == CFV::ReconstructionRegion::HaloDependent,
                               "invalid auxiliary region");

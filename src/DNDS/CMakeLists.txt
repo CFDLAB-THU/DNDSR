@@ -21,6 +21,9 @@ dnds_variable_to_parent_scope(DNDS_PCH_TARGETS_FAST)
 
 set(LIBNAME dnds)
 find_package(Threads REQUIRED)
+if(DNDS_USE_CALIPER)
+    find_package(caliper CONFIG REQUIRED)
+endif()
 
 set(LINKS
 ${DNDS_EXTERNAL_LIBS}
@@ -56,6 +59,7 @@ Algebra/AmgXPreconditioner.cpp
 Algebra/BatchedSVD.cpp
 Algebra/LocalProducts.cpp
 Diagnostics/Profiling.cpp
+Diagnostics/Timeline.cpp
 Math/HardEigen.cpp
 Serializer/SerializerBase.cpp
 Serializer/SerializerJSON.cpp
@@ -102,6 +106,12 @@ dnds_add_lib(${LIBNAME} "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}"
 
 dnds_add_lib(${LIBNAME}_shared "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}"
     ON ON ON)  # SHARED,FAST, EXCLUDE
+if(DNDS_USE_CALIPER)
+    foreach(_target ${LIBNAME} ${LIBNAME}_shared)
+        target_link_libraries(${_target} PRIVATE caliper)
+        target_compile_definitions(${_target} PRIVATE DNDS_USE_CALIPER)
+    endforeach()
+endif()
 if(DNDS_USE_CUDA)
     target_link_libraries(${LIBNAME} PRIVATE CUDA::cusolver)
     target_link_libraries(${LIBNAME}_shared PRIVATE CUDA::cusolver)

@@ -1,4 +1,5 @@
 #include "Cauchy/Implicit/LinearSolver.hpp"
+#include "DNDS/Diagnostics/Timeline.hpp"
 #include "Cauchy/Implicit/LinearSolverAlgebra.hpp"
 #include "Cauchy/Implicit/LocalAMGPreconditioner.hpp"
 #include "Cauchy/State/CPU/FieldKernels.hpp"
@@ -385,6 +386,7 @@ namespace DNDS::Cauchy
             }
             void JacobiSweep(const Field &rhs, Field &input, Field &output, bool knownZero)
             {
+                const TimelineScope timeline("Cauchy/Linear/JacobiSweep");
                 auto &first = settings.jacobiLocalSweeps == 2 ? forward : output;
                 auto engine = compute.LockEngine();
                 OperatorSchedule schedule(engine, compute, communication, execution.overlap);
@@ -578,6 +580,7 @@ namespace DNDS::Cauchy
                 const Field &rhs, OptionalRef<const Field> initialGuess,
                 const std::vector<real> &componentScales)
             {
+                const TimelineScope timeline("Cauchy/Linear/Solve");
                 struct FinishProfile
                 {
                     LinearProfile &profile;

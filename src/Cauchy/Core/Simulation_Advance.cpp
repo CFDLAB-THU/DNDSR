@@ -1,4 +1,5 @@
 #include "Cauchy/Core/Simulation.hpp"
+#include "DNDS/Diagnostics/Timeline.hpp"
 #include "Cauchy/Interface/InterfaceCoupling.hpp"
 #include "DNDS/MPI/CollectiveStage.hpp"
 #include "DNDS/MPI/Failure.hpp"
@@ -60,6 +61,7 @@ namespace DNDS::Cauchy
     StepResult Simulation::Advance(real dt,
                                    std::optional<real> acceptedTime)
     {
+        const TimelineScope timeline("Cauchy/Step", std::int64_t(_step));
         real limits[2]{dt, -dt};
         int valid = std::isfinite(dt) && dt > 0;
         valid = MPI::AllreduceValue<MPI::Reduction::Min>(valid, _placement.Control());
@@ -195,6 +197,7 @@ namespace DNDS::Cauchy
             const auto solveGroup = [&](auto &sessions,
                                         const DomainStageGroup &description)
             {
+                const TimelineScope stageTimeline("Cauchy/Stage", description.stage);
                 NonlinearSolveGroup group;
                 group.communication = _placement.ControlContext();
                 group.policy = _updatePolicy;

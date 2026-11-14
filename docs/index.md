@@ -21,6 +21,9 @@ distributed gates and the measured gains and regressions by shape.
 
 ## Architecture entry points
 
+The [Plan 61-2 profiling guide](dev/plan612_cuda_optimization.md) describes
+opt-in CUDA timeline ranges and the fixed uncached TGV optimization baseline.
+
 The [Plan 61 CUDA inventory](dev/plan61_cuda_inventory.md) tracks the specialized
 perfect-gas device path and its grouped implementation/validation status.
 

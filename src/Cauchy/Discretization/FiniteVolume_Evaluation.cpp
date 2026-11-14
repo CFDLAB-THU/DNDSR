@@ -1,4 +1,5 @@
 #include "Cauchy/Discretization/FiniteVolume.hpp"
+#include "DNDS/Diagnostics/Timeline.hpp"
 #include "Cauchy/State/CPU/FieldKernels.hpp"
 #include "Cauchy/Discretization/FiniteVolumeWorkspaceInternal.hpp"
 #include "DNDS/Runtime/Execution/SessionAccess.hpp"
@@ -281,6 +282,7 @@ namespace DNDS::Cauchy
                                     OptionalRef<AuxiliaryValues> auxiliary,
                                     OptionalRef<const QueuedEvaluationDependency> dependency) const
     {
+        const TimelineScope timeline("Cauchy/FV/Evaluate");
         if (!auxiliary && work.rhsAuxiliary)
             auxiliary.Emplace(*work.rhsAuxiliary);
         auto reconstructionSession = reconstruction.session.Acquire();
@@ -384,6 +386,7 @@ namespace DNDS::Cauchy
         const bool overlap = _data->settings.execution.overlap;
         const auto sweep = [&](CFV::ReconstructionRegion region)
         {
+            const TimelineScope vrTimeline("Cauchy/CFV/Reconstruction/Submit");
             const auto timing = work.BeginQueuedPhase(engine, stream, Workspace::VRPhase);
             if (work.limitedVR)
             {

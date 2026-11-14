@@ -1,4 +1,5 @@
 #include "Cauchy/Implicit/FiniteVolumeDeviceJacobian.hpp"
+#include "DNDS/Diagnostics/Timeline.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeStateKernels.hpp"
 #include "Cauchy/Core/NumericalFailure.hpp"
 #include "DNDS/Runtime/Execution/EagerArray.hpp"
@@ -10,6 +11,7 @@ namespace DNDS::Cauchy
                                              const R::Array<real> &inversePseudoTime, LinearProblemContext &output,
                                              JacobianPreparation controls, real time, const JacobianContext &context) const
     {
+        const TimelineScope timeline("Cauchy/Linear/PrepareJacobian");
 #ifdef DNDS_USE_CUDA
         auto &work = context.workspace.get();
         ValidateWorkspace(state, work);
