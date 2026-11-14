@@ -406,6 +406,30 @@ cmake --preset cuda
 cmake --build build-cuda -j32
 ```
 
+### Explicit toolkit selection
+
+The Cauchy CUDA optimization work targets **CUDA 13.2** for new builds while
+retaining **CUDA 12.6** compatibility. Select the compiler explicitly and use
+a separate build directory for each toolkit; changing `PATH` does not replace
+the CUDA compiler already recorded in an existing CMake cache:
+
+```bash
+cmake -S . -B build-cuda13 -G Ninja -DDNDS_USE_CUDA=ON \
+  -DCMAKE_CUDA_COMPILER=/usr/local/cuda-13.2/bin/nvcc \
+  -DCUDAToolkit_ROOT=/usr/local/cuda-13.2
+# Compatibility build, with independent cache and artifacts:
+cmake -S . -B build-cuda12 -G Ninja -DDNDS_USE_CUDA=ON \
+  -DCMAKE_CUDA_COMPILER=/usr/local/cuda-12.6/bin/nvcc \
+  -DCUDAToolkit_ROOT=/usr/local/cuda-12.6
+```
+
+Use an installed toolkit path appropriate for the host. CUDA-dependent binary
+providers must match that selection too: in particular, rebuild AmgX into a
+separate prefix because CUDA13 changes cuBLAS/cuSOLVER library major versions.
+Check the resulting executable's resolved libraries, not only `nvcc --version`.
+See [AmgX](amgx.md) and the [optimization record](../dev/plan612_cuda_optimization.md)
+for qualification scope and the optional source-CCCL arithmetic dependency.
+
 ### CUDA 13.1 (CCCL 3.x) Compatibility
 
 CUDA 13.1 moved thrust, cub, and libcudacxx headers into a `cccl/`

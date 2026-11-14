@@ -56,6 +56,9 @@ namespace DNDS::Cauchy::CUDA
         DNDS_check_throw_info(!primitiveGradient || components == 5, "primitive viscous gradients require pure flow5");
         DNDS_check_throw_info(!produceLow || components == 5, "low-order flux blending applies to flow5 only");
         using P = DNDS::Math::ComputePrecision;
+        DNDS_check_throw_info(!warpQuadrature || (components == 5 && polynomialPrecision == P::FP64 &&
+                                                  dissipationPrecision == P::FP64 && fluxPrecision == P::FP64),
+                              "warp quadrature currently qualifies FP64 flow5 only");
         P selected = P::FP64;
         for (const auto precision : {polynomialPrecision, dissipationPrecision, fluxPrecision})
         {

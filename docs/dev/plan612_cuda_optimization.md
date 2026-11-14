@@ -46,6 +46,12 @@ active. Completed CUDA prefixes cache retirement only after publishing errors,
 releasing captured owners and finishing access reservations; repeated observation
 must preserve the original failure.
 
+CUDA prefix events use blocking host synchronization at explicit host observation
+points. This prevents driver-side spin inside `cudaEventSynchronize`; native
+stream waits and nonblocking event queries retain their ordinary semantics.
+It does not permit the engine to block while a controller-progress operation
+still needs polling. Host wake latency and GPU throughput are measured separately.
+
 Fixed-count Jacobi uses two prebound fields and queues sweeps on the same shared
 CPU/CUDA schedule. It never rebinds the public solution allocation or its halo.
 Even counts finish in that allocation; odd counts copy once. Solve still observes
@@ -72,6 +78,7 @@ solver schedule, primary state, restart format, geometry or residual sums:
 | `polynomialArithmetic` | `fp64` (default), `fp32`, `f32f32`; RHS point-local basis/value/gradient |
 | `dissipationArithmetic` | Same types; Roe-family dissipation, FP64 central physical flux |
 | `fluxArithmetic` | Same types; full flow5 perfect-gas local thermo/convection/molecular diffusion |
+| `rhsMapping` | `thread` (default, ordered quadrature) or `warpQuadrature` (FP64 flow5 experiment) |
 
 These are experimental CUDA choices. Reduced arithmetic is flow5 only; full
 reduced flux excludes primitive viscous gradients, RANS and QCR. One launch
@@ -79,6 +86,12 @@ uses one common reduced arithmetic type, and full flux already includes its
 dissipation. Unsupported combinations fail explicitly. PP decisions and stored
 means/coefficients remain FP64; failed reduced-range point arithmetic returns
 a numerical status rather than silently switching precision.
+
+The warp mapping assigns a face to one full warp, evaluates its quadrature
+points in lanes, and uses a fixed warp reduction for the integrated flux.
+Inactive lanes still participate in collectives. It changes summation order,
+so compare against the CPU/default mapping with the declared FP64 tolerance,
+not byte equality. Physical boundary points retain separate unique output rows.
 
 The host wrapper validates residency/layout/shape once, then selects templated
 `__global__` entries and shared host/device numerical helpers. Native FP64

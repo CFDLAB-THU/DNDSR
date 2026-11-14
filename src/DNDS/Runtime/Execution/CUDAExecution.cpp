@@ -128,7 +128,12 @@ namespace DNDS::Runtime
             explicit CUDAPrefix(std::shared_ptr<NativeStream> stream) : _stream(std::move(stream)), _ordinal(_stream->ordinal)
             {
                 DeviceScope scope(_ordinal);
-                Check(cudaEventCreateWithFlags(&_event, cudaEventDisableTiming));
+                // Host waits occur only at explicit observation/drain points.
+                // Let the OS sleep there: a default CUDA event can spin inside
+                // cudaEventSynchronize even after engine-side polling ceased.
+                // Query and device stream-wait semantics are unchanged; this
+                // flag adds no synchronization to queued kernel submission.
+                Check(cudaEventCreateWithFlags(&_event, cudaEventDisableTiming | cudaEventBlockingSync));
             }
             ~CUDAPrefix()
             {

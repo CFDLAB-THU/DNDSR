@@ -79,6 +79,7 @@ namespace DNDS::Cauchy::CUDA
         bool direct = false, linear = false, firstOrder = false;
         bool viscous = false, primitiveGradient = false, distinctViscous = false;
         bool positivity = false, faceFallback = false, useStencil = false, produceLow = false;
+        bool warpQuadrature = false;
         void Validate() const;
     };
     static_assert(std::is_trivially_copyable_v<RHSKernelControls>);

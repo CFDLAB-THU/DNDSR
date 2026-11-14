@@ -70,6 +70,7 @@ namespace DNDS::Cauchy
     {
         std::string stateInputLayout = "aos", reconstructionInputLayout = "aos";
         std::string polynomialArithmetic = "fp64", dissipationArithmetic = "fp64", fluxArithmetic = "fp64";
+        std::string rhsMapping = "thread";
         DNDS_DECLARE_CONFIG(KernelExecutionSettings)
         {
             DNDS_FIELD(stateInputLayout, "Experimental CUDA mean/linear input shadows: aos or aosoa32; primary storage is unchanged");
@@ -77,11 +78,12 @@ namespace DNDS::Cauchy
             DNDS_FIELD(polynomialArithmetic, "Point-local polynomial compute: fp64, fp32 or f32f32; coefficients remain FP64");
             DNDS_FIELD(dissipationArithmetic, "Gas-agnostic Riemann dissipation arithmetic: fp64, fp32 or f32f32");
             DNDS_FIELD(fluxArithmetic, "Point physics and full flux arithmetic: fp64, fp32 or f32f32; residual sums remain FP64");
+            DNDS_FIELD(rhsMapping, "CUDA FP64 face mapping: thread (ordered quadrature) or warpQuadrature (deterministic warp sum)");
         }
         bool Default() const
         {
             return stateInputLayout == "aos" && reconstructionInputLayout == "aos" &&
-                   polynomialArithmetic == "fp64" && dissipationArithmetic == "fp64" && fluxArithmetic == "fp64";
+                   polynomialArithmetic == "fp64" && dissipationArithmetic == "fp64" && fluxArithmetic == "fp64" && rhsMapping == "thread";
         }
     };
     struct ExecutionSettings

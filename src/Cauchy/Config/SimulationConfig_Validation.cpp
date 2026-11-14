@@ -279,6 +279,10 @@ namespace DNDS::Cauchy
                 "nondefault reconstruction kernel requires CUDA");
         const auto &kernels = s.execution.kernels;
         require(cuda || kernels.Default(), "operator compute/layout experiments require CUDA");
+        require(kernels.rhsMapping == "thread" || kernels.rhsMapping == "warpQuadrature", "RHS kernel mapping " + kernels.rhsMapping);
+        require(kernels.rhsMapping == "thread" || (kernels.polynomialArithmetic == "fp64" &&
+                                                   kernels.dissipationArithmetic == "fp64" && kernels.fluxArithmetic == "fp64"),
+                "warp quadrature currently qualifies FP64 arithmetic only");
         for (const auto *layout : {&kernels.stateInputLayout, &kernels.reconstructionInputLayout})
             require(*layout == "aos" || *layout == "aosoa32", "kernel input layout " + *layout);
         for (const auto *precision : {&kernels.polynomialArithmetic, &kernels.dissipationArithmetic, &kernels.fluxArithmetic})
@@ -318,6 +322,7 @@ namespace DNDS::Cauchy
         require(s.equation.system == "compressible", "equation " + s.equation.system);
         const bool mixture = s.equation.eos == "idealGasMixture";
         const bool rans = s.equation.rans.model != "none", extended = mixture || rans;
+        require(kernels.rhsMapping == "thread" || !extended, "warp quadrature currently qualifies flow5 only");
         require(reducedArithmetic.empty() || !extended, "experimental reduced RHS arithmetic requires perfect-gas flow5");
         require(kernels.fluxArithmetic == "fp64" || s.numerics.viscousGradient == "polynomial",
                 "reduced full flux currently requires conservative polynomial gradients");
