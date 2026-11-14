@@ -2,6 +2,7 @@
 
 #include "Cauchy/Physics/FlowState.hpp"
 #include "DNDS/Core/Errors.hpp"
+#include "DNDS/Math/ComputeScalar.hpp"
 #include <cmath>
 #include <string>
 #include <limits>
@@ -10,19 +11,23 @@ namespace DNDS::Cauchy::Riemann
 {
     /// EOS-independent physical input. Pressure is supplied by the equation
     /// layer; conservative energy retains that layer's energy convention.
-    struct EulerState
+    template <class Scalar>
+    struct EulerStateT
     {
-        FlowState conservative;
-        real pressure;
+        FlowStateT<Scalar> conservative;
+        Scalar pressure;
     };
+    using EulerState = EulerStateT<real>;
     /// Rusanov additionally requires the equation's physical sound speed.
     /// Further algorithms add their own typed enthalpy/derivative/average data;
     /// absent thermodynamics must never be guessed from conservative energy.
-    struct AcousticState
+    template <class Scalar>
+    struct AcousticStateT
     {
-        EulerState flow;
-        real soundSpeed;
+        EulerStateT<Scalar> flow;
+        Scalar soundSpeed;
     };
+    using AcousticState = AcousticStateT<real>;
     struct Requirements
     {
         bool pressure, soundSpeed, enthalpy;
@@ -65,54 +70,67 @@ namespace DNDS::Cauchy::Riemann
     /// basis. This describes the supplied model; no gamma or EOS recovery is
     /// required in Roe or HLLEP. Extra pressure-neutral energy can be supplied
     /// explicitly for multi-energy/species profiles with the corresponding mode.
-    struct RoeData
+    template <class Scalar>
+    struct RoeDataT
     {
-        Vector3 velocity;
-        real soundSpeed, enthalpy, contactEnergy;
-        FlowState contactProjection;
-        real contactEnergyJump = 0;
+        Vector3T<Scalar> velocity;
+        Scalar soundSpeed, enthalpy, contactEnergy;
+        FlowStateT<Scalar> contactProjection;
+        Scalar contactEnergyJump = 0;
     };
-    struct WaveBounds
+    using RoeData = RoeDataT<real>;
+    template <class Scalar>
+    struct WaveBoundsT
     {
-        real left, right;
+        Scalar left, right;
     };
-    struct AUSMData
+    using WaveBounds = WaveBoundsT<real>;
+    template <class Scalar>
+    struct AUSMDataT
     {
-        real faceSoundSpeed;
+        Scalar faceSoundSpeed;
     };
+    using AUSMData = AUSMDataT<real>;
     /// Common modular flux interface. Optional data pointers are required only
     /// by RequiredInputs(); their storage is caller-owned through Evaluate.
     /// Face and mean states are separate, preserving legacy implicit estimates.
-    struct FluxInput
+    template <class Scalar>
+    struct FluxInputT
     {
-        AcousticState left, right;
-        Vector3 normal, gridVelocity{};
-        const AcousticState *leftMean = nullptr, *rightMean = nullptr;
-        const RoeData *roe = nullptr;
-        const WaveBounds *outerWaves = nullptr;
-        const AUSMData *ausm = nullptr;
+        AcousticStateT<Scalar> left, right;
+        Vector3T<Scalar> normal, gridVelocity{};
+        const AcousticStateT<Scalar> *leftMean = nullptr, *rightMean = nullptr;
+        const RoeDataT<Scalar> *roe = nullptr;
+        const WaveBoundsT<Scalar> *outerWaves = nullptr;
+        const AUSMDataT<Scalar> *ausm = nullptr;
     };
-    struct FluxResult
+    using FluxInput = FluxInputT<real>;
+    template <class Scalar>
+    struct FluxResultT
     {
-        FlowState flux;
-        real acousticMinus, contact, acousticPlus;
+        FlowStateT<Scalar> flux;
+        Scalar acousticMinus, contact, acousticPlus;
     };
-    struct FluxSettings
+    using FluxResult = FluxResultT<real>;
+    template <class Scalar>
+    struct FluxSettingsT
     {
-        real dLambda = 0, fixScale = 1, incrementScale = 1;
-        real referenceMach = .1, pressureStencilMin = std::numeric_limits<real>::max();
+        Scalar dLambda = 0, fixScale = 1, incrementScale = 1;
+        Scalar referenceMach = Scalar(.1), pressureStencilMin = DNDS::Math::ScalarMaxFinite<Scalar>();
     };
+    using FluxSettings = FluxSettingsT<real>;
 
     /// Unit normal and explicit grid velocity (zero by default); only
     /// kinematics and supplied pressure are used. No EOS, heat capacity or
     /// total-enthalpy recovery occurs here.
-    DNDS_DEVICE_CALLABLE inline FlowState PhysicalFlux(const EulerState &input, const Vector3 &normal, const Vector3 &gridVelocity = {})
+    template <class Scalar>
+    DNDS_DEVICE_CALLABLE inline FlowStateT<Scalar> PhysicalFlux(const EulerStateT<Scalar> &input, const Vector3T<Scalar> &normal, const Vector3T<Scalar> &gridVelocity = {})
     {
         const auto &state = input.conservative;
-        real speed = 0;
+        Scalar speed = 0;
         for (int d = 0; d < 3; ++d)
             speed += (state[1 + d] / state[0] - gridVelocity[d]) * normal[d];
-        FlowState flux{state[0] * speed, 0, 0, 0, (state[4] + input.pressure) * speed};
+        FlowStateT<Scalar> flux{state[0] * speed, 0, 0, 0, (state[4] + input.pressure) * speed};
         for (int d = 0; d < 3; ++d)
         {
             flux[1 + d] = state[1 + d] * speed + input.pressure * normal[d];
@@ -120,34 +138,37 @@ namespace DNDS::Cauchy::Riemann
         }
         return flux;
     }
-    DNDS_DEVICE_CALLABLE inline real SignalSpeed(const AcousticState &input, const Vector3 &normal, const Vector3 &gridVelocity = {})
+    template <class Scalar>
+    DNDS_DEVICE_CALLABLE inline Scalar SignalSpeed(const AcousticStateT<Scalar> &input, const Vector3T<Scalar> &normal, const Vector3T<Scalar> &gridVelocity = {})
     {
-        real speed = 0;
+        Scalar speed = 0;
         for (int d = 0; d < 3; ++d)
             speed += (input.flow.conservative[1 + d] / input.flow.conservative[0] - gridVelocity[d]) * normal[d];
-        return std::abs(speed) + input.soundSpeed;
+        return DNDS::Math::ScalarAbs(speed) + input.soundSpeed;
     }
     /// Face contribution to the legacy H-correction stencil. The sound speeds
     /// are equation-provided. This scalar is invariant under swapping sides
     /// and reversing the normal, and under a common constant grid velocity.
-    DNDS_DEVICE_CALLABLE inline real TransverseSignalJump(const AcousticState &left, const AcousticState &right, const Vector3 &normal)
+    template <class Scalar>
+    DNDS_DEVICE_CALLABLE inline Scalar TransverseSignalJump(const AcousticStateT<Scalar> &left, const AcousticStateT<Scalar> &right, const Vector3T<Scalar> &normal)
     {
-        real jump = 0;
+        Scalar jump = 0;
         for (int d = 0; d < 3; ++d)
             jump += (right.flow.conservative[1 + d] / right.flow.conservative[0] -
                      left.flow.conservative[1 + d] / left.flow.conservative[0]) *
                     normal[d];
         // max(|du+da|, |du-da|, |da|) = |du|+|da|.
-        return std::abs(jump) + std::abs(right.soundSpeed - left.soundSpeed);
+        return DNDS::Math::ScalarAbs(jump) + DNDS::Math::ScalarAbs(right.soundSpeed - left.soundSpeed);
     }
-    DNDS_DEVICE_CALLABLE inline FlowState Rusanov(const AcousticState &left, const AcousticState &right, const Vector3 &normal, const Vector3 &gridVelocity = {})
+    template <class Scalar>
+    DNDS_DEVICE_CALLABLE inline FlowStateT<Scalar> Rusanov(const AcousticStateT<Scalar> &left, const AcousticStateT<Scalar> &right, const Vector3T<Scalar> &normal, const Vector3T<Scalar> &gridVelocity = {})
     {
         const auto a = PhysicalFlux(left.flow, normal, gridVelocity), b = PhysicalFlux(right.flow, normal, gridVelocity);
-        const real speedLeft = SignalSpeed(left, normal, gridVelocity), speedRight = SignalSpeed(right, normal, gridVelocity);
-        const real alpha = speedLeft > speedRight ? speedLeft : speedRight;
-        FlowState result;
+        const Scalar speedLeft = SignalSpeed(left, normal, gridVelocity), speedRight = SignalSpeed(right, normal, gridVelocity);
+        const Scalar alpha = speedLeft > speedRight ? speedLeft : speedRight;
+        FlowStateT<Scalar> result;
         for (int j = 0; j < 5; ++j)
-            result[j] = .5 * (a[j] + b[j] - alpha * (right.flow.conservative[j] - left.flow.conservative[j]));
+            result[j] = Scalar(.5) * (a[j] + b[j] - alpha * (right.flow.conservative[j] - left.flow.conservative[j]));
         return result;
     }
     /// Coarse selection resolved before face loops. Required inputs are explicit

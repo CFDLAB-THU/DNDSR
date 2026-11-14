@@ -40,6 +40,9 @@ namespace DNDS::Cauchy
                                   "device Jacobian input placement or AoS shape differs");
         };
         const auto &field = state.CoupledField();
+        output.ConfigureInputLayout(_data->settings.execution.kernels.stateInputLayout == "aosoa32"
+                                        ? LinearInputLayout::Tiled32
+                                        : LinearInputLayout::Native);
         checkTable(field.Owned(), owned, n);
         checkTable(field.Ghost(), all - owned, n);
         checkTable(inversePseudoTime, owned, 1);
@@ -93,6 +96,14 @@ namespace DNDS::Cauchy
         if (!work.deviceJacobian)
             work.deviceJacobian = std::make_shared<Workspace::DeviceJacobianData>(_data, n, stream.Context());
         const auto scratch = work.deviceJacobian;
+        const R::Array<real> *inputOwned = &field.Owned(), *inputGhost = &field.Ghost();
+        if (scratch->inputOwned)
+        {
+            scratch->inputOwned->Refresh(engine, stream, *inputOwned);
+            scratch->inputGhost->Refresh(engine, stream, *inputGhost);
+            inputOwned = &scratch->inputOwned->Values();
+            inputGhost = &scratch->inputGhost->Values();
+        }
         const auto slot = scratch->Acquire(controls.roeDissipation);
         auto &values = slot->values;
         const auto &cells = work.DeviceCellSelection(CFV::ReconstructionRegion::All);
@@ -110,7 +121,7 @@ namespace DNDS::Cauchy
         R::SubmitArrays(engine, stream, [](R::ExecutionContext context, auto result)
                         { CUDA::ClearNumericalStatus(context, result); }, R::WriteAs<R::FixedRows<1>>(scratch->result));
         R::SubmitArrays(engine, stream, [gas = physics.gas](R::ExecutionContext context, auto owned, auto ghost, auto means, auto p, auto dp, auto status)
-                        { CUDA::FreezeJacobianMeans(context, gas, owned, ghost, means, p, dp, status); }, R::ReadAs<R::TableRows>(field.Owned()), R::ReadAs<R::TableRows>(field.Ghost()), R::WriteAs<R::TableRows>(values.means), R::WriteAs<R::TableRows>(values.pressure), R::WriteAs<R::TableRows>(values.pressureDerivative), R::WriteAs<R::FixedRows<1>>(scratch->meansStatus));
+                        { CUDA::FreezeJacobianMeans(context, gas, owned, ghost, means, p, dp, status); }, R::ReadAs<R::UniformTableRows>(*inputOwned), R::ReadAs<R::UniformTableRows>(*inputGhost), R::WriteAs<R::UniformTableRows>(values.means), R::WriteAs<R::TableRows>(values.pressure), R::WriteAs<R::TableRows>(values.pressureDerivative), R::WriteAs<R::FixedRows<1>>(scratch->meansStatus));
         scratch->AppendStatus(engine, stream, scratch->meansStatus);
         R::SubmitArrays(engine, stream, [](R::ExecutionContext context, auto input, auto output)
                         { Algebra::ApplyRowViews(context, Algebra::PointwiseOperation::Copy, output.DynamicView(), input.DynamicView()); }, R::ReadAs<R::TableRows>(*auxiliary.faceSpectralRadius), R::WriteAs<R::TableRows>(values.radius));
@@ -152,7 +163,7 @@ namespace DNDS::Cauchy
             request.parameters = parameters; request.rans = physics.rans.kind;
             request.solver = scratch->owner->flux.Kind(); request.fluxSettings = scratch->owner->settings.numerics.riemann.KernelSettings();
             request.time = time; request.physicalBoundary = controls.scalarBoundaryDerivative;
-            CUDA::AddJacobianFaces(context, request, cells, diagonal, full, magnitudes, status); }, R::ReadAs<R::TableRows>(values.means), R::ReadAs<R::TableRows>(values.pressure), R::ReadAs<R::TableRows>(values.pressureDerivative), R::ReadAs<R::TableRows>(values.radius), R::ReadAs<R::TableRows>(incoming), R::ReadAs<R::TableRows>(wave ? scratch->waveJump : _data->deviceEmpty), R::ReadAs<R::TableRows>(pressure ? scratch->pressureMinimum : _data->deviceEmpty), R::ReadAs<R::FixedRows<1>>(cells), R::ReadWriteAs<R::TableRows>(output.Diagonal()), R::WriteAs<R::TableRows>(values.magnitudes), R::ReadWriteAs<R::FixedRows<1>>(scratch->rowsStatus));
+            CUDA::AddJacobianFaces(context, request, cells, diagonal, full, magnitudes, status); }, R::ReadAs<R::UniformTableRows>(values.means), R::ReadAs<R::TableRows>(values.pressure), R::ReadAs<R::TableRows>(values.pressureDerivative), R::ReadAs<R::TableRows>(values.radius), R::ReadAs<R::TableRows>(incoming), R::ReadAs<R::TableRows>(wave ? scratch->waveJump : _data->deviceEmpty), R::ReadAs<R::TableRows>(pressure ? scratch->pressureMinimum : _data->deviceEmpty), R::ReadAs<R::FixedRows<1>>(cells), R::ReadWriteAs<R::TableRows>(output.Diagonal()), R::WriteAs<R::TableRows>(values.magnitudes), R::ReadWriteAs<R::FixedRows<1>>(scratch->rowsStatus));
         scratch->AppendStatus(engine, stream, scratch->rowsStatus);
         if (output.HasAssembledOffDiagonal())
         {
@@ -161,7 +172,7 @@ namespace DNDS::Cauchy
             R::SubmitArrays(engine, stream, [scratch, parameters](R::ExecutionContext context, auto means, auto p, auto dp, auto radius, auto magnitudes, auto cells, auto blocks, auto offsets, auto status)
                             {
                 const CUDA::FrozenJacobianInput request{scratch->geometryRead->View(), means, p, dp, radius, magnitudes, parameters};
-                CUDA::AssembleFrozenJacobian(context, request, cells, {blocks, offsets, parameters.components}, status); }, R::ReadAs<R::TableRows>(values.means), R::ReadAs<R::TableRows>(values.pressure), R::ReadAs<R::TableRows>(values.pressureDerivative), R::ReadAs<R::TableRows>(values.radius), R::ReadAs<R::TableRows>(values.magnitudes), R::ReadAs<R::FixedRows<1>>(cells), R::WriteAs<R::TableRows>(blocks), R::ReadAs<R::FixedRows<1>>(output.OffDiagonal().OffsetArray()), R::WriteAs<R::FixedRows<1>>(scratch->assemblyStatus));
+                CUDA::AssembleFrozenJacobian(context, request, cells, {blocks, offsets, parameters.components}, status); }, R::ReadAs<R::UniformTableRows>(values.means), R::ReadAs<R::TableRows>(values.pressure), R::ReadAs<R::TableRows>(values.pressureDerivative), R::ReadAs<R::TableRows>(values.radius), R::ReadAs<R::TableRows>(values.magnitudes), R::ReadAs<R::FixedRows<1>>(cells), R::WriteAs<R::TableRows>(blocks), R::ReadAs<R::FixedRows<1>>(output.OffDiagonal().OffsetArray()), R::WriteAs<R::FixedRows<1>>(scratch->assemblyStatus));
             scratch->AppendStatus(engine, stream, scratch->assemblyStatus);
         }
         // Explicit publication boundary, not a per-kernel wait. The CPU path

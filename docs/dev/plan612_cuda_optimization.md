@@ -59,3 +59,44 @@ return an ordered stream completion. This applies to any locally empty rank,
 including participants with nonempty peers. Repeated empty publications may
 queue because they own no mutable request workspace. The ordinary halo
 publication/freshness protocol remains responsible for publishing the result.
+
+## Kernel-local layout and arithmetic experiments
+
+`execution.kernels` selects operator-local policies without changing the
+solver schedule, primary state, restart format, geometry or residual sums:
+
+| Setting | Values / scope |
+| --- | --- |
+| `stateInputLayout` | `aos` (default), `aosoa32`; RHS, Jacobian and linear input shadows |
+| `reconstructionInputLayout` | `aos` (default), `aosoa32`; RHS coefficient/viscous input shadows |
+| `polynomialArithmetic` | `fp64` (default), `fp32`, `f32f32`; RHS point-local basis/value/gradient |
+| `dissipationArithmetic` | Same types; Roe-family dissipation, FP64 central physical flux |
+| `fluxArithmetic` | Same types; full flow5 perfect-gas local thermo/convection/molecular diffusion |
+
+These are experimental CUDA choices. Reduced arithmetic is flow5 only; full
+reduced flux excludes primitive viscous gradients, RANS and QCR. One launch
+uses one common reduced arithmetic type, and full flux already includes its
+dissipation. Unsupported combinations fail explicitly. PP decisions and stored
+means/coefficients remain FP64; failed reduced-range point arithmetic returns
+a numerical status rather than silently switching precision.
+
+The host wrapper validates residency/layout/shape once, then selects templated
+`__global__` entries and shared host/device numerical helpers. Native FP64
+flow5 RHS has static AoS/tiled input indexing; precision experiments use uniform
+layout-aware views to bound template instantiations. No metadata owner or lease
+is created inside the numerical kernel.
+
+`Algebra::ArrayInputCache` owns a setup-allocated tiled shadow. Refresh is queued
+on its consumer lane and invalidated by source storage identity, shape and
+submission mutation epoch, or writes to the shadow. Kernel operands retain
+ordinary ownership/access declarations. A source producer on another lane must
+be ordered before refresh by the caller; this cache is bound to its first lane
+and is not a cross-stream readiness oracle. Counts/versions are host metadata;
+no device-to-host scan occurs to decide a cache hit. Shadow conversion costs
+must be included in end-to-end layout comparisons.
+
+Float-float uses optional header-only CCCL (`DNDS_USE_CCCL_COMPUTE=ON`, pinned
+`DNDS_CCCL_SOURCE_ROOT`). It has an FP32-like exponent range and is not IEEE
+FP64. A coherent source libcudacxx/Thrust/CUB family must precede toolkit headers
+in the enabled build. The external checkout remains separate from the packaged
+dependency bundle. Qualification results belong in the plan execution record.

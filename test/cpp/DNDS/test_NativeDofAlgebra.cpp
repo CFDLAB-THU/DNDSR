@@ -3,12 +3,73 @@
 #include "DNDS/Algebra/DofAlgebra.hpp"
 #include "DNDS/Algebra/DofHalo.hpp"
 #include "DNDS/Algebra/DofScratchPool.hpp"
+#include "DNDS/Algebra/ArrayInputCache.hpp"
 #include "DNDS/Core/OMP.hpp"
 #include <atomic>
 #include <thread>
 
 namespace A = DNDS::Algebra;
 namespace R = DNDS::Runtime;
+
+TEST_CASE("Operator input layout caches track queued mutations and storage aliases")
+{
+    constexpr DNDS::index width = 95;
+    for (DNDS::index workers : {0, 2})
+        for (DNDS::index rows : {31, 32, 33})
+        {
+            CAPTURE(workers);
+            CAPTURE(rows);
+            R::EagerEngine engine(workers);
+            const auto stream = engine.CreateCPUStream(), other = engine.CreateCPUStream();
+            R::Array<DNDS::real> source(R::RowLayout::Dense(rows, width, width + 3));
+            A::ArrayInputCache cache(source, "test/tiledInput");
+            const auto allocation = cache.Values().Storage().Identity();
+            R::SubmitArrays(engine, stream, [](auto, auto values)
+                            {
+                for (DNDS::index iRow = 0; iRow < values.RowCount(); ++iRow)
+                    for (DNDS::index j = 0; j < values.Width(); ++j)
+                        values(iRow, j) = 1000 * iRow + j; }, R::WriteAs<R::UniformTableRows>(source));
+            CHECK(cache.Refresh(engine, stream, source));
+            CHECK_FALSE(cache.Refresh(engine, stream, source));
+            engine.Synchronize();
+            const auto verify = [&](DNDS::real offset)
+            {
+                const auto read = cache.Values().Read();
+                const auto values = read.View<R::TiledColMajorTable<32>>();
+                for (DNDS::index iRow = 0; iRow < rows; ++iRow)
+                    for (DNDS::index j = 0; j < width; ++j)
+                        CHECK(values(iRow, j) == 1000 * iRow + j + offset);
+                CHECK(cache.Values().Storage().Identity() == allocation);
+            };
+            verify(0);
+            R::SubmitArrays(engine, stream, [](auto, auto values)
+                            {
+                for (DNDS::index iRow = 0; iRow < values.RowCount(); ++iRow)
+                    for (DNDS::index j = 0; j < values.Width(); ++j)
+                        values(iRow, j) += 7; }, R::ReadWriteAs<R::UniformTableRows>(source));
+            CHECK(cache.Refresh(engine, stream, source));
+            engine.Synchronize();
+            verify(7);
+
+            auto shadowAlias = cache.Values();
+            R::SubmitArrays(engine, stream, [](auto, auto values)
+                            { values(0, 0) = -99; }, R::WriteAs<R::UniformTableRows>(shadowAlias));
+            CHECK(cache.Refresh(engine, stream, source));
+            engine.Synchronize();
+            verify(7);
+
+            // Two ArrayStorage objects can share one allocation; their row
+            // metadata is independent, so allocation identity alone is no key.
+            auto independentStorage = R::Array<DNDS::real>::FromStorage(source.Layout(), source.Storage());
+            CHECK(independentStorage.Storage().Identity() == source.Storage().Identity());
+            CHECK(independentStorage.SharedStorage() != source.SharedStorage());
+            CHECK(cache.Refresh(engine, stream, independentStorage));
+            CHECK_FALSE(cache.Refresh(engine, stream, independentStorage));
+            engine.Synchronize();
+            verify(7);
+            CHECK_THROWS(cache.Refresh(engine, other, independentStorage));
+        }
+}
 
 TEST_CASE("Independent OMP row kernels return deterministic first numerical failure")
 {

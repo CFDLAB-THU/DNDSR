@@ -215,7 +215,10 @@ namespace DNDS::Cauchy::CUDA
                                input.means, input.pressure, input.pressureDerivative, input.radius, selected, diagonal, status);
         DNDS_check_throw_info(all >= rows && input.offsets.RowCount() == rows + 1 && status.RowCount() == rows,
                               "CUDA Jacobian face row spaces differ");
-        Table(input.means, all, p.components);
+        DNDS_check_throw_info(input.means.RowCount() == all && input.means.Width() == p.components &&
+                                  (input.means.kind == R::RowLayoutKind::Table ||
+                                   (input.means.kind == R::RowLayoutKind::TiledColMajorTable && input.means.stride == 32)),
+                              "Jacobian means layout or shape differs");
         Table(input.pressure, all, 1);
         Table(input.pressureDerivative, all, p.components);
         Table(input.radius, input.radius.RowCount(), 2);
@@ -241,8 +244,8 @@ namespace DNDS::Cauchy::CUDA
                     Table(field, all, 1);
                 }
         }
-        for (const auto field : {input.means, input.pressure, input.pressureDerivative, input.radius, input.incoming, input.waveJump, input.pressureMinimum})
-            DNDS_check_throw_info(!field.data || (field.data != diagonal.data && (!p.roe || field.data != magnitudes.data)),
+        for (const auto *field : {input.means.data, input.pressure.data, input.pressureDerivative.data, input.radius.data, input.incoming.data, input.waveJump.data, input.pressureMinimum.data})
+            DNDS_check_throw_info(!field || (field != diagonal.data && (!p.roe || field != magnitudes.data)),
                                   "CUDA Jacobian face output aliases input");
         DNDS_check_throw_info(!diagonal.data || (!p.roe || diagonal.data != magnitudes.data), "CUDA Jacobian face outputs alias");
         R::CheckKernelArgumentBudget<JacobianFaceInput, LinearIndexRows, LinearWriteRows, bool, LinearWriteRows, JacobianStatus>();

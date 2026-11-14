@@ -55,17 +55,25 @@ namespace DNDS::Cauchy::CUDA
         DNDS_check_throw_info(direct || firstOrder || (modes > 0 && modes <= 19), "RHS polynomial degree/shape is missing");
         DNDS_check_throw_info(!primitiveGradient || components == 5, "primitive viscous gradients require pure flow5");
         DNDS_check_throw_info(!produceLow || components == 5, "low-order flux blending applies to flow5 only");
-    }
-    void RHSFields::ValidateDevice(R::Device device) const
-    {
-        R::ValidateViewDevices(device, mean, reconstruction, viscousData);
-        if (hasPreparedMean)
-            preparedMean.ValidateDevice(device);
-        if (hasIncoming)
-            incoming.ValidateDevice(device);
-        if (hasWave)
-            waveJump.ValidateDevice(device);
-        if (hasPressure)
-            pressureMinimum.ValidateDevice(device);
+        using P = DNDS::Math::ComputePrecision;
+        P selected = P::FP64;
+        for (const auto precision : {polynomialPrecision, dissipationPrecision, fluxPrecision})
+        {
+            DNDS_check_throw_info(precision >= P::FP64 && precision <= P::FloatFloat, "unknown CUDA RHS arithmetic");
+#ifndef DNDS_USE_CCCL_COMPUTE
+            DNDS_check_throw_info(precision != P::FloatFloat, "float-float RHS requires the CCCL compute build option");
+#endif
+            if (precision != P::FP64)
+            {
+                DNDS_check_throw_info(selected == P::FP64 || selected == precision,
+                                      "one face launch requires one common reduced arithmetic type");
+                selected = precision;
+            }
+        }
+        DNDS_check_throw_info(selected == P::FP64 || components == 5, "reduced RHS arithmetic is specialized for flow5");
+        DNDS_check_throw_info(fluxPrecision == P::FP64 || (!primitiveGradient && dissipationPrecision == P::FP64),
+                              "full reduced flux uses conservative gradients and includes its own dissipation");
+        DNDS_check_throw_info(dissipationPrecision == P::FP64 || (solver >= Riemann::Solver::Roe && solver <= Riemann::Solver::Roe_M9),
+                              "reduced dissipation currently requires the Roe family");
     }
 }

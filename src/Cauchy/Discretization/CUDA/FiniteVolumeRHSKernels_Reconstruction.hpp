@@ -5,8 +5,8 @@
 
 namespace DNDS::Cauchy::CUDA::Detail
 {
-    template <int Components>
-    DNDS_DEVICE_CALLABLE void MeanPoint(const RHSFields &fields, index iCell, PerfectGasKernelPoint<Components> &point) noexcept
+    template <int Components, class Fields>
+    DNDS_DEVICE_CALLABLE void MeanPoint(const Fields &fields, index iCell, PerfectGasKernelPoint<Components> &point) noexcept
     {
         for (int j = 0; j < Components; ++j)
         {
@@ -34,9 +34,9 @@ namespace DNDS::Cauchy::CUDA::Detail
         }
         return result;
     }
-    template <int Components>
+    template <int Components, class PolynomialScalar = real, class Fields>
     DNDS_DEVICE_CALLABLE void ReconstructPoint(const RHSGeometry &geometry, const RHSKernelParameters &parameters,
-                                               const RHSKernelControls &controls, const RHSFields &fields,
+                                               const RHSKernelControls &controls, const Fields &fields,
                                                const FiniteVolumeDetail::SampleRecord &sample, bool other,
                                                PerfectGasKernelPoint<Components> &point, index &fallbacks) noexcept
     {
@@ -45,6 +45,11 @@ namespace DNDS::Cauchy::CUDA::Detail
         const int dimension = controls.dimension;
         if (!controls.firstOrder && (!controls.direct || controls.linear))
         {
+            using S = PolynomialScalar;
+            std::array<S, Components> values{};
+            std::array<std::array<S, 3>, Components> gradients{};
+            for (int j = 0; j < Components; ++j)
+                values[j] = DNDS::Math::ScalarCast<S>(point.values[j]);
             const auto position = ParentPoint(geometry, sample, other);
             const auto &viscous = controls.distinctViscous && !controls.primitiveGradient ? fields.viscousData : fields.reconstruction;
             if (controls.direct)
@@ -52,32 +57,39 @@ namespace DNDS::Cauchy::CUDA::Detail
                 for (int j = 0; j < Components; ++j)
                     for (int d = 0; d < dimension; ++d)
                     {
-                        point.values[j] += fields.reconstruction(iCell, j * dimension + d) * (position[d] - geometry.cells(iCell, 4 + d));
+                        values[j] += DNDS::Math::ScalarCast<S>(fields.reconstruction(iCell, j * dimension + d)) *
+                                     (DNDS::Math::ScalarCast<S>(position[d]) - DNDS::Math::ScalarCast<S>(geometry.cells(iCell, 4 + d)));
                         if (controls.viscous && !controls.primitiveGradient)
-                            point.gradients[j][d] = viscous(iCell, j * dimension + d);
+                            gradients[j][d] = DNDS::Math::ScalarCast<S>(viscous(iCell, j * dimension + d));
                     }
             }
             else
             {
                 const int derivatives = controls.viscous && !controls.primitiveGradient ? dimension + 1 : 1;
-                CFV::Math::TaylorPointEvaluation prepared;
+                CFV::Math::TaylorPointEvaluationT<S> prepared;
                 if (derivatives > geometry.basis.cachedDerivatives)
-                    prepared = geometry.basis.PreparePoint(iCell, position);
+                    prepared = geometry.basis.PreparePoint<S>(iCell, position);
                 // Consume one modal basis across all equations before advancing.
                 // This keeps the original per-equation summation order while
                 // avoiding a 4x19 thread-local table in the hot face kernel.
                 for (int mode = 0; mode < controls.modes; ++mode)
                 {
-                    real basis[4];
+                    S basis[4];
                     for (int d = 0; d < derivatives; ++d)
                         basis[d] = geometry.basis.Evaluate(iCell, sample.point, other ? 1 - sample.side : sample.side, prepared, d, mode);
                     for (int j = 0; j < Components; ++j)
                     {
-                        point.values[j] += fields.reconstruction(iCell, j * controls.modes + mode) * basis[0];
+                        values[j] += DNDS::Math::ScalarCast<S>(fields.reconstruction(iCell, j * controls.modes + mode)) * basis[0];
                         for (int d = 1; d < derivatives; ++d)
-                            point.gradients[j][d - 1] += viscous(iCell, j * controls.modes + mode) * basis[d];
+                            gradients[j][d - 1] += DNDS::Math::ScalarCast<S>(viscous(iCell, j * controls.modes + mode)) * basis[d];
                     }
                 }
+            }
+            for (int j = 0; j < Components; ++j)
+            {
+                point.values[j] = DNDS::Math::ScalarCast<real>(values[j]);
+                for (int d = 0; d < dimension; ++d)
+                    point.gradients[j][d] = DNDS::Math::ScalarCast<real>(gradients[j][d]);
             }
         }
         if constexpr (Components > 5)
@@ -109,9 +121,9 @@ namespace DNDS::Cauchy::CUDA::Detail
             return point.status;
         return Riemann::AcousticState{{flow, point.value.thermo.pressure}, point.value.thermo.soundSpeed};
     }
-    template <int Components>
+    template <int Components, class Fields>
     DNDS_DEVICE_CALLABLE NumericalResult<Riemann::AcousticState> PointAcoustic(const RHSKernelParameters &parameters,
-                                                                               const RHSKernelControls &controls, const RHSFields &fields,
+                                                                               const RHSKernelControls &controls, const Fields &fields,
                                                                                const FiniteVolumeDetail::SampleRecord &sample, bool other,
                                                                                PerfectGasKernelPoint<Components> &point, index &fallbacks) noexcept
     {
@@ -129,9 +141,10 @@ namespace DNDS::Cauchy::CUDA::Detail
         }
         return result;
     }
+    template <class Fields>
     DNDS_DEVICE_CALLABLE inline NumericalResult<FlowState> BoundaryFlow(const RHSGeometry &geometry, const RHSKernelParameters &parameters,
                                                                         const RHSKernelControls &controls,
-                                                                        const RHSFields &fields, const FiniteVolumeDetail::SampleRecord &sample,
+                                                                        const Fields &fields, const FiniteVolumeDetail::SampleRecord &sample,
                                                                         const FlowState &inside, bool exterior) noexcept
     {
         const auto &condition = geometry.conditions(sample.condition, 0);
@@ -147,10 +160,10 @@ namespace DNDS::Cauchy::CUDA::Detail
         return TryPerfectGasBoundaryValue(condition, parameters.physics.gas, inside, sample.normal, sample.ownPoint,
                                           controls.time, controls.frame, exterior);
     }
-    template <int Components>
+    template <int Components, class Fields>
     DNDS_DEVICE_CALLABLE NumericalStatus ExteriorPoint(const RHSGeometry &geometry, const RHSKernelParameters &parameters,
                                                        const RHSKernelControls &controls,
-                                                       const RHSFields &fields, const FiniteVolumeDetail::SampleRecord &sample,
+                                                       const Fields &fields, const FiniteVolumeDetail::SampleRecord &sample,
                                                        PerfectGasKernelPoint<Components> &point) noexcept
     {
         const auto &condition = geometry.conditions(sample.condition, 0);

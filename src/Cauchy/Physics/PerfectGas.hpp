@@ -2,6 +2,7 @@
 
 #include "DNDS/Core/Errors.hpp"
 #include "DNDS/Core/Defines.hpp"
+#include "DNDS/Math/ComputeScalar.hpp"
 #include "Cauchy/Physics/FlowState.hpp"
 #include "Physics/Transport/NewtonianFourier.hpp"
 #include "Physics/Transport/MolecularViscosity.hpp"
@@ -13,51 +14,52 @@ namespace DNDS::Cauchy
     /// outside the loop; no mesh, communication, allocation, or callback occurs
     /// here. Future EOS/equation kernels may expose different local profiles
     /// behind the solver's coarse equation dispatch without virtual face calls.
-    struct PerfectGas
+    template <class Scalar>
+    struct PerfectGasT
     {
-        real gamma = 1.4, gasConstant = 1., viscosity = 0., prandtl = 0.72;
+        Scalar gamma = Scalar(1.4), gasConstant = Scalar(1.), viscosity = Scalar(0.), prandtl = Scalar(0.72);
         Physics::Transport::ViscosityModel viscosityModel = Physics::Transport::ViscosityModel::Constant;
-        real viscosityReferenceTemperature = 1., sutherlandConstant = 0.;
+        Scalar viscosityReferenceTemperature = Scalar(1.), sutherlandConstant = Scalar(0.);
         void Validate() const
         {
-            DNDS_check_throw_info(std::isfinite(gamma) && gamma > 1 && std::isfinite(gasConstant) && gasConstant > 0 &&
-                                      std::isfinite(viscosity) && viscosity >= 0 && std::isfinite(prandtl) && prandtl > 0,
+            DNDS_check_throw_info(DNDS::Math::ScalarFinite(gamma) && gamma > 1 && DNDS::Math::ScalarFinite(gasConstant) && gasConstant > 0 &&
+                                      DNDS::Math::ScalarFinite(viscosity) && viscosity >= 0 && DNDS::Math::ScalarFinite(prandtl) && prandtl > 0,
                                   "invalid perfect-gas parameters");
             using Model = Physics::Transport::ViscosityModel;
             DNDS_check_throw_info((viscosityModel == Model::Constant || viscosityModel == Model::Sutherland || viscosityModel == Model::ConstantKinematic) &&
-                                      std::isfinite(viscosityReferenceTemperature) && viscosityReferenceTemperature > 0 &&
-                                      std::isfinite(sutherlandConstant) && sutherlandConstant >= 0,
+                                      DNDS::Math::ScalarFinite(viscosityReferenceTemperature) && viscosityReferenceTemperature > 0 &&
+                                      DNDS::Math::ScalarFinite(sutherlandConstant) && sutherlandConstant >= 0,
                                   "invalid perfect-gas viscosity law");
         }
         /// Molecular coefficients use the actual point rho/T. Parameters are
         /// resolved once; the shared law is allocation-free and device-callable.
-        DNDS_DEVICE_CALLABLE real MolecularViscosity(real density, real temperature) const
+        DNDS_DEVICE_CALLABLE Scalar MolecularViscosity(Scalar density, Scalar temperature) const
         {
             return Physics::Transport::MolecularViscosity(viscosityModel, viscosity, density, temperature,
                                                           viscosityReferenceTemperature, sutherlandConstant);
         }
-        DNDS_DEVICE_CALLABLE real Pressure(const FlowState &state) const
+        DNDS_DEVICE_CALLABLE Scalar Pressure(const FlowStateT<Scalar> &state) const
         {
-            real momentumSquared = 0;
+            Scalar momentumSquared = 0;
             for (int d = 0; d < 3; ++d)
                 momentumSquared += state[1 + d] * state[1 + d];
-            return (gamma - 1) * (state[4] - 0.5 * momentumSquared / state[0]);
+            return (gamma - 1) * (state[4] - Scalar(0.5) * momentumSquared / state[0]);
         }
         /// Conservative pressure derivative at a validated perfect-gas state.
         /// The energy convention excludes turbulent kinetic energy. RANS
         /// scalar derivatives are therefore zero and are appended by the
         /// equation-profile producer, independently of the rho*k stress term.
-        DNDS_DEVICE_CALLABLE FlowState PressureDerivative(const FlowState &state) const noexcept
+        DNDS_DEVICE_CALLABLE FlowStateT<Scalar> PressureDerivative(const FlowStateT<Scalar> &state) const noexcept
         {
-            FlowState result{};
-            real speedSquared = 0;
+            FlowStateT<Scalar> result{};
+            Scalar speedSquared = 0;
             for (int d = 0; d < 3; ++d)
             {
-                const real velocity = state[1 + d] / state[0];
+                const Scalar velocity = state[1 + d] / state[0];
                 speedSquared += velocity * velocity;
                 result[1 + d] = -(gamma - 1) * velocity;
             }
-            result[0] = .5 * (gamma - 1) * speedSquared;
+            result[0] = Scalar(.5) * (gamma - 1) * speedSquared;
             result[4] = gamma - 1;
             return result;
         }
@@ -65,27 +67,27 @@ namespace DNDS::Cauchy
         /// all five conservative components. Thermodynamic derivatives belong
         /// to the model, independently of numerical Riemann dissipation.
         /// Caller checks state admissibility before evaluating a batch.
-        DNDS_DEVICE_CALLABLE std::array<real, 25> FluxJacobian(const FlowState &state, const Vector3 &normal) const
+        DNDS_DEVICE_CALLABLE std::array<Scalar, 25> FluxJacobian(const FlowStateT<Scalar> &state, const Vector3T<Scalar> &normal) const
         {
-            std::array<real, 25> result{};
-            Vector3 velocity{};
-            real normalVelocity = 0, speedSquared = 0;
+            std::array<Scalar, 25> result{};
+            Vector3T<Scalar> velocity{};
+            Scalar normalVelocity = 0, speedSquared = 0;
             for (int d = 0; d < 3; ++d)
             {
                 velocity[d] = state[1 + d] / state[0];
                 normalVelocity += velocity[d] * normal[d];
                 speedSquared += velocity[d] * velocity[d];
             }
-            const real pressure = Pressure(state);
+            const Scalar pressure = Pressure(state);
             for (int column = 0; column < 5; ++column)
             {
-                const real densityIncrement = column == 0 ? 1 : 0;
-                const real energyIncrement = column == 4 ? 1 : 0;
-                real pressureIncrement = (gamma - 1) * (energyIncrement + .5 * speedSquared * densityIncrement);
-                real normalIncrement = 0, massIncrement = 0;
+                const Scalar densityIncrement = column == 0 ? 1 : 0;
+                const Scalar energyIncrement = column == 4 ? 1 : 0;
+                Scalar pressureIncrement = (gamma - 1) * (energyIncrement + Scalar(.5) * speedSquared * densityIncrement);
+                Scalar normalIncrement = 0, massIncrement = 0;
                 for (int d = 0; d < 3; ++d)
                 {
-                    const real momentumIncrement = column == 1 + d ? 1 : 0;
+                    const Scalar momentumIncrement = column == 1 + d ? 1 : 0;
                     pressureIncrement -= (gamma - 1) * velocity[d] * momentumIncrement;
                     normalIncrement += (momentumIncrement - velocity[d] * densityIncrement) / state[0] * normal[d];
                     massIncrement += momentumIncrement * normal[d];
@@ -98,51 +100,51 @@ namespace DNDS::Cauchy
             }
             return result;
         }
-        DNDS_DEVICE_CALLABLE bool Admissible(const FlowState &state, real densityFloor = 0, real pressureFloor = 0) const
+        DNDS_DEVICE_CALLABLE bool Admissible(const FlowStateT<Scalar> &state, Scalar densityFloor = 0, Scalar pressureFloor = 0) const
         {
-            for (real value : state)
-                if (!std::isfinite(value))
+            for (Scalar value : state)
+                if (!DNDS::Math::ScalarFinite(value))
                     return false;
             return state[0] > densityFloor && Pressure(state) > pressureFloor;
         }
-        DNDS_DEVICE_CALLABLE PrimitiveState Primitive(const FlowState &state) const
+        DNDS_DEVICE_CALLABLE PrimitiveStateT<Scalar> Primitive(const FlowStateT<Scalar> &state) const
         {
-            const real pressure = Pressure(state);
-            PrimitiveState result{state[0], pressure, pressure / (state[0] * gasConstant), std::sqrt(gamma * pressure / state[0]), {}};
+            const Scalar pressure = Pressure(state);
+            PrimitiveStateT<Scalar> result{state[0], pressure, pressure / (state[0] * gasConstant), DNDS::Math::ScalarSqrt(gamma * pressure / state[0]), {}};
             for (int d = 0; d < 3; ++d)
                 result.velocity[d] = state[1 + d] / state[0];
             return result;
         }
         /// Input is [rho,u,v,w,p]. Caller validates positive rho,p once at its
         /// data boundary; these pure math functions do not throw in hot loops.
-        DNDS_DEVICE_CALLABLE FlowState Conservative(const FlowState &primitive) const
+        DNDS_DEVICE_CALLABLE FlowStateT<Scalar> Conservative(const FlowStateT<Scalar> &primitive) const
         {
-            FlowState result{primitive[0], 0, 0, 0, primitive[4] / (gamma - 1)};
+            FlowStateT<Scalar> result{primitive[0], 0, 0, 0, primitive[4] / (gamma - 1)};
             for (int d = 0; d < 3; ++d)
             {
                 result[1 + d] = primitive[0] * primitive[1 + d];
-                result[4] += 0.5 * primitive[0] * primitive[1 + d] * primitive[1 + d];
+                result[4] += Scalar(0.5) * primitive[0] * primitive[1 + d] * primitive[1 + d];
             }
             return result;
         }
         /// Chain rule from [rho,rho*u,rho*v,rho*w,rho*E] to [rho,u,v,w,T].
         /// State and gradient are point values, not conservative cell averages.
         /// The caller validates the linearization state outside this pure kernel.
-        DNDS_DEVICE_CALLABLE FlowGradient PrimitiveGradient(const FlowState &state, const FlowGradient &gradient) const
+        DNDS_DEVICE_CALLABLE FlowGradientT<Scalar> PrimitiveGradient(const FlowStateT<Scalar> &state, const FlowGradientT<Scalar> &gradient) const
         {
-            FlowGradient result{};
-            Vector3 velocity{};
-            real speedSquared = 0;
+            FlowGradientT<Scalar> result{};
+            Vector3T<Scalar> velocity{};
+            Scalar speedSquared = 0;
             for (int j = 0; j < 3; ++j)
             {
                 velocity[j] = state[1 + j] / state[0];
                 speedSquared += velocity[j] * velocity[j];
             }
-            const real pressure = Pressure(state);
+            const Scalar pressure = Pressure(state);
             for (int d = 0; d < 3; ++d)
             {
                 result[0][d] = gradient[0][d];
-                real pressureGradient = gradient[4][d] + .5 * speedSquared * gradient[0][d];
+                Scalar pressureGradient = gradient[4][d] + Scalar(.5) * speedSquared * gradient[0][d];
                 for (int j = 0; j < 3; ++j)
                 {
                     result[1 + j][d] = (gradient[1 + j][d] - velocity[j] * gradient[0][d]) / state[0];
@@ -156,21 +158,31 @@ namespace DNDS::Cauchy
         /// Positive viscous flux; FV residual is -div(F_inviscid)+div(F_viscous).
         /// Stokes stress and Fourier heat conduction, with point mu and fixed Pr. The
         /// energy component is u dot (tau*n) + k grad(T) dot n.
-        DNDS_DEVICE_CALLABLE FlowState ViscousFlux(const PrimitiveState &state, const FlowGradient &gradient, const Vector3 &normal) const
+        DNDS_DEVICE_CALLABLE FlowStateT<Scalar> ViscousFlux(const PrimitiveStateT<Scalar> &state, const FlowGradientT<Scalar> &gradient, const Vector3T<Scalar> &normal) const
         {
             struct VelocityGradient
             {
-                const FlowGradient &values;
-                DNDS_DEVICE_CALLABLE real operator()(int i, int j) const { return values[1 + i][j]; }
+                const FlowGradientT<Scalar> &values;
+                DNDS_DEVICE_CALLABLE Scalar operator()(int i, int j) const { return values[1 + i][j]; }
             };
-            const real mu = MolecularViscosity(state.density, state.temperature);
-            const real conductivity = mu * gamma * gasConstant / ((gamma - 1) * prandtl);
+            const Scalar mu = MolecularViscosity(state.density, state.temperature);
+            const Scalar conductivity = mu * gamma * gasConstant / ((gamma - 1) * prandtl);
             const auto flux = Physics::Transport::NewtonianFourierNormalFlux(state.velocity, VelocityGradient{gradient}, gradient[4], normal, mu, conductivity);
-            FlowState result{};
+            FlowStateT<Scalar> result{};
             for (int i = 0; i < 3; ++i)
                 result[1 + i] = flux.traction[i];
             result[4] = flux.energy;
             return result;
         }
     };
+    using PerfectGas = PerfectGasT<real>;
+
+    /// Convert only point-kernel parameters at an explicit arithmetic boundary.
+    /// This neither changes persistent state precision nor selects a backend.
+    template <class To, class From>
+    DNDS_DEVICE_CALLABLE inline PerfectGasT<To> CastPerfectGas(const PerfectGasT<From> &gas) noexcept
+    {
+        return {To(gas.gamma), To(gas.gasConstant), To(gas.viscosity), To(gas.prandtl), gas.viscosityModel,
+                To(gas.viscosityReferenceTemperature), To(gas.sutherlandConstant)};
+    }
 }

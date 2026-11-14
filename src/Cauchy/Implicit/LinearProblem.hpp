@@ -21,6 +21,11 @@ namespace DNDS::Cauchy
         Core,
         HaloDependent
     };
+    enum class LinearInputLayout
+    {
+        Native,
+        Tiled32
+    };
     enum class DiagonalStorage
     {
         Entries,
@@ -112,6 +117,8 @@ namespace DNDS::Cauchy
         bool _inversePending = false;
         struct ActionWorkspace;
         std::shared_ptr<ActionWorkspace> _actionWorkspace;
+        struct InputWorkspace;
+        std::shared_ptr<InputWorkspace> _inputWorkspace;
         void PrepareActionWorkspace();
         Runtime::Array<NumericalStatus> &ActionStatus() const;
         struct ILUState;
@@ -150,6 +157,10 @@ namespace DNDS::Cauchy
         }
         index Components() const { return _components; }
         Runtime::Device Device() const { return _diagonal.GetDevice(); }
+        /// Prepare optional layout shadows for vector reads only. Primary state,
+        /// matrix blocks and output remain unchanged. Call before queued actions;
+        /// repeated selection of the current layout does not allocate or drain.
+        void ConfigureInputLayout(LinearInputLayout layout);
         /// Explicit host numerical decision boundary for queued evaluated
         /// actions. Reduces device status, drains, then reports the first error.
         /// CPU/assembled providers have no additional status workspace.

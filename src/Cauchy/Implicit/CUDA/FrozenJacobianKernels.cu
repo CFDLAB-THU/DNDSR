@@ -66,8 +66,8 @@ namespace DNDS::Cauchy::CUDA
 
         template <int N, bool Jacobi>
         __global__ void Apply(FrozenJacobianInput s, LinearIndexRows selected, LinearReadRows diagonal,
-                              bool fullDiagonal, LinearReadRows rhs, LinearReadRows owned,
-                              LinearReadRows ghost, LinearWriteRows output, FrozenJacobianStatus status)
+                              bool fullDiagonal, VectorReadRows rhs, VectorReadRows owned,
+                              VectorReadRows ghost, LinearWriteRows output, FrozenJacobianStatus status)
         {
             for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x;
                  iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
@@ -140,6 +140,13 @@ namespace DNDS::Cauchy::CUDA
             DNDS_check_throw_info(view.kind == R::RowLayoutKind::Table && view.RowCount() == rows && view.Width() == width,
                                   "frozen CUDA Jacobian requires matching AoS tables");
         }
+        void Vector(VectorReadRows view, index rows, index width)
+        {
+            DNDS_check_throw_info(view.RowCount() == rows && view.Width() == width &&
+                                      (view.kind == R::RowLayoutKind::Table ||
+                                       (view.kind == R::RowLayoutKind::TiledColMajorTable && view.stride == 32)),
+                                  "frozen CUDA vector requires matching AoS or tiled32 input");
+        }
         void Check(R::ExecutionContext context, const FrozenJacobianInput &s, LinearIndexRows selected, FrozenJacobianStatus status)
         {
             const auto &p = s.parameters;
@@ -149,7 +156,7 @@ namespace DNDS::Cauchy::CUDA
                                   "unsupported frozen CUDA Jacobian profile");
             s.geometry.ValidateDevice(context.device);
             R::ValidateViewDevices(context.device, s.means, s.pressure, s.pressureDerivative, s.radius, selected, status);
-            Table(s.means, s.means.RowCount(), p.components);
+            Vector(s.means, s.means.RowCount(), p.components);
             Table(s.pressure, s.means.RowCount(), 1);
             Table(s.pressureDerivative, s.means.RowCount(), p.components);
             Table(s.radius, s.radius.RowCount(), 2);
@@ -190,24 +197,24 @@ namespace DNDS::Cauchy::CUDA
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "frozen CUDA Jacobian assembly launch failed");
     }
     void ApplyFrozenJacobian(R::ExecutionContext context, const FrozenJacobianInput &s, LinearIndexRows selected,
-                             LinearReadRows diagonal, bool fullDiagonal, LinearReadRows rhs, LinearReadRows owned,
-                             LinearReadRows ghost, LinearWriteRows output, FrozenJacobianStatus status, bool jacobi)
+                             LinearReadRows diagonal, bool fullDiagonal, VectorReadRows rhs, VectorReadRows owned,
+                             VectorReadRows ghost, LinearWriteRows output, FrozenJacobianStatus status, bool jacobi)
     {
         Check(context, s, selected, status);
         R::ValidateViewDevices(context.device, diagonal, owned, output);
         const index rows = s.geometry.columns.RowCount(), n = s.parameters.components;
         Table(diagonal, rows, fullDiagonal ? n * n : n);
-        Table(owned, rows, n);
+        Vector(owned, rows, n);
         Table(output, rows, n);
         if (ghost.RowCount())
         {
             ghost.ValidateDevice(context.device);
-            Table(ghost, s.means.RowCount() - rows, n);
+            Vector(ghost, s.means.RowCount() - rows, n);
         }
         if (jacobi)
         {
             rhs.ValidateDevice(context.device);
-            Table(rhs, rows, n);
+            Vector(rhs, rows, n);
         }
         DNDS_check_throw_info(!output.data || (output.data != diagonal.data && output.data != owned.data &&
                                                output.data != ghost.data && (!jacobi || output.data != rhs.data) && output.data != s.means.data &&

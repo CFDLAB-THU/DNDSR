@@ -13,6 +13,11 @@ namespace DNDS::Cauchy
 #ifdef DNDS_USE_CUDA
         const auto device = context.device;
         const index owned = owner->metrics.NumCell(), all = owner->metrics.NumCellProc();
+        if (owner->settings.execution.kernels.stateInputLayout == "aosoa32")
+        {
+            inputOwned.emplace(R::RowLayout::Dense(owned, components), device, "Cauchy/Jacobian/tiledInput");
+            inputGhost.emplace(R::RowLayout::Dense(all - owned, components), device, "Cauchy/Jacobian/tiledGhost");
+        }
         // Symbolic setup only. Do not download full CFV metrics or basis caches.
         const auto samples = owner->stencil.jacobianSamples.To(R::Device::Host(), context);
         const auto offsets = owner->stencil.jacobianOffsets.To(R::Device::Host(), context);
@@ -68,6 +73,11 @@ namespace DNDS::Cauchy
         slot->values = {table(all, components, "means"), table(all, 1, "pressure"), table(all, components, "pressureDerivative"),
                         table(owner->stencil.stencilFaces.RowCount(), 2, "radius"),
                         table(roe ? owner->stencil.jacobianSamples.RowCount() : 0, 3, "magnitudes")};
+        if (inputOwned)
+        {
+            slot->values.means.Reset(R::RowLayout::TiledColMajor(all, components, 32), device);
+            slot->values.means.SetName("Cauchy/Jacobian/slot" + std::to_string(slots.size()) + "/tiledMeans", DNDS_ALLOCATION_SITE());
+        }
         slots.push_back(slot);
         return slot;
     }

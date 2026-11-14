@@ -5,13 +5,15 @@
 #include "Cauchy/Physics/PhysicalFlux.hpp"
 #include "Cauchy/Physics/RANSFlux.hpp"
 #include "Cauchy/Riemann/RiemannFluxMath.hpp"
+#include "Cauchy/Riemann/RiemannCompute.hpp"
+#include "Cauchy/Physics/PerfectGasCompute.hpp"
 
 namespace DNDS::Cauchy::CUDA::Detail
 {
-    template <int Components>
+    template <int Components, class Fields>
     DNDS_DEVICE_CALLABLE NumericalStatus WallPoint(const RHSGeometry &geometry, const RHSKernelParameters &parameters,
                                                    const RHSKernelControls &controls,
-                                                   const RHSFields &fields, const FiniteVolumeDetail::SampleRecord &sample,
+                                                   const Fields &fields, const FiniteVolumeDetail::SampleRecord &sample,
                                                    const PerfectGasKernelPoint<Components> &left, PerfectGasKernelPoint<Components> &face) noexcept
     {
         const auto wall = BoundaryFlow(geometry, parameters, controls, fields, sample, left.Flow(), false);
@@ -24,10 +26,10 @@ namespace DNDS::Cauchy::CUDA::Detail
             face.values[j] *= wall.value[0] / left.values[0];
         return {};
     }
-    template <int Components>
+    template <int Components, class Fields>
     DNDS_DEVICE_CALLABLE NumericalResult<FlowState> PrimitiveDiffusion(const RHSGeometry &geometry, const RHSKernelParameters &parameters,
                                                                        const RHSKernelControls &controls,
-                                                                       const RHSFields &fields, const FiniteVolumeDetail::SampleRecord &sample,
+                                                                       const Fields &fields, const FiniteVolumeDetail::SampleRecord &sample,
                                                                        const PerfectGasKernelPoint<Components> &left,
                                                                        const PerfectGasKernelPoint<Components> &right) noexcept
     {
@@ -108,9 +110,9 @@ namespace DNDS::Cauchy::CUDA::Detail
      * per-point allocation, EOS callbacks or exception recovery are used.
      * Residuals keep the CPU sign convention: -weight*normalFlux.
      */
-    template <int Components>
+    template <int Components, class PolynomialScalar = real, class FluxScalar = real, class DissipationScalar = real, class Fields>
     DNDS_DEVICE_CALLABLE NumericalStatus EvaluateFace(const RHSGeometry &geometry, const RHSKernelParameters &parameters,
-                                                      const RHSKernelControls &controls, const RHSFields &fields,
+                                                      const RHSKernelControls &controls, const Fields &fields,
                                                       const RHSFaceOutputs &output, index iFace, index &fallbacks) noexcept
     {
         const index first = geometry.faceEntries(iFace, 0);
@@ -126,9 +128,9 @@ namespace DNDS::Cauchy::CUDA::Detail
             const bool wall = !internal && condition.kind == BoundaryKind::NoSlipWall;
             const bool wallFluxState = wall && controls.fluxPolicy.noRsOnWall;
             PerfectGasKernelPoint<Components> left, right, face;
-            ReconstructPoint(geometry, parameters, controls, fields, sample, false, left, fallbacks);
+            ReconstructPoint<Components, PolynomialScalar>(geometry, parameters, controls, fields, sample, false, left, fallbacks);
             if (internal)
-                ReconstructPoint(geometry, parameters, controls, fields, sample, true, right, fallbacks);
+                ReconstructPoint<Components, PolynomialScalar>(geometry, parameters, controls, fields, sample, true, right, fallbacks);
             else
             {
                 right = left;
@@ -215,8 +217,20 @@ namespace DNDS::Cauchy::CUDA::Detail
                     minimum = std::min(minimum, fields.pressureMinimum(sample.other, 0));
                 settings.pressureStencilMin = std::min(settings.pressureStencilMin, minimum);
             }
-            const auto prepared = PreparePerfectGasRiemann(gas, controls.solver, leftData.value, rightData.value, meanLeftData, meanRightData, sample.normal, grid);
-            const auto convection = Riemann::Math::Evaluate(controls.solver, prepared.Input(leftData.value, rightData.value, sample.normal, grid), settings);
+            Riemann::FluxResult convection;
+            if constexpr (std::is_same_v<FluxScalar, real>)
+            {
+                const auto prepared = PreparePerfectGasRiemann(gas, controls.solver, leftData.value, rightData.value, meanLeftData, meanRightData, sample.normal, grid);
+                convection = Riemann::EvaluateRoeDissipationCompute<DissipationScalar>(controls.solver, prepared.Input(leftData.value, rightData.value, sample.normal, grid), settings);
+            }
+            else
+            {
+                const auto result = TryPerfectGasRiemannCompute<FluxScalar>(gas, controls.solver, leftFlow, rightFlow,
+                                                                            meanLeftData.flow.conservative, meanRightData.flow.conservative, sample.normal, grid, settings);
+                if (!result)
+                    return result.status.At(sample.cell, sample.point);
+                convection = result.value;
+            }
             std::array<real, Components> flux{}, low{};
             for (int j = 0; j < 5; ++j)
                 flux[j] = convection.flux[j];
@@ -281,7 +295,23 @@ namespace DNDS::Cauchy::CUDA::Detail
                             return status.At(sample.cell, sample.point);
                     }
                     const real distance = geometry.hasWall ? geometry.wallFaces(sample.face, sample.point - geometry.faceOffsets(sample.face, 0)) : 0;
-                    const auto diffusion = face.Diffusion(parameters.physics, sample.normal, distance, wall && !condition.isothermal);
+                    const auto diffusion = [&]() -> NumericalResult<std::array<real, Components>>
+                    {
+                        if constexpr (std::is_same_v<FluxScalar, real>)
+                            return face.Diffusion(parameters.physics, sample.normal, distance, wall && !condition.isothermal);
+                        else
+                        {
+                            static_assert(Components == 5, "reduced full flux is a flow5 specialization");
+                            FlowGradient leftGradient, rightGradient;
+                            for (int j = 0; j < 5; ++j)
+                            {
+                                leftGradient[j] = left.gradients[j];
+                                rightGradient[j] = right.gradients[j];
+                            }
+                            return TryPerfectGasPolynomialViscousCompute<FluxScalar>(gas, left.Flow(), right.Flow(), leftGradient, rightGradient,
+                                                                                     sample.normal, inverseDistance, wall && !condition.isothermal, wallFluxState, face.Flow());
+                        }
+                    }();
                     if (!diffusion)
                         return diffusion.status.At(sample.cell, sample.point);
                     for (int j = 0; j < Components; ++j)
@@ -291,7 +321,18 @@ namespace DNDS::Cauchy::CUDA::Detail
                             low[j] -= diffusion.value[j];
                 }
             }
+            // Experimental narrower arithmetic has a narrower exponent range
+            // too. Report overflow explicitly; never publish a successful
+            // face status for a nonfinite reduced-precision flux/gradient.
+            if constexpr (!std::is_same_v<PolynomialScalar, real> || !std::is_same_v<FluxScalar, real> || !std::is_same_v<DissipationScalar, real>)
+                for (int j = 0; j < Components; ++j)
+                    if (!std::isfinite(flux[j]) || (controls.produceLow && !std::isfinite(low[j])))
+                        return NumericalStatus{NumericalError::InvalidState, 15}.At(sample.cell, sample.point);
             const real weight = geometry.quadrature(sample.point, 6);
+            if constexpr (!std::is_same_v<PolynomialScalar, real> || !std::is_same_v<FluxScalar, real> || !std::is_same_v<DissipationScalar, real>)
+                for (int j = 0; j < Components; ++j)
+                    if (!std::isfinite(weight * flux[j]) || (controls.produceLow && !std::isfinite(weight * low[j])))
+                        return NumericalStatus{NumericalError::InvalidState, 15}.At(sample.cell, sample.point);
             if (output.wallForce.RowCount() && sample.boundaryPoint != UnInitIndex)
                 for (int d = 0; d < 3; ++d)
                     output.wallForce(sample.boundaryPoint, d) = wall || condition.kind == BoundaryKind::SlipWall ? weight * flux[1 + d] : 0;
@@ -302,6 +343,10 @@ namespace DNDS::Cauchy::CUDA::Detail
                     integratedLow[j] -= weight * low[j];
             }
         }
+        if constexpr (!std::is_same_v<PolynomialScalar, real> || !std::is_same_v<FluxScalar, real> || !std::is_same_v<DissipationScalar, real>)
+            for (int j = 0; j < Components; ++j)
+                if (!std::isfinite(integrated[j]) || (controls.produceLow && !std::isfinite(integratedLow[j])))
+                    return NumericalStatus{NumericalError::InvalidState, 15}.At(anchor.cell, anchor.point);
         for (int j = 0; j < Components; ++j)
         {
             output.high(iFace, j) = integrated[j];

@@ -793,6 +793,13 @@ namespace DNDS::Runtime
         if (first)
             std::rethrow_exception(first);
     }
+    bool ExecutionStream::SameLane(const ExecutionStream &other) const
+    {
+        auto launcher = _launcher.lock();
+        const auto runtime = _runtime.lock();
+        return launcher && launcher == other._launcher.lock() &&
+               runtime && runtime == other._runtime.lock() && _lane == other._lane;
+    }
     std::shared_ptr<StreamLauncher> ExecutionStream::LockLauncher() const
     {
         const auto runtime = _runtime.lock();

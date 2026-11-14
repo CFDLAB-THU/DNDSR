@@ -9,9 +9,9 @@ namespace DNDS::Cauchy::CUDA
     {
         /// One thread owns a complete row. Each block product and sparse sum
         /// follows column order; no floating-point atomics or parallel writes.
-        template <int N, bool Jacobi, bool Zero>
-        __global__ void LinearRows(LinearBlockInput request, LinearReadRows rhs,
-                                   LinearReadRows owned, LinearReadRows ghost, LinearWriteRows output)
+        template <int N, bool Jacobi, bool Zero, class InputRows>
+        __global__ void LinearRows(LinearBlockInput request, InputRows rhs,
+                                   InputRows owned, InputRows ghost, LinearWriteRows output)
         {
             for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x;
                  iRow < request.rows.RowCount(); iRow += index(gridDim.x) * blockDim.x)
@@ -71,8 +71,15 @@ namespace DNDS::Cauchy::CUDA
             DNDS_check_throw_info(view.kind == R::RowLayoutKind::Table && view.RowCount() == rows && view.Width() == width,
                                   "CUDA linear operator requires matching combined AoS tables");
         }
+        void CheckVector(VectorReadRows view, index rows, index width)
+        {
+            DNDS_check_throw_info(view.RowCount() == rows && view.Width() == width &&
+                                      (view.kind == R::RowLayoutKind::Table ||
+                                       (view.kind == R::RowLayoutKind::TiledColMajorTable && view.stride == 32)),
+                                  "CUDA linear vector requires matching AoS or tiled32 input");
+        }
         void Check(R::ExecutionContext context, const LinearBlockInput &request,
-                   LinearReadRows rhs, LinearReadRows owned, LinearReadRows ghost,
+                   VectorReadRows rhs, VectorReadRows owned, VectorReadRows ghost,
                    LinearWriteRows output, bool jacobi, bool zero)
         {
             DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA &&
@@ -86,14 +93,14 @@ namespace DNDS::Cauchy::CUDA
             if (jacobi)
             {
                 rhs.ValidateDevice(context.device);
-                CheckTable(rhs, request.ownedRows, request.components);
+                CheckVector(rhs, request.ownedRows, request.components);
                 DNDS_check_throw_info(!output.data || output.data != rhs.data, "CUDA Jacobi output aliases rhs");
             }
             if (!zero)
             {
                 R::ValidateViewDevices(context.device, owned, request.columns);
                 request.blocks.ValidateDevice(context.device);
-                CheckTable(owned, request.ownedRows, request.components);
+                CheckVector(owned, request.ownedRows, request.components);
                 DNDS_check_throw_info(request.columns.RowCount() == request.ownedRows &&
                                           request.blocks.RowNumber() == request.ownedRows && request.blocks.blockSize == request.components &&
                                           request.blocks.values.Width() == request.components * request.components,
@@ -101,7 +108,7 @@ namespace DNDS::Cauchy::CUDA
                 if (ghost.RowCount())
                 {
                     ghost.ValidateDevice(context.device);
-                    CheckTable(ghost, ghost.RowCount(), request.components);
+                    CheckVector(ghost, ghost.RowCount(), request.components);
                 }
                 DNDS_check_throw_info(!output.data || (output.data != owned.data && output.data != ghost.data &&
                                                        output.data != request.blocks.values.data),
@@ -109,31 +116,42 @@ namespace DNDS::Cauchy::CUDA
             }
         }
         template <bool Jacobi, bool Zero>
-        void Launch(R::ExecutionContext context, const LinearBlockInput &request, LinearReadRows rhs,
-                    LinearReadRows owned, LinearReadRows ghost, LinearWriteRows output)
+        void Launch(R::ExecutionContext context, const LinearBlockInput &request, VectorReadRows rhs,
+                    VectorReadRows owned, VectorReadRows ghost, LinearWriteRows output)
         {
             Check(context, request, rhs, owned, ghost, output, Jacobi, Zero);
-            R::CheckKernelArgumentBudget<LinearBlockInput, LinearReadRows, LinearReadRows, LinearReadRows, LinearWriteRows>();
+            R::CheckKernelArgumentBudget<LinearBlockInput, VectorReadRows, VectorReadRows, VectorReadRows, LinearWriteRows>();
             if (!request.rows.RowCount())
                 return;
             const unsigned blocks = unsigned(std::min<index>(65535, (request.rows.RowCount() + 127) / 128));
             const auto stream = static_cast<cudaStream_t>(context.stream);
-            if (request.components == 5)
-                LinearRows<5, Jacobi, Zero><<<blocks, 128, 0, stream>>>(request, rhs, owned, ghost, output);
-            else if (request.components == 6)
-                LinearRows<6, Jacobi, Zero><<<blocks, 128, 0, stream>>>(request, rhs, owned, ghost, output);
+            const auto issue = [&](auto right, auto own, auto remote)
+            {
+                if (request.components == 5)
+                    LinearRows<5, Jacobi, Zero><<<blocks, 128, 0, stream>>>(request, right, own, remote, output);
+                else if (request.components == 6)
+                    LinearRows<6, Jacobi, Zero><<<blocks, 128, 0, stream>>>(request, right, own, remote, output);
+                else
+                    LinearRows<7, Jacobi, Zero><<<blocks, 128, 0, stream>>>(request, right, own, remote, output);
+            };
+            if (rhs.kind == R::RowLayoutKind::Table && owned.kind == R::RowLayoutKind::Table && ghost.kind == R::RowLayoutKind::Table)
+            {
+                const auto table = [](VectorReadRows view) -> LinearReadRows
+                { return {view.data, view.offsets, view.rows, view.width, view.stride, view.sizes, view.kind, view.device}; };
+                issue(table(rhs), table(owned), table(ghost));
+            }
             else
-                LinearRows<7, Jacobi, Zero><<<blocks, 128, 0, stream>>>(request, rhs, owned, ghost, output);
+                issue(rhs, owned, ghost);
             DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA linear block kernel launch failed");
         }
     }
     void ApplyLinearRows(R::ExecutionContext context, const LinearBlockInput &request,
-                         LinearReadRows owned, LinearReadRows ghost, LinearWriteRows output)
+                         VectorReadRows owned, VectorReadRows ghost, LinearWriteRows output)
     {
         Launch<false, false>(context, request, {}, owned, ghost, output);
     }
     void JacobiLinearRows(R::ExecutionContext context, const LinearBlockInput &request,
-                          LinearReadRows rhs, LinearReadRows owned, LinearReadRows ghost,
+                          VectorReadRows rhs, VectorReadRows owned, VectorReadRows ghost,
                           LinearWriteRows output, bool zeroStart)
     {
         if (zeroStart)

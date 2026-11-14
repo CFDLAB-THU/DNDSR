@@ -81,6 +81,7 @@ include(cmake/DndsCompilerFlags.cmake)
 #    (reads MPI, options, CUDA toolkit results)
 include(cmake/DndsExternalDeps.cmake)
 include(cmake/DndsAmgX.cmake)
+include(cmake/DndsCCCL.cmake)
 
 # 6. Helper functions (add_fast_flags, dnds_add_lib, dnds_add_py_module)
 include("${PROJECT_SOURCE_DIR}/cmakeCommonUtils.cmake")

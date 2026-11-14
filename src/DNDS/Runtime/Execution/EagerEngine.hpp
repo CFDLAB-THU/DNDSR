@@ -183,6 +183,9 @@ namespace DNDS::Runtime
     public:
         ExecutionStream() = default;
         ExecutionContext Context() const;
+        /// Compare live launcher identity without exposing a native pointer.
+        /// This does not establish readiness or retain either runtime.
+        bool SameLane(const ExecutionStream &other) const;
         ExecutionBorrow BorrowContext() const;
         /// Lock the actual runtime for one synchronous operator call. The
         /// returned facade shares queues but does not own shutdown. Closed or

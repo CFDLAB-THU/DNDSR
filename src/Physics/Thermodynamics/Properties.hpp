@@ -8,16 +8,18 @@ namespace DNDS::Physics::Thermodynamics
     /// ChemicalSource queries produce SI; solver-facing material queries use
     /// ReferenceScales. Internal energy and enthalpy include thermochemical
     /// reference energy, not the separate bookkeeping base-energy offset.
-    struct Properties
+    template <class Scalar>
+    struct PropertiesT
     {
-        double density = std::numeric_limits<double>::quiet_NaN();
-        double temperature = std::numeric_limits<double>::quiet_NaN();
-        double pressure = std::numeric_limits<double>::quiet_NaN();
-        double soundSpeed = std::numeric_limits<double>::quiet_NaN();
-        double internalEnergy = std::numeric_limits<double>::quiet_NaN();
-        double enthalpy = std::numeric_limits<double>::quiet_NaN();
-        double cp = std::numeric_limits<double>::quiet_NaN();
-        double cv = std::numeric_limits<double>::quiet_NaN();
-        double gasConstant = std::numeric_limits<double>::quiet_NaN();
+        Scalar density = Scalar(std::numeric_limits<double>::quiet_NaN());
+        Scalar temperature = Scalar(std::numeric_limits<double>::quiet_NaN());
+        Scalar pressure = Scalar(std::numeric_limits<double>::quiet_NaN());
+        Scalar soundSpeed = Scalar(std::numeric_limits<double>::quiet_NaN());
+        Scalar internalEnergy = Scalar(std::numeric_limits<double>::quiet_NaN());
+        Scalar enthalpy = Scalar(std::numeric_limits<double>::quiet_NaN());
+        Scalar cp = Scalar(std::numeric_limits<double>::quiet_NaN());
+        Scalar cv = Scalar(std::numeric_limits<double>::quiet_NaN());
+        Scalar gasConstant = Scalar(std::numeric_limits<double>::quiet_NaN());
     };
+    using Properties = PropertiesT<double>;
 }

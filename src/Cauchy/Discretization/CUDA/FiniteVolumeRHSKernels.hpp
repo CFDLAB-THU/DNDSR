@@ -6,12 +6,13 @@
 #include "Cauchy/Boundary/PerfectGasBoundary.hpp"
 #include "Cauchy/Physics/ThermalAdmissibility.hpp"
 #include "CFV/Plans/FiniteVolumePlan.hpp"
+#include "DNDS/Math/ComputeScalar.hpp"
 
 namespace DNDS::Cauchy::CUDA
 {
     using RHSInput = Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::TableRows>;
     using RHSOutput = Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::TableRows>;
-    using RHSField = Runtime::PairReadView<real, Runtime::AccessBoundsChecks, Runtime::TableRows>;
+    using RHSField = Runtime::PairReadView<real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows>;
     using RHSIndices = Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
     using RHSStatus = Runtime::ArrayView<NumericalStatus, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
 
@@ -70,6 +71,11 @@ namespace DNDS::Cauchy::CUDA
         real time = 0;
         Riemann::Solver solver = Riemann::Solver::Rusanov;
         int components = 5, modes = 0, dimension = 3;
+        /// Operator-local arithmetic only; persistent inputs, output sums and
+        /// PP checks remain FP64. Host dispatch resolves these before launch.
+        DNDS::Math::ComputePrecision polynomialPrecision = DNDS::Math::ComputePrecision::FP64;
+        DNDS::Math::ComputePrecision dissipationPrecision = DNDS::Math::ComputePrecision::FP64;
+        DNDS::Math::ComputePrecision fluxPrecision = DNDS::Math::ComputePrecision::FP64;
         bool direct = false, linear = false, firstOrder = false;
         bool viscous = false, primitiveGradient = false, distinctViscous = false;
         bool positivity = false, faceFallback = false, useStencil = false, produceLow = false;
@@ -78,16 +84,31 @@ namespace DNDS::Cauchy::CUDA
     static_assert(std::is_trivially_copyable_v<RHSKernelControls>);
 
     /// Changing operands; geometry/physics publications are separate. Only
-    /// combined AoS fields are supported. viscousData denotes primitive
+    /// combined uniform-row fields are supported. viscousData denotes primitive
     /// gradients when primitiveGradient is selected, otherwise optional
     /// conservative gradients/Taylor coefficients with the reconstruction shape.
-    struct RHSFields
+    template <class MeanPolicy = Runtime::UniformTableRows, class CoefficientPolicy = Runtime::UniformTableRows>
+    struct RHSFieldsT
     {
-        RHSField mean, reconstruction, viscousData, waveJump, pressureMinimum;
+        Runtime::PairReadView<real, Runtime::AccessBoundsChecks, MeanPolicy> mean;
+        Runtime::PairReadView<real, Runtime::AccessBoundsChecks, CoefficientPolicy> reconstruction, viscousData;
+        RHSField waveJump, pressureMinimum;
         RHSInput preparedMean, incoming;
         bool hasPreparedMean = false, hasIncoming = false, hasWave = false, hasPressure = false;
-        void ValidateDevice(Runtime::Device device) const;
+        void ValidateDevice(Runtime::Device device) const
+        {
+            Runtime::ValidateViewDevices(device, mean, reconstruction, viscousData);
+            if (hasPreparedMean)
+                preparedMean.ValidateDevice(device);
+            if (hasIncoming)
+                incoming.ValidateDevice(device);
+            if (hasWave)
+                waveJump.ValidateDevice(device);
+            if (hasPressure)
+                pressureMinimum.ValidateDevice(device);
+        }
     };
+    using RHSFields = RHSFieldsT<>;
     struct RHSFaceOutputs
     {
         RHSOutput high, low;

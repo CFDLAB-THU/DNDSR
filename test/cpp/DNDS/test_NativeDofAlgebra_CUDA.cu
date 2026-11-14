@@ -1,11 +1,45 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
 #include "DNDS/Algebra/DofAlgebra.hpp"
+#include "DNDS/Algebra/ArrayInputCache.hpp"
 #include "DNDS/Runtime/Execution/CUDAExecution.hpp"
 #include <cuda_runtime.h>
 
 namespace A = DNDS::Algebra;
 namespace R = DNDS::Runtime;
+
+TEST_CASE("CUDA operator input cache orders queued conversion before its consumer")
+{
+    constexpr DNDS::index rows = 33, width = 95;
+    R::Array<DNDS::real> host(R::RowLayout::Dense(rows, width, width + 3));
+    {
+        auto write = host.Write();
+        for (DNDS::index iRow = 0; iRow < rows; ++iRow)
+            for (DNDS::index j = 0; j < width; ++j)
+                write.View()(iRow, j) = .25 * iRow - .125 * j;
+    }
+    R::EagerEngine engine;
+    const auto producer = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
+    const auto consumer = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
+    auto source = host.To(R::Device::CUDA(0));
+    R::Array<DNDS::real> output(R::RowLayout::Dense(rows, width), source.GetDevice());
+    A::ArrayInputCache cache(source, "test/CUDA/tiledInput");
+    const auto allocation = cache.Values().Storage().Identity();
+    R::SubmitArrays(engine, producer, [](auto context, auto values)
+                    { A::ApplyRowViews(context, A::PointwiseOperation::Scale, values.DynamicView(), {}, {}, 2); }, R::ReadWriteAs<R::UniformTableRows>(source));
+    consumer.WaitFor(producer.Record());
+    CHECK(cache.Refresh(engine, consumer, source));
+    CHECK_FALSE(cache.Refresh(engine, consumer, source));
+    R::SubmitArrays(engine, consumer, [](auto context, auto input, auto result)
+                    { A::ApplyRowViews(context, A::PointwiseOperation::Copy, result.DynamicView(), input.DynamicView()); }, R::ReadAs<R::TiledColMajorTable<32>>(cache.Values()), R::WriteAs<R::TableRows>(output));
+    engine.Synchronize();
+    CHECK(cache.Values().Storage().Identity() == allocation);
+    const auto actual = output.To(R::Device::Host());
+    const auto read = actual.Read(), reference = host.Read();
+    for (DNDS::index iRow = 0; iRow < rows; ++iRow)
+        for (DNDS::index j = 0; j < width; ++j)
+            CHECK(read.View()(iRow, j) == 2 * reference.View()(iRow, j));
+}
 
 TEST_CASE_TEMPLATE("Native CUDA algebra retains float/double fields, joins streams and excludes padding/ghosts", T, float, double)
 {

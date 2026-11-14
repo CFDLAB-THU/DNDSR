@@ -7,5 +7,7 @@ dnds_add_lib(physics "${PHYSICS_CPPS}" "dnds;${PHYSICS_LINKS}" "${DNDS_PCH_TARGE
 dnds_add_lib(physics_shared "${PHYSICS_CPPS}" "dnds_shared;${PHYSICS_LINKS}" "${DNDS_PCH_TARGETS_FAST}" ON ON ON)
 target_compile_definitions(physics PUBLIC CT_USE_SYSTEM_FMT=1)
 target_compile_definitions(physics_shared PUBLIC CT_USE_SYSTEM_FMT=1)
+target_link_libraries(physics PUBLIC DNDS::ComputeScalar)
+target_link_libraries(physics_shared PUBLIC DNDS::ComputeScalar)
 install(TARGETS physics_shared LIBRARY DESTINATION "DNDSR/lib" COMPONENT py OPTIONAL)
 install(TARGETS physics_shared LIBRARY DESTINATION "${PROJECT_SOURCE_DIR}/python/DNDSR/_lib" COMPONENT py OPTIONAL)

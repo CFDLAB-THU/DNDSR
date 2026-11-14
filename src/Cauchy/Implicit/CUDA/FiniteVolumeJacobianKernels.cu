@@ -10,8 +10,8 @@ namespace DNDS::Cauchy::CUDA
     namespace
     {
         template <int N>
-        __global__ void Freeze(PerfectGas gas, LinearReadRows owned, LinearReadRows ghost,
-                               LinearWriteRows means, LinearWriteRows pressure, LinearWriteRows derivative, JacobianStatus status)
+        __global__ void Freeze(PerfectGas gas, VectorReadRows owned, VectorReadRows ghost,
+                               R::ArrayView<real, R::AccessBoundsChecks, R::UniformTableRows> means, LinearWriteRows pressure, LinearWriteRows derivative, JacobianStatus status)
         {
             for (index iCell = index(blockIdx.x) * blockDim.x + threadIdx.x;
                  iCell < means.RowCount(); iCell += index(gridDim.x) * blockDim.x)
@@ -98,10 +98,18 @@ namespace DNDS::Cauchy::CUDA
             DNDS_check_throw_info(view.kind == R::RowLayoutKind::Table && view.RowCount() == rows && view.Width() == width,
                                   "CUDA Jacobian preparation requires matching combined AoS tables");
         }
+        template <class View>
+        void CheckVector(View view, index rows, index width)
+        {
+            DNDS_check_throw_info(view.RowCount() == rows && view.Width() == width &&
+                                      (view.kind == R::RowLayoutKind::Table ||
+                                       (view.kind == R::RowLayoutKind::TiledColMajorTable && view.stride == 32)),
+                                  "Jacobian mean requires matching AoS or tiled32 input");
+        }
         unsigned Blocks(index rows) { return unsigned(std::min<index>(65535, (rows + 127) / 128)); }
     }
     void FreezeJacobianMeans(R::ExecutionContext context, const PerfectGas &gas,
-                             LinearReadRows owned, LinearReadRows ghost, LinearWriteRows means,
+                             VectorReadRows owned, VectorReadRows ghost, R::ArrayView<real, R::AccessBoundsChecks, R::UniformTableRows> means,
                              LinearWriteRows pressure, LinearWriteRows derivative, JacobianStatus status)
     {
         const index n = owned.Width(), rows = owned.RowCount() + ghost.RowCount();
@@ -109,22 +117,22 @@ namespace DNDS::Cauchy::CUDA
                               "CUDA Jacobian mean preparation requires a CUDA perfect-gas 5/6/7 profile");
         gas.Validate();
         R::ValidateViewDevices(context.device, owned, means, pressure, derivative, status);
-        CheckTable(owned, owned.RowCount(), n);
+        CheckVector(owned, owned.RowCount(), n);
         if (ghost.RowCount())
         {
             ghost.ValidateDevice(context.device);
-            CheckTable(ghost, ghost.RowCount(), n);
+            CheckVector(ghost, ghost.RowCount(), n);
         }
-        CheckTable(means, rows, n);
+        CheckVector(means, rows, n);
         CheckTable(pressure, rows, 1);
         CheckTable(derivative, rows, n);
         DNDS_check_throw_info(status.RowCount() == rows, "CUDA Jacobian mean status shape differs");
-        for (const auto output : {means, pressure, derivative})
-            DNDS_check_throw_info(!output.data || (output.data != owned.data && output.data != ghost.data),
+        for (const auto *output : {means.data, pressure.data, derivative.data})
+            DNDS_check_throw_info(!output || (output != owned.data && output != ghost.data),
                                   "CUDA Jacobian mean output aliases a live input");
         DNDS_check_throw_info(!means.data || (means.data != pressure.data && means.data != derivative.data && pressure.data != derivative.data),
                               "CUDA Jacobian mean outputs alias");
-        R::CheckKernelArgumentBudget<PerfectGas, LinearReadRows, LinearReadRows, LinearWriteRows, LinearWriteRows, LinearWriteRows, JacobianStatus>();
+        R::CheckKernelArgumentBudget<PerfectGas, VectorReadRows, VectorReadRows, decltype(means), LinearWriteRows, LinearWriteRows, JacobianStatus>();
         if (!rows)
             return;
         const auto stream = static_cast<cudaStream_t>(context.stream);

@@ -9,6 +9,15 @@ namespace DNDS::Cauchy::CUDA
     namespace
     {
         constexpr int Threads = 128;
+        /// Keep the mathematical reduction independent of deprecated CUB
+        /// functor aliases; supported with toolkit and pinned source headers.
+        struct MinimumIndex
+        {
+            DNDS_DEVICE_CALLABLE index operator()(index left, index right) const noexcept
+            {
+                return right < left ? right : left;
+            }
+        };
         template <bool Final>
         __global__ void Frozen(FASRead values, FASRead saved, FASSelection selection,
                                R::ArrayView<const index, R::AccessBoundsChecks, R::FixedRows<1>> input, FASIndexWrite output)
@@ -24,7 +33,7 @@ namespace DNDS::Cauchy::CUDA
                             first = std::min(first, iRow);
             using Reduce = cub::BlockReduce<index, Threads>;
             __shared__ typename Reduce::TempStorage storage;
-            const index result = Reduce(storage).Reduce(first, cub::Min{});
+            const index result = Reduce(storage).Reduce(first, MinimumIndex{});
             if (!threadIdx.x)
                 output(blockIdx.x, 0) = Final && result == INT64_MAX ? -1 : result;
         }

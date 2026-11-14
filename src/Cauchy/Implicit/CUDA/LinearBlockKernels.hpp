@@ -6,6 +6,7 @@ namespace DNDS::Cauchy::CUDA
 {
     using LinearReadRows = Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::TableRows>;
     using LinearWriteRows = Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::TableRows>;
+    using VectorReadRows = Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows>;
     using LinearIndexRows = Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
 
     /** @brief Frozen assembled operator for a selected set of independent rows.
@@ -28,11 +29,11 @@ namespace DNDS::Cauchy::CUDA
     /// Enqueue y = A*x on selected rows. Output must not alias any input.
     /// Combined AoS widths 5/6/7 only; no communication or host wait is hidden.
     void ApplyLinearRows(Runtime::ExecutionContext context, const LinearBlockInput &request,
-                         LinearReadRows owned, LinearReadRows ghost, LinearWriteRows output);
+                         VectorReadRows owned, VectorReadRows ghost, LinearWriteRows output);
     /// Enqueue x_new = D^-1*(b - A_off*x_old), with frozen remote inputs.
     /// Zero-start consumes only rhs, inverse and row selection: columns,
     /// blocks, owned and ghost may all be absent and are never dereferenced.
     void JacobiLinearRows(Runtime::ExecutionContext context, const LinearBlockInput &request,
-                          LinearReadRows rhs, LinearReadRows owned, LinearReadRows ghost,
+                          VectorReadRows rhs, VectorReadRows owned, VectorReadRows ghost,
                           LinearWriteRows output, bool zeroStart);
 }

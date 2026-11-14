@@ -2,6 +2,8 @@
 #include "doctest.h"
 // Deliberately no PerfectGas/EOS/energy-model header in this independent test.
 #include "Cauchy/Riemann/RiemannFlux.hpp"
+#include "Cauchy/Riemann/RiemannFluxMath.hpp"
+#include "Cauchy/Riemann/RiemannCompute.hpp"
 
 namespace C = DNDS::Cauchy;
 namespace F = DNDS::Cauchy::Riemann;
@@ -105,4 +107,77 @@ TEST_CASE("Every flux accepts external thermodynamics and transforms covariantly
             CHECK(shifted[j] == doctest::Approx(original[j]).epsilon(2e-12).scale(1));
         CHECK(shifted[4] == doctest::Approx(original[4] + offset * original[0]).epsilon(2e-12).scale(1));
     }
+}
+
+namespace
+{
+    template <class Scalar>
+    void CheckTypedRiemann(double tolerance)
+    {
+        const F::AcousticState left{{{2, 6, -8, 10, 100}, 7}, 11};
+        const F::AcousticState right{{{1, -2, 1, 3, -50}, 19}, 5};
+        const F::RoeData roe{{.5, -.7, .1}, 9, 12, .375, {1, .2, -.3, .1, -.07}};
+        const F::WaveBounds bounds{-12, 13};
+        const F::AUSMData ausm{8};
+        const auto typedState = [](const F::AcousticState &state)
+        {
+            F::AcousticStateT<Scalar> result{};
+            for (int j = 0; j < 5; ++j)
+                result.flow.conservative[j] = Scalar(state.flow.conservative[j]);
+            result.flow.pressure = Scalar(state.flow.pressure);
+            result.soundSpeed = Scalar(state.soundSpeed);
+            return result;
+        };
+        const auto typedLeft = typedState(left), typedRight = typedState(right);
+        F::RoeDataT<Scalar> typedRoe{};
+        for (int d = 0; d < 3; ++d)
+            typedRoe.velocity[d] = Scalar(roe.velocity[d]);
+        for (int j = 0; j < 5; ++j)
+            typedRoe.contactProjection[j] = Scalar(roe.contactProjection[j]);
+        typedRoe.soundSpeed = Scalar(roe.soundSpeed);
+        typedRoe.enthalpy = Scalar(roe.enthalpy);
+        typedRoe.contactEnergy = Scalar(roe.contactEnergy);
+        const F::WaveBoundsT<Scalar> typedBounds{Scalar(bounds.left), Scalar(bounds.right)};
+        const F::AUSMDataT<Scalar> typedAUSM{Scalar(ausm.faceSoundSpeed)};
+        const F::FluxInput reference{left, right, {1, 0, 0}, {}, &left, &right, &roe, &bounds, &ausm};
+        const F::FluxInputT<Scalar> typed{typedLeft, typedRight, {1, 0, 0}, {}, &typedLeft, &typedRight, &typedRoe, &typedBounds, &typedAUSM};
+        // This fixture deliberately supplies external thermodynamics. The same
+        // gas-agnostic formula is instantiated, rather than a reduced-precision
+        // reimplementation with a different pressure/energy convention.
+        for (int iSolver = int(F::Solver::Rusanov); iSolver <= int(F::Solver::AUSMPlusUp2); ++iSolver)
+        {
+            CAPTURE(iSolver);
+            const auto expected = F::Math::Evaluate(F::Solver(iSolver), reference, F::FluxSettings{});
+            const auto actual = F::Math::Evaluate(F::Solver(iSolver), typed, F::FluxSettingsT<Scalar>{});
+            const auto adapted = F::EvaluateRiemannCompute<Scalar>(F::Solver(iSolver), reference);
+            for (int j = 0; j < 5; ++j)
+            {
+                CHECK(DNDS::Math::ScalarFinite(actual.flux[j]));
+                CHECK(adapted.flux[j] == DNDS::Math::ScalarCast<double>(actual.flux[j]));
+                CHECK(adapted.flux[j] == doctest::Approx(expected.flux[j]).epsilon(tolerance).scale(1));
+            }
+            if (F::Math::Roe(F::Solver(iSolver)))
+            {
+                const auto mixed = F::EvaluateRoeDissipationCompute<Scalar>(F::Solver(iSolver), reference);
+                for (int j = 0; j < 5; ++j)
+                    CHECK(mixed.flux[j] == doctest::Approx(expected.flux[j]).epsilon(tolerance).scale(1));
+                // Zero jump: reduced dissipation must retain the exact FP64
+                // physical flux, rather than round the central state as well.
+                auto equal = reference;
+                equal.right = equal.left;
+                equal.rightMean = equal.leftMean;
+                const auto central = F::PhysicalFlux(equal.left.flow, equal.normal, equal.gridVelocity);
+                CHECK(F::EvaluateRoeDissipationCompute<Scalar>(F::Solver(iSolver), equal).flux == central);
+            }
+        }
+        CHECK(F::Math::DenominatorGuard<Scalar>() > 0);
+    }
+}
+TEST_CASE("Shared Riemann formulas support explicit kernel-local arithmetic types")
+{
+    CHECK(F::Math::DenominatorGuard<double>() == DNDS::verySmallReal);
+    CheckTypedRiemann<DNDS::Math::real_f32>(4e-5);
+#ifdef DNDS_USE_CCCL_COMPUTE
+    CheckTypedRiemann<DNDS::Math::real_f32f32>(2e-11);
+#endif
 }

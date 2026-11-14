@@ -7,6 +7,58 @@ namespace M = DNDS::CFV::Math;
 using S = DNDS::CFV::ReconstructionFunctionalSettings;
 using Point = DNDS::Geom::tPoint;
 
+namespace
+{
+    template <class Scalar>
+    void CheckTypedTaylor(double tolerance)
+    {
+        namespace A = DNDS::Math;
+        const std::array<double, 3> point{.21, -.37, .63}, center{-.19, .13, -.09};
+        const double scale = 1.7;
+        const M::TaylorBasis basis(3, 3);
+        const auto parameters = basis.KernelParameters();
+        const auto prepared = M::TaylorPointEvaluationT<Scalar>::FromPoint(point, center, scale);
+        for (int derivative = 0; derivative < basis.Size(); ++derivative)
+            for (int mode = 0; mode < basis.Size(); ++mode)
+            {
+                double expected = 1;
+                const auto &alpha = basis.MultiIndex(mode), &beta = basis.MultiIndex(derivative);
+                for (int d = 0; d < 3; ++d)
+                {
+                    if (beta[d] > alpha[d])
+                    {
+                        expected = 0;
+                        break;
+                    }
+                    for (int k = 0; k < beta[d]; ++k)
+                        expected *= alpha[d] - k;
+                    expected *= std::pow(point[d] - center[d], alpha[d] - beta[d]) / std::pow(scale, alpha[d]);
+                }
+                CHECK(A::ScalarCast<double>(parameters.Derivative(derivative, mode, prepared)) == doctest::Approx(expected).epsilon(tolerance));
+            }
+        const Scalar two(2), three(3);
+        CHECK(A::ScalarCast<double>(A::ScalarMin(two, three)) == 2);
+        CHECK(A::ScalarCast<double>(A::ScalarMax(two, three)) == 3);
+        CHECK(A::ScalarCast<double>(A::ScalarAbs(-two)) == 2);
+        CHECK(A::ScalarCast<double>(A::ScalarSqrt(two)) == doctest::Approx(std::sqrt(2.)).epsilon(tolerance));
+        CHECK(A::ScalarFinite(two));
+        CHECK(A::ScalarEpsilon<Scalar>() > Scalar(0));
+        CHECK(A::ScalarMinPositive<Scalar>() > Scalar(0));
+    }
+}
+
+TEST_CASE("Compute scalar Taylor contexts preserve derivatives across explicit arithmetic choices")
+{
+    CheckTypedTaylor<double>(2e-13);
+    CheckTypedTaylor<DNDS::Math::real_f32>(3e-6);
+#ifdef DNDS_USE_CCCL_COMPUTE
+    CheckTypedTaylor<DNDS::Math::real_f32f32>(2e-12);
+    using Pair = DNDS::Math::real_f32f32;
+    const auto increment = Pair(1.0000000001) - Pair(1.0);
+    CHECK(DNDS::Math::ScalarCast<double>(increment) == doctest::Approx(1.000000082740371e-10).epsilon(1e-12));
+#endif
+}
+
 TEST_CASE("Prepared Taylor points preserve nonunit-scale physical derivatives and zero-mean modes")
 {
     const std::array<DNDS::real, 3> point{0.19, -0.37, 0.61}, center{-0.23, 0.11, -0.17};

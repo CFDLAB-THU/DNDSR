@@ -36,7 +36,8 @@ namespace DNDS::Cauchy::CUDA
     struct FrozenJacobianInput
     {
         JacobianGeometryView geometry;
-        LinearReadRows means, pressure, pressureDerivative, radius, magnitudes;
+        VectorReadRows means;
+        LinearReadRows pressure, pressureDerivative, radius, magnitudes;
         FrozenJacobianParameters parameters;
     };
     using FrozenJacobianStatus = Runtime::ArrayView<NumericalStatus, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
@@ -59,6 +60,6 @@ namespace DNDS::Cauchy::CUDA
     /// explicit caller reset. A failed row produces NaNs rather than stale data.
     void ApplyFrozenJacobian(Runtime::ExecutionContext context, const FrozenJacobianInput &snapshot,
                              LinearIndexRows selected, LinearReadRows diagonal, bool fullDiagonal,
-                             LinearReadRows rhs, LinearReadRows owned, LinearReadRows ghost,
+                             VectorReadRows rhs, VectorReadRows owned, VectorReadRows ghost,
                              LinearWriteRows output, FrozenJacobianStatus status, bool jacobi);
 }

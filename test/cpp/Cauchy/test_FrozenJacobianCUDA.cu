@@ -225,8 +225,8 @@ TEST_CASE("CUDA frozen Jacobians match CPU blocks and actions including ALE peri
                 const auto own = ownedDevice.Read(context), ghost = ghostDevice.Read(context);
                 auto meanWrite = dm.Write(context), pressureWrite = dpr.Write(context), derivativeWrite = dd.Write(context);
                 auto statusWrite = meanStatus.Write(context);
-                C::CUDA::FreezeJacobianMeans(context, gas, own.View<R::TableRows>(), ghost.View<R::TableRows>(),
-                                             meanWrite.View<R::TableRows>(), pressureWrite.View<R::TableRows>(), derivativeWrite.View<R::TableRows>(), statusWrite.View<R::FixedRows<1>>());
+                C::CUDA::FreezeJacobianMeans(context, gas, own.View<R::UniformTableRows>(), ghost.View<R::UniformTableRows>(),
+                                             meanWrite.View<R::UniformTableRows>(), pressureWrite.View<R::TableRows>(), derivativeWrite.View<R::TableRows>(), statusWrite.View<R::FixedRows<1>>());
                 REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
             }
             {
@@ -237,7 +237,7 @@ TEST_CASE("CUDA frozen Jacobians match CPU blocks and actions including ALE peri
             }
             const auto dr = radius.To(context.device), dmag = magnitudes.To(context.device);
             const auto mr = dm.Read(context), pr = dpr.Read(context), der = dd.Read(context), rr = dr.Read(context), mags = dmag.Read(context);
-            C::CUDA::FrozenJacobianInput snapshot{deviceGeometry, mr.View<R::TableRows>(), pr.View<R::TableRows>(), der.View<R::TableRows>(),
+            C::CUDA::FrozenJacobianInput snapshot{deviceGeometry, mr.View<R::UniformTableRows>(), pr.View<R::TableRows>(), der.View<R::TableRows>(),
                                                   rr.View<R::TableRows>(), parameters.roe ? mags.View<R::TableRows>() : C::CUDA::LinearReadRows{}, parameters};
             A::BlockMatrixStorage actual({2, 1, 0, 1}, n, context.device);
             R::Array<DNDS::NumericalStatus> status(R::RowLayout::Dense(4, 1), context.device);
@@ -281,9 +281,9 @@ TEST_CASE("CUDA frozen Jacobians match CPU blocks and actions including ALE peri
                     // Exercise the same split launches as production: a core
                     // launch cannot see the vector ghost allocation at all.
                     C::CUDA::ApplyFrozenJacobian(context, snapshot, coreRead.View<R::FixedRows<1>>(), dir.View<R::TableRows>(), true,
-                                                 br.View<R::TableRows>(), xr.View<R::TableRows>(), {}, out.View<R::TableRows>(), st.View<R::FixedRows<1>>(), jacobi);
+                                                 br.View<R::UniformTableRows>(), xr.View<R::UniformTableRows>(), {}, out.View<R::TableRows>(), st.View<R::FixedRows<1>>(), jacobi);
                     C::CUDA::ApplyFrozenJacobian(context, snapshot, depRead.View<R::FixedRows<1>>(), dir.View<R::TableRows>(), true,
-                                                 br.View<R::TableRows>(), xr.View<R::TableRows>(), gr.View<R::TableRows>(), out.View<R::TableRows>(), st.View<R::FixedRows<1>>(), jacobi);
+                                                 br.View<R::UniformTableRows>(), xr.View<R::UniformTableRows>(), gr.View<R::UniformTableRows>(), out.View<R::TableRows>(), st.View<R::FixedRows<1>>(), jacobi);
                     REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
                 }
                 const auto result = output.To(R::Device::Host());
@@ -493,7 +493,7 @@ TEST_CASE("CUDA centered face diagonal matches CPU wall chains Roe matrices and 
             request.offsets = offr.View<R::FixedRows<1>>();
             const auto faceView = fr.View<R::FixedRows<7>>();
             request.faces = {faceView.data, nullptr, faceView.rows, faceView.width, faceView.stride, nullptr, faceView.kind, faceView.device};
-            request.means = mr.View<R::TableRows>();
+            request.means = mr.View<R::UniformTableRows>();
             request.pressure = pr.View<R::TableRows>();
             request.pressureDerivative = der.View<R::TableRows>();
             request.radius = rr.View<R::TableRows>();

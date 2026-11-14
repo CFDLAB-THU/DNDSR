@@ -7,13 +7,22 @@ namespace DNDS::Cauchy
 {
     /// Conservative compressible flow profile, including transverse momentum
     /// on planar geometry. Its energy origin is defined by the equation model.
-    using FlowState = std::array<real, 5>;
-    using Vector3 = std::array<real, 3>;
-    /// Physical gradients: [rho,u,v,w,T], each with three directions.
-    using FlowGradient = std::array<Vector3, 5>;
-    struct PrimitiveState
+    template <class Scalar>
+    using FlowStateT = std::array<Scalar, 5>;
+    template <class Scalar>
+    using Vector3T = std::array<Scalar, 3>;
+    using FlowState = FlowStateT<real>;
+    using Vector3 = Vector3T<real>;
+    /// Five field gradients, each with three physical-space directions. The
+    /// consumer declares whether components are conservative or [rho,u,v,w,T].
+    template <class Scalar>
+    using FlowGradientT = std::array<Vector3T<Scalar>, 5>;
+    using FlowGradient = FlowGradientT<real>;
+    template <class Scalar>
+    struct PrimitiveStateT
     {
-        real density, pressure, temperature, soundSpeed;
-        Vector3 velocity;
+        Scalar density, pressure, temperature, soundSpeed;
+        Vector3T<Scalar> velocity;
     };
+    using PrimitiveState = PrimitiveStateT<real>;
 }

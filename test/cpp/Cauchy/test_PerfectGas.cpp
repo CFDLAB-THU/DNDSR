@@ -1,6 +1,10 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
 #include "Cauchy/Physics/PerfectGas.hpp"
+#include "Cauchy/Physics/PerfectGasViscousFlux.hpp"
+#include "Cauchy/Physics/PerfectGasCompute.hpp"
+#include "Cauchy/Physics/RiemannPreparation.hpp"
+#include "Cauchy/Riemann/RiemannFluxMath.hpp"
 #include "Cauchy/Riemann/RiemannFlux.hpp"
 #include "Cauchy/Boundary/BoundarySystem.hpp"
 #include "Cauchy/Input/FlowProfile.hpp"
@@ -757,4 +761,120 @@ TEST_CASE("Farfield sonic branches and approximate wall Jacobians follow Euler c
     for (int j = 0; j < 5; ++j)
         for (int k = 0; k < 5; ++k)
             CHECK(approximate[j * 5 + k] == (j == k ? (j >= 1 && j <= 3 ? -1 : 1) : 0));
+}
+
+namespace
+{
+    template <class Scalar>
+    void CheckTypedPerfectGas(double tolerance)
+    {
+        C::PerfectGas gas{1.4, 2., .03, .72};
+        gas.viscosityModel = DNDS::Physics::Transport::ViscosityModel::Sutherland;
+        gas.viscosityReferenceTemperature = .7;
+        gas.sutherlandConstant = .2;
+        const auto typedGas = C::CastPerfectGas<Scalar>(gas);
+        const auto state = gas.Conservative({1.2, .4, -.3, .2, 2.1});
+        C::FlowStateT<Scalar> typedState{};
+        C::FlowGradient gradient{};
+        C::FlowGradientT<Scalar> typedGradient{};
+        for (int j = 0; j < 5; ++j)
+        {
+            typedState[j] = Scalar(state[j]);
+            for (int d = 0; d < 3; ++d)
+            {
+                gradient[j][d] = .03 * (j + 1) - .02 * (d + 1);
+                typedGradient[j][d] = Scalar(gradient[j][d]);
+            }
+        }
+        const auto point = C::TryPerfectGasPoint(gas, state, true);
+        const auto typedPoint = C::TryPerfectGasPoint(typedGas, typedState, true);
+        REQUIRE(bool(point));
+        REQUIRE(bool(typedPoint));
+        const C::Vector3 normal{1. / 3, 2. / 3, -2. / 3};
+        const C::Vector3T<Scalar> typedNormal{Scalar(normal[0]), Scalar(normal[1]), Scalar(normal[2])};
+        const auto expected = C::PreparePerfectGasViscousFlux(state, gradient, point.value, normal, 0., 0., false, false);
+        const auto actual = C::PreparePerfectGasViscousFlux(typedState, typedGradient, typedPoint.value, typedNormal, Scalar(0), Scalar(0), false, false);
+        CHECK(DNDS::Math::ScalarCast<double>(typedPoint.value.thermo.soundSpeed) == doctest::Approx(point.value.thermo.soundSpeed).epsilon(tolerance));
+        CHECK(DNDS::Math::ScalarCast<double>(typedPoint.value.transport.viscosity) == doctest::Approx(point.value.transport.viscosity).epsilon(tolerance));
+        CHECK(DNDS::Math::ScalarCast<double>(typedPoint.value.diffusionBound) == doctest::Approx(point.value.diffusionBound).epsilon(tolerance));
+        for (int j = 0; j < 5; ++j)
+            CHECK(DNDS::Math::ScalarCast<double>(actual[j]) == doctest::Approx(expected[j]).epsilon(tolerance).scale(1));
+        const C::Riemann::AcousticState acoustic{{state, point.value.thermo.pressure}, point.value.thermo.soundSpeed};
+        const C::Riemann::AcousticStateT<Scalar> typedAcoustic{{typedState, typedPoint.value.thermo.pressure}, typedPoint.value.thermo.soundSpeed};
+        const auto prepared = C::PreparePerfectGasRiemann(gas, C::Riemann::Solver::Roe_M9, acoustic, acoustic, acoustic, acoustic, normal);
+        const auto typedPrepared = C::PreparePerfectGasRiemann(typedGas, C::Riemann::Solver::Roe_M9, typedAcoustic, typedAcoustic, typedAcoustic, typedAcoustic, typedNormal);
+        const auto flux = C::Riemann::Math::Evaluate(C::Riemann::Solver::Roe_M9, prepared.Input(acoustic, acoustic, normal), C::Riemann::FluxSettings{});
+        const auto typedFlux = C::Riemann::Math::Evaluate(C::Riemann::Solver::Roe_M9, typedPrepared.Input(typedAcoustic, typedAcoustic, typedNormal), C::Riemann::FluxSettingsT<Scalar>{});
+        for (int j = 0; j < 5; ++j)
+            CHECK(DNDS::Math::ScalarCast<double>(typedFlux.flux[j]) == doctest::Approx(flux.flux[j]).epsilon(tolerance).scale(1));
+        const auto right = gas.Conservative({1.1, .5, -.4, .25, 1.9});
+        const auto fullConvection = C::TryPerfectGasRiemannCompute<Scalar>(gas, C::Riemann::Solver::Roe_M9, state, right, state, right, normal);
+        const auto referenceConvection = C::TryPerfectGasRiemannCompute<double>(gas, C::Riemann::Solver::Roe_M9, state, right, state, right, normal);
+        REQUIRE(bool(fullConvection));
+        REQUIRE(bool(referenceConvection));
+        C::FlowState faceState;
+        C::FlowGradient faceGradient;
+        for (int j = 0; j < 5; ++j)
+        {
+            faceState[j] = .5 * (state[j] + right[j]);
+            for (int d = 0; d < 3; ++d)
+                faceGradient[j][d] = gradient[j][d] + normal[d] * (right[j] - state[j]) * .7;
+        }
+        const auto facePoint = C::TryPerfectGasPoint(gas, faceState, true);
+        REQUIRE(bool(facePoint));
+        const auto referenceDiffusion = C::PreparePerfectGasViscousFlux(faceState, faceGradient, facePoint.value, normal, 0., 0., false, false);
+        const auto fullDiffusion = C::TryPerfectGasPolynomialViscousCompute<Scalar>(gas, state, right, gradient, gradient, normal, .7, false);
+        REQUIRE(bool(fullDiffusion));
+        for (int j = 0; j < 5; ++j)
+        {
+            CHECK(fullConvection.value.flux[j] == doctest::Approx(referenceConvection.value.flux[j]).epsilon(tolerance).scale(1));
+            CHECK(fullDiffusion.value[j] == doctest::Approx(referenceDiffusion[j]).epsilon(tolerance).scale(1));
+        }
+    }
+}
+TEST_CASE("Perfect gas transport and flux preparation preserve typed local arithmetic")
+{
+    CheckTypedPerfectGas<DNDS::Math::real_f32>(4e-6);
+#ifdef DNDS_USE_CCCL_COMPUTE
+    CheckTypedPerfectGas<DNDS::Math::real_f32f32>(2e-12);
+#endif
+}
+
+namespace
+{
+    template <class Scalar>
+    void CheckComputeShockAndContact(DNDS::real tolerance)
+    {
+        const C::PerfectGas gas;
+        // A large pressure jump and a low-pressure stationary contact probe
+        // arithmetic cancellation outside the smooth TGV pilot. No repairs.
+        for (const auto rightPrimitive : {C::FlowState{.125, 0, 0, 0, .1}, C::FlowState{.02, 0, 0, 0, 1e-6}})
+        {
+            const bool contact = rightPrimitive[4] < 1e-5;
+            const auto left = gas.Conservative({1, 0, 0, 0, contact ? 1e-6 : 1000.});
+            const auto right = gas.Conservative(rightPrimitive);
+            for (const auto solver : {C::Riemann::Solver::Roe_M1, C::Riemann::Solver::Rusanov})
+            {
+                const auto expected = C::TryPerfectGasRiemannCompute<double>(gas, solver, left, right, left, right, {1, 0, 0});
+                const auto actual = C::TryPerfectGasRiemannCompute<Scalar>(gas, solver, left, right, left, right, {1, 0, 0});
+                const auto reverse = C::TryPerfectGasRiemannCompute<Scalar>(gas, solver, right, left, right, left, {-1, 0, 0});
+                REQUIRE(bool(expected));
+                REQUIRE(bool(actual));
+                REQUIRE(bool(reverse));
+                for (int j = 0; j < 5; ++j)
+                {
+                    CHECK(std::isfinite(actual.value.flux[j]));
+                    CHECK(std::abs(actual.value.flux[j] - expected.value.flux[j]) / (1 + std::abs(expected.value.flux[j])) <= tolerance);
+                    CHECK(std::abs(actual.value.flux[j] + reverse.value.flux[j]) / (1 + std::abs(actual.value.flux[j])) <= tolerance);
+                }
+            }
+        }
+    }
+}
+TEST_CASE("Reduced perfect gas flux preserves shock and low pressure contact bounds")
+{
+    CheckComputeShockAndContact<DNDS::Math::real_f32>(5e-5);
+#ifdef DNDS_USE_CCCL_COMPUTE
+    CheckComputeShockAndContact<DNDS::Math::real_f32f32>(2e-10);
+#endif
 }

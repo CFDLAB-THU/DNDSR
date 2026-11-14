@@ -423,22 +423,24 @@ namespace DNDS::CFV
         }
         /// Prepare only when requested derivatives exceed cachedDerivatives.
         /// Fully cached placements need no cell-geometry allocation at all.
-        DNDS_DEVICE_CALLABLE Math::TaylorPointEvaluation PreparePoint(
+        template <class Scalar = real>
+        DNDS_DEVICE_CALLABLE Math::TaylorPointEvaluationT<Scalar> PreparePoint(
             index iCell, const std::array<real, 3> &point) const noexcept
         {
-            return Math::TaylorPointEvaluation::FromPoint(
+            return Math::TaylorPointEvaluationT<Scalar>::FromPoint(
                 point, {cells(iCell, 1), cells(iCell, 2), cells(iCell, 3)}, cells(iCell, 7));
         }
         /// Reuse this point context across all modes and field components;
         /// cached derivative rows still take precedence over direct evaluation.
-        DNDS_DEVICE_CALLABLE real Evaluate(index iCell, index iPoint, int side, const Math::TaylorPointEvaluation &point,
-                                           int derivative, int mode) const noexcept
+        template <class Scalar>
+        DNDS_DEVICE_CALLABLE Scalar Evaluate(index iCell, index iPoint, int side, const Math::TaylorPointEvaluationT<Scalar> &point,
+                                             int derivative, int mode) const noexcept
         {
             DNDS_HD_assert(derivative >= 0 && derivative < availableDerivatives && mode >= 0 && mode < polynomial.size - 1);
             if (derivative < cachedDerivatives)
-                return cached(2 * iPoint + side, mode * cachedDerivatives + derivative);
-            const real value = polynomial.Derivative(derivative, mode + 1, point);
-            return derivative == 0 ? value - moments(iCell, mode + 1) : value;
+                return DNDS::Math::ScalarCast<Scalar>(cached(2 * iPoint + side, mode * cachedDerivatives + derivative));
+            const Scalar value = polynomial.Derivative(derivative, mode + 1, point);
+            return derivative == 0 ? value - DNDS::Math::ScalarCast<Scalar>(moments(iCell, mode + 1)) : value;
         }
         DNDS_DEVICE_CALLABLE real Evaluate(index iCell, index iPoint, int side, const std::array<real, 3> &point,
                                            int derivative, int mode) const noexcept

@@ -1,4 +1,6 @@
-#include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Faces.hpp"
+#include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Launch.hpp"
+#include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Inputs.hpp"
+#include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Compute.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include <cuda_runtime.h>
 
@@ -9,26 +11,6 @@ namespace DNDS::Cauchy::CUDA
     using ParametersView = R::ArrayView<const RHSKernelParameters, R::AccessBoundsChecks, R::FixedRows<1>>;
     namespace
     {
-        template <int Components>
-        __global__ void Faces(GeometryView published, ParametersView parameters, RHSKernelControls controls,
-                              RHSFields fields, RHSFaceOutputs output, RHSIndices selected)
-        {
-            const auto &geometry = published(0, 0);
-            const auto &physics = parameters(0, 0);
-            for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
-            {
-                const index iFace = selected(iRow, 0);
-                index fallbacks = 0;
-                // Publication/profile mismatch is an explicit programming
-                // error, not a numerical point fallback.
-                auto status = physics.physics.rans.Supported() && physics.physics.rans.ComponentNumber() + 5 == Components &&
-                                      physics.physics.dimension == controls.dimension && (!controls.viscous || physics.physics.viscous)
-                                  ? Detail::EvaluateFace<Components>(geometry, physics, controls, fields, output, iFace, fallbacks)
-                                  : NumericalStatus{NumericalError::InvalidInput, 1};
-                output.status(iFace, 0) = status;
-                output.fallbackCounts(iFace, 0) = fallbacks;
-            }
-        }
         template <int Components>
         __global__ void Cells(GeometryView published, RHSInput faces, RHSInput lowFaces,
                               R::ArrayView<const NumericalStatus, R::AccessBoundsChecks, R::FixedRows<1>> faceStatus,
@@ -95,10 +77,12 @@ namespace DNDS::Cauchy::CUDA
         }
         void ValidateField(const RHSField &field, index owned, index ghost, index width, bool requireGhost)
         {
-            DNDS_check_throw_info(field.owned.RowCount() == owned && field.owned.Width() == width && field.owned.kind == R::RowLayoutKind::Table,
-                                  "CUDA RHS requires a correctly shaped owned AoS field");
+            const auto supported = [](auto view)
+            { return view.kind == R::RowLayoutKind::Table || (view.kind == R::RowLayoutKind::TiledColMajorTable && view.stride == 32); };
+            DNDS_check_throw_info(field.owned.RowCount() == owned && field.owned.Width() == width && supported(field.owned),
+                                  "CUDA RHS requires correctly shaped AoS or tiled32 input");
             if (requireGhost || field.ghost.RowCount())
-                DNDS_check_throw_info(field.ghost.RowCount() == ghost && field.ghost.Width() == width && field.ghost.kind == R::RowLayoutKind::Table,
+                DNDS_check_throw_info(field.ghost.RowCount() == ghost && field.ghost.Width() == width && supported(field.ghost),
                                       "CUDA RHS ghost field is incomplete or has another layout");
         }
     }
@@ -156,18 +140,36 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<GeometryView, ParametersView, RHSKernelControls, RHSFields, RHSFaceOutputs, RHSIndices>();
         if (!faces.RowCount())
             return;
-        const unsigned blocks = unsigned(std::min<index>((faces.RowCount() + 127) / 128, 1024));
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        using P = DNDS::Math::ComputePrecision;
+        if (controls.polynomialPrecision != P::FP64 || controls.fluxPrecision != P::FP64 || controls.dissipationPrecision != P::FP64)
+        {
+            Detail::LaunchComputeFluxFaces(context, geometry, parameters, controls, fields, output, faces);
+            DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA RHS compute face launch failed");
+            return;
+        }
         switch (controls.components)
         {
         case 5:
-            Faces<5><<<blocks, 128, 0, stream>>>(geometry.View(), parameters, controls, fields, output, faces);
+        {
+            using Table = R::TableRows;
+            using Tiled = R::TiledColMajorTable<32>;
+            const bool tiledMean = fields.mean.owned.kind == R::RowLayoutKind::TiledColMajorTable;
+            const bool tiledRec = fields.reconstruction.owned.RowCount() ? fields.reconstruction.owned.kind == R::RowLayoutKind::TiledColMajorTable : fields.viscousData.owned.kind == R::RowLayoutKind::TiledColMajorTable;
+            if (tiledMean && tiledRec)
+                Detail::LaunchFluxFaces<5>(context, geometry, parameters, controls, Detail::ProjectRHSFields<Tiled, Tiled>(fields), output, faces);
+            else if (tiledMean)
+                Detail::LaunchFluxFaces<5>(context, geometry, parameters, controls, Detail::ProjectRHSFields<Tiled, Table>(fields), output, faces);
+            else if (tiledRec)
+                Detail::LaunchFluxFaces<5>(context, geometry, parameters, controls, Detail::ProjectRHSFields<Table, Tiled>(fields), output, faces);
+            else
+                Detail::LaunchFluxFaces<5>(context, geometry, parameters, controls, Detail::ProjectRHSFields<Table, Table>(fields), output, faces);
             break;
+        }
         case 6:
-            Faces<6><<<blocks, 128, 0, stream>>>(geometry.View(), parameters, controls, fields, output, faces);
+            Detail::LaunchFluxFaces<6>(context, geometry, parameters, controls, fields, output, faces);
             break;
         case 7:
-            Faces<7><<<blocks, 128, 0, stream>>>(geometry.View(), parameters, controls, fields, output, faces);
+            Detail::LaunchFluxFaces<7>(context, geometry, parameters, controls, fields, output, faces);
             break;
         }
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA RHS face launch failed");

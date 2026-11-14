@@ -277,6 +277,27 @@ namespace DNDS::Cauchy
         const auto reconstructionKernel = s.execution.ReconstructionKernel();
         require(cuda || reconstructionKernel == CFV::ReconstructionDeviceKernel::FP64,
                 "nondefault reconstruction kernel requires CUDA");
+        const auto &kernels = s.execution.kernels;
+        require(cuda || kernels.Default(), "operator compute/layout experiments require CUDA");
+        for (const auto *layout : {&kernels.stateInputLayout, &kernels.reconstructionInputLayout})
+            require(*layout == "aos" || *layout == "aosoa32", "kernel input layout " + *layout);
+        for (const auto *precision : {&kernels.polynomialArithmetic, &kernels.dissipationArithmetic, &kernels.fluxArithmetic})
+        {
+            require(*precision == "fp64" || *precision == "fp32" || *precision == "f32f32", "kernel arithmetic " + *precision);
+#ifndef DNDS_USE_CCCL_COMPUTE
+            require(*precision != "f32f32", "f32f32 kernel arithmetic requires DNDS_USE_CCCL_COMPUTE");
+#endif
+        }
+        require(kernels.fluxArithmetic == "fp64" || kernels.dissipationArithmetic == "fp64",
+                "full flux arithmetic already includes dissipation; select only one reduced flux policy");
+        std::string reducedArithmetic;
+        for (const auto *precision : {&kernels.polynomialArithmetic, &kernels.dissipationArithmetic, &kernels.fluxArithmetic})
+            if (*precision != "fp64")
+            {
+                require(reducedArithmetic.empty() || reducedArithmetic == *precision,
+                        "one RHS launch requires one common reduced arithmetic type");
+                reducedArithmetic = *precision;
+            }
         require(s.numerics.limiter != "LVR" || reconstructionKernel == CFV::ReconstructionDeviceKernel::FP64,
                 "LVR currently requires the fp64 reconstruction kernel");
         require(s.execution.device == "cpu" || cuda, "residual/BC/reconstruction backend " + s.execution.device);
@@ -297,6 +318,15 @@ namespace DNDS::Cauchy
         require(s.equation.system == "compressible", "equation " + s.equation.system);
         const bool mixture = s.equation.eos == "idealGasMixture";
         const bool rans = s.equation.rans.model != "none", extended = mixture || rans;
+        require(reducedArithmetic.empty() || !extended, "experimental reduced RHS arithmetic requires perfect-gas flow5");
+        require(kernels.fluxArithmetic == "fp64" || s.numerics.viscousGradient == "polynomial",
+                "reduced full flux currently requires conservative polynomial gradients");
+        if (kernels.dissipationArithmetic != "fp64" && Riemann::RiemannFlux::Available(s.numerics.flux))
+        {
+            const auto solver = Riemann::RiemannFlux::Resolve(s.numerics.flux).Kind();
+            require(solver >= Riemann::Solver::Roe && solver <= Riemann::Solver::Roe_M9,
+                    "reduced dissipation currently requires the Roe family");
+        }
         const auto usesAMGX = [](const ImplicitSettings &implicit)
         { return implicit.linear.method == "amgx" || (implicit.linear.method == "gmres" && implicit.linear.preconditioner == "amgx"); };
         const auto requireAMGX = [&](const ImplicitSettings &implicit, const std::string &level)

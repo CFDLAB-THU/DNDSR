@@ -40,7 +40,10 @@ namespace DNDS::Cauchy
                                   _values.pressure.Layout().Width() == 1 && _values.radius.Layout().Width() == 2 &&
                                   (!parameters.roe || parameters.components == 5),
                               "frozen Jacobian publication shape differs");
-        for (const auto *array : {&_values.means, &_values.pressure, &_values.pressureDerivative, &_values.radius, &_values.magnitudes})
+        DNDS_check_throw_info(_values.means.Layout().Kind() == R::RowLayoutKind::Table ||
+                                  (_values.means.Layout().Kind() == R::RowLayoutKind::TiledColMajorTable && _values.means.Layout().Stride() == 32),
+                              "frozen Jacobian means require AoS or tiled32");
+        for (const auto *array : {&_values.pressure, &_values.pressureDerivative, &_values.radius, &_values.magnitudes})
             DNDS_check_throw_info(array->Layout().Kind() == R::RowLayoutKind::Table, "frozen Jacobian publication requires AoS tables");
     }
     SpanView<const index> FrozenJacobianOperator::ColumnRow(index iRow) const
@@ -83,6 +86,6 @@ namespace DNDS::Cauchy
                             DNDS_check_throw_info(false, "frozen CUDA Jacobian provider is not compiled");
 #endif
                         },
-                        R::ReadAs<R::TableRows>(_values.means), R::ReadAs<R::TableRows>(_values.pressure), R::ReadAs<R::TableRows>(_values.pressureDerivative), R::ReadAs<R::TableRows>(_values.radius), R::ReadAs<R::TableRows>(_values.magnitudes), R::ReadAs<R::TableRows>(action.diagonal), R::ReadAs<R::TableRows>(action.rhs ? *action.rhs : _empty), R::ReadAs<R::TableRows>(action.owned), R::ReadAs<R::TableRows>(action.ghost ? *action.ghost : _empty), R::ReadAs<R::FixedRows<1>>(action.rows), R::WriteAs<R::TableRows>(action.output), R::ReadWriteAs<R::FixedRows<1>>(action.status));
+                        R::ReadAs<R::UniformTableRows>(_values.means), R::ReadAs<R::TableRows>(_values.pressure), R::ReadAs<R::TableRows>(_values.pressureDerivative), R::ReadAs<R::TableRows>(_values.radius), R::ReadAs<R::TableRows>(_values.magnitudes), R::ReadAs<R::TableRows>(action.diagonal), R::ReadAs<R::UniformTableRows>(action.rhs ? *action.rhs : _empty), R::ReadAs<R::UniformTableRows>(action.owned), R::ReadAs<R::UniformTableRows>(action.ghost ? *action.ghost : _empty), R::ReadAs<R::FixedRows<1>>(action.rows), R::WriteAs<R::TableRows>(action.output), R::ReadWriteAs<R::FixedRows<1>>(action.status));
     }
 }

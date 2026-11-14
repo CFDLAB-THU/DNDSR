@@ -2,6 +2,7 @@
 #include "Cauchy/Implicit/CPU/LinearBlockKernels.hpp"
 #include "Cauchy/State/EquationDofAlgebra.hpp"
 #include "DNDS/Runtime/Execution/EagerArrayBatch.hpp"
+#include "DNDS/Algebra/ArrayInputCache.hpp"
 #ifdef DNDS_USE_CUDA
 #    include "Cauchy/Implicit/CUDA/LinearBlockKernels.hpp"
 #endif
@@ -10,6 +11,26 @@ namespace DNDS::Cauchy
 {
     namespace R = Runtime;
     namespace A = Algebra;
+    struct LinearProblemContext::InputWorkspace
+    {
+        Algebra::ArrayInputCache rhs, owned, ghost;
+        InputWorkspace(const Algebra::DofSpace &space, index components, R::Device device)
+            : rhs(R::RowLayout::Dense(space.OwnedRows(), components), device, "Cauchy/linear/tiledRHS"),
+              owned(R::RowLayout::Dense(space.OwnedRows(), components), device, "Cauchy/linear/tiledInput"),
+              ghost(R::RowLayout::Dense(space.GhostRows(), components), device, "Cauchy/linear/tiledGhost") {}
+    };
+    void LinearProblemContext::ConfigureInputLayout(LinearInputLayout layout)
+    {
+        DNDS_check_throw_info(layout == LinearInputLayout::Native || layout == LinearInputLayout::Tiled32,
+                              "unknown linear input layout");
+        if (layout == LinearInputLayout::Native)
+            _inputWorkspace.reset();
+        else if (!_inputWorkspace)
+        {
+            DNDS_check_throw_info(Device().space == R::MemorySpace::CUDA, "tiled linear shadow requires CUDA");
+            _inputWorkspace = std::make_shared<InputWorkspace>(_space, _components, Device());
+        }
+    }
     namespace
     {
         using Field = A::DofField<real>;
@@ -147,18 +168,23 @@ namespace DNDS::Cauchy
             DNDS_check_throw_info(_inverseCurrent && _inverseSourceEpoch == _diagonal.MutationEpoch() &&
                                       _inverseEpoch == _inverse.MutationEpoch(),
                                   "queued Jacobi inverse is missing or invalidated by a submitted write");
+        const auto coupled = [](auto &state) -> decltype(auto)
+        {
+            if constexpr (std::is_same_v<State, EquationDofs>)
+                return state.CoupledField();
+            else
+                return (state);
+        };
+        const auto shadow = [&](Algebra::ArrayInputCache &cache, const R::Array<real> &source) -> const R::Array<real> &
+        {
+            cache.Refresh(engine, stream, source);
+            return cache.Values();
+        };
 
         if (!zero && !_offDiagonal && Device() != R::Device::Host())
         {
             DNDS_check_throw_info(_offDiagonalEvaluator && _offDiagonalEvaluator->Device() == Device(),
                                   "queued evaluated Jacobian is missing or belongs to another device");
-            const auto coupled = [](auto &state) -> decltype(auto)
-            {
-                if constexpr (std::is_same_v<State, EquationDofs>)
-                    return state.CoupledField();
-                else
-                    return (state);
-            };
             EvaluatedLinearAction action;
             action.rows = region == LinearRegion::All    ? _pattern->rows.OrderArray()
                           : region == LinearRegion::Core ? _pattern->rows.CoreArray()
@@ -169,6 +195,14 @@ namespace DNDS::Cauchy
                 action.ghost = coupled(*input).Ghost();
             if (rhs)
                 action.rhs = coupled(*rhs).Owned();
+            if (_inputWorkspace)
+            {
+                action.owned = shadow(_inputWorkspace->owned, action.owned);
+                if (action.ghost)
+                    action.ghost = shadow(_inputWorkspace->ghost, *action.ghost);
+                if (action.rhs)
+                    action.rhs = shadow(_inputWorkspace->rhs, *action.rhs);
+            }
             action.output = coupled(output).Owned();
             action.status = ActionStatus();
             action.fullDiagonal = _diagonalStorage == DiagonalStorage::Block;
@@ -209,6 +243,17 @@ namespace DNDS::Cauchy
             right = AddInput(*rhs, false, reads);
         if (input)
             source = AddInput(*input, region != LinearRegion::Core && _pattern->hasGhostColumns, reads);
+        if (_inputWorkspace)
+        {
+            if (rhs)
+                reads[right.FirstOwned()] = R::ReadAs<R::UniformTableRows>(shadow(_inputWorkspace->rhs, coupled(*rhs).Owned()));
+            if (input)
+            {
+                reads[source.FirstOwned()] = R::ReadAs<R::UniformTableRows>(shadow(_inputWorkspace->owned, coupled(*input).Owned()));
+                if (source.FirstGhost() >= 0)
+                    reads[source.FirstGhost()] = R::ReadAs<R::UniformTableRows>(shadow(_inputWorkspace->ghost, coupled(*input).Ghost()));
+            }
+        }
         std::vector<Output> writes;
         Fields(output, [&](auto &field)
                { writes.push_back(R::WriteAs<R::UniformTableRows>(field.Owned())); });
@@ -227,10 +272,10 @@ namespace DNDS::Cauchy
 #ifdef DNDS_USE_CUDA
                 const CUDA::LinearBlockInput request{blocks, zero ? decltype(pattern.columns){} : pattern.columns,
                     rows, Table(values[diagonalSlot]), pattern.ownedRows, int(components), fullDiagonal};
-                const auto x = zero ? CUDA::LinearReadRows{} : Table(values[source.FirstOwned()]);
-                const auto ghost = !zero && source.FirstGhost() >= 0 ? Table(values[source.FirstGhost()]) : CUDA::LinearReadRows{};
+                const auto x = zero ? CUDA::VectorReadRows{} : values[source.FirstOwned()];
+                const auto ghost = !zero && source.FirstGhost() >= 0 ? values[source.FirstGhost()] : CUDA::VectorReadRows{};
                 if (jacobi)
-                    CUDA::JacobiLinearRows(context, request, Table(values[right.FirstOwned()]), x, ghost, Table(outputs[0]), zero);
+                    CUDA::JacobiLinearRows(context, request, values[right.FirstOwned()], x, ghost, Table(outputs[0]), zero);
                 else
                     CUDA::ApplyLinearRows(context, request, x, ghost, Table(outputs[0]));
 #else

@@ -22,8 +22,8 @@ namespace DNDS::Cauchy::CUDA
      * subsequent matrix actions use this independent immutable publication.
      */
     void FreezeJacobianMeans(Runtime::ExecutionContext context, const PerfectGas &gas,
-                             LinearReadRows owned, LinearReadRows ghost,
-                             LinearWriteRows means, LinearWriteRows pressure,
+                             VectorReadRows owned, VectorReadRows ghost,
+                             Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows> means, LinearWriteRows pressure,
                              LinearWriteRows pressureDerivative, JacobianStatus status);
 
     /// Freeze a scalar stencil signal in owned-then-ghost numbering. This is
@@ -57,7 +57,8 @@ namespace DNDS::Cauchy::CUDA
         LinearIndexRows offsets;
         Runtime::ArrayView<const real, false, Runtime::FixedRows<7>> faces;
         Runtime::ArrayView<const PerfectGasBoundaryParameters, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> conditions;
-        LinearReadRows means, pressure, pressureDerivative, radius, incoming;
+        VectorReadRows means;
+        LinearReadRows pressure, pressureDerivative, radius, incoming;
         Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> wallMean;
         LinearReadRows waveJump, pressureMinimum;
         FrozenJacobianParameters parameters;

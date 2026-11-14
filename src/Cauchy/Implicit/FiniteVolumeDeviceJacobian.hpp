@@ -3,6 +3,7 @@
 #include "Cauchy/Discretization/FiniteVolumeWorkspaceInternal.hpp"
 #include "Cauchy/Implicit/FrozenJacobianOperator.hpp"
 #include "Cauchy/Implicit/CUDA/FiniteVolumeJacobianKernels.hpp"
+#include "DNDS/Algebra/ArrayInputCache.hpp"
 
 namespace DNDS::Cauchy
 {
@@ -37,6 +38,7 @@ namespace DNDS::Cauchy
         std::vector<std::shared_ptr<Slot>> slots;
         Runtime::Array<NumericalStatus> meansStatus, rowsStatus, assemblyStatus, partial, result;
         Runtime::Array<real> waveJump, pressureMinimum;
+        std::optional<Algebra::ArrayInputCache> inputOwned, inputGhost;
         index components;
 
         DeviceJacobianData(std::shared_ptr<const Data>, index components, Runtime::ExecutionContext);
