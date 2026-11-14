@@ -1,5 +1,8 @@
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels.hpp"
 #include <optional>
+#ifdef DNDS_USE_CUDA
+#    include <cuda_runtime.h>
+#endif
 
 namespace DNDS::Cauchy::CUDA
 {
@@ -17,9 +20,15 @@ namespace DNDS::Cauchy::CUDA
         RHSGeometry host;
         R::Array<RHSGeometry> storage;
         std::optional<R::Array<RHSGeometry>::ReadLease> read;
+        int multiprocessors = 0;
         Data(RHSGeometry geometry, R::ExecutionContext context) : host(geometry)
         {
             host.ValidateDevice(context.device);
+#ifdef DNDS_USE_CUDA
+            cudaDeviceProp properties;
+            DNDS_check_throw_info(cudaGetDeviceProperties(&properties, context.device.ordinal) == cudaSuccess, "RHS placement device query failed");
+            multiprocessors = properties.multiProcessorCount;
+#endif
             DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && host.offsets.RowCount() > 0 &&
                                       host.offsets.RowCount() - 1 <= host.cells.RowCount(),
                                   "invalid CUDA RHS geometry publication");
@@ -41,6 +50,7 @@ namespace DNDS::Cauchy::CUDA
         return _data->read->View<R::FixedRows<1>>();
     }
     R::Device RHSGeometryPublication::Device() const { return _data->storage.GetDevice(); }
+    int RHSGeometryPublication::MultiprocessorCount() const { return _data->multiprocessors; }
     void RHSKernelParameters::Validate(int components) const
     {
         physics.Validate(components);
@@ -56,6 +66,10 @@ namespace DNDS::Cauchy::CUDA
         DNDS_check_throw_info(!primitiveGradient || components == 5, "primitive viscous gradients require pure flow5");
         DNDS_check_throw_info(!produceLow || components == 5, "low-order flux blending applies to flow5 only");
         using P = DNDS::Math::ComputePrecision;
+        DNDS_check_throw_info(blockSize == 64 || blockSize == 128 || blockSize == 256, "invalid CUDA RHS block size");
+        DNDS_check_throw_info(!doubleBuffer || (components == 5 && polynomialPrecision == P::FP64 &&
+                                                dissipationPrecision == P::FP64 && fluxPrecision == P::FP64),
+                              "double buffering currently qualifies FP64 flow5 only");
         DNDS_check_throw_info(!warpQuadrature || (components == 5 && polynomialPrecision == P::FP64 &&
                                                   dissipationPrecision == P::FP64 && fluxPrecision == P::FP64),
                               "warp quadrature currently qualifies FP64 flow5 only");

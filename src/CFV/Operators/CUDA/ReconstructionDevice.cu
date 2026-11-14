@@ -1,4 +1,5 @@
 #include "CFV/Detail/ReconstructionDeviceKernels.hpp"
+#include "DNDS/Math/ComputeScalar.hpp"
 #include <cuda_runtime.h>
 #include <cmath>
 
@@ -27,7 +28,10 @@ namespace DNDS::CFV::Detail
                 matrixAInvB = p.matrixAInvB, vectorAInvB = p.vectorAInvB, boundaryInjection = p.boundaryInjection;
         }
     };
-    template <bool limited, class Scalar, class Status>
+    // Matrix storage, dense-product arithmetic and whole-update arithmetic are
+    // independent. The defaults preserve the original FP32-product/FP64-update
+    // policy, including the FP64 periodic rotation before its FP32 product.
+    template <bool limited, class Scalar, class AccumScalar = real, class ProductScalar = Scalar, class Status>
     __global__ void Jacobi(JacobiView<Scalar> plan, DeviceWorkSelection selection, DevicePeriodicBlocks blocks,
                            R::PairReadView<real> mean, R::PairReadView<real> input,
                            R::ArrayView<const real> boundary, R::ArrayView<real> output, Status status,
@@ -38,23 +42,24 @@ namespace DNDS::CFV::Detail
         for (index iWork = blockIdx.x; iWork < selection.count; iWork += gridDim.x)
         {
             const auto iCell = selection.Cell(iWork);
-            real penalty = 0;
+            AccumScalar penalty(0);
             if constexpr (limited)
-                penalty = alpha(iCell, 0);
-            const real scale = plan.relax * (1 - penalty);
+                penalty = AccumScalar(alpha(iCell, 0));
+            const AccumScalar relax(plan.relax);
+            const AccumScalar scale = relax * (AccumScalar(1) - penalty);
             for (index i = threadIdx.x; i < output.width; i += blockDim.x)
             {
                 const index mode = i % plan.n, component = i / plan.n;
-                real value = input(iCell, i) * (1 - plan.relax);
+                AccumScalar value = AccumScalar(input(iCell, i)) * (AccumScalar(1) - relax);
                 if constexpr (limited)
                     if (penalty > 0)
-                        value += (plan.relax * penalty) * target(iCell, i);
+                        value += (relax * penalty) * AccumScalar(target(iCell, i));
                 // A fully constrained cell must not read a neighbor or BC.
                 // Post-blending an unlimited sweep would propagate NaNs from
                 // values which the CPU LVR operator deliberately never reads.
-                if (scale == 0)
+                if (scale == AccumScalar(0))
                 {
-                    output(iCell, i) = value;
+                    output(iCell, i) = Math::ScalarCast<real>(value);
                     continue;
                 }
                 for (index entry = plan.offsets(iCell, 0); entry < plan.offsets(iCell + 1, 0); ++entry)
@@ -62,44 +67,44 @@ namespace DNDS::CFV::Detail
                     const auto other = plan.neighbors(entry, 0);
                     if (other != UnInitIndex)
                     {
-                        // Quantized mode converts operands and accumulates this
-                        // dense product in FP32, then promotes the contribution
-                        // into the FP64 relaxed coefficient. This is the SIMT
-                        // reference, not a hidden TF32/tensor-core substitution.
-                        Scalar product = 0;
+                        // The original quantized policy uses an FP32 product
+                        // and FP64 outer sum. The full policies instead use the
+                        // chosen scalar throughout, casting FP64 inputs directly
+                        // and retaining the already quantized FP32 maps.
+                        ProductScalar product(0);
                         for (index j = 0; j < plan.n; ++j)
-                            product += plan.matrixAInvB(entry, j * plan.n + mode) * Scalar(input(other, component * plan.n + j));
-                        value += scale * product;
+                            product += ProductScalar(plan.matrixAInvB(entry, j * plan.n + mode)) * ProductScalar(input(other, component * plan.n + j));
+                        value += scale * AccumScalar(product);
                         const auto first = plan.rotated && plan.rotationActive(entry, 0)
                                                ? blocks.First(component)
                                                : -1;
                         if (first >= 0)
                         {
-                            Scalar correction = 0;
+                            ProductScalar correction(0);
                             for (index j = 0; j < plan.n; ++j)
                             {
-                                real rotated = 0;
+                                AccumScalar rotated(0);
                                 for (index d = 0; d < 3; ++d)
-                                    rotated += input(other, (first + d) * plan.n + j) *
-                                               (plan.rotation(entry, d * 3 + component - first) - (component - first == d ? 1 : 0));
-                                correction += plan.matrixAInvB(entry, j * plan.n + mode) * Scalar(rotated);
+                                    rotated += AccumScalar(input(other, (first + d) * plan.n + j)) *
+                                               (AccumScalar(plan.rotation(entry, d * 3 + component - first)) - AccumScalar(component - first == d ? 1 : 0));
+                                correction += ProductScalar(plan.matrixAInvB(entry, j * plan.n + mode)) * ProductScalar(rotated);
                             }
-                            value += scale * correction;
+                            value += scale * AccumScalar(correction);
                         }
-                        real otherMean = mean(other, component);
+                        AccumScalar otherMean(mean(other, component));
                         if (first >= 0)
                         {
-                            otherMean = 0;
+                            otherMean = AccumScalar(0);
                             for (index d = 0; d < 3; ++d)
-                                otherMean += plan.rotation(entry, d * 3 + component - first) * mean(other, first + d);
+                                otherMean += AccumScalar(plan.rotation(entry, d * 3 + component - first)) * AccumScalar(mean(other, first + d));
                         }
-                        value += plan.vectorAInvB(entry, mode) * (scale * (otherMean - mean(iCell, component)));
+                        value += AccumScalar(plan.vectorAInvB(entry, mode)) * (scale * (otherMean - AccumScalar(mean(iCell, component))));
                     }
                     else
                         for (index q = plan.boundaryOffsets(entry, 0); q < plan.boundaryOffsets(entry + 1, 0); ++q)
-                            value += plan.boundaryInjection(q, mode) * (scale * (boundary(q, component) - mean(iCell, component)));
+                            value += AccumScalar(plan.boundaryInjection(q, mode)) * (scale * (AccumScalar(boundary(q, component)) - AccumScalar(mean(iCell, component))));
                 }
-                output(iCell, i) = value;
+                output(iCell, i) = Math::ScalarCast<real>(value);
             }
         }
     }
@@ -192,6 +197,16 @@ namespace DNDS::CFV::Detail
         for (index iCell = index(blockIdx.x) * blockDim.x + threadIdx.x; iCell < alpha.rows; iCell += index(gridDim.x) * blockDim.x)
             if (!isfinite(alpha(iCell, 0)) || alpha(iCell, 0) < 0 || alpha(iCell, 0) > 1)
                 atomicExch(&status(0, 0), 1);
+    }
+    // Stream-ordered after the update: never read and write status in the same
+    // grid. Check only selected results, allowing unused FP64 inputs/rows to
+    // exceed the narrower compute range. Commit remains guarded by this status.
+    __global__ void ValidateJacobiResult(DeviceWorkSelection selection, R::ArrayView<const real> output, R::ArrayView<int> status)
+    {
+        for (index iWork = blockIdx.x; iWork < selection.count; iWork += gridDim.x)
+            for (index i = threadIdx.x; i < output.width; i += blockDim.x)
+                if (!isfinite(output(selection.Cell(iWork), i)))
+                    atomicExch(&status(0, 0), 1);
     }
     __device__ real Biway(real center, real other, real epsilon)
     {
@@ -352,6 +367,35 @@ namespace DNDS::CFV::Detail
         else
             Jacobi<false><<<unsigned(std::min<index>(selection.count, 256)), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(JacobiView<real>(plan), selection, blocks, mean, input, boundary, output, status, {}, {});
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA Jacobi launch failed");
+    }
+    void LaunchJacobiFullAccumulation(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection,
+                                      DevicePeriodicBlocks blocks, R::PairReadView<real> mean, R::PairReadView<real> input,
+                                      R::ArrayView<const real> boundary, R::ArrayView<real> output, R::ArrayView<int> status, bool floatFloat)
+    {
+        DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && plan.quantized,
+                              "full accumulation Jacobi requires a CUDA context and FP32 sweep maps");
+#ifndef DNDS_USE_CCCL_COMPUTE
+        DNDS_check_throw_info(!floatFloat, "float-float Jacobi requires DNDS_USE_CCCL_COMPUTE");
+#endif
+        R::ValidateViewDevices(context.device, plan, selection, blocks, mean, input, boundary, output, status);
+        R::CheckKernelArgumentBudget<JacobiView<float>, decltype(selection), decltype(blocks), decltype(mean),
+                                     decltype(input), decltype(boundary), decltype(output), decltype(status),
+                                     R::ArrayView<const real>, R::ArrayView<const real>>();
+        if (!selection.count)
+            return;
+        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto count = unsigned(std::min<index>(selection.count, 256));
+        const auto readStatus = status.ConstView();
+        if (!floatFloat)
+            Jacobi<false, float, float, float><<<count, 128, 0, stream>>>(
+                JacobiView<float>(plan), selection, blocks, mean, input, boundary, output, readStatus, {}, {});
+#ifdef DNDS_USE_CCCL_COMPUTE
+        else
+            Jacobi<false, float, Math::real_f32f32, Math::real_f32f32><<<count, 128, 0, stream>>>(
+                JacobiView<float>(plan), selection, blocks, mean, input, boundary, output, readStatus, {}, {});
+#endif
+        ValidateJacobiResult<<<count, 128, 0, stream>>>(selection, output.ConstView(), status);
+        DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "full accumulation CUDA Jacobi launch failed");
     }
     void LaunchJacobiShared(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection,
                             DevicePeriodicBlocks blocks, R::PairReadView<real> mean, R::PairReadView<real> input,

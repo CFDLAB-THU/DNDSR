@@ -215,6 +215,8 @@ namespace DNDS::Cauchy
         controls.dissipationPrecision = precision(kernelSettings.dissipationArithmetic);
         controls.fluxPrecision = precision(kernelSettings.fluxArithmetic);
         controls.warpQuadrature = kernelSettings.rhsMapping == "warpQuadrature";
+        controls.blockSize = kernelSettings.rhsBlockSize;
+        controls.doubleBuffer = kernelSettings.rhsDoubleBuffer;
         controls.modes = owner->reconstruction ? owner->reconstruction->NRecDOF() : 0;
         controls.direct = n.reconstruction != "variational";
         controls.linear = n.reconstruction == "gradient";

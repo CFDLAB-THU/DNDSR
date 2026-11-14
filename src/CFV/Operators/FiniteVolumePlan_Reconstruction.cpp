@@ -536,6 +536,9 @@ namespace DNDS::CFV
             SubmitDeviceReconstructionIterTo(engine, stream, mean, input, work, boundary, region, kernel);
             return;
         }
+        DNDS_check_throw_info(kernel != ReconstructionDeviceKernel::FP32FullAccumulation &&
+                                  kernel != ReconstructionDeviceKernel::FP32FloatFloatAccumulation,
+                              "full accumulation reconstruction requires CUDA and FP32 sweep maps");
         Require(ReconstructionOperation::Sweep);
         Validate();
         DNDS_check_throw_info(engine.Owns(stream) && stream.Context().device == R::Device::Host(),
@@ -613,6 +616,9 @@ namespace DNDS::CFV
             CheckStatus(work);
             return;
         }
+        DNDS_check_throw_info(kernel != ReconstructionDeviceKernel::FP32FullAccumulation &&
+                                  kernel != ReconstructionDeviceKernel::FP32FloatFloatAccumulation,
+                              "full accumulation reconstruction requires CUDA and FP32 sweep maps");
         DoReconstructionIterTo(mean, coefficients, work, boundary);
         CommitReconstruction(coefficients, work);
     }

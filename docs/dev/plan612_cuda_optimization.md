@@ -79,6 +79,8 @@ solver schedule, primary state, restart format, geometry or residual sums:
 | `dissipationArithmetic` | Same types; Roe-family dissipation, FP64 central physical flux |
 | `fluxArithmetic` | Same types; full flow5 perfect-gas local thermo/convection/molecular diffusion |
 | `rhsMapping` | `thread` (default, ordered quadrature) or `warpQuadrature` (FP64 flow5 experiment) |
+| `rhsBlockSize` | 64, 128 (default), 256 threads per block |
+| `rhsDoubleBuffer` | False (default); two shared changing-input banks with async prefetch |
 
 These are experimental CUDA choices. Reduced arithmetic is flow5 only; full
 reduced flux excludes primitive viscous gradients, RANS and QCR. One launch
@@ -92,6 +94,16 @@ points in lanes, and uses a fixed warp reduction for the integrated flux.
 Inactive lanes still participate in collectives. It changes summation order,
 so compare against the CPU/default mapping with the declared FP64 tolerance,
 not byte equality. Physical boundary points retain separate unique output rows.
+
+Double buffering cooperatively stages both parent means, reconstruction and
+optional distinct viscous coefficients, and prepared auxiliary scalars. The
+next grid-stride batch is prefetched into the other bank with `cp.async` on
+Ampere while the current batch is consumed. Two banks are bounded to32KiB;
+the thread mapping may have inactive compute lanes when P3 rows are large.
+All lanes participate in bank readiness/reuse barriers. Geometry/quadrature,
+basis and point-shaped interface packets remain resident common inputs.
+The grid uses up to four blocks per SM, from a setup-cached device property.
+No hot-path hardware query, allocation, lease or host copy is introduced.
 
 The host wrapper validates residency/layout/shape once, then selects templated
 `__global__` entries and shared host/device numerical helpers. Native FP64
@@ -113,3 +125,23 @@ Float-float uses optional header-only CCCL (`DNDS_USE_CCCL_COMPUTE=ON`, pinned
 FP64. A coherent source libcudacxx/Thrust/CUB family must precede toolkit headers
 in the enabled build. The external checkout remains separate from the packaged
 dependency bundle. Qualification results belong in the plan execution record.
+
+### Quantized VR accumulation
+
+`execution.reconstructionKernel` keeps quantization separate from RHS arithmetic:
+
+| Choice | Sweep maps | Local product and update arithmetic | Stored coefficients |
+| --- | --- | --- | --- |
+| `fp32` | FP32 | FP32 dense products; FP64 outer/mean/BC/relaxation sum | FP64 |
+| `fp32Accum` | FP32 | Entire local update in FP32 | FP64 |
+| `fp32FloatFloatAccum` | FP32 | Entire local update in float-float | FP64 |
+
+The complete-update choices include periodic rotations, neighbor/mean and
+boundary contributions and relaxation. FP64 input values convert directly to
+the selected scalar; float-float retains both input limbs, but cannot recover
+precision already removed from the maps. Only the final result converts to
+FP64. WBAP and PP are unaffected. Unsupported build/device/model choices fail
+at setup; float-float requires the optional CCCL headers. New policies validate
+selected output rows before guarded commit; nonfinite arithmetic sets retained
+device status without exception recovery or a new host wait. This validation
+pass is absent from the unchanged default/mixed policies.

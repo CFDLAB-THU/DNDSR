@@ -262,6 +262,10 @@ namespace DNDS::Cauchy
             return Kernel::FP64TensorCoreAsync;
         if (reconstructionKernel == "fp32")
             return Kernel::FP32;
+        if (reconstructionKernel == "fp32Accum")
+            return Kernel::FP32FullAccumulation;
+        if (reconstructionKernel == "fp32FloatFloatAccum")
+            return Kernel::FP32FloatFloatAccumulation;
         if (reconstructionKernel == "tf32")
             return Kernel::TF32TensorCore;
         DNDS_check_throw_info(false, "unknown reconstruction kernel: " + reconstructionKernel);
@@ -277,9 +281,17 @@ namespace DNDS::Cauchy
         const auto reconstructionKernel = s.execution.ReconstructionKernel();
         require(cuda || reconstructionKernel == CFV::ReconstructionDeviceKernel::FP64,
                 "nondefault reconstruction kernel requires CUDA");
+#ifndef DNDS_USE_CCCL_COMPUTE
+        require(reconstructionKernel != CFV::ReconstructionDeviceKernel::FP32FloatFloatAccumulation,
+                "fp32FloatFloatAccum reconstruction requires DNDS_USE_CCCL_COMPUTE");
+#endif
         const auto &kernels = s.execution.kernels;
         require(cuda || kernels.Default(), "operator compute/layout experiments require CUDA");
         require(kernels.rhsMapping == "thread" || kernels.rhsMapping == "warpQuadrature", "RHS kernel mapping " + kernels.rhsMapping);
+        require(kernels.rhsBlockSize == 64 || kernels.rhsBlockSize == 128 || kernels.rhsBlockSize == 256, "RHS block size must be 64, 128 or 256");
+        require(!kernels.rhsDoubleBuffer || (kernels.polynomialArithmetic == "fp64" &&
+                                             kernels.dissipationArithmetic == "fp64" && kernels.fluxArithmetic == "fp64"),
+                "double buffering currently qualifies FP64 only");
         require(kernels.rhsMapping == "thread" || (kernels.polynomialArithmetic == "fp64" &&
                                                    kernels.dissipationArithmetic == "fp64" && kernels.fluxArithmetic == "fp64"),
                 "warp quadrature currently qualifies FP64 arithmetic only");
@@ -322,6 +334,7 @@ namespace DNDS::Cauchy
         require(s.equation.system == "compressible", "equation " + s.equation.system);
         const bool mixture = s.equation.eos == "idealGasMixture";
         const bool rans = s.equation.rans.model != "none", extended = mixture || rans;
+        require(!kernels.rhsDoubleBuffer || !extended, "double buffering currently qualifies flow5 only");
         require(kernels.rhsMapping == "thread" || !extended, "warp quadrature currently qualifies flow5 only");
         require(reducedArithmetic.empty() || !extended, "experimental reduced RHS arithmetic requires perfect-gas flow5");
         require(kernels.fluxArithmetic == "fp64" || s.numerics.viscousGradient == "polynomial",

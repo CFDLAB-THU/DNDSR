@@ -153,10 +153,11 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
     const auto device = R::Device::CUDA(0), host = R::Device::Host();
     const auto context = R::ExecutionContext::CUDA(0);
 #ifdef DNDS_USE_CCCL_COMPUTE
-    constexpr int experimentalVariants = 9;
+    constexpr int firstMapping = 8;
 #else
-    constexpr int experimentalVariants = 6;
+    constexpr int firstMapping = 5;
 #endif
+    constexpr int experimentalVariants = firstMapping + 4;
     for (const std::string model : {"none", "SA", "KOmegaWilcox", "KOmegaSST"})
         for (const int reconstruction : {0, 1, 2, 3})
             for (int experiment = 0; experiment < (model == "none" && reconstruction == 3 ? experimentalVariants : 1); ++experiment)
@@ -164,9 +165,9 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
                 // Retain the canonical model/reconstruction matrix. Experimental
                 // policies add only one uncached P3 flow5 fixture per selection.
                 INFO("model=" << model << ", reconstruction=" << reconstruction << ", experiment=" << experiment);
-                const real tolerance = experiment == experimentalVariants - 1 ? 3e-11 : experiment >= 5 ? 2e-10
-                                                                                    : experiment >= 2   ? 5e-5
-                                                                                                        : 3e-11;
+                const real tolerance = experiment >= firstMapping ? 3e-11 : experiment >= 5 ? 2e-10
+                                                                        : experiment >= 2   ? 5e-5
+                                                                                            : 3e-11;
                 C::EquationSettings settings;
                 settings.transport = "NewtonianFourier";
                 settings.viscosity = .002;
@@ -205,15 +206,18 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
                     controls.dissipationPrecision = Precision::FP32;
                 if (experiment == 4)
                     controls.fluxPrecision = Precision::FP32;
-                if (experiment == 5 && experiment != experimentalVariants - 1)
+                if (experiment == 5 && experiment < firstMapping)
                     controls.polynomialPrecision = Precision::FloatFloat;
-                if (experiment == 6 && experiment != experimentalVariants - 1)
+                if (experiment == 6 && experiment < firstMapping)
                     controls.dissipationPrecision = Precision::FloatFloat;
-                if (experiment == 7 && experiment != experimentalVariants - 1)
+                if (experiment == 7 && experiment < firstMapping)
                     controls.fluxPrecision = Precision::FloatFloat;
                 if (experiment == 3 || experiment == 6)
                     controls.solver = C::Riemann::Solver::Roe_M1;
-                controls.warpQuadrature = experiment == experimentalVariants - 1;
+                controls.warpQuadrature = experiment == firstMapping || experiment == firstMapping + 2;
+                controls.doubleBuffer = experiment > firstMapping;
+                controls.blockSize = experiment == firstMapping + 1 ? 64 : experiment == firstMapping + 3 ? 256
+                                                                                                          : 128;
                 // Two points per face exercise idle lanes and fixed warp
                 // quadrature accumulation against the same CPU oracle.
                 controls.fluxPolicy.required = C::Riemann::RequiredInputs(controls.solver);

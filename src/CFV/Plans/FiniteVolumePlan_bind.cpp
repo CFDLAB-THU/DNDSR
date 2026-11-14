@@ -159,6 +159,8 @@ namespace DNDS::CFV
             .value("FP64TensorCoreShared", ReconstructionDeviceKernel::FP64TensorCoreShared)
             .value("FP64TensorCoreAsync", ReconstructionDeviceKernel::FP64TensorCoreAsync)
             .value("FP32", ReconstructionDeviceKernel::FP32)
+            .value("FP32FullAccumulation", ReconstructionDeviceKernel::FP32FullAccumulation)
+            .value("FP32FloatFloatAccumulation", ReconstructionDeviceKernel::FP32FloatFloatAccumulation)
             .value("TF32TensorCore", ReconstructionDeviceKernel::TF32TensorCore);
         py::enum_<ReconstructionMatrixPrecision>(m, "ReconstructionMatrixPrecision")
             .value("FP64", ReconstructionMatrixPrecision::FP64)
@@ -184,7 +186,7 @@ namespace DNDS::CFV
             .def("Size", &PolynomialSamplingPlan::Size)
             .def("Validate", &PolynomialSamplingPlan::Validate)
             .def("Device", &PolynomialSamplingPlan::Device)
-            .def("Placed", &PolynomialSamplingPlan::Placed)
+            .def("Placed", py::overload_cast<Runtime::Device, Runtime::ExecutionContext>(&PolynomialSamplingPlan::Placed, py::const_))
             .def("Evaluate", py::overload_cast<const FVField &, const FVField &, Runtime::Array<real> &, int>(&PolynomialSamplingPlan::Evaluate, py::const_), py::arg("mean"), py::arg("coefficients"),
                  py::arg("output"), py::arg("derivative") = 0)
             .def("EvaluateQueued", py::overload_cast<Runtime::EagerEngine &, const Runtime::ExecutionStream &, const FVField &, const FVField &, Runtime::Array<real> &, int>(&PolynomialSamplingPlan::Evaluate, py::const_),

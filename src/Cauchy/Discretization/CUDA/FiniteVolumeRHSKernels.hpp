@@ -52,6 +52,7 @@ namespace DNDS::Cauchy::CUDA
         const RHSGeometry &HostDescriptor() const;
         Runtime::ArrayView<const RHSGeometry, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> View() const;
         Runtime::Device Device() const;
+        int MultiprocessorCount() const;
     };
 
     struct RHSKernelParameters
@@ -80,6 +81,8 @@ namespace DNDS::Cauchy::CUDA
         bool viscous = false, primitiveGradient = false, distinctViscous = false;
         bool positivity = false, faceFallback = false, useStencil = false, produceLow = false;
         bool warpQuadrature = false;
+        int blockSize = 128;
+        bool doubleBuffer = false;
         void Validate() const;
     };
     static_assert(std::is_trivially_copyable_v<RHSKernelControls>);

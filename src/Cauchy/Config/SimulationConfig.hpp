@@ -71,6 +71,8 @@ namespace DNDS::Cauchy
         std::string stateInputLayout = "aos", reconstructionInputLayout = "aos";
         std::string polynomialArithmetic = "fp64", dissipationArithmetic = "fp64", fluxArithmetic = "fp64";
         std::string rhsMapping = "thread";
+        int rhsBlockSize = 128;
+        bool rhsDoubleBuffer = false;
         DNDS_DECLARE_CONFIG(KernelExecutionSettings)
         {
             DNDS_FIELD(stateInputLayout, "Experimental CUDA mean/linear input shadows: aos or aosoa32; primary storage is unchanged");
@@ -79,11 +81,14 @@ namespace DNDS::Cauchy
             DNDS_FIELD(dissipationArithmetic, "Gas-agnostic Riemann dissipation arithmetic: fp64, fp32 or f32f32");
             DNDS_FIELD(fluxArithmetic, "Point physics and full flux arithmetic: fp64, fp32 or f32f32; residual sums remain FP64");
             DNDS_FIELD(rhsMapping, "CUDA FP64 face mapping: thread (ordered quadrature) or warpQuadrature (deterministic warp sum)");
+            DNDS_FIELD(rhsBlockSize, "Experimental CUDA RHS threads per block: 64, 128 or 256");
+            DNDS_FIELD(rhsDoubleBuffer, "Experimental FP64 flow5 double-buffered shared means/coefficient/auxiliary face batches");
         }
         bool Default() const
         {
             return stateInputLayout == "aos" && reconstructionInputLayout == "aos" &&
-                   polynomialArithmetic == "fp64" && dissipationArithmetic == "fp64" && fluxArithmetic == "fp64" && rhsMapping == "thread";
+                   polynomialArithmetic == "fp64" && dissipationArithmetic == "fp64" && fluxArithmetic == "fp64" && rhsMapping == "thread" &&
+                   rhsBlockSize == 128 && !rhsDoubleBuffer;
         }
     };
     struct ExecutionSettings
@@ -117,7 +122,7 @@ namespace DNDS::Cauchy
             DNDS_FIELD(transferPreflight, "MPI launch validation: collective (default) or abortOnFailure (local checks, fatal MPI abort, no per-launch global agreement); setup remains collective");
             DNDS_FIELD(hostThreads, "CPU worker count; zero means inline execution");
             DNDS_FIELD(communicationExecution, "MPI payload execution: caller (default) or worker (CPU Direct/HostPacked, requires MPI_THREAD_MULTIPLE)");
-            DNDS_FIELD(reconstructionKernel, "CUDA VR sweep: fp64 (default), fp64Shared (experimental SIMT 5/6/7-component P1..P3), fp64Tensor, fp64TensorShared, fp64TensorAsync, fp32, or tf32. fp32/tf32 quantize inverted sweep maps; coefficients and WBAP remain FP64. Nondefault modes require CUDA and are unavailable with LVR; gradient-only levels have no VR sweep. Device support is checked at placement.");
+            DNDS_FIELD(reconstructionKernel, "CUDA VR sweep: fp64 (default), fp64Shared (experimental SIMT 5/6/7-component P1..P3), fp64Tensor, fp64TensorShared, fp64TensorAsync, fp32, fp32Accum, fp32FloatFloatAccum, or tf32. The fp32 family and tf32 quantize inverted sweep maps. fp32 keeps FP64 outer accumulation; fp32Accum/fp32FloatFloatAccum compute the entire regular Jacobi update in FP32/float-float, then store FP64. Float-float requires DNDS_USE_CCCL_COMPUTE and does not recover map precision. Coefficient storage and WBAP remain FP64. Nondefault modes require CUDA and are unavailable with LVR; gradient-only levels have no VR sweep. Device support is checked at placement.");
             config.field_section(&T::kernels, "kernels", "Operator-local CUDA input layout and compute arithmetic policies");
             DNDS_FIELD(checkAccess, "Validate declared scheduled accesses at submission");
             DNDS_FIELD(overlap, "Overlap input halo exchanges with owned-only core work; false waits then runs unsplit kernels");

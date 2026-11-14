@@ -319,12 +319,13 @@ namespace DNDS::CFV
         /// independent request and must be enabled explicitly with metrics.
         int basisDerivativeOrder = 1;
         /// Quantize only the already-inverted sweep maps during placement.
-        /// Means, coefficients, relaxation and WBAP maps stay FP64. FP32 is an
-        /// explicit accuracy/performance experiment, never the default.
+        /// Means, coefficients, relaxation and WBAP maps stay in FP64 storage.
+        /// Sweep arithmetic is selected independently by the device kernel.
         ReconstructionMatrixPrecision matrixPrecision = ReconstructionMatrixPrecision::FP64;
     };
-    /// Explicit CUDA numerical kernel selection. CPU placement ignores this
-    /// choice; backend resolution occurs once per submitted CFV operation.
+    /// Explicit CUDA numerical kernel selection. Backend resolution occurs
+    /// once per submitted CFV operation. Full accumulation policies require
+    /// resident FP32 sweep maps and fail rather than falling back on the CPU.
     enum class ReconstructionDeviceKernel
     {
         FP64,
@@ -342,7 +343,15 @@ namespace DNDS::CFV
         /// Experimental FP64 SIMT sweep: share one neighbor coefficient row
         /// across target modes without changing their ordered arithmetic. No
         /// tensor-core requirement; combined 5/6/7-component P1..P3 only.
-        FP64Shared
+        FP64Shared,
+        /// FP32 sweep maps and the entire local update in FP32, including
+        /// relaxation, periodic rotation, means and boundary contributions.
+        /// Only the final result is promoted to durable FP64 storage.
+        FP32FullAccumulation,
+        /// Same FP32 maps, with the entire local update in float-float.
+        /// FP64 inputs are converted directly to the high/low pair; this does
+        /// not restore precision lost in the maps. Requires CCCL compute.
+        FP32FloatFloatAccumulation
     };
     struct ResidentBufferInfo
     {

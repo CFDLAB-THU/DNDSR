@@ -684,6 +684,13 @@ TEST_CASE("Opt-in FP32 sweep maps retain FP64 coefficients and avoid duplicate d
         options.matrixPrecision = C::ReconstructionMatrixPrecision::FP32;
         auto reduced = cpu.Place(device, context, options);
         CHECK(reduced.SupportsKernel(C::ReconstructionDeviceKernel::FP32));
+        CHECK(reduced.SupportsKernel(C::ReconstructionDeviceKernel::FP32FullAccumulation));
+#ifdef DNDS_USE_CCCL_COMPUTE
+        CHECK(reduced.SupportsKernel(C::ReconstructionDeviceKernel::FP32FloatFloatAccumulation));
+#else
+        CHECK_FALSE(reduced.SupportsKernel(C::ReconstructionDeviceKernel::FP32FloatFloatAccumulation));
+#endif
+        CHECK_FALSE(full.SupportsKernel(C::ReconstructionDeviceKernel::FP32FullAccumulation));
         CHECK_FALSE(reduced.SupportsKernel(C::ReconstructionDeviceKernel::FP64));
         const auto fullBuffers = full.ResidentBuffers(), smallBuffers = reduced.ResidentBuffers();
         for (const std::string name : {"matrixAInvB", "vectorAInvB", "boundaryInjection"})
@@ -716,12 +723,19 @@ TEST_CASE("Opt-in FP32 sweep maps retain FP64 coefficients and avoid duplicate d
         auto deviceMean = metrics.BuildField(R::RowLayout::Dense(0, components), device);
         auto deviceInput = reduced.BuildCoefficients(components);
         auto deviceWork = reduced.BuildWorkspace(components, std::vector<I>{1});
+        auto accumulationWork = reduced.BuildWorkspace(components, std::vector<I>{1});
         auto tensorWork = reduced.BuildWorkspace(components, std::vector<I>{1});
         auto deviceBoundary = reduced.PlaceBoundaryValues(boundary);
         deviceMean.Owned().CopyFrom(mean.Owned(), context).Wait();
         deviceMean.Ghost().CopyFrom(mean.Ghost(), context).Wait();
         R::EagerEngine engine;
         const auto stream = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
+        CHECK_THROWS(full.SubmitReconstructionIterTo(engine, stream, deviceMean, deviceInput, deviceWork, deviceBoundary,
+                                                     C::ReconstructionRegion::All, C::ReconstructionDeviceKernel::FP32FullAccumulation));
+#ifndef DNDS_USE_CCCL_COMPUTE
+        CHECK_THROWS(reduced.SubmitReconstructionIterTo(engine, stream, deviceMean, deviceInput, accumulationWork, deviceBoundary,
+                                                        C::ReconstructionRegion::All, C::ReconstructionDeviceKernel::FP32FloatFloatAccumulation));
+#endif
         // Compare each sweep with exactly the same input. This isolates local
         // arithmetic error instead of mixing it with iterative error growth.
         for (int iteration = 0; iteration < 3; ++iteration)
@@ -729,6 +743,7 @@ TEST_CASE("Opt-in FP32 sweep maps retain FP64 coefficients and avoid duplicate d
             inputHalo.Begin().Wait();
             deviceInput.Owned().CopyFrom(input.Owned(), context).Wait();
             deviceInput.Ghost().CopyFrom(input.Ghost(), context).Wait();
+            const auto frozenOwned = input.Owned().To(R::Device::Host());
             cpu.DoReconstructionIter(mean, input, work, boundary);
             reduced.SubmitReconstructionIterTo(engine, stream, deviceMean, deviceInput, deviceWork, deviceBoundary,
                                                C::ReconstructionRegion::Core, C::ReconstructionDeviceKernel::FP32);
@@ -737,6 +752,30 @@ TEST_CASE("Opt-in FP32 sweep maps retain FP64 coefficients and avoid duplicate d
             engine.Synchronize();
             reduced.CheckStatus(deviceWork);
             Equal(work.temporary, deviceWork.temporary, 2e-5);
+            for (const auto kernel : {C::ReconstructionDeviceKernel::FP32FullAccumulation,
+                                      C::ReconstructionDeviceKernel::FP32FloatFloatAccumulation})
+            {
+                if (!reduced.SupportsKernel(kernel))
+                    continue;
+                CAPTURE(kernel);
+                reduced.SubmitReconstructionIterTo(engine, stream, deviceMean, deviceInput, accumulationWork, deviceBoundary,
+                                                   C::ReconstructionRegion::Core, kernel);
+                reduced.SubmitReconstructionIterTo(engine, stream, deviceMean, deviceInput, accumulationWork, deviceBoundary,
+                                                   C::ReconstructionRegion::HaloDependent, kernel);
+                engine.Synchronize();
+                reduced.CheckStatus(accumulationWork);
+                // Same frozen CPU input and P3 oracle as the existing policy:
+                // Sector rotates the vector block; Hex exercises 3D BC sums.
+                // Float-float still has FP32 map quantization error.
+                Equal(work.temporary, accumulationWork.temporary, 2e-5);
+                // The CPU convenience call commits into input. Compare the
+                // device's immutable operand with the pre-call snapshot.
+                const auto retained = deviceInput.Owned().To(R::Device::Host());
+                const auto before = frozenOwned.Read(), after = retained.Read();
+                for (I iCell = 0; iCell < retained.RowCount(); ++iCell)
+                    for (I j = 0; j < I(input.Width()); ++j)
+                        CHECK(after.View()(iCell, j) == before.View()(iCell, j));
+            }
             if (reduced.SupportsKernel(C::ReconstructionDeviceKernel::TF32TensorCore))
             {
                 // Deliberately a different arithmetic policy. Compare the
@@ -770,6 +809,77 @@ TEST_CASE("Opt-in FP32 sweep maps retain FP64 coefficients and avoid duplicate d
         engine.Synchronize();
         reduced.CheckStatus(deviceWork);
         Equal(work.temporary, deviceWork.temporary, 2e-5);
+        if (!sector)
+        {
+            // Isolate mean/BC subtraction from dense products. A common 1e8
+            // offset erases the small differences if the complete update uses
+            // float; direct FP64-to-float-float conversion retains them. This
+            // catches accidental float staging and a hidden FP64 outer sum.
+            Fill(mean, 1e8);
+            {
+                auto write = input.Owned().Write();
+                for (I iCell = 0; iCell < input.Owned().RowCount(); ++iCell)
+                    for (I j = 0; j < I(input.Width()); ++j)
+                        write.View()(iCell, j) = 0;
+            }
+            {
+                auto write = boundary.values.Write();
+                for (I q = 0; q < boundary.values.RowCount(); ++q)
+                    for (I j = 0; j < components; ++j)
+                        write.View()(q, j) = 1e8 + .00001 * q + .00002 * j;
+            }
+            metrics.BindHalo(mean).Begin().Wait();
+            inputHalo.Begin().Wait();
+            deviceMean.Owned().CopyFrom(mean.Owned(), context).Wait();
+            deviceMean.Ghost().CopyFrom(mean.Ghost(), context).Wait();
+            deviceInput.Owned().CopyFrom(input.Owned(), context).Wait();
+            deviceInput.Ghost().CopyFrom(input.Ghost(), context).Wait();
+            deviceBoundary = reduced.PlaceBoundaryValues(boundary);
+            cpu.DoReconstructionIter(mean, input, work, boundary);
+            {
+                double maximum = 0;
+                const auto read = work.temporary.Owned().Read();
+                for (I iCell = 0; iCell < work.temporary.Owned().RowCount(); ++iCell)
+                    for (I j = 0; j < I(input.Width()); ++j)
+                        maximum = std::max(maximum, std::abs(read.View()(iCell, j)));
+                CHECK(maximum > 1e-3);
+            }
+            for (const auto kernel : {C::ReconstructionDeviceKernel::FP32FullAccumulation,
+                                      C::ReconstructionDeviceKernel::FP32FloatFloatAccumulation})
+            {
+                if (!reduced.SupportsKernel(kernel))
+                    continue;
+                reduced.SubmitReconstructionIterTo(engine, stream, deviceMean, deviceInput, accumulationWork, deviceBoundary,
+                                                   C::ReconstructionRegion::All, kernel);
+                engine.Synchronize();
+                reduced.CheckStatus(accumulationWork);
+                if (kernel == C::ReconstructionDeviceKernel::FP32FloatFloatAccumulation)
+                    Equal(work.temporary, accumulationWork.temporary, 2e-5);
+                else
+                {
+                    const auto host = accumulationWork.temporary.Owned().To(R::Device::Host());
+                    const auto read = host.Read();
+                    for (I iCell = 0; iCell < host.RowCount(); ++iCell)
+                        for (I j = 0; j < I(input.Width()); ++j)
+                            CHECK(read.View()(iCell, j) == 0);
+                }
+            }
+        }
+        else
+        {
+            // Narrow arithmetic overflow is deferred to retained status. A
+            // queued commit must preserve the original durable FP64 state.
+            Fill(input, 1e100);
+            inputHalo.Begin().Wait();
+            deviceInput.Owned().CopyFrom(input.Owned(), context).Wait();
+            deviceInput.Ghost().CopyFrom(input.Ghost(), context).Wait();
+            reduced.SubmitReconstructionIterTo(engine, stream, deviceMean, deviceInput, accumulationWork, deviceBoundary,
+                                               C::ReconstructionRegion::All, C::ReconstructionDeviceKernel::FP32FullAccumulation);
+            reduced.SubmitCommitReconstruction(engine, stream, deviceInput, accumulationWork);
+            engine.Synchronize();
+            CHECK_THROWS(reduced.CheckStatus(accumulationWork));
+            Equal(input, deviceInput);
+        }
     }
 }
 

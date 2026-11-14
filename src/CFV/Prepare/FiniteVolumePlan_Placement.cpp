@@ -629,6 +629,24 @@ namespace DNDS::CFV
                               "device Jacobi aliases its input");
         const auto selection = Selection(*_device, region);
         auto pin = _device;
+        if (kernel == ReconstructionDeviceKernel::FP32FullAccumulation || kernel == ReconstructionDeviceKernel::FP32FloatFloatAccumulation)
+        {
+            // Only these policies validate narrow-range arithmetic results.
+            // Declare the retained status mutation, including the separate
+            // stream-ordered result check, to the Runtime dependency tracker.
+            auto launchAccum = [pin, selection, kernel](R::ExecutionContext context, auto mo, auto mg, auto ro, auto rg, auto bc, auto output, auto blocks, auto status)
+            {
+                Detail::LaunchJacobiFullAccumulation(context, pin->view, selection, {blocks}, {mo, mg}, {ro, rg}, bc, output, status,
+                                                     kernel == ReconstructionDeviceKernel::FP32FloatFloatAccumulation);
+            };
+            if (region == ReconstructionRegion::Core)
+                R::SubmitArrays(engine, stream, [launchAccum](R::ExecutionContext c, auto mo, auto ro, auto bc, auto output, auto blocks, auto status)
+                                { launchAccum(c, mo, R::ArrayView<const real>{}, ro, R::ArrayView<const real>{}, bc, output, blocks, status); }, R::Read(mean.Owned()), R::Read(input.Owned()), R::Read(boundary.values), R::Write(work.temporary.Owned()), R::Read(work.devicePeriodicVectorStarts), R::ReadWrite(work.deviceStatus));
+            else
+                R::SubmitArrays(engine, stream, launchAccum, R::Read(mean.Owned()), R::Read(mean.Ghost()), R::Read(input.Owned()), R::Read(input.Ghost()),
+                                R::Read(boundary.values), R::Write(work.temporary.Owned()), R::Read(work.devicePeriodicVectorStarts), R::ReadWrite(work.deviceStatus));
+            return;
+        }
         auto launch = [pin, selection, kernel](R::ExecutionContext context, auto mo, auto mg, auto ro, auto rg, auto bc, auto output, auto blocks, auto status)
         {
             if (kernel == ReconstructionDeviceKernel::FP64Shared)
@@ -773,7 +791,7 @@ namespace DNDS::CFV
             return;
         ValidateDeviceWorkspace(_device, work);
         const auto host = work.deviceStatus.To(R::Device::Host());
-        DNDS_check_throw_info(host.Read().View()(0, 0) == 0, "device reconstruction validation failed (indicator, LVR penalty or characteristics); do not publish the queued result");
+        DNDS_check_throw_info(host.Read().View()(0, 0) == 0, "device reconstruction validation failed (indicator, LVR penalty, characteristics or nonfinite narrow accumulation); do not publish the queued result");
     }
     bool VariationalReconstructionPlan::SupportsKernel(ReconstructionDeviceKernel kernel) const
     {
@@ -782,6 +800,10 @@ namespace DNDS::CFV
             return kernel == ReconstructionDeviceKernel::FP64;
         if (_device->view.quantized)
             return kernel == ReconstructionDeviceKernel::FP32 ||
+                   kernel == ReconstructionDeviceKernel::FP32FullAccumulation ||
+#ifdef DNDS_USE_CCCL_COMPUTE
+                   kernel == ReconstructionDeviceKernel::FP32FloatFloatAccumulation ||
+#endif
                    (kernel == ReconstructionDeviceKernel::TF32TensorCore && _device->tf32TensorCore);
         if (kernel == ReconstructionDeviceKernel::FP64Shared)
             return _device->view.n == 2 || _device->view.n == 3 || _device->view.n == 5 ||
@@ -820,6 +842,11 @@ namespace DNDS::CFV
         void LaunchJacobiShared(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks, R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>, R::ArrayView<const int>)
         {
             DNDS_check_throw_info(false, "CUDA shared FP64 SIMT Jacobi unavailable");
+        }
+        void LaunchJacobiFullAccumulation(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
+                                          R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>, R::ArrayView<int>, bool)
+        {
+            DNDS_check_throw_info(false, "CUDA full accumulation Jacobi unavailable");
         }
         void LaunchLimitedJacobi(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
                                  R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<const real>,

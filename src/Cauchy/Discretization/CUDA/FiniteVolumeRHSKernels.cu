@@ -1,6 +1,7 @@
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Launch.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Inputs.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Compute.hpp"
+#include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Staging.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include <cuda_runtime.h>
 
@@ -140,6 +141,12 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<GeometryView, ParametersView, RHSKernelControls, RHSFields, RHSFaceOutputs, RHSIndices>();
         if (!faces.RowCount())
             return;
+        if (controls.doubleBuffer)
+        {
+            Detail::LaunchBufferedFluxFaces(context, geometry, parameters, controls, fields, output, faces);
+            DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "buffered CUDA RHS face launch failed");
+            return;
+        }
         using P = DNDS::Math::ComputePrecision;
         if (controls.polynomialPrecision != P::FP64 || controls.fluxPrecision != P::FP64 || controls.dissipationPrecision != P::FP64)
         {
