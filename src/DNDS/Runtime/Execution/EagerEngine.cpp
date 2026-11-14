@@ -397,6 +397,7 @@ namespace DNDS::Runtime
                 : _executor(std::move(executor)), _lane(std::move(lane)), _prefix(prefix) {}
             bool Ready() const override { return _executor->Poll(_lane, _prefix); }
             void Wait() const override { _executor->Wait(_lane, _prefix); }
+            unsigned AutonomousWaitPriority() const noexcept override { return 1; }
         };
 
         class CPULauncher : public StreamLauncher
@@ -669,6 +670,13 @@ namespace DNDS::Runtime
             for (const auto &stream : streams)
                 prefixes.push_back(stream->Record());
             std::vector<bool> complete(prefixes.size(), false);
+            std::vector<index> waitOrder;
+            waitOrder.reserve(prefixes.size());
+            for (index i = 0; i < index(prefixes.size()); ++i)
+                if (prefixes[i].Provider() && prefixes[i].Provider()->AutonomousWaitPriority())
+                    waitOrder.push_back(i);
+            std::stable_sort(waitOrder.begin(), waitOrder.end(), [&](index a, index b)
+                             { return prefixes[a].Provider()->AutonomousWaitPriority() > prefixes[b].Provider()->AutonomousWaitPriority(); });
             for (;;)
             {
                 // Submission is serialized with this loop. Each callback runs
@@ -691,6 +699,24 @@ namespace DNDS::Runtime
                     else
                         ++it;
                 }
+                // Register rejects new progress while draining, and registered
+                // operations have now released their owners on this controller.
+                // Only after all such work retires may a provider's autonomous
+                // Wait replace repeated Ready queries. Higher-priority native
+                // producers finish before self-progressing CPU consumers.
+                if (_state->pending.empty())
+                    for (const auto i : waitOrder)
+                        if (!complete[i])
+                            try
+                            {
+                                prefixes[i].WaitHost();
+                                complete[i] = true;
+                            }
+                            catch (...)
+                            {
+                                failure();
+                                complete[i] = true;
+                            }
                 bool all = _state->pending.empty();
                 for (size_t i = 0; i < prefixes.size(); ++i)
                 {

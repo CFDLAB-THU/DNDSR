@@ -11,6 +11,7 @@
 #include "DNDS/MPI/Failure.hpp"
 #include "DNDS/Runtime/Execution/SessionAccess.hpp"
 #include <array>
+#include <functional>
 #include <optional>
 #include <utility>
 #include <cstdlib>
@@ -422,8 +423,9 @@ namespace DNDS::Cauchy
                             ++iField; });
                     problem->SubmitJacobi(engine, compute, rhs, forward, output);
                 }
-                Stage([&]
-                      { schedule.Join(); });
+                // Submission retains all operands. The caller observes numerical
+                // status at its solve/norm boundary, not after each local sweep.
+                // Real MPI routes still establish their controller-ready edge.
             }
             void ApplyILU(const Field &rhs, Field &output)
             {
@@ -730,11 +732,33 @@ namespace DNDS::Cauchy
                     };
                     if (data.settings.stopping == "fixedCount")
                     {
-                        while (report.iterations < data.settings.maxIterations)
+                        if (data.settings.method == "jacobi")
                         {
-                            if (localCorrection && (initialGuess || report.iterations != 0))
-                                formDefect();
-                            correct();
+                            // Keep public solution storage and persistent halo
+                            // bindings stable. Alternate prebound slots instead
+                            // of copying a full field after every correction.
+                            auto current = std::ref(x), destination = std::ref(data.next);
+                            while (report.iterations < data.settings.maxIterations)
+                            {
+                                data.JacobiSweep(rhs, current.get(), destination.get(),
+                                                 !initialGuess && report.iterations == 0);
+                                std::swap(current, destination);
+                                report.jacobiSweeps += data.settings.jacobiLocalSweeps;
+                                report.jacobiInputExchanges += bool(initialGuess) || report.iterations != 0;
+                                ++report.iterations;
+                            }
+                            if (report.iterations % 2)
+                                data.Stage([&]
+                                           { algebra.Copy(x, current.get()); });
+                        }
+                        else
+                        {
+                            while (report.iterations < data.settings.maxIterations)
+                            {
+                                if (localCorrection && (initialGuess || report.iterations != 0))
+                                    formDefect();
+                                correct();
+                            }
                         }
                         if (!initialGuess && report.iterations == 0)
                             data.Stage([&]
@@ -863,6 +887,8 @@ namespace DNDS::Cauchy
                 data->gmres->VisitOperatorInputs(bind);
             else
                 bind(*data->solution);
+            if (settings.method == "jacobi")
+                bind(data->next);
             if (settings.method == "sgs" || (settings.method == "gmres" && settings.preconditioner == "sgs"))
             {
                 bind(data->old);

@@ -281,6 +281,9 @@ namespace DNDS::Runtime
                                        bool observeProducer) const;
         TransferOperation StartManaged(const ExecutionStream &stream, bool checked,
                                        bool callerValid, bool observeProducer) const;
+        bool HasEmptyDirectPayload() const;
+        TransferOperation SubmitEmpty(EagerEngine &engine, const ExecutionStream &stream,
+                                      bool callerValid) const;
         TransferOperation Start(ExecutionContext context, bool scheduled, std::shared_ptr<AccessTrackingContext> tracking = {}, uint64_t lane = 0, bool callerValid = true) const;
 
     public:
@@ -296,6 +299,10 @@ namespace DNDS::Runtime
         /// Import the producer prefix, then submit on the communication lane.
         /// Native providers use stream events without a host wait. Portable MPI
         /// requires controller progress/readiness and is not graph-capturable.
+        /// A direct MPI route with no local sends/receives and no reducer has
+        /// no payload effect: it retains the usual preflights and binding owner
+        /// but exports only an ordered stream prefix, without a producer host
+        /// wait or payload access reservation. This is independent of rank count.
         TransferOperation SubmitAfter(EagerEngine &engine, const ExecutionStream &communication,
                                       StreamEvent producer, bool callerValid = true) const;
         /// One active Begin operation per binding. Default remains isolated persistent

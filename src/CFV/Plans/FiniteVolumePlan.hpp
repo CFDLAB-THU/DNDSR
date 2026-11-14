@@ -338,7 +338,11 @@ namespace DNDS::CFV
         /// Experimental 16x16x8 TF32 tensor products on FP32 sweep maps.
         /// Explicitly rounds operands to TF32, accumulates in FP32, promotes
         /// the correction to FP64. This is not the FP32 reference arithmetic.
-        TF32TensorCore
+        TF32TensorCore,
+        /// Experimental FP64 SIMT sweep: share one neighbor coefficient row
+        /// across target modes without changing their ordered arithmetic. No
+        /// tensor-core requirement; combined 5/6/7-component P1..P3 only.
+        FP64Shared
     };
     struct ResidentBufferInfo
     {

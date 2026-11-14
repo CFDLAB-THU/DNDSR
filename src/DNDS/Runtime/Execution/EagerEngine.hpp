@@ -84,6 +84,15 @@ namespace DNDS::Runtime
             /// a provider must not throw merely because work is still pending.
             virtual bool Ready() const = 0;
             virtual void Wait() const = 0;
+            /// Opt in to a blocking host wait after controller-managed external
+            /// progress is fully retired. Zero preserves nonblocking polling for
+            /// custom providers. A positive priority promises that Wait advances
+            /// its own dependencies without another engine progress pass.
+            /// Larger priorities are observed first: native submitted work uses
+            /// 2, self-progressing CPU executors use 1, so CPU dependency scans
+            /// need not repeatedly query a native producer. This is an ordering
+            /// preference, not a backend identity or a dependency replacement.
+            virtual unsigned AutonomousWaitPriority() const noexcept { return 0; }
             /// Backend completion notification, including terminal failure.
             /// Publish result/error and release completed accesses first. This
             /// wakes consumers; it never runs their numerical work inline.

@@ -1646,3 +1646,79 @@ TEST_CASE("MPI enqueue and unavailable NCCL capabilities reject explicitly")
     if (!NCCLTransferProvider::Available())
         CHECK_THROWS(NCCLTransferProvider::Create(MPI_COMM_WORLD, Device::CUDA(0)));
 }
+
+TEST_CASE("Empty direct routes retain stream ordering without payload access or host readiness")
+{
+    struct DeferredEvent final : StreamEvent::State
+    {
+        mutable std::atomic<bool> ready{false}, hostWait{false};
+        bool Ready() const override { return ready.load(); }
+        void Wait() const override
+        {
+            hostWait.store(true);
+            ready.store(true);
+        }
+    };
+    for (const bool checked : {false, true})
+    {
+        EagerEngine engine(2, checked ? std::make_shared<AccessTrackingContext>() : nullptr);
+        const auto communication = engine.CreateCPUStream();
+        Array<double> source(RowLayout::Dense(1, 1)), destination(source.Layout());
+        destination.Write().View()(0, 0) = 17;
+        const auto version = destination.Version();
+        auto context = std::make_shared<CommunicationContext>(MPI_COMM_WORLD);
+        RowTransferPlan route(context, 1, 1, {});
+        auto binding = PayloadPlan(route, source.Layout(), destination.Layout(), ElementSchema::For<double>())
+                           .Bind(source, destination, TransferTransport::Direct);
+        auto ready = std::make_shared<DeferredEvent>();
+        // An unrelated immediate reader must not conflict: no destination row
+        // is written by this route, despite its nonempty destination allocation.
+        auto read = destination.Read();
+        auto operation = binding.SubmitAfter(engine, communication, StreamEvent(ready));
+        auto repeated = binding.SubmitAfter(engine, communication, StreamEvent(ready));
+        CHECK_FALSE(ready->hostWait.load());
+        ready->ready.store(true);
+        ready->NotifyCompletion();
+        operation.Wait();
+        repeated.Wait();
+        engine.Synchronize();
+        CHECK(destination.Version() == version);
+        CHECK(read.View()(0, 0) == 17);
+        // Caller validity still participates in the ordinary collective checks.
+        int rank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        CHECK_THROWS(binding.SubmitReady(engine, communication, rank != 0));
+    }
+}
+
+TEST_CASE("Locally empty direct participants retain the nonempty peer preflight sequence")
+{
+    int rank, size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    if (size < 3)
+        return;
+    for (const bool checked : {false, true})
+    {
+        EagerEngine engine(2, checked ? std::make_shared<AccessTrackingContext>() : nullptr);
+        const auto communication = engine.CreateCPUStream();
+        Array<double> source(RowLayout::Dense(1, 1)), destination(source.Layout());
+        source.Write().View()(0, 0) = rank + 10;
+        auto context = std::make_shared<CommunicationContext>(MPI_COMM_WORLD);
+        const std::vector<RowRequest> requests = rank < 2 ? std::vector<RowRequest>{{1 - rank, 0, 0}} : std::vector<RowRequest>{};
+        RowTransferPlan route(context, 1, 1, requests);
+        auto binding = PayloadPlan(route, source.Layout(), destination.Layout(), ElementSchema::For<double>())
+                           .Bind(source, destination, TransferTransport::Direct);
+        TransferOperation operation;
+        {
+            CountReductions count;
+            operation = binding.SubmitReady(engine, communication);
+        }
+        CHECK(reductionNumber == (checked ? 3 : 1));
+        operation.Wait();
+        engine.Synchronize();
+        if (rank < 2)
+            CHECK(destination.Read().View()(0, 0) == 11 - rank);
+        CHECK_THROWS(binding.SubmitReady(engine, communication, rank != size - 1));
+    }
+}

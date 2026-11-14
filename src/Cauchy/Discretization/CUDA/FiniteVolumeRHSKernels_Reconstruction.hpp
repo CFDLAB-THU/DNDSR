@@ -59,21 +59,25 @@ namespace DNDS::Cauchy::CUDA::Detail
             }
             else
             {
-                real basis[4][19];
                 const int derivatives = controls.viscous && !controls.primitiveGradient ? dimension + 1 : 1;
                 CFV::Math::TaylorPointEvaluation prepared;
                 if (derivatives > geometry.basis.cachedDerivatives)
                     prepared = geometry.basis.PreparePoint(iCell, position);
-                for (int d = 0; d < derivatives; ++d)
-                    for (int mode = 0; mode < controls.modes; ++mode)
-                        basis[d][mode] = geometry.basis.Evaluate(iCell, sample.point, other ? 1 - sample.side : sample.side, prepared, d, mode);
-                for (int j = 0; j < Components; ++j)
-                    for (int mode = 0; mode < controls.modes; ++mode)
+                // Consume one modal basis across all equations before advancing.
+                // This keeps the original per-equation summation order while
+                // avoiding a 4x19 thread-local table in the hot face kernel.
+                for (int mode = 0; mode < controls.modes; ++mode)
+                {
+                    real basis[4];
+                    for (int d = 0; d < derivatives; ++d)
+                        basis[d] = geometry.basis.Evaluate(iCell, sample.point, other ? 1 - sample.side : sample.side, prepared, d, mode);
+                    for (int j = 0; j < Components; ++j)
                     {
-                        point.values[j] += fields.reconstruction(iCell, j * controls.modes + mode) * basis[0][mode];
+                        point.values[j] += fields.reconstruction(iCell, j * controls.modes + mode) * basis[0];
                         for (int d = 1; d < derivatives; ++d)
-                            point.gradients[j][d - 1] += viscous(iCell, j * controls.modes + mode) * basis[d][mode];
+                            point.gradients[j][d - 1] += viscous(iCell, j * controls.modes + mode) * basis[d];
                     }
+                }
             }
         }
         if constexpr (Components > 5)

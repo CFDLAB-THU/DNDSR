@@ -614,6 +614,9 @@ namespace DNDS::CFV
         ValidateDeviceStream(*this, stream);
         DNDS_check_throw_info(SupportsKernel(kernel), "requested CUDA reconstruction kernel is unavailable on this device/build");
         ValidateDeviceWorkspace(_device, work, input);
+        if (kernel == ReconstructionDeviceKernel::FP64Shared)
+            DNDS_check_throw_info(work.components >= 5 && work.components <= 7,
+                                  "shared FP64 SIMT reconstruction requires 5/6/7 components");
         ValidateDeviceField(*this, mean, work.components);
         ValidateDeviceField(*this, input, work.components * _device->view.n);
         for (const auto *array : {&mean.Owned(), &mean.Ghost(), &input.Owned(), &input.Ghost(), &boundary.values})
@@ -628,7 +631,9 @@ namespace DNDS::CFV
         auto pin = _device;
         auto launch = [pin, selection, kernel](R::ExecutionContext context, auto mo, auto mg, auto ro, auto rg, auto bc, auto output, auto blocks, auto status)
         {
-            if (kernel == ReconstructionDeviceKernel::TF32TensorCore)
+            if (kernel == ReconstructionDeviceKernel::FP64Shared)
+                Detail::LaunchJacobiShared(context, pin->view, selection, {blocks}, {mo, mg}, {ro, rg}, bc, output, status);
+            else if (kernel == ReconstructionDeviceKernel::TF32TensorCore)
                 Detail::LaunchJacobiTF32(context, pin->view, selection, {blocks}, {mo, mg}, {ro, rg}, bc, output, status);
             else if (kernel == ReconstructionDeviceKernel::FP64TensorCoreShared || kernel == ReconstructionDeviceKernel::FP64TensorCoreAsync)
                 Detail::LaunchJacobiTensorCoreShared(context, pin->view, selection, {blocks}, {mo, mg}, {ro, rg}, bc, output, status,
@@ -778,6 +783,9 @@ namespace DNDS::CFV
         if (_device->view.quantized)
             return kernel == ReconstructionDeviceKernel::FP32 ||
                    (kernel == ReconstructionDeviceKernel::TF32TensorCore && _device->tf32TensorCore);
+        if (kernel == ReconstructionDeviceKernel::FP64Shared)
+            return _device->view.n == 2 || _device->view.n == 3 || _device->view.n == 5 ||
+                   _device->view.n == 9 || _device->view.n == 19;
         return kernel == ReconstructionDeviceKernel::FP64 ||
                ((kernel == ReconstructionDeviceKernel::FP64TensorCore || kernel == ReconstructionDeviceKernel::FP64TensorCoreShared ||
                  kernel == ReconstructionDeviceKernel::FP64TensorCoreAsync) &&
@@ -808,6 +816,10 @@ namespace DNDS::CFV
         void LaunchJacobi(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks, R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>, R::ArrayView<const int>)
         {
             DNDS_check_throw_info(false, "CUDA Jacobi unavailable");
+        }
+        void LaunchJacobiShared(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks, R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>, R::ArrayView<const int>)
+        {
+            DNDS_check_throw_info(false, "CUDA shared FP64 SIMT Jacobi unavailable");
         }
         void LaunchLimitedJacobi(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
                                  R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<const real>,

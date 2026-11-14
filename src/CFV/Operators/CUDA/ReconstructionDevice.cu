@@ -103,6 +103,84 @@ namespace DNDS::CFV::Detail
             }
         }
     }
+    /// Candidate SIMT alternative to the reference and DMMA implementations.
+    /// Each block stages one neighbor row, then reuses it across target modes.
+    /// Keep entry, mode-product, rotation-correction and mean/BC addition order
+    /// identical to Jacobi<false, real>. Barriers are block-uniform, including
+    /// lanes with no output slot. No limited/LVR semantics are changed here.
+    __global__ void JacobiSharedSIMT(JacobiView<real> plan, DeviceWorkSelection selection, DevicePeriodicBlocks blocks,
+                                     R::PairReadView<real> mean, R::PairReadView<real> input,
+                                     R::ArrayView<const real> boundary, R::ArrayView<real> output, R::ArrayView<const int> status)
+    {
+        if (status(0, 0))
+            return;
+        __shared__ real coefficients[19 * 7];
+        for (index iWork = blockIdx.x; iWork < selection.count; iWork += gridDim.x)
+        {
+            const auto iCell = selection.Cell(iWork);
+            real values[2]{};
+            for (int slot = 0; slot < 2; ++slot)
+            {
+                const index i = threadIdx.x + slot * blockDim.x;
+                if (i < output.width)
+                    values[slot] = input(iCell, i) * (1 - plan.relax);
+            }
+            for (index entry = plan.offsets(iCell, 0); entry < plan.offsets(iCell + 1, 0); ++entry)
+            {
+                const auto other = plan.neighbors(entry, 0);
+                if (other != UnInitIndex)
+                    for (index i = threadIdx.x; i < output.width; i += blockDim.x)
+                        coefficients[i] = input(other, i);
+                __syncthreads();
+                for (int slot = 0; slot < 2; ++slot)
+                {
+                    const index i = threadIdx.x + slot * blockDim.x;
+                    if (i >= output.width)
+                        continue;
+                    const index mode = i % plan.n, component = i / plan.n;
+                    if (other != UnInitIndex)
+                    {
+                        real product = 0;
+                        for (index j = 0; j < plan.n; ++j)
+                            product += plan.matrixAInvB(entry, j * plan.n + mode) * coefficients[component * plan.n + j];
+                        values[slot] += plan.relax * product;
+                        const auto first = plan.rotated && plan.rotationActive(entry, 0) ? blocks.First(component) : -1;
+                        if (first >= 0)
+                        {
+                            real correction = 0;
+                            for (index j = 0; j < plan.n; ++j)
+                            {
+                                real rotated = 0;
+                                for (index d = 0; d < 3; ++d)
+                                    rotated += coefficients[(first + d) * plan.n + j] *
+                                               (plan.rotation(entry, d * 3 + component - first) - (component - first == d ? 1 : 0));
+                                correction += plan.matrixAInvB(entry, j * plan.n + mode) * rotated;
+                            }
+                            values[slot] += plan.relax * correction;
+                        }
+                        real otherMean = mean(other, component);
+                        if (first >= 0)
+                        {
+                            otherMean = 0;
+                            for (index d = 0; d < 3; ++d)
+                                otherMean += plan.rotation(entry, d * 3 + component - first) * mean(other, first + d);
+                        }
+                        values[slot] += plan.vectorAInvB(entry, mode) * (plan.relax * (otherMean - mean(iCell, component)));
+                    }
+                    else
+                        for (index q = plan.boundaryOffsets(entry, 0); q < plan.boundaryOffsets(entry + 1, 0); ++q)
+                            values[slot] += plan.boundaryInjection(q, mode) * (plan.relax * (boundary(q, component) - mean(iCell, component)));
+                }
+                __syncthreads(); // No lane may overwrite a still-consumed neighbor.
+            }
+            for (int slot = 0; slot < 2; ++slot)
+            {
+                const index i = threadIdx.x + slot * blockDim.x;
+                if (i < output.width)
+                    output(iCell, i) = values[slot];
+            }
+        }
+    }
     __global__ void ValidateIndicator(R::ArrayView<const real> indicator, R::ArrayView<int> status)
     {
         for (index i = index(blockIdx.x) * blockDim.x + threadIdx.x; i < indicator.rows; i += index(gridDim.x) * blockDim.x)
@@ -274,6 +352,26 @@ namespace DNDS::CFV::Detail
         else
             Jacobi<false><<<unsigned(std::min<index>(selection.count, 256)), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(JacobiView<real>(plan), selection, blocks, mean, input, boundary, output, status, {}, {});
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA Jacobi launch failed");
+    }
+    void LaunchJacobiShared(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection,
+                            DevicePeriodicBlocks blocks, R::PairReadView<real> mean, R::PairReadView<real> input,
+                            R::ArrayView<const real> boundary, R::ArrayView<real> output, R::ArrayView<const int> status)
+    {
+        DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && !plan.quantized,
+                              "shared FP64 SIMT Jacobi requires a CUDA context and FP64 sweep maps");
+        R::ValidateViewDevices(context.device, plan, selection, blocks, mean, input, boundary, output, status);
+        const auto components = mean.owned.Width();
+        DNDS_check_throw_info((plan.n == 2 || plan.n == 3 || plan.n == 5 || plan.n == 9 || plan.n == 19) &&
+                                  components >= 5 && components <= 7 && output.Width() == components * plan.n &&
+                                  input.owned.Width() == output.Width() && output.RowCount() == mean.owned.RowCount(),
+                              "shared FP64 SIMT Jacobi requires 5/6/7-component P1..P3 fields");
+        R::CheckKernelArgumentBudget<JacobiView<real>, decltype(selection), decltype(blocks), decltype(mean),
+                                     decltype(input), decltype(boundary), decltype(output), decltype(status)>();
+        if (!selection.count)
+            return;
+        JacobiSharedSIMT<<<unsigned(std::min<index>(selection.count, 1024)), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(
+            JacobiView<real>(plan), selection, blocks, mean, input, boundary, output, status);
+        DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "shared FP64 SIMT Jacobi launch failed");
     }
     void LaunchLimitedJacobi(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection,
                              DevicePeriodicBlocks blocks, R::PairReadView<real> mean, R::PairReadView<real> input,

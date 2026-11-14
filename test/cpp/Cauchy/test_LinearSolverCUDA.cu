@@ -9,6 +9,7 @@
 #include "DNDS/Runtime/Execution/CUDAExecution.hpp"
 #include <cuda_runtime.h>
 #include <limits>
+#include <Eigen/Dense>
 
 namespace C = DNDS::Cauchy;
 namespace R = DNDS::Runtime;
@@ -32,6 +33,50 @@ namespace
                                                                                             : 0; }
     real Off(I cell, I other, I i, I j) { return i == j ? -.1 - .001 * cell : i == 1 && j == 4 ? .003 * (other + 1)
                                                                                                : 0; }
+
+    // Independent whole-distribution recurrence: every owned and remote value
+    // is frozen for one Jacobi update, with a CPU dense diagonal solve. This
+    // does not call the production linear actions, halo or inverse kernels.
+    std::vector<real> JacobiOracle(int components, int iterations, const std::vector<std::vector<I>> &columns)
+    {
+        const I count = I(mpi.size) * 4 * components;
+        std::vector<real> current(count, 0), next(count);
+        const auto offset = [components](int rank, I cell, I component)
+        { return (I(rank) * 4 + cell) * components + component; };
+        for (int iteration = 0; iteration < iterations; ++iteration)
+        {
+            for (int rank = 0; rank < mpi.size; ++rank)
+                for (I iCell = 0; iCell < 4; ++iCell)
+                {
+                    Eigen::MatrixXd diagonal(components, components);
+                    Eigen::VectorXd value(components);
+                    for (I i = 0; i < components; ++i)
+                    {
+                        value[i] = 0;
+                        for (I j = 0; j < components; ++j)
+                        {
+                            diagonal(i, j) = Diagonal(iCell, i, j, components);
+                            value[i] += diagonal(i, j) * Exact(rank, iCell, j);
+                        }
+                        for (const auto other : columns[iCell])
+                        {
+                            const int owner = other < 4 ? rank : (rank + mpi.size - 1) % mpi.size;
+                            const I local = other < 4 ? other : other - 2;
+                            for (I j = 0; j < components; ++j)
+                            {
+                                value[i] += Off(iCell, other, i, j) * Exact(owner, local, j);
+                                value[i] -= Off(iCell, other, i, j) * current[offset(owner, local, j)];
+                            }
+                        }
+                    }
+                    const Eigen::VectorXd solved = diagonal.fullPivLu().solve(value);
+                    for (I j = 0; j < components; ++j)
+                        next[offset(rank, iCell, j)] = solved[j];
+                }
+            current.swap(next);
+        }
+        return current;
+    }
 }
 
 TEST_CASE("Reserved weighted products and finite checks use deterministic resident reductions")
@@ -194,6 +239,31 @@ TEST_CASE("Distributed coupled Jacobi, AmgX correction and left GMRES share queu
                 for (I iCell = 0; iCell < 4; ++iCell)
                     for (I j = 0; j < n; ++j)
                         CHECK(read.View()(iCell, j) == doctest::Approx(Exact(mpi.rank, iCell, j)).epsilon(3e-10).scale(1));
+                if (mode == 0)
+                    for (const int iterations : {3, 8})
+                    {
+                        CAPTURE(iterations);
+                        settings.stopping = "fixedCount";
+                        settings.maxIterations = iterations;
+                        settings.jacobiLocalSweeps = 1;
+                        C::DofLinearSolver fixed(problem, rhs, bind, settings, execution);
+                        // A caller may keep this alias before Solve. Odd/even
+                        // ping-pong must publish into its original allocation.
+                        const auto retained = fixed.Solution();
+                        const auto original = retained.CoupledField().Owned().SharedStorage();
+                        const auto fixedReport = fixed.Solve(rhs);
+                        CHECK(fixedReport.usable);
+                        CHECK(fixedReport.iterations == iterations);
+                        CHECK(fixedReport.jacobiSweeps == iterations);
+                        CHECK(fixedReport.innerProductBatches == 0);
+                        CHECK(fixed.Solution().CoupledField().Owned().SharedStorage() == original);
+                        const auto expected = JacobiOracle(n, iterations, columns);
+                        const auto host = retained.CoupledField().Owned().To(R::Device::Host());
+                        const auto values = host.Read();
+                        for (I iCell = 0; iCell < 4; ++iCell)
+                            for (I j = 0; j < n; ++j)
+                                CHECK(values.View()(iCell, j) == doctest::Approx(expected[(I(mpi.rank) * 4 + iCell) * n + j]).epsilon(3e-11).scale(1));
+                    }
                 if (mode == 3)
                 {
                     // Fixed-count preconditioner-only means exactly two

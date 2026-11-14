@@ -49,6 +49,39 @@ static void Equal(const C::FVField &a, const C::FVField &b, double tolerance = 5
             CHECK(right.View()(iRow, iComp) == doctest::Approx(left.View()(iRow, iComp)).epsilon(tolerance).scale(1));
 }
 
+static void CompareSharedSweep(const C::FiniteVolumePlan &metrics, const C::VariationalReconstructionPlan &plan,
+                               const C::VariationalReconstructionPlan &resident, I components)
+{
+    auto mean = metrics.BuildField(components), coefficients = plan.BuildCoefficients(components);
+    Fill(mean, 1.0);
+    Fill(coefficients, .02);
+    metrics.BindHalo(mean).Begin().Wait();
+    metrics.BindHalo(coefficients).Begin().Wait();
+    const auto context = R::ExecutionContext::CUDA(0);
+    auto gpuMean = metrics.BuildField(mean.Owned().Layout(), resident.Device());
+    auto gpuCoefficients = resident.BuildCoefficients(components);
+    for (auto pair : {std::make_pair(&gpuMean, &mean), std::make_pair(&gpuCoefficients, &coefficients)})
+    {
+        pair.first->Owned().CopyFrom(pair.second->Owned(), context).Wait();
+        pair.first->Ghost().CopyFrom(pair.second->Ghost(), context).Wait();
+    }
+    auto boundary = plan.BuildBoundaryValues(components);
+    {
+        auto write = boundary.values.Write();
+        for (I iPoint = 0; iPoint < boundary.values.RowCount(); ++iPoint)
+            for (I j = 0; j < components; ++j)
+                write.View()(iPoint, j) = 1 + .1 * j + .001 * iPoint;
+    }
+    auto gpuBoundary = resident.PlaceBoundaryValues(boundary);
+    const std::vector<I> vectors{1};
+    auto cpu = plan.BuildWorkspace(components, vectors);
+    auto gpu = resident.BuildWorkspace(components, vectors);
+    REQUIRE(resident.SupportsKernel(C::ReconstructionDeviceKernel::FP64Shared));
+    plan.DoReconstructionIter(mean, coefficients, cpu, boundary);
+    resident.DoReconstructionIter(gpuMean, gpuCoefficients, gpu, gpuBoundary, C::ReconstructionDeviceKernel::FP64Shared);
+    Equal(coefficients, gpuCoefficients);
+}
+
 TEST_CASE("Queued FV gradients and linear-mode projection share CPU and CUDA incidence semantics")
 {
     struct Profile
@@ -799,12 +832,13 @@ TEST_CASE("CUDA Jacobi and WBAP agree with CPU for physical DOF layouts and dire
                 }
                 else
                     pending = deviceHalo.Begin(R::ExecutionContext::CUDA(0));
-                resident.SubmitReconstructionIterTo(engine, stream, deviceMean, coefficients, work, deviceBC, C::ReconstructionRegion::Core, jacobiKernel);
+                const auto kernel = step == 3 ? C::ReconstructionDeviceKernel::FP64Shared : jacobiKernel;
+                resident.SubmitReconstructionIterTo(engine, stream, deviceMean, coefficients, work, deviceBC, C::ReconstructionRegion::Core, kernel);
                 if (nccl)
                     stream.WaitFor(comm.Record());
                 else
                     pending.Wait();
-                resident.SubmitReconstructionIterTo(engine, stream, deviceMean, coefficients, work, deviceBC, C::ReconstructionRegion::HaloDependent, jacobiKernel);
+                resident.SubmitReconstructionIterTo(engine, stream, deviceMean, coefficients, work, deviceBC, C::ReconstructionRegion::HaloDependent, kernel);
                 resident.SubmitCommitReconstruction(engine, stream, coefficients, work);
                 engine.Synchronize();
                 resident.CheckStatus(work);
@@ -857,6 +891,7 @@ TEST_CASE("CUDA preserves rotated periodic vectors and axisymmetric prepared ope
         settings.maxOrder = 2;
         auto plan = C::VariationalReconstructionPlan::ConstructRecCoeff(metrics, settings);
         auto resident = plan.Place(R::Device::CUDA(0), R::ExecutionContext::CUDA(0));
+        CompareSharedSweep(metrics, plan, resident, 5);
         const I components = 21, width = components * plan.NRecDOF();
         const auto vectors = std::vector<I>{1, 7};
         auto mean = metrics.BuildField(components);
@@ -911,6 +946,9 @@ TEST_CASE("CUDA degree three 3D reconstruction supports 37 coupled components an
         auto plan = C::VariationalReconstructionPlan::ConstructRecCoeff(metrics, settings);
         REQUIRE(plan.NRecDOF() == 19);
         auto resident = plan.Place(R::Device::CUDA(0), R::ExecutionContext::CUDA(0));
+        // Seven P3 fields have 133 coefficients: exercise the second output
+        // slot and inactive lanes, including the fixture's empty participants.
+        CompareSharedSweep(metrics, plan, resident, 7);
         const I components = 37, width = components * plan.NRecDOF();
         auto mean = metrics.BuildField(components);
         Fill(mean, 1.0);

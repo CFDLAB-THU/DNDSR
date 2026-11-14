@@ -8,7 +8,7 @@ namespace DNDS
      * execution/submission, not GPU completion, and introduce no synchronization.
      * Builds without Caliper are no-ops. A scope stays on its creating thread; payloads
      * identify steps, stages or iterations. No execution/lifetime contract relies
-     * on this diagnostic. Names must remain valid for the constructor call.
+     * on this diagnostic. Names must remain valid through scope destruction.
      */
     class TimelineScope
     {

@@ -195,82 +195,83 @@ TEST_CASE("Jacobi matches independent frozen-remote local-sweep oracle")
     for (bool evaluated : {false, true})
         for (int localSweeps : {1, 2})
             for (bool warm : {false, true})
-            {
-                Fixture fixture(evaluated ? 1 : 2, evaluated);
-                C::LinearSolveSettings settings;
-                settings.method = "jacobi";
-                settings.stopping = "fixedCount";
-                settings.maxIterations = 2;
-                settings.jacobiLocalSweeps = localSweeps;
-                C::LinearSolver solver(fixture.problem, fixture.rhs, [&](Field &field)
-                                       { return fixture.Bind(field); }, settings);
-                Eigen::VectorXd expected = Eigen::VectorXd::Zero(20 * fixture.size);
-                if (warm)
-                    for (int rank = 0; rank < fixture.size; ++rank)
-                        for (DNDS::index iCell = 0; iCell < 4; ++iCell)
-                            for (int j = 0; j < 5; ++j)
-                                expected[20 * rank + 5 * iCell + j] = RHS(rank, iCell, j);
-                for (int iteration = 0; iteration < 2; ++iteration)
+                for (int iterations : {1, 2, 8})
                 {
-                    const Eigen::VectorXd frozen = expected;
-                    for (int sweep = 0; sweep < localSweeps; ++sweep)
-                    {
-                        Eigen::VectorXd next = expected;
+                    Fixture fixture(evaluated ? 1 : 2, evaluated);
+                    C::LinearSolveSettings settings;
+                    settings.method = "jacobi";
+                    settings.stopping = "fixedCount";
+                    settings.maxIterations = iterations;
+                    settings.jacobiLocalSweeps = localSweeps;
+                    C::LinearSolver solver(fixture.problem, fixture.rhs, [&](Field &field)
+                                           { return fixture.Bind(field); }, settings);
+                    Eigen::VectorXd expected = Eigen::VectorXd::Zero(20 * fixture.size);
+                    if (warm)
                         for (int rank = 0; rank < fixture.size; ++rank)
                             for (DNDS::index iCell = 0; iCell < 4; ++iCell)
-                            {
-                                Eigen::Matrix<double, 5, 1> value;
                                 for (int j = 0; j < 5; ++j)
-                                    value[j] = RHS(rank, iCell, j);
-                                for (auto column : columns[iCell])
-                                    if (column < 4)
-                                        value -= Off(iCell, column) * expected.segment<5>(20 * rank + 5 * column);
-                                    else
-                                        value -= Off(iCell, column) * frozen.segment<5>(20 * ((rank + fixture.size - 1) % fixture.size) + 5 * (column - 2));
-                                next.segment<5>(20 * rank + 5 * iCell) = Diagonal(iCell).fullPivLu().solve(value);
-                            }
-                        expected = std::move(next);
+                                    expected[20 * rank + 5 * iCell + j] = RHS(rank, iCell, j);
+                    for (int iteration = 0; iteration < iterations; ++iteration)
+                    {
+                        const Eigen::VectorXd frozen = expected;
+                        for (int sweep = 0; sweep < localSweeps; ++sweep)
+                        {
+                            Eigen::VectorXd next = expected;
+                            for (int rank = 0; rank < fixture.size; ++rank)
+                                for (DNDS::index iCell = 0; iCell < 4; ++iCell)
+                                {
+                                    Eigen::Matrix<double, 5, 1> value;
+                                    for (int j = 0; j < 5; ++j)
+                                        value[j] = RHS(rank, iCell, j);
+                                    for (auto column : columns[iCell])
+                                        if (column < 4)
+                                            value -= Off(iCell, column) * expected.segment<5>(20 * rank + 5 * column);
+                                        else
+                                            value -= Off(iCell, column) * frozen.segment<5>(20 * ((rank + fixture.size - 1) % fixture.size) + 5 * (column - 2));
+                                    next.segment<5>(20 * rank + 5 * iCell) = Diagonal(iCell).fullPivLu().solve(value);
+                                }
+                            expected = std::move(next);
+                        }
                     }
-                }
-                const auto report = solver.Solve(fixture.rhs, warm ? DNDS::OptionalRef<const C::LinearSolver::Field>(fixture.rhs) : DNDS::OptionalRef<const C::LinearSolver::Field>{});
-                REQUIRE(report.usable);
-                CHECK(report.jacobiSweeps == 2 * localSweeps);
-                CHECK(report.jacobiInputExchanges == (warm ? 2 : 1));
-                C::EquationSchema schema{"mock-coupled", "identity", "identity", {}};
-                A::DofBundle fields(fixture.space);
-                for (int block = 0; block < 2; ++block)
-                {
-                    C::EquationBlockSchema part;
-                    part.name = block == 0 ? "first" : "second";
-                    const int width = block == 0 ? 3 : 2;
-                    for (int j = 0; j < width; ++j)
-                        part.components.push_back({part.name + std::to_string(j), "", part.name});
-                    fields.Add(part.name, Field(fixture.space, block == 0 ? R::RowLayout::ColMajor(0, width) : R::RowLayout::TiledColMajor(0, width, 8)));
-                    schema.blocks.push_back(std::move(part));
-                }
-                auto split = C::EquationDofs::Separate(std::move(schema), std::move(fields));
-                {
-                    auto write = split.WriteOwned();
-                    const auto layout = write.ComponentLayout();
+                    const auto report = solver.Solve(fixture.rhs, warm ? DNDS::OptionalRef<const C::LinearSolver::Field>(fixture.rhs) : DNDS::OptionalRef<const C::LinearSolver::Field>{});
+                    REQUIRE(report.usable);
+                    CHECK(report.jacobiSweeps == iterations * localSweeps);
+                    CHECK(report.jacobiInputExchanges == iterations - !warm);
+                    C::EquationSchema schema{"mock-coupled", "identity", "identity", {}};
+                    A::DofBundle fields(fixture.space);
+                    for (int block = 0; block < 2; ++block)
+                    {
+                        C::EquationBlockSchema part;
+                        part.name = block == 0 ? "first" : "second";
+                        const int width = block == 0 ? 3 : 2;
+                        for (int j = 0; j < width; ++j)
+                            part.components.push_back({part.name + std::to_string(j), "", part.name});
+                        fields.Add(part.name, Field(fixture.space, block == 0 ? R::RowLayout::ColMajor(0, width) : R::RowLayout::TiledColMajor(0, width, 8)));
+                        schema.blocks.push_back(std::move(part));
+                    }
+                    auto split = C::EquationDofs::Separate(std::move(schema), std::move(fields));
+                    {
+                        auto write = split.WriteOwned();
+                        const auto layout = write.ComponentLayout();
+                        for (DNDS::index iCell = 0; iCell < 4; ++iCell)
+                            for (int j = 0; j < 5; ++j)
+                                layout.View()(iCell, j) = RHS(fixture.rank, iCell, j);
+                    }
+                    C::DofLinearSolver splitSolver(fixture.problem, split, [&](Field &field)
+                                                   { return fixture.Bind(field); }, settings, {false, true});
+                    REQUIRE(splitSolver.Solve(split, warm ? DNDS::OptionalRef<const C::EquationDofs>(split) : DNDS::OptionalRef<const C::EquationDofs>{}).usable);
+                    const auto splitRead = splitSolver.Solution().ReadOwned();
+                    const auto splitLayout = splitRead.ComponentLayout();
+                    const auto result = solver.Solution().Owned().Read();
+                    const auto input = fixture.rhs.Owned().Read();
                     for (DNDS::index iCell = 0; iCell < 4; ++iCell)
                         for (int j = 0; j < 5; ++j)
-                            layout.View()(iCell, j) = RHS(fixture.rank, iCell, j);
+                        {
+                            CHECK(result.View<R::UniformTableRows>()(iCell, j) == doctest::Approx(expected[20 * fixture.rank + 5 * iCell + j]).epsilon(2e-13));
+                            CHECK(input.View<R::UniformTableRows>()(iCell, j) == RHS(fixture.rank, iCell, j));
+                            CHECK(splitLayout.View()(iCell, j) == doctest::Approx(expected[20 * fixture.rank + 5 * iCell + j]).epsilon(2e-13));
+                        }
                 }
-                C::DofLinearSolver splitSolver(fixture.problem, split, [&](Field &field)
-                                               { return fixture.Bind(field); }, settings, {false, true});
-                REQUIRE(splitSolver.Solve(split, warm ? DNDS::OptionalRef<const C::EquationDofs>(split) : DNDS::OptionalRef<const C::EquationDofs>{}).usable);
-                const auto splitRead = splitSolver.Solution().ReadOwned();
-                const auto splitLayout = splitRead.ComponentLayout();
-                const auto result = solver.Solution().Owned().Read();
-                const auto input = fixture.rhs.Owned().Read();
-                for (DNDS::index iCell = 0; iCell < 4; ++iCell)
-                    for (int j = 0; j < 5; ++j)
-                    {
-                        CHECK(result.View<R::UniformTableRows>()(iCell, j) == doctest::Approx(expected[20 * fixture.rank + 5 * iCell + j]).epsilon(2e-13));
-                        CHECK(input.View<R::UniformTableRows>()(iCell, j) == RHS(fixture.rank, iCell, j));
-                        CHECK(splitLayout.View()(iCell, j) == doctest::Approx(expected[20 * fixture.rank + 5 * iCell + j]).epsilon(2e-13));
-                    }
-            }
 }
 
 TEST_CASE("Dedicated zero-start SGS needs no old storage and preserves explicit-zero results")

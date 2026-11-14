@@ -706,6 +706,14 @@ TEST_CASE("CUDA launch exceptions drain submitted uses and invalidate partial an
     CHECK_FALSE(skipped.IsValid());
     CHECK(partial.Storage().IsIdle());
     CHECK(released == 1);
+    // A retired failure remains observable without repeating retirement or
+    // dropping its terminal error on the completed-prefix fast path.
+    for (int repeat = 0; repeat < 4; ++repeat)
+    {
+        CHECK_THROWS(tail.Ready());
+        CHECK_THROWS(tail.WaitHost());
+    }
+    CHECK(released == 1);
 }
 
 TEST_CASE("Concurrent CUDA host submitters preserve one native stream order without kernel events")
@@ -775,8 +783,13 @@ TEST_CASE("CUDA dependency only prefixes retire earlier batches and completed hi
         CHECK_THROWS(left.WaitFor(R::StreamEvent(std::make_shared<Unready>())));
         engine.Synchronize();
     }
-    CHECK(survivor.Ready()); // Native stream/event ownership outlives the engine.
-    survivor.WaitHost();
+    // Completed observations outlive engine/stream teardown and do not rerun
+    // captured retirement. The provider caches both completion and its error.
+    for (int repeat = 0; repeat < 16; ++repeat)
+    {
+        CHECK(survivor.Ready());
+        CHECK_NOTHROW(survivor.WaitHost());
+    }
     CHECK(a.To(R::Device::Host()).Read().At(52, 5) == 98);
 }
 

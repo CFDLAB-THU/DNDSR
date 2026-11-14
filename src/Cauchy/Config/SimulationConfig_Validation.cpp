@@ -252,6 +252,8 @@ namespace DNDS::Cauchy
         using Kernel = CFV::ReconstructionDeviceKernel;
         if (reconstructionKernel == "fp64")
             return Kernel::FP64;
+        if (reconstructionKernel == "fp64Shared")
+            return Kernel::FP64Shared;
         if (reconstructionKernel == "fp64Tensor")
             return Kernel::FP64TensorCore;
         if (reconstructionKernel == "fp64TensorShared")

@@ -272,6 +272,77 @@ TEST_CASE("Context shutdown progresses controller transport and CPU lanes before
         }
 }
 
+TEST_CASE("Drain waits autonomous prefixes by priority only after controller progress retires")
+{
+    struct Progress final : R::ExecutionProgress
+    {
+        int polls = 0;
+        bool retired = false;
+        bool Poll() override { return retired = ++polls == 3; }
+    };
+    struct Prefix final : R::StreamEvent::State
+    {
+        std::shared_ptr<Progress> progress;
+        std::vector<unsigned> &order;
+        unsigned priority;
+        mutable bool done = false, prematureWait = false;
+        mutable int readyCalls = 0, waitCalls = 0;
+        Prefix(std::shared_ptr<Progress> p, std::vector<unsigned> &o, unsigned rank)
+            : progress(std::move(p)), order(o), priority(rank) {}
+        bool Ready() const override
+        {
+            ++readyCalls;
+            return done || (!priority && progress->retired);
+        }
+        void Wait() const override
+        {
+            ++waitCalls;
+            prematureWait = prematureWait || !progress->retired;
+            order.push_back(priority);
+            done = true;
+        }
+        unsigned AutonomousWaitPriority() const noexcept override { return priority; }
+    };
+    struct Launcher final : R::StreamLauncher
+    {
+        std::shared_ptr<Prefix> prefix;
+        explicit Launcher(std::shared_ptr<Prefix> p) : prefix(std::move(p)) {}
+        R::ExecutionContext Context() const override { return R::ExecutionContext::Host(); }
+        void Submit(Work work, R::CommandKind, Retirement retire) override
+        {
+            work(Context());
+            if (retire)
+                retire({});
+        }
+        void WaitFor(R::StreamEvent event) override { event.WaitHost(); }
+        R::StreamEvent Record() override { return R::StreamEvent(prefix); }
+        void Drain() override {}
+    };
+    // The provider declarations drive ordering; these mocks require no CUDA.
+    R::EagerEngine engine;
+    auto progress = std::make_shared<Progress>();
+    std::vector<unsigned> order;
+    auto consumer = std::make_shared<Prefix>(progress, order, 1);
+    auto producer = std::make_shared<Prefix>(progress, order, 2);
+    auto custom = std::make_shared<Prefix>(progress, order, 0);
+    engine.CreateStream(std::make_shared<Launcher>(consumer));
+    engine.CreateStream(std::make_shared<Launcher>(producer));
+    engine.CreateStream(std::make_shared<Launcher>(custom));
+    engine.RegisterProgress(progress);
+    engine.Synchronize();
+    CHECK(progress->polls == 3);
+    const std::vector<unsigned> expected{2, 1};
+    CHECK(order == expected);
+    CHECK_FALSE(consumer->prematureWait);
+    CHECK_FALSE(producer->prematureWait);
+    CHECK(consumer->waitCalls == 1);
+    CHECK(producer->waitCalls == 1);
+    CHECK(custom->waitCalls == 0);
+    CHECK(custom->readyCalls > 0);
+    CHECK(Gate{}.AutonomousWaitPriority() == 0);
+    engine.Close();
+}
+
 TEST_CASE("Active mock communication overlaps inline and worker core kernels")
 {
     // A separate executor models transport for inline/one-worker compute;

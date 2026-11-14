@@ -68,6 +68,18 @@ namespace DNDS::Runtime
             mutable std::once_flag _retired;
             mutable std::exception_ptr _error;
             std::atomic<bool> _recorded{false};
+            mutable std::atomic<bool> _finished{false};
+
+            bool Finished() const
+            {
+                if (!_finished.load(std::memory_order_acquire))
+                    return false;
+                // The release store follows every error write and capture
+                // retirement. The cached path must preserve terminal errors.
+                if (_error)
+                    std::rethrow_exception(_error);
+                return true;
+            }
 
             void Finish(std::exception_ptr nativeError) const
             {
@@ -106,7 +118,7 @@ namespace DNDS::Runtime
                                    }
                                    _commands.clear();
                                    _stream.reset(); // A completed event does not own a live stream.
-                               });
+                                   _finished.store(true, std::memory_order_release); });
                 NotifyCompletion(); // CPU consumers wake only after host retirement.
                 if (_error)
                     std::rethrow_exception(_error);
@@ -139,6 +151,8 @@ namespace DNDS::Runtime
             bool Ready() const override
             {
                 DNDS_check_throw_info(_recorded, "unrecorded CUDA prefix");
+                if (Finished())
+                    return true;
                 DeviceScope scope(_ordinal);
                 auto status = cudaEventQuery(_event);
                 if (status == cudaErrorNotReady)
@@ -158,6 +172,8 @@ namespace DNDS::Runtime
             void Wait() const override
             {
                 DNDS_check_throw_info(_recorded, "unrecorded CUDA prefix");
+                if (Finished())
+                    return;
                 DeviceScope scope(_ordinal);
                 std::exception_ptr error;
                 try
@@ -170,6 +186,7 @@ namespace DNDS::Runtime
                 }
                 Finish(error);
             }
+            unsigned AutonomousWaitPriority() const noexcept override { return 2; }
             void WaitOn(const NativeStream &consumer) const
             {
                 DNDS_check_throw_info(_recorded && consumer.ordinal == _ordinal,

@@ -154,6 +154,7 @@ namespace DNDS::CFV
             .def_readonly("temporary", &ReconstructionWorkspace::temporary);
         py::enum_<ReconstructionDeviceKernel>(m, "ReconstructionDeviceKernel")
             .value("FP64", ReconstructionDeviceKernel::FP64)
+            .value("FP64Shared", ReconstructionDeviceKernel::FP64Shared)
             .value("FP64TensorCore", ReconstructionDeviceKernel::FP64TensorCore)
             .value("FP64TensorCoreShared", ReconstructionDeviceKernel::FP64TensorCoreShared)
             .value("FP64TensorCoreAsync", ReconstructionDeviceKernel::FP64TensorCoreAsync)
