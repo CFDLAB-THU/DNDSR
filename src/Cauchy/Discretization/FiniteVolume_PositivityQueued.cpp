@@ -163,15 +163,12 @@ namespace DNDS::Cauchy
             struct Operands
             {
                 std::vector<index> means, higher, base, reference, destination;
-                R::Array<index>::ReadLease offsets;
                 EquationDofs destinationShape;
-                Operands(const R::Array<index> &values, EquationDofs shape, R::Device device)
-                    : offsets(values.Read({device, nullptr})), destinationShape(std::move(shape)) {}
+                explicit Operands(EquationDofs shape) : destinationShape(std::move(shape)) {}
             };
             const bool writeReference = phase == PPPhase::Truncate;
             const bool writeFlux = phase == PPPhase::Select || phase == PPPhase::Compress || phase == PPPhase::Recover;
-            auto slots = std::make_shared<Operands>(data.owner->stencil.positivityOffsets,
-                                                    writeReference ? *data.reference : flux, device);
+            auto slots = std::make_shared<Operands>(writeReference ? *data.reference : flux);
             std::vector<R::ArrayOperand<real, false, R::UniformTableRows>> reads;
             std::vector<R::ArrayOperand<real, true, R::UniformTableRows>> writes;
             const auto read = [&](const R::Array<real> &array)
@@ -194,14 +191,14 @@ namespace DNDS::Cauchy
                     writes.push_back(R::ReadWriteAs<R::UniformTableRows>(slots->destinationShape.PhysicalField(iField).Owned()));
                 }
             auto &status = cuda ? data.device->status : data.emptyStatus;
-            R::SubmitArrayBatch(engine, stream, [pin, slots, base, gpuPolicy, phase, order, cells, points](R::ExecutionContext context, auto reads, auto writes, auto degree, auto beta, auto recover, auto scale, auto status)
+            R::SubmitArrayBatch(engine, stream, [pin, slots, base, gpuPolicy, phase, order, cells, points](R::ExecutionContext context, auto reads, auto writes, auto degree, auto beta, auto recover, auto scale, auto status, auto offsets)
                                 {
                                     if (context.device == R::Device::Host())
                                     {
                                         const auto means = ComponentLayout(pin->prototype, reads, slots->means, cells);
                                         auto request = base;
                                         request.means = means.View();
-                                        request.offsets = slots->offsets.View<R::FixedRows<1>>();
+                                        request.offsets = offsets;
                                         using ReadLayout = Algebra::DofComponentLayout<const real>;
                                         std::optional<ReadLayout> higher, lower, reference;
                                         std::optional<Algebra::DofComponentLayout<real>> destination;
@@ -246,7 +243,7 @@ namespace DNDS::Cauchy
                                         return;
                                     }
 #ifdef DNDS_USE_CUDA
-                                    CUDA::PolynomialPositivityRequest request{AoS(reads[slots->means.front()]), slots->offsets.View<R::FixedRows<1>>(), status, gpuPolicy};
+                                    CUDA::PolynomialPositivityRequest request{AoS(reads[slots->means.front()]), offsets, status, gpuPolicy};
                                     const auto higher = slots->higher.empty() ? CUDA::PPInput{} : AoS(reads[slots->higher.front()]);
                                     const auto lower = slots->base.empty() ? CUDA::PPInput{} : AoS(reads[slots->base.front()]);
                                     const auto reference = slots->reference.empty() ? CUDA::PPInput{} : AoS(reads[slots->reference.front()]);
@@ -280,7 +277,7 @@ namespace DNDS::Cauchy
                                     }
 #endif
                                 },
-                                std::move(reads), std::move(writes), std::make_tuple(R::ReadWriteAs<R::FixedRows<1>>(data.degree), R::ReadWriteAs<R::FixedRows<1>>(data.beta), R::ReadWriteAs<R::FixedRows<1>>(data.recover), R::ReadWriteAs<R::FixedRows<1>>(data.recoveryScale), R::WriteAs<R::FixedRows<1>>(status)));
+                                std::move(reads), std::move(writes), std::make_tuple(R::ReadWriteAs<R::FixedRows<1>>(data.degree), R::ReadWriteAs<R::FixedRows<1>>(data.beta), R::ReadWriteAs<R::FixedRows<1>>(data.recover), R::ReadWriteAs<R::FixedRows<1>>(data.recoveryScale), R::WriteAs<R::FixedRows<1>>(status), R::ReadAs<R::FixedRows<1>>(data.owner->stencil.positivityOffsets)));
             appendStatus();
         };
         const auto observe = [&]

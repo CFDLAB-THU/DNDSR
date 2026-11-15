@@ -195,6 +195,22 @@ Currently executable backends are Host and CUDA. Allocator policies must return
 zero-initialized correctly placed storage and preserve ownership until the
 last lease ends.
 
+Queued operators instead declare arrays with `Runtime::ReadAs`/`WriteAs` and
+`SubmitArrays` (or `SubmitArrayBatch`). Include index, stencil and metric arrays,
+not only solution fields. A captured immediate read lease still has the safe
+destructor fence above and can serialize submission unnecessarily. Scheduled
+operands retain allocation and row metadata through the launcher's completion,
+exclude conflicting immediate mutation and publish the same terminal error.
+Access retirement itself adds no per-operand event or host fence; final resource
+release still follows the allocator/provider contract.
+
+`MetadataBuffer` is immutable after its completed construction/placement.
+`MetadataArrayView(metadata, device)` supplies a residency-checked borrowed view
+without an immediate lease; capture the metadata owner until completion. This
+does not permit untracked reads of ordinary mutable Arrays. Immediate copy
+`Completion` aliases share a cached terminal success/error, so repeated `Wait`
+and `Ready` observers do not repeat the native synchronization after completion.
+
 ## Owned/ghost overlap
 
 Owned and ghost remain separate allocations. A halo operation takes an owned

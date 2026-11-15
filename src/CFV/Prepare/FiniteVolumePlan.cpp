@@ -213,6 +213,19 @@ namespace DNDS::CFV
         DNDS_check_throw_info(context.device == Device(), "FV metric read context differs from placement");
         return FiniteVolumeRead(_data, context);
     }
+    const R::Array<real> &FiniteVolumePlan::CellMetrics() const { return _data->cell; }
+    const R::Array<real> &FiniteVolumePlan::FaceQuadrature() const { return _data->faceQuadrature; }
+    const R::Array<real> &FiniteVolumePlan::FaceMetrics() const { return _data->faceMean; }
+    const R::Array<real> &FiniteVolumePlan::RadialMoments() const { return _data->radialMoment; }
+    const R::Array<index> &FiniteVolumePlan::FaceOffsets() const { return _data->faceOffsets; }
+    MeshReadAccess FiniteVolumePlan::AcquireMeshRead(bool wallDistance) const
+    {
+        auto requirements = MeshReadRequirements::CellFlux();
+        requirements.wallDistance = wallDistance;
+        auto guard = _data->mesh->AcquireRead(requirements);
+        Validate(); // The retained generation excludes mutation during validation.
+        return guard;
+    }
     R::Device FiniteVolumePlan::Device() const { return _data->cell.GetDevice(); }
     FiniteVolumePlan FiniteVolumePlan::Placed(R::Device device, R::ExecutionContext context) const
     {

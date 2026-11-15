@@ -8,6 +8,8 @@
 #include "DNDS/Legacy/Array.hpp"
 #include <cuda_runtime.h>
 #include <map>
+#include <atomic>
+#include <thread>
 
 using namespace DNDS::Runtime;
 
@@ -513,6 +515,68 @@ TEST_CASE("Runtime CUDA residency, cross-stream transfer and retained leases")
     }
     REQUIRE(cudaStreamDestroy(stream1) == cudaSuccess);
     REQUIRE(cudaStreamDestroy(stream2) == cudaSuccess);
+}
+
+TEST_CASE("Copied CUDA completions share terminal observation without releasing attached leases")
+{
+    REQUIRE(cudaSetDevice(0) == cudaSuccess);
+    cudaStream_t stream = nullptr;
+    REQUIRE(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking) == cudaSuccess);
+    const auto context = ExecutionContext::CUDA(0, stream);
+    std::atomic<int> released{0};
+    std::weak_ptr<void> lifetime;
+    {
+        constexpr DNDS::index rows = 257;
+        void *pointer = nullptr;
+        REQUIRE(cudaMalloc(&pointer, rows * sizeof(double)) == cudaSuccess);
+        auto owner = std::shared_ptr<void>(pointer, [&released](void *value)
+                                           {
+                                               if (cudaFree(value) != cudaSuccess)
+                                                   std::terminate();
+                                               ++released; });
+        lifetime = owner;
+        auto values = Array<double>::FromStorage(RowLayout::Dense(rows, 1),
+                                                 Buffer::FromAllocation(Allocation::Import(owner, rows * sizeof(double), Device::CUDA(0)),
+                                                                        0, rows * sizeof(double)));
+        auto write = values.Write(context);
+        FillRows<<<7, 64, 0, stream>>>(write.View());
+        REQUIRE(cudaGetLastError() == cudaSuccess);
+        const auto done = Completion::Record(context);
+        write.Complete(done);
+        CHECK_THROWS(values.Read(context));
+        owner.reset();
+        values = {};
+        std::atomic<bool> failed{false};
+        std::vector<std::thread> observers;
+        for (int i = 0; i < 4; ++i)
+            observers.emplace_back([completion = done, &failed]
+                                   {
+                                       try
+                                       {
+                                           for (int repeat = 0; repeat < 8; ++repeat)
+                                           {
+                                               completion.Wait();
+                                               if (!completion.Ready())
+                                                   failed = true;
+                                           }
+                                       }
+                                       catch (...)
+                                       {
+                                           failed = true;
+                                       } });
+        for (auto &observer : observers)
+            observer.join();
+        CHECK_FALSE(failed.load());
+        CHECK_FALSE(lifetime.expired()); // Observing completion does not retire its lease.
+        CHECK(released.load() == 0);
+        write.Wait(); // Reuses the terminal result, then releases the allocation.
+        CHECK(lifetime.expired());
+        CHECK(released.load() == 1);
+        CHECK(done.Ready());
+        CHECK_NOTHROW(done.Wait());
+    }
+    CHECK(released.load() == 1);
+    REQUIRE(cudaStreamDestroy(stream) == cudaSuccess);
 }
 
 TEST_CASE("Legacy device mirror cannot supply stale native host access")

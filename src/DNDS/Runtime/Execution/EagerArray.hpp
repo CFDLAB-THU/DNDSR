@@ -6,6 +6,15 @@
 
 namespace DNDS::Runtime
 {
+    /// Borrow an immutable metadata publication as a residency-tagged whole
+    /// array view. Its owner must be captured until the operation completes.
+    /// Metadata has no mutable aliases; ordinary Arrays still need operands.
+    template <class T>
+    ArrayView<const T, AccessBoundsChecks, FixedRows<1>> MetadataArrayView(const MetadataBuffer<T> &metadata, Device device)
+    {
+        const auto values = metadata.View(device);
+        return {values.data(), nullptr, index(values.size()), 1, 1, nullptr, RowLayoutKind::Table, device};
+    }
     /// Structural pin and declared intent; construction does not reserve access.
     /// SubmitArrays reserves all operands before accepting the command.
     template <class T, bool Writable, class LayoutPolicy = RowLayout>

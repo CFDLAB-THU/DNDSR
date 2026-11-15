@@ -203,6 +203,17 @@ namespace DNDS::CFV
         }
         void Validate() const;
         FiniteVolumeRead AcquireRead(Runtime::ExecutionContext context = Runtime::ExecutionContext::Host()) const;
+        /// Generation-only guard for queued operators whose metric arrays are
+        /// declared as scheduled operands. Does not acquire metric payloads.
+        Geom::MeshReadAccess AcquireMeshRead(bool wallDistance = false) const;
+        /// Immutable metric operands for queued execution. Declare the required
+        /// arrays with Runtime::ReadAs; keep a mesh-generation guard through
+        /// operation completion. A returned handle is not an access grant.
+        const Runtime::Array<real> &CellMetrics() const;
+        const Runtime::Array<real> &FaceQuadrature() const;
+        const Runtime::Array<real> &FaceMetrics() const;
+        const Runtime::Array<real> &RadialMoments() const;
+        const Runtime::Array<index> &FaceOffsets() const;
         /// Explicit setup copy of immutable metrics, independent of VR buffers.
         /// Row-space/halo/mesh identities are shared, but payload arrays belong
         /// only to the returned placement. Release the original host plan when

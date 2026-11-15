@@ -67,46 +67,35 @@ namespace DNDS::Cauchy
                                   "queued boundary output/status aliases an input");
         DNDS_check_throw_info(!output.Storage().Overlaps(status.Storage()), "queued boundary output aliases status");
 
-        // Immutable geometry and small physics descriptors are pinned once at
-        // submission. Mutable operands below use the engine's scheduled access
-        // reservations, so a prior queued producer requires no host observation.
+        // Retain the geometry generation and immutable metadata owner. Array
+        // payloads below all use scheduled reads, including stencil geometry.
         struct Inputs
         {
             std::shared_ptr<const Data> owner;
-            CFV::FiniteVolumeRead metric;
-            R::Array<BoundaryTraceGeometry>::ReadLease points;
-            R::Array<index>::ReadLease rows;
-            R::ReadAccess policy, conditions;
+            Geom::MeshReadAccess mesh;
             std::optional<CFV::ReconstructionResidentRead> basis;
-            std::optional<WallDistanceRead> walls;
+            bool hasWall;
             Inputs(std::shared_ptr<const Data> data, bool polynomial, bool primitive)
-                : owner(std::move(data)), metric(owner->metrics.AcquireRead({owner->metrics.Device(), nullptr})),
-                  points(owner->boundaryTraceGeometry.Read({owner->metrics.Device(), nullptr})),
-                  rows(owner->gradientBoundaryRows.Read({owner->metrics.Device(), nullptr})),
-                  policy(owner->deviceBoundaryPolicy.Read({owner->metrics.Device(), nullptr})),
-                  conditions(owner->deviceBoundaryConditions.Read({owner->metrics.Device(), nullptr}))
+                : owner(std::move(data)), mesh(owner->metrics.AcquireMeshRead(bool(owner->wallDistance))),
+                  hasWall(!primitive && owner->equation.HasRANS() && owner->equation.RANS().ComponentNumber() == 2)
             {
                 if (polynomial)
                     basis.emplace(owner->reconstruction->AcquireResidentRead());
-                if (!primitive && owner->equation.HasRANS() && owner->equation.RANS().ComponentNumber() == 2)
-                {
+                if (hasWall)
                     DNDS_check_throw_info(owner->wallDistance, "two-equation boundary requires wall distance");
-                    walls.emplace(owner->wallDistance->AcquireRead({owner->metrics.Device(), nullptr}));
-                }
             }
         };
         const auto pin = std::make_shared<Inputs>(_data, bool(coefficients), primitive);
         const auto frame = _data->motion.At(options.time).KernelParameters();
         const int components = int(state.ComponentNumber());
         const bool hasIncoming = bool(incoming);
-        R::SubmitArrays(engine, stream, [pin, options, frame, components, mapped, primitive, hasIncoming](R::ExecutionContext context, auto mean, auto rec, auto incoming, auto target, auto status)
+        R::SubmitArrays(engine, stream, [pin, options, frame, components, mapped, primitive, hasIncoming](R::ExecutionContext context, auto mean, auto rec, auto incoming, auto target, auto status, auto points, auto rows, auto wall)
                         {
                 CUDA::BoundaryTraceRequest request;
-                request.parameters = {pin->policy.View<CUDA::BoundaryKernelParameters>().data, nullptr, 1, 1, 1, nullptr, R::RowLayoutKind::Table, context.device};
-                request.conditions = {pin->conditions.View<PerfectGasBoundaryParameters>().data, nullptr,
-                    index(pin->owner->deviceBoundaryConditions.size()), 1, 1, nullptr, R::RowLayoutKind::Table, context.device};
-                request.points = pin->points.View<R::FixedRows<1>>();
-                request.sourceRows = pin->rows.View<R::FixedRows<1>>();
+                request.parameters = R::MetadataArrayView(pin->owner->deviceBoundaryPolicy, context.device);
+                request.conditions = R::MetadataArrayView(pin->owner->deviceBoundaryConditions, context.device);
+                request.points = points;
+                request.sourceRows = rows;
                 request.means = mean; request.coefficients = rec; request.incoming = incoming;
                 request.output = target; request.status = status;
                 request.time = options.time; request.frame = frame;
@@ -119,13 +108,12 @@ namespace DNDS::Cauchy
                     request.basis = pin->basis->PointBasisView();
                     request.modes = request.basis.polynomial.size - 1;
                 }
-                if (pin->walls)
+                if (pin->hasWall)
                 {
-                    const auto wall = pin->walls->View().cellMean;
                     request.wallMean = {wall.data, wall.offsets, wall.rows, wall.width, wall.stride, wall.sizes, wall.kind, wall.device};
                 }
                 if (primitive) CUDA::FillPrimitiveBoundary(context, request);
-                else CUDA::FillBoundaryTraces(context, request); }, R::ReadAs<R::TableRows>(mean), R::ReadAs<R::TableRows>(rec), R::ReadAs<R::TableRows>(packet), R::WriteAs<R::TableRows>(output), R::WriteAs<R::FixedRows<1>>(status));
+                else CUDA::FillBoundaryTraces(context, request); }, R::ReadAs<R::TableRows>(mean), R::ReadAs<R::TableRows>(rec), R::ReadAs<R::TableRows>(packet), R::WriteAs<R::TableRows>(output), R::WriteAs<R::FixedRows<1>>(status), R::ReadAs<R::FixedRows<1>>(_data->boundaryTraceGeometry), R::ReadAs<R::FixedRows<1>>(_data->gradientBoundaryRows), R::ReadAs<R::TableRows>(pin->hasWall ? _data->wallDistance->CellMeans() : _data->deviceEmpty));
 #else
         DNDS_check_throw_info(false, "CUDA boundary execution is not built");
 #endif

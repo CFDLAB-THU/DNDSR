@@ -35,20 +35,19 @@ namespace DNDS::Cauchy
         struct Inputs
         {
             std::shared_ptr<const Data> owner;
-            CFV::FiniteVolumeRead metric;
-            R::Array<BoundaryTraceGeometry>::ReadLease geometry;
-            R::Array<index>::ReadLease rows;
-            std::optional<WallDistanceRead> walls;
+            Geom::MeshReadAccess geometry;
+            bool walls = false;
             std::optional<Physics::Chemistry::ChemicalWorkerPool> workers;
             std::vector<EquationBlockLocation> locations;
             std::vector<index> logicalFirst;
             index components = 0, ransFirst = -1, incoming = -1;
             Inputs(std::shared_ptr<const Data> data, std::optional<Physics::Chemistry::ChemicalWorkerPool> pool)
-                : owner(std::move(data)), metric(owner->metrics.AcquireRead()), geometry(owner->boundaryTraceGeometry.Read()),
-                  rows(owner->gradientBoundaryRows.Read()), workers(std::move(pool))
+                : owner(std::move(data)),
+                  geometry(owner->metrics.AcquireMeshRead(owner->equation.HasRANS() && owner->equation.RANS().ComponentNumber() == 2)),
+                  workers(std::move(pool))
             {
                 if (owner->equation.HasRANS() && owner->equation.RANS().ComponentNumber() == 2)
-                    walls.emplace(owner->wallDistance->AcquireRead());
+                    walls = true;
             }
         };
         auto pin = std::make_shared<Inputs>(_data, std::move(workers));
@@ -75,7 +74,7 @@ namespace DNDS::Cauchy
         for (const auto &output : outputs)
             for (const auto &input : inputs)
                 DNDS_check_throw_info(!output.storage->Values().Overlaps(input.storage->Values()), "mean-gradient boundary output aliases input");
-        R::SubmitArrayBatch(engine, stream, [pin, time](R::ExecutionContext, auto inputs, auto outputs)
+        R::SubmitArrayBatch(engine, stream, [pin, time](R::ExecutionContext, auto inputs, auto outputs, auto points, auto rows, auto wallMean)
                             {
             // Acquire worker state at execution, never while earlier commands
             // may need the same pool. It is released before the next launcher.
@@ -89,8 +88,8 @@ namespace DNDS::Cauchy
                 targets.push_back({outputs[location.physicalField], location.firstComponent, location.componentNumber});
             }
             CPU::BoundaryTraceRequest request;
-            request.points = pin->geometry.View<R::FixedRows<1>>();
-            request.pointRows = pin->rows.View<R::FixedRows<1>>();
+            request.points = points;
+            request.pointRows = rows;
             request.usePointRows = true;
             request.repairRANS = false;
             request.means = {means.data(), index(means.size())};
@@ -100,13 +99,15 @@ namespace DNDS::Cauchy
             request.ransFirst = pin->ransFirst;
             if (pin->owner->equation.HasRANS())
                 request.rans = {pin->owner->equation.RANS().Kind(), pin->owner->equation.RANS().ComponentNumber()};
-            if (pin->walls) request.wallDistance = pin->walls->HostView();
+            if (pin->walls)
+                request.wallDistance.cellMean = {wallMean.data, wallMean.offsets, wallMean.rows, wallMean.width,
+                                                wallMean.stride, wallMean.sizes, wallMean.kind, wallMean.device};
             if (pin->incoming >= 0) request.incoming = inputs[pin->incoming];
             request.frame = pin->owner->motion.At(time);
             request.time = time;
             RequireNumericalSuccess(CPU::FillBoundaryTraces(request,
                 {pin->owner->boundaryConditions.data(), index(pin->owner->boundaryConditions.size())},
                 pin->owner->boundaryPoint, SpanView<CPU::BoundaryTraceWorkerScratch>{workers.data(), index(workers.size())}),
-                "queued mean-gradient boundary"); }, std::move(inputs), std::move(outputs));
+                "queued mean-gradient boundary"); }, std::move(inputs), std::move(outputs), std::make_tuple(R::ReadAs<R::FixedRows<1>>(_data->boundaryTraceGeometry), R::ReadAs<R::FixedRows<1>>(_data->gradientBoundaryRows), R::ReadAs<R::RowLayout>(pin->walls ? _data->wallDistance->CellMeans() : _data->deviceEmpty)));
     }
 }

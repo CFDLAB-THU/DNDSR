@@ -61,6 +61,9 @@ namespace DNDS::Runtime
         class CUDAPrefix final : public StreamEvent::State
         {
             mutable std::shared_ptr<NativeStream> _stream;
+            // Identity without extending the native stream's lifetime after
+            // retirement. A raw CUDA stream handle can be reused after destroy.
+            const std::weak_ptr<NativeStream> _origin;
             const int _ordinal;
             cudaEvent_t _event = nullptr;
             mutable std::vector<RetainedCommand> _commands;
@@ -125,7 +128,8 @@ namespace DNDS::Runtime
             }
 
         public:
-            explicit CUDAPrefix(std::shared_ptr<NativeStream> stream) : _stream(std::move(stream)), _ordinal(_stream->ordinal)
+            explicit CUDAPrefix(std::shared_ptr<NativeStream> stream)
+                : _stream(std::move(stream)), _origin(_stream), _ordinal(_stream->ordinal)
             {
                 DeviceScope scope(_ordinal);
                 // Host waits occur only at explicit observation/drain points.
@@ -192,6 +196,11 @@ namespace DNDS::Runtime
                 Finish(error);
             }
             unsigned AutonomousWaitPriority() const noexcept override { return 2; }
+            bool BelongsTo(const NativeStream &consumer) const
+            {
+                const auto origin = _origin.lock();
+                return origin && origin.get() == &consumer;
+            }
             void WaitOn(const NativeStream &consumer) const
             {
                 DNDS_check_throw_info(_recorded && consumer.ordinal == _ordinal,
@@ -367,6 +376,19 @@ namespace DNDS::Runtime
             DNDS_check_throw_info(event.Ready(), "pending non-CUDA dependency needs an explicit host wait before CUDA submission");
             return;
         }
+        // The launcher's previous-prefix chain already retains every earlier
+        // prefix from this same native stream, including errors and captured
+        // owners. Stream order supplies the device dependency. Do not turn a
+        // self-wait into another dependency-only event at the next Record().
+        // ExecutionStream still imports the logical checked-access frontier.
+        if (native->BelongsTo(*_state->native))
+            return;
+        // Repeating an identical foreign prefix before Record needs one native
+        // wait and one retained dependency. Distinct prefixes are not merged:
+        // a newer producer may contain work absent from the older prefix.
+        for (const auto &dependency : _state->dependencies)
+            if (dependency.Provider() == event.Provider())
+                return;
         _state->dependencies.push_back(event); // Retain provider until the consumer prefix completes.
         try
         {

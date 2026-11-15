@@ -109,10 +109,8 @@ namespace DNDS::Cauchy
             std::shared_ptr<const Data> owner;
             ThermalPolicy thermal;
             R::MetadataBuffer<index> logicalFirst, vectorStarts;
-            CFV::FiniteVolumeRead metric;
-            FiniteVolumeStencilStorage::ReadAccess stencil;
-            std::optional<CFV::ReconstructionBasisRead> basis;
-            std::optional<WallDistanceRead> walls;
+            Geom::MeshReadAccess geometry;
+            bool basis = false, walls = false;
             std::optional<RHSOperator> fixed;
             std::shared_ptr<PointEvaluator> evaluator;
             std::optional<Physics::Chemistry::ChemicalWorkerPool> workers;
@@ -134,7 +132,7 @@ namespace DNDS::Cauchy
                    R::MetadataBuffer<index> offsets, R::MetadataBuffer<index> vectors,
                    std::shared_ptr<PointEvaluator> pointEvaluator, const EquationDofs &state, EquationDofs &output)
                 : owner(std::move(data)), thermal(policy), logicalFirst(std::move(offsets)), vectorStarts(std::move(vectors)),
-                  metric(owner->metrics.AcquireRead()), stencil(owner->stencil.Read()), evaluator(std::move(pointEvaluator)),
+                  geometry(owner->metrics.AcquireMeshRead(bool(owner->wallDistance))), evaluator(std::move(pointEvaluator)),
                   means{state.NumericAlias(), {}}, result{output.NumericAlias(), {}} {}
         };
         auto pin = std::make_shared<Inputs>(owner, thermal, logicalFirst, vectorStarts, std::move(evaluator), state, output);
@@ -150,9 +148,9 @@ namespace DNDS::Cauchy
         if (!pin->fixed)
         {
             if (modal)
-                pin->basis.emplace(owner->reconstruction->AcquireBasisRead());
+                pin->basis = true;
             if (owner->wallDistance)
-                pin->walls.emplace(owner->wallDistance->AcquireRead());
+                pin->walls = true;
         }
         for (index iBlock = 0; iBlock < state.BlockNumber(); ++iBlock)
             if (state.Schema().blocks[iBlock].name == "rans")
@@ -275,7 +273,7 @@ namespace DNDS::Cauchy
         auto result = std::make_shared<RHSSubmission>();
         result->region = region;
         const auto timing = BeginQueuedPhase(engine, stream, RHSPhase);
-        R::SubmitArrayBatch(engine, stream, [pin, result, region, time](R::ExecutionContext, auto inputs, auto outputs)
+        R::SubmitArrayBatch(engine, stream, [pin, result, region, time](R::ExecutionContext, auto inputs, auto outputs, auto samples, auto offsets, auto faceEntries, auto coreCells, auto dependentCells, auto coreFaces, auto dependentFaces, auto cells, auto faceOffsets, auto quadrature, auto radial, auto faces, auto cached, auto moments, auto wallFaces, auto wallMean)
                             {
             if (pin->fixed)
             {
@@ -332,9 +330,21 @@ namespace DNDS::Cauchy
                 for (const auto &field : pin->gradients) gradients.push_back(field.View(inputs));
                 for (const auto &field : pin->viscousGradients) viscousGradients.push_back(field.View(inputs));
                 CPU::EquationRHSRequest request;
-                request.stencil = pin->stencil.View();
-                request.metric = pin->metric.HostView();
-                if (pin->basis) request.basis = pin->basis->EvaluationView();
+                request.stencil.samples = samples;
+                request.stencil.offsets = offsets;
+                request.stencil.faceEntries = faceEntries;
+                request.stencil.coreCells = coreCells;
+                request.stencil.dependentCells = dependentCells;
+                request.stencil.rhsCoreFaces = coreFaces;
+                request.stencil.rhsDependentFaces = dependentFaces;
+                request.metric = {cells, faceOffsets, quadrature, radial, faces};
+                if (pin->basis)
+                {
+                    const auto &settings = pin->owner->reconstruction->Settings();
+                    request.basis = {cached, moments, request.metric, pin->geometry.HostView(),
+                                     pin->owner->metrics.Dimension(), settings.maxOrder, pin->owner->reconstruction->NRecDOF(),
+                                     settings.cacheDiffBase ? int(cached.width / pin->owner->reconstruction->NRecDOF()) : 0};
+                }
                 request.conditions = {pin->owner->boundaryConditions.data(), index(pin->owner->boundaryConditions.size())};
                 request.meanBlocks = {means.blocks.data(), index(means.blocks.size())};
                 request.recBlocks = {rec.blocks.data(), index(rec.blocks.size())};
@@ -355,7 +365,11 @@ namespace DNDS::Cauchy
                 const auto wall = outputs[pin->wallFlux];
                 DNDS_check_throw_info(wall.Width() == 3, "queued boundary momentum width differs");
                 request.wallFlux = {wall.data, wall.offsets, wall.rows, wall.width, wall.stride, wall.sizes, wall.kind, wall.device};
-                if (pin->walls) request.wall = pin->walls->HostView();
+                if (pin->walls)
+                {
+                    request.wall.faces = {wallFaces.data, wallFaces.offsets, wallFaces.rows, wallFaces.width, wallFaces.stride, wallFaces.sizes, wallFaces.kind, wallFaces.device};
+                    request.wall.cellMean = {wallMean.data, wallMean.offsets, wallMean.rows, wallMean.width, wallMean.stride, wallMean.sizes, wallMean.kind, wallMean.device};
+                }
                 request.thermal = pin->thermal.View();
                 request.frame = pin->owner->motion.At(time);
                 request.fluxPolicy = pin->owner->fluxPolicy;
@@ -396,7 +410,7 @@ namespace DNDS::Cauchy
                 RequireNumericalSuccess(evaluated.status, "queued equation RHS");
                 result->faceFallbacks = evaluated.value;
             }
-            result->completed.store(true, std::memory_order_release); }, std::move(reads), std::move(writes));
+            result->completed.store(true, std::memory_order_release); }, std::move(reads), std::move(writes), std::make_tuple(R::ReadAs<R::FixedRows<1>>(owner->stencil.samples), R::ReadAs<R::FixedRows<1>>(owner->stencil.offsets), R::ReadAs<R::FixedRows<1>>(owner->stencil.faceEntries), R::ReadAs<R::FixedRows<1>>(owner->stencil.coreCells), R::ReadAs<R::FixedRows<1>>(owner->stencil.dependentCells), R::ReadAs<R::FixedRows<1>>(owner->stencil.rhsCoreFaces), R::ReadAs<R::FixedRows<1>>(owner->stencil.rhsDependentFaces), R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics()), R::ReadAs<R::FixedRows<1>>(owner->metrics.FaceOffsets()), R::ReadAs<R::FixedRows<7>>(owner->metrics.FaceQuadrature()), R::ReadAs<R::FixedRows<3>>(owner->metrics.RadialMoments()), R::ReadAs<R::FixedRows<7>>(owner->metrics.FaceMetrics()), R::ReadAs<R::TableRows>(pin->basis ? owner->reconstruction->SamplingFaceBasis() : owner->deviceEmpty), R::ReadAs<R::TableRows>(pin->basis ? owner->reconstruction->SamplingMoments() : owner->deviceEmpty), R::ReadAs<R::RowLayout>(pin->walls ? owner->wallDistance->FaceValues() : owner->deviceEmpty), R::ReadAs<R::RowLayout>(pin->walls ? owner->wallDistance->CellMeans() : owner->deviceEmpty)));
         EndQueuedPhase(engine, stream, timing);
         return result;
     }

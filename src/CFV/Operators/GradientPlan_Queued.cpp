@@ -1,6 +1,7 @@
 #include "CFV/Plans/GradientPlan.hpp"
 #include "CFV/Detail/GradientKernels.hpp"
 #include "DNDS/Runtime/Execution/EagerArray.hpp"
+#include "Geom/Access/MeshAccess.hpp"
 #include <limits>
 
 namespace DNDS::CFV
@@ -51,9 +52,9 @@ namespace DNDS::CFV
 #ifndef DNDS_USE_CUDA
         DNDS_check_throw_info(Device() == R::Device::Host(), "CUDA gradients are not built");
 #endif
-        auto geometry = std::make_shared<FiniteVolumeRead>(_data->metrics.AcquireRead(stream.Context()));
-        engine.RetainUntilSynchronize(_data);
-        engine.RetainUntilSynchronize(geometry);
+        // The kernel consumes no metric arrays. Pin only its mesh generation;
+        // the captured guard retires with this operation, not an engine drain.
+        auto geometry = std::make_shared<Geom::MeshReadAccess>(_data->metrics.AcquireMeshRead());
         const auto &selected = region == ReconstructionRegion::HaloDependent ? _data->dependent : _data->core;
         const index count = region == ReconstructionRegion::All ? _data->metrics.NumCell() : selected.RowCount();
         const int dimension = _data->metrics.Dimension();

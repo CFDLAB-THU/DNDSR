@@ -129,6 +129,16 @@ namespace DNDS::Runtime
         {
             return _buffer.Read(context);
         }
+        /// Borrowed whole-buffer descriptor of this immutable publication.
+        /// Construction/CopyTo finish initialization before publication, and
+        /// there is no mutable alias API. Retain a MetadataBuffer copy (or its
+        /// owning publication) through queued completion; no per-use read lease
+        /// or completion event is needed. This does not apply to mutable Arrays.
+        SpanView<const T> View(Device device) const
+        {
+            DNDS_check_throw_info(device == GetDevice(), "immutable metadata view placement mismatch");
+            return {_data, index(_size)};
+        }
         bool operator==(const MetadataBuffer &other) const
         {
             DNDS_check_throw_info(GetDevice() == Device::Host() &&

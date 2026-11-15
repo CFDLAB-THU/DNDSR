@@ -735,8 +735,15 @@ TEST_CASE("Queued linear actions retain expired owners and reject a submitted st
                 b.View()(0, 1) = -2;
             }
             problem.InvertDiagonal();
+            // A same-stream setup producer may refresh identical CSR offsets
+            // before the numerical action. Submission must reserve a queued
+            // read, rather than trying to acquire an immediate read now.
+            auto offsets = problem.OffDiagonal().OffsetArray();
+            R::SubmitArrays(engine, stream, [](R::ExecutionContext, auto rows)
+                            { rows(0, 0) = rows(1, 0) = 0; }, R::WriteAs<R::FixedRows<1>>(offsets));
             problem.SubmitJacobiZero(engine, stream, rhs, first);
             problem.SubmitApply(engine, stream, first, output);
+            CHECK_THROWS(offsets.Write());
             R::SubmitArrays(engine, stream, [](R::ExecutionContext, auto diagonal)
                             { diagonal(0, 0) = 5; }, R::WriteAs<R::TableRows>(problem.Diagonal()));
             // The producer has not executed, but its reservation invalidates

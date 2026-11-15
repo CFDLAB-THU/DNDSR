@@ -3,6 +3,7 @@
 #include "CFV/Detail/CharacteristicKernels.hpp"
 #include "DNDS/Runtime/Execution/EagerArray.hpp"
 #include "DNDS/Runtime/Execution/CUDAExecution.hpp"
+#include "Geom/Access/MeshAccess.hpp"
 
 namespace DNDS::CFV
 {
@@ -209,9 +210,7 @@ namespace DNDS::CFV
             DNDS_check_throw_info(workspace.limiterScratch.Identity() != array->Identity() &&
                                       !Algebra::Detail::Overlaps(workspace.limiterScratch.Storage(), array->Storage()),
                                   "gradient limiter scratch aliases an operand");
-        auto geometry = std::make_shared<FiniteVolumeRead>(_data->metrics.AcquireRead(stream.Context()));
-        engine.RetainUntilSynchronize(_data);
-        engine.RetainUntilSynchronize(geometry);
+        auto geometry = std::make_shared<Geom::MeshReadAccess>(_data->metrics.AcquireMeshRead());
         const auto &selected = region == ReconstructionRegion::HaloDependent ? _data->dependent : _data->core;
         const index workCount = region == ReconstructionRegion::All ? _data->metrics.NumCell() : selected.RowCount();
         R::SubmitArrays(engine, stream, [geometry, region, workCount, dimension, rotated = _data->hasRotatedFrames, first, count, threshold, centerWeight, activated = bool(indicator)](R::ExecutionContext context, auto offsets, auto neighbors, auto faces, auto rotations, auto rotationActive, auto rows, auto starts, auto owned, auto ghost, auto forward, auto inverse, auto activation, auto output, auto scratch, auto status)

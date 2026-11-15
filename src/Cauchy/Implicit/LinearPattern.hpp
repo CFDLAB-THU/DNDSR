@@ -61,6 +61,7 @@ namespace DNDS::Cauchy
         /// symbolic publication; callers must not write through an alias.
         const Runtime::Array<index> &ColumnsArray() const { return _columns; }
         const Runtime::Array<index> &OrderArray() const { return _order; }
+        const Runtime::Array<index> &PositionArray() const { return _position; }
         const Runtime::Array<index> &CoreArray() const { return _core; }
         const Runtime::Array<index> &DependentArray() const { return _dependent; }
         /// Setup/diagnostic snapshot. Numerical operators use Read(), never a

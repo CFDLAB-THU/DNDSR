@@ -58,6 +58,52 @@ Even counts finish in that allocation; odd counts copy once. Solve still observe
 finiteness/action status and returns a completed result. No per-sweep residual
 observation is added. Real MPI payloads retain their explicit controller bridge.
 
+### Queued descriptor access and retirement
+
+Queued operators declare read access to pattern, stencil, quadrature and metric
+Arrays just as they declare numerical inputs. Retaining an immediate read lease
+inside a queued command is insufficient for efficient scheduling: its destructor
+must conservatively fence unless an explicit completion is attached. Use
+`ReadAs`/`SubmitArrays` or the extra typed operands of `SubmitArrayBatch` instead.
+The operation record retains value and CSR shape allocations, excludes immediate
+mutation and publishes completion/errors through the existing stream prefix.
+Generation-only `FiniteVolumePlan::AcquireMeshRead` protects mesh identity without
+acquiring unrelated metric payloads. Synchronous APIs and host result observations
+retain ordinary immediate access semantics.
+
+`MetadataBuffer` is a separate immutable publication: construction and placement
+complete initialization and no mutable alias is exported. A queued callback may
+borrow `MetadataArrayView` while retaining its metadata owner through completion.
+This exception must not be applied to mutable Arrays or used to bypass residency
+checks. Long-lived immutable resident publications still use exclusion seals;
+these are acquired at setup, not on every numerical call.
+
+Native CUDA waits on the same stream are redundant with FIFO execution and the
+existing prefix chain. Omitting them preserves the checked dependency frontier,
+terminal errors and captured owners. Repeated identical pending foreign-prefix
+waits are also coalesced; different producer prefixes retain their real dependency.
+Immediate shared completions cache terminal success/error so copy, lease and
+destructor observers do not repeatedly synchronize the same event. Host waits
+use blocking events. The conservative no-completion fence remains unchanged.
+
+Required host PP/convergence decisions and the portable CUDA-aware MPI progress
+bridge are not removed by this optimization. Fixed-count queued kernels remain
+distinct from dynamic stopping, which still has an explicit observation boundary.
+
+The matched A5000 two-step follow-up preserves every final flow5 value bitwise
+and all 167 non-timing history rows. In the warmed second step, stream syncs
+fall 10,351 -> 1,495; event syncs 5,109 -> 3,217; stream waits 1,757 -> 1,666.
+Event creations remain 3,627, kernel count remains 5,828 and tiny D2H copies
+remain 1,118 / 49,540 bytes. Stream-sync API wall time falls 1,609.7 -> 3.64 ms,
+mostly by moving waits to real prefix observation boundaries rather than by
+shortening GPU work. GPU idle is 624.7 -> 615.9 ms, while the complete GPU span
+is 56.670 -> 56.827 s. One serial matched pair establishes bookkeeping removal
+and exact numerical preservation; it does not demonstrate a throughput speedup.
+The reference still has one capped nonlinear stage. Focused validation covers
+eight CPU/MPI CTests and ten CUDA executables / 54 cases on the A5000. Full
+records and the retained traces are indexed in the plan repository's
+`evidence/plan61-2-queued-access-retirement/` directory.
+
 An empty direct-transfer route is defined by empty send **and** receive row maps
 with no reducer. It has no payload access: preserve caller/route/device/active
 checks and the normal collective-preflight sequence, then retain the binding and

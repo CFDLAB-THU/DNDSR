@@ -337,8 +337,16 @@ TEST_CASE("Queued CPU reconstruction and WBAP retain operands through chained pu
                 for (I iRow = 0; iRow < source.RowCount(); ++iRow)
                     for (I component = 0; component < source.RowSize(iRow); ++component)
                         output(iRow, component) = source(iRow, component); }, R::Read(queued.Owned()), R::Write(observed));
+            if (workers)
+            {
+                // Scheduled table reads must keep the same mutation exclusion
+                // as the former immediate scopes while the worker is blocked.
+                CHECK_THROWS(mean.Owned().Write());
+                CHECK_THROWS(fixture.mesh->versions.BeginMutation(R::Change::Geometry));
+            }
             gate.Release();
             engine.Synchronize();
+            CHECK(mean.Owned().Storage().IsIdle());
             Equal(reference, queued);
             auto expected = reference.Owned().Read(), actual = observed.Read();
             for (I iRow = 0; iRow < observed.RowCount(); ++iRow)

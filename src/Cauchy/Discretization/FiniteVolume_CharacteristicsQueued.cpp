@@ -71,21 +71,17 @@ namespace DNDS::Cauchy
                                   "CUDA characteristics require combined perfect-gas flow5/SA/2EQ");
             struct Inputs
             {
-                CFV::FiniteVolumeRead geometry;
-                FiniteVolumeStencilStorage::ReadAccess stencil;
+                Geom::MeshReadAccess geometry;
                 explicit Inputs(const Data &data)
-                    : geometry(data.metrics.AcquireRead({data.metrics.Device(), nullptr})),
-                      stencil(data.stencil.Read({data.metrics.Device(), nullptr})) {}
+                    : geometry(data.mesh->AcquireRead(Geom::MeshReadRequirements::CellFlux())) {}
             };
             const auto pin = std::make_shared<Inputs>(*owner);
             auto &storage = *characteristicDevice;
             const auto &field = state.CoupledField();
-            R::SubmitArrays(engine, stream, [pin, gas = owner->equation.Gas()](R::ExecutionContext context, auto owned, auto ghost, auto left, auto right, auto status, auto flags)
-                            {
-                const auto stencil = pin->stencil.View();
-                CUDA::PrepareFaceCharacteristicMatrices(context,
-                    {stencil.samples, stencil.characteristicFaceEntries, pin->geometry.View().quadrature},
-                    {owned, ghost}, gas, left, right, status, flags); }, R::ReadAs<R::TableRows>(field.Owned()), R::ReadAs<R::TableRows>(field.Ghost()), R::WriteAs<R::TableRows>(forward), R::WriteAs<R::TableRows>(inverse), R::WriteAs<R::FixedRows<1>>(storage.status), R::WriteAs<R::FixedRows<1>>(storage.flags));
+            R::SubmitArrays(engine, stream, [pin, gas = owner->equation.Gas()](R::ExecutionContext context, auto owned, auto ghost, auto left, auto right, auto status, auto flags, auto samples, auto entries, auto quadrature)
+                            { CUDA::PrepareFaceCharacteristicMatrices(context,
+                                                                      {samples, entries, quadrature},
+                                                                      {owned, ghost}, gas, left, right, status, flags); }, R::ReadAs<R::TableRows>(field.Owned()), R::ReadAs<R::TableRows>(field.Ghost()), R::WriteAs<R::TableRows>(forward), R::WriteAs<R::TableRows>(inverse), R::WriteAs<R::FixedRows<1>>(storage.status), R::WriteAs<R::FixedRows<1>>(storage.flags), R::ReadAs<R::FixedRows<1>>(owner->stencil.samples), R::ReadAs<R::FixedRows<1>>(owner->stencil.characteristicFaceEntries), R::ReadAs<R::FixedRows<7>>(owner->metrics.FaceQuadrature()));
             R::SubmitArrays(engine, stream, [](R::ExecutionContext context, auto rows, auto empty, auto partial, auto result)
                             { CUDA::ReduceNumericalStatus(context, rows, empty, partial, result); }, R::ReadAs<R::FixedRows<1>>(storage.status), R::ReadAs<R::FixedRows<1>>(storage.empty), R::WriteAs<R::FixedRows<1>>(storage.partial), R::WriteAs<R::FixedRows<1>>(storage.result));
             R::SubmitArrays(engine, stream, [](R::ExecutionContext context, auto flags, auto partial, auto result)
@@ -108,16 +104,13 @@ namespace DNDS::Cauchy
         {
             std::shared_ptr<const Data> owner;
             EquationDofs state;
-            CFV::FiniteVolumeRead geometry;
             Geom::MeshReadAccess mesh;
-            FiniteVolumeStencilStorage::ReadAccess stencil;
             std::optional<PerfectGas> gas;
             std::optional<DerivedFields> derivedOwned, derivedGhost;
             std::array<int, 5> columns{};
             index ownedSlot = -1, ghostSlot = -1, thermalSlot = -1, thermalGhostSlot = -1;
             explicit Inputs(std::shared_ptr<const Data> data, const EquationDofs &values)
-                : owner(std::move(data)), state(values.NumericAlias()), geometry(owner->metrics.AcquireRead()),
-                  mesh(owner->mesh->AcquireRead(Geom::MeshReadRequirements::CellFlux())), stencil(owner->stencil.Read()) {}
+                : owner(std::move(data)), state(values.NumericAlias()), mesh(owner->metrics.AcquireMeshRead()) {}
         };
         auto pin = std::make_shared<Inputs>(owner, state);
         std::vector<R::ArrayOperand<real, false, R::UniformTableRows>> inputs;
@@ -163,7 +156,7 @@ namespace DNDS::Cauchy
         }
         std::vector<R::ArrayOperand<real, true, R::UniformTableRows>> outputs{
             R::ReadWriteAs<R::UniformTableRows>(forward), R::ReadWriteAs<R::UniformTableRows>(inverse)};
-        R::SubmitArrayBatch(engine, stream, [pin, record, first](R::ExecutionContext context, auto inputs, auto outputs)
+        R::SubmitArrayBatch(engine, stream, [pin, record, first](R::ExecutionContext context, auto inputs, auto outputs, auto faces, auto cells, auto offsets, auto quadrature)
                             {
             std::optional<MeanThermodynamicView> thermal;
             if (pin->derivedOwned)
@@ -184,13 +177,17 @@ namespace DNDS::Cauchy
             const auto left = table(outputs[0]), right = table(outputs[1]);
             R::ValidateViewDevices(context.device, means, left, right);
             if (thermal) thermal->values.ValidateDevice(context.device);
+            FiniteVolumeStencilView stencil;
+            stencil.stencilFaces = faces;
+            CFV::FiniteVolumeHostView metric;
+            metric.cells = cells; metric.faceOffsets = offsets; metric.quadrature = quadrature;
             record->fallbacks = RequireNumericalSuccess(CPU::PrepareFaceCharacteristicMatrices(
-                pin->stencil.View(), pin->mesh.HostView(), pin->geometry.HostView(), means, first,
+                stencil, pin->mesh.HostView(), metric, means, first,
                 left, right, pin->gas, thermal), "queued characteristics");
             if (pin->owner->settings.numerics.characteristicDiagnostics)
                 RequireNumericalSuccess(CPU::ValidateFaceCharacteristicMatrices(left.ConstView(), right.ConstView()),
                                         "characteristic inverse diagnostic");
-            record->completed.store(true, std::memory_order_release); }, std::move(inputs), std::move(outputs));
+            record->completed.store(true, std::memory_order_release); }, std::move(inputs), std::move(outputs), std::make_tuple(R::ReadAs<R::FixedRows<1>>(owner->stencil.stencilFaces), R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics()), R::ReadAs<R::FixedRows<1>>(owner->metrics.FaceOffsets()), R::ReadAs<R::FixedRows<7>>(owner->metrics.FaceQuadrature())));
         return record;
     }
 

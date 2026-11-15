@@ -1,6 +1,7 @@
 #include "CFV/Plans/LimitedVRPlan.hpp"
 #include "CFV/Detail/LimitedVRKernels.hpp"
 #include "DNDS/Runtime/Execution/EagerArray.hpp"
+#include "Geom/Access/MeshAccess.hpp"
 
 namespace DNDS::CFV
 {
@@ -15,11 +16,10 @@ namespace DNDS::CFV
 #ifndef DNDS_USE_CUDA
         DNDS_check_throw_info(Device() == R::Device::Host(), "CUDA LVR kernels are not built");
 #endif
-        auto geometry = std::make_shared<FiniteVolumeRead>(_metrics.AcquireRead(stream.Context()));
-        engine.RetainUntilSynchronize(geometry);
+        auto geometry = std::make_shared<Geom::MeshReadAccess>(_metrics.AcquireMeshRead());
         const auto &selected = region == ReconstructionRegion::HaloDependent ? _dependent : _core;
         const index count = region == ReconstructionRegion::All ? _metrics.NumCell() : selected.RowCount();
-        R::SubmitArrays(engine, stream, [region, count, parameters](R::ExecutionContext context, auto offsets, auto neighbors, auto boundary, auto rows, auto scalar, auto scalarGhost, auto gate, auto gateGhost, auto prior, auto result)
+        R::SubmitArrays(engine, stream, [geometry, region, count, parameters](R::ExecutionContext context, auto offsets, auto neighbors, auto boundary, auto rows, auto scalar, auto scalarGhost, auto gate, auto gateGhost, auto prior, auto result)
                         {
                             const Detail::LimitedVRStencilView stencil{offsets, neighbors, boundary};
                             const Detail::DeviceWorkSelection selection{rows.DynamicView(), count, region != ReconstructionRegion::All};
@@ -42,11 +42,10 @@ namespace DNDS::CFV
 #ifndef DNDS_USE_CUDA
         DNDS_check_throw_info(Device() == R::Device::Host(), "CUDA LVR kernels are not built");
 #endif
-        auto geometry = std::make_shared<FiniteVolumeRead>(_metrics.AcquireRead(stream.Context()));
-        engine.RetainUntilSynchronize(geometry);
+        auto geometry = std::make_shared<Geom::MeshReadAccess>(_metrics.AcquireMeshRead());
         const auto &selected = region == ReconstructionRegion::HaloDependent ? _dependent : _core;
         const index count = region == ReconstructionRegion::All ? _metrics.NumCell() : selected.RowCount();
-        R::SubmitArrays(engine, stream, [region, count, active, excludeBoundary, saturatedOnly, caps](R::ExecutionContext context, auto offsets, auto neighbors, auto boundary, auto rows, auto owned, auto ghost, auto result)
+        R::SubmitArrays(engine, stream, [geometry, region, count, active, excludeBoundary, saturatedOnly, caps](R::ExecutionContext context, auto offsets, auto neighbors, auto boundary, auto rows, auto owned, auto ghost, auto result)
                         {
                             const Detail::LimitedVRStencilView stencil{offsets, neighbors, boundary};
                             const Detail::DeviceWorkSelection selection{rows.DynamicView(), count, region != ReconstructionRegion::All};

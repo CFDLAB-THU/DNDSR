@@ -77,20 +77,18 @@ namespace DNDS::Cauchy
         struct Inputs
         {
             std::shared_ptr<const Data> owner;
-            CFV::FiniteVolumeRead metric;
-            FiniteVolumeStencilStorage::ReadAccess stencil;
+            Geom::MeshReadAccess mesh;
             explicit Inputs(std::shared_ptr<const Data> data) : owner(std::move(data)),
-                                                                metric(owner->metrics.AcquireRead({owner->metrics.Device(), nullptr})), stencil(owner->stencil.Read({owner->metrics.Device(), nullptr})) {}
+                                                                mesh(owner->mesh->AcquireRead(Geom::MeshReadRequirements::CellFlux())) {}
         };
         const auto pin = std::make_shared<Inputs>(owner);
         const bool ghosts = region != CFV::ReconstructionRegion::Core;
-        R::SubmitArrays(engine, stream, [pin, barth, ghosts](R::ExecutionContext context, auto mean, auto remote, auto input, auto output, auto cells)
+        R::SubmitArrays(engine, stream, [pin, barth, ghosts](R::ExecutionContext context, auto mean, auto remote, auto input, auto output, auto cells, auto samples, auto offsets, auto metrics)
                         {
-                const auto stencil = pin->stencil.View();
                 CUDA::GradientLimiterGeometry geometry;
-                geometry.samples = stencil.samples; geometry.offsets = stencil.offsets;
-                geometry.cells = pin->metric.View().cells;
-                CUDA::LimitPhysicalGradients(context, geometry, {mean, remote}, input, output, cells, pin->owner->metrics.Dimension(), barth, ghosts); }, R::ReadAs<R::TableRows>(means.Owned()), R::ReadAs<R::TableRows>(ghosts ? means.Ghost() : owner->deviceEmpty), R::ReadAs<R::TableRows>(source), R::WriteAs<R::TableRows>(target), R::ReadAs<R::FixedRows<1>>(DeviceCellSelection(region)));
+                geometry.samples = samples; geometry.offsets = offsets;
+                geometry.cells = metrics;
+                CUDA::LimitPhysicalGradients(context, geometry, {mean, remote}, input, output, cells, pin->owner->metrics.Dimension(), barth, ghosts); }, R::ReadAs<R::TableRows>(means.Owned()), R::ReadAs<R::TableRows>(ghosts ? means.Ghost() : owner->deviceEmpty), R::ReadAs<R::TableRows>(source), R::WriteAs<R::TableRows>(target), R::ReadAs<R::FixedRows<1>>(DeviceCellSelection(region)), R::ReadAs<R::FixedRows<1>>(owner->stencil.samples), R::ReadAs<R::FixedRows<1>>(owner->stencil.offsets), R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics()));
 #else
         DNDS_check_throw_info(false, "CUDA gradient limiting is not built");
 #endif
@@ -119,14 +117,12 @@ namespace DNDS::Cauchy
                                        : ReconstructionClippedReferencePolicy::FallbackToBase;
         // Only immutable sample geometry is pinned here. Mutable means,
         // gradients, beta and mandatory status are declared engine operands.
-        const auto pin = std::make_shared<FiniteVolumeStencilStorage::ReadAccess>(owner->stencil.Read({owner->metrics.Device(), nullptr}));
-        const auto metric = std::make_shared<CFV::FiniteVolumeRead>(owner->metrics.AcquireRead({owner->metrics.Device(), nullptr}));
-        R::SubmitArrays(engine, stream, [pin, metric, parameters](R::ExecutionContext context, auto mean, auto gradients, auto cells, auto beta, auto status)
+        const auto mesh = std::make_shared<Geom::MeshReadAccess>(owner->mesh->AcquireRead(Geom::MeshReadRequirements::CellFlux()));
+        R::SubmitArrays(engine, stream, [mesh, parameters](R::ExecutionContext context, auto mean, auto gradients, auto cells, auto beta, auto status, auto offsets, auto displacements)
                         {
-                const auto stencil = pin->View();
                 CUDA::GradientLimiterGeometry geometry;
-                geometry.positivityOffsets = stencil.positivityOffsets; geometry.displacements = stencil.positivityDisplacements;
-                CUDA::LimitPositivePhysicalGradients(context, geometry, mean, gradients, cells, parameters, beta, status); }, R::ReadAs<R::TableRows>(means), R::ReadWriteAs<R::TableRows>(gradients), R::ReadAs<R::FixedRows<1>>(DeviceCellSelection(CFV::ReconstructionRegion::All)), R::WriteAs<R::FixedRows<1>>(preparationStatus->gradientBeta), R::WriteAs<R::FixedRows<1>>(preparationStatus->meanOwned));
+                geometry.positivityOffsets = offsets; geometry.displacements = displacements;
+                CUDA::LimitPositivePhysicalGradients(context, geometry, mean, gradients, cells, parameters, beta, status); }, R::ReadAs<R::TableRows>(means), R::ReadWriteAs<R::TableRows>(gradients), R::ReadAs<R::FixedRows<1>>(DeviceCellSelection(CFV::ReconstructionRegion::All)), R::WriteAs<R::FixedRows<1>>(preparationStatus->gradientBeta), R::WriteAs<R::FixedRows<1>>(preparationStatus->meanOwned), R::ReadAs<R::FixedRows<1>>(owner->stencil.positivityOffsets), R::ReadAs<R::FixedRows<3>>(owner->stencil.positivityDisplacements));
         AppendPreparationStatus(engine, stream, preparationStatus->meanOwned);
 #else
         DNDS_check_throw_info(false, "CUDA gradient positivity is not built");

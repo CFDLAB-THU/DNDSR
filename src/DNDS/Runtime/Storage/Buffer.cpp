@@ -263,12 +263,64 @@ namespace DNDS::Runtime
         void *stream = nullptr;
 #ifdef DNDS_USE_CUDA
         cudaEvent_t event = nullptr;
+        mutable std::mutex observation;
+        mutable std::atomic<bool> completed{false};
+        mutable std::exception_ptr error;
+
+        bool Completed() const
+        {
+            if (!completed.load(std::memory_order_acquire))
+                return false;
+            if (error)
+                std::rethrow_exception(error);
+            return true;
+        }
+        /// One terminal observation is shared by the copy and every attached
+        /// lease. A nonblocking Ready must not wait behind another observer's
+        /// blocking CUDA wait. Completion/error publication precedes the release
+        /// store; later observers neither query nor synchronize the event again.
+        bool Observe(bool wait) const
+        {
+            if (Completed())
+                return true;
+            std::unique_lock<std::mutex> lock(observation, std::defer_lock);
+            if (wait)
+                lock.lock();
+            else if (!lock.try_lock())
+                return false;
+            if (Completed())
+                return true;
+            DeviceScope scope(device.ordinal);
+            const auto status = wait ? cudaEventSynchronize(event) : cudaEventQuery(event);
+            if (!wait && status == cudaErrorNotReady)
+                return false;
+            try
+            {
+                CheckCUDA(status);
+            }
+            catch (...)
+            {
+                error = std::current_exception();
+            }
+            completed.store(true, std::memory_order_release);
+            if (error)
+                std::rethrow_exception(error);
+            return true;
+        }
         ~State()
         {
             if (event)
             {
+                try
+                {
+                    Observe(true); // Last ownership release still waits if unobserved.
+                }
+                catch (...)
+                {
+                    std::terminate();
+                }
                 DeviceScope scope(device.ordinal);
-                if (cudaEventSynchronize(event) != cudaSuccess || cudaEventDestroy(event) != cudaSuccess)
+                if (cudaEventDestroy(event) != cudaSuccess)
                     std::terminate();
             }
         }
@@ -289,7 +341,10 @@ namespace DNDS::Runtime
 #ifdef DNDS_USE_CUDA
         ValidateStream(context);
         DeviceScope device(context.device.ordinal);
-        CheckCUDA(cudaEventCreateWithFlags(&state->event, cudaEventDisableTiming));
+        // Immediate completions are observed at host-access boundaries, just
+        // like queued prefixes. Sleeping there avoids driver-side busy waiting;
+        // device stream ordering and nonblocking Ready semantics are unchanged.
+        CheckCUDA(cudaEventCreateWithFlags(&state->event, cudaEventDisableTiming | cudaEventBlockingSync));
         CheckCUDA(cudaEventRecord(state->event, static_cast<cudaStream_t>(context.stream)));
 #endif
         return Completion(std::move(state));
@@ -313,10 +368,7 @@ namespace DNDS::Runtime
     {
 #ifdef DNDS_USE_CUDA
         if (_state && _state->event)
-        {
-            DeviceScope device(_state->device.ordinal);
-            CheckCUDA(cudaEventSynchronize(_state->event));
-        }
+            _state->Observe(true);
 #endif
     }
 
@@ -324,13 +376,7 @@ namespace DNDS::Runtime
     {
 #ifdef DNDS_USE_CUDA
         if (_state && _state->event)
-        {
-            DeviceScope device(_state->device.ordinal);
-            auto status = cudaEventQuery(_state->event);
-            if (status == cudaErrorNotReady)
-                return false;
-            CheckCUDA(status);
-        }
+            return _state->Observe(false);
 #endif
         return true;
     }

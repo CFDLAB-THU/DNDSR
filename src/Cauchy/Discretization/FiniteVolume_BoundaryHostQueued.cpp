@@ -24,8 +24,7 @@ namespace DNDS::Cauchy
             return;
         }
         const auto timing = BeginQueuedPhase(engine, stream, BoundaryPhase);
-        // Only immutable geometry/physics metadata use immediate read scopes.
-        // Every mutable payload below is a Runtime operand. In particular, a
+        // Array-backed geometry and fields use scheduled operands alike. A
         // queued VR reader cannot block this producer by reserving BC reads
         // before the CPU worker has reached the producer's execution callback.
         struct Inputs
@@ -33,11 +32,8 @@ namespace DNDS::Cauchy
             std::shared_ptr<const Data> owner;
             ThermalPolicy thermal;
             R::MetadataBuffer<index> logicalFirst;
-            CFV::FiniteVolumeRead metrics;
-            R::Array<BoundaryTraceGeometry>::ReadLease points;
-            R::Array<index>::ReadLease rows;
-            std::optional<CFV::ReconstructionBasisRead> basis;
-            std::optional<WallDistanceRead> walls;
+            Geom::MeshReadAccess geometry;
+            bool basis = false, walls = false;
             std::vector<EquationBlockLocation> means, coefficients, targets;
             std::optional<EquationBlockLocation> ransMean;
             std::vector<index> gradientOutputs;
@@ -52,8 +48,8 @@ namespace DNDS::Cauchy
             Inputs(std::shared_ptr<const Data> data, const ThermalPolicy &policy,
                    R::MetadataBuffer<index> offsets, std::shared_ptr<PointEvaluator> pointEvaluator)
                 : owner(std::move(data)), thermal(policy), logicalFirst(std::move(offsets)),
-                  metrics(owner->metrics.AcquireRead()), points(owner->boundaryTraceGeometry.Read()),
-                  rows(owner->gradientBoundaryRows.Read()), evaluator(std::move(pointEvaluator)) {}
+                  geometry(owner->metrics.AcquireMeshRead(owner->equation.HasRANS() && owner->equation.RANS().ComponentNumber() == 2)),
+                  evaluator(std::move(pointEvaluator)) {}
         };
         auto pin = std::make_shared<Inputs>(owner, thermal, logicalFirst, std::move(evaluator));
         pin->workers = workers;
@@ -66,12 +62,12 @@ namespace DNDS::Cauchy
         pin->mirrored = owner->settings.numerics.reconstruction == "variational" &&
                         owner->settings.numerics.vrBoundaryValue == "physicalMirrored";
         if (polynomial && owner->settings.numerics.reconstruction == "variational")
-            pin->basis.emplace(owner->reconstruction->AcquireBasisRead());
+            pin->basis = true;
         if (owner->equation.HasRANS())
         {
             pin->ransMean = state.LocateBlock("rans");
             if (owner->equation.RANS().ComponentNumber() == 2)
-                pin->walls.emplace(owner->wallDistance->AcquireRead());
+                pin->walls = true;
         }
         std::vector<R::ArrayOperand<real, false, R::UniformTableRows>> inputs;
         std::vector<R::ArrayOperand<real, true, R::UniformTableRows>> outputs;
@@ -112,7 +108,7 @@ namespace DNDS::Cauchy
             for (const auto &input : inputs)
                 DNDS_check_throw_info(!output.storage->Values().Overlaps(input.storage->Values()),
                                       "boundary output aliases a mutable input");
-        R::SubmitArrayBatch(engine, stream, [pin, time](R::ExecutionContext, auto inputs, auto outputs)
+        R::SubmitArrayBatch(engine, stream, [pin, time](R::ExecutionContext, auto inputs, auto outputs, auto points, auto rows, auto cells, auto faceOffsets, auto quadrature, auto radial, auto faces, auto cached, auto moments, auto wallMean)
                             {
             // Acquire scarce chemistry workers only when this operation runs.
             // Earlier queued auxiliary refreshes may still own the pool slot
@@ -134,7 +130,7 @@ namespace DNDS::Cauchy
             for (const auto &location : pin->targets)
                 targets.push_back({outputs[location.physicalField], location.firstComponent, location.componentNumber});
             CPU::BoundaryTraceRequest request;
-            request.points = pin->points.View<R::FixedRows<1>>();
+            request.points = points;
             request.means = {means.data(), index(means.size())};
             request.coefficients = {coefficients.data(), index(coefficients.size())};
             request.output = {targets.data(), index(targets.size())};
@@ -143,14 +139,23 @@ namespace DNDS::Cauchy
             request.polynomial = bool(pin->basis);
             request.allowPointFallback = pin->owner->settings.numerics.positivity || pin->owner->settings.numerics.faceFallback;
             request.thermal = pin->thermal.View();
-            if (pin->basis) request.basis = pin->basis->EvaluationView();
+            if (pin->basis)
+            {
+                const auto &settings = pin->owner->reconstruction->Settings();
+                request.basis = {cached, moments, {cells, faceOffsets, quadrature, radial, faces},
+                                 pin->geometry.HostView(), pin->owner->metrics.Dimension(), settings.maxOrder,
+                                 pin->owner->reconstruction->NRecDOF(),
+                                 settings.cacheDiffBase ? int(cached.width / pin->owner->reconstruction->NRecDOF()) : 0};
+            }
             if (pin->ransMean)
             {
                 const auto &rans = pin->owner->equation.RANS();
                 request.rans = {rans.Kind(), rans.ComponentNumber()};
                 request.ransMeans = block(*pin->ransMean, 0);
             }
-            if (pin->walls) request.wallDistance = pin->walls->HostView();
+            if (pin->walls)
+                request.wallDistance.cellMean = {wallMean.data, wallMean.offsets, wallMean.rows, wallMean.width,
+                                                wallMean.stride, wallMean.sizes, wallMean.kind, wallMean.device};
             request.frame = pin->owner->motion.At(time);
             if (pin->incomingInput >= 0) request.incoming = inputs[pin->incomingInput];
             request.ransFirst = pin->ransFirst;
@@ -170,13 +175,13 @@ namespace DNDS::Cauchy
             fill(pin->mirrored && !gradient ? BoundaryPointStateKind::ExteriorState : BoundaryPointStateKind::FaceTrace);
             for (index iField = 0; iField < pin->fieldNumber; ++iField)
                 if (const auto target = pin->gradientOutputs[iField]; target >= 0)
-                    CPU::CopyBoundaryRows(outputs[iField].ConstView(), outputs[target], pin->rows.View<R::FixedRows<1>>());
+                    CPU::CopyBoundaryRows(outputs[iField].ConstView(), outputs[target], rows);
             if (pin->mirrored && gradient) fill(BoundaryPointStateKind::ExteriorState);
             if (pin->primitiveOutput >= 0)
             {
                 CPU::PrimitiveBoundaryRequest primitive;
                 primitive.points = request.points;
-                primitive.sourceRows = pin->rows.View<R::FixedRows<1>>();
+                primitive.sourceRows = rows;
                 primitive.means = request.means;
                 primitive.componentNumber = request.componentNumber;
                 primitive.output = outputs[pin->primitiveOutput];
@@ -186,7 +191,7 @@ namespace DNDS::Cauchy
                 primitive.flowFirst = pin->flowFirst;
                 primitive.time = time;
                 RequireNumericalSuccess(CPU::FillPrimitiveBoundary(primitive, conditions), "queued primitive boundary evaluation");
-            } }, std::move(inputs), std::move(outputs));
+            } }, std::move(inputs), std::move(outputs), std::make_tuple(R::ReadAs<R::FixedRows<1>>(owner->boundaryTraceGeometry), R::ReadAs<R::FixedRows<1>>(owner->gradientBoundaryRows), R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics()), R::ReadAs<R::FixedRows<1>>(owner->metrics.FaceOffsets()), R::ReadAs<R::FixedRows<7>>(owner->metrics.FaceQuadrature()), R::ReadAs<R::FixedRows<3>>(owner->metrics.RadialMoments()), R::ReadAs<R::FixedRows<7>>(owner->metrics.FaceMetrics()), R::ReadAs<R::TableRows>(pin->basis ? owner->reconstruction->SamplingFaceBasis() : owner->deviceEmpty), R::ReadAs<R::TableRows>(pin->basis ? owner->reconstruction->SamplingMoments() : owner->deviceEmpty), R::ReadAs<R::RowLayout>(pin->walls ? owner->wallDistance->CellMeans() : owner->deviceEmpty)));
         EndQueuedPhase(engine, stream, timing);
     }
 }

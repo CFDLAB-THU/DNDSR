@@ -62,6 +62,12 @@ namespace DNDS::Cauchy
                                              real minimumDistance = 0);
         WallDistanceRead AcquireRead(Runtime::ExecutionContext context = Runtime::ExecutionContext::Host()) const;
         Runtime::Device Device() const;
+        /// Immutable sampled operands for queued readers. Retain the mesh wall
+        /// generation and declare these arrays with Runtime::ReadAs; returning
+        /// a const handle does not grant access or readiness.
+        const Runtime::Array<real> &CellValues() const;
+        const Runtime::Array<real> &FaceValues() const;
+        const Runtime::Array<real> &CellMeans() const;
         /// Synchronous placement of immutable quadrature buffers only. The
         /// placed cache preserves mesh generation identity but retains no host
         /// source arrays; replacing the source handle releases its payloads.

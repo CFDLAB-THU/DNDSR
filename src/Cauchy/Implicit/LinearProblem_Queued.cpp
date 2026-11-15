@@ -210,14 +210,12 @@ namespace DNDS::Cauchy
             return;
         }
 
-        struct Frozen
-        {
-            LinearPatternStorage::ReadAccess pattern;
-            std::optional<R::Array<index>::ReadLease> offsets;
-            std::shared_ptr<const OffDiagonalEvaluator> evaluator;
-            explicit Frozen(LinearPatternStorage::ReadAccess read) : pattern(std::move(read)) {}
-        };
-        auto retained = std::make_shared<Frozen>(_pattern->rows.Read(context));
+        // Pattern/offset arrays are operands too: an immediate read scope here
+        // would fence its CUDA stream when the completed command is retired.
+        // Scheduled reads retain CSR shape buffers and reject mutation until
+        // the same operation completion that retires the numerical operands.
+        const auto &patternArrays = _pattern->rows;
+        const auto evaluator = _offDiagonalEvaluator;
         std::vector<Input> reads{R::ReadAs<R::UniformTableRows>(_diagonal)};
         const index diagonalSlot = jacobi ? index(reads.size()) : 0;
         if (jacobi)
@@ -227,7 +225,6 @@ namespace DNDS::Cauchy
         {
             if (_offDiagonal)
             {
-                retained->offsets.emplace(_offDiagonal->OffsetArray().Read(context));
                 blocksSlot = index(reads.size());
                 reads.push_back(R::ReadAs<R::UniformTableRows>(_offDiagonal->Values()));
             }
@@ -235,7 +232,6 @@ namespace DNDS::Cauchy
             {
                 DNDS_check_throw_info(context.device == R::Device::Host() && _offDiagonalEvaluator,
                                       "queued evaluated device Jacobian producer is not installed");
-                retained->evaluator = _offDiagonalEvaluator;
             }
         }
         ComponentBinding right, source;
@@ -260,13 +256,13 @@ namespace DNDS::Cauchy
         const auto destination = Describe(output, 0, -1);
         const auto components = _components;
         const bool fullDiagonal = _diagonalStorage == DiagonalStorage::Block;
-        R::SubmitArrayBatch(engine, stream, [retained, right, source, destination, components, fullDiagonal, region, diagonalSlot, blocksSlot, jacobi, zero](R::ExecutionContext context, SpanView<const ReadRows> values, SpanView<const WriteRows> outputs)
+        R::SubmitArrayBatch(engine, stream, [evaluator, right, source, destination, components, fullDiagonal, region, diagonalSlot, blocksSlot, jacobi, zero, ownedRows = _space.OwnedRows()](R::ExecutionContext context, SpanView<const ReadRows> values, SpanView<const WriteRows> outputs, auto columns, auto order, auto position, auto core, auto dependent, auto offsets)
                             {
-            const auto pattern = retained->pattern.View();
+            const LinearPatternView pattern{columns, order, position, core, dependent, index(ownedRows)};
             const auto rows = region == LinearRegion::All ? pattern.order : region == LinearRegion::Core ? pattern.core : pattern.dependent;
             A::BlockMatrixArrayView<const real> blocks;
             if (blocksSlot >= 0)
-                blocks = {Table(values[blocksSlot]), retained->offsets->template View<R::FixedRows<1>>(), components};
+                blocks = {Table(values[blocksSlot]), offsets, components};
             if (context.device != R::Device::Host())
             {
 #ifdef DNDS_USE_CUDA
@@ -283,7 +279,7 @@ namespace DNDS::Cauchy
 #endif
                 return;
             }
-            CPU::LinearBlockInput request{{{}, retained->evaluator.get(), components}, pattern, rows,
+            CPU::LinearBlockInput request{{{}, evaluator.get(), components}, pattern, rows,
                 Table(values[diagonalSlot]), components, fullDiagonal};
             if (blocksSlot >= 0) request.blocks.assembled.emplace(blocks);
             const auto y = destination.template View<real>(outputs);
@@ -294,7 +290,7 @@ namespace DNDS::Cauchy
                 CPU::JacobiLinearRows(request, b.View().OwnedPart(), x.View().OwnedPart(), x.View().GhostPart(), y.View(), zero);
             }
             else
-                CPU::ApplyLinearRows(request, x.View().OwnedPart(), x.View().GhostPart(), y.View()); }, std::move(reads), std::move(writes));
+                CPU::ApplyLinearRows(request, x.View().OwnedPart(), x.View().GhostPart(), y.View()); }, std::move(reads), std::move(writes), std::make_tuple(R::ReadAs<R::CSRRows>(patternArrays.ColumnsArray()), R::ReadAs<R::FixedRows<1>>(patternArrays.OrderArray()), R::ReadAs<R::FixedRows<1>>(patternArrays.PositionArray()), R::ReadAs<R::FixedRows<1>>(patternArrays.CoreArray()), R::ReadAs<R::FixedRows<1>>(patternArrays.DependentArray()), R::ReadAs<R::FixedRows<1>>(!zero && _offDiagonal ? _offDiagonal->OffsetArray() : patternArrays.OrderArray())));
     }
 
     void LinearProblemContext::SubmitApply(R::EagerEngine &engine, const R::ExecutionStream &stream, const Field &input, Field &output, LinearRegion region) const

@@ -68,14 +68,13 @@ namespace DNDS::Cauchy
         struct Inputs
         {
             std::shared_ptr<const Data> owner;
-            CFV::FiniteVolumeRead metric;
-            FiniteVolumeStencilStorage::ReadAccess stencil;
+            Geom::MeshReadAccess geometry;
             R::MetadataBuffer<index> logicalField, logicalComponent, vectorStarts;
             std::vector<std::array<index, 2>> means;
             std::vector<index> gradients;
             index components, owned, ghost;
             explicit Inputs(std::shared_ptr<const Data> data) : owner(std::move(data)),
-                                                                metric(owner->metrics.AcquireRead()), stencil(owner->stencil.Read()) {}
+                                                                geometry(owner->metrics.AcquireMeshRead()) {}
         };
         auto pin = std::make_shared<Inputs>(owner);
         pin->logicalField = logicalField;
@@ -109,7 +108,7 @@ namespace DNDS::Cauchy
         outputArrays.push_back(directLimiterScratch);
         writes.push_back(R::WriteAs<R::UniformTableRows>(directLimiterScratch));
         CheckDisjoint(inputArrays, outputArrays);
-        R::SubmitArrayBatch(engine, stream, [pin, barth, count = cpuGradientWorkers](R::ExecutionContext, auto reads, auto writes)
+        R::SubmitArrayBatch(engine, stream, [pin, barth, count = cpuGradientWorkers](R::ExecutionContext, auto reads, auto writes, auto samples, auto offsets, auto cells)
                             {
             const auto columns = MeanColumns(reads, pin->means, pin->logicalField.HostView(), pin->logicalComponent.HostView());
             std::vector<ReadRows> source;
@@ -117,7 +116,9 @@ namespace DNDS::Cauchy
             for (const index slot : pin->gradients) source.push_back(reads[slot]);
             for (index iField = 0; iField < index(pin->gradients.size()); ++iField) destination.push_back(writes[iField]);
             CPU::GradientLimiterRequest request;
-            request.stencil = pin->stencil.View(); request.metric = pin->metric.HostView();
+            request.stencil.samples = samples;
+            request.stencil.offsets = offsets;
+            request.metric.cells = cells;
             request.means = {{columns.data(), index(columns.size())}, pin->owned, pin->ghost, pin->components};
             request.source = {source.data(), index(source.size())}; request.destination = {destination.data(), index(destination.size())};
             request.logicalField = pin->logicalField.HostView(); request.logicalComponent = pin->logicalComponent.HostView();
@@ -128,7 +129,7 @@ namespace DNDS::Cauchy
             workers.reserve(size_t(count));
             for (index iWorker = 0; iWorker < count; ++iWorker)
                 workers.push_back(ScratchWindow(writes[index(destination.size())], 6 * iWorker, 6));
-            CPU::LimitPhysicalGradients(request, {workers.data(), index(workers.size())}); }, std::move(reads), std::move(writes));
+            CPU::LimitPhysicalGradients(request, {workers.data(), index(workers.size())}); }, std::move(reads), std::move(writes), std::make_tuple(R::ReadAs<R::FixedRows<1>>(owner->stencil.samples), R::ReadAs<R::FixedRows<1>>(owner->stencil.offsets), R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics())));
     }
 
     std::shared_ptr<FiniteVolume::Workspace::GradientPositivitySubmission> FiniteVolume::Workspace::SubmitGradientPositivity(
@@ -174,14 +175,14 @@ namespace DNDS::Cauchy
         struct Inputs
         {
             std::shared_ptr<const Data> owner;
-            FiniteVolumeStencilStorage::ReadAccess stencil;
+            Geom::MeshReadAccess geometry;
             ThermalPolicy thermal;
             R::MetadataBuffer<index> logicalField, logicalComponent;
             std::vector<std::array<index, 2>> means;
             index components, ransFirst;
             RANSReconstructionView rans;
             Inputs(std::shared_ptr<const Data> data, const ThermalPolicy &policy)
-                : owner(std::move(data)), stencil(owner->stencil.Read()), thermal(policy) {}
+                : owner(std::move(data)), geometry(owner->metrics.AcquireMeshRead()), thermal(policy) {}
         };
         auto pin = std::make_shared<Inputs>(owner, thermal);
         pin->logicalField = logicalField;
@@ -207,13 +208,14 @@ namespace DNDS::Cauchy
         outputArrays.push_back(directPPSamples);
         writes.push_back(R::WriteAs<R::UniformTableRows>(directPPSamples));
         CheckDisjoint(inputArrays, outputArrays);
-        R::SubmitArrayBatch(engine, stream, [pin, result, count = cpuGradientWorkers](R::ExecutionContext, auto reads, auto writes)
+        R::SubmitArrayBatch(engine, stream, [pin, result, count = cpuGradientWorkers](R::ExecutionContext, auto reads, auto writes, auto offsets, auto displacements)
                             {
             const auto columns = MeanColumns(reads, pin->means, pin->logicalField.HostView(), pin->logicalComponent.HostView());
             std::vector<WriteRows> gradients;
             for (index iField = 0; iField < index(pin->means.size()); ++iField) gradients.push_back(writes[iField]);
             CPU::GradientPositivityRequest request;
-            request.stencil = pin->stencil.View();
+            request.stencil.positivityOffsets = offsets;
+            request.stencil.positivityDisplacements = displacements;
             request.means = {{columns.data(), index(columns.size())}, pin->owner->metrics.NumCell(), 0, pin->components};
             request.gradients = {gradients.data(), index(gradients.size())};
             request.logicalField = pin->logicalField.HostView(); request.logicalComponent = pin->logicalComponent.HostView();
@@ -230,7 +232,7 @@ namespace DNDS::Cauchy
             const auto value = RequireNumericalSuccess(CPU::LimitPositivePhysicalGradients(request,
                 SpanView<CPU::GradientPositivityWorkerScratch>{workers.data(), index(workers.size())}), "queued gradient positivity");
             result->limited = value.limited; result->minimum = value.minimum;
-            result->completed.store(true, std::memory_order_release); }, std::move(reads), std::move(writes));
+            result->completed.store(true, std::memory_order_release); }, std::move(reads), std::move(writes), std::make_tuple(R::ReadAs<R::FixedRows<1>>(owner->stencil.positivityOffsets), R::ReadAs<R::FixedRows<3>>(owner->stencil.positivityDisplacements)));
         pendingGradientStatistics = result;
         return result;
     }

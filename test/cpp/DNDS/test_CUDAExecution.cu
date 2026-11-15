@@ -191,6 +191,42 @@ TEST_CASE("CUDA mutation epochs precede completion and survive stream retirement
     CHECK(result.Read().View()(16, 4) == 2.);
 }
 
+TEST_CASE("CUDA self waits reuse the queued prefix and retain operands until completion")
+{
+    PreloadKernels();
+    R::EagerEngine engine(0, std::make_shared<R::AccessTrackingContext>());
+    auto launcher = std::make_shared<R::CUDALauncher>(0);
+    const auto stream = engine.CreateStream(launcher);
+    R::Array<double> temporary(R::RowLayout::Dense(19, 5), R::Device::CUDA(0));
+    R::Array<double> output(temporary.Layout(), R::Device::CUDA(0));
+    auto alias = temporary;
+    std::weak_ptr<const R::ArrayStorage> retained = temporary.SharedStorage();
+    Gate gate;
+    gate.Enqueue(engine, stream);
+    R::SubmitArrays(engine, stream, LaunchAdd, R::Write(temporary));
+    const auto producer = stream.Record();
+    for (int repeat = 0; repeat < 3; ++repeat)
+    {
+        stream.WaitFor(producer);
+        CHECK(stream.Record().Provider() == producer.Provider());
+    }
+    CHECK(launcher->NativeEventsRecorded() == 1);
+    CHECK_THROWS(alias.Write(stream.Context()));
+    R::SubmitArrays(engine, stream, [](R::ExecutionContext context, auto input, auto result)
+                    {
+                        Scale<<<7, 32, 0, static_cast<cudaStream_t>(context.stream)>>>(input, result, 3);
+                        DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "self-wait scale launch failed"); }, R::Read(temporary), R::Write(output));
+    alias = {};
+    temporary = {};
+    CHECK_FALSE(retained.expired());
+    const auto complete = stream.Record();
+    CHECK(launcher->NativeEventsRecorded() == 2);
+    *gate.open = true;
+    complete.WaitHost();
+    CHECK(retained.expired());
+    CHECK(output.To(R::Device::Host()).Read().At(18, 4) == 3.);
+}
+
 TEST_CASE("Closing mixed CPU CUDA execution retains temporary operands and observes completed events")
 {
     PreloadKernels();
@@ -697,6 +733,8 @@ TEST_CASE("CUDA launch exceptions drain submitted uses and invalidate partial an
                                       { delete p; ++released; });
     engine.ReleaseOn(std::move(owner), stream);
     auto tail = stream.Record();
+    stream.WaitFor(tail);
+    CHECK(stream.Record().Provider() == tail.Provider());
     CHECK_FALSE(launched);
     CHECK_FALSE(tail.Ready());
     CHECK(released == 0);
@@ -756,7 +794,9 @@ TEST_CASE("CUDA dependency only prefixes retire earlier batches and completed hi
         auto earlier = left.Record();
         std::weak_ptr<const R::StreamEvent::State> old = earlier.Provider();
         R::SubmitArrays(engine, right, LaunchAdd, R::Write(b));
-        left.WaitFor(right.Record());
+        const auto foreign = right.Record();
+        left.WaitFor(foreign);
+        left.WaitFor(foreign);     // Duplicate waits retain one dependency, not two.
         auto join = left.Record(); // Contains a wait, no kernel.
         CHECK_FALSE(join.Ready());
         *gate.open = true;

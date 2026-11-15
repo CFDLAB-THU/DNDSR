@@ -1,6 +1,7 @@
 #include "CFV/Plans/GradientPlan.hpp"
 #include "CFV/Detail/GradientKernels.hpp"
 #include "DNDS/Runtime/Execution/EagerArray.hpp"
+#include "Geom/Access/MeshAccess.hpp"
 #include "DNDS/Runtime/Execution/CUDAExecution.hpp"
 
 namespace DNDS::CFV
@@ -57,13 +58,10 @@ namespace DNDS::CFV
 #ifndef DNDS_USE_CUDA
         DNDS_check_throw_info(Device() == R::Device::Host(), "CUDA gradient conversion is not built");
 #endif
-        auto geometry = std::make_shared<FiniteVolumeRead>(_data->metrics.AcquireRead(stream.Context()));
-        engine.RetainUntilSynchronize(_data);
-        engine.RetainUntilSynchronize(geometry);
-        const auto cells = geometry->View().cells;
+        auto geometry = std::make_shared<Geom::MeshReadAccess>(_data->metrics.AcquireMeshRead());
         const int dimension = _data->metrics.Dimension();
         const index firstCell = ghost ? _data->metrics.NumCell() : 0, modes = reconstruction.NRecDOF();
-        R::SubmitArrays(engine, stream, [geometry, cells, dimension, firstCell, modes, toCoefficients](R::ExecutionContext context, auto input, auto output)
+        R::SubmitArrays(engine, stream, [geometry, dimension, firstCell, modes, toCoefficients](R::ExecutionContext context, auto cells, auto input, auto output)
                         {
                             if (context.device == R::Device::Host())
                                 Detail::ConvertGradient(cells, input, output, firstCell, dimension, modes, toCoefficients);
@@ -72,7 +70,7 @@ namespace DNDS::CFV
                                 Detail::LaunchGradientConversion(context, cells, input, output, firstCell, dimension, modes, toCoefficients);
 #endif
                         },
-                        R::ReadAs<R::UniformTableRows>(ghost ? source.Ghost() : source.Owned()), R::WriteAs<R::UniformTableRows>(ghost ? destination.Ghost() : destination.Owned()));
+                        R::ReadAs<R::FixedRows<8>>(_data->metrics.CellMetrics()), R::ReadAs<R::UniformTableRows>(ghost ? source.Ghost() : source.Owned()), R::WriteAs<R::UniformTableRows>(ghost ? destination.Ghost() : destination.Owned()));
     }
     void GradientPlan::ConvertToCoefficients(const FVField &gradient, const VariationalReconstructionPlan &reconstruction, FVField &coefficients) const
     {

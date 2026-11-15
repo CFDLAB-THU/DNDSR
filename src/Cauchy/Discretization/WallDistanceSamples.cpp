@@ -78,6 +78,21 @@ namespace DNDS::Cauchy
             fill(view.FaceNodes(iFace), view.GetFaceElement(iFace), faces[iFace]);
         return WallDistanceSamples(std::move(data));
     }
+    const R::Array<real> &WallDistanceSamples::CellValues() const
+    {
+        _data->stamp.Validate();
+        return _data->cells;
+    }
+    const R::Array<real> &WallDistanceSamples::FaceValues() const
+    {
+        _data->stamp.Validate();
+        return _data->faces;
+    }
+    const R::Array<real> &WallDistanceSamples::CellMeans() const
+    {
+        _data->stamp.Validate();
+        return _data->mean;
+    }
     WallDistanceRead::WallDistanceRead(std::shared_ptr<const Detail::WallDistanceData> data, R::ExecutionContext context)
         : _data(std::move(data)), _mesh(_data->mesh->AcquireRead(Requirements())),
           _cells(_data->cells.Read(context)), _faces(_data->faces.Read(context)), _mean(_data->mean.Read(context))
