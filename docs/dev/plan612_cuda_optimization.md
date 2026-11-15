@@ -172,9 +172,14 @@ kernel investigation. The reopened evidence is maintained separately under
 `workspace/dndsr-next-plan/evidence/plan61-2-profiling-completion/`. It includes
 all 35 baseline hot launch configurations on A100 and A5000, all 25 qualified
 A5000 normal variant captures, matched initial RHS/VR counter comparisons and
-the full CPU submission/event/copy/idle review. Additional A100 candidate
-captures remain held while physical GPU1 is occupied by unrelated workloads;
-A5000 measurements do not substitute for that architecture-specific gate.
+the full CPU submission/event/copy/idle review. The reopened profiling
+investigation is complete under the user's 2026-11-15 instruction to skip
+occupied A100. Additional A100 candidate captures remain explicitly deferred;
+A5000 measurements do not substitute for those architecture-specific results.
+The final report and requirement audit are `INVESTIGATION-REPORT.md` and
+`CLOSURE-AUDIT.json` in the evidence directory. They retain raw hashes,
+fresh numerical revalidation and the five normal traces' unknown controller
+exit status with independently verified complete raw/numerical evidence.
 
 In these counter reports, DRAM is device-local GDDR6 on A5000 and HBM on A100.
 It is distinct from CPU RAM and host/device copies. Cumulative DRAM bytes for
