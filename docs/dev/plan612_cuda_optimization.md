@@ -164,3 +164,42 @@ declared budgets but do not accelerate this case. The full tables, numerical
 limits, compiler/runtime hashes and per-operator timeline belong in the separate
 Plan 61-2 evidence record, not a universal kernel-selection rule. These two-step
 pilots retain one capped nonlinear stage and do not establish long-time accuracy.
+
+## Per-kernel profiling status and memory interpretation
+
+The earlier whole-update assessment did not complete the requested individual
+kernel investigation. The reopened evidence is maintained separately under
+`workspace/dndsr-next-plan/evidence/plan61-2-profiling-completion/`. It includes
+all 35 baseline hot launch configurations on A100 and A5000, all 25 qualified
+A5000 normal variant captures, matched initial RHS/VR counter comparisons and
+the full CPU submission/event/copy/idle review. Additional A100 candidate
+captures remain held while physical GPU1 is occupied by unrelated workloads;
+A5000 measurements do not substitute for that architecture-specific gate.
+
+In these counter reports, DRAM is device-local GDDR6 on A5000 and HBM on A100.
+It is distinct from CPU RAM and host/device copies. Cumulative DRAM bytes for
+one selected invocation include repeated field/geometry accesses, outputs and
+cache misses from CUDA thread-private local memory. Local memory can contain
+addressable automatic arrays and device-call stack state; register spilling
+is only one cause. The sampled A100 spill counters report zero despite large local
+load/store counts. Do not equate local-sector bytes with off-chip traffic or
+sum L1 local/global sectors with DRAM bytes across the same memory hierarchy.
+
+Nsight Compute combines counters from replay passes into one invocation's
+report. The 197.83 GB A5000 RHS observation is neither a 197.83 GB allocation nor
+the sum of twelve replayed invocations. Nsight may separately save replay
+buffers in host RAM; that profiler overhead is outside the selected kernel.
+The warmed normal step 2 trace has no H2D payload. Replay timings with cache
+flushing diagnose memory/instruction behavior; ordinary qualified NSYS kernel
+distributions and unprofiled repetitions provide throughput measurements.
+
+The accepted coefficient-only tiled RHS control reduces device-DRAM traffic
+to 102.62 GB while L1 local requests remain about 255.3 GB. This distinguishes
+input-layout effects from persistent local/helper traffic. The aggregate
+counters do not identify the exact source array behind every cache miss.
+Use the separate native execution-pipe counts as instructions, not FLOPs or
+exact opcode counts; precision variants also differ in physical-view
+projection, so their timings are complete-implementation comparisons.
+
+References: [CUDA local memory](https://docs.nvidia.com/cuda/archive/12.6.3/cuda-c-programming-guide/index.html#device-memory-accesses),
+[Nsight Compute kernel replay](https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#kernel-replay).
