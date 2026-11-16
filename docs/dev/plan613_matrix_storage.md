@@ -38,28 +38,61 @@ transformations still apply in the corresponding incidence frame, including
 self-periodic faces. `aosRowPadding` controls AoS pitch in scalar elements;
 `allocationAlignmentBytes` independently requests base alignment.
 
-The CUDA `fp64Pipelined` and `fp64TensorAsync` policies use a common stage-once
-scan. `numerics.cfv.cudaSweep` controls `mapping` (`block` or `warp`),
-`buffering` (`neighbor` or `cellRow`), `threads`, `gridBlocks` (zero is a wide
-grid), and `asynchronous` (cp.async). Tensor arithmetic requires warp mapping
-and FP64-MMA hardware. Each team consumes a complete modal matrix and all
-component coefficient rows before advancing; no output-mode tile causes a
-global matrix reload. The two slots prefetch either one next neighbor or all
-incidences of the next grid-stride cell. Whole-row shared capacity is checked
-against a setup-derived maximum row count before launch; infeasible policies
-fail explicitly. These specialized paths support at most seven components;
-the ordinary FP64/FP32 paths retain general component support.
+The retained CUDA families are the general `fp64` sweep, existing
+`fp64MatrixShared`, neighbor-buffered SIMT `fp64Pipelined`, and neighbor-buffered
+MMA `fp64TensorAsync`. `floatFloatPipelined` adds complete float-float arithmetic
+to the same SIMT body. General quantized-map `fp32`, `fp32Accum`,
+`fp32FloatFloatAccum` and `tf32` policies remain separate; the latter float-float
+policy has already lost matrix precision and is not the new experiment.
 
-The previous tensor selection names use this same stage-once implementation;
-`fp64Tensor` retains its 256-block default, `fp64TensorWide` uses a wider grid,
-and `fp64TensorShared` selects synchronous staging. `fp64TensorAsync` honors
-the configured buffering policy. Raw sweeps gather B products then apply the
-local inverse, staged once per cell and reused across variables. Historical
-repeated-stage tensor implementations were removed. Unsupported combinations
-fail instead of silently switching. Scalar/SIMT and tensor paths need not
-produce bitwise identical results. Async records retain arrays and immutable
-metadata until the enclosing stream completes; numerical kernels do not
-allocate, acquire leases, communicate, or synchronize the host.
+`numerics.cfv.cudaSweep` controls only `threads` and `gridBlocks`. Zero threads
+select 32 for block-team SIMT and 128 for static warp-team MMA (32 for dynamic component counts); zero blocks selects
+a wide grid. Both pipelines stage a whole neighbor matrix and every component
+coefficient once, using two cp.async slots. Full-cell-row buffering, warp-team
+SIMT, synchronous staged alternatives and duplicate wide/static/tensor selectors
+were retired after measurements; their configurations belong to their historical
+source revision. Ordinary
+FP64/FP32 retain general component support. The staged families specialize
+5/6/7 components and use shared accumulation for dynamic counts; all five
+modal sizes 2/3/5/9/19 cover P1/P2/P3 in 2D and 3D. Dynamic counts are limited
+by checked shared-memory capacity, rather than a fixed seven-component array.
+FP64 MMA requires supporting hardware.
+
+`floatFloatPipelined` requires `DNDS_USE_CCCL_COMPUTE` and the pinned CCCL
+`cuda::fp32mp2` provider (`DNDS::Math::real_f32f32`). ALL numerical sweep
+arithmetic uses the pair: matrix products, reductions, periodic rotation,
+mean/BC terms, raw inverse application and relaxation. FP64 is used only at
+input/output conversion. Matrix/state storage stays FP64; inputs are converted
+directly into both limbs, without first rounding to a single float. Shared
+staging transports FP64 bytes then converts each matrix/coefficient once.
+The narrower exponent range can overflow. A device-only result check sets the
+sticky workspace status before guarded commit; no host drain or FP64 fallback
+is inserted. This changes arithmetic precision, not the reconstruction weights.
+
+Quantized FP32-map placement also supports `fp32Pipelined` (full FP32 SIMT
+arithmetic) and `tf32Pipelined` (TF32-rounded tensor products and FP32 update
+arithmetic), through the same neighbor-buffered implementation. Raw matrix
+representations remain FP64-only. TF32 has a separately looser accuracy budget;
+it is not an ordinary-FP32 alias. The general FP32/TF32 policies remain
+available as numerical/comparison anchors. Matrix, state and output component
+meaning is identical across those choices. All use the common queued CFV
+operator with explicit placement/capability checks.
+
+The shared staged numerical implementation is in
+`Operators/CUDA/ReconstructionDeviceKernels_Staged.cuh`. The paired `_FP64`,
+`_FloatFloat` and `_FP32` translation units instantiate mode/component variants
+independently; the small `.cu` wrapper checks arguments and selects a provider.
+The general sweep uses the same mode/component dispatch discipline via
+`ReconstructionDevice_General.cuh` and its precision-specific translation units.
+Kernels receive only numeric views and POD parameters. Host dispatch descriptors
+never become device kernel arguments or asynchronous owners.
+
+Raw sweeps gather B products then apply the local inverse, loaded once per
+cell and reused across variables. Periodic component transformations and face
+transpose conventions are preserved. Distinct inputs/outputs, scheduled leases
+and immutable plan retention remain responsibilities of the common queued
+operator. Numerical kernels contain no allocation, lease acquisition, MPI or
+host synchronization. Unsupported device/build/shape combinations reject.
 
 ## Interpreting measurements
 

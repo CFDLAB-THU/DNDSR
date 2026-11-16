@@ -57,6 +57,8 @@ namespace DNDS::Cauchy
             options.basisDerivativeOrder = 1;
             placed->reconstructionKernel = _data->settings.execution.ReconstructionKernel();
             if (placed->reconstructionKernel == CFV::ReconstructionDeviceKernel::FP32 ||
+                placed->reconstructionKernel == CFV::ReconstructionDeviceKernel::FP32Pipelined ||
+                placed->reconstructionKernel == CFV::ReconstructionDeviceKernel::TF32Pipelined ||
                 placed->reconstructionKernel == CFV::ReconstructionDeviceKernel::FP32FullAccumulation ||
                 placed->reconstructionKernel == CFV::ReconstructionDeviceKernel::FP32FloatFloatAccumulation ||
                 placed->reconstructionKernel == CFV::ReconstructionDeviceKernel::TF32TensorCore)

@@ -23,7 +23,7 @@ static void Check(cudaError_t result)
 static void Run(int argc, char **argv)
 {
     DNDS::MPIInfo mpi(MPI_COMM_WORLD);
-    DNDS_check_throw_info(mpi.size == 1 && argc == 6, "usage: sweep_benchmark periodic-mesh catalog.json precomputed|raw-full|raw-triangle subpartitions repetitions (np1)");
+    DNDS_check_throw_info(mpi.size == 1 && argc == 6, "usage: sweep_benchmark periodic-mesh catalog.json precomputed|raw-full|raw-triangle|quantized subpartitions repetitions (np1)");
     const std::string representation = argv[3];
     const int partitions = std::stoi(argv[4]), repetitions = std::stoi(argv[5]);
     DNDS_check_throw_info(partitions >= 0 && repetitions > 0, "invalid sweep benchmark controls");
@@ -50,7 +50,7 @@ static void Run(int argc, char **argv)
     settings.functional.dirWeightScheme = C::ReconstructionFunctionalSettings::DirectionalWeight::HQM_OPT;
     settings.functional.geomWeightScheme = C::ReconstructionFunctionalSettings::GeometricWeight::HQM_SD;
     settings.functional.scaleType = C::ReconstructionFunctionalSettings::LengthScale::BaryDiff;
-    if (representation != "precomputed")
+    if (representation != "precomputed" && representation != "quantized")
     {
         DNDS_check_throw_info(representation == "raw-full" || representation == "raw-triangle", "unknown sweep representation");
         settings.storage.representation = "raw";
@@ -68,7 +68,7 @@ static void Run(int argc, char **argv)
     const auto stream = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
     const auto context = stream.Context();
     auto resident = plan.Place(device, context);
-    const double placed = MPI_Wtime();
+    double placed = MPI_Wtime();
     constexpr I components = 5;
     auto mean = metrics.BuildField(components), coefficients = plan.BuildCoefficients(components);
     {
@@ -119,7 +119,24 @@ static void Run(int argc, char **argv)
     }
     cudaDeviceProp properties{};
     Check(cudaGetDeviceProperties(&properties, 0));
-    std::cout << "VR_SETUP " << J{{"device", properties.name}, {"cells", metrics.NumCell()}, {"subpartitions", partitions}, {"representation", representation}, {"import_seconds", imported - setupStart}, {"reorder_seconds", reordered - imported}, {"prepare_seconds", prepared - reordered}, {"placement_seconds", placed - prepared}, {"input_and_warmup_seconds", MPI_Wtime() - placed}, {"matrix_bytes", resident.StorageReport().retainedAllocationBytes}}.dump() << std::endl;
+
+    if (representation == "quantized")
+    {
+        const double quantizedStart = MPI_Wtime();
+        C::ReconstructionResidencyOptions options;
+        options.matrixPrecision = C::ReconstructionMatrixPrecision::FP32;
+        resident = plan.Place(device, context, options);
+        placed += MPI_Wtime() - quantizedStart;
+        db = resident.PlaceBoundaryValues(boundary);
+        workspace = resident.BuildWorkspace(components);
+    }
+    // StorageReport describes retained host preparation when host payloads are
+    // available. This receipt needs the selected device publication instead,
+    // particularly after quantization; never label FP64 host bytes as FP32.
+    size_t residentBytes = 0;
+    for (const auto &buffer : resident.ResidentBuffers())
+        residentBytes += buffer.bytes;
+    std::cout << "VR_SETUP " << J{{"device", properties.name}, {"cells", metrics.NumCell()}, {"subpartitions", partitions}, {"representation", representation}, {"import_seconds", imported - setupStart}, {"reorder_seconds", reordered - imported}, {"prepare_seconds", prepared - reordered}, {"placement_seconds", placed - prepared}, {"input_and_warmup_seconds", MPI_Wtime() - placed}, {"matrix_bytes", residentBytes}}.dump() << std::endl;
     cudaEvent_t start{}, end{};
     Check(cudaEventCreate(&start));
     Check(cudaEventCreate(&end));
@@ -129,23 +146,39 @@ static void Run(int argc, char **argv)
     const auto co = du.Owned().Read(context), cg = du.Ghost().Read(context);
     const auto bc = db.values.Read(context);
     const auto starts = workspace.devicePeriodicVectorStarts.Read(context);
-    const auto status = workspace.deviceStatus.Read(context);
+    auto status = workspace.deviceStatus.Write(context);
     auto output = workspace.temporary.Owned().Write(context);
     const D::DeviceWorkSelection selection{{}, metrics.NumCell(), false};
+    const auto optionsFor = [](const J &row)
+    {
+        C::ReconstructionSweepLaunch options;
+        options.threads = row.value("threads", 0);
+        options.gridBlocks = row.value("gridBlocks", 0);
+        return options;
+    };
+    const auto arithmeticFor = [](const J &row)
+    {
+        const auto kernel = row.at("kernel").get<std::string>();
+        return kernel == "float-float"        ? D::ReconstructionSweepArithmetic::FloatFloat
+               : kernel == "tensor"           ? D::ReconstructionSweepArithmetic::FP64TensorCore
+               : kernel == "quantized-simt"   ? D::ReconstructionSweepArithmetic::FP32
+               : kernel == "quantized-tensor" ? D::ReconstructionSweepArithmetic::TF32
+                                              : D::ReconstructionSweepArithmetic::FP64;
+    };
     const auto launch = [&](const J &row)
     {
-        if (row.value("baseline", false))
-            D::LaunchJacobiOptimized(context, view, selection, {starts.View()}, {mo.View(), mg.View()}, {co.View(), cg.View()}, bc.View(), output.View(), status.View(), 2);
+        const auto kernel = row.at("kernel").get<std::string>();
+        if (kernel == "general")
+            D::LaunchJacobi(context, view, selection, {starts.View()}, {mo.View(), mg.View()}, {co.View(), cg.View()}, bc.View(), output.View(), status.View().ConstView());
+        else if (kernel == "matrix-shared")
+            D::LaunchJacobiMatrixShared(context, view, selection, {starts.View()}, {mo.View(), mg.View()}, {co.View(), cg.View()}, bc.View(), output.View(), status.View().ConstView());
         else
         {
-            C::ReconstructionSweepLaunch options;
-            options.mapping = row.at("mapping");
-            options.buffering = row.at("buffering");
-            options.threads = row.at("threads");
-            options.gridBlocks = row.at("gridBlocks");
-            options.asynchronous = row.value("asynchronous", true);
+            DNDS_check_throw_info(kernel == "simt" || kernel == "tensor" || kernel == "float-float" || kernel == "quantized-simt" || kernel == "quantized-tensor", "unknown retained sweep kernel");
             D::LaunchStagedJacobi(context, view, selection, {starts.View()}, {mo.View(), mg.View()}, {co.View(), cg.View()},
-                                  bc.View(), output.View(), status.View(), options, row.value("tensor", false));
+                                  bc.View(), output.View(), status.View().ConstView(), optionsFor(row), arithmeticFor(row));
+            if (kernel == "float-float" || kernel == "quantized-simt" || kernel == "quantized-tensor")
+                D::LaunchValidateJacobiResult(context, selection, output.View().ConstView(), status.View());
         }
     };
     for (const auto &row : catalog)
@@ -154,37 +187,20 @@ static void Run(int argc, char **argv)
         record["representation"] = representation;
         record["subpartitions"] = partitions;
         record["device"] = properties.name;
-        if (row.value("tensor", false) && !D::FP64TensorCoreAvailable(device))
+        if ((row.at("kernel") == "tensor" && !D::FP64TensorCoreAvailable(device)) ||
+            (row.at("kernel") == "quantized-tensor" && !D::TF32TensorCoreAvailable(device)))
         {
             record["status"] = "unsupported_tensor_device";
             std::cout << "VR_SWEEP " << record.dump() << std::endl;
             continue;
         }
-        try
+        if (row.at("kernel") != "general" && row.at("kernel") != "matrix-shared")
         {
-            if (!row.value("baseline", false))
-            {
-                C::ReconstructionSweepLaunch options;
-                options.mapping = row.at("mapping"), options.buffering = row.at("buffering");
-                options.threads = row.at("threads"), options.gridBlocks = row.at("gridBlocks");
-                options.asynchronous = row.value("asynchronous", true);
-                const auto resource = D::InspectStagedJacobi(context, view, selection, {starts.View()}, {mo.View(), mg.View()},
-                                                             {co.View(), cg.View()}, bc.View(), output.View(), status.View(), options, row.value("tensor", false));
-                record["resources"] = {{"shared_bytes", resource.sharedBytes}, {"registers_per_thread", resource.registersPerThread}, {"resident_blocks_per_sm", resource.activeBlocksPerSM}, {"grid_blocks", resource.gridBlocks}, {"threads_per_block", resource.threads}};
-            }
-            launch(row);
+            const auto resource = D::InspectStagedJacobi(context, view, selection, {starts.View()}, {mo.View(), mg.View()},
+                                                         {co.View(), cg.View()}, bc.View(), output.View(), status.View().ConstView(), optionsFor(row), arithmeticFor(row));
+            record["resources"] = {{"shared_bytes", resource.sharedBytes}, {"registers_per_thread", resource.registersPerThread}, {"resident_blocks_per_sm", resource.activeBlocksPerSM}, {"grid_blocks", resource.gridBlocks}, {"threads_per_block", resource.threads}};
         }
-        catch (const std::exception &error)
-        {
-            // This np1 diagnostic catches only the local wrapper prevalidation,
-            // before a numerical launch; production collective paths abort.
-            if (std::string(error.what()).find("staging exceeds device shared memory") == std::string::npos)
-                throw;
-            record["status"] = "rejected";
-            record["reason"] = error.what();
-            std::cout << "VR_SWEEP " << record.dump() << std::endl;
-            continue;
-        }
+        launch(row);
         Check(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)));
         std::vector<double> actual(size_t(metrics.NumCell() * components * plan.NRecDOF()));
         Check(cudaMemcpy(actual.data(), output.View().data, actual.size() * sizeof(double), cudaMemcpyDeviceToHost));
@@ -197,7 +213,9 @@ static void Run(int argc, char **argv)
                 DNDS_check_throw_info(std::isfinite(value), "nonfinite sweep output");
                 error = std::max(error, std::abs(value - expected.View()(iCell, j)) / (1 + std::abs(expected.View()(iCell, j))));
             }
-        DNDS_check_throw_info(error <= 2e-10, "sweep numerical comparison failed");
+        const double tolerance = row.value("tolerance", 2e-10);
+        DNDS_check_throw_info(error <= tolerance, "sweep numerical comparison failed");
+        record["tolerance"] = tolerance;
         std::vector<double> times;
         for (int trial = 0; trial < 3; ++trial)
         {

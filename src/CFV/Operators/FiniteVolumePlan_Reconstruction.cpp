@@ -603,8 +603,10 @@ namespace DNDS::CFV
             return;
         }
         DNDS_check_throw_info(kernel != ReconstructionDeviceKernel::FP32FullAccumulation &&
-                                  kernel != ReconstructionDeviceKernel::FP32FloatFloatAccumulation,
-                              "full accumulation reconstruction requires CUDA and FP32 sweep maps");
+                                  kernel != ReconstructionDeviceKernel::FP32FloatFloatAccumulation &&
+                                  kernel != ReconstructionDeviceKernel::FloatFloatPipelined &&
+                                  kernel != ReconstructionDeviceKernel::FP32Pipelined && kernel != ReconstructionDeviceKernel::TF32Pipelined,
+                              "reduced arithmetic reconstruction requires explicit CUDA placement");
         Require(ReconstructionOperation::Sweep);
         Validate();
         DNDS_check_throw_info(engine.Owns(stream) && stream.Context().device == R::Device::Host(),
@@ -683,8 +685,10 @@ namespace DNDS::CFV
             return;
         }
         DNDS_check_throw_info(kernel != ReconstructionDeviceKernel::FP32FullAccumulation &&
-                                  kernel != ReconstructionDeviceKernel::FP32FloatFloatAccumulation,
-                              "full accumulation reconstruction requires CUDA and FP32 sweep maps");
+                                  kernel != ReconstructionDeviceKernel::FP32FloatFloatAccumulation &&
+                                  kernel != ReconstructionDeviceKernel::FloatFloatPipelined &&
+                                  kernel != ReconstructionDeviceKernel::FP32Pipelined && kernel != ReconstructionDeviceKernel::TF32Pipelined,
+                              "reduced arithmetic reconstruction requires explicit CUDA placement");
         DoReconstructionIterTo(mean, coefficients, work, boundary);
         CommitReconstruction(coefficients, work);
     }

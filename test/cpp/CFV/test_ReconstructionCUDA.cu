@@ -4,6 +4,7 @@
 #include "CFV/Plans/PolynomialSamplingPlan.hpp"
 #include "CFV/Plans/GradientPlan.hpp"
 #include "CFV/Math/PeriodicFrame.hpp"
+#include "CFV/Detail/ReconstructionDeviceKernels.hpp"
 #include "DNDS/Runtime/Execution/CUDAExecution.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include "DNDS/Runtime/Communication/NCCLTransfer.hpp"
@@ -79,13 +80,11 @@ static void CompareSharedSweep(const C::FiniteVolumePlan &metrics, const C::Vari
     const auto originalOwned = coefficients.Owned().Clone();
     const auto originalGhost = coefficients.Ghost().Clone();
     plan.DoReconstructionIter(mean, coefficients, cpu, boundary);
-    std::vector<C::ReconstructionDeviceKernel> kernels{C::ReconstructionDeviceKernel::FP64Shared, C::ReconstructionDeviceKernel::FP64Wide,
-                                                       C::ReconstructionDeviceKernel::FP64Static, C::ReconstructionDeviceKernel::FP64MatrixShared,
+    std::vector<C::ReconstructionDeviceKernel> kernels{C::ReconstructionDeviceKernel::FP64MatrixShared,
                                                        C::ReconstructionDeviceKernel::FP64Pipelined};
-    for (auto tensor : {C::ReconstructionDeviceKernel::FP64TensorCore, C::ReconstructionDeviceKernel::FP64TensorCoreWide,
-                        C::ReconstructionDeviceKernel::FP64TensorCoreShared, C::ReconstructionDeviceKernel::FP64TensorCoreAsync})
-        if (resident.SupportsKernel(tensor))
-            kernels.push_back(tensor);
+    for (auto kernel : {C::ReconstructionDeviceKernel::FloatFloatPipelined, C::ReconstructionDeviceKernel::FP64TensorCoreAsync})
+        if (resident.SupportsKernel(kernel))
+            kernels.push_back(kernel);
     for (auto kernel : kernels)
         for (bool split : {false, true})
         {
@@ -781,7 +780,7 @@ TEST_CASE("Opt-in FP32 sweep maps retain FP64 coefficients and avoid duplicate d
             reduced.CheckStatus(deviceWork);
             Equal(work.temporary, deviceWork.temporary, 2e-5);
             for (const auto kernel : {C::ReconstructionDeviceKernel::FP32FullAccumulation,
-                                      C::ReconstructionDeviceKernel::FP32FloatFloatAccumulation})
+                                      C::ReconstructionDeviceKernel::FP32FloatFloatAccumulation, C::ReconstructionDeviceKernel::FP32Pipelined})
             {
                 if (!reduced.SupportsKernel(kernel))
                     continue;
@@ -804,17 +803,18 @@ TEST_CASE("Opt-in FP32 sweep maps retain FP64 coefficients and avoid duplicate d
                     for (I j = 0; j < I(input.Width()); ++j)
                         CHECK(after.View()(iCell, j) == before.View()(iCell, j));
             }
-            if (reduced.SupportsKernel(C::ReconstructionDeviceKernel::TF32TensorCore))
-            {
-                // Deliberately a different arithmetic policy. Compare the
-                // same frozen inputs with the FP64 oracle as well as recording
-                // a stricter FP32 reference above; this is not a finite-only gate.
-                reduced.SubmitReconstructionIterTo(engine, stream, deviceMean, deviceInput, tensorWork, deviceBoundary,
-                                                   C::ReconstructionRegion::All, C::ReconstructionDeviceKernel::TF32TensorCore);
-                engine.Synchronize();
-                reduced.CheckStatus(tensorWork);
-                Equal(work.temporary, tensorWork.temporary, 3e-3);
-            }
+            for (const auto tensorKernel : {C::ReconstructionDeviceKernel::TF32TensorCore, C::ReconstructionDeviceKernel::TF32Pipelined})
+                if (reduced.SupportsKernel(tensorKernel))
+                {
+                    // Deliberately a different arithmetic policy. Compare the
+                    // same frozen inputs with the FP64 oracle as well as recording
+                    // a stricter FP32 reference above; this is not a finite-only gate.
+                    reduced.SubmitReconstructionIterTo(engine, stream, deviceMean, deviceInput, tensorWork, deviceBoundary,
+                                                       C::ReconstructionRegion::All, tensorKernel);
+                    engine.Synchronize();
+                    reduced.CheckStatus(tensorWork);
+                    Equal(work.temporary, tensorWork.temporary, 3e-3);
+                }
             cpu.CommitReconstruction(input, work);
         }
         auto target = cpu.BuildCoefficients(components), deviceTarget = reduced.BuildCoefficients(components);
@@ -873,7 +873,7 @@ TEST_CASE("Opt-in FP32 sweep maps retain FP64 coefficients and avoid duplicate d
                 CHECK(maximum > 1e-3);
             }
             for (const auto kernel : {C::ReconstructionDeviceKernel::FP32FullAccumulation,
-                                      C::ReconstructionDeviceKernel::FP32FloatFloatAccumulation})
+                                      C::ReconstructionDeviceKernel::FP32FloatFloatAccumulation, C::ReconstructionDeviceKernel::FP32Pipelined})
             {
                 if (!reduced.SupportsKernel(kernel))
                     continue;
@@ -970,7 +970,7 @@ TEST_CASE("CUDA Jacobi and WBAP agree with CPU for physical DOF layouts and dire
                 }
                 else
                     pending = deviceHalo.Begin(R::ExecutionContext::CUDA(0));
-                const auto kernel = step == 3 ? C::ReconstructionDeviceKernel::FP64Shared : jacobiKernel;
+                const auto kernel = step == 3 ? C::ReconstructionDeviceKernel::FP64MatrixShared : jacobiKernel;
                 resident.SubmitReconstructionIterTo(engine, stream, deviceMean, coefficients, work, deviceBC, C::ReconstructionRegion::Core, kernel);
                 if (nccl)
                     stream.WaitFor(comm.Record());
@@ -1060,7 +1060,7 @@ TEST_CASE("CUDA preserves rotated periodic vectors and axisymmetric prepared ope
             gpuHalo.Begin(R::ExecutionContext::CUDA(0)).Wait();
             plan.DoReconstructionIter(mean, cpuCoefficients, cpu, boundary);
             // Large coupled-component coverage belongs to the general kernel;
-            // the stage-once specializations deliberately cover flow5/6/7.
+            // the staged suite separately checks dynamic components at P3.
             resident.DoReconstructionIter(gpuMean, gpuCoefficients, gpu, gpuBoundary, C::ReconstructionDeviceKernel::FP64);
             Equal(cpuCoefficients, gpuCoefficients, 2e-9);
         }
@@ -1210,10 +1210,9 @@ int main(int argc, char **argv)
     mpi = DNDS::MPIInfo(MPI_COMM_WORLD);
     if (const auto *value = std::getenv("DNDS_TEST_RECONSTRUCTION_KERNEL"))
     {
-        DNDS_check_throw_info(std::string(value) == "tensor" || std::string(value) == "tensorWide" || std::string(value) == "shared" || std::string(value) == "async", "unknown test reconstruction kernel");
-        jacobiKernel = std::string(value) == "tensorWide" ? C::ReconstructionDeviceKernel::FP64TensorCoreWide : std::string(value) == "shared" ? C::ReconstructionDeviceKernel::FP64TensorCoreShared
-                                                                                                            : std::string(value) == "async"    ? C::ReconstructionDeviceKernel::FP64TensorCoreAsync
-                                                                                                                                               : C::ReconstructionDeviceKernel::FP64TensorCore;
+        const std::string name(value);
+        DNDS_check_throw_info(name == "async" || name == "floatFloat", "unknown test reconstruction kernel");
+        jacobiKernel = name == "floatFloat" ? C::ReconstructionDeviceKernel::FloatFloatPipelined : C::ReconstructionDeviceKernel::FP64TensorCoreAsync;
     }
     if (const auto *value = std::getenv("DNDS_TEST_TRANSFER_PROVIDER"))
     {

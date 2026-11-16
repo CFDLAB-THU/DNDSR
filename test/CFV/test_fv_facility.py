@@ -318,7 +318,7 @@ def test_stride_aware_reconstruction_uses_shared_runtime_physical_fields(format)
 
 @pytest.mark.mpi
 @pytest.mark.parametrize("backend", ["mpi", "nccl"])
-@pytest.mark.parametrize("kernel_name", ["FP64", "FP64TensorCore", "FP64TensorCoreShared", "FP64TensorCoreAsync"])
+@pytest.mark.parametrize("kernel_name", ["FP64", "FP64MatrixShared", "FP64Pipelined", "FloatFloatPipelined", "FP64TensorCoreAsync"])
 def test_device_reconstruction_publication_layouts_and_python_shared_buffers(backend, kernel_name):
     if backend == "nccl" and not R.NCCLTransferProvider.available():
         pytest.skip("build with NCCL")

@@ -55,7 +55,8 @@ TEST_CASE("Stage-once VR pipelines preserve complete modal batches and queued de
     // geometry, physical BC, rotation and 5/6/7-component tails, not a Cartesian
     // product of geometry/degree/storage choices.
     for (const auto profile : {Profile{0, 1, 5, false, false}, Profile{2, 1, 6, true, false},
-                               Profile{0, 3, 5, false, false}, Profile{1, 2, 6, true, false}, Profile{2, 3, 7, true, true}})
+                               Profile{0, 3, 5, false, false}, Profile{1, 2, 6, true, false}, Profile{2, 3, 7, true, true},
+                               Profile{2, 2, 6, false, false}, Profile{0, 2, 21, false, false}, Profile{2, 3, 37, true, false}})
     {
         CAPTURE(profile.fixture);
         auto mesh = profile.fixture == 0 ? CFVTest::MixedCells(mpi) : profile.fixture == 1 ? CFVTest::Sector(mpi)
@@ -83,25 +84,30 @@ TEST_CASE("Stage-once VR pipelines preserve complete modal batches and queued de
         settings.storage.representation = profile.raw ? "raw" : "precomputed";
         settings.storage.faceCoupling = profile.raw;
         settings.storage.inverseTriangle = profile.triangle;
-        for (int candidate = 0; candidate < 6; ++candidate)
+        for (int candidate = 0; candidate < 7; ++candidate)
         {
             CAPTURE(candidate);
-            const bool tensor = candidate >= 4, cellRow = candidate % 2;
-            settings.cudaSweep.mapping = candidate < 2 || tensor ? "warp" : "block";
-            settings.cudaSweep.buffering = cellRow ? "cellRow" : "neighbor";
-            // A complete row deliberately uses one warp/block: shared memory
-            // scales with independent warp-cells, especially for 19x7 raw data.
-            settings.cudaSweep.threads = cellRow ? (candidate < 2 || tensor ? 32 : 128) : (tensor ? 128 : candidate < 2 ? 64
-                                                                                                                        : 96);
+            const bool tensor = candidate == 2 || candidate == 4;
+            const bool quantized = candidate == 3 || candidate == 4;
+            settings.storage.representation = profile.raw && !quantized ? "raw" : "precomputed";
+            settings.storage.faceCoupling = profile.raw && !quantized;
+            settings.storage.inverseTriangle = profile.triangle && !quantized;
+            settings.cudaSweep.threads = tensor && profile.components <= 7 ? 128 : 32;
             settings.cudaSweep.gridBlocks = 2;
-            settings.cudaSweep.asynchronous = true;
             auto plan = C::VariationalReconstructionPlan::ConstructRecCoeff(metrics, settings, capabilities);
             const auto context = R::ExecutionContext::CUDA(0);
-            auto resident = plan.Place(context.device, context);
-            const auto kernel = tensor ? C::ReconstructionDeviceKernel::FP64TensorCoreAsync : C::ReconstructionDeviceKernel::FP64Pipelined;
+            C::ReconstructionResidencyOptions placement;
+            placement.matrixPrecision = quantized ? C::ReconstructionMatrixPrecision::FP32 : C::ReconstructionMatrixPrecision::FP64;
+            auto resident = plan.Place(context.device, context, placement);
+            const auto kernel = candidate == 4 ? C::ReconstructionDeviceKernel::TF32Pipelined : candidate == 3 ? C::ReconstructionDeviceKernel::FP32Pipelined
+                                                                                            : candidate == 2   ? C::ReconstructionDeviceKernel::FP64TensorCoreAsync
+                                                                                            : candidate == 1   ? C::ReconstructionDeviceKernel::FloatFloatPipelined
+                                                                                            : candidate == 5   ? C::ReconstructionDeviceKernel::FP64MatrixShared
+                                                                                            : candidate == 6   ? C::ReconstructionDeviceKernel::FP64
+                                                                                                               : C::ReconstructionDeviceKernel::FP64Pipelined;
             if (!resident.SupportsKernel(kernel))
             {
-                REQUIRE(tensor); // SIMT must run on both supported devices.
+                REQUIRE((tensor || candidate == 1)); // Float-float is an optional build capability.
                 continue;
             }
             auto boundary = plan.BuildBoundaryValues(profile.components);
@@ -135,7 +141,27 @@ TEST_CASE("Stage-once VR pipelines preserve complete modal batches and queued de
                                                     C::ReconstructionRegion::All, kernel);
             engine.Close();
             resident.CheckStatus(work);
-            Equal(reference.temporary, work.temporary, 2e-9);
+            Equal(reference.temporary, work.temporary, candidate == 4 ? 3e-3 : quantized ? 2e-5
+                                                                                         : 2e-10);
+            if (candidate == 1 && profile.fixture == 0 && profile.degree == 1)
+            {
+                // Narrow exponent overflow is an explicit failed publication,
+                // not a silent fallback or partial overwrite of durable URec.
+                Fill(deviceCoefficients, 1e100);
+                const auto before = deviceCoefficients.Owned().To(R::Device::Host());
+                R::EagerEngine invalid;
+                const auto stream = invalid.CreateStream(std::make_shared<R::CUDALauncher>(0));
+                resident.SubmitReconstructionIterTo(invalid, stream, deviceMean, deviceCoefficients, work, deviceBoundary,
+                                                    C::ReconstructionRegion::All, kernel);
+                resident.SubmitCommitReconstruction(invalid, stream, deviceCoefficients, work);
+                invalid.Close();
+                CHECK_THROWS(resident.CheckStatus(work));
+                const auto after = deviceCoefficients.Owned().To(R::Device::Host());
+                const auto left = before.Read(), right = after.Read();
+                for (I iCell = 0; iCell < before.RowCount(); ++iCell)
+                    for (I j = 0; j < deviceCoefficients.Width(); ++j)
+                        CHECK(left.View()(iCell, j) == right.View()(iCell, j));
+            }
         }
     }
 }
@@ -146,3 +172,62 @@ TEST_CASE("CUDA VR launch policy rejects a non-warp thread count")
     launch.threads = 31;
     CHECK_THROWS(launch.Validate());
 }
+
+#ifdef DNDS_USE_CCCL_COMPUTE
+TEST_CASE("Float-float VR preserves low limbs through a cancelling modal product")
+{
+    namespace D = C::Detail;
+    const auto context = R::ExecutionContext::CUDA(0);
+    const auto upload = [context](auto values, I width)
+    {
+        using T = typename decltype(values)::value_type;
+        R::Array<T> host(R::RowLayout::Dense(I(values.size()) / width, width));
+        {
+            auto write = host.Write();
+            for (I i = 0; i < I(values.size()); ++i)
+                write.View()(i / width, i % width) = values[i];
+        }
+        return host.To(context.device, context);
+    };
+    // Deliberately independent of CFV setup matrices: [1,-1] dotted with
+    // [1e8+.25,1e8] must recover .25. Rounding inputs/products to one float
+    // instead produces zero, which a relative test on a large state can hide.
+    auto offsets = upload(std::vector<I>{0, 1}, 1);
+    auto neighbors = upload(std::vector<I>{0}, 1);
+    auto boundaryOffsets = upload(std::vector<I>{0, 0}, 1);
+    auto matrix = upload(std::vector<double>{1, 0, -1, 0}, 4);
+    auto vector = upload(std::vector<double>{0, 0}, 2);
+    auto injection = upload(std::vector<double>{}, 2);
+    auto mean = upload(std::vector<double>(5, 0), 5);
+    std::vector<double> values(10);
+    for (I j = 0; j < 5; ++j)
+        values[j * 2] = 1e8 + .25, values[j * 2 + 1] = 1e8;
+    auto coefficients = upload(values, 10);
+    auto output = upload(std::vector<double>(10, -7), 10);
+    auto status = upload(std::vector<int>{0}, 1);
+    {
+        auto offsetsRead = offsets.Read(context), neighborsRead = neighbors.Read(context), boundaryRead = boundaryOffsets.Read(context);
+        auto matrixRead = matrix.Read(context), vectorRead = vector.Read(context), injectionRead = injection.Read(context);
+        auto meanRead = mean.Read(context), coefficientsRead = coefficients.Read(context);
+        auto statusWrite = status.Write(context);
+        auto result = output.Write(context);
+        D::ReconstructionDeviceView plan;
+        plan.owned = 1, plan.n = 2, plan.relax = 1;
+        plan.offsets = offsetsRead.View(), plan.neighbors = neighborsRead.View(), plan.boundaryOffsets = boundaryRead.View();
+        plan.matrixAInvB = matrixRead.View(), plan.vectorAInvB = vectorRead.View(), plan.boundaryInjection = injectionRead.View();
+        D::LaunchStagedJacobi(context, plan, {{}, 1, false}, {}, {meanRead.View(), {}}, {coefficientsRead.View(), {}}, {},
+                              result.View(), statusWrite.View().ConstView(), {}, D::ReconstructionSweepArithmetic::FloatFloat);
+        D::LaunchValidateJacobiResult(context, {{}, 1, false}, result.View().ConstView(), statusWrite.View());
+        REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
+    }
+    const auto host = output.To(R::Device::Host());
+    const auto read = host.Read();
+    for (I j = 0; j < 5; ++j)
+    {
+        CHECK(read.View()(0, j * 2) == .25);
+        CHECK(read.View()(0, j * 2 + 1) == 0);
+    }
+    const auto flag = status.To(R::Device::Host());
+    CHECK(flag.Read().View()(0, 0) == 0);
+}
+#endif

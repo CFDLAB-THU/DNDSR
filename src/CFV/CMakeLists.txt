@@ -54,7 +54,13 @@ Operators/FiniteVolumePlan_Linear.cpp
 )
 if (DNDS_USE_CUDA)
 list(APPEND CPPS Operators/CUDA/CharacteristicKernels_CUDA.cu Operators/CUDA/GradientKernels_CUDA.cu Operators/CUDA/LimitedVRKernels_CUDA.cu Operators/CUDA/PolynomialSamplingKernels_CUDA.cu Legacy/VRDefines.cu Operators/CUDA/ReconstructionDevice.cu Operators/CUDA/ReconstructionTensorCore.cu)
-list(APPEND CPPS Operators/CUDA/ReconstructionDeviceKernels_TF32.cu Operators/CUDA/ReconstructionDeviceKernels_Raw.cu Operators/CUDA/ReconstructionDeviceKernels_Staged.cu)
+list(APPEND CPPS Operators/CUDA/ReconstructionDeviceKernels_TF32.cu Operators/CUDA/ReconstructionDeviceKernels_Raw.cu Operators/CUDA/ReconstructionDeviceKernels_Staged.cu
+    Operators/CUDA/ReconstructionDeviceKernels_Staged_FP64.cu
+    Operators/CUDA/ReconstructionDeviceKernels_Staged_FloatFloat.cu
+    Operators/CUDA/ReconstructionDeviceKernels_Staged_FP32.cu
+    Operators/CUDA/ReconstructionDevice_General_FP64.cu
+    Operators/CUDA/ReconstructionDevice_General_FP32.cu
+    Operators/CUDA/ReconstructionDevice_General_FloatFloat.cu)
 list(APPEND CPPS Operators/CUDA/DistributedInterfaceSamplingKernels.cu)
 endif()
 

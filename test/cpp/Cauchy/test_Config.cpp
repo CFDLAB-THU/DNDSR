@@ -23,7 +23,7 @@ TEST_CASE("Reconstruction kernel selection is explicit and retains the FP64 defa
     C::ExecutionSettings execution;
     CHECK(execution.ReconstructionKernel() == Kernel::FP64);
     for (const auto &[name, kernel] : std::vector<std::pair<std::string, Kernel>>{
-             {"fp64Wide", Kernel::FP64Wide}, {"fp64Static", Kernel::FP64Static}, {"fp64MatrixShared", Kernel::FP64MatrixShared}, {"fp64Tensor", Kernel::FP64TensorCore}, {"fp64TensorWide", Kernel::FP64TensorCoreWide}, {"fp64TensorShared", Kernel::FP64TensorCoreShared}, {"fp64TensorAsync", Kernel::FP64TensorCoreAsync}, {"fp32", Kernel::FP32}, {"fp32Accum", Kernel::FP32FullAccumulation}, {"fp32FloatFloatAccum", Kernel::FP32FloatFloatAccumulation}, {"tf32", Kernel::TF32TensorCore}})
+             {"fp64MatrixShared", Kernel::FP64MatrixShared}, {"fp64Pipelined", Kernel::FP64Pipelined}, {"floatFloatPipelined", Kernel::FloatFloatPipelined}, {"fp32Pipelined", Kernel::FP32Pipelined}, {"tf32Pipelined", Kernel::TF32Pipelined}, {"fp64TensorAsync", Kernel::FP64TensorCoreAsync}, {"fp32", Kernel::FP32}, {"fp32Accum", Kernel::FP32FullAccumulation}, {"fp32FloatFloatAccum", Kernel::FP32FloatFloatAccumulation}, {"tf32", Kernel::TF32TensorCore}})
     {
         execution.reconstructionKernel = name;
         CHECK(execution.ReconstructionKernel() == kernel);

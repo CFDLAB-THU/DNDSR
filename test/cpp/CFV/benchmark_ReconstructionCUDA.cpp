@@ -38,7 +38,7 @@ int main(int argc, char **argv)
     int result = 0;
     try
     {
-        DNDS_check_throw_info(argc >= 5 && argc <= 8, "arguments: grid-width degree components repetitions [direct|packed|nccl] [fp64|tensor|shared|async|fp32|tf32] [all|aos]");
+        DNDS_check_throw_info(argc >= 5 && argc <= 8, "arguments: grid-width degree components repetitions [direct|packed|nccl] [fp64|async|pipelined|floatFloat|fp32|tf32] [all|aos]");
         const I width = std::stoll(argv[1]), components = std::stoll(argv[3]);
         const int degree = std::stoi(argv[2]), repeats = std::stoi(argv[4]);
         DNDS_check_throw_info(components > 0 && components <= 64 && repeats > 0, "invalid benchmark shape");
@@ -46,15 +46,15 @@ int main(int argc, char **argv)
         const std::string layouts = argc >= 8 ? argv[7] : "all";
         DNDS_check_throw_info(layouts == "all" || layouts == "aos", "unknown benchmark layout selection");
         DNDS_check_throw_info(transportName == "direct" || transportName == "packed" || transportName == "nccl", "unknown transfer backend");
-        DNDS_check_throw_info(kernelName == "fp64" || kernelName == "tensor" || kernelName == "shared" || kernelName == "async" ||
+        DNDS_check_throw_info(kernelName == "fp64" || kernelName == "pipelined" || kernelName == "floatFloat" || kernelName == "async" ||
                                   kernelName == "fp32" || kernelName == "tf32",
                               "unknown reconstruction kernel");
         const auto transport = transportName == "direct" ? R::TransferTransport::Direct : R::TransferTransport::DevicePacked;
-        const auto kernel = kernelName == "fp32" ? C::ReconstructionDeviceKernel::FP32 : kernelName == "tf32" ? C::ReconstructionDeviceKernel::TF32TensorCore
-                                                                                     : kernelName == "shared" ? C::ReconstructionDeviceKernel::FP64TensorCoreShared
-                                                                                     : kernelName == "async"  ? C::ReconstructionDeviceKernel::FP64TensorCoreAsync
-                                                                                     : kernelName == "tensor" ? C::ReconstructionDeviceKernel::FP64TensorCore
-                                                                                                              : C::ReconstructionDeviceKernel::FP64;
+        const auto kernel = kernelName == "fp32" ? C::ReconstructionDeviceKernel::FP32 : kernelName == "tf32"     ? C::ReconstructionDeviceKernel::TF32TensorCore
+                                                                                     : kernelName == "pipelined"  ? C::ReconstructionDeviceKernel::FP64Pipelined
+                                                                                     : kernelName == "floatFloat" ? C::ReconstructionDeviceKernel::FloatFloatPipelined
+                                                                                     : kernelName == "async"      ? C::ReconstructionDeviceKernel::FP64TensorCoreAsync
+                                                                                                                  : C::ReconstructionDeviceKernel::FP64;
         const auto device = R::Device::CUDA(0);
         const auto context = R::ExecutionContext::CUDA(0);
         R::TransferOptions transferOptions;

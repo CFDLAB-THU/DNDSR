@@ -270,24 +270,18 @@ namespace DNDS::Cauchy
         using Kernel = CFV::ReconstructionDeviceKernel;
         if (reconstructionKernel == "fp64")
             return Kernel::FP64;
-        if (reconstructionKernel == "fp64Shared")
-            return Kernel::FP64Shared;
-        if (reconstructionKernel == "fp64Wide")
-            return Kernel::FP64Wide;
-        if (reconstructionKernel == "fp64Static")
-            return Kernel::FP64Static;
         if (reconstructionKernel == "fp64MatrixShared")
             return Kernel::FP64MatrixShared;
+        if (reconstructionKernel == "floatFloatPipelined")
+            return Kernel::FloatFloatPipelined;
         if (reconstructionKernel == "fp64Pipelined")
             return Kernel::FP64Pipelined;
-        if (reconstructionKernel == "fp64Tensor")
-            return Kernel::FP64TensorCore;
-        if (reconstructionKernel == "fp64TensorWide")
-            return Kernel::FP64TensorCoreWide;
-        if (reconstructionKernel == "fp64TensorShared")
-            return Kernel::FP64TensorCoreShared;
         if (reconstructionKernel == "fp64TensorAsync")
             return Kernel::FP64TensorCoreAsync;
+        if (reconstructionKernel == "fp32Pipelined")
+            return Kernel::FP32Pipelined;
+        if (reconstructionKernel == "tf32Pipelined")
+            return Kernel::TF32Pipelined;
         if (reconstructionKernel == "fp32")
             return Kernel::FP32;
         if (reconstructionKernel == "fp32Accum")
@@ -310,8 +304,9 @@ namespace DNDS::Cauchy
         require(cuda || reconstructionKernel == CFV::ReconstructionDeviceKernel::FP64,
                 "nondefault reconstruction kernel requires CUDA");
 #ifndef DNDS_USE_CCCL_COMPUTE
-        require(reconstructionKernel != CFV::ReconstructionDeviceKernel::FP32FloatFloatAccumulation,
-                "fp32FloatFloatAccum reconstruction requires DNDS_USE_CCCL_COMPUTE");
+        require(reconstructionKernel != CFV::ReconstructionDeviceKernel::FP32FloatFloatAccumulation &&
+                    reconstructionKernel != CFV::ReconstructionDeviceKernel::FloatFloatPipelined,
+                "float-float reconstruction requires DNDS_USE_CCCL_COMPUTE");
 #endif
         const auto &kernels = s.execution.kernels;
         require(cuda || kernels.Default(), "operator compute/layout experiments require CUDA");

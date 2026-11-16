@@ -14,7 +14,7 @@ namespace DNDS::CFV::Detail
      * The relaxed/LVR target contribution bypasses A-inverse. Alpha=1 must not
      * read any neighbor, boundary value or inverse, including NaN sentinels.
      */
-    template <int FixedModes, bool SharedMatrix, bool Limited>
+    template <int FixedModes, int Components, bool SharedMatrix, bool Limited>
     __global__ void RawJacobi(RawJacobiView plan, DeviceWorkSelection selection, DevicePeriodicBlocks blocks,
                               R::PairReadView<real> mean, R::PairReadView<real> input,
                               R::ArrayView<const real> boundary, R::ArrayView<real> output,
@@ -23,13 +23,15 @@ namespace DNDS::CFV::Detail
         if (status(0, 0))
             return;
         const index n = FixedModes ? FixedModes : plan.n;
-        __shared__ real right[19 * 7], coefficients[19 * 7], matrix[SharedMatrix ? 19 * 19 : 1];
+        const index width = Components ? Components * n : output.width;
+        extern __shared__ real words[];
+        real *right = words, *coefficients = right + width, *matrix = coefficients + width;
         for (index iWork = blockIdx.x; iWork < selection.count; iWork += gridDim.x)
         {
             const index iCell = selection.Cell(iWork);
             const real penalty = Limited ? alpha(iCell, 0) : 0;
             const real scale = plan.relax * (1 - penalty);
-            for (index i = threadIdx.x; i < output.width; i += blockDim.x)
+            for (index i = threadIdx.x; i < width; i += blockDim.x)
                 right[i] = 0;
             __syncthreads();
             if (scale != 0)
@@ -45,14 +47,14 @@ namespace DNDS::CFV::Detail
                     const auto block = plan.matrices[matrixRow];
                     if (other != UnInitIndex)
                     {
-                        for (index i = threadIdx.x; i < output.width; i += blockDim.x)
+                        for (index i = threadIdx.x; i < width; i += blockDim.x)
                             coefficients[i] = input(other, i);
                         if constexpr (SharedMatrix)
                             for (index k = threadIdx.x; k < n * n; k += blockDim.x)
                                 matrix[k] = block[transpose ? k / n + n * (k % n) : k];
                     }
                     __syncthreads();
-                    for (index i = threadIdx.x; i < output.width; i += blockDim.x)
+                    for (index i = threadIdx.x; i < width; i += blockDim.x)
                     {
                         const index mode = i % n, component = i / n;
                         if (other != UnInitIndex)
@@ -100,7 +102,7 @@ namespace DNDS::CFV::Detail
             }
             __syncthreads();
             const auto inverse = plan.inverse[iCell];
-            for (index i = threadIdx.x; i < output.width; i += blockDim.x)
+            for (index i = threadIdx.x; i < width; i += blockDim.x)
             {
                 real value = input(iCell, i) * (1 - plan.relax);
                 if constexpr (Limited)
@@ -121,52 +123,80 @@ namespace DNDS::CFV::Detail
     void LaunchRawJacobi(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection,
                          DevicePeriodicBlocks blocks, R::PairReadView<real> mean, R::PairReadView<real> input,
                          R::ArrayView<const real> boundary, R::ArrayView<real> output, R::ArrayView<const int> status,
-                         R::ArrayView<const real> target, R::ArrayView<const real> alpha, bool limited, int mapping)
+                         R::ArrayView<const real> target, R::ArrayView<const real> alpha, bool limited, bool matrixShared)
     {
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && plan.raw && !plan.quantized &&
-                                  plan.n > 0 && plan.n <= 19 && mean.owned.Width() > 0 && mean.owned.Width() <= 7 &&
-                                  mapping >= -1 && mapping <= 2 && output.Width() == plan.n * mean.owned.Width() &&
+                                  plan.n > 0 && plan.n <= 19 && mean.owned.Width() > 0 && mean.owned.Width() <= INT_MAX / plan.n &&
+                                  output.Width() == plan.n * mean.owned.Width() &&
                                   input.owned.Width() == output.Width() && output.RowCount() == mean.owned.RowCount() &&
                                   plan.matrixAInvB.Width() == plan.n * plan.n && plan.vectorAInvB.Width() == plan.n &&
                                   plan.localInverse.Width() == (plan.inverseTriangle ? plan.n * (plan.n + 1) / 2 : plan.n * plan.n),
-                              "raw CUDA VR requires FP64 P1..P3 and at most seven components");
+                              "raw CUDA VR requires FP64 P1..P3 and a valid component count");
         R::ValidateViewDevices(context.device, plan, selection, blocks, mean, input, boundary, output, status, target, alpha);
         R::CheckKernelArgumentBudget<RawJacobiView, decltype(selection), decltype(blocks), decltype(mean), decltype(input),
                                      decltype(boundary), decltype(output), decltype(status), decltype(target), decltype(alpha)>();
         if (!selection.count)
             return;
         const auto stream = static_cast<cudaStream_t>(context.stream);
-        const unsigned grid = unsigned(std::min<index>(selection.count, mapping < 0 ? 256 : 65535));
+        const unsigned grid = unsigned(std::min<index>(selection.count, matrixShared || limited ? 65535 : 256));
+        const auto bytes = size_t(2 * output.width + (matrixShared ? plan.n * plan.n : 0)) * sizeof(real);
         const auto launch = [&](auto modes)
         {
             constexpr int N = decltype(modes)::value;
-            const auto limitedLaunch = [&](auto limit)
+            const auto components = [&](auto count)
             {
-                constexpr bool L = decltype(limit)::value;
-                if (mapping == 2)
-                    RawJacobi<N, true, L><<<grid, 96, 0, stream>>>(RawJacobiView(plan), selection, blocks, mean, input, boundary, output, status, target, alpha);
+                constexpr int C = decltype(count)::value;
+                const auto limitedLaunch = [&](auto limit)
+                {
+                    constexpr bool L = decltype(limit)::value;
+                    if (matrixShared)
+                        RawJacobi<N, C, true, L><<<grid, 96, bytes, stream>>>(RawJacobiView(plan), selection, blocks, mean, input, boundary, output, status, target, alpha);
+                    else
+                        RawJacobi<N, C, false, L><<<grid, limited ? 96 : 128, bytes, stream>>>(RawJacobiView(plan), selection, blocks, mean, input, boundary, output, status, target, alpha);
+                };
+                if (limited)
+                    limitedLaunch(std::true_type{});
                 else
-                    RawJacobi<N, false, L><<<grid, N ? 96 : 128, 0, stream>>>(RawJacobiView(plan), selection, blocks, mean, input, boundary, output, status, target, alpha);
+                    limitedLaunch(std::false_type{});
             };
-            if (limited)
-                limitedLaunch(std::true_type{});
-            else
-                limitedLaunch(std::false_type{});
+            switch (mean.owned.width)
+            {
+            case 5:
+                components(std::integral_constant<int, 5>{});
+                break;
+            case 6:
+                components(std::integral_constant<int, 6>{});
+                break;
+            case 7:
+                components(std::integral_constant<int, 7>{});
+                break;
+            default:
+                components(std::integral_constant<int, 0>{});
+                break;
+            }
         };
-        if (mapping <= 0)
-            launch(std::integral_constant<int, 0>{});
-        else if (plan.n == 2)
+        switch (plan.n)
+        {
+        case 2:
             launch(std::integral_constant<int, 2>{});
-        else if (plan.n == 3)
+            break;
+        case 3:
             launch(std::integral_constant<int, 3>{});
-        else if (plan.n == 5)
+            break;
+        case 5:
             launch(std::integral_constant<int, 5>{});
-        else if (plan.n == 9)
+            break;
+        case 9:
             launch(std::integral_constant<int, 9>{});
-        else if (plan.n == 19)
+            break;
+        case 19:
             launch(std::integral_constant<int, 19>{});
-        else
+            break;
+        default:
             launch(std::integral_constant<int, 0>{});
+            break;
+        }
+
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "raw CUDA Jacobi launch failed");
     }
 }

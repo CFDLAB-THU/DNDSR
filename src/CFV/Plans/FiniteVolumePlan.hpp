@@ -346,8 +346,6 @@ namespace DNDS::CFV
     enum class ReconstructionDeviceKernel
     {
         FP64,
-        FP64TensorCore,
-        FP64TensorCoreShared,
         FP64TensorCoreAsync,
         /// FP32 matrix/coefficient products accumulated in FP32, then added to
         /// FP64 coefficients. SIMT FMA reference for quantized MMA experiments;
@@ -357,18 +355,8 @@ namespace DNDS::CFV
         /// Explicitly rounds operands to TF32, accumulates in FP32, promotes
         /// the correction to FP64. This is not the FP32 reference arithmetic.
         TF32TensorCore,
-        /// Experimental FP64 SIMT sweep: share one neighbor coefficient row
-        /// across target modes without changing their ordered arithmetic. No
-        /// tensor-core requirement; combined 5/6/7-component P1..P3 only.
-        FP64Shared,
-        /// Reference ordered FP64 arithmetic with a larger grid. This isolates
-        /// the old 256-block residency limit from arithmetic/layout changes.
-        FP64Wide,
-        /// Larger grid plus fixed P1/P2/P3 modal sizes and 96-thread cells.
-        /// Keeps each scalar product's neighbor and summation order unchanged.
-        FP64Static,
         /// Fixed modal sizes and shared staging of each neighbor matrix and
-        /// coefficient row. Requires 5/6/7 components; no reduced precision.
+        /// coefficient row. Static 5/6/7 and dynamic components; FP64 arithmetic.
         FP64MatrixShared,
         /// FP32 sweep maps and the entire local update in FP32, including
         /// relaxation, periodic rotation, means and boundary contributions.
@@ -378,10 +366,16 @@ namespace DNDS::CFV
         /// FP64 inputs are converted directly to the high/low pair; this does
         /// not restore precision lost in the maps. Requires CCCL compute.
         FP32FloatFloatAccumulation,
-        /// Identical FP64 MMA arithmetic with a wider warp-per-cell grid.
-        FP64TensorCoreWide,
-        /// Stage-once SIMT, configurable warp/block and neighbor/cell-row pipeline.
-        FP64Pipelined
+        /// Stage-once block-team SIMT with neighbor cp.async buffering.
+        FP64Pipelined,
+        /// Same SIMT sweep with ALL numerical arithmetic in CCCL fp32mp2.
+        /// FP64 maps/states are converted directly at loads and final stores;
+        /// this is distinct from quantized-map FP32FloatFloatAccumulation.
+        FloatFloatPipelined,
+        /// FP32-quantized maps and full FP32 neighbor-buffered SIMT update.
+        FP32Pipelined,
+        /// FP32 maps, TF32-rounded tensor products and FP32 update arithmetic.
+        TF32Pipelined
     };
     struct ResidentBufferInfo
     {
