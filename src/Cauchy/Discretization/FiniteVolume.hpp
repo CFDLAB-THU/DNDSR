@@ -628,7 +628,8 @@ namespace DNDS::Cauchy
         /// mode omits off-diagonal storage; PrepareJacobian supplies its frozen
         /// physical snapshot. Both modes retain explicit diagonal storage.
         std::shared_ptr<LinearProblemContext> BuildLinearProblem(const EquationDofs &prototype, DiagonalStorage diagonal,
-                                                                 OffDiagonalStorage offDiagonal = OffDiagonalStorage::Assembled) const;
+                                                                 OffDiagonalStorage offDiagonal = OffDiagonalStorage::Assembled,
+                                                                 LinearMatrixOptions storage = {}) const;
         /// Prepare integrated approximate-Jacobian coefficients from
         /// frozen means and prepared face signals. No input mutation, MPI or
         /// inverse/factor preparation occurs here. inversePseudoTime is an
@@ -923,7 +924,7 @@ namespace DNDS::Cauchy
                                        const JacobianContext &context,
                                        const Runtime::Array<real>::WriteLease &diagonal, DiagonalStorage storage,
                                        real scale, PointEvaluator &evaluator,
-                                       OptionalRef<const EquationFVDetail::MeanLinearizationOutput> linearization = {}) const;
+                                       OptionalRef<const EquationFVDetail::MeanLinearizationOutput> linearization = {}, bool rowMajorBlocks = false) const;
         index PrepareFaceCharacteristicMatrices(const EquationDofs &state,
                                                 Runtime::Array<real> &forward,
                                                 Runtime::Array<real> &inverse,

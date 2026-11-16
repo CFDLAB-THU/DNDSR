@@ -4,6 +4,8 @@
 #include <limits>
 #include <mutex>
 #include <sstream>
+#include <algorithm>
+#include <vector>
 #ifdef DNDS_USE_AMGX
 #    include <amgx_c.h>
 #    include <cuda_runtime_api.h>
@@ -69,7 +71,9 @@ namespace DNDS::Algebra
             // enclosing AMG scope. Put relaxation in the nested smoother:
             // otherwise the requested factor is ignored (upstream default .9).
             std::ostringstream text;
-            text << R"({"config_version":2,"determinism_flag":1,"block_format":"ROW_MAJOR","solver":{"solver":"AMG",)"
+            text << R"({"config_version":2,"determinism_flag":1,"block_format":")"
+                 << (s.blockFormat == AmgXBlockFormat::ColumnMajor ? "COL_MAJOR" : "ROW_MAJOR")
+                 << R"(","solver":{"solver":"AMG",)"
                  << R"("algorithm":"AGGREGATION","selector":"SIZE_2","cycle":"V",)"
                  << R"("smoother":{"solver":"BLOCK_JACOBI","monitor_residual":0,"print_solve_stats":0,"relaxation_factor":)"
                  << s.relaxation << R"(},"coarse_solver":"NOSOLVER","monitor_residual":0,)"
@@ -135,6 +139,8 @@ namespace DNDS::Algebra
     {
         Runtime::Device device;
         Runtime::Array<int> offsets, columns;
+        std::optional<Runtime::Array<int>::ReadLease> offsetRead, columnRead;
+        bool separateDiagonal = false;
         index rows = 0, entries = 0;
         int blockSize = 1;
         bool pattern = false, uploaded = false, ready = false;
@@ -189,6 +195,8 @@ namespace DNDS::Algebra
                                   settings.coarseSweeps > 0 && settings.maxLevels > 0 && settings.minCoarseRows > 0 &&
                                   std::isfinite(settings.relaxation) && settings.relaxation > 0 && settings.relaxation <= 1,
                               "invalid fixed-cycle AmgX settings");
+        DNDS_check_throw_info(settings.blockFormat == AmgXBlockFormat::RowMajor,
+                              "the selected AmgX BLOCK_JACOBI hierarchy requires native row-major blocks; transposition is not implemented");
         _state->device = device;
 #ifdef DNDS_USE_AMGX
         std::lock_guard<std::mutex> lock(Provider().mutex);
@@ -205,9 +213,12 @@ namespace DNDS::Algebra
     Runtime::Device AmgXPreconditioner::GetDevice() const { return _state->device; }
     index AmgXPreconditioner::RowNumber() const { return _state->rows * _state->blockSize; }
 
-    void AmgXPreconditioner::SetPattern(Runtime::ArrayView<const int> offsets, Runtime::ArrayView<const int> columns, int blockSize)
+    void AmgXPreconditioner::SetPattern(const Runtime::Array<int> &offsetArray, const Runtime::Array<int> &columnArray,
+                                        int blockSize, bool separateDiagonal)
     {
         DNDS_check_throw_info(blockSize == 1 || (blockSize >= 5 && blockSize <= 7), "unsupported AmgX native block width");
+        auto offsetRead = offsetArray.Read(), columnRead = columnArray.Read();
+        const auto offsets = offsetRead.View(), columns = columnRead.View();
         CheckScalarTable(offsets, Runtime::Device::Host());
         CheckScalarTable(columns, Runtime::Device::Host());
         DNDS_check_throw_info(offsets.rows >= 1 && offsets.rows - 1 <= std::numeric_limits<int>::max() / blockSize &&
@@ -215,46 +226,55 @@ namespace DNDS::Algebra
                               "AmgX block CSR exceeds int32 range");
         const index rows = offsets.rows - 1;
         DNDS_check_throw_info(offsets(0, 0) == 0 && offsets(rows, 0) == columns.rows, "invalid AmgX CSR endpoints");
+        std::vector<int> row;
         for (index iRow = 0; iRow < rows; ++iRow)
         {
             const int begin = offsets(iRow, 0), end = offsets(iRow + 1, 0);
             DNDS_check_throw_info(begin >= 0 && begin <= end && end <= columns.rows, "invalid AmgX CSR row");
+            row.clear();
             bool diagonal = false;
-            int previous = -1;
             for (index j = begin; j < end; ++j)
             {
                 const int column = columns(j, 0);
-                DNDS_check_throw_info(column > previous && column < rows, "AmgX requires sorted unique local columns");
-                previous = column;
+                DNDS_check_throw_info(column >= 0 && column < rows, "AmgX requires rank-local native columns; off-rank filtering is unsupported");
+                row.push_back(column);
                 diagonal |= column == iRow;
             }
-            DNDS_check_throw_info(diagonal, "AmgX row is missing its diagonal");
+            // This local validation scratch never changes the caller's CSR
+            // order or numerical block ordinal. AmgX's public upload accepts
+            // unique unsorted CSR, including its separate-DIAG representation.
+            std::sort(row.begin(), row.end());
+            DNDS_check_throw_info(std::adjacent_find(row.begin(), row.end()) == row.end(), "AmgX requires unique native columns");
+            DNDS_check_throw_info(separateDiagonal ? !diagonal : diagonal,
+                                  "AmgX diagonal presence differs from its declared native representation");
         }
-        Runtime::Array<int> ownOffsets(Runtime::RowLayout::Dense(offsets.rows, 1));
-        Runtime::Array<int> ownColumns(Runtime::RowLayout::Dense(columns.rows, 1));
-        {
-            auto a = ownOffsets.Write(), b = ownColumns.Write();
-            for (index iRow = 0; iRow < offsets.rows; ++iRow)
-                a.View()(iRow, 0) = offsets(iRow, 0);
-            for (index iRow = 0; iRow < columns.rows; ++iRow)
-                b.View()(iRow, 0) = columns(iRow, 0);
-        }
-        ownOffsets.SetName("AmgX/CSR/offsets", DNDS_ALLOCATION_SITE());
-        ownColumns.SetName("AmgX/CSR/columns", DNDS_ALLOCATION_SITE());
-        _state->offsets = std::move(ownOffsets);
-        _state->columns = std::move(ownColumns);
+        _state->offsetRead.reset();
+        _state->columnRead.reset();
+        _state->offsets = offsetArray;
+        _state->columns = columnArray;
+        _state->offsetRead.emplace(std::move(offsetRead));
+        _state->columnRead.emplace(std::move(columnRead));
         _state->rows = rows;
         _state->entries = columns.rows;
         _state->blockSize = blockSize;
+        _state->separateDiagonal = separateDiagonal;
         _state->pattern = true;
         _state->uploaded = _state->ready = false;
     }
 
-    void AmgXPreconditioner::UpdateValuesBorrowed(Runtime::ExecutionContext context, Runtime::ArrayView<const real> values)
+    void AmgXPreconditioner::UpdateValuesBorrowed(Runtime::ExecutionContext context, Runtime::ArrayView<const real> values,
+                                                  std::optional<Runtime::ArrayView<const real>> diagonal)
     {
         DNDS_check_throw_info(context.device == GetDevice() && _state->pattern, "AmgX update needs its device and pattern");
         CheckScalarTable(values, GetDevice());
         DNDS_check_throw_info(values.rows == _state->entries * _state->blockSize * _state->blockSize, "AmgX value count mismatch");
+        DNDS_check_throw_info(bool(diagonal) == _state->separateDiagonal, "AmgX separate diagonal is missing or unexpected");
+        if (diagonal)
+        {
+            CheckScalarTable(*diagonal, GetDevice());
+            DNDS_check_throw_info(diagonal->rows == _state->rows * _state->blockSize * _state->blockSize,
+                                  "AmgX separate diagonal value count mismatch");
+        }
         _state->ready = false;
 #ifdef DNDS_USE_AMGX
         std::lock_guard<std::mutex> lock(Provider().mutex);
@@ -263,12 +283,11 @@ namespace DNDS::Algebra
         if (_state->rows)
         {
             if (_state->uploaded)
-                Check(AMGX_matrix_replace_coefficients(_state->matrix, int(_state->rows), int(_state->entries), values.data, nullptr));
+                Check(AMGX_matrix_replace_coefficients(_state->matrix, int(_state->rows), int(_state->entries), values.data, diagonal ? diagonal->data : nullptr));
             else
             {
-                auto offsets = _state->offsets.Read(), columns = _state->columns.Read();
                 Check(AMGX_matrix_upload_all(_state->matrix, int(_state->rows), int(_state->entries), _state->blockSize, _state->blockSize,
-                                             offsets.View().data, columns.View().data, values.data, nullptr));
+                                             _state->offsetRead->View().data, _state->columnRead->View().data, values.data, diagonal ? diagonal->data : nullptr));
                 Check(AMGX_vector_bind(_state->rhs, _state->matrix));
                 Check(AMGX_vector_bind(_state->solution, _state->matrix));
             }

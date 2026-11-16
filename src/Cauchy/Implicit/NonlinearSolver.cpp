@@ -101,7 +101,8 @@ namespace DNDS::Cauchy
               admissibility(fv.PrepareAdmissibility(workers)),
               operators(fv.Metrics(), admissibility, stream.Context()),
               problem(fv.BuildLinearProblem(state, settings.diagonal == "block" ? DiagonalStorage::Block : DiagonalStorage::Entries,
-                                            (settings.jacobianAction == "directEvaluated" || settings.jacobianAction == "semiMatrixFree") ? OffDiagonalStorage::DirectEvaluated : OffDiagonalStorage::Assembled)),
+                                            (settings.jacobianAction == "directEvaluated" || settings.jacobianAction == "semiMatrixFree") ? OffDiagonalStorage::DirectEvaluated : OffDiagonalStorage::Assembled,
+                                            NonlinearDetail::ResolveMatrixStorage(settings.linear))),
               positivity(controls.numerics.positivity), reconstructionTolerance(settings.requireConvergedReconstruction && controls.numerics.reconstruction == "variational" ? controls.numerics.reconstructionTolerance : 0)
         {
             setup = std::make_unique<NonlinearSolveSetup>(

@@ -41,7 +41,7 @@ namespace DNDS::Cauchy::CPU
             if (request.fullBlock)
                 for (index j = 0; j < nv; ++j)
                     for (index i = 0; i < nv; ++i)
-                        d(iCell, i + nv * j) = i == j ? mass : 0;
+                        d(iCell, request.rowMajorBlocks ? i * nv + j : i + nv * j) = i == j ? mass : 0;
             else
                 for (index j = 0; j < nv; ++j) d(iCell, j) = mass;
             if (snapshot.frame.moving)
@@ -50,7 +50,7 @@ namespace DNDS::Cauchy::CPU
                 {
                     for (int j = 0; j < 5; ++j)
                         for (int i = 0; i < 5; ++i)
-                            d(iCell, snapshot.flowFirst + i + nv * (snapshot.flowFirst + j)) += request.scale * metric.GetCellVol(iCell) * rotation[i + 5 * j];
+                            d(iCell, request.rowMajorBlocks ? (snapshot.flowFirst + i) * nv + snapshot.flowFirst + j : snapshot.flowFirst + i + nv * (snapshot.flowFirst + j)) += request.scale * metric.GetCellVol(iCell) * rotation[i + 5 * j];
                 }
                 else
                     for (int i = 0; i < 5; ++i)
@@ -69,12 +69,13 @@ namespace DNDS::Cauchy::CPU
         const auto &inputValues = request.input;
         const auto &wallValues = request.walls;
         const auto incomingFace = request.incoming;
-        const auto d = request.diagonal, boundaryMeans = request.boundaryMeans;
+        const auto d = request.diagonal;
+        const auto boundaryMeans = request.boundaryMeans;
         const auto b = request.offDiagonal;
         const auto radius = request.radius;
         const auto time = request.time;
         const index owned = request.owned, all = request.all, nv = snapshot.components;
-        const bool sixComponentShape = b && nv == 6 && snapshot.flowFirst == 0 &&
+        const bool sixComponentShape = b && !b->RowMajorBlocks() && !request.rowMajorBlocks && b->ElementStride() == 1 && d.ElementStride() == 1 && nv == 6 && snapshot.flowFirst == 0 &&
                                        snapshot.allComponents && snapshot.kineticFirst < 0;
         const auto ownedTable = sixComponentShape ? Algebra::TryOwnedTable(inputValues.OwnedPart()) : std::nullopt;
         const auto ghostTable = sixComponentShape ? Algebra::TryGhostTable(inputValues.GhostPart()) : std::nullopt;
@@ -115,7 +116,7 @@ namespace DNDS::Cauchy::CPU
                             return NumericalStatus{NumericalError::InvalidState}.At(iCell);
                         const index row = snapshot.speciesFirst + k;
                         if (request.fullBlock || row == column)
-                            d(iCell, request.fullBlock ? row + nv * column : row) -=
+                            d(iCell, request.fullBlock ? (request.rowMajorBlocks ? row * nv + column : row + nv * column) : row) -=
                                 request.scale * metric.GetCellVol(iCell) * properties.sourceJacobian(k, j);
                     }
                 }
@@ -294,7 +295,7 @@ namespace DNDS::Cauchy::CPU
         };
         if (request.fullBlock)
         {
-            const auto matrices = Algebra::MakeEigenRowMatrices(d, nv, nv);
+            const auto matrices = Algebra::MakeEigenRowMatrices(d, nv, nv, Runtime::Device::Host(), request.rowMajorBlocks);
             for (index iCell = begin; iCell < end; ++iCell)
             {
                 auto block = matrices[iCell];

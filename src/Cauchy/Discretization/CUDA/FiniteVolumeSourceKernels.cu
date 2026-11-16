@@ -97,7 +97,7 @@ namespace DNDS::Cauchy::CUDA
         template <class View>
         void CheckTable(View view, index rows, index width)
         {
-            DNDS_check_throw_info(view.kind == R::RowLayoutKind::Table && view.RowCount() == rows && view.Width() == width,
+            DNDS_check_throw_info((view.kind == R::RowLayoutKind::Table || view.kind == R::RowLayoutKind::ColMajorTable || view.kind == R::RowLayoutKind::TiledColMajorTable) && view.RowCount() == rows && view.Width() == width,
                                   "CUDA source requires a correctly shaped combined AoS table");
         }
     }

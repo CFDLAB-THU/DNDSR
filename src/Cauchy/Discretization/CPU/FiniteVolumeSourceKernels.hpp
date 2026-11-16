@@ -29,12 +29,13 @@ namespace DNDS::Cauchy::CPU
         WallDistanceView walls;
         EquationBlockReadView ransMean;
         EquationBlockArrayView<real> speciesOutput, ransOutput;
-        Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::TableRows> matrix;
+        Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows> matrix;
         std::optional<EquationFVDetail::MeanLinearizationOutput> linearization;
         index cells = 0, components = 0, flowFirst = -1, speciesFirst = -1, ransFirst = -1;
         int dimension = 0, independentSpecies = 0;
         bool chemical = false, fullBlock = false;
         real scale = 1;
+        bool rowMajorBlocks = false;
     };
     /// Exclusive physics worker and point scratch retained by the operator.
     /// Construct before submission with the same property request as the serial

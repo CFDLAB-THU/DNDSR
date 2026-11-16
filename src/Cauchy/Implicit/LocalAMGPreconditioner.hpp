@@ -7,9 +7,12 @@ namespace DNDS::Cauchy
 {
     /** @brief Rank-local AmgX adapter for the coupled assembled operator.
      * @details One device, no communicator and no distributed AmgX machinery.
-     * Only the owned-owned principal matrix is copied to the provider. DNDS
-     * retains off-rank columns and computes the full operator in stationary
-     * defect correction or GMRES.
+     * The initial compatible path requires one rank, a primary native int32
+     * pattern and compact column-major cell blocks with separate diagonal.
+     * Native DNDS allocations are borrowed directly by the public upload;
+     * provider-internal copies remain owned by AmgX. Incompatible layouts or
+     * off-rank principal extraction fail explicitly. No DNDS packing, sorting,
+     * transposition or index conversion is hidden in this adapter.
      * Pattern preparation is once per solver; values update when the frozen
      * matrix changes. Provider cycles are fixed, zero-started and linear.
      * Update/Apply drain the supplied engine before entering the provider:

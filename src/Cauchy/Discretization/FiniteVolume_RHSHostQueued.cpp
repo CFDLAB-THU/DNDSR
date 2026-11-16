@@ -1,4 +1,5 @@
 #include "Cauchy/Discretization/FiniteVolumeWorkspaceInternal.hpp"
+#include "DNDS/Diagnostics/Timeline.hpp"
 #include "Cauchy/Discretization/CPU/FiniteVolumeRHSKernels.hpp"
 #include "Cauchy/Core/NumericalFailure.hpp"
 #include "Cauchy/Physics/PointWorkerContexts.hpp"
@@ -272,6 +273,7 @@ namespace DNDS::Cauchy
                 DNDS_check_throw_info(!writes[i].storage->Values().Overlaps(writes[j].storage->Values()), "queued RHS outputs overlap");
         auto result = std::make_shared<RHSSubmission>();
         result->region = region;
+        const TimelineScope timeline("Cauchy/FV/RHS/HostSubmit");
         const auto timing = BeginQueuedPhase(engine, stream, RHSPhase);
         R::SubmitArrayBatch(engine, stream, [pin, result, region, time](R::ExecutionContext, auto inputs, auto outputs, auto samples, auto offsets, auto faceEntries, auto coreCells, auto dependentCells, auto coreFaces, auto dependentFaces, auto cells, auto faceOffsets, auto quadrature, auto radial, auto faces, auto cached, auto moments, auto wallFaces, auto wallMean)
                             {

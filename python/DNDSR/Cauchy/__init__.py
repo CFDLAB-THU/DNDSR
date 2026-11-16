@@ -9,6 +9,7 @@ from ._ext.cauchy_pybind11 import (EquationDofs, FiniteVolumeOperators, Auxiliar
                                   AuxiliaryValues, MeanGradients, Workspace,
                                   MeanWorkspace, DiagonalStorage, OffDiagonalStorage,
                                   LinearRegion, JacobianPreparation, LinearProblem,
+                                  MatrixTableLayout, MatrixTableOptions, LinearIndexStorage, LinearMatrixOptions,
                                   LinearSolveSettings, LinearExecution, LinearIterationReport, LinearStop,
                                   DofLinearSolver, DofSGSIteration,
                                   NonlinearSolveControl, NonlinearStageSolver,
@@ -19,6 +20,7 @@ __all__ += ["EquationDofs", "FiniteVolumeOperators", "AuxiliaryRequest", "Auxili
             "MeanGradients", "Workspace", "MeanWorkspace",
             "DiagonalStorage", "OffDiagonalStorage", "LinearRegion",
             "JacobianPreparation", "LinearProblem", "LinearSolveSettings",
+            "MatrixTableLayout", "MatrixTableOptions", "LinearIndexStorage", "LinearMatrixOptions",
             "LinearExecution", "LinearIterationReport", "LinearStop", "DofLinearSolver",
             "DofSGSIteration", "NonlinearSolveControl", "NonlinearStageSolver",
             "PolynomialMultigrid"]

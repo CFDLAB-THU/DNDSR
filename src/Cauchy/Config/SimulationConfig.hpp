@@ -122,7 +122,7 @@ namespace DNDS::Cauchy
             DNDS_FIELD(transferPreflight, "MPI launch validation: collective (default) or abortOnFailure (local checks, fatal MPI abort, no per-launch global agreement); setup remains collective");
             DNDS_FIELD(hostThreads, "CPU worker count; zero means inline execution");
             DNDS_FIELD(communicationExecution, "MPI payload execution: caller (default) or worker (CPU Direct/HostPacked, requires MPI_THREAD_MULTIPLE)");
-            DNDS_FIELD(reconstructionKernel, "CUDA VR sweep: fp64 (default), fp64Shared (experimental SIMT 5/6/7-component P1..P3), fp64Tensor, fp64TensorShared, fp64TensorAsync, fp32, fp32Accum, fp32FloatFloatAccum, or tf32. The fp32 family and tf32 quantize inverted sweep maps. fp32 keeps FP64 outer accumulation; fp32Accum/fp32FloatFloatAccum compute the entire regular Jacobi update in FP32/float-float, then store FP64. Float-float requires DNDS_USE_CCCL_COMPUTE and does not recover map precision. Coefficient storage and WBAP remain FP64. Nondefault modes require CUDA and are unavailable with LVR; gradient-only levels have no VR sweep. Device support is checked at placement.");
+            DNDS_FIELD(reconstructionKernel, "CUDA VR sweep: fp64 (default), fp64Shared, fp64Wide (wide reference grid), fp64Static (static modes), fp64MatrixShared (shared matrix/neighbor reuse), fp64Tensor, fp64TensorShared, fp64TensorAsync, fp32, fp32Accum, fp32FloatFloatAccum, or tf32. SIMT shared variants support 5/6/7-component P1..P3. The fp32 family and tf32 quantize inverted sweep maps. fp32 keeps FP64 outer accumulation; fp32Accum/fp32FloatFloatAccum compute the entire regular Jacobi update in FP32/float-float, then store FP64. Float-float requires DNDS_USE_CCCL_COMPUTE and does not recover map precision. Coefficient storage and WBAP remain FP64. Nondefault modes require CUDA and are unavailable with LVR; gradient-only levels have no VR sweep. Device support is checked at placement.");
             config.field_section(&T::kernels, "kernels", "Operator-local CUDA input layout and compute arithmetic policies");
             DNDS_FIELD(checkAccess, "Validate declared scheduled accesses at submission");
             DNDS_FIELD(overlap, "Overlap input halo exchanges with owned-only core work; false waits then runs unsplit kernels");
@@ -287,6 +287,29 @@ namespace DNDS::Cauchy
             config.field_section(&T::profile, "profile", "Space/time input for analytic boundary values");
         }
     };
+    /// Matrix physical layout is independent of the equation-state layout.
+    struct ImplicitMatrixTableSettings
+    {
+        std::string layout = "aos";
+        index rowPaddingMultiple = 1;
+        DNDS_DECLARE_CONFIG(ImplicitMatrixTableSettings)
+        {
+            DNDS_FIELD(layout, "aos, soa, or aosoa32; one logical row is one dense column-major block");
+            DNDS_FIELD(rowPaddingMultiple, "Positive SoA row-allocation padding multiple; ignored for aos and fixed-tile aosoa32");
+        }
+    };
+    struct ImplicitMatrixStorageSettings
+    {
+        ImplicitMatrixTableSettings diagonal, inverse, offDiagonal;
+        std::string indices = "auto";
+        DNDS_DECLARE_CONFIG(ImplicitMatrixStorageSettings)
+        {
+            config.field_section(&T::diagonal, "diagonal", "Assembled diagonal blocks");
+            config.field_section(&T::inverse, "inverse", "Prepared local diagonal inverses");
+            config.field_section(&T::offDiagonal, "offDiagonal", "Assembled off-diagonal blocks");
+            DNDS_FIELD(indices, "Primary sparse index storage: auto selects int32 for amgx and int64 otherwise; int32/int64 are explicit alternatives. AmgX requires native int32 and compatible aos blocks without adapter repacking.");
+        }
+    };
     struct ImplicitLinearSettings
     {
         std::string method = "gmres", preconditioner = "sgs";
@@ -297,12 +320,18 @@ namespace DNDS::Cauchy
         int subspace = 10;
         int jacobiLocalSweeps = 1;
         int diagonalInverseRefinement = 0;
+        std::string cudaDiagonalInverse = "batchedSVD";
+        std::string cudaJacobiMapping = "thread";
+        ImplicitMatrixStorageSettings matrixStorage;
         real relativeTolerance = .1, absoluteTolerance = 1e-12;
         DNDS_DECLARE_CONFIG(ImplicitLinearSettings)
         {
             DNDS_FIELD(method, "sgs or jacobi stationary sweeps, ilu or amgx stationary defect correction, or restarted left-gmres; amgx requires assembled CUDA storage");
             DNDS_FIELD(jacobiLocalSweeps, "One or two local Jacobi sweeps per iteration; two freezes remote iterate values between sweeps, with one input exchange");
             DNDS_FIELD(diagonalInverseRefinement, "Optional guarded block-inverse corrections: 0 (default) preserves the existing inversion, 1..3 refines within retained SVD subspaces without changing the cutoff. Requires block-diagonal SGS/Jacobi; unavailable for ILU/AmgX.");
+            DNDS_FIELD(cudaDiagonalInverse, "CUDA block inverse kernel: batchedSVD (reference/default) or guardedLU (experimental fixed 5/6/7 LU with the CPU condition guard and filtered SVD fallback); CPU inversion is unchanged");
+            DNDS_FIELD(cudaJacobiMapping, "CUDA assembled Jacobi mapping: thread (reference/default) or componentGroup (experimental eight lanes per cell); CPU row arithmetic is unchanged");
+            config.field_section(&T::matrixStorage, "matrixStorage", "Independent matrix-table and native sparse-index formats; no hot-path format conversion");
             DNDS_FIELD(preconditioner, "Fixed sgs, zero-started jacobi, rank-local ilu or single-device amgx for GMRES; amgx requires assembled CUDA storage; unused by stationary methods");
             DNDS_FIELD(stopping, "residual uses tolerance checks; fixedCount executes exactly iterations for SGS/ILU, omits true-residual reporting and checks the final update is finite; tolerances are ignored");
             DNDS_FIELD(componentScaling, "GMRES metric: none or meanState (Euler volume-averaged absolute conservative magnitudes with a common momentum scale and kinetic energy scale; requires a compressible flow5 block)");

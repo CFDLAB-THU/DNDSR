@@ -151,12 +151,15 @@ namespace DNDS::Cauchy::Bindings
             op.fv.ValidateAuxValues(u, a, t);
         }, py::arg("state"), py::arg("values"), py::arg("time") = 0, Local)
             .def("build_linear_problem",
-                 [](const FiniteVolumeOperators &op, const EquationDofs &u, DiagonalStorage d, OffDiagonalStorage o)
+                 [](const FiniteVolumeOperators &op, const EquationDofs &u, DiagonalStorage d, OffDiagonalStorage o,
+                    const LinearMatrixOptions &storage)
         {
-            return op.fv.BuildLinearProblem(u, d, o);
-        }, py::arg("state"), py::arg_v("diagonal", DiagonalStorage::Block, "DiagonalStorage.Block"),
+            return op.fv.BuildLinearProblem(u, d, o, storage);
+        },
+                 py::arg("state"), py::arg_v("diagonal", DiagonalStorage::Block, "DiagonalStorage.Block"),
                  py::arg_v("off_diagonal", OffDiagonalStorage::Assembled, "OffDiagonalStorage.Assembled"),
-                 py::keep_alive<0, 1>(), py::call_guard<py::gil_scoped_release>(), Collective)
+                 py::arg("storage") = LinearMatrixOptions{}, py::keep_alive<0, 1>(),
+                 py::call_guard<py::gil_scoped_release>(), Collective)
             .def("prepare_jacobian",
                  [](const FiniteVolumeOperators &op, const EquationDofs &u, const AuxiliaryValues &a,
                     const R::PythonArray &inverseDt, LinearProblemContext &p, JacobianPreparation c, real t,

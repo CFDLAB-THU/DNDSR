@@ -140,7 +140,12 @@ def test_finite_volume_operator_frontend_composes_native_residual_and_linear_sol
         assert auxiliary.face_wave_jump is None
         assert auxiliary.derived_owned is not None
         storage = C.OffDiagonalStorage.SemiMatrixFree if mixture else C.OffDiagonalStorage.Assembled
-        problem = operators.build_linear_problem(state, off_diagonal=storage)
+        matrix_storage = C.LinearMatrixOptions()
+        matrix_storage.diagonal.layout = C.MatrixTableLayout.SoA
+        matrix_storage.inverse.layout = C.MatrixTableLayout.AoSoA32
+        matrix_storage.off_diagonal.layout = C.MatrixTableLayout.AoSoA32
+        matrix_storage.indices = C.LinearIndexStorage.Int32
+        problem = operators.build_linear_problem(state, off_diagonal=storage, storage=matrix_storage)
         inverse_dt = R.Array(R.RowLayout.dense(state.space.owned_rows, 1), np.dtype("float64"))
         for i_cell in range(state.space.owned_rows):
             inverse_dt[i_cell, 0] = 1e4

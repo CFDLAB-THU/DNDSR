@@ -10,14 +10,15 @@ namespace DNDS::Cauchy::CPU
     struct DiagonalInverseRequest
     {
         Runtime::ArrayView<const real, Runtime::AccessBoundsChecks,
-                           Runtime::TableRows>
+                           Runtime::UniformTableRows>
             diagonal;
         Runtime::ArrayView<real, Runtime::AccessBoundsChecks,
-                           Runtime::TableRows>
+                           Runtime::UniformTableRows>
             inverse;
         index components = 0;
         bool fullBlock = false;
         int refinementSteps = 0;
+        bool rowMajor = false;
     };
 
     /// @return Number of rows that needed the existing SVD fallback.

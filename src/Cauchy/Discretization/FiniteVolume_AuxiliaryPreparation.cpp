@@ -1,4 +1,5 @@
 #include "Cauchy/Discretization/FiniteVolume.hpp"
+#include "DNDS/Diagnostics/Timeline.hpp"
 #include "Cauchy/Core/NumericalFailure.hpp"
 #include "Cauchy/Discretization/FiniteVolumeAuxiliaryInternal.hpp"
 #include "Cauchy/Discretization/CPU/FiniteVolumeAuxiliaryKernels.hpp"
@@ -584,6 +585,7 @@ namespace DNDS::Cauchy
     void FiniteVolume::AuxiliaryPreparation::Apply(R::EagerEngine &engine, const R::ExecutionStream &stream,
                                                    CFV::ReconstructionRegion region)
     {
+        const TimelineScope timeline("Cauchy/FV/Auxiliary/AllBackends");
         if (_queued)
         {
             ApplyQueued(engine, stream, region);

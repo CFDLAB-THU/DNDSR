@@ -62,6 +62,14 @@ namespace DNDS::Cauchy
             return R::ArrayView<T, R::AccessBoundsChecks, R::TableRows>{view.data, nullptr, view.rows,
                                                                         view.width, view.stride, nullptr, view.kind, view.device};
         }
+        LinearColumnsView SymbolicColumns(LinearColumnsView::Wide columns)
+        {
+            return {columns};
+        }
+        LinearColumnsView SymbolicColumns(LinearColumnsView::Narrow columns, LinearColumnsView::Narrow offsets)
+        {
+            return {offsets, columns};
+        }
         struct ColumnSlot
         {
             index owned, ghost, component;
@@ -118,7 +126,7 @@ namespace DNDS::Cauchy
 
     template <class State>
     void LinearProblemContext::SubmitRows(R::EagerEngine &engine, const R::ExecutionStream &stream,
-                                          OptionalRef<const State> rhs, OptionalRef<const State> input, State &output, LinearRegion region) const
+                                          OptionalRef<const State> rhs, OptionalRef<const State> input, State &output, LinearRegion region, LinearKernelOptions options) const
     {
         ValidateMatrix();
         const auto context = stream.Context();
@@ -183,6 +191,7 @@ namespace DNDS::Cauchy
 
         if (!zero && !_offDiagonal && Device() != R::Device::Host())
         {
+            DNDS_check_throw_info(!options.componentGroups, "component-group CUDA Jacobi requires an assembled operator");
             DNDS_check_throw_info(_offDiagonalEvaluator && _offDiagonalEvaluator->Device() == Device(),
                                   "queued evaluated Jacobian is missing or belongs to another device");
             EvaluatedLinearAction action;
@@ -206,6 +215,7 @@ namespace DNDS::Cauchy
             action.output = coupled(output).Owned();
             action.status = ActionStatus();
             action.fullDiagonal = _diagonalStorage == DiagonalStorage::Block;
+            action.rowMajorBlocks = _rowMajorBlocks;
             _offDiagonalEvaluator->SubmitRows(engine, stream, std::move(action));
             return;
         }
@@ -256,22 +266,25 @@ namespace DNDS::Cauchy
         const auto destination = Describe(output, 0, -1);
         const auto components = _components;
         const bool fullDiagonal = _diagonalStorage == DiagonalStorage::Block;
-        R::SubmitArrayBatch(engine, stream, [evaluator, right, source, destination, components, fullDiagonal, region, diagonalSlot, blocksSlot, jacobi, zero, ownedRows = _space.OwnedRows()](R::ExecutionContext context, SpanView<const ReadRows> values, SpanView<const WriteRows> outputs, auto columns, auto order, auto position, auto core, auto dependent, auto offsets)
-                            {
-            const LinearPatternView pattern{columns, order, position, core, dependent, index(ownedRows)};
+        const auto submit = [&](auto symbolic)
+        {
+            R::SubmitArrayBatch(engine, stream, [evaluator, right, source, destination, components, fullDiagonal, region, diagonalSlot, blocksSlot, jacobi, zero, options, rowMajorBlocks = _rowMajorBlocks, ownedRows = _space.OwnedRows()](R::ExecutionContext context, SpanView<const ReadRows> values, SpanView<const WriteRows> outputs, auto order, auto position, auto core, auto dependent, auto offsets, auto... symbolicViews)
+                                {
+            const auto symbolicColumns = SymbolicColumns(symbolicViews...);
+            const LinearPatternView pattern{symbolicColumns, order, position, core, dependent, index(ownedRows)};
             const auto rows = region == LinearRegion::All ? pattern.order : region == LinearRegion::Core ? pattern.core : pattern.dependent;
             A::BlockMatrixArrayView<const real> blocks;
             if (blocksSlot >= 0)
-                blocks = {Table(values[blocksSlot]), offsets, components};
+                blocks = {values[blocksSlot], offsets, components, rowMajorBlocks};
             if (context.device != R::Device::Host())
             {
 #ifdef DNDS_USE_CUDA
                 const CUDA::LinearBlockInput request{blocks, zero ? decltype(pattern.columns){} : pattern.columns,
-                    rows, Table(values[diagonalSlot]), pattern.ownedRows, int(components), fullDiagonal};
+                    rows, values[diagonalSlot], pattern.ownedRows, int(components), fullDiagonal, rowMajorBlocks};
                 const auto x = zero ? CUDA::VectorReadRows{} : values[source.FirstOwned()];
                 const auto ghost = !zero && source.FirstGhost() >= 0 ? values[source.FirstGhost()] : CUDA::VectorReadRows{};
                 if (jacobi)
-                    CUDA::JacobiLinearRows(context, request, values[right.FirstOwned()], x, ghost, Table(outputs[0]), zero);
+                    CUDA::JacobiLinearRows(context, request, values[right.FirstOwned()], x, ghost, Table(outputs[0]), zero, options.componentGroups);
                 else
                     CUDA::ApplyLinearRows(context, request, x, ghost, Table(outputs[0]));
 #else
@@ -280,7 +293,7 @@ namespace DNDS::Cauchy
                 return;
             }
             CPU::LinearBlockInput request{{{}, evaluator.get(), components}, pattern, rows,
-                Table(values[diagonalSlot]), components, fullDiagonal};
+                values[diagonalSlot], components, fullDiagonal, {}, rowMajorBlocks};
             if (blocksSlot >= 0) request.blocks.assembled.emplace(blocks);
             const auto y = destination.template View<real>(outputs);
             const auto x = (zero ? right : source).View<const real>(values);
@@ -290,7 +303,12 @@ namespace DNDS::Cauchy
                 CPU::JacobiLinearRows(request, b.View().OwnedPart(), x.View().OwnedPart(), x.View().GhostPart(), y.View(), zero);
             }
             else
-                CPU::ApplyLinearRows(request, x.View().OwnedPart(), x.View().GhostPart(), y.View()); }, std::move(reads), std::move(writes), std::make_tuple(R::ReadAs<R::CSRRows>(patternArrays.ColumnsArray()), R::ReadAs<R::FixedRows<1>>(patternArrays.OrderArray()), R::ReadAs<R::FixedRows<1>>(patternArrays.PositionArray()), R::ReadAs<R::FixedRows<1>>(patternArrays.CoreArray()), R::ReadAs<R::FixedRows<1>>(patternArrays.DependentArray()), R::ReadAs<R::FixedRows<1>>(!zero && _offDiagonal ? _offDiagonal->OffsetArray() : patternArrays.OrderArray())));
+                CPU::ApplyLinearRows(request, x.View().OwnedPart(), x.View().GhostPart(), y.View()); }, std::move(reads), std::move(writes), std::tuple_cat(std::make_tuple(R::ReadAs<R::FixedRows<1>>(patternArrays.OrderArray()), R::ReadAs<R::FixedRows<1>>(patternArrays.PositionArray()), R::ReadAs<R::FixedRows<1>>(patternArrays.CoreArray()), R::ReadAs<R::FixedRows<1>>(patternArrays.DependentArray()), R::ReadAs<R::FixedRows<1>>(!zero && _offDiagonal ? _offDiagonal->OffsetArray() : patternArrays.OrderArray())), std::move(symbolic)));
+        };
+        if (patternArrays.UsesInt32())
+            submit(std::make_tuple(R::ReadAs<R::FixedRows<1>>(patternArrays.Columns32()), R::ReadAs<R::FixedRows<1>>(patternArrays.Offsets32())));
+        else
+            submit(std::make_tuple(R::ReadAs<R::CSRRows>(patternArrays.ColumnsArray())));
     }
 
     void LinearProblemContext::SubmitApply(R::EagerEngine &engine, const R::ExecutionStream &stream, const Field &input, Field &output, LinearRegion region) const
@@ -301,20 +319,20 @@ namespace DNDS::Cauchy
     {
         SubmitRows<EquationDofs>(engine, stream, {}, std::cref(input), output, region);
     }
-    void LinearProblemContext::SubmitJacobi(R::EagerEngine &engine, const R::ExecutionStream &stream, const Field &rhs, const Field &input, Field &output, LinearRegion region) const
+    void LinearProblemContext::SubmitJacobi(R::EagerEngine &engine, const R::ExecutionStream &stream, const Field &rhs, const Field &input, Field &output, LinearRegion region, LinearKernelOptions options) const
     {
-        SubmitRows<Field>(engine, stream, std::cref(rhs), std::cref(input), output, region);
+        SubmitRows<Field>(engine, stream, std::cref(rhs), std::cref(input), output, region, options);
     }
-    void LinearProblemContext::SubmitJacobi(R::EagerEngine &engine, const R::ExecutionStream &stream, const EquationDofs &rhs, const EquationDofs &input, EquationDofs &output, LinearRegion region) const
+    void LinearProblemContext::SubmitJacobi(R::EagerEngine &engine, const R::ExecutionStream &stream, const EquationDofs &rhs, const EquationDofs &input, EquationDofs &output, LinearRegion region, LinearKernelOptions options) const
     {
-        SubmitRows<EquationDofs>(engine, stream, std::cref(rhs), std::cref(input), output, region);
+        SubmitRows<EquationDofs>(engine, stream, std::cref(rhs), std::cref(input), output, region, options);
     }
-    void LinearProblemContext::SubmitJacobiZero(R::EagerEngine &engine, const R::ExecutionStream &stream, const Field &rhs, Field &output, LinearRegion region) const
+    void LinearProblemContext::SubmitJacobiZero(R::EagerEngine &engine, const R::ExecutionStream &stream, const Field &rhs, Field &output, LinearRegion region, LinearKernelOptions options) const
     {
-        SubmitRows<Field>(engine, stream, std::cref(rhs), {}, output, region);
+        SubmitRows<Field>(engine, stream, std::cref(rhs), {}, output, region, options);
     }
-    void LinearProblemContext::SubmitJacobiZero(R::EagerEngine &engine, const R::ExecutionStream &stream, const EquationDofs &rhs, EquationDofs &output, LinearRegion region) const
+    void LinearProblemContext::SubmitJacobiZero(R::EagerEngine &engine, const R::ExecutionStream &stream, const EquationDofs &rhs, EquationDofs &output, LinearRegion region, LinearKernelOptions options) const
     {
-        SubmitRows<EquationDofs>(engine, stream, std::cref(rhs), {}, output, region);
+        SubmitRows<EquationDofs>(engine, stream, std::cref(rhs), {}, output, region, options);
     }
 }

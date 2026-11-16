@@ -28,6 +28,7 @@ namespace DNDS::Cauchy
         std::optional<Runtime::Array<real>> rhs, ghost;
         Runtime::Array<NumericalStatus> status;
         bool fullDiagonal = true;
+        bool rowMajorBlocks = false;
     };
     /// Immutable physical block producer. Columns and block ordinals belong to
     /// LinearProblemContext. Implementations own frozen numerical inputs; they

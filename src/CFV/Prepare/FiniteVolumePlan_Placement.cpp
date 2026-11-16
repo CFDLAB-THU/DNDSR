@@ -287,6 +287,10 @@ namespace DNDS::CFV
         view.wbapCenterWeight = Settings().WBAP_nStd;
         view.rotated = host.hasRotatedPeriodicity;
         view.quantized = options.matrixPrecision == ReconstructionMatrixPrecision::FP32;
+        view.raw = host.settings.storage.Raw();
+        view.inverseTriangle = host.settings.storage.inverseTriangle;
+        view.faceCoupling = host.settings.storage.faceCoupling;
+        DNDS_check_throw_info(!view.raw || !view.quantized, "raw VR sweeps currently require FP64 matrix placement");
 #define DNDS_REC_ADD(member) view.member = result->Add(#member, host.member, context)
         DNDS_REC_ADD(offsets);
         DNDS_REC_ADD(neighbors);
@@ -300,9 +304,15 @@ namespace DNDS::CFV
         }
         else
         {
-            view.matrixAInvB = result->Add("matrixAInvB", *host.matrixAInvB, context);
-            view.vectorAInvB = result->Add("vectorAInvB", *host.vectorAInvB, context);
-            view.boundaryInjection = result->Add("boundaryInjection", *host.boundaryInjection, context);
+            view.matrixAInvB = result->Add(view.raw ? "rawMatrixB" : "matrixAInvB", host.SweepMatrices(), context);
+            view.vectorAInvB = result->Add(view.raw ? "rawVectorB" : "vectorAInvB", host.SweepVectors(), context);
+            view.boundaryInjection = result->Add(view.raw ? "rawBoundaryInjection" : "boundaryInjection", host.SweepInjection(), context);
+        }
+        if (view.raw)
+        {
+            view.localInverse = result->Add("localInverse", *host.localInverse, context);
+            if (view.faceCoupling)
+                view.faceSide = result->Add("rawFaceSide", *host.rawFaceSide, context);
         }
         if (host.capabilities.wbap)
             view.secondary = result->Add("secondary", *host.secondary, context);
@@ -614,7 +624,7 @@ namespace DNDS::CFV
         ValidateDeviceStream(*this, stream);
         DNDS_check_throw_info(SupportsKernel(kernel), "requested CUDA reconstruction kernel is unavailable on this device/build");
         ValidateDeviceWorkspace(_device, work, input);
-        if (kernel == ReconstructionDeviceKernel::FP64Shared)
+        if (kernel == ReconstructionDeviceKernel::FP64Shared || kernel == ReconstructionDeviceKernel::FP64MatrixShared)
             DNDS_check_throw_info(work.components >= 5 && work.components <= 7,
                                   "shared FP64 SIMT reconstruction requires 5/6/7 components");
         ValidateDeviceField(*this, mean, work.components);
@@ -651,6 +661,11 @@ namespace DNDS::CFV
         {
             if (kernel == ReconstructionDeviceKernel::FP64Shared)
                 Detail::LaunchJacobiShared(context, pin->view, selection, {blocks}, {mo, mg}, {ro, rg}, bc, output, status);
+            else if (kernel == ReconstructionDeviceKernel::FP64Wide || kernel == ReconstructionDeviceKernel::FP64Static ||
+                     kernel == ReconstructionDeviceKernel::FP64MatrixShared)
+                Detail::LaunchJacobiOptimized(context, pin->view, selection, {blocks}, {mo, mg}, {ro, rg}, bc, output, status,
+                                              kernel == ReconstructionDeviceKernel::FP64Wide ? 0 : kernel == ReconstructionDeviceKernel::FP64Static ? 1
+                                                                                                                                                    : 2);
             else if (kernel == ReconstructionDeviceKernel::TF32TensorCore)
                 Detail::LaunchJacobiTF32(context, pin->view, selection, {blocks}, {mo, mg}, {ro, rg}, bc, output, status);
             else if (kernel == ReconstructionDeviceKernel::FP64TensorCoreShared || kernel == ReconstructionDeviceKernel::FP64TensorCoreAsync)
@@ -798,6 +813,10 @@ namespace DNDS::CFV
         DNDS_check_throw_info(_identity, "reconstruction plan is empty");
         if (!_device)
             return kernel == ReconstructionDeviceKernel::FP64;
+        if (_device->view.raw)
+            return kernel == ReconstructionDeviceKernel::FP64 || kernel == ReconstructionDeviceKernel::FP64Wide ||
+                   kernel == ReconstructionDeviceKernel::FP64Static || kernel == ReconstructionDeviceKernel::FP64MatrixShared ||
+                   kernel == ReconstructionDeviceKernel::FP64Shared;
         if (_device->view.quantized)
             return kernel == ReconstructionDeviceKernel::FP32 ||
                    kernel == ReconstructionDeviceKernel::FP32FullAccumulation ||
@@ -805,10 +824,11 @@ namespace DNDS::CFV
                    kernel == ReconstructionDeviceKernel::FP32FloatFloatAccumulation ||
 #endif
                    (kernel == ReconstructionDeviceKernel::TF32TensorCore && _device->tf32TensorCore);
-        if (kernel == ReconstructionDeviceKernel::FP64Shared)
+        if (kernel == ReconstructionDeviceKernel::FP64Shared || kernel == ReconstructionDeviceKernel::FP64Static ||
+            kernel == ReconstructionDeviceKernel::FP64MatrixShared)
             return _device->view.n == 2 || _device->view.n == 3 || _device->view.n == 5 ||
                    _device->view.n == 9 || _device->view.n == 19;
-        return kernel == ReconstructionDeviceKernel::FP64 ||
+        return kernel == ReconstructionDeviceKernel::FP64 || kernel == ReconstructionDeviceKernel::FP64Wide ||
                ((kernel == ReconstructionDeviceKernel::FP64TensorCore || kernel == ReconstructionDeviceKernel::FP64TensorCoreShared ||
                  kernel == ReconstructionDeviceKernel::FP64TensorCoreAsync) &&
                 _device->fp64TensorCore);
@@ -842,6 +862,10 @@ namespace DNDS::CFV
         void LaunchJacobiShared(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks, R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>, R::ArrayView<const int>)
         {
             DNDS_check_throw_info(false, "CUDA shared FP64 SIMT Jacobi unavailable");
+        }
+        void LaunchJacobiOptimized(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks, R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>, R::ArrayView<const int>, int)
+        {
+            DNDS_check_throw_info(false, "CUDA optimized FP64 SIMT Jacobi unavailable");
         }
         void LaunchJacobiFullAccumulation(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
                                           R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>, R::ArrayView<int>, bool)

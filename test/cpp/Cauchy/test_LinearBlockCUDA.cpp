@@ -5,6 +5,7 @@
 #include "doctest.h"
 #include "Cauchy/Implicit/CUDA/LinearBlockKernels.hpp"
 #include "Cauchy/Implicit/CPU/LinearBlockKernels.hpp"
+#include "DNDS/Runtime/Array/ArrayCopy.hpp"
 #include <cuda_runtime.h>
 
 namespace R = DNDS::Runtime;
@@ -62,7 +63,6 @@ TEST_CASE("CUDA assembled actions and Jacobi preserve sparse block order and cor
         position[order[iRow]] = iRow;
     const C::LinearPatternStorage pattern(columns, order, position, core, dependent);
     const auto context = R::ExecutionContext::CUDA(0);
-    const auto placedPattern = pattern.Placed(context.device, context);
     for (bool tiled : {false, true})
         for (int components : {5, 6, 7})
             for (bool fullDiagonal : {false, true})
@@ -89,7 +89,7 @@ TEST_CASE("CUDA assembled actions and Jacobi preserve sparse block order and cor
                 {
                     const auto read = diagonal.Read();
                     auto write = inverse.Write();
-                    const auto d = read.View<R::TableRows>();
+                    const auto d = read.View<R::UniformTableRows>();
                     const auto v = write.View<R::TableRows>();
                     for (I iCell = 0; iCell < rows; ++iCell)
                         if (fullDiagonal)
@@ -108,8 +108,46 @@ TEST_CASE("CUDA assembled actions and Jacobi preserve sparse block order and cor
                                    { return -.2 + .013 * (iRow - j); });
                 auto rhs = Table(rows, components, [](I iRow, I j)
                                  { return .7 - .002 * (iRow + 2 * j); });
-                const auto placedMatrix = matrix.Placed(context.device, context);
-                const auto dd = diagonal.To(context.device), di = inverse.To(context.device);
+                // A small discriminating set, not a Cartesian layout matrix.
+                // The independent CPU oracle above retains original AoS data.
+                const auto layout = [](A::MatrixTableLayout kind)
+                { return A::MatrixTableOptions{kind, 32}; };
+                const auto aos = layout(A::MatrixTableLayout::AoS), soa = layout(A::MatrixTableLayout::SoA), tiled32 = layout(A::MatrixTableLayout::AoSoA32);
+                const auto blockOptions = !tiled || components == 5 ? aos : components == 6 ? soa
+                                                                                            : tiled32;
+                const auto diagonalOptions = !tiled || components == 7 ? aos : components == 5 ? soa
+                                                                                               : tiled32;
+                const auto inverseOptions = !tiled || components == 6 ? aos : components == 5 ? tiled32
+                                                                                              : soa;
+                const bool rowMajorBlocks = tiled && components == 5;
+                A::BlockMatrixStorage alternative(counts, components, R::Device::Host(), blockOptions, rowMajorBlocks);
+                {
+                    const auto read = matrix.Read();
+                    auto write = alternative.Write();
+                    for (I iCell = 0; iCell < rows; ++iCell)
+                        for (I k = 0; k < counts[iCell]; ++k)
+                            for (int j = 0; j < components; ++j)
+                                for (int i = 0; i < components; ++i)
+                                    write.ArrayView().Element(iCell, k, i, j) = read.ArrayView().Element(iCell, k, i, j);
+                }
+                const auto placedMatrix = alternative.Placed(context.device, context);
+                const auto matrixPlacement = [&](const auto &array, A::MatrixTableOptions options)
+                {
+                    R::Array<real> result(options.MakeLayout(array.RowCount(), array.Layout().Width()));
+                    {
+                        const auto read = array.Read();
+                        auto write = result.Write();
+                        for (I iCell = 0; iCell < array.RowCount(); ++iCell)
+                            for (I j = 0; j < array.Layout().Width(); ++j)
+                                write.View<R::UniformTableRows>()(iCell, fullDiagonal && rowMajorBlocks ? (j % components) * components + j / components : j) = read.View()(iCell, j);
+                    }
+                    return result.To(context.device);
+                };
+                const auto dd = matrixPlacement(diagonal, diagonalOptions), di = matrixPlacement(inverse, inverseOptions);
+                const C::LinearPatternStorage selectedPattern(columns, order, position, core, dependent,
+                                                              tiled && components == 5 ? C::LinearIndexStorage::Int32 : C::LinearIndexStorage::Int64);
+                CHECK(selectedPattern.CopyColumns() == columns);
+                const auto placedPattern = selectedPattern.Placed(context.device, context);
                 const auto place = [&](const auto &source)
                 {
                     if (!tiled)
@@ -125,62 +163,64 @@ TEST_CASE("CUDA assembled actions and Jacobi preserve sparse block order and cor
                     return converted.To(context.device);
                 };
                 const auto dx = place(owned), dg = place(ghost), db = place(rhs);
-                for (int operation : {0, 1, 2}) // action, ordinary Jacobi, zero-start Jacobi
-                {
-                    CAPTURE(operation);
-                    auto expected = Table(rows, components, [](I, I)
-                                          { return -900.; });
-                    auto actual = expected.To(context.device), split = expected.To(context.device);
+                for (bool componentGroups : {false, true})
+                    for (int operation : {0, 1, 2}) // action, ordinary Jacobi, zero-start Jacobi
                     {
-                        const auto p = pattern.Read();
-                        const auto blocks = matrix.Read();
-                        const auto d = (operation ? inverse : diagonal).Read();
-                        const auto x = owned.Read(), g = ghost.Read(), b = rhs.Read();
-                        auto output = expected.Write();
-                        C::CPU::LinearBlockInput request{{blocks.View(), nullptr, components}, p.View(), p.View().order, d.View<R::TableRows>(), components, fullDiagonal};
-                        if (!operation)
-                            C::CPU::ApplyLinearRows(request, x.View<R::UniformTableRows>(), g.View<R::UniformTableRows>(), output.View<R::UniformTableRows>());
-                        else
-                            C::CPU::JacobiLinearRows(request, b.View<R::UniformTableRows>(), x.View<R::UniformTableRows>(), g.View<R::UniformTableRows>(), output.View<R::UniformTableRows>(), operation == 2);
-                    }
-                    {
-                        const auto p = placedPattern.Read(context);
-                        const auto blocks = placedMatrix.Read(context);
-                        const auto d = (operation ? di : dd).Read(context);
-                        const auto x = dx.Read(context), g = dg.Read(context), b = db.Read(context);
-                        auto output = actual.Write(context), splitOutput = split.Write(context);
-                        C::CUDA::LinearBlockInput request{blocks.ArrayView(), p.View().columns, p.View().order,
-                                                          d.View<R::TableRows>(), rows, components, fullDiagonal};
-                        if (!operation && components == 5 && !fullDiagonal)
+                        CAPTURE(componentGroups);
+                        CAPTURE(operation);
+                        auto expected = Table(rows, components, [](I, I)
+                                              { return -900.; });
+                        auto actual = expected.To(context.device), split = expected.To(context.device);
                         {
-                            const auto hostDiagonal = diagonal.Read();
-                            auto invalid = request;
-                            invalid.diagonal = hostDiagonal.View<R::TableRows>();
-                            CHECK_THROWS(C::CUDA::ApplyLinearRows(context, invalid, x.View<R::UniformTableRows>(),
-                                                                  g.View<R::UniformTableRows>(), output.View<R::TableRows>()));
-                        }
-                        if (operation == 2)
-                        {
-                            request.blocks = {};
-                            request.columns = {};
-                        }
-                        const auto launch = [&](auto out, auto remote)
-                        {
+                            const auto p = pattern.Read();
+                            const auto blocks = matrix.Read();
+                            const auto d = (operation ? inverse : diagonal).Read();
+                            const auto x = owned.Read(), g = ghost.Read(), b = rhs.Read();
+                            auto output = expected.Write();
+                            C::CPU::LinearBlockInput request{{blocks.View(), nullptr, components}, p.View(), p.View().order, d.View<R::UniformTableRows>(), components, fullDiagonal};
                             if (!operation)
-                                C::CUDA::ApplyLinearRows(context, request, x.View<R::UniformTableRows>(), remote, out);
+                                C::CPU::ApplyLinearRows(request, x.View<R::UniformTableRows>(), g.View<R::UniformTableRows>(), output.View<R::UniformTableRows>());
                             else
-                                C::CUDA::JacobiLinearRows(context, request, b.View<R::UniformTableRows>(),
-                                                          operation == 2 ? C::CUDA::VectorReadRows{} : x.View<R::UniformTableRows>(), remote, out, operation == 2);
-                        };
-                        launch(output.View<R::TableRows>(), g.View<R::UniformTableRows>());
-                        request.rows = p.View().core;
-                        launch(splitOutput.View<R::TableRows>(), C::CUDA::VectorReadRows{});
-                        request.rows = p.View().dependent;
-                        launch(splitOutput.View<R::TableRows>(), g.View<R::UniformTableRows>());
-                        REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
+                                C::CPU::JacobiLinearRows(request, b.View<R::UniformTableRows>(), x.View<R::UniformTableRows>(), g.View<R::UniformTableRows>(), output.View<R::UniformTableRows>(), operation == 2);
+                        }
+                        {
+                            const auto p = placedPattern.Read(context);
+                            const auto blocks = placedMatrix.Read(context);
+                            const auto d = (operation ? di : dd).Read(context);
+                            const auto x = dx.Read(context), g = dg.Read(context), b = db.Read(context);
+                            auto output = actual.Write(context), splitOutput = split.Write(context);
+                            C::CUDA::LinearBlockInput request{blocks.ArrayView(), p.View().columns, p.View().order,
+                                                              d.View<R::UniformTableRows>(), rows, components, fullDiagonal, rowMajorBlocks};
+                            if (!operation && components == 5 && !fullDiagonal)
+                            {
+                                const auto hostDiagonal = diagonal.Read();
+                                auto invalid = request;
+                                invalid.diagonal = hostDiagonal.View<R::UniformTableRows>();
+                                CHECK_THROWS(C::CUDA::ApplyLinearRows(context, invalid, x.View<R::UniformTableRows>(),
+                                                                      g.View<R::UniformTableRows>(), output.View<R::TableRows>()));
+                            }
+                            if (operation == 2)
+                            {
+                                request.blocks = {};
+                                request.columns = {};
+                            }
+                            const auto launch = [&](auto out, auto remote)
+                            {
+                                if (!operation)
+                                    C::CUDA::ApplyLinearRows(context, request, x.View<R::UniformTableRows>(), remote, out);
+                                else
+                                    C::CUDA::JacobiLinearRows(context, request, b.View<R::UniformTableRows>(),
+                                                              operation == 2 ? C::CUDA::VectorReadRows{} : x.View<R::UniformTableRows>(), remote, out, operation == 2, componentGroups);
+                            };
+                            launch(output.View<R::TableRows>(), g.View<R::UniformTableRows>());
+                            request.rows = p.View().core;
+                            launch(splitOutput.View<R::TableRows>(), C::CUDA::VectorReadRows{});
+                            request.rows = p.View().dependent;
+                            launch(splitOutput.View<R::TableRows>(), g.View<R::UniformTableRows>());
+                            REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
+                        }
+                        Compare(actual, expected);
+                        Compare(split, expected);
                     }
-                    Compare(actual, expected);
-                    Compare(split, expected);
-                }
             }
 }

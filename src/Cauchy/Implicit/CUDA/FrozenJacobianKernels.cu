@@ -43,7 +43,7 @@ namespace DNDS::Cauchy::CUDA
                 NumericalStatus checked{};
                 for (index iBlock = 0; iBlock < s.geometry.columns.RowSize(iCell) && checked; ++iBlock)
                 {
-                    const auto block = output(iCell, iBlock);
+
                     for (int j = 0; j < N; ++j)
                     {
                         std::array<real, N> direction{}, product{};
@@ -55,7 +55,7 @@ namespace DNDS::Cauchy::CUDA
                                 break;
                         }
                         for (int i = 0; i < N; ++i)
-                            block[i + N * j] = product[i];
+                            output.Element(iCell, iBlock, i, j) = product[i];
                         if (!checked)
                             break;
                     }
@@ -65,9 +65,9 @@ namespace DNDS::Cauchy::CUDA
         }
 
         template <int N, bool Jacobi>
-        __global__ void Apply(FrozenJacobianInput s, LinearIndexRows selected, LinearReadRows diagonal,
+        __global__ void Apply(FrozenJacobianInput s, LinearIndexRows selected, MatrixReadRows diagonal,
                               bool fullDiagonal, VectorReadRows rhs, VectorReadRows owned,
-                              VectorReadRows ghost, LinearWriteRows output, FrozenJacobianStatus status)
+                              VectorReadRows ghost, LinearWriteRows output, FrozenJacobianStatus status, bool rowMajorBlocks)
         {
             for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x;
                  iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
@@ -86,7 +86,7 @@ namespace DNDS::Cauchy::CUDA
                         value[i] = rhs(iCell, i);
                     else if (fullDiagonal)
                         for (int j = 0; j < N; ++j)
-                            value[i] += diagonal(iCell, i + N * j) * owned(iCell, j);
+                            value[i] += diagonal(iCell, rowMajorBlocks ? i * N + j : i + N * j) * owned(iCell, j);
                     else
                         value[i] = diagonal(iCell, i) * owned(iCell, i);
                 for (index iBlock = 0; iBlock < s.geometry.columns.RowSize(iCell) && checked; ++iBlock)
@@ -116,7 +116,7 @@ namespace DNDS::Cauchy::CUDA
                             result = 0;
                             if (fullDiagonal)
                                 for (int j = 0; j < N; ++j)
-                                    result += diagonal(iCell, i + N * j) * value[j];
+                                    result += diagonal(iCell, rowMajorBlocks ? i * N + j : i + N * j) * value[j];
                             else
                                 result = diagonal(iCell, i) * value[i];
                         }
@@ -137,7 +137,7 @@ namespace DNDS::Cauchy::CUDA
         template <class View>
         void Table(View view, index rows, index width)
         {
-            DNDS_check_throw_info(view.kind == R::RowLayoutKind::Table && view.RowCount() == rows && view.Width() == width,
+            DNDS_check_throw_info((view.kind == R::RowLayoutKind::Table || view.kind == R::RowLayoutKind::ColMajorTable || view.kind == R::RowLayoutKind::TiledColMajorTable) && view.RowCount() == rows && view.Width() == width,
                                   "frozen CUDA Jacobian requires matching AoS tables");
         }
         void Vector(VectorReadRows view, index rows, index width)
@@ -197,8 +197,8 @@ namespace DNDS::Cauchy::CUDA
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "frozen CUDA Jacobian assembly launch failed");
     }
     void ApplyFrozenJacobian(R::ExecutionContext context, const FrozenJacobianInput &s, LinearIndexRows selected,
-                             LinearReadRows diagonal, bool fullDiagonal, VectorReadRows rhs, VectorReadRows owned,
-                             VectorReadRows ghost, LinearWriteRows output, FrozenJacobianStatus status, bool jacobi)
+                             MatrixReadRows diagonal, bool fullDiagonal, VectorReadRows rhs, VectorReadRows owned,
+                             VectorReadRows ghost, LinearWriteRows output, FrozenJacobianStatus status, bool jacobi, bool rowMajorBlocks)
     {
         Check(context, s, selected, status);
         R::ValidateViewDevices(context.device, diagonal, owned, output);
@@ -221,8 +221,8 @@ namespace DNDS::Cauchy::CUDA
                                                output.data != s.pressure.data && output.data != s.pressureDerivative.data &&
                                                output.data != s.radius.data && output.data != s.magnitudes.data),
                               "frozen CUDA Jacobian output aliases an input");
-        R::CheckKernelArgumentBudget<FrozenJacobianInput, LinearIndexRows, LinearReadRows, bool, LinearReadRows,
-                                     LinearReadRows, LinearReadRows, LinearWriteRows, FrozenJacobianStatus>();
+        R::CheckKernelArgumentBudget<FrozenJacobianInput, LinearIndexRows, MatrixReadRows, bool, VectorReadRows,
+                                     VectorReadRows, VectorReadRows, LinearWriteRows, FrozenJacobianStatus, bool>();
         if (!selected.RowCount())
             return;
         const unsigned blocks = unsigned(std::min<index>(65535, (selected.RowCount() + 127) / 128));
@@ -230,20 +230,20 @@ namespace DNDS::Cauchy::CUDA
         if (jacobi)
         {
             if (n == 5)
-                Apply<5, true><<<blocks, 128, 0, stream>>>(s, selected, diagonal, fullDiagonal, rhs, owned, ghost, output, status);
+                Apply<5, true><<<blocks, 128, 0, stream>>>(s, selected, diagonal, fullDiagonal, rhs, owned, ghost, output, status, rowMajorBlocks);
             else if (n == 6)
-                Apply<6, true><<<blocks, 128, 0, stream>>>(s, selected, diagonal, fullDiagonal, rhs, owned, ghost, output, status);
+                Apply<6, true><<<blocks, 128, 0, stream>>>(s, selected, diagonal, fullDiagonal, rhs, owned, ghost, output, status, rowMajorBlocks);
             else
-                Apply<7, true><<<blocks, 128, 0, stream>>>(s, selected, diagonal, fullDiagonal, rhs, owned, ghost, output, status);
+                Apply<7, true><<<blocks, 128, 0, stream>>>(s, selected, diagonal, fullDiagonal, rhs, owned, ghost, output, status, rowMajorBlocks);
         }
         else
         {
             if (n == 5)
-                Apply<5, false><<<blocks, 128, 0, stream>>>(s, selected, diagonal, fullDiagonal, {}, owned, ghost, output, status);
+                Apply<5, false><<<blocks, 128, 0, stream>>>(s, selected, diagonal, fullDiagonal, {}, owned, ghost, output, status, rowMajorBlocks);
             else if (n == 6)
-                Apply<6, false><<<blocks, 128, 0, stream>>>(s, selected, diagonal, fullDiagonal, {}, owned, ghost, output, status);
+                Apply<6, false><<<blocks, 128, 0, stream>>>(s, selected, diagonal, fullDiagonal, {}, owned, ghost, output, status, rowMajorBlocks);
             else
-                Apply<7, false><<<blocks, 128, 0, stream>>>(s, selected, diagonal, fullDiagonal, {}, owned, ghost, output, status);
+                Apply<7, false><<<blocks, 128, 0, stream>>>(s, selected, diagonal, fullDiagonal, {}, owned, ghost, output, status, rowMajorBlocks);
         }
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "frozen CUDA Jacobian action launch failed");
     }

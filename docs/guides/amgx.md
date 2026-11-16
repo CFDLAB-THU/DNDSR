@@ -31,12 +31,34 @@ requesting AmgX requires the imported dependency; no fallback is implicit.
 Runtime adapter calls must order input readiness and output completion according
 to AmgX's actual API, without assuming it uses the application's stream.
 
-`DNDS::Algebra::AmgXPreconditioner` accepts native row-major block CSR for
+`DNDS::Algebra::AmgXPreconditioner` accepts native block CSR for
 5/6/7-component cell Jacobians; Cauchy never expands them into scalar rows.
 The bundled [provider patch](../../scripts/patches/README.amgx.md) enables
 6/7 throughout the selected AMG path and repairs its large-block kernels.
-Genuinely scalar DNDS matrices may still use width one. `SetPattern` takes host index views and retains
-private Runtime arrays. `UpdateValuesBorrowed` takes FP64 device values;
+Genuinely scalar DNDS matrices may still use width one. `SetPattern` shares the
+caller's compact host `Runtime::Array<int>` offsets/columns and retains read
+leases, so those symbolic arrays cannot mutate until replacement/destruction.
+Unique unsorted columns retain their input block order. Numeric values and optional separate diagonal use native row-major block
+order. Although public upload supports `COL_MAJOR` for some other algorithms,
+the selected `BLOCK_JACOBI` hierarchy explicitly requires `ROW_MAJOR`; this
+adapter rejects another format before entering the provider. The public provider upload performs its own internal copies.
+
+The Cauchy adapter currently supports **one rank** with a primary native int32
+linear pattern, native row-major full compact AoS diagonal/off-diagonal arrays and compact AoS
+vectors. Cauchy constructs its primary blocks in row-major order when AmgX is selected,
+using `ROW_MAJOR` with the existing separate diagonal. The same native blocks
+are interpreted by DNDS matrix actions/inversion; no second format is kept. It performs
+no DNDS packing, transposition, sorting, off-rank filtering, padding removal or
+int64-to-int32 conversion. Incompatible representation fails explicitly before
+provider execution. Select `implicit.linear.matrixStorage.indices="auto"` (the
+default, choosing native int32 for AmgX), or `"int32"`. Diagonal and off-diagonal
+matrix layouts must be `"aos"`; the inverse matrix layout is independent. Future
+multi-rank support requires a genuinely native principal-matrix partition, not
+a hidden copied/filtered matrix. Numeric block views currently retain their
+separate int64 block-row offsets; those are distinct from the primary provider
+int32 CSR and are not converted or uploaded.
+
+`UpdateValuesBorrowed` takes FP64 device values and optional separate diagonal;
 `ApplyBorrowed` takes device residual/correction views. Both wrappers check
 placement and synchronize explicitly. The submitting operator must drain
 host-progressed communication before this provider boundary, retain scopes,
@@ -49,11 +71,11 @@ Residual monitoring is disabled inside the provider, preserving a fixed linear
 action. Cauchy `linear.method="amgx"`, `stopping="fixedCount"`, `iterations=2`
 performs exactly two stationary corrections with no Krylov method. An explicitly
 selected `gmres` method can also use this preconditioner. Pattern/value updates
-belong between linear solves. Focused native-block tests pass independent
-Galerkin/dense-block oracles and MPI-free memcheck. A fixed-two-application
-cylinder comparison converges with matching CPU/GPU final fields; the native6
-NACA run reaches its configured density-only target. These case results do not
-guarantee convergence of arbitrary nonsymmetric systems or all RANS components.
+belong between linear solves. The historical packed-adapter tests and case comparisons remain evidence of
+the provider mathematics, not validation of this newer copy-free boundary.
+Focused tests exercise native unsorted int32 patterns, separate row-major
+nonsymmetric 5/6/7 blocks and fixed-count solver semantics. No arbitrary
+nonsymmetric-system or all-component RANS convergence guarantee is implied.
 
 ## Caller-stream extension investigation
 

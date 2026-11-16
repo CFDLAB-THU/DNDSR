@@ -16,6 +16,7 @@ namespace DNDS::Cauchy
         LinearPatternView patternView;
         index components;
         DiagonalStorage mode;
+        bool rowMajorBlocks;
         // Pin numeric allocation/layout owners, not communicator owners. A
         // numerical scope may retire on a worker; MPI resources stay outside.
         R::Array<real> rhs, forward, forwardGhost, output;
@@ -29,7 +30,7 @@ namespace DNDS::Cauchy
         int lower = 0, upper = 0; // 0=not started,1=first region complete,2=scan complete
 
         State(const LinearProblemContext &problem, const Field &b, const Field *old, Field &temporary, Field &result, bool middle)
-            : pattern(problem._pattern), patternRead(pattern->rows.Read()), patternView(patternRead.View()), components(problem._components), mode(problem._diagonalStorage),
+            : pattern(problem._pattern), patternRead(pattern->rows.Read()), patternView(patternRead.View()), components(problem._components), mode(problem._diagonalStorage), rowMajorBlocks(problem._rowMajorBlocks),
               rhs(b.Owned()), forward(temporary.Owned()), forwardGhost(temporary.Ghost()), output(result.Owned()),
               diagonalRead(problem._diagonal.Read()), inverseRead(problem._inverse.Read()), rhsRead(rhs.Read()),
               blocksRead(problem.ReadOffDiagonal()), initialForwardGhost(forwardGhost.Version()), middleExchange(middle)
@@ -73,7 +74,7 @@ namespace DNDS::Cauchy
             const auto b = rhsRead.View<R::UniformTableRows>();
             const auto old = inputRead ? inputRead->View<R::UniformTableRows>() : b;
             const CPU::LinearBlockInput request{blocksRead.View(), patternView, rows,
-                                                inverseRead.View<R::TableRows>(), components, mode == DiagonalStorage::Block, pattern->sweepPartitions.HostView()};
+                                                inverseRead.View<R::UniformTableRows>(), components, mode == DiagonalStorage::Block, pattern->sweepPartitions.HostView(), rowMajorBlocks};
             started = true;
             if constexpr (Upper)
                 CPU::UpperSGSRows(request, b, old, forwardValues, ghostValues, destination, !input && !middleExchange);

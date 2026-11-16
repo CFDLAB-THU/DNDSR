@@ -47,7 +47,7 @@ namespace DNDS::Cauchy::CUDA
         SourceScalar weights, lengths, wallMean;
         Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::CSRRows> wallPoints;
         Runtime::ArrayView<const real, false, Runtime::FixedRows<8>> cells;
-        SourceOutput output;
+        Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows> output;
         SourceStatus status;
         int components = 0, dimension = 0;
         SourceEvaluation evaluation = SourceEvaluation::QuadratureResidual;

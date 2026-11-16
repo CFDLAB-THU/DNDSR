@@ -13,6 +13,7 @@ namespace DNDS::Cauchy
         LinearPatternView patternView;
         index components;
         DiagonalStorage mode;
+        bool rowMajorBlocks;
         EquationDofs rhs, forward, output;
         std::optional<EquationDofs> input;
         R::Array<real>::ReadLease diagonalRead, inverseRead;
@@ -24,7 +25,7 @@ namespace DNDS::Cauchy
         bool middleExchange, started = false;
         int lower = 0, upper = 0;
         State(const LinearProblemContext &problem, const EquationDofs &b, const EquationDofs *old, EquationDofs &temporary, EquationDofs &result, bool middle)
-            : pattern(problem._pattern), patternRead(pattern->rows.Read()), patternView(patternRead.View()), components(problem._components), mode(problem._diagonalStorage),
+            : pattern(problem._pattern), patternRead(pattern->rows.Read()), patternView(patternRead.View()), components(problem._components), mode(problem._diagonalStorage), rowMajorBlocks(problem._rowMajorBlocks),
               rhs(b.NumericAlias()), forward(temporary.NumericAlias()), output(result.NumericAlias()),
               diagonalRead(problem._diagonal.Read()), inverseRead(problem._inverse.Read()), blocksRead(problem.ReadOffDiagonal()),
               rhsRead(rhs.ReadOwned()), middleExchange(middle)
@@ -73,7 +74,7 @@ namespace DNDS::Cauchy
                 old.emplace(inputRead->ComponentLayout());
             const auto previous = old ? old->View() : b.View();
             const CPU::LinearBlockInput request{blocksRead.View(), patternView, rows,
-                                                inverseRead.View<R::TableRows>(), components, mode == DiagonalStorage::Block, pattern->sweepPartitions.HostView()};
+                                                inverseRead.View<R::UniformTableRows>(), components, mode == DiagonalStorage::Block, pattern->sweepPartitions.HostView(), rowMajorBlocks};
             started = true;
             if constexpr (Upper)
                 CPU::UpperSGSRows(request, b.View(), previous, forwardValues, ghost, destination, !input && !middleExchange);

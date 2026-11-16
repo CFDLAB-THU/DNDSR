@@ -1,12 +1,15 @@
 #pragma once
 
 #include "DNDS/Algebra/BlockMatrixStorage.hpp"
+#include "Cauchy/Implicit/LinearPattern.hpp"
 
 namespace DNDS::Cauchy::CUDA
 {
     using LinearReadRows = Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::TableRows>;
     using LinearWriteRows = Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::TableRows>;
     using VectorReadRows = Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows>;
+    using MatrixReadRows = Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows>;
+    using MatrixWriteRows = Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows>;
     using LinearIndexRows = Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
 
     /** @brief Frozen assembled operator for a selected set of independent rows.
@@ -16,16 +19,19 @@ namespace DNDS::Cauchy::CUDA
      * unique. Core selection proves all columns owned; its ghost view may be
      * absent. No stream, lease, communicator or host evaluator is stored here.
      */
-    struct LinearBlockInput
+    template <class Columns>
+    struct LinearBlockInputView
     {
         Algebra::BlockMatrixArrayView<const real> blocks;
-        Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::CSRRows> columns;
+        Columns columns;
         LinearIndexRows rows;
-        LinearReadRows diagonal;
+        MatrixReadRows diagonal;
         index ownedRows = 0;
         int components = 0;
         bool fullDiagonal = false;
+        bool rowMajorBlocks = false;
     };
+    using LinearBlockInput = LinearBlockInputView<LinearColumnsView>;
     /// Enqueue y = A*x on selected rows. Output must not alias any input.
     /// Combined AoS widths 5/6/7 only; no communication or host wait is hidden.
     void ApplyLinearRows(Runtime::ExecutionContext context, const LinearBlockInput &request,
@@ -35,5 +41,5 @@ namespace DNDS::Cauchy::CUDA
     /// blocks, owned and ghost may all be absent and are never dereferenced.
     void JacobiLinearRows(Runtime::ExecutionContext context, const LinearBlockInput &request,
                           VectorReadRows rhs, VectorReadRows owned, VectorReadRows ghost,
-                          LinearWriteRows output, bool zeroStart);
+                          LinearWriteRows output, bool zeroStart, bool componentGroups = false);
 }

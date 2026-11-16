@@ -49,7 +49,8 @@ namespace DNDS::Cauchy
     SpanView<const index> FrozenJacobianOperator::ColumnRow(index iRow) const
     {
         const auto row = _geometry->_columnRead.View().columns[iRow];
-        return {row.data(), row.size()};
+        DNDS_check_throw_info(!row.narrow, "evaluated Jacobian column span requires its native wide geometry");
+        return {row.wide, row.size()};
     }
     void FrozenJacobianOperator::EvaluateBlock(index, index, Eigen::Ref<Eigen::MatrixXd>) const
     {
@@ -62,7 +63,7 @@ namespace DNDS::Cauchy
     void FrozenJacobianOperator::SubmitRows(R::EagerEngine &engine, const R::ExecutionStream &stream, EvaluatedLinearAction action) const
     {
         DNDS_check_throw_info(engine.Owns(stream) && stream.Context().device == _device, "frozen Jacobian stream/device differs");
-        const bool jacobi = bool(action.rhs), full = action.fullDiagonal;
+        const bool jacobi = bool(action.rhs), full = action.fullDiagonal, rowMajorBlocks = action.rowMajorBlocks;
         const auto check = [&](const R::Array<real> &input)
         {
             DNDS_check_throw_info(input.GetDevice() == _device && !action.output.Storage().Overlaps(input.Storage()),
@@ -77,15 +78,15 @@ namespace DNDS::Cauchy
         for (const auto *input : {&_values.means, &_values.pressure, &_values.pressureDerivative, &_values.radius, &_values.magnitudes})
             check(*input);
         const auto retained = shared_from_this();
-        R::SubmitArrays(engine, stream, [retained, jacobi, full](R::ExecutionContext context, auto means, auto pressure, auto derivative, auto radius, auto magnitudes, auto diagonal, auto rhs, auto owned, auto ghost, auto rows, auto output, auto status)
+        R::SubmitArrays(engine, stream, [retained, jacobi, full, rowMajorBlocks](R::ExecutionContext context, auto means, auto pressure, auto derivative, auto radius, auto magnitudes, auto diagonal, auto rhs, auto owned, auto ghost, auto rows, auto output, auto status)
                         {
 #ifdef DNDS_USE_CUDA
                             const CUDA::FrozenJacobianInput snapshot{retained->_geometry->_residentRead.View(), means, pressure, derivative, radius, magnitudes, retained->_parameters};
-                            CUDA::ApplyFrozenJacobian(context, snapshot, rows, diagonal, full, rhs, owned, ghost, output, status, jacobi);
+                            CUDA::ApplyFrozenJacobian(context, snapshot, rows, diagonal, full, rhs, owned, ghost, output, status, jacobi, rowMajorBlocks);
 #else
                             DNDS_check_throw_info(false, "frozen CUDA Jacobian provider is not compiled");
 #endif
                         },
-                        R::ReadAs<R::UniformTableRows>(_values.means), R::ReadAs<R::TableRows>(_values.pressure), R::ReadAs<R::TableRows>(_values.pressureDerivative), R::ReadAs<R::TableRows>(_values.radius), R::ReadAs<R::TableRows>(_values.magnitudes), R::ReadAs<R::TableRows>(action.diagonal), R::ReadAs<R::UniformTableRows>(action.rhs ? *action.rhs : _empty), R::ReadAs<R::UniformTableRows>(action.owned), R::ReadAs<R::UniformTableRows>(action.ghost ? *action.ghost : _empty), R::ReadAs<R::FixedRows<1>>(action.rows), R::WriteAs<R::TableRows>(action.output), R::ReadWriteAs<R::FixedRows<1>>(action.status));
+                        R::ReadAs<R::UniformTableRows>(_values.means), R::ReadAs<R::TableRows>(_values.pressure), R::ReadAs<R::TableRows>(_values.pressureDerivative), R::ReadAs<R::TableRows>(_values.radius), R::ReadAs<R::TableRows>(_values.magnitudes), R::ReadAs<R::UniformTableRows>(action.diagonal), R::ReadAs<R::UniformTableRows>(action.rhs ? *action.rhs : _empty), R::ReadAs<R::UniformTableRows>(action.owned), R::ReadAs<R::UniformTableRows>(action.ghost ? *action.ghost : _empty), R::ReadAs<R::FixedRows<1>>(action.rows), R::WriteAs<R::TableRows>(action.output), R::ReadWriteAs<R::FixedRows<1>>(action.status));
     }
 }

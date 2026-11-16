@@ -8,12 +8,12 @@ namespace DNDS::CFV::Detail
     namespace R = Runtime;
     /// Sweep-only argument projection. Limiter tables and work lists do not
     /// belong in the kernel argument block (especially with LVR operands).
-    template <class Scalar>
+    template <class Scalar, class Layout = R::RowLayout>
     struct JacobiView
     {
         R::ArrayView<const index> offsets, neighbors, boundaryOffsets;
         R::ArrayView<const uint8_t> rotationActive;
-        R::ArrayView<const Scalar> matrixAInvB, vectorAInvB, boundaryInjection;
+        R::ArrayView<const Scalar, R::AccessBoundsChecks, Layout> matrixAInvB, vectorAInvB, boundaryInjection;
         R::ArrayView<const real> rotation;
         index n;
         real relax;
@@ -22,23 +22,26 @@ namespace DNDS::CFV::Detail
             : offsets(p.offsets), neighbors(p.neighbors), boundaryOffsets(p.boundaryOffsets),
               rotationActive(p.rotationActive), rotation(p.rotation), n(p.n), relax(p.relax), rotated(p.rotated)
         {
+            const auto project = [](R::ArrayView<const Scalar> v) -> R::ArrayView<const Scalar, R::AccessBoundsChecks, Layout>
+            { return {v.data, v.offsets, v.rows, v.width, v.stride, v.sizes, v.kind, v.device}; };
             if constexpr (std::is_same_v<Scalar, float>)
-                matrixAInvB = p.matrixAInvB32, vectorAInvB = p.vectorAInvB32, boundaryInjection = p.boundaryInjection32;
+                matrixAInvB = project(p.matrixAInvB32), vectorAInvB = project(p.vectorAInvB32), boundaryInjection = project(p.boundaryInjection32);
             else
-                matrixAInvB = p.matrixAInvB, vectorAInvB = p.vectorAInvB, boundaryInjection = p.boundaryInjection;
+                matrixAInvB = project(p.matrixAInvB), vectorAInvB = project(p.vectorAInvB), boundaryInjection = project(p.boundaryInjection);
         }
     };
     // Matrix storage, dense-product arithmetic and whole-update arithmetic are
     // independent. The defaults preserve the original FP32-product/FP64-update
     // policy, including the FP64 periodic rotation before its FP32 product.
-    template <bool limited, class Scalar, class AccumScalar = real, class ProductScalar = Scalar, class Status>
-    __global__ void Jacobi(JacobiView<Scalar> plan, DeviceWorkSelection selection, DevicePeriodicBlocks blocks,
+    template <bool limited, class Scalar, class AccumScalar = real, class ProductScalar = Scalar, int FixedModes = 0, class Layout = R::RowLayout, class Status>
+    __global__ void Jacobi(JacobiView<Scalar, Layout> plan, DeviceWorkSelection selection, DevicePeriodicBlocks blocks,
                            R::PairReadView<real> mean, R::PairReadView<real> input,
                            R::ArrayView<const real> boundary, R::ArrayView<real> output, Status status,
                            R::ArrayView<const real> target, R::ArrayView<const real> alpha)
     {
         if (status(0, 0))
             return;
+        const index n = FixedModes ? FixedModes : plan.n;
         for (index iWork = blockIdx.x; iWork < selection.count; iWork += gridDim.x)
         {
             const auto iCell = selection.Cell(iWork);
@@ -49,7 +52,7 @@ namespace DNDS::CFV::Detail
             const AccumScalar scale = relax * (AccumScalar(1) - penalty);
             for (index i = threadIdx.x; i < output.width; i += blockDim.x)
             {
-                const index mode = i % plan.n, component = i / plan.n;
+                const index mode = i % n, component = i / n;
                 AccumScalar value = AccumScalar(input(iCell, i)) * (AccumScalar(1) - relax);
                 if constexpr (limited)
                     if (penalty > 0)
@@ -72,8 +75,8 @@ namespace DNDS::CFV::Detail
                         // chosen scalar throughout, casting FP64 inputs directly
                         // and retaining the already quantized FP32 maps.
                         ProductScalar product(0);
-                        for (index j = 0; j < plan.n; ++j)
-                            product += ProductScalar(plan.matrixAInvB(entry, j * plan.n + mode)) * ProductScalar(input(other, component * plan.n + j));
+                        for (index j = 0; j < n; ++j)
+                            product += ProductScalar(plan.matrixAInvB(entry, j * n + mode)) * ProductScalar(input(other, component * n + j));
                         value += scale * AccumScalar(product);
                         const auto first = plan.rotated && plan.rotationActive(entry, 0)
                                                ? blocks.First(component)
@@ -81,13 +84,13 @@ namespace DNDS::CFV::Detail
                         if (first >= 0)
                         {
                             ProductScalar correction(0);
-                            for (index j = 0; j < plan.n; ++j)
+                            for (index j = 0; j < n; ++j)
                             {
                                 AccumScalar rotated(0);
                                 for (index d = 0; d < 3; ++d)
-                                    rotated += AccumScalar(input(other, (first + d) * plan.n + j)) *
+                                    rotated += AccumScalar(input(other, (first + d) * n + j)) *
                                                (AccumScalar(plan.rotation(entry, d * 3 + component - first)) - AccumScalar(component - first == d ? 1 : 0));
-                                correction += ProductScalar(plan.matrixAInvB(entry, j * plan.n + mode)) * ProductScalar(rotated);
+                                correction += ProductScalar(plan.matrixAInvB(entry, j * n + mode)) * ProductScalar(rotated);
                             }
                             value += scale * AccumScalar(correction);
                         }
@@ -113,13 +116,16 @@ namespace DNDS::CFV::Detail
     /// Keep entry, mode-product, rotation-correction and mean/BC addition order
     /// identical to Jacobi<false, real>. Barriers are block-uniform, including
     /// lanes with no output slot. No limited/LVR semantics are changed here.
-    __global__ void JacobiSharedSIMT(JacobiView<real> plan, DeviceWorkSelection selection, DevicePeriodicBlocks blocks,
+    template <int FixedModes = 0, bool ShareMatrices = false, class Layout = R::RowLayout>
+    __global__ void JacobiSharedSIMT(JacobiView<real, Layout> plan, DeviceWorkSelection selection, DevicePeriodicBlocks blocks,
                                      R::PairReadView<real> mean, R::PairReadView<real> input,
                                      R::ArrayView<const real> boundary, R::ArrayView<real> output, R::ArrayView<const int> status)
     {
         if (status(0, 0))
             return;
+        const index n = FixedModes ? FixedModes : plan.n;
         __shared__ real coefficients[19 * 7];
+        __shared__ real matrix[ShareMatrices ? 19 * 19 : 1];
         for (index iWork = blockIdx.x; iWork < selection.count; iWork += gridDim.x)
         {
             const auto iCell = selection.Cell(iWork);
@@ -134,32 +140,41 @@ namespace DNDS::CFV::Detail
             {
                 const auto other = plan.neighbors(entry, 0);
                 if (other != UnInitIndex)
+                {
                     for (index i = threadIdx.x; i < output.width; i += blockDim.x)
                         coefficients[i] = input(other, i);
+                    if constexpr (ShareMatrices)
+                        for (index i = threadIdx.x; i < n * n; i += blockDim.x)
+                            matrix[i] = plan.matrixAInvB(entry, i);
+                }
                 __syncthreads();
                 for (int slot = 0; slot < 2; ++slot)
                 {
                     const index i = threadIdx.x + slot * blockDim.x;
                     if (i >= output.width)
                         continue;
-                    const index mode = i % plan.n, component = i / plan.n;
+                    const index mode = i % n, component = i / n;
                     if (other != UnInitIndex)
                     {
                         real product = 0;
-                        for (index j = 0; j < plan.n; ++j)
-                            product += plan.matrixAInvB(entry, j * plan.n + mode) * coefficients[component * plan.n + j];
+                        for (index j = 0; j < n; ++j)
+                        {
+                            const real a = ShareMatrices ? matrix[j * n + mode] : plan.matrixAInvB(entry, j * n + mode);
+                            product += a * coefficients[component * n + j];
+                        }
                         values[slot] += plan.relax * product;
                         const auto first = plan.rotated && plan.rotationActive(entry, 0) ? blocks.First(component) : -1;
                         if (first >= 0)
                         {
                             real correction = 0;
-                            for (index j = 0; j < plan.n; ++j)
+                            for (index j = 0; j < n; ++j)
                             {
                                 real rotated = 0;
                                 for (index d = 0; d < 3; ++d)
-                                    rotated += coefficients[(first + d) * plan.n + j] *
+                                    rotated += coefficients[(first + d) * n + j] *
                                                (plan.rotation(entry, d * 3 + component - first) - (component - first == d ? 1 : 0));
-                                correction += plan.matrixAInvB(entry, j * plan.n + mode) * rotated;
+                                const real a = ShareMatrices ? matrix[j * n + mode] : plan.matrixAInvB(entry, j * n + mode);
+                                correction += a * rotated;
                             }
                             values[slot] += plan.relax * correction;
                         }
@@ -214,7 +229,21 @@ namespace DNDS::CFV::Detail
         const real r2 = ratio * ratio;
         return other == 0 ? 0 : center * (1 + r2 * ratio) / (1 + r2 * r2);
     }
-    __global__ void WBAP(ReconstructionDeviceView plan, DeviceWorkSelection selection, DevicePeriodicBlocks vectors,
+    /// Limiter-only projection keeps unrelated raw/inverse/sweep tables out
+    /// of the aggregate CUDA argument block.
+    struct WBAPView
+    {
+        R::ArrayView<const index> offsets, neighbors, faces;
+        R::ArrayView<const real> secondary, rotation;
+        R::ArrayView<const uint8_t> rotationActive;
+        index n;
+        real wbapCenterWeight;
+        bool rotated;
+        explicit WBAPView(const ReconstructionDeviceView &p)
+            : offsets(p.offsets), neighbors(p.neighbors), faces(p.faces), secondary(p.secondary), rotation(p.rotation),
+              rotationActive(p.rotationActive), n(p.n), wbapCenterWeight(p.wbapCenterWeight), rotated(p.rotated) {}
+    };
+    __global__ void WBAP(WBAPView plan, DeviceWorkSelection selection, DevicePeriodicBlocks vectors,
                          R::PairReadView<real> input, R::ArrayView<real> output, R::ArrayView<real> scratch,
                          DeviceCharacteristicView transform, R::ArrayView<const real> indicator, R::ArrayView<int> status,
                          index begin, index modes, real threshold, real epsilon)
@@ -355,6 +384,11 @@ namespace DNDS::CFV::Detail
     void LaunchJacobi(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection, DevicePeriodicBlocks blocks,
                       R::PairReadView<real> mean, R::PairReadView<real> input, R::ArrayView<const real> boundary, R::ArrayView<real> output, R::ArrayView<const int> status)
     {
+        if (plan.raw)
+        {
+            LaunchRawJacobi(context, plan, selection, blocks, mean, input, boundary, output, status, {}, {}, false, -1);
+            return;
+        }
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA, "CUDA Jacobi requires a CUDA context");
         R::ValidateViewDevices(context.device, plan, selection, blocks, mean, input, boundary, output, status);
         R::CheckKernelArgumentBudget<JacobiView<real>, decltype(selection), decltype(blocks), decltype(mean),
@@ -401,6 +435,11 @@ namespace DNDS::CFV::Detail
                             DevicePeriodicBlocks blocks, R::PairReadView<real> mean, R::PairReadView<real> input,
                             R::ArrayView<const real> boundary, R::ArrayView<real> output, R::ArrayView<const int> status)
     {
+        if (plan.raw)
+        {
+            LaunchRawJacobi(context, plan, selection, blocks, mean, input, boundary, output, status, {}, {}, false, 2);
+            return;
+        }
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && !plan.quantized,
                               "shared FP64 SIMT Jacobi requires a CUDA context and FP64 sweep maps");
         R::ValidateViewDevices(context.device, plan, selection, blocks, mean, input, boundary, output, status);
@@ -413,9 +452,75 @@ namespace DNDS::CFV::Detail
                                      decltype(input), decltype(boundary), decltype(output), decltype(status)>();
         if (!selection.count)
             return;
-        JacobiSharedSIMT<<<unsigned(std::min<index>(selection.count, 1024)), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(
+        JacobiSharedSIMT<><<<unsigned(std::min<index>(selection.count, 1024)), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(
             JacobiView<real>(plan), selection, blocks, mean, input, boundary, output, status);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "shared FP64 SIMT Jacobi launch failed");
+    }
+    void LaunchJacobiOptimized(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection,
+                               DevicePeriodicBlocks blocks, R::PairReadView<real> mean, R::PairReadView<real> input,
+                               R::ArrayView<const real> boundary, R::ArrayView<real> output,
+                               R::ArrayView<const int> status, int mapping)
+    {
+        if (plan.raw)
+        {
+            LaunchRawJacobi(context, plan, selection, blocks, mean, input, boundary, output, status, {}, {}, false, mapping);
+            return;
+        }
+        DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && !plan.quantized &&
+                                  mapping >= 0 && mapping <= 2,
+                              "optimized FP64 Jacobi requires a CUDA context, FP64 maps and a valid mapping");
+        R::ValidateViewDevices(context.device, plan, selection, blocks, mean, input, boundary, output, status);
+        DNDS_check_throw_info(output.Width() == mean.owned.Width() * plan.n &&
+                                  input.owned.Width() == output.Width() && output.RowCount() == mean.owned.RowCount(),
+                              "optimized FP64 Jacobi field shape differs");
+        DNDS_check_throw_info(mapping == 0 || plan.n == 2 || plan.n == 3 || plan.n == 5 || plan.n == 9 || plan.n == 19,
+                              "static FP64 Jacobi requires P1..P3 modal dimensions");
+        DNDS_check_throw_info(mapping != 2 || (mean.owned.Width() >= 5 && mean.owned.Width() <= 7),
+                              "matrix-shared FP64 Jacobi requires 5/6/7 components");
+        R::CheckKernelArgumentBudget<JacobiView<real>, decltype(selection), decltype(blocks), decltype(mean),
+                                     decltype(input), decltype(boundary), decltype(output), decltype(status),
+                                     R::ArrayView<const real>, R::ArrayView<const real>>();
+        if (!selection.count)
+            return;
+        const auto stream = static_cast<cudaStream_t>(context.stream);
+        // More blocks make sufficient independent cells available to every SM.
+        // The reference's 256-block cap is retained by LaunchJacobi for a clean
+        // comparison; changing this limit never changes arithmetic order.
+        const unsigned grid = unsigned(std::min<index>(selection.count, 65535));
+        if (mapping == 0)
+            Jacobi<false><<<grid, 128, 0, stream>>>(JacobiView<real>(plan), selection, blocks, mean, input, boundary, output, status, {}, {});
+        else
+        {
+            const auto launch = [&](auto modes)
+            {
+                constexpr int N = decltype(modes)::value;
+                const auto launchLayout = [&](auto layout)
+                {
+                    using Layout = decltype(layout);
+                    if (mapping == 1)
+                        Jacobi<false, real, real, real, N, Layout><<<grid, 96, 0, stream>>>(JacobiView<real, Layout>(plan), selection, blocks, mean, input, boundary, output, status, {}, {});
+                    else
+                        JacobiSharedSIMT<N, true, Layout><<<grid, 96, 0, stream>>>(JacobiView<real, Layout>(plan), selection, blocks, mean, input, boundary, output, status);
+                };
+                // Projection is checked once by the wrapper, never per element.
+                if (plan.matrixAInvB.kind == R::RowLayoutKind::Table && plan.vectorAInvB.kind == R::RowLayoutKind::Table &&
+                    plan.boundaryInjection.kind == R::RowLayoutKind::Table)
+                    launchLayout(R::TableRows{});
+                else
+                    launchLayout(R::RowLayout{});
+            };
+            if (plan.n == 2)
+                launch(std::integral_constant<int, 2>{});
+            else if (plan.n == 3)
+                launch(std::integral_constant<int, 3>{});
+            else if (plan.n == 5)
+                launch(std::integral_constant<int, 5>{});
+            else if (plan.n == 9)
+                launch(std::integral_constant<int, 9>{});
+            else
+                launch(std::integral_constant<int, 19>{});
+        }
+        DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "optimized FP64 Jacobi launch failed");
     }
     void LaunchLimitedJacobi(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection,
                              DevicePeriodicBlocks blocks, R::PairReadView<real> mean, R::PairReadView<real> input,
@@ -433,7 +538,9 @@ namespace DNDS::CFV::Detail
         // A separate stream-ordered validation pass avoids a status read/write
         // race between cell blocks and prevents partial publication on error.
         ValidatePenalty<<<unsigned(std::min<index>(256, (alpha.rows + 127) / 128)), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(alpha, status);
-        if (plan.quantized)
+        if (plan.raw)
+            LaunchRawJacobi(context, plan, selection, blocks, mean, input, boundary, output, status.ConstView(), target, alpha, true, 1);
+        else if (plan.quantized)
             Jacobi<true><<<unsigned(std::min<index>(selection.count, 256)), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(
                 JacobiView<float>(plan), selection, blocks, mean, input, boundary, output, status, target, alpha);
         else
@@ -447,7 +554,7 @@ namespace DNDS::CFV::Detail
     {
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA, "CUDA WBAP requires a CUDA context");
         R::ValidateViewDevices(context.device, plan, selection, blocks, input, output, scratch, transform, indicator, status);
-        R::CheckKernelArgumentBudget<decltype(plan), decltype(selection), decltype(blocks), decltype(input),
+        R::CheckKernelArgumentBudget<WBAPView, decltype(selection), decltype(blocks), decltype(input),
                                      decltype(output), decltype(scratch), decltype(transform), decltype(indicator),
                                      decltype(status), index, index, real, real>();
         const auto stream = static_cast<cudaStream_t>(context.stream);
@@ -456,7 +563,7 @@ namespace DNDS::CFV::Detail
         if (indicator.rows)
             ValidateIndicator<<<unsigned(std::min<index>(256, (indicator.rows + 127) / 128)), 128, 0, stream>>>(indicator, status);
         if (selection.count)
-            WBAP<<<unsigned(blocksCount), 128, 0, stream>>>(plan, selection, blocks, input, output, scratch, transform, indicator, status, begin, modes, threshold, std::pow(verySmallReal, .25));
+            WBAP<<<unsigned(blocksCount), 128, 0, stream>>>(WBAPView(plan), selection, blocks, input, output, scratch, transform, indicator, status, begin, modes, threshold, std::pow(verySmallReal, .25));
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA WBAP launch failed");
     }
     void LaunchCommit(R::ExecutionContext context, R::ArrayView<const real> input, R::ArrayView<real> output, R::ArrayView<const int> status)

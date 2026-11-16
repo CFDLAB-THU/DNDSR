@@ -134,7 +134,7 @@ namespace DNDS::Cauchy
             request.cells = pin->metric.View().cells; request.output = output; request.status = status;
             request.components = n; request.dimension = dim; request.fullBlock = fullBlock; request.scale = scale;
             request.evaluation = quadrature ? CUDA::SourceEvaluation::QuadratureDestruction : CUDA::SourceEvaluation::MeanDestruction;
-            CUDA::AddRANSSources(context, request, cells); }, R::ReadAs<R::TableRows>(state.CoupledField().Owned()), R::ReadAs<R::TableRows>(quadrature ? work.sourceValues[0] : empty), R::ReadAs<R::TableRows>(g0), R::ReadAs<R::TableRows>(g1), R::ReadAs<R::TableRows>(g2), R::ReadAs<R::FixedRows<1>>(work.sourceOffsets), R::ReadAs<R::FixedRows<1>>(work.sourceWeights), R::ReadAs<R::FixedRows<1>>(owner->ransCellLength), R::ReadAs<R::FixedRows<1>>(work.DeviceCellSelection(CFV::ReconstructionRegion::All)), R::ReadWriteAs<R::TableRows>(diagonal), R::WriteAs<R::FixedRows<1>>(rowsStatus));
+            CUDA::AddRANSSources(context, request, cells); }, R::ReadAs<R::TableRows>(state.CoupledField().Owned()), R::ReadAs<R::TableRows>(quadrature ? work.sourceValues[0] : empty), R::ReadAs<R::TableRows>(g0), R::ReadAs<R::TableRows>(g1), R::ReadAs<R::TableRows>(g2), R::ReadAs<R::FixedRows<1>>(work.sourceOffsets), R::ReadAs<R::FixedRows<1>>(work.sourceWeights), R::ReadAs<R::FixedRows<1>>(owner->ransCellLength), R::ReadAs<R::FixedRows<1>>(work.DeviceCellSelection(CFV::ReconstructionRegion::All)), R::ReadWriteAs<R::UniformTableRows>(diagonal), R::WriteAs<R::FixedRows<1>>(rowsStatus));
         AppendStatus(engine, stream, rowsStatus);
 #else
         (void)work;

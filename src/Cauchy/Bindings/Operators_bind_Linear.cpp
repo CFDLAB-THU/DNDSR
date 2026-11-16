@@ -8,6 +8,26 @@ namespace DNDS::Cauchy::Bindings
 {
     void BindOperatorLinear(py::module_ &m)
     {
+        py::enum_<Algebra::MatrixTableLayout>(m, "MatrixTableLayout")
+            .value("AoS", Algebra::MatrixTableLayout::AoS)
+            .value("SoA", Algebra::MatrixTableLayout::SoA)
+            .value("AoSoA32", Algebra::MatrixTableLayout::AoSoA32);
+        py::class_<Algebra::MatrixTableOptions>(m, "MatrixTableOptions")
+            .def(py::init<>())
+            .def_readwrite("layout", &Algebra::MatrixTableOptions::layout)
+            .def_readwrite("row_padding_multiple", &Algebra::MatrixTableOptions::rowPaddingMultiple);
+        py::enum_<LinearIndexStorage>(m, "LinearIndexStorage")
+            .value("Int64", LinearIndexStorage::Int64)
+            .value("Int32", LinearIndexStorage::Int32);
+        py::class_<LinearMatrixOptions>(
+            m, "LinearMatrixOptions",
+            "Independent native matrix layouts and sparse indices; row_major_blocks selects within-block order without repacking.")
+            .def(py::init<>())
+            .def_readwrite("diagonal", &LinearMatrixOptions::diagonal)
+            .def_readwrite("inverse", &LinearMatrixOptions::inverse)
+            .def_readwrite("off_diagonal", &LinearMatrixOptions::offDiagonal)
+            .def_readwrite("indices", &LinearMatrixOptions::indices)
+            .def_readwrite("row_major_blocks", &LinearMatrixOptions::rowMajorBlocks);
         py::enum_<DiagonalStorage>(m, "DiagonalStorage")
             .value("Entries", DiagonalStorage::Entries)
             .value("Block", DiagonalStorage::Block);
@@ -91,6 +111,8 @@ namespace DNDS::Cauchy::Bindings
             .def_readwrite("sgs_sweeps", &LinearSolveSettings::sgsSweeps)
             .def_readwrite("jacobi_local_sweeps", &LinearSolveSettings::jacobiLocalSweeps)
             .def_readwrite("diagonal_inverse_refinement", &LinearSolveSettings::diagonalInverseRefinement)
+            .def_readwrite("cuda_diagonal_inverse", &LinearSolveSettings::cudaDiagonalInverse)
+            .def_readwrite("cuda_jacobi_mapping", &LinearSolveSettings::cudaJacobiMapping)
             .def_readwrite("ilu_fill", &LinearSolveSettings::iluFill)
             .def_readwrite("ilu_preconditioner_corrections", &LinearSolveSettings::iluPreconditionerCorrections)
             .def_readwrite("ilu_core_first", &LinearSolveSettings::iluCoreFirst)

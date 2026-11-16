@@ -37,6 +37,13 @@ namespace DNDS::Cauchy
         /// original policy, 1..3 preserves the SVD cutoff/retained subspace.
         /// Applies to SGS/Jacobi, not ILU or provider-owned AMG inverses.
         int diagonalInverseRefinement = 0;
+        /// Experimental CUDA block inverse: batchedSVD (reference/default) or
+        /// guardedLU (fixed 5/6/7 partial-pivot LU with filtered SVD fallback).
+        /// CPU continues to use its canonical Eigen guarded LU/SVD policy.
+        std::string cudaDiagonalInverse = "batchedSVD";
+        /// Assembled CUDA Jacobi mapping. componentGroup shares one cell among
+        /// eight lanes, preserving component-dot and sparse-neighbor order.
+        std::string cudaJacobiMapping = "thread";
         /// Fixed zero-started ILU defect corrections per GMRES application.
         /// More than one uses the full operator/halo between local solves.
         /// The count is frozen for Solve; stationary ILU uses maxIterations.
@@ -108,7 +115,8 @@ namespace DNDS::Cauchy
     /// any supported table layout. Dense blocks couple every logical component;
     /// no implicit device fallback occurs. CUDA currently requires one combined
     /// AoS flow5/SA/2EQ field and Jacobi, AmgX defect correction or GMRES with Jacobi/AmgX. AmgX consumes
-    /// a native cell-block CSR copy of the assembled owned-owned principal matrix, while
+    /// the primary native int32, row-major assembled blocks directly (one rank
+    /// and compact AoS matrix/vector storage for now), while
     /// DNDS retains the full distributed operator and halo schedule.
     ///
     /// All domain ranks construct/call together. The prototype's physical

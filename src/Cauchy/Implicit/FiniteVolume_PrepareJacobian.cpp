@@ -206,7 +206,7 @@ namespace DNDS::Cauchy
             diagonal->CancelUnmodified();
             throw;
         }
-        const auto d = diagonal->View<R::TableRows>();
+        const auto d = diagonal->View<R::UniformTableRows>();
         const auto blocks = offDiagonal ? std::optional(offDiagonal->View()) : std::nullopt;
         const auto stencilRead = _data->stencil.Read();
         std::optional<R::Array<real>::WriteLease> magnitudeWrite;
@@ -231,6 +231,7 @@ namespace DNDS::Cauchy
         request.physicalMass = controls.physicalMass;
         request.scale = controls.residualScale;
         request.fullBlock = output.DiagonalMode() == DiagonalStorage::Block;
+        request.rowMajorBlocks = output.RowMajorBlocks();
         request.roe = controls.roeDissipation;
         request.evaluated = bool(evaluated);
         request.selected = !selection.All();

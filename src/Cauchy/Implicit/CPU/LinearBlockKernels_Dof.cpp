@@ -5,14 +5,14 @@ namespace DNDS::Cauchy::CPU
 {
     void ApplyLinearRows(const LinearBlockInput &request, LinearDofRead owned, LinearDofRead ghost, LinearDofWrite output)
     {
-        const auto diagonal = Algebra::MakeEigenRowMatrices(request.diagonal, request.components, request.fullDiagonal ? request.components : 1);
+        const auto diagonal = Algebra::MakeEigenRowMatrices(request.diagonal, request.components, request.fullDiagonal ? request.components : 1, Runtime::Device::Host(), request.rowMajorBlocks);
         request.blocks.WithActions([&](const auto &blocks)
                                    { ApplyBlockRows(owned, ghost, output, diagonal,
                                                     blocks, request.pattern, request.rows, request.components, request.fullDiagonal); });
     }
     void JacobiLinearRows(const LinearBlockInput &request, LinearDofRead rhs, LinearDofRead owned, LinearDofRead ghost, LinearDofWrite output, bool zeroStart)
     {
-        const auto inverse = Algebra::MakeEigenRowMatrices(request.diagonal, request.components, request.fullDiagonal ? request.components : 1);
+        const auto inverse = Algebra::MakeEigenRowMatrices(request.diagonal, request.components, request.fullDiagonal ? request.components : 1, Runtime::Device::Host(), request.rowMajorBlocks);
         if (zeroStart)
         {
             JacobiRows<true>(rhs, rhs, rhs, output, inverse, 0,
@@ -30,7 +30,7 @@ namespace DNDS::Cauchy::CPU
     }
     void LowerSGSRows(const LinearBlockInput &request, LinearDofRead rhs, LinearDofRead old, LinearDofRead ghost, LinearDofWrite output, bool zeroStart)
     {
-        const auto inverse = Algebra::MakeEigenRowMatrices(request.diagonal, request.components, request.fullDiagonal ? request.components : 1);
+        const auto inverse = Algebra::MakeEigenRowMatrices(request.diagonal, request.components, request.fullDiagonal ? request.components : 1, Runtime::Device::Host(), request.rowMajorBlocks);
         request.blocks.WithActions([&](const auto &blocks)
                                    {
             const auto invoke = [&](auto zero)
@@ -47,7 +47,7 @@ namespace DNDS::Cauchy::CPU
     }
     void UpperSGSRows(const LinearBlockInput &request, LinearDofRead rhs, LinearDofRead old, LinearDofRead forward, LinearDofRead ghost, LinearDofWrite output, bool zeroStart)
     {
-        const auto inverse = Algebra::MakeEigenRowMatrices(request.diagonal, request.components, request.fullDiagonal ? request.components : 1);
+        const auto inverse = Algebra::MakeEigenRowMatrices(request.diagonal, request.components, request.fullDiagonal ? request.components : 1, Runtime::Device::Host(), request.rowMajorBlocks);
         request.blocks.WithActions([&](const auto &blocks)
                                    {
             const auto invoke = [&](auto zero)

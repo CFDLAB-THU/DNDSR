@@ -87,6 +87,12 @@ namespace DNDS::CFV::Detail
         // Unscaled blocks retain the original assembled operator even when
         // the truncated local inverse projects out small, nonzero modes.
         std::optional<Runtime::Array<real>> rawMatrixB, rawVectorB, rawBoundaryInjection;
+        /// Raw face representation reuses faces as its row mapping. This byte
+        /// records the canonical parent side; side one reads B transposed.
+        std::optional<Runtime::Array<uint8_t>> rawFaceSide;
+        const Runtime::Array<real> &SweepMatrices() const { return settings.storage.Raw() ? *rawMatrixB : *matrixAInvB; }
+        const Runtime::Array<real> &SweepVectors() const { return settings.storage.Raw() ? *rawVectorB : *vectorAInvB; }
+        const Runtime::Array<real> &SweepInjection() const { return settings.storage.Raw() ? *rawBoundaryInjection : *boundaryInjection; }
         Runtime::Array<real> neighborRotation;
         /// Setup-time incidence classification. A byte avoids hot-loop matrix
         /// comparisons and distinguishes ordinary/translated faces in a mesh

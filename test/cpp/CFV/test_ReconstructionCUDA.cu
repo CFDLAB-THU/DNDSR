@@ -76,10 +76,32 @@ static void CompareSharedSweep(const C::FiniteVolumePlan &metrics, const C::Vari
     const std::vector<I> vectors{1};
     auto cpu = plan.BuildWorkspace(components, vectors);
     auto gpu = resident.BuildWorkspace(components, vectors);
-    REQUIRE(resident.SupportsKernel(C::ReconstructionDeviceKernel::FP64Shared));
+    const auto originalOwned = coefficients.Owned().Clone();
+    const auto originalGhost = coefficients.Ghost().Clone();
     plan.DoReconstructionIter(mean, coefficients, cpu, boundary);
-    resident.DoReconstructionIter(gpuMean, gpuCoefficients, gpu, gpuBoundary, C::ReconstructionDeviceKernel::FP64Shared);
-    Equal(coefficients, gpuCoefficients);
+    for (auto kernel : {C::ReconstructionDeviceKernel::FP64Shared, C::ReconstructionDeviceKernel::FP64Wide,
+                        C::ReconstructionDeviceKernel::FP64Static, C::ReconstructionDeviceKernel::FP64MatrixShared})
+        for (bool split : {false, true})
+        {
+            CAPTURE(int(kernel));
+            CAPTURE(split);
+            REQUIRE(resident.SupportsKernel(kernel));
+            gpuCoefficients.Owned().CopyFrom(originalOwned, context).Wait();
+            gpuCoefficients.Ghost().CopyFrom(originalGhost, context).Wait();
+            if (!split)
+                resident.DoReconstructionIter(gpuMean, gpuCoefficients, gpu, gpuBoundary, kernel);
+            else
+            {
+                R::EagerEngine engine;
+                const auto stream = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
+                resident.SubmitReconstructionIterTo(engine, stream, gpuMean, gpuCoefficients, gpu, gpuBoundary, C::ReconstructionRegion::Core, kernel);
+                resident.SubmitReconstructionIterTo(engine, stream, gpuMean, gpuCoefficients, gpu, gpuBoundary, C::ReconstructionRegion::HaloDependent, kernel);
+                resident.SubmitCommitReconstruction(engine, stream, gpuCoefficients, gpu);
+                engine.Synchronize();
+                resident.CheckStatus(gpu);
+            }
+            Equal(coefficients, gpuCoefficients);
+        }
 }
 
 TEST_CASE("Queued FV gradients and linear-mode projection share CPU and CUDA incidence semantics")
@@ -1170,6 +1192,9 @@ TEST_CASE("Device errors reject unsupported SOR stale publications and invalid i
     }
     CHECK_THROWS(resident.Validate());
 }
+// Storage variants share the exact distributed fixtures and CPU oracle above.
+#include "test_ReconstructionCUDA_Storage.hpp"
+
 int main(int argc, char **argv)
 {
     MPI_Init(&argc, &argv);

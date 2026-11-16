@@ -42,7 +42,7 @@ TEST_CASE("Native flow-five AMG preserves an uncoupled zero transverse equation"
     const auto context = R::ExecutionContext::CUDA(0);
     DNDS::Algebra::AmgXPreconditioner provider(device);
     const auto o = offsets.Read(), c = columns.Read();
-    provider.SetPattern(o.View(), c.View(), int(width));
+    provider.SetPattern(offsets, columns, int(width));
     REQUIRE(provider.RowNumber() == rows * width);
     auto a = values.To(device), b = rhs.To(device);
     R::Array<double> x(R::RowLayout::Dense(rows * width, 1), device);
@@ -109,7 +109,7 @@ TEST_CASE("Single-device AmgX applies a fixed linear local preconditioner and re
         DNDS::Algebra::AmgXPreconditioner provider(device);
         {
             auto o = offsets.Read(), c = columns.Read();
-            provider.SetPattern(o.View(), c.View(), int(components));
+            provider.SetPattern(offsets, columns, int(components));
         }
         auto values = hostValues.To(device), rhs = hostRhs.To(device);
         R::Array<double> solution(R::RowLayout::Dense(n, 1), device);
@@ -155,7 +155,7 @@ TEST_CASE("Single-device AmgX applies a fixed linear local preconditioner and re
             DNDS::Algebra::AmgXSettings settings;
             settings.cycles = 2;
             DNDS::Algebra::AmgXPreconditioner second(device, settings);
-            second.SetPattern(offsetRead.View(), columnRead.View(), int(components));
+            second.SetPattern(offsets, columns, int(components));
             const auto valueRead = values.Read(R::ExecutionContext::CUDA(0));
             second.UpdateValuesBorrowed(R::ExecutionContext::CUDA(0), valueRead.View());
             const auto rhsRead = rhs.Read(R::ExecutionContext::CUDA(0));
@@ -232,7 +232,7 @@ TEST_CASE("Native RANS block inversion covers all launched thread scratch and de
             const auto context = R::ExecutionContext::CUDA(0);
             DNDS::Algebra::AmgXPreconditioner provider(device, settings);
             const auto o = offsets.Read(), c = columns.Read();
-            provider.SetPattern(o.View(), c.View(), int(n));
+            provider.SetPattern(offsets, columns, int(n));
             auto a = values.To(device), b = rhs.To(device);
             R::Array<double> x(rhs.Layout(), device);
             {

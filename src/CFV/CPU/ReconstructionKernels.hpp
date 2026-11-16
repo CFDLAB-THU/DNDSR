@@ -25,7 +25,9 @@ namespace DNDS::CFV::CPU
     struct ReconstructionSweepView
     {
         ReconstructionIndexRows offsets, neighbors, boundaryOffsets;
-        ReconstructionTable matrices, vectors, injection;
+        ReconstructionReadRows matrices, vectors, injection, inverse;
+        ReconstructionIndexRows faces;
+        R::ArrayView<const uint8_t, R::AccessBoundsChecks, R::FixedRows<1>> faceSides;
         R::ArrayView<const real, R::AccessBoundsChecks, R::FixedRows<9>> rotations;
         R::ArrayView<const uint8_t, R::AccessBoundsChecks, R::FixedRows<1>> rotationActive;
         ReconstructionField means;
@@ -35,6 +37,7 @@ namespace DNDS::CFV::CPU
         index modes = 0, components = 0;
         real relaxation = 1;
         bool sor = false, rotated = false, limited = false;
+        bool raw = false, inverseTriangle = false, faceCoupling = false;
     };
     /// Jacobi or ordered block SOR into a distinct output. All array access and
     /// lifetime decisions have already been resolved by the operator. Returns

@@ -40,9 +40,9 @@ namespace DNDS::Cauchy::CUDA
      * RANS source destruction is a separate additive volume-source operator.
      */
     void InitializeJacobianDiagonal(Runtime::ExecutionContext context, JacobianCellMetrics cells,
-                                    LinearReadRows inverseTau, LinearWriteRows diagonal, JacobianStatus status,
+                                    LinearReadRows inverseTau, MatrixWriteRows diagonal, JacobianStatus status,
                                     LinearIndexRows selected, const RigidFrameParameters &frame,
-                                    real physicalMass, real scale, int components, bool fullBlock);
+                                    real physicalMass, real scale, int components, bool fullBlock, bool rowMajorBlocks = false);
 
     /** @brief Frozen centered face inputs of the approximate diagonal.
      * @details Every incidence is visited once, independently of polynomial
@@ -67,6 +67,7 @@ namespace DNDS::Cauchy::CUDA
         Riemann::FluxSettings fluxSettings;
         real time = 0;
         bool physicalBoundary = true;
+        bool rowMajorBlocks = false;
     };
     /** @brief Add face dissipation, wall chain rules and self-periodic terms.
      * @details diagonal/status already contain mass and source contributions.
@@ -77,6 +78,6 @@ namespace DNDS::Cauchy::CUDA
      * Final component projection acts on the complete accumulated diagonal.
      */
     void AddJacobianFaces(Runtime::ExecutionContext context, const JacobianFaceInput &input,
-                          LinearIndexRows selected, LinearWriteRows diagonal, bool fullBlock,
+                          LinearIndexRows selected, MatrixWriteRows diagonal, bool fullBlock,
                           LinearWriteRows magnitudes, JacobianStatus status);
 }

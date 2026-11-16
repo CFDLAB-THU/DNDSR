@@ -18,16 +18,32 @@ namespace DNDS::CFV
         struct OptionalTableWriter
         {
             std::optional<R::Array<real>::WriteLease> lease;
-            R::ArrayView<real, false, R::TableRows> values;
+            R::ArrayView<real, false, R::UniformTableRows> values;
             explicit OptionalTableWriter(std::optional<R::Array<real>> &array)
             {
                 if (array)
                 {
                     lease.emplace(array->Write());
-                    values = lease->View<R::TableRows>();
+                    values = lease->View<R::UniformTableRows>();
                 }
             }
         };
+        template <class Derived>
+        void PublishMatrix(R::ArrayView<real, false, R::UniformTableRows> target, index row,
+                           const Eigen::MatrixBase<Derived> &matrix, bool triangle = false)
+        {
+            const index n = matrix.rows();
+            if (!triangle && target.ElementStride() == 1)
+                Eigen::Map<Matrix>(target[row].data(), n, n) = matrix;
+            else if (triangle)
+                for (index i = 0; i < n; ++i)
+                    for (index j = 0; j <= i; ++j)
+                        target(row, i * (i + 1) / 2 + j) = matrix(i, j);
+            else
+                for (index j = 0; j < n; ++j)
+                    for (index i = 0; i < n; ++i)
+                        target(row, i + n * j) = matrix(i, j);
+        }
         /// Face scratch dependencies. Full support retains the original slot
         /// order; sweep-only setup omits the two secondary change-of-base maps.
         struct FaceSystemLayout
@@ -74,6 +90,10 @@ namespace DNDS::CFV
                                             {
             metrics.Validate();
             settings.Validate();
+            const auto &storage = settings.storage;
+            const bool rawSweep = capabilities.sweeps && storage.Raw();
+            DNDS_check_throw_info(!storage.Raw() || (!capabilities.linearSystem && !capabilities.localPreconditioner),
+                                  "experimental raw VR storage requires a sweep-only capability profile");
             DNDS_check_throw_info(settings.intOrder == geometry->intOrder, "VR quadrature differs from prepared metrics");
             auto meshRead = geometry->mesh->AcquireRead(MeshReadRequirements::CellFlux());
             const auto mesh = meshRead.HostView();
@@ -136,11 +156,11 @@ namespace DNDS::CFV
             data->boundaryOffsets = R::Array<index>(R::RowLayout::Dense(incidences + 1, 1));
             // Central operation-to-storage dependency table. Do not construct
             // full tables and discard them after setup: that retains peak cost.
-            if (capabilities.sweeps)
+            if (capabilities.sweeps && !rawSweep)
             {
-                data->matrixAInvB.emplace(R::RowLayout::Dense(incidences, n * n));
-                data->vectorAInvB.emplace(R::RowLayout::Dense(incidences, n));
-                data->boundaryInjection.emplace(R::RowLayout::Dense(boundaryCount, n));
+                data->matrixAInvB.emplace(storage.Layout(incidences, n * n, storage.matrixLayout));
+                data->vectorAInvB.emplace(storage.Layout(incidences, n, storage.vectorLayout));
+                data->boundaryInjection.emplace(storage.Layout(boundaryCount, n, storage.boundaryLayout));
             }
             if (capabilities.wbap)
                 data->secondary.emplace(R::RowLayout::Dense(incidences, n * n));
@@ -151,8 +171,18 @@ namespace DNDS::CFV
                 data->rawVectorB.emplace(R::RowLayout::Dense(incidences, n));
                 data->rawBoundaryInjection.emplace(R::RowLayout::Dense(boundaryCount, n));
             }
-            if (capabilities.localPreconditioner)
-                data->localInverse.emplace(R::RowLayout::Dense(nCell, n * n));
+            if (rawSweep)
+            {
+                data->rawMatrixB.emplace(storage.Layout(storage.faceCoupling ? nFace : incidences, n * n, storage.matrixLayout));
+                data->rawVectorB.emplace(storage.Layout(incidences, n, storage.vectorLayout));
+                data->rawBoundaryInjection.emplace(storage.Layout(boundaryCount, n, storage.boundaryLayout));
+                if (storage.faceCoupling)
+                    data->rawFaceSide.emplace(R::RowLayout::Dense(incidences, 1));
+            }
+            if (capabilities.localPreconditioner || rawSweep)
+                data->localInverse.emplace(rawSweep
+                                              ? storage.Layout(nCell, storage.inverseTriangle ? n * (n + 1) / 2 : n * n, storage.inverseLayout)
+                                              : R::RowLayout::Dense(nCell, n * n));
             if (capabilities.inverseDiagnostics)
                 data->inverseConditions.emplace(R::RowLayout::Dense(nCell, 4));
             data->neighborRotation = R::Array<real>(R::RowLayout::Dense(incidences, 9));
@@ -165,6 +195,17 @@ namespace DNDS::CFV
             const auto rawMatrices = rawMatrixWrite.values, rawVectors = rawVectorWrite.values, rawInjections = rawInjectionWrite.values;
             OptionalTableWriter localMatrixWrite(data->localMatrix), localInverseWrite(data->localInverse);
             const auto localMatrices = localMatrixWrite.values, localInverses = localInverseWrite.values;
+            std::optional<R::Array<uint8_t>::WriteLease> faceSideWrite;
+            R::ArrayView<uint8_t, false, R::FixedRows<1>> faceSides;
+            if (data->rawFaceSide)
+            {
+                faceSideWrite.emplace(data->rawFaceSide->Write());
+                faceSides = faceSideWrite->View<R::FixedRows<1>>();
+            }
+            // A failed symmetry check is merged after the setup team; never
+            // throw out of an OpenMP numerical row or silently symmetrize it.
+            std::vector<uint8_t> inverseSymmetry(size_t(rawSweep && storage.inverseTriangle ? nCell : 0), 1);
+            data->preparationRuntimeScratchBytes += inverseSymmetry.size();
             data->boundaryPoints = R::Array<index>(R::RowLayout::Dense(boundaryCount, 4));
             // Only requested face-system blocks exist. This is preparation
             // scratch, released before returning the immutable plan.
@@ -172,7 +213,7 @@ namespace DNDS::CFV
             if (faceSystem.width)
             {
                 systems.emplace(R::RowLayout::Dense(nFace, faceSystem.width));
-                data->preparationRuntimeScratchBytes = systems->Storage().Bytes();
+                data->preparationRuntimeScratchBytes += systems->Storage().Bytes();
             }
             auto momentWrite = data->moments.Write();
             const auto moment = momentWrite.View<R::TableRows>();
@@ -324,6 +365,8 @@ namespace DNDS::CFV
                 }
                 if (faceSystem.b >= 0)
                     Eigen::Map<Matrix>(system[iFace].data() + faceSystem.b, n, n) = bLR;
+                if (rawSweep && storage.faceCoupling)
+                    PublishMatrix(rawMatrices, iFace, bLR);
                 if (capabilities.wbap && iR != UnInitIndex)
                 {
                     const tPoint centerL{cell(iL, 1), cell(iL, 2), cell(iL, 3)}, centerR{cell(iR, 1), cell(iR, 2), cell(iR, 3)};
@@ -400,8 +443,19 @@ namespace DNDS::CFV
                     spectrum = HardEigen::EigenSVDInverse(A, inverse, settings.svdTolerance, settings.svdAbsoluteTolerance);
                 if (capabilities.linearSystem)
                     Eigen::Map<Matrix>(localMatrices[iCell].data(), n, n) = A;
-                if (capabilities.localPreconditioner)
-                    Eigen::Map<Matrix>(localInverses[iCell].data(), n, n) = inverse;
+                if (capabilities.localPreconditioner || rawSweep)
+                {
+                    if (rawSweep && storage.inverseTriangle)
+                    {
+                        // Relative to this inverse's own scale, with no unit
+                        // floor: a zero inverse requires exactly zero asymmetry.
+                        const real norm = inverse.cwiseAbs().maxCoeff();
+                        const real asymmetry = (inverse - inverse.transpose()).cwiseAbs().maxCoeff();
+                        inverseSymmetry[size_t(iCell)] = inverse.allFinite() &&
+                            asymmetry <= 128 * n * std::numeric_limits<real>::epsilon() * norm;
+                    }
+                    PublishMatrix(localInverses, iCell, inverse, rawSweep && storage.inverseTriangle);
+                }
                 if (capabilities.inverseDiagnostics)
                 {
                     conditions(iCell, 0) = spectrum.rank;
@@ -414,6 +468,8 @@ namespace DNDS::CFV
                     const index iFace = c2f[slot], other = mesh.CellFaceOther(iCell, iFace, rowsize(slot));
                     const int side = mesh.CellIsFaceBack(iCell, iFace, rowsize(slot)) ? 0 : 1;
                     faces(iEntry, 0) = iFace, neighbors(iEntry, 0) = other;
+                    if (rawSweep && storage.faceCoupling)
+                        faceSides(iEntry, 0) = uint8_t(side);
                     const tGPoint rotation = Detail::OtherFrameInCell(mesh, iFace, side);
                     Eigen::Map<tGPoint>(rotations[iEntry].data()) = rotation;
                     rotationActive(iEntry, 0) = !rotation.isApprox(tGPoint::Identity(), 1e-14);
@@ -441,16 +497,40 @@ namespace DNDS::CFV
                             }
                             rawB = Eigen::Map<const Eigen::VectorXd>(system[iFace].data() + faceSystem.mean + side * n, n);
                         }
-                        if (capabilities.sweeps)
+                        if (rawSweep)
                         {
-                            auto M = Eigen::Map<Matrix>(matrices[iEntry].data(), n, n);
-                            auto b = Eigen::Map<Eigen::VectorXd>(vectors[iEntry].data(), n);
-                            M.setZero(), b.setZero();
-                            if (other != UnInitIndex)
+                            if (!storage.faceCoupling)
+                                PublishMatrix(rawMatrices, iEntry, rawM);
+                            for (int i = 0; i < n; ++i)
+                                rawVectors(iEntry, i) = rawB[i];
+                        }
+                        else if (capabilities.sweeps)
+                        {
+                            if (matrices.ElementStride() == 1 && vectors.ElementStride() == 1)
                             {
-                                if (other != iCell || !rotation.isApprox(tGPoint::Identity(), 1e-14))
-                                    M.noalias() = inverse * rawM;
-                                b.noalias() = inverse * rawB;
+                                auto M = Eigen::Map<Matrix>(matrices[iEntry].data(), n, n);
+                                auto b = Eigen::Map<Eigen::VectorXd>(vectors[iEntry].data(), n);
+                                M.setZero(), b.setZero();
+                                if (other != UnInitIndex)
+                                {
+                                    if (other != iCell || !rotation.isApprox(tGPoint::Identity(), 1e-14))
+                                        M.noalias() = inverse * rawM;
+                                    b.noalias() = inverse * rawB;
+                                }
+                            }
+                            else
+                            {
+                                SmallMatrix product;
+                                Eigen::VectorXd productVector(n);
+                                product.setZero(n, n), productVector.setZero();
+                                if (other != UnInitIndex)
+                                {
+                                    if (other != iCell || !rotation.isApprox(tGPoint::Identity(), 1e-14))
+                                        product.noalias() = inverse * rawM;
+                                    productVector.noalias() = inverse * rawB;
+                                }
+                                PublishMatrix(matrices, iEntry, product);
+                                for (int i = 0; i < n; ++i) vectors(iEntry, i) = productVector[i];
                             }
                         }
                     }
@@ -462,14 +542,27 @@ namespace DNDS::CFV
                                 basis(iCell, {point(iQ, 0), point(iQ, 1), point(iQ, 2)}, left);
                                 auto rawInjection = Eigen::Map<Eigen::VectorXd>(capabilities.linearSystem ? rawInjections[iBoundary].data() : rawVectorScratch.data(), n);
                                 rawInjection = left.row(0).transpose() * (system(iFace, faceSystem.boundaryWeight) * point(iQ, 6));
-                                if (capabilities.sweeps)
-                                    Eigen::Map<Eigen::VectorXd>(injections[iBoundary].data(), n).noalias() = inverse * rawInjection;
+                                if (rawSweep)
+                                    for (int i = 0; i < n; ++i)
+                                        rawInjections(iBoundary, i) = rawInjection[i];
+                                else if (capabilities.sweeps)
+                                {
+                                    if (injections.ElementStride() == 1)
+                                        Eigen::Map<Eigen::VectorXd>(injections[iBoundary].data(), n).noalias() = inverse * rawInjection;
+                                    else
+                                    {
+                                        const Eigen::VectorXd product = inverse * rawInjection;
+                                        for (int i = 0; i < n; ++i) injections(iBoundary, i) = product[i];
+                                    }
+                                }
                             }
                             bPoints(iBoundary, 0) = iCell, bPoints(iBoundary, 1) = iFace;
                             bPoints(iBoundary, 2) = iQ - faceOffset(iFace, 0), bPoints(iBoundary, 3) = iQ;
                         }
                 }
             });
+            DNDS_check_throw_info(std::find(inverseSymmetry.begin(), inverseSymmetry.end(), uint8_t(0)) == inverseSymmetry.end(),
+                                  "local VR inverse is not symmetric to the packed-storage tolerance; full storage is required");
             // Deterministic controller merge after the team. These are setup
             // diagnostics, not atomics inside each inverse/face arithmetic path.
             for (index i = 0; i < incidences; ++i)

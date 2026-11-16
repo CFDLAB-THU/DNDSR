@@ -29,7 +29,7 @@ namespace DNDS::Cauchy
 
     }
     std::shared_ptr<const LinearProblemContext::Pattern> LinearProblemContext::BuildPattern(
-        const Algebra::DofSpace &space, std::vector<std::vector<index>> columns, std::vector<index> core, LinearSweepPartitions partitions)
+        const Algebra::DofSpace &space, std::vector<std::vector<index>> columns, std::vector<index> core, LinearSweepPartitions partitions, LinearIndexStorage indices)
     {
         DNDS_check_throw_info(space.OwnedRows() <= size_t(INT64_MAX) && space.GhostRows() <= size_t(INT64_MAX) - space.OwnedRows(),
                               "linear row space exceeds signed index range");
@@ -68,24 +68,24 @@ namespace DNDS::Cauchy
         position.resize(rows);
         for (index i = 0; i < rows; ++i)
             position[order[i]] = i;
-        data->rows = LinearPatternStorage(columns, order, position, core, dependent);
+        data->rows = LinearPatternStorage(columns, order, position, core, dependent, indices);
         return data;
     }
     LinearProblemContext::LinearProblemContext(Algebra::DofSpace space, index components,
                                                std::vector<std::vector<index>> columns,
-                                               std::vector<index> core, DiagonalStorage diagonal, OffDiagonalStorage offDiagonal, R::Device device, LinearSweepPartitions partitions)
-        : _space(std::move(space)), _pattern(BuildPattern(_space, std::move(columns), std::move(core), std::move(partitions))), _components(components), _diagonalStorage(diagonal),
-          _diagonal(R::RowLayout::Dense(_pattern->partition->owned, DiagonalWidth(components, diagonal)), device),
-          _inverse(_diagonal.Layout(), device), _offDiagonalStorage(offDiagonal)
+                                               std::vector<index> core, DiagonalStorage diagonal, OffDiagonalStorage offDiagonal, R::Device device, LinearSweepPartitions partitions, LinearMatrixOptions matrixOptions)
+        : _space(std::move(space)), _pattern(BuildPattern(_space, std::move(columns), std::move(core), std::move(partitions), matrixOptions.indices)), _components(components), _diagonalStorage(diagonal), _rowMajorBlocks(matrixOptions.rowMajorBlocks),
+          _diagonal(matrixOptions.diagonal.MakeLayout(_pattern->partition->owned, DiagonalWidth(components, diagonal)), device),
+          _inverse(matrixOptions.inverse.MakeLayout(_pattern->partition->owned, DiagonalWidth(components, diagonal)), device), _offDiagonalStorage(offDiagonal)
     {
         DNDS_check_throw_info(offDiagonal == OffDiagonalStorage::Assembled || offDiagonal == OffDiagonalStorage::DirectEvaluated,
                               "invalid off-diagonal storage mode");
         if (offDiagonal == OffDiagonalStorage::Assembled)
-            _offDiagonal.emplace(Counts(Columns()), components, device);
+            _offDiagonal.emplace(Counts(Columns()), components, device, matrixOptions.offDiagonal, matrixOptions.rowMajorBlocks);
         if (device != R::Device::Host())
         {
             auto placed = std::make_shared<Pattern>(_pattern->partition);
-            placed->hostColumns = _pattern->rows.ColumnsArray();
+            placed->hostRows = std::make_shared<const LinearPatternStorage>(_pattern->rows);
             placed->rows = _pattern->rows.Placed(device, {device, nullptr});
             placed->hasGhostColumns = _pattern->hasGhostColumns;
             placed->sweepPartitions = _pattern->sweepPartitions;
@@ -139,8 +139,8 @@ namespace DNDS::Cauchy
                               "invalid evaluated off-diagonal publication");
         // Compare retained CSR rows directly. Columns() is a diagnostic copy;
         // rebuilding nested host vectors here would allocate every update.
-        const auto patternRead = (_pattern->hostColumns ? *_pattern->hostColumns : _pattern->rows.ColumnsArray()).Read();
-        const auto columns = patternRead.View<R::CSRRows>();
+        const auto patternRead = HostPattern().Read();
+        const auto columns = patternRead.View().columns;
         DNDS_check_throw_info(evaluator->RowNumber() == columns.RowCount(), "evaluated row count differs");
         for (index iRow = 0; iRow < columns.RowCount(); ++iRow)
         {
@@ -177,16 +177,16 @@ namespace DNDS::Cauchy
         _inverseCurrent = false;
         _inverseFallbacks = 0;
         ValidateMatrix();
-        DNDS_check_throw_info(_diagonal.GetDevice() == R::Device::Host() && _diagonal.Layout() == _inverse.Layout(), "linear diagonal shape/backend changed");
+        DNDS_check_throw_info(_diagonal.GetDevice() == R::Device::Host() && _diagonal.RowCount() == _inverse.RowCount() && _diagonal.Layout().Width() == _inverse.Layout().Width(), "linear diagonal shape/backend changed");
         const auto read = _diagonal.Read();
         std::optional<R::Array<real>::WriteLease> write(_inverse.Write());
-        const auto input = read.View<R::TableRows>();
-        const auto output = write->View<R::TableRows>();
+        const auto input = read.View<R::UniformTableRows>();
+        const auto output = write->View<R::UniformTableRows>();
         const index width = DiagonalWidth(_components, _diagonalStorage);
         DNDS_check_throw_info(input.RowCount() == index(_pattern->partition->owned) && input.Width() == width, "linear diagonal shape changed");
         _inverseFallbacks = RequireNumericalSuccess(CPU::InvertLinearDiagonal(
                                                         {input, output, _components,
-                                                         _diagonalStorage == DiagonalStorage::Block, refinementSteps}),
+                                                         _diagonalStorage == DiagonalStorage::Block, refinementSteps, RowMajorBlocks()}),
                                                     "InvertLinearDiagonal");
         _inverseSVDCells = _inverseFallbacks;
         _diagonalVersion = _diagonal.Version();
@@ -214,8 +214,7 @@ namespace DNDS::Cauchy
         const auto remote = ghost ? ghost->View<R::UniformTableRows>() : CPU::LinearReadRows{};
         const auto rows = region == LinearRegion::All ? pattern.order : region == LinearRegion::Core ? pattern.core
                                                                                                      : pattern.dependent;
-        CPU::ApplyLinearRows({offDiagonal.View(), pattern, rows, diagonal.View<R::TableRows>(),
-                              _components, _diagonalStorage == DiagonalStorage::Block},
+        CPU::ApplyLinearRows({offDiagonal.View(), pattern, rows, diagonal.View<R::UniformTableRows>(), _components, _diagonalStorage == DiagonalStorage::Block, {}, _rowMajorBlocks},
                              owned.View<R::UniformTableRows>(),
                              remote, destination.View<R::UniformTableRows>());
     }
@@ -249,8 +248,7 @@ namespace DNDS::Cauchy
                                                                                                      : pattern.dependent;
         try
         {
-            CPU::JacobiLinearRows({blocks.View(), pattern, rows, inverse.View<R::TableRows>(),
-                                   _components, _diagonalStorage == DiagonalStorage::Block},
+            CPU::JacobiLinearRows({blocks.View(), pattern, rows, inverse.View<R::UniformTableRows>(), _components, _diagonalStorage == DiagonalStorage::Block, {}, _rowMajorBlocks},
                                   b, x, remote,
                                   destination.View<R::UniformTableRows>(), !input);
         }

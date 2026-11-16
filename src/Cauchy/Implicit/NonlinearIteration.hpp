@@ -26,6 +26,31 @@ namespace DNDS::Cauchy::NonlinearDetail
         for (index level = 0; level < index(step.levelCorrections.size()); ++level)
             total.levelCorrections[level] += step.levelCorrections[level];
     }
+    /// Resolve storage before allocating the canonical matrix. Selecting a
+    /// provider never manufactures a converted pattern or numeric mirror.
+    inline LinearMatrixOptions ResolveMatrixStorage(const ImplicitLinearSettings &settings)
+    {
+        const auto table = [](const ImplicitMatrixTableSettings &input)
+        {
+            DNDS_check_throw_info(input.layout == "aos" || input.layout == "soa" || input.layout == "aosoa32", "invalid matrix table layout");
+            return Algebra::MatrixTableOptions{input.layout == "aos" ? Algebra::MatrixTableLayout::AoS : input.layout == "soa" ? Algebra::MatrixTableLayout::SoA
+                                                                                                                               : Algebra::MatrixTableLayout::AoSoA32,
+                                               input.rowPaddingMultiple};
+        };
+        DNDS_check_throw_info(settings.matrixStorage.indices == "auto" || settings.matrixStorage.indices == "int32" ||
+                                  settings.matrixStorage.indices == "int64",
+                              "invalid matrix index storage");
+        const bool amg = settings.method == "amgx" || (settings.method == "gmres" && settings.preconditioner == "amgx");
+        LinearMatrixOptions result;
+        result.diagonal = table(settings.matrixStorage.diagonal);
+        result.inverse = table(settings.matrixStorage.inverse);
+        result.offDiagonal = table(settings.matrixStorage.offDiagonal);
+        result.indices = settings.matrixStorage.indices == "int32" || (settings.matrixStorage.indices == "auto" && amg)
+                             ? LinearIndexStorage::Int32
+                             : LinearIndexStorage::Int64;
+        result.rowMajorBlocks = amg;
+        return result;
+    }
     inline LinearSolveSettings ResolveLinear(const ImplicitSettings &settings)
     {
         LinearSolveSettings result;
@@ -40,6 +65,8 @@ namespace DNDS::Cauchy::NonlinearDetail
         result.sgsSweeps = settings.sgs.sweeps;
         result.jacobiLocalSweeps = settings.linear.jacobiLocalSweeps;
         result.diagonalInverseRefinement = settings.linear.diagonalInverseRefinement;
+        result.cudaDiagonalInverse = settings.linear.cudaDiagonalInverse;
+        result.cudaJacobiMapping = settings.linear.cudaJacobiMapping;
         result.exchangeBetweenSweeps = settings.sgs.exchangeBetweenSweeps;
         result.iluFill = settings.ilu.fill;
         result.iluPreconditionerCorrections = settings.ilu.preconditionerCorrections;

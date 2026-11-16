@@ -13,6 +13,7 @@
 #include "CFV/Math/ReconstructionFunctional.hpp"
 #include "CFV/Math/TaylorBasis.hpp"
 #include "CFV/Plans/ReconstructionCapabilities.hpp"
+#include "CFV/Plans/ReconstructionStorage.hpp"
 #include <functional>
 #include <map>
 #include <optional>
@@ -48,6 +49,7 @@ namespace DNDS::CFV
         bool cacheDiffBase = true;
         int cacheDiffBaseOrder = 1;
         ReconstructionFunctionalSettings functional;
+        ReconstructionStorageSettings storage;
         real bcWeight = 1., svdTolerance = 1e-13, svdAbsoluteTolerance = 0;
         std::array<real, 4> boundaryDerivativeWeights{1, 1, 1, 1};
         /// Optional zone-specific replacement for the unsquared per-order
@@ -62,6 +64,7 @@ namespace DNDS::CFV
             DNDS_FIELD(coreFirst, "Use conservative node-star core before dependent cells for ordered SOR");
             DNDS_FIELD(HQMWeights, "Legacy HQM_OPT derivative and HQM_SD geometry weights");
             config.field_section(&T::functional, "functional", "Independent isotropic functional weights and length policy");
+            config.field_section(&T::storage, "storage", "Independent sweep representation and matrix payload layouts");
             DNDS_FIELD(cacheDiffBase, "Retain basis values and derivatives on face quadrature points");
             DNDS_FIELD(cacheDiffBaseOrder, "Highest cached derivative order, 0..3; default value and first derivatives; capped by polynomial degree");
             DNDS_FIELD(bcWeight, "Dirichlet boundary value weight");
@@ -355,6 +358,15 @@ namespace DNDS::CFV
         /// across target modes without changing their ordered arithmetic. No
         /// tensor-core requirement; combined 5/6/7-component P1..P3 only.
         FP64Shared,
+        /// Reference ordered FP64 arithmetic with a larger grid. This isolates
+        /// the old 256-block residency limit from arithmetic/layout changes.
+        FP64Wide,
+        /// Larger grid plus fixed P1/P2/P3 modal sizes and 96-thread cells.
+        /// Keeps each scalar product's neighbor and summation order unchanged.
+        FP64Static,
+        /// Fixed modal sizes and shared staging of each neighbor matrix and
+        /// coefficient row. Requires 5/6/7 components; no reduced precision.
+        FP64MatrixShared,
         /// FP32 sweep maps and the entire local update in FP32, including
         /// relaxation, periodic rotation, means and boundary contributions.
         /// Only the final result is promoted to durable FP64 storage.

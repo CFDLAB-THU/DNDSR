@@ -152,6 +152,18 @@ namespace DNDS::Cauchy
     void ImplicitSettings::ValidateComponents(index components) const
     {
         DNDS_check_throw_info(components > 0 && components < INT_MAX, "invalid implicit equation dimension");
+        const auto validMatrixTable = [](const ImplicitMatrixTableSettings &table)
+        {
+            return (table.layout == "aos" || table.layout == "soa" || table.layout == "aosoa32") && table.rowPaddingMultiple > 0;
+        };
+        const bool usesAMG = linear.method == "amgx" || (linear.method == "gmres" && linear.preconditioner == "amgx");
+        DNDS_check_throw_info(validMatrixTable(linear.matrixStorage.diagonal) && validMatrixTable(linear.matrixStorage.inverse) &&
+                                  validMatrixTable(linear.matrixStorage.offDiagonal) &&
+                                  (linear.matrixStorage.indices == "auto" || linear.matrixStorage.indices == "int32" || linear.matrixStorage.indices == "int64"),
+                              "invalid independent linear matrix storage settings");
+        DNDS_check_throw_info(!usesAMG || (linear.matrixStorage.indices != "int64" && linear.matrixStorage.diagonal.layout == "aos" &&
+                                           linear.matrixStorage.offDiagonal.layout == "aos"),
+                              "copy-free AmgX requires primary int32 sparse indices and aos diagonal/off-diagonal blocks");
         DNDS_check_throw_info((normOrder == 1 || normOrder == 2) &&
                                   (residualReference == "initial" || residualReference == "runningMaximum"),
                               "invalid implicit residual norm/reference/components");
@@ -178,7 +190,9 @@ namespace DNDS::Cauchy
                                   std::isfinite(pseudoCFL) && pseudoCFL > 0 && std::isfinite(maxPseudoCFL) && maxPseudoCFL >= pseudoCFL &&
                                   std::isfinite(pseudoGrowth) && pseudoGrowth >= 1 && std::isfinite(relaxation) && relaxation > 0 && relaxation <= 1,
                               "invalid implicit nonlinear/diagonal/pseudo-time controls");
-        DNDS_check_throw_info(linear.diagonalInverseRefinement >= 0 && linear.diagonalInverseRefinement <= 3 &&
+        DNDS_check_throw_info((linear.cudaJacobiMapping == "thread" || linear.cudaJacobiMapping == "componentGroup") &&
+                                  (linear.cudaDiagonalInverse == "batchedSVD" || linear.cudaDiagonalInverse == "guardedLU") &&
+                                  linear.diagonalInverseRefinement >= 0 && linear.diagonalInverseRefinement <= 3 &&
                                   (!linear.diagonalInverseRefinement ||
                                    (diagonal == "block" && (linear.method == "sgs" || linear.method == "jacobi" ||
                                                             (linear.method == "gmres" && (linear.preconditioner == "sgs" || linear.preconditioner == "jacobi"))))),
@@ -254,6 +268,12 @@ namespace DNDS::Cauchy
             return Kernel::FP64;
         if (reconstructionKernel == "fp64Shared")
             return Kernel::FP64Shared;
+        if (reconstructionKernel == "fp64Wide")
+            return Kernel::FP64Wide;
+        if (reconstructionKernel == "fp64Static")
+            return Kernel::FP64Static;
+        if (reconstructionKernel == "fp64MatrixShared")
+            return Kernel::FP64MatrixShared;
         if (reconstructionKernel == "fp64Tensor")
             return Kernel::FP64TensorCore;
         if (reconstructionKernel == "fp64TensorShared")

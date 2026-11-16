@@ -1,6 +1,7 @@
 #include "Cauchy/Implicit/CUDA/LinearDiagonalKernels.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include "Solver/InverseRefinement.hpp"
+#include "Solver/SmallBlockInverse.hpp"
 #include <cuda_runtime.h>
 #include <limits>
 
@@ -9,7 +10,90 @@ namespace DNDS::Cauchy::CUDA
     namespace R = Runtime;
     namespace
     {
-        __global__ void Prepare(DiagonalRead diagonal, DiagonalWrite normalized, DiagonalWrite scales, DiagonalStatus status, int n)
+        __global__ void ResetCount(DiagonalCount count) { count(0, 0) = 0; }
+        // Logical dense entries have one canonical meaning; the optional
+        // row-major provider representation changes addresses, not algebra.
+        __device__ int Entry(int i, int j, int n, bool rowMajor) { return rowMajor ? i * n + j : i + n * j; }
+
+        template <int N>
+        __device__ bool Normalize(DiagonalRead diagonal, index iCell,
+                                  Direct::SmallDenseMatrix<N> &matrix, real (&scales)[N], bool rowMajor)
+        {
+            bool valid = true;
+            for (int i = 0; i < N; ++i)
+            {
+                const real value = diagonal(iCell, i + N * i);
+                scales[i] = 1 / value;
+                valid = valid && isfinite(value) && value != 0 && isfinite(scales[i]);
+            }
+            for (int j = 0; j < N; ++j)
+                for (int i = 0; i < N; ++i)
+                {
+                    matrix(i, j) = diagonal(iCell, Entry(i, j, N, rowMajor)) * scales[i];
+                    valid = valid && isfinite(matrix(i, j));
+                }
+            return valid;
+        }
+        template <int N, bool Refine>
+        __global__ void SmallLU(DiagonalRead diagonal, DiagonalWrite inverse,
+                                DiagonalStatus status, DiagonalModes fallback,
+                                DiagonalCount count, int steps, bool rowMajor)
+        {
+            for (index iCell = index(blockIdx.x) * blockDim.x + threadIdx.x;
+                 iCell < diagonal.RowCount(); iCell += index(gridDim.x) * blockDim.x)
+            {
+                Direct::SmallDenseMatrix<N> matrix, result;
+                real scales[N];
+                fallback(iCell, 0) = 0;
+                const bool valid = Normalize<N>(diagonal, iCell, matrix, scales, rowMajor);
+                status(iCell, 0) = valid ? NumericalStatus{} : NumericalStatus{NumericalError::InvalidInput, 1, iCell};
+                if (!valid)
+                    continue;
+                if (!Direct::TrySmallLUInverse<N, Refine>(matrix, result, steps))
+                {
+                    fallback(iCell, 0) = 1;
+                    atomicAdd(reinterpret_cast<unsigned long long *>(count.data), 1ULL);
+                    continue;
+                }
+                for (int j = 0; j < N; ++j)
+                    for (int i = 0; i < N; ++i)
+                    {
+                        const real value = result(i, j) * scales[j];
+                        inverse(iCell, Entry(i, j, N, rowMajor)) = value;
+                        if (!isfinite(value))
+                            status(iCell, 0) = NumericalStatus{NumericalError::InvalidState, 3, iCell};
+                    }
+            }
+        }
+        template <int N, bool Refine>
+        __global__ void SmallFallback(DiagonalRead diagonal, DiagonalWrite inverse,
+                                      DiagonalStatus status, DiagonalModes fallback, int steps, bool rowMajor)
+        {
+            for (index iCell = index(blockIdx.x) * blockDim.x + threadIdx.x;
+                 iCell < diagonal.RowCount(); iCell += index(gridDim.x) * blockDim.x)
+            {
+                if (!fallback(iCell, 0))
+                    continue;
+                Direct::SmallDenseMatrix<N> matrix, result;
+                real scales[N];
+                Normalize<N>(diagonal, iCell, matrix, scales, rowMajor);
+                int truncated = 0;
+                if (!Direct::SmallSVDInverse<N, Refine>(matrix, result, truncated, steps))
+                {
+                    status(iCell, 0) = NumericalStatus{NumericalError::NoConvergence, 100, iCell};
+                    continue;
+                }
+                for (int j = 0; j < N; ++j)
+                    for (int i = 0; i < N; ++i)
+                    {
+                        const real value = result(i, j) * scales[j];
+                        inverse(iCell, Entry(i, j, N, rowMajor)) = value;
+                        if (!isfinite(value))
+                            status(iCell, 0) = NumericalStatus{NumericalError::InvalidState, 3, iCell};
+                    }
+            }
+        }
+        __global__ void Prepare(DiagonalRead diagonal, DiagonalWrite normalized, DiagonalWrite scales, DiagonalStatus status, int n, bool rowMajor)
         {
             for (index iCell = index(blockIdx.x) * blockDim.x + threadIdx.x; iCell < diagonal.RowCount(); iCell += index(gridDim.x) * blockDim.x)
             {
@@ -24,7 +108,7 @@ namespace DNDS::Cauchy::CUDA
                 for (int j = 0; j < n; ++j)
                     for (int i = 0; i < n; ++i)
                     {
-                        const real value = diagonal(iCell, i + n * j) * scales(iCell, i);
+                        const real value = diagonal(iCell, Entry(i, j, n, rowMajor)) * scales(iCell, i);
                         valid = valid && isfinite(value);
                         normalized(iCell, i + n * j) = value;
                     }
@@ -49,7 +133,7 @@ namespace DNDS::Cauchy::CUDA
         };
         template <bool Refine>
         __global__ void Complete(DiagonalRead diagonal, DiagonalRead singular, DiagonalRead left, DiagonalRead right, DiagonalRead scales,
-                                 DiagonalInfo info, DiagonalWrite inverse, DiagonalStatus status, DiagonalModes truncated, int n, int steps)
+                                 DiagonalInfo info, DiagonalWrite inverse, DiagonalStatus status, DiagonalModes truncated, int n, int steps, bool rowMajor)
         {
             for (index iCell = index(blockIdx.x) * blockDim.x + threadIdx.x; iCell < inverse.RowCount(); iCell += index(gridDim.x) * blockDim.x)
             {
@@ -87,7 +171,7 @@ namespace DNDS::Cauchy::CUDA
                         if constexpr (!Refine)
                             value *= scales(iCell, j);
                         valid = valid && isfinite(value);
-                        inverse(iCell, i + n * j) = value;
+                        inverse(iCell, Entry(i, j, n, rowMajor)) = value;
                     }
                 if constexpr (Refine)
                 {
@@ -100,10 +184,10 @@ namespace DNDS::Cauchy::CUDA
                         for (int i = 0; i < n; ++i)
                             for (int j = 0; j < n; ++j)
                             {
-                                a(i, j) = diagonal(iCell, i + n * j) * scales(iCell, i);
+                                a(i, j) = diagonal(iCell, Entry(i, j, n, rowMajor)) * scales(iCell, i);
                                 u(i, j) = left(iCell, i + n * j);
                                 v(i, j) = right(iCell, i + n * j);
-                                x(i, j) = inverse(iCell, i + n * j);
+                                x(i, j) = inverse(iCell, Entry(i, j, n, rowMajor));
                             }
                         Direct::RefineSVDInverse(a, u, v, SingularRow{singular, iCell}, x, c, z, residual, trial, n, steps);
                         for (int i = 0; i < n; ++i)
@@ -111,7 +195,7 @@ namespace DNDS::Cauchy::CUDA
                             {
                                 const real value = x(i, j) * scales(iCell, j);
                                 valid = valid && isfinite(value);
-                                inverse(iCell, i + n * j) = value;
+                                inverse(iCell, Entry(i, j, n, rowMajor)) = value;
                             }
                     }
                 }
@@ -138,7 +222,9 @@ namespace DNDS::Cauchy::CUDA
         void Table(View view, R::Device device, index rows, int width)
         {
             view.ValidateDevice(device);
-            DNDS_check_throw_info(view.kind == R::RowLayoutKind::Table && view.RowCount() == rows && view.Width() == width,
+            DNDS_check_throw_info((view.kind == R::RowLayoutKind::Table || view.kind == R::RowLayoutKind::ColMajorTable ||
+                                   view.kind == R::RowLayoutKind::TiledColMajorTable) &&
+                                      view.RowCount() == rows && view.Width() == width,
                                   "CUDA inverse array shape differs");
         }
         void CheckContext(R::ExecutionContext context, int n)
@@ -148,8 +234,49 @@ namespace DNDS::Cauchy::CUDA
         }
         void CheckLaunch() { DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA diagonal inverse kernel launch failed"); }
     }
+    void InvertSmallBlocks(R::ExecutionContext context, DiagonalRead diagonal,
+                           DiagonalWrite inverse, DiagonalStatus status, DiagonalModes fallback,
+                           DiagonalCount count, int n, int refinementSteps, bool rowMajor)
+    {
+        CheckContext(context, n);
+        DNDS_check_throw_info(refinementSteps >= 0 && refinementSteps <= 3, "invalid small-block refinement count");
+        const index rows = diagonal.RowCount();
+        Table(diagonal, context.device, rows, n * n);
+        Table(inverse, context.device, rows, n * n);
+        Table(status, context.device, rows, 1);
+        Table(fallback, context.device, rows, 1);
+        Table(count, context.device, 1, 1);
+        DNDS_check_throw_info(!rows || diagonal.data != inverse.data, "small-block inverse aliases diagonal");
+        R::CheckKernelArgumentBudget<DiagonalRead, DiagonalWrite, DiagonalStatus, DiagonalModes, DiagonalCount, int, bool>();
+        const auto stream = static_cast<cudaStream_t>(context.stream);
+        ResetCount<<<1, 1, 0, stream>>>(count);
+        if (rows)
+        {
+            const auto launch = [&](auto size, auto refine)
+            {
+                constexpr int N = decltype(size)::value;
+                constexpr bool refineValue = decltype(refine)::value;
+                SmallLU<N, refineValue><<<Blocks(rows), 128, 0, stream>>>(diagonal, inverse, status, fallback, count, refinementSteps, rowMajor);
+                SmallFallback<N, refineValue><<<Blocks(rows), 128, 0, stream>>>(diagonal, inverse, status, fallback, refinementSteps, rowMajor);
+            };
+            const auto dispatch = [&](auto refine)
+            {
+                if (n == 5)
+                    launch(std::integral_constant<int, 5>{}, refine);
+                else if (n == 6)
+                    launch(std::integral_constant<int, 6>{}, refine);
+                else
+                    launch(std::integral_constant<int, 7>{}, refine);
+            };
+            if (refinementSteps)
+                dispatch(std::true_type{});
+            else
+                dispatch(std::false_type{});
+        }
+        CheckLaunch();
+    }
     void PrepareDiagonalSVD(R::ExecutionContext context, DiagonalRead diagonal, DiagonalWrite normalized,
-                            DiagonalWrite scales, DiagonalStatus status, int n)
+                            DiagonalWrite scales, DiagonalStatus status, int n, bool rowMajor)
     {
         CheckContext(context, n);
         const index rows = diagonal.RowCount();
@@ -159,15 +286,15 @@ namespace DNDS::Cauchy::CUDA
         Table(status, context.device, rows, 1);
         DNDS_check_throw_info(!rows || (diagonal.data != normalized.data && diagonal.data != scales.data && normalized.data != scales.data),
                               "CUDA SVD preparation operands alias");
-        R::CheckKernelArgumentBudget<DiagonalRead, DiagonalWrite, DiagonalWrite, DiagonalStatus, int>();
+        R::CheckKernelArgumentBudget<DiagonalRead, DiagonalWrite, DiagonalWrite, DiagonalStatus, int, bool>();
         if (!rows)
             return;
-        Prepare<<<Blocks(rows), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(diagonal, normalized, scales, status, n);
+        Prepare<<<Blocks(rows), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(diagonal, normalized, scales, status, n, rowMajor);
         CheckLaunch();
     }
     void CompleteDiagonalSVD(R::ExecutionContext context, DiagonalRead diagonal, DiagonalRead singular, DiagonalRead left, DiagonalRead right,
                              DiagonalRead scales, DiagonalInfo info, DiagonalWrite inverse, DiagonalStatus status,
-                             DiagonalModes truncated, int n, int refinementSteps)
+                             DiagonalModes truncated, int n, int refinementSteps, bool rowMajor)
     {
         CheckContext(context, n);
         const index rows = inverse.RowCount();
@@ -183,13 +310,13 @@ namespace DNDS::Cauchy::CUDA
         Table(truncated, context.device, rows, 1);
         DNDS_check_throw_info(!rows || (inverse.data != diagonal.data && inverse.data != singular.data && inverse.data != left.data && inverse.data != right.data && inverse.data != scales.data),
                               "CUDA SVD inverse aliases an input");
-        R::CheckKernelArgumentBudget<DiagonalRead, DiagonalRead, DiagonalRead, DiagonalRead, DiagonalRead, DiagonalInfo, DiagonalWrite, DiagonalStatus, DiagonalModes, int, int>();
+        R::CheckKernelArgumentBudget<DiagonalRead, DiagonalRead, DiagonalRead, DiagonalRead, DiagonalRead, DiagonalInfo, DiagonalWrite, DiagonalStatus, DiagonalModes, int, int, bool>();
         if (!rows)
             return;
         if (refinementSteps)
-            Complete<true><<<Blocks(rows), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(diagonal, singular, left, right, scales, info, inverse, status, truncated, n, refinementSteps);
+            Complete<true><<<Blocks(rows), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(diagonal, singular, left, right, scales, info, inverse, status, truncated, n, refinementSteps, rowMajor);
         else
-            Complete<false><<<Blocks(rows), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(diagonal, singular, left, right, scales, info, inverse, status, truncated, n, 0);
+            Complete<false><<<Blocks(rows), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(diagonal, singular, left, right, scales, info, inverse, status, truncated, n, 0, rowMajor);
         CheckLaunch();
     }
     void InvertDiagonalEntries(R::ExecutionContext context, DiagonalRead diagonal, DiagonalWrite inverse, DiagonalStatus status, int n)

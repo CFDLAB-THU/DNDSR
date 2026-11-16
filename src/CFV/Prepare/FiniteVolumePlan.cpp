@@ -16,6 +16,7 @@ namespace DNDS::CFV
     void ReconstructionSettings::Validate() const
     {
         functional.Validate();
+        storage.Validate();
         // Quadrature and polynomial degrees are independent numerical choices.
         // No degree+1 rule guarantees exact integration of the full functional.
         // Keep the supported-rule range; SVD handles the chosen discrete system.

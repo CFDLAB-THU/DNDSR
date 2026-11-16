@@ -5,10 +5,12 @@
 #include "Cauchy/Physics/EquationSystem.hpp"
 #include "Cauchy/State/EquationDofs.hpp"
 #include "DNDS/Algebra/AmgXPreconditioner.hpp"
+#include "Cauchy/Implicit/LocalAMGPreconditioner.hpp"
 #include "DNDS/Algebra/LocalProducts.hpp"
 #include "DNDS/Runtime/Execution/CUDAExecution.hpp"
 #include <cuda_runtime.h>
 #include <limits>
+#include <numeric>
 #include <Eigen/Dense>
 
 namespace C = DNDS::Cauchy;
@@ -141,7 +143,7 @@ TEST_CASE("Reserved weighted products and finite checks use deterministic reside
     }
 }
 
-TEST_CASE("Distributed coupled Jacobi, AmgX correction and left GMRES share queued orchestration")
+TEST_CASE("Distributed coupled Jacobi and left GMRES share queued orchestration")
 {
     const auto cuda = R::Device::CUDA(DeviceOrdinal());
     const std::vector<std::vector<I>> columns{{1}, {0, 2}, {1, 3, 4}, {2, 5}};
@@ -190,10 +192,8 @@ TEST_CASE("Distributed coupled Jacobi, AmgX correction and left GMRES share queu
                 }
         }
         for (int backend : {0, 1, 2})
-            for (int mode : {0, 1, 2, 3})
+            for (int mode : {0, 1})
             {
-                if (mode >= 2 && (backend != 2 || !A::AmgXPreconditioner::Available()))
-                    continue;
                 CAPTURE(n);
                 CAPTURE(backend);
                 CAPTURE(mode);
@@ -214,14 +214,14 @@ TEST_CASE("Distributed coupled Jacobi, AmgX correction and left GMRES share queu
                         .Bind(part.Owned(), part.Ghost());
                 };
                 C::LinearSolveSettings settings;
-                settings.method = mode == 0 ? "jacobi" : mode == 3 ? "amgx"
-                                                                   : "gmres";
-                settings.preconditioner = mode == 2 ? "amgx" : "jacobi";
+                settings.method = mode == 0 ? "jacobi" : "gmres";
+                settings.preconditioner = "jacobi";
                 settings.maxIterations = 24;
                 settings.subspace = 8;
                 settings.relativeTolerance = 1e-11;
                 settings.absoluteTolerance = 0;
                 settings.jacobiLocalSweeps = 2;
+                settings.cudaJacobiMapping = backend == 2 && n != 6 ? "componentGroup" : "thread";
                 settings.residualCheckInterval = 2;
                 C::LinearExecution execution;
                 execution.overlap = n != 6;
@@ -264,25 +264,6 @@ TEST_CASE("Distributed coupled Jacobi, AmgX correction and left GMRES share queu
                             for (I j = 0; j < n; ++j)
                                 CHECK(values.View()(iCell, j) == doctest::Approx(expected[(I(mpi.rank) * 4 + iCell) * n + j]).epsilon(3e-11).scale(1));
                     }
-                if (mode == 3)
-                {
-                    // Fixed-count preconditioner-only means exactly two
-                    // applications, even when the tolerance accepts zero.
-                    // The first starts at zero; only the second needs A*x.
-                    settings.stopping = "fixedCount";
-                    settings.maxIterations = 2;
-                    settings.relativeTolerance = 1e30;
-                    C::DofLinearSolver fixed(problem, rhs, bind, settings, execution);
-                    const auto fixedReport = fixed.Solve(rhs);
-                    CHECK(fixedReport.usable);
-                    CHECK(fixedReport.stop == DNDS::Linear::LinearStop::FixedCount);
-                    CHECK(fixedReport.iterations == 2);
-                    CHECK(fixedReport.preconditionerApplications == 2);
-                    CHECK(fixedReport.operatorApplications == 1);
-                    CHECK(fixedReport.innerProductBatches == 0);
-                    CHECK_FALSE(fixedReport.converged);
-                    CHECK(std::isnan(fixedReport.trueResidual));
-                }
             }
     }
 }
@@ -296,4 +277,115 @@ int main(int argc, char **argv)
     const int result = context.run();
     DNDS::MPI::Finalize();
     return result;
+}
+
+TEST_CASE("Copy-free local AmgX consumes native int32 unsorted row-major blocks")
+{
+    if (mpi.size != 1 || !A::AmgXPreconditioner::Available())
+        return;
+    constexpr I rows = 17;
+    const auto device = R::Device::CUDA(DeviceOrdinal());
+    auto communication = std::make_shared<R::CommunicationContext>(MPI_COMM_WORLD);
+    A::DofSpace space(communication, rows, 0, "native int32 local AMG");
+    std::vector<std::vector<I>> columns(rows);
+    for (I iCell = 0; iCell < rows; ++iCell)
+        columns[iCell] = {(iCell + 1) % rows, (iCell + rows - 1) % rows};
+    std::vector<I> core(rows);
+    std::iota(core.begin(), core.end(), I(0));
+    for (const int n : {5, 6, 7})
+    {
+        CAPTURE(n);
+        C::LinearMatrixOptions options;
+        options.indices = C::LinearIndexStorage::Int32;
+        options.rowMajorBlocks = true;
+        auto problemOwner = std::make_shared<C::LinearProblemContext>(space, n, columns, core, C::DiagonalStorage::Block,
+                                                                      C::OffDiagonalStorage::Assembled, device, C::LinearSweepPartitions{}, options);
+        auto &problem = *problemOwner;
+        CHECK(problem.HostPattern().UsesInt32());
+        R::Array<real> diagonal(R::RowLayout::Dense(rows, n * n)), rhs(R::RowLayout::Dense(rows, n));
+        A::BlockMatrixStorage blocks(std::vector<I>(rows, 2), n, R::Device::Host(), {}, true);
+        const auto exact = [](I iCell, I j)
+        { return .4 + .03 * iCell + .07 * j; };
+        {
+            auto d = diagonal.Write(), b = rhs.Write();
+            auto a = blocks.Write();
+            for (I iCell = 0; iCell < rows; ++iCell)
+                for (int i = 0; i < n; ++i)
+                {
+                    real value = 0;
+                    for (int j = 0; j < n; ++j)
+                    {
+                        const real own = i == j ? 4 + .2 * i : .012 * (i + 1) - .019 * (j + 1);
+                        d.View()(iCell, i * n + j) = own;
+                        value += own * exact(iCell, j);
+                        for (I k = 0; k < 2; ++k)
+                        {
+                            const real other = .003 * (i + 1) - .005 * (j + 1) + .001 * k;
+                            a.ArrayView().Element(iCell, k, i, j) = other;
+                            value += other * exact(columns[iCell][k], j);
+                        }
+                    }
+                    b.View()(iCell, i) = value;
+                }
+        }
+        R::EagerEngine engine;
+        const auto stream = engine.CreateStream(std::make_shared<R::CUDALauncher>(device.ordinal));
+        problem.Diagonal().CopyFrom(diagonal, stream.Context()).Wait();
+        auto values = problem.OffDiagonal().Values();
+        values.CopyFrom(blocks.Values(), stream.Context()).Wait();
+        A::AmgXSettings settings;
+        settings.maxLevels = 1;
+        settings.coarseSweeps = 40;
+        settings.relaxation = .9;
+        C::LocalAMGPreconditioner preconditioner(problem, settings);
+        auto input = rhs.To(device);
+        R::Array<real> output(R::RowLayout::Dense(rows, n), device);
+        preconditioner.Update(engine, stream, problem);
+        preconditioner.Apply(engine, stream, input, output);
+        const auto host = output.To(R::Device::Host());
+        const auto read = host.Read();
+        for (I iCell = 0; iCell < rows; ++iCell)
+            for (int j = 0; j < n; ++j)
+                CHECK(read.View()(iCell, j) == doctest::Approx(exact(iCell, j)).epsilon(3e-11));
+        // The adapter must reject incompatible representation rather than
+        // silently allocating a packed shadow matrix/vector.
+        R::Array<real> padded(R::RowLayout::Dense(rows, n, n + 1), device);
+        CHECK_THROWS(preconditioner.Apply(engine, stream, padded, output));
+        C::DomainSettings domain;
+        if (n > 5)
+        {
+            domain.equation.transport = "NewtonianFourier";
+            domain.equation.viscosity = .01;
+            domain.equation.rans.model = n == 6 ? "SA" : "KOmegaSST";
+        }
+        const auto equation = C::EquationSystem::Resolve(domain.equation);
+        A::DofField<real> field(space, input, R::Array<real>(R::RowLayout::Dense(0, n), device));
+        auto bundle = C::EquationDofs::Coupled(equation.Schema(), field);
+        const auto route = R::RowTransferPlan::Known(communication, rows, 0, std::vector<std::vector<I>>(1), std::vector<std::vector<I>>(1));
+        const auto bind = [&](auto &part)
+        {
+            return R::PayloadPlan(route, part.Owned().Layout(), part.Ghost().Layout(), R::ElementSchema::Arithmetic<real>())
+                .Bind(part.Owned(), part.Ghost());
+        };
+        C::LinearSolveSettings controls;
+        controls.method = "amgx";
+        controls.stopping = "fixedCount";
+        controls.maxIterations = 2;
+        controls.relativeTolerance = 1e30;
+        C::LinearExecution execution;
+        execution.collectiveChecks = false;
+        execution.overlap = false;
+        execution.streams = C::LinearExecution::Streams{stream, engine.CreateStream(std::make_shared<R::CUDALauncher>(device.ordinal))};
+        C::DofLinearSolver fixed(problemOwner, bundle, bind, controls, execution);
+        const auto report = fixed.Solve(bundle);
+        CHECK(report.usable);
+        CHECK(report.stop == DNDS::Linear::LinearStop::FixedCount);
+        CHECK(report.iterations == 2);
+        CHECK(report.preconditionerApplications == 2);
+        CHECK(report.operatorApplications == 1);
+        CHECK(report.innerProductBatches == 0);
+        CHECK_FALSE(report.converged);
+        CHECK(std::isnan(report.trueResidual));
+        engine.Close();
+    }
 }

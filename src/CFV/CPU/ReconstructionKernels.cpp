@@ -1,5 +1,6 @@
 #include "CFV/CPU/ReconstructionKernels.hpp"
 #include "CFV/Math/PolynomialReconstruction.hpp"
+#include "CFV/Math/ReconstructionMatrixAccess.hpp"
 #include "DNDS/Algebra/EigenView.hpp"
 #include "DNDS/Core/OMP.hpp"
 #include <optional>
@@ -9,7 +10,9 @@ namespace DNDS::CFV::CPU
     using Matrix = Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic>;
     using ConstMap = Eigen::Map<const Matrix>;
 
-    NumericalStatus ReconstructionSweep(const ReconstructionSweepView &view, const ReconstructionWorkSelection &work)
+    template <class MatrixRows, class VectorRows, class InjectionRows>
+    NumericalStatus ReconstructionSweepImpl(const ReconstructionSweepView &view, const ReconstructionWorkSelection &work,
+                                            MatrixRows matrices, VectorRows vectors, InjectionRows injection)
     {
         if (view.limited)
             for (index iCell = 0; iCell < work.owned; ++iCell)
@@ -22,7 +25,9 @@ namespace DNDS::CFV::CPU
         const auto u = view.means;
         const auto bValues = view.boundary;
         const auto offsets = view.offsets, neighbors = view.neighbors, bOffsets = view.boundaryOffsets;
-        const auto matrices = view.matrices, vectors = view.vectors, injection = view.injection;
+        const auto matrixRows = Algebra::MakeEigenRowMatrices(matrices, n, n);
+        const auto vectorRows = Algebra::MakeEigenRowMatrices(vectors, n, 1);
+        const auto injectionRows = Algebra::MakeEigenRowMatrices(injection, n, 1);
         const auto rotations = view.rotations;
         const auto rotationActive = view.rotationActive;
         const auto nextMatrices = Algebra::MakeEigenRowMatrices(next, n, nv);
@@ -48,6 +53,9 @@ namespace DNDS::CFV::CPU
                 output.noalias() += (relax * alphaCell) * (*targetMatrices)[iCell];
             if (scale == 0)
                 return;
+            Math::SmallMatrix rawRight;
+            if (view.raw)
+                rawRight.setZero(n, nv);
             for (index iEntry = offsets(iCell, 0); iEntry < offsets(iCell + 1, 0); ++iEntry)
             {
                 const index other = neighbors(iEntry, 0);
@@ -62,13 +70,38 @@ namespace DNDS::CFV::CPU
                     // Component rotation is independent of spatial derivative
                     // pullback, already included in the prepared B block.
                     // Apply scalar columns directly, then correct vector blocks.
-                    output.noalias() += scale * ConstMap(matrices[iEntry].data(), n, n) * otherCoefficients;
+                    if (view.raw)
+                    {
+                        // A same-frame periodic self-neighbor was subtracted
+                        // from A at setup. Its shared face B must not reappear.
+                        if (other != iCell || rotatedEntry)
+                            for (index variable = 0; variable < nv; ++variable)
+                                for (index i = 0; i < n; ++i)
+                                {
+                                    real product = 0;
+                                    for (index j = 0; j < n; ++j)
+                                        product += Math::ReconstructionCouplingEntry(matrices, view.faces, view.faceSides, iEntry, i, j, n, view.faceCoupling) * otherCoefficients(j, variable);
+                                    rawRight(i, variable) += product;
+                                }
+                    }
+                    else
+                        output.noalias() += scale * matrixRows[iEntry] * otherCoefficients;
                     if (rotatedEntry)
                         for (auto first : work.vectorStarts)
                         {
                             const Eigen::Map<const Geom::tGPoint> rotation(rotations[iEntry].data());
                             rotatedRec = otherCoefficients.middleCols(first, 3) * (rotation.transpose() - Geom::tGPoint::Identity());
-                            output.middleCols(first, 3).noalias() += scale * ConstMap(matrices[iEntry].data(), n, n) * rotatedRec;
+                            if (view.raw)
+                                for (index variable = 0; variable < 3; ++variable)
+                                    for (index i = 0; i < n; ++i)
+                                    {
+                                        real product = 0;
+                                        for (index j = 0; j < n; ++j)
+                                            product += Math::ReconstructionCouplingEntry(matrices, view.faces, view.faceSides, iEntry, i, j, n, view.faceCoupling) * rotatedRec(j, variable);
+                                        rawRight(i, first + variable) += product;
+                                    }
+                            else
+                                output.middleCols(first, 3).noalias() += scale * matrixRows[iEntry] * rotatedRec;
                         }
                     for (index variable = 0; variable < nv; ++variable)
                     {
@@ -82,14 +115,29 @@ namespace DNDS::CFV::CPU
                                     for (int d = 0; d < 3; ++d)
                                         value += rotation(variable - first, d) * u(other, first + d);
                                 }
-                        output.col(variable).noalias() += Eigen::Map<const Eigen::VectorXd>(vectors[iEntry].data(), n) * (scale * (value - u(iCell, variable)));
+                        if (view.raw)
+                            rawRight.col(variable).noalias() += vectorRows[iEntry] * (value - u(iCell, variable));
+                        else
+                            output.col(variable).noalias() += vectorRows[iEntry] * (scale * (value - u(iCell, variable)));
                     }
                 }
                 else
                     for (index iQ = bOffsets(iEntry, 0); iQ < bOffsets(iEntry + 1, 0); ++iQ)
                         for (index variable = 0; variable < nv; ++variable)
-                            output.col(variable).noalias() += Eigen::Map<const Eigen::VectorXd>(injection[iQ].data(), n) * (scale * (bValues(iQ, variable) - u(iCell, variable)));
+                            if (view.raw)
+                                rawRight.col(variable).noalias() += injectionRows[iQ] * (bValues(iQ, variable) - u(iCell, variable));
+                            else
+                                output.col(variable).noalias() += injectionRows[iQ] * (scale * (bValues(iQ, variable) - u(iCell, variable)));
             }
+            if (view.raw)
+                for (index variable = 0; variable < nv; ++variable)
+                    for (index i = 0; i < n; ++i)
+                    {
+                        real value = 0;
+                        for (index j = 0; j < n; ++j)
+                            value += Math::ReconstructionInverseEntry(view.inverse, iCell, i, j, n, view.inverseTriangle) * rawRight(j, variable);
+                        output(i, variable) += scale * value;
+                    }
         };
         const index owned = work.owned;
         if (!view.sor)
@@ -136,6 +184,19 @@ namespace DNDS::CFV::CPU
                              { sweep(work.partitionStarts[part], work.partitionStarts[part + 1]); });
         }
         return {};
+    }
+    NumericalStatus ReconstructionSweep(const ReconstructionSweepView &view, const ReconstructionWorkSelection &work)
+    {
+        // One physical-layout dispatch outside every cell/product loop. The
+        // canonical AoS path keeps a compile-time unit Eigen inner stride.
+        if (view.matrices.kind == R::RowLayoutKind::Table && view.vectors.kind == R::RowLayoutKind::Table &&
+            view.injection.kind == R::RowLayoutKind::Table)
+        {
+            const auto table = [](ReconstructionReadRows v) -> ReconstructionTable
+            { return {v.data, v.offsets, v.rows, v.width, v.stride, v.sizes, v.kind, v.device}; };
+            return ReconstructionSweepImpl(view, work, table(view.matrices), table(view.vectors), table(view.injection));
+        }
+        return ReconstructionSweepImpl(view, work, view.matrices, view.vectors, view.injection);
     }
     NumericalStatus ReconstructionLimiterWBAP(const ReconstructionLimiterView &view, const ReconstructionWorkSelection &work)
     {

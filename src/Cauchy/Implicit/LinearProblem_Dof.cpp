@@ -32,8 +32,7 @@ namespace DNDS::Cauchy
                                                                                                       : pattern.dependent;
         try
         {
-            CPU::JacobiLinearRows({blocks.View(), pattern, rows, inverse.View<R::TableRows>(),
-                                   _components, _diagonalStorage == DiagonalStorage::Block},
+            CPU::JacobiLinearRows({blocks.View(), pattern, rows, inverse.View<R::UniformTableRows>(), _components, _diagonalStorage == DiagonalStorage::Block, {}, _rowMajorBlocks},
                                   b.View().OwnedPart(),
                                   x.View().OwnedPart(), x.View().GhostPart(), y.View(), !input);
         }
@@ -83,8 +82,7 @@ namespace DNDS::Cauchy
         const auto offDiagonal = ReadOffDiagonal();
         const auto rows = region == LinearRegion::All ? pattern.order : region == LinearRegion::Core ? pattern.core
                                                                                                      : pattern.dependent;
-        CPU::ApplyLinearRows({offDiagonal.View(), pattern, rows, diagonal.View<R::TableRows>(),
-                              _components, _diagonalStorage == DiagonalStorage::Block},
+        CPU::ApplyLinearRows({offDiagonal.View(), pattern, rows, diagonal.View<R::UniformTableRows>(), _components, _diagonalStorage == DiagonalStorage::Block, {}, _rowMajorBlocks},
                              source.View().OwnedPart(),
                              source.View().GhostPart(), destination.View());
     }

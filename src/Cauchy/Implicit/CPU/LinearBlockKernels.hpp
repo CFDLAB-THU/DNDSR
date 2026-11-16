@@ -9,7 +9,7 @@ namespace DNDS::Cauchy::CPU
     using LinearReadRows = Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows>;
     using LinearWriteRows = Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows>;
     using LinearIndexRows = Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
-    using LinearDiagonalRows = Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::TableRows>;
+    using LinearDiagonalRows = Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows>;
     using LinearDofRead = Algebra::DofComponentView<const real>;
     using LinearDofWrite = Algebra::DofComponentView<real>;
 
@@ -29,6 +29,7 @@ namespace DNDS::Cauchy::CPU
         /// Immutable setup metadata; used only by CPU SGS. Each parallel block
         /// reads frozen values across its physical-row interval boundaries.
         SpanView<const index> sweepPartitions;
+        bool rowMajorBlocks = false;
     };
     /// Apply A to the supplied rows; output is distinct from both inputs.
     void ApplyLinearRows(const LinearBlockInput &, LinearReadRows owned, LinearReadRows ghost, LinearWriteRows output);
@@ -48,6 +49,6 @@ namespace DNDS::Cauchy::CPU
     void UpperSGSRows(const LinearBlockInput &, LinearDofRead rhs, LinearDofRead old, LinearDofRead forward, LinearDofRead ghost, LinearDofWrite output, bool zeroStart);
     /// Fill the rank-local ILU template before the generic LU factorizer runs.
     void FillLinearFactor(LinearDiagonalRows diagonal, OffDiagonalView blocks, Algebra::BlockMatrixView<real> factor,
-                          Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::CSRRows> sourceBlocks,
-                          index components, bool fullDiagonal);
+                          LinearColumnsView sourceBlocks,
+                          index components, bool fullDiagonal, bool rowMajorBlocks = false);
 }

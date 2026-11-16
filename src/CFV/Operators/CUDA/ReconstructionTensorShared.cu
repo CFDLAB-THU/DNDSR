@@ -161,7 +161,7 @@ namespace DNDS::CFV::Detail
                                       R::ArrayView<real> output, R::ArrayView<const int> status, bool async)
     {
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA, "CUDA shared tensor Jacobi requires a CUDA context");
-        DNDS_check_throw_info(!plan.quantized, "FP64 shared tensor Jacobi requires FP64 sweep maps");
+        DNDS_check_throw_info(!plan.quantized && !plan.raw, "FP64 shared tensor Jacobi requires FP64 sweep maps");
         R::ValidateViewDevices(context.device, plan, selection, vectors, mean, input, boundary, output, status);
         R::CheckKernelArgumentBudget<decltype(plan), decltype(selection), decltype(vectors), decltype(mean),
                                      decltype(input), decltype(boundary), decltype(output), decltype(status)>();

@@ -23,7 +23,7 @@ TEST_CASE("Reconstruction kernel selection is explicit and retains the FP64 defa
     C::ExecutionSettings execution;
     CHECK(execution.ReconstructionKernel() == Kernel::FP64);
     for (const auto &[name, kernel] : std::vector<std::pair<std::string, Kernel>>{
-             {"fp64Tensor", Kernel::FP64TensorCore}, {"fp64TensorShared", Kernel::FP64TensorCoreShared}, {"fp64TensorAsync", Kernel::FP64TensorCoreAsync}, {"fp32", Kernel::FP32}, {"fp32Accum", Kernel::FP32FullAccumulation}, {"fp32FloatFloatAccum", Kernel::FP32FloatFloatAccumulation}, {"tf32", Kernel::TF32TensorCore}})
+             {"fp64Wide", Kernel::FP64Wide}, {"fp64Static", Kernel::FP64Static}, {"fp64MatrixShared", Kernel::FP64MatrixShared}, {"fp64Tensor", Kernel::FP64TensorCore}, {"fp64TensorShared", Kernel::FP64TensorCoreShared}, {"fp64TensorAsync", Kernel::FP64TensorCoreAsync}, {"fp32", Kernel::FP32}, {"fp32Accum", Kernel::FP32FullAccumulation}, {"fp32FloatFloatAccum", Kernel::FP32FloatFloatAccumulation}, {"tf32", Kernel::TF32TensorCore}})
     {
         execution.reconstructionKernel = name;
         CHECK(execution.ReconstructionKernel() == kernel);
@@ -35,6 +35,26 @@ TEST_CASE("Reconstruction kernel selection is explicit and retains the FP64 defa
     CHECK_THROWS_WITH(C::ResolvedExecutionPlan::Resolve(domain), doctest::Contains("requires CUDA"));
     domain.settings.execution.reconstructionKernel = "automatic-low-precision";
     CHECK_THROWS_WITH(C::ResolvedExecutionPlan::Resolve(domain), doctest::Contains("unknown reconstruction kernel"));
+}
+TEST_CASE("Linear matrix storage round-trips independently and rejects hidden AmgX repacking")
+{
+    C::DomainSettings settings;
+    auto &linear = settings.implicit.linear;
+    linear.method = "jacobi";
+    linear.matrixStorage.diagonal.layout = "soa";
+    linear.matrixStorage.diagonal.rowPaddingMultiple = 64;
+    linear.matrixStorage.inverse.layout = "aosoa32";
+    const auto restored = C::Json(settings).get<C::DomainSettings>();
+    CHECK(restored.implicit.linear.matrixStorage.diagonal.layout == "soa");
+    CHECK(restored.implicit.linear.matrixStorage.diagonal.rowPaddingMultiple == 64);
+    CHECK(restored.implicit.linear.matrixStorage.inverse.layout == "aosoa32");
+    CHECK(restored.implicit.linear.matrixStorage.offDiagonal.layout == "aos");
+    CHECK_NOTHROW(settings.implicit.Validate());
+    linear.method = "amgx";
+    CHECK_THROWS_WITH(settings.implicit.Validate(), doctest::Contains("copy-free AmgX"));
+    linear.matrixStorage.diagonal.layout = "aos";
+    linear.matrixStorage.indices = "int32";
+    CHECK_NOTHROW(settings.implicit.Validate());
 }
 TEST_CASE("CUDA capability resolution requires a complete combined perfect gas profile")
 {

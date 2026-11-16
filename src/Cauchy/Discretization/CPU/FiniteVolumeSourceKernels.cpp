@@ -63,7 +63,7 @@ namespace DNDS::Cauchy::CPU
                         if (!std::isfinite(derivative))
                             return NumericalStatus{NumericalError::InvalidState}.At(iCell);
                         if (request.fullBlock || row == column)
-                            request.matrix(iCell, request.fullBlock ? row + nv * column : row) -= request.scale * volume * derivative;
+                            request.matrix(iCell, request.fullBlock ? (request.rowMajorBlocks ? row * nv + column : row + nv * column) : row) -= request.scale * volume * derivative;
                     }
                 }
         }
@@ -122,7 +122,7 @@ namespace DNDS::Cauchy::CPU
                         if (!std::isfinite(derivative))
                             return NumericalStatus{NumericalError::InvalidState}.At(iCell);
                         if (request.fullBlock || row == column)
-                            request.matrix(iCell, request.fullBlock ? row + nv * column : row) -=
+                            request.matrix(iCell, request.fullBlock ? (request.rowMajorBlocks ? row * nv + column : row + nv * column) : row) -=
                                 request.scale * weight * derivative;
                     }
                 }

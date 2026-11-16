@@ -57,8 +57,8 @@ namespace DNDS::Cauchy::CUDA
                 output(iCell, 0) = iCell < owned.RowCount() ? owned(iCell, 0) : ghost(iCell - owned.RowCount(), 0);
         }
         __global__ void Initialize(JacobianCellMetrics cells, LinearReadRows inverseTau,
-                                   LinearWriteRows diagonal, JacobianStatus status, LinearIndexRows selected,
-                                   RigidFrameParameters frame, real physicalMass, real scale, int components, bool fullBlock)
+                                   MatrixWriteRows diagonal, JacobianStatus status, LinearIndexRows selected,
+                                   RigidFrameParameters frame, real physicalMass, real scale, int components, bool fullBlock, bool rowMajorBlocks)
         {
             const auto rotation = frame.NegativeSourceJacobian();
             real rotationBound = 0;
@@ -81,7 +81,7 @@ namespace DNDS::Cauchy::CUDA
                 const real mass = volume * (tau + physicalMass);
                 for (int j = 0; j < (fullBlock ? components * components : components); ++j)
                 {
-                    const int i = fullBlock ? j % components : j, k = fullBlock ? j / components : j;
+                    const int i = fullBlock ? (rowMajorBlocks ? j / components : j % components) : j, k = fullBlock ? (rowMajorBlocks ? j % components : j / components) : j;
                     real value = i == k ? mass : 0;
                     if (frame.moving && i < 5 && k < 5)
                         value += fullBlock ? scale * volume * rotation[i + 5 * k] : scale * volume * rotationBound;
@@ -95,7 +95,7 @@ namespace DNDS::Cauchy::CUDA
         template <class View>
         void CheckTable(View view, index rows, index width)
         {
-            DNDS_check_throw_info(view.kind == R::RowLayoutKind::Table && view.RowCount() == rows && view.Width() == width,
+            DNDS_check_throw_info((view.kind == R::RowLayoutKind::Table || view.kind == R::RowLayoutKind::ColMajorTable || view.kind == R::RowLayoutKind::TiledColMajorTable) && view.RowCount() == rows && view.Width() == width,
                                   "CUDA Jacobian preparation requires matching combined AoS tables");
         }
         template <class View>
@@ -160,9 +160,9 @@ namespace DNDS::Cauchy::CUDA
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA Jacobian signal copy launch failed");
     }
     void InitializeJacobianDiagonal(R::ExecutionContext context, JacobianCellMetrics cells,
-                                    LinearReadRows inverseTau, LinearWriteRows diagonal, JacobianStatus status,
+                                    LinearReadRows inverseTau, MatrixWriteRows diagonal, JacobianStatus status,
                                     LinearIndexRows selected, const RigidFrameParameters &frame,
-                                    real physicalMass, real scale, int components, bool fullBlock)
+                                    real physicalMass, real scale, int components, bool fullBlock, bool rowMajorBlocks)
     {
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && components >= 5 && components <= 7 &&
                                   std::isfinite(physicalMass) && physicalMass >= 0 && std::isfinite(scale) && scale >= 0,
@@ -173,12 +173,12 @@ namespace DNDS::Cauchy::CUDA
         DNDS_check_throw_info(cells.RowCount() >= diagonal.RowCount() && status.RowCount() == diagonal.RowCount() &&
                                   (!diagonal.data || (diagonal.data != inverseTau.data && diagonal.data != cells.data)),
                               "CUDA Jacobian diagonal shape or alias differs");
-        R::CheckKernelArgumentBudget<JacobianCellMetrics, LinearReadRows, LinearWriteRows, JacobianStatus, LinearIndexRows,
-                                     RigidFrameParameters, real, real, int, bool>();
+        R::CheckKernelArgumentBudget<JacobianCellMetrics, LinearReadRows, MatrixWriteRows, JacobianStatus, LinearIndexRows,
+                                     RigidFrameParameters, real, real, int, bool, bool>();
         if (!selected.RowCount())
             return;
         Initialize<<<Blocks(selected.RowCount()), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(
-            cells, inverseTau, diagonal, status, selected, frame, physicalMass, scale, components, fullBlock);
+            cells, inverseTau, diagonal, status, selected, frame, physicalMass, scale, components, fullBlock, rowMajorBlocks);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA Jacobian diagonal initialization launch failed");
     }
 }

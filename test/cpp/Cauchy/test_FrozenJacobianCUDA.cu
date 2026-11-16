@@ -280,9 +280,9 @@ TEST_CASE("CUDA frozen Jacobians match CPU blocks and actions including ALE peri
                     auto st = status.Write(context);
                     // Exercise the same split launches as production: a core
                     // launch cannot see the vector ghost allocation at all.
-                    C::CUDA::ApplyFrozenJacobian(context, snapshot, coreRead.View<R::FixedRows<1>>(), dir.View<R::TableRows>(), true,
+                    C::CUDA::ApplyFrozenJacobian(context, snapshot, coreRead.View<R::FixedRows<1>>(), dir.View<R::UniformTableRows>(), true,
                                                  br.View<R::UniformTableRows>(), xr.View<R::UniformTableRows>(), {}, out.View<R::TableRows>(), st.View<R::FixedRows<1>>(), jacobi);
-                    C::CUDA::ApplyFrozenJacobian(context, snapshot, depRead.View<R::FixedRows<1>>(), dir.View<R::TableRows>(), true,
+                    C::CUDA::ApplyFrozenJacobian(context, snapshot, depRead.View<R::FixedRows<1>>(), dir.View<R::UniformTableRows>(), true,
                                                  br.View<R::UniformTableRows>(), xr.View<R::UniformTableRows>(), gr.View<R::UniformTableRows>(), out.View<R::TableRows>(), st.View<R::FixedRows<1>>(), jacobi);
                     REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
                 }
@@ -386,7 +386,7 @@ TEST_CASE("CUDA diagonal initialization preserves CPU mass and moving-frame bloc
                 // CFV's metric view intentionally has its own unchecked policy.
                 const auto source = cr.View<R::FixedRows<8>>();
                 const C::CUDA::JacobianCellMetrics metric{source.data, nullptr, source.rows, source.width, source.stride, nullptr, source.kind, source.device};
-                C::CUDA::InitializeJacobianDiagonal(context, metric, tr.View<R::TableRows>(), write.View<R::TableRows>(),
+                C::CUDA::InitializeJacobianDiagonal(context, metric, tr.View<R::TableRows>(), write.View<R::UniformTableRows>(),
                                                     st.View<R::FixedRows<1>>(), rr.View<R::FixedRows<1>>(), frame.KernelParameters(), .2, .73, n, full);
                 REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
             }
@@ -508,7 +508,7 @@ TEST_CASE("CUDA centered face diagonal matches CPU wall chains Roe matrices and 
             {
                 auto out = diagonal.Write(context), waves = magnitudes.Write(context);
                 auto st = status.Write(context);
-                C::CUDA::AddJacobianFaces(context, request, selr.View<R::FixedRows<1>>(), out.View<R::TableRows>(), full, waves.View<R::TableRows>(), st.View<R::FixedRows<1>>());
+                C::CUDA::AddJacobianFaces(context, request, selr.View<R::FixedRows<1>>(), out.View<R::UniformTableRows>(), full, waves.View<R::TableRows>(), st.View<R::FixedRows<1>>());
                 REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
             }
             const auto actual = diagonal.To(R::Device::Host());

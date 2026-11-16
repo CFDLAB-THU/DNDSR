@@ -8,8 +8,33 @@
 
 namespace DNDS::Algebra
 {
+    /// Physical storage of independent matrix blocks. State-vector layout is
+    /// deliberately independent of these choices.
+    enum class MatrixTableLayout
+    {
+        AoS,
+        SoA,
+        AoSoA32
+    };
+    struct MatrixTableOptions
+    {
+        MatrixTableLayout layout = MatrixTableLayout::AoS;
+        /// SoA physical row pitch; AoS and tiled32 determine their own pitch.
+        index rowPaddingMultiple = 1;
+        Runtime::RowLayout MakeLayout(index rows, index width) const
+        {
+            DNDS_check_throw_info(rows >= 0 && width >= 0 && rowPaddingMultiple > 0,
+                                  "invalid matrix table dimensions or padding");
+            if (layout == MatrixTableLayout::AoS)
+                return Runtime::RowLayout::Dense(rows, width);
+            if (layout == MatrixTableLayout::SoA)
+                return Runtime::RowLayout::ColMajor(rows, width, {rowPaddingMultiple, 0});
+            DNDS_check_throw_info(layout == MatrixTableLayout::AoSoA32, "invalid matrix table layout");
+            return Runtime::RowLayout::TiledColMajor(rows, width, 32);
+        }
+    };
     /** @brief Borrowed dense-block rows for CPU and device kernels.
-     * @details Each value row is one column-major square block. Sparse-row
+     * @details Each value row is one square block in the declared dense order. Sparse-row
      * offsets are field data with the same residency as values. The owner must
      * retain both leases through completion. No Eigen object or owning handle
      * crosses a CUDA launch boundary.
@@ -17,9 +42,10 @@ namespace DNDS::Algebra
     template <class Scalar>
     struct BlockMatrixArrayView
     {
-        Runtime::ArrayView<Scalar, Runtime::AccessBoundsChecks, Runtime::TableRows> values;
+        Runtime::ArrayView<Scalar, Runtime::AccessBoundsChecks, Runtime::UniformTableRows> values;
         Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> offsets;
         index blockSize = 0;
+        bool rowMajorBlocks = false;
         DNDS_DEVICE_CALLABLE index RowNumber() const { return offsets.RowCount() - 1; }
         DNDS_DEVICE_CALLABLE index BlockNumber(index iRow) const
         {
@@ -37,7 +63,7 @@ namespace DNDS::Algebra
         {
             if constexpr (Runtime::AccessBoundsChecks)
                 DNDS_HD_assert(i >= 0 && i < blockSize && j >= 0 && j < blockSize);
-            return (*this)(iRow, iBlock)[i + blockSize * j];
+            return (*this)(iRow, iBlock)[rowMajorBlocks ? i * blockSize + j : i + blockSize * j];
         }
         /// Validate once at the host launcher, never per matrix entry.
         void ValidateDevice(Runtime::Device device) const
@@ -48,23 +74,28 @@ namespace DNDS::Algebra
 
     /// Borrowed CPU dense-block access. Retain the storage access object while
     /// using this view. Logical sparse rows contain consecutive dense blocks;
-    /// each block uses the centralized column-major Eigen adapter.
+    /// each block uses the centralized strided Eigen adapter without packing.
     template <class Scalar>
     class BlockMatrixView
     {
-        using ArrayView = Runtime::ArrayView<Scalar, Runtime::AccessBoundsChecks, Runtime::TableRows>;
+        using ArrayView = Runtime::ArrayView<Scalar, Runtime::AccessBoundsChecks, Runtime::UniformTableRows>;
         EigenRowMatrices<ArrayView> _blocks;
         Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> _offsets;
-        index _rows;
+        index _rows, _componentStride;
+        bool _rowMajorBlocks;
 
     public:
         explicit BlockMatrixView(BlockMatrixArrayView<Scalar> view)
-            : _blocks(view.values, view.blockSize, view.blockSize, Runtime::Device::Host()),
-              _offsets(view.offsets), _rows(view.RowNumber())
+            : _blocks(view.values, view.blockSize, view.blockSize, Runtime::Device::Host(), view.rowMajorBlocks),
+              _offsets(view.offsets), _rows(view.RowNumber()), _componentStride(view.values.ElementStride()), _rowMajorBlocks(view.rowMajorBlocks)
         {
             view.ValidateDevice(Runtime::Device::Host());
         }
         index RowNumber() const { return _rows; }
+        /// Scalar spacing inside each dense block; contiguous-only leaf
+        /// specializations must test this once before their row loop.
+        index ElementStride() const { return _componentStride; }
+        bool RowMajorBlocks() const { return _rowMajorBlocks; }
         index BlockNumber(index iRow) const
         {
             if constexpr (Runtime::AccessBoundsChecks)
@@ -88,6 +119,7 @@ namespace DNDS::Algebra
         {
             index rows;
             index blockSize;
+            bool rowMajorBlocks;
         };
         std::shared_ptr<const Layout> _layout;
         Runtime::Array<real> _values;
@@ -107,7 +139,7 @@ namespace DNDS::Algebra
                 : _layout(std::move(layout)), _lease(std::move(lease)), _offsets(std::move(offsets)) {}
             BlockMatrixArrayView<const real> ArrayView() const
             {
-                return {_lease.View<Runtime::TableRows>(), _offsets.View<Runtime::FixedRows<1>>(), _layout->blockSize};
+                return {_lease.View<Runtime::UniformTableRows>(), _offsets.View<Runtime::FixedRows<1>>(), _layout->blockSize, _layout->rowMajorBlocks};
             }
             auto View() const
             {
@@ -125,7 +157,7 @@ namespace DNDS::Algebra
                 : _layout(std::move(layout)), _lease(std::move(lease)), _offsets(std::move(offsets)) {}
             BlockMatrixArrayView<real> ArrayView() const
             {
-                return {_lease.View<Runtime::TableRows>(), _offsets.View<Runtime::FixedRows<1>>(), _layout->blockSize};
+                return {_lease.View<Runtime::UniformTableRows>(), _offsets.View<Runtime::FixedRows<1>>(), _layout->blockSize, _layout->rowMajorBlocks};
             }
             auto View() const
             {
@@ -138,12 +170,13 @@ namespace DNDS::Algebra
         };
 
         BlockMatrixStorage(const std::vector<index> &blocksPerRow, index blockSize,
-                           Runtime::Device device = Runtime::Device::Host())
+                           Runtime::Device device = Runtime::Device::Host(), MatrixTableOptions options = {}, bool rowMajorBlocks = false)
         {
             DNDS_check_throw_info(blockSize > 0 && blockSize <= std::numeric_limits<rowsize>::max() / blockSize,
                                   "invalid dense block dimension");
             auto layout = std::make_shared<Layout>();
             layout->blockSize = blockSize;
+            layout->rowMajorBlocks = rowMajorBlocks;
             layout->rows = index(blocksPerRow.size());
             _offsets = Runtime::Array<index>(Runtime::RowLayout::Dense(layout->rows + 1, 1));
             index totalBlocks = 0;
@@ -160,13 +193,14 @@ namespace DNDS::Algebra
                     offsets(iRow + 1, 0) = totalBlocks;
                 }
             }
-            _values = Runtime::Array<real>(Runtime::RowLayout::Dense(totalBlocks, blockSize * blockSize), device);
+            _values = Runtime::Array<real>(options.MakeLayout(totalBlocks, blockSize * blockSize), device);
             if (device != Runtime::Device::Host())
                 _offsets = _offsets.To(device);
             _layout = std::move(layout);
         }
         index RowNumber() const { return _layout->rows; }
         index BlockSize() const { return _layout->blockSize; }
+        bool RowMajorBlocks() const { return _layout->rowMajorBlocks; }
         /// Host setup/diagnostic snapshot; kernels use retained ArrayView().
         /// Device storage must be explicitly placed on host before this call.
         std::vector<index> Offsets() const

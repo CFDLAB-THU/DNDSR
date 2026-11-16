@@ -97,7 +97,7 @@ namespace DNDS::Cauchy
                                                                  const R::Array<real>::WriteLease &diagonal,
                                                                  DiagonalStorage storage, real scale,
                                                                  PointEvaluator &evaluator,
-                                                                 OptionalRef<const MeanLinearizationOutput> linearization) const
+                                                                 OptionalRef<const MeanLinearizationOutput> linearization, bool rowMajorBlocks) const
     {
         if (!sourceSampling)
             return false;
@@ -120,7 +120,7 @@ namespace DNDS::Cauchy
         const auto walls = wallRead ? wallRead->HostView() : WallDistanceView{};
         const auto lengths = lengthRead ? lengthRead->View<R::FixedRows<1>>()
                                         : R::ArrayView<const real, R::AccessBoundsChecks, R::FixedRows<1>>{};
-        const auto matrix = diagonal.View<R::TableRows>();
+        const auto matrix = diagonal.View<R::UniformTableRows>();
         const index nv = state.ComponentNumber();
         const int independent = owner->equation.HasMixture() ? owner->equation.Mixture().SpeciesNumber() - 1 : 0;
         std::vector<EquationBlockLocation> locations;
@@ -169,6 +169,7 @@ namespace DNDS::Cauchy
         request.gradients = gradientMetadata.HostView();
         request.metric = metric;
         request.matrix = matrix;
+        request.rowMajorBlocks = rowMajorBlocks;
         request.scale = scale;
         request.fullBlock = storage == DiagonalStorage::Block;
         if (linearization)
@@ -193,12 +194,12 @@ namespace DNDS::Cauchy
     /// source freshness; the production wrapper validates its provenance.
     bool FiniteVolume::Workspace::AddMeanSourceJacobian(const EquationDofs &state, const R::Array<real>::WriteLease &diagonal,
                                                         DiagonalStorage storage, real scale, PointEvaluator &evaluator,
-                                                        OptionalRef<const MeanLinearizationOutput> linearization) const
+                                                        OptionalRef<const MeanLinearizationOutput> linearization, bool rowMajorBlocks) const
     {
         if (sourceOffsets.RowCount() == 0)
             return false;
         if (owner->settings.implicit.sourceJacobianMode == "rhsQuadrature")
-            return AddRHSQuadratureSourceJacobian(state, diagonal, storage, scale, evaluator, linearization);
+            return AddRHSQuadratureSourceJacobian(state, diagonal, storage, scale, evaluator, linearization, rowMajorBlocks);
         // Resolve the synchronous nullable borrow once; property sampling
         // below must not pay a checked OptionalRef dereference per cell.
         // The default approximate source matrix is a one-point,
@@ -256,7 +257,7 @@ namespace DNDS::Cauchy
         }
         const auto walls = wallRead ? wallRead->HostView() : WallDistanceView{};
         const auto lengths = lengthRead ? lengthRead->View<R::FixedRows<1>>() : R::ArrayView<const real, R::AccessBoundsChecks, R::FixedRows<1>>{};
-        const auto matrix = diagonal.View<R::TableRows>();
+        const auto matrix = diagonal.View<R::UniformTableRows>();
         const index nv = state.ComponentNumber();
         const int independent = owner->equation.HasMixture() ? owner->equation.Mixture().SpeciesNumber() - 1 : 0;
         std::vector<EquationBlockLocation> locations;
@@ -282,6 +283,7 @@ namespace DNDS::Cauchy
         request.gradients = gradientMetadata.HostView();
         request.metric = metric;
         request.matrix = matrix;
+        request.rowMajorBlocks = rowMajorBlocks;
         request.scale = scale;
         request.fullBlock = storage == DiagonalStorage::Block;
         if (linearization)

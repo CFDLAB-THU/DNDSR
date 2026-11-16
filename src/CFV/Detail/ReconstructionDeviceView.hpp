@@ -10,21 +10,22 @@ namespace DNDS::CFV::Detail
     struct ReconstructionDeviceView
     {
         Runtime::ArrayView<const index> offsets, neighbors, faces, boundaryOffsets;
-        Runtime::ArrayView<const uint8_t> rotationActive;
-        Runtime::ArrayView<const real> matrixAInvB, vectorAInvB, secondary, boundaryInjection, rotation;
+        Runtime::ArrayView<const uint8_t> rotationActive, faceSide;
+        Runtime::ArrayView<const real> matrixAInvB, vectorAInvB, secondary, boundaryInjection, rotation, localInverse;
         Runtime::ArrayView<const float> matrixAInvB32, vectorAInvB32, boundaryInjection32;
         Runtime::ArrayView<const index> core, dependent;
         index owned = 0, n = 0;
         real relax = 1, wbapCenterWeight = 10;
         bool rotated = false;
         bool quantized = false;
+        bool raw = false, inverseTriangle = false, faceCoupling = false;
         /// One host launch check for every nested allocation; never called by
         /// point/row arithmetic. The placed plan retains all borrowed storage.
         void ValidateDevice(Runtime::Device expected) const
         {
             Runtime::ValidateViewDevices(expected, offsets, neighbors, faces, boundaryOffsets, rotationActive,
                                          matrixAInvB, vectorAInvB, secondary, boundaryInjection, rotation, core, dependent,
-                                         matrixAInvB32, vectorAInvB32, boundaryInjection32);
+                                         matrixAInvB32, vectorAInvB32, boundaryInjection32, localInverse, faceSide);
         }
     };
     struct DeviceWorkSelection

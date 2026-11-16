@@ -59,7 +59,7 @@ namespace DNDS::Cauchy::CUDA
     /// Status must initially contain success; failures are sticky until an
     /// explicit caller reset. A failed row produces NaNs rather than stale data.
     void ApplyFrozenJacobian(Runtime::ExecutionContext context, const FrozenJacobianInput &snapshot,
-                             LinearIndexRows selected, LinearReadRows diagonal, bool fullDiagonal,
+                             LinearIndexRows selected, MatrixReadRows diagonal, bool fullDiagonal,
                              VectorReadRows rhs, VectorReadRows owned, VectorReadRows ghost,
-                             LinearWriteRows output, FrozenJacobianStatus status, bool jacobi);
+                             LinearWriteRows output, FrozenJacobianStatus status, bool jacobi, bool rowMajorBlocks = false);
 }

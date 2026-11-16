@@ -30,9 +30,9 @@ namespace DNDS::Cauchy::CPU
     };
     /// Add the frozen directional flux derivative without acquiring storage.
     /// Selection acts in the stored equation frame, after periodic transforms.
-    template <class Means>
+    template <class Means, class Output>
     void AddEquationJacobianPoint(const EquationJacobianView &snapshot,
-                                  const JacobianPointValue &point, Eigen::Ref<Eigen::MatrixXd> output,
+                                  const JacobianPointValue &point, Output &&output,
                                   const Means &values, bool weighted = true, bool selectComponents = true)
     {
         FlowState flow{};
@@ -89,9 +89,9 @@ namespace DNDS::Cauchy::CPU
         }
     }
     /// Closed-form identity-frame convection, retaining all EOS couplings.
-    template <class Means>
+    template <class Means, class Output>
     void AddFrozenEquationJacobianPoint(const EquationJacobianView &snapshot,
-                                        const JacobianPointValue &point, Eigen::Ref<Eigen::MatrixXd> output,
+                                        const JacobianPointValue &point, Output &&output,
                                         const Means &values, bool weighted = true, bool selectComponents = true)
     {
         if (snapshot.kineticFirst >= 0)
@@ -221,7 +221,7 @@ namespace DNDS::Cauchy::CPU
         RHSFlowFieldView mean;
         RHSAuxiliaryViews packet;
         RHSScalarView radius, inverseTau, incoming;
-        Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::TableRows> diagonal;
+        Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows> diagonal;
         std::optional<Algebra::BlockMatrixView<real>> blocks;
         std::optional<Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::FixedRows<3>>> magnitudes;
         RigidFrame frame;
@@ -229,6 +229,7 @@ namespace DNDS::Cauchy::CPU
         real time = 0, physicalMass = 0, scale = 1;
         bool fullBlock = true, roe = false, evaluated = false, selected = false;
         std::array<bool, 5> active{};
+        bool rowMajorBlocks = false;
     };
     void EvaluateFlowJacobianBlock(const FlowJacobianView &, const EquationSystem &, index iRow, index iBlock, Eigen::Ref<Eigen::MatrixXd> output);
     void ApplyFlowJacobianBlock(const FlowJacobianView &, const EquationSystem &, index iRow, index iBlock, JacobianInput input, Eigen::Ref<Eigen::VectorXd> output);
@@ -246,7 +247,8 @@ namespace DNDS::Cauchy::CPU
         SpanView<const EquationBlockReadView> blocks;
         Algebra::DofComponentView<const real> input;
         RHSScalarView radius, tau, incoming;
-        Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::TableRows> diagonal, frozenRadius, boundaryMeans;
+        Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows> diagonal;
+        Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::TableRows> frozenRadius, boundaryMeans;
         std::optional<Algebra::BlockMatrixView<real>> offDiagonal;
         EquationFVDetail::MeanLinearizationOutput linearization;
         WallDistanceView walls;
@@ -255,6 +257,7 @@ namespace DNDS::Cauchy::CPU
         int independent = 0;
         bool fullBlock = true, directChemicalSource = false, hasWalls = false;
         bool linearizeBoundary = true;
+        bool rowMajorBlocks = false;
     };
     /// Initialize mass/rotation and freeze face signals before source addition.
     NumericalStatus InitializeEquationJacobian(const EquationJacobianPreparation &) noexcept;

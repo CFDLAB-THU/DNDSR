@@ -1,4 +1,5 @@
 #include "Cauchy/Discretization/FiniteVolume.hpp"
+#include "DNDS/Diagnostics/Timeline.hpp"
 #include "DNDS/MPI/Failure.hpp"
 #include "Cauchy/Core/NumericalFailure.hpp"
 #include "Cauchy/Implicit/JacobianGeometry.hpp"
@@ -132,7 +133,7 @@ namespace DNDS::Cauchy
         }
     };
 
-    std::shared_ptr<LinearProblemContext> FiniteVolume::BuildLinearProblem(const EquationDofs &prototype, DiagonalStorage diagonal, OffDiagonalStorage offDiagonal) const
+    std::shared_ptr<LinearProblemContext> FiniteVolume::BuildLinearProblem(const EquationDofs &prototype, DiagonalStorage diagonal, OffDiagonalStorage offDiagonal, LinearMatrixOptions storage) const
     {
         Metrics().Validate();
         _data->partition.Validate();
@@ -151,13 +152,14 @@ namespace DNDS::Cauchy
             partitions.starts.push_back(Mesh().LocalPartEnd(Mesh().NLocalParts() - 1));
         }
         return std::make_shared<LinearProblemContext>(prototype.Space(), prototype.ComponentNumber(),
-                                                      _data->jacobianColumns->CopyColumns(), _data->partition.Core(), diagonal, offDiagonal, prototype.Device(), std::move(partitions));
+                                                      _data->jacobianColumns->CopyColumns(), _data->partition.Core(), diagonal, offDiagonal, prototype.Device(), std::move(partitions), storage);
     }
     void FiniteVolume::PrepareJacobian(const EquationDofs &state, const AuxiliaryValues &auxiliary, const R::Array<real> &inversePseudoTime,
                                        LinearProblemContext &output, JacobianPreparation controls, real time, std::optional<Physics::Chemistry::ChemicalWorkerPool> workers,
                                        std::optional<JacobianContext> context) const
     {
         const auto *sourceWorkspace = context ? &context->workspace.get() : nullptr;
+        const TimelineScope timeline("Cauchy/Linear/PrepareJacobianAllBackends");
         ValidateAuxValues(state, auxiliary, time);
         if (state.Device() != R::Device::Host())
         {
@@ -252,7 +254,7 @@ namespace DNDS::Cauchy
             diagonal->CancelUnmodified();
             throw;
         }
-        const auto d = diagonal->View<R::TableRows>();
+        const auto d = diagonal->View<R::UniformTableRows>();
         std::optional<Algebra::BlockMatrixView<real>> b;
         if (off)
             b.emplace(off->View());
@@ -273,13 +275,14 @@ namespace DNDS::Cauchy
         CPU::EquationJacobianPreparation request{
             *snapshot, stencilRead.View(), metric, {_data->boundaryConditions.data(), index(_data->boundaryConditions.size())}, blockMetadata.HostView(), inputValues, radius, tau, incomingFace, d, snapshotWrite->radius.View<R::TableRows>(), boundaryMeansWrite.View<R::TableRows>(), b, {snapshot->flowFirst, snapshot->speciesFirst, snapshotWrite->derivative.View<R::TableRows>(), snapshotWrite->pressure.View<R::TableRows>(), output.HasAssembledOffDiagonal() ? std::nullopt : std::optional(snapshotWrite->means.View<R::TableRows>())}, wallValues, time, controls.residualScale, controls.physicalMass, owned, all, snapshot->independent, output.DiagonalMode() == DiagonalStorage::Block, chemical && !sourceWorkspace, bool(wallRead)};
         request.linearizeBoundary = controls.scalarBoundaryDerivative;
+        request.rowMajorBlocks = output.RowMajorBlocks();
         try
         {
             RequireNumericalSuccess(CPU::InitializeEquationJacobian(request), "initialize equation Jacobian");
             bool ownedPropertiesPrepared = false;
             if ((chemical || rans) && sourceWorkspace)
                 ownedPropertiesPrepared = AddEquationSourceJacobian(state, *context, *diagonal,
-                                                                    output.DiagonalMode(), controls.residualScale, pointWorkers.front().evaluator, std::cref(request.linearization));
+                                                                    output.DiagonalMode(), controls.residualScale, pointWorkers.front().evaluator, std::cref(request.linearization), output.RowMajorBlocks());
             RequireNumericalSuccess(CPU::CompleteEquationJacobian(request, _data->boundaryPoint,
                                                                   {pointWorkers.data(), index(pointWorkers.size())}, ownedPropertiesPrepared),
                                     "complete equation Jacobian");

@@ -3,6 +3,7 @@
 #include "DNDS/Math/HardEigen.hpp"
 #include "DNDS/Core/NumericalStatus.hpp"
 #include "Solver/InverseRefinement.hpp"
+#include "Solver/SmallBlockInverse.hpp"
 #include <Eigen/LU>
 #include <cmath>
 
@@ -33,7 +34,7 @@ namespace DNDS::Direct
         DiagonalBlockInverseResult<Matrix> result;
         Eigen::PartialPivLU<Matrix> lu(normalized);
         const real conditionReciprocal = lu.rcond();
-        bool usable = std::isfinite(conditionReciprocal) && conditionReciprocal >= 1e-7;
+        bool usable = std::isfinite(conditionReciprocal) && conditionReciprocal >= DiagonalLUConditionMinimum;
         if (usable)
         {
             result.value = lu.solve(Matrix::Identity(matrix.rows(), matrix.cols()));

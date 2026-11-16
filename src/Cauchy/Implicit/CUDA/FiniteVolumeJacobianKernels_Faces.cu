@@ -14,13 +14,13 @@ namespace DNDS::Cauchy::CUDA
     {
         template <int N>
         __device__ NumericalStatus FaceRow(const JacobianFaceInput &q, index iCell,
-                                           LinearWriteRows diagonal, bool fullBlock, LinearWriteRows magnitudes)
+                                           MatrixWriteRows diagonal, bool fullBlock, LinearWriteRows magnitudes)
         {
             const auto &p = q.parameters;
             std::array<real, N * N> own{};
             for (int j = 0; j < N; ++j)
                 for (int i = 0; i < N; ++i)
-                    own[i + N * j] = fullBlock ? diagonal(iCell, i + N * j) : (i == j ? diagonal(iCell, i) : 0);
+                    own[i + N * j] = fullBlock ? diagonal(iCell, q.rowMajorBlocks ? i * N + j : i + N * j) : (i == j ? diagonal(iCell, i) : 0);
             std::array<real, N> mean{};
             for (int j = 0; j < N; ++j)
                 mean[j] = q.means(iCell, j);
@@ -173,11 +173,11 @@ namespace DNDS::Cauchy::CUDA
                         return NumericalStatus{NumericalError::InvalidState, 5, iCell};
                 }
             for (int j = 0; j < (fullBlock ? N * N : N); ++j)
-                diagonal(iCell, j) = fullBlock ? own[j] : own[j + N * j];
+                diagonal(iCell, fullBlock && q.rowMajorBlocks ? (j % N) * N + j / N : j) = fullBlock ? own[j] : own[j + N * j];
             return {};
         }
         template <int N>
-        __global__ void Faces(JacobianFaceInput input, LinearIndexRows selected, LinearWriteRows diagonal,
+        __global__ void Faces(JacobianFaceInput input, LinearIndexRows selected, MatrixWriteRows diagonal,
                               bool fullBlock, LinearWriteRows magnitudes, JacobianStatus status)
         {
             for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x;
@@ -191,12 +191,12 @@ namespace DNDS::Cauchy::CUDA
         template <class View>
         void Table(View view, index rows, index width)
         {
-            DNDS_check_throw_info(view.kind == R::RowLayoutKind::Table && view.RowCount() == rows && view.Width() == width,
+            DNDS_check_throw_info((view.kind == R::RowLayoutKind::Table || view.kind == R::RowLayoutKind::ColMajorTable || view.kind == R::RowLayoutKind::TiledColMajorTable) && view.RowCount() == rows && view.Width() == width,
                                   "CUDA Jacobian face table shape differs");
         }
     }
     void AddJacobianFaces(R::ExecutionContext context, const JacobianFaceInput &input,
-                          LinearIndexRows selected, LinearWriteRows diagonal, bool fullBlock,
+                          LinearIndexRows selected, MatrixWriteRows diagonal, bool fullBlock,
                           LinearWriteRows magnitudes, JacobianStatus status)
     {
         const auto &p = input.parameters;

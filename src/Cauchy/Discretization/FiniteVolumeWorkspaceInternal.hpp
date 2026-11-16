@@ -637,11 +637,11 @@ namespace DNDS::Cauchy
         bool AddRHSQuadratureSourceJacobian(
             const EquationDofs &state, const R::Array<real>::WriteLease &diagonal,
             DiagonalStorage storage, real scale, PointEvaluator &evaluator,
-            OptionalRef<const EquationFVDetail::MeanLinearizationOutput> linearization) const;
+            OptionalRef<const EquationFVDetail::MeanLinearizationOutput> linearization, bool rowMajorBlocks = false) const;
         bool AddMeanSourceJacobian(
             const EquationDofs &state, const R::Array<real>::WriteLease &diagonal,
             DiagonalStorage storage, real scale, PointEvaluator &evaluator,
-            OptionalRef<const EquationFVDetail::MeanLinearizationOutput> linearization = {}) const;
+            OptionalRef<const EquationFVDetail::MeanLinearizationOutput> linearization = {}, bool rowMajorBlocks = false) const;
         void PublishSourceState(const EquationDofs &state, real time);
         bool SourceSamplesCurrent(const EquationDofs &state, real time) const;
         void PrepareVolumeSource(const EquationDofs &state,

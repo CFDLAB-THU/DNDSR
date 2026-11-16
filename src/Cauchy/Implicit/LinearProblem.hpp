@@ -26,6 +26,19 @@ namespace DNDS::Cauchy
         Native,
         Tiled32
     };
+    /// Explicit CUDA small-block kernel selection. CPU always retains the
+    /// canonical guarded Eigen LU/SVD implementation.
+    enum class CUDADiagonalInverse
+    {
+        BatchedSVD,
+        GuardedLU
+    };
+    /// Launch mapping only; the component and sparse accumulation orders are
+    /// unchanged. CUDA component groups are available for assembled Jacobi.
+    struct LinearKernelOptions
+    {
+        bool componentGroups = false;
+    };
     enum class DiagonalStorage
     {
         Entries,
@@ -43,6 +56,17 @@ namespace DNDS::Cauchy
     struct LinearSweepPartitions
     {
         std::vector<index> starts;
+    };
+    /// Independent numeric matrix layouts and the primary symbolic index ABI.
+    /// Int32 is opt-in for providers which borrow that exact representation.
+    struct LinearMatrixOptions
+    {
+        Algebra::MatrixTableOptions diagonal, inverse, offDiagonal;
+        LinearIndexStorage indices = LinearIndexStorage::Int64;
+        /// Dense component order, independent of physical table layout. The
+        /// default remains column-major; AmgX chooses primary row-major blocks
+        /// for diagonal, inverse and off-diagonal together, without shadows.
+        bool rowMajorBlocks = false;
     };
     /// Integrated residual convention: A=M/dTau+physicalMass*M-residualScale*J_R.
     /// Roe dissipation requires a full diagonal block. Scalar dissipation may
@@ -82,7 +106,7 @@ namespace DNDS::Cauchy
         template <class State>
         void SubmitRows(Runtime::EagerEngine &, const Runtime::ExecutionStream &,
                         OptionalRef<const State> rhs, OptionalRef<const State> input,
-                        State &output, LinearRegion region) const;
+                        State &output, LinearRegion region, LinearKernelOptions options = {}) const;
         struct Pattern
         {
             std::shared_ptr<const Algebra::DofSpace::Partition> partition;
@@ -90,7 +114,7 @@ namespace DNDS::Cauchy
             Runtime::MetadataBuffer<index> sweepPartitions;
             /// Host validation metadata only; resident numerical operators
             /// consume rows. This avoids copying device indices per publication.
-            std::optional<Runtime::Array<index>> hostColumns;
+            std::shared_ptr<const LinearPatternStorage> hostRows;
             bool hasGhostColumns = false;
             explicit Pattern(std::shared_ptr<const Algebra::DofSpace::Partition> rowsIdentity)
                 : partition(std::move(rowsIdentity)) {}
@@ -100,6 +124,7 @@ namespace DNDS::Cauchy
         std::shared_ptr<const LinearPatternStorage> _validatedColumns;
         index _components;
         DiagonalStorage _diagonalStorage;
+        bool _rowMajorBlocks;
         Runtime::Array<real> _diagonal, _inverse;
         OffDiagonalStorage _offDiagonalStorage;
         std::optional<Algebra::BlockMatrixStorage> _offDiagonal;
@@ -123,7 +148,7 @@ namespace DNDS::Cauchy
         Runtime::Array<NumericalStatus> &ActionStatus() const;
         struct ILUState;
         std::shared_ptr<ILUState> _ilu;
-        static std::shared_ptr<const Pattern> BuildPattern(const Algebra::DofSpace &space, std::vector<std::vector<index>> columns, std::vector<index> core, LinearSweepPartitions partitions);
+        static std::shared_ptr<const Pattern> BuildPattern(const Algebra::DofSpace &space, std::vector<std::vector<index>> columns, std::vector<index> core, LinearSweepPartitions partitions, LinearIndexStorage indices);
         const Pattern &Layout() const
         {
             DNDS_check_throw_info(_pattern, "linear context was moved");
@@ -145,7 +170,8 @@ namespace DNDS::Cauchy
                              std::vector<std::vector<index>> columns,
                              std::vector<index> core, DiagonalStorage diagonal,
                              OffDiagonalStorage offDiagonal = OffDiagonalStorage::Assembled,
-                             Runtime::Device device = Runtime::Device::Host(), LinearSweepPartitions partitions = {});
+                             Runtime::Device device = Runtime::Device::Host(), LinearSweepPartitions partitions = {},
+                             LinearMatrixOptions matrixOptions = {});
         LinearProblemContext(const LinearProblemContext &) = delete;
         LinearProblemContext &operator=(const LinearProblemContext &) = delete;
         LinearProblemContext(LinearProblemContext &&) noexcept = default;
@@ -156,6 +182,7 @@ namespace DNDS::Cauchy
             return _space;
         }
         index Components() const { return _components; }
+        bool RowMajorBlocks() const { return _rowMajorBlocks; }
         Runtime::Device Device() const { return _diagonal.GetDevice(); }
         /// Prepare optional layout shadows for vector reads only. Primary state,
         /// matrix blocks and output remain unchanged. Call before queued actions;
@@ -170,6 +197,9 @@ namespace DNDS::Cauchy
         void ResetQueuedActionStatus(Runtime::EagerEngine &, const Runtime::ExecutionStream &) const;
         DiagonalStorage DiagonalMode() const { return _diagonalStorage; }
         std::vector<std::vector<index>> Columns() const { return Layout().rows.CopyColumns(); }
+        /// Native host symbolic publication, shared with a compatible provider.
+        /// No index conversion, sorting or rank-local filtering is performed.
+        const LinearPatternStorage &HostPattern() const { return Layout().hostRows ? *Layout().hostRows : Layout().rows; }
         /// Validate an immutable producer stencil once, then compare identity.
         /// Caller serializes preparation with context use. Retaining the token
         /// prevents address reuse; a new mesh/order supplies a new token.
@@ -239,11 +269,12 @@ namespace DNDS::Cauchy
         /// into guarded residual corrections, preserving discarded SVD modes.
         void InvertDiagonal(int refinementSteps = 0);
         index LastInverseFallbacks() const { return _inverseFallbacks; }
-        /// CPU: fallback rows. CUDA full blocks: all rows use batched SVD.
+        /// Number of blocks actually processed by the selected SVD path.
         index LastInverseSVDCells() const { return _inverseSVDCells; }
         /// Setup-only workspace/provider creation. Repeated calls on the same
         /// context reuse allocations. Do this before entering the solve loop.
-        void PrepareDiagonalInverse(Runtime::ExecutionContext context);
+        void PrepareDiagonalInverse(Runtime::ExecutionContext context,
+                                    CUDADiagonalInverse kernel = CUDADiagonalInverse::BatchedSVD);
         /// Queue CPU inversion or CUDA scale/SVD/recovery/status reduction.
         /// The current inverse is invalid until ObserveDiagonalInverse succeeds.
         /// Every operand and provider is retained beyond this object's lifetime.
@@ -277,11 +308,11 @@ namespace DNDS::Cauchy
          */
         void SubmitApply(Runtime::EagerEngine &, const Runtime::ExecutionStream &, const Field &, Field &, LinearRegion = LinearRegion::All) const;
         void SubmitApply(Runtime::EagerEngine &, const Runtime::ExecutionStream &, const EquationDofs &, EquationDofs &, LinearRegion = LinearRegion::All) const;
-        void SubmitJacobi(Runtime::EagerEngine &, const Runtime::ExecutionStream &, const Field &, const Field &, Field &, LinearRegion = LinearRegion::All) const;
-        void SubmitJacobi(Runtime::EagerEngine &, const Runtime::ExecutionStream &, const EquationDofs &, const EquationDofs &, EquationDofs &, LinearRegion = LinearRegion::All) const;
+        void SubmitJacobi(Runtime::EagerEngine &, const Runtime::ExecutionStream &, const Field &, const Field &, Field &, LinearRegion = LinearRegion::All, LinearKernelOptions = {}) const;
+        void SubmitJacobi(Runtime::EagerEngine &, const Runtime::ExecutionStream &, const EquationDofs &, const EquationDofs &, EquationDofs &, LinearRegion = LinearRegion::All, LinearKernelOptions = {}) const;
         /// Zero-start reserves neither old input nor off-diagonal values.
-        void SubmitJacobiZero(Runtime::EagerEngine &, const Runtime::ExecutionStream &, const Field &, Field &, LinearRegion = LinearRegion::All) const;
-        void SubmitJacobiZero(Runtime::EagerEngine &, const Runtime::ExecutionStream &, const EquationDofs &, EquationDofs &, LinearRegion = LinearRegion::All) const;
+        void SubmitJacobiZero(Runtime::EagerEngine &, const Runtime::ExecutionStream &, const Field &, Field &, LinearRegion = LinearRegion::All, LinearKernelOptions = {}) const;
+        void SubmitJacobiZero(Runtime::EagerEngine &, const Runtime::ExecutionStream &, const EquationDofs &, EquationDofs &, LinearRegion = LinearRegion::All, LinearKernelOptions = {}) const;
         /// Move-only access scope for one staged symmetric-GS application.
         /// Lower runs Core then HaloDependent; Upper runs HaloDependent then
         /// Core. All is available for either complete scan. Finish publishes

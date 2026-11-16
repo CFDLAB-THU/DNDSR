@@ -14,14 +14,15 @@ namespace DNDS::Cauchy
     struct LinearProblemContext::InverseWorkspace
     {
         R::ExecutionContext context;
+        CUDADiagonalInverse kernel;
         R::Array<NumericalStatus> summary, rowStatus, statusScratch;
         std::optional<R::Array<index>> fallbackCount;
         R::Array<real> normalized, scales, singular, left, right, work;
         R::Array<int> info, truncated;
         std::shared_ptr<Algebra::BatchedSVD> provider;
         uint64_t sourceEpoch = 0, inverseEpoch = 0;
-        explicit InverseWorkspace(R::ExecutionContext where, index rows, int width, bool fullBlock)
-            : context(where), summary(R::RowLayout::Dense(1, 1), where.device)
+        explicit InverseWorkspace(R::ExecutionContext where, index rows, int width, bool fullBlock, CUDADiagonalInverse selected)
+            : context(where), kernel(selected), summary(R::RowLayout::Dense(1, 1), where.device)
         {
             summary.SetName("linear/inverse/status");
             if (where.device == R::Device::Host())
@@ -37,6 +38,14 @@ namespace DNDS::Cauchy
             statusScratch.SetName("linear/inverse/statusScratch");
             if (!fullBlock)
                 return;
+            if (kernel == CUDADiagonalInverse::GuardedLU)
+            {
+                truncated = R::Array<int>(R::RowLayout::Dense(rows, 1), where.device);
+                truncated.SetName("linear/inverse/fallbackMask");
+                fallbackCount.emplace(R::RowLayout::Dense(1, 1), where.device);
+                fallbackCount->SetName("linear/inverse/fallbackCount");
+                return;
+            }
             normalized = R::Array<real>(R::RowLayout::Dense(rows, width * width), where.device);
             scales = R::Array<real>(R::RowLayout::Dense(rows, width), where.device);
             singular = R::Array<real>(scales.Layout(), where.device);
@@ -62,13 +71,14 @@ namespace DNDS::Cauchy
 #endif
         }
     };
-    void LinearProblemContext::PrepareDiagonalInverse(R::ExecutionContext context)
+    void LinearProblemContext::PrepareDiagonalInverse(R::ExecutionContext context, CUDADiagonalInverse kernel)
     {
         ValidateMatrix();
         DNDS_check_throw_info(!_inversePending && context.device == Device(), "inverse setup has pending work or a different device");
-        if (_inverseWorkspace && _inverseWorkspace->context.device == context.device && _inverseWorkspace->context.stream == context.stream)
+        DNDS_check_throw_info(kernel == CUDADiagonalInverse::BatchedSVD || kernel == CUDADiagonalInverse::GuardedLU, "invalid CUDA inverse kernel");
+        if (_inverseWorkspace && _inverseWorkspace->context.device == context.device && _inverseWorkspace->context.stream == context.stream && _inverseWorkspace->kernel == kernel)
             return;
-        _inverseWorkspace = std::make_shared<InverseWorkspace>(context, index(_space.OwnedRows()), int(_components), _diagonalStorage == DiagonalStorage::Block);
+        _inverseWorkspace = std::make_shared<InverseWorkspace>(context, index(_space.OwnedRows()), int(_components), _diagonalStorage == DiagonalStorage::Block, kernel);
     }
     void LinearProblemContext::SubmitInvertDiagonal(R::EagerEngine &engine, const R::ExecutionStream &stream, int refinementSteps)
     {
@@ -87,28 +97,32 @@ namespace DNDS::Cauchy
         retained->sourceEpoch = _diagonal.MutationEpoch();
         const int width = int(_components);
         const bool fullBlock = _diagonalStorage == DiagonalStorage::Block;
+        const bool rowMajor = RowMajorBlocks();
         if (context.device == R::Device::Host())
         {
-            R::SubmitArrays(engine, stream, [retained, width, fullBlock, refinementSteps](R::ExecutionContext, auto diagonal, auto inverse, auto status, auto counts)
+            R::SubmitArrays(engine, stream, [retained, width, fullBlock, refinementSteps, rowMajor](R::ExecutionContext, auto diagonal, auto inverse, auto status, auto counts)
                             {
-                const auto result = CPU::InvertLinearDiagonal({diagonal, inverse, width, fullBlock, refinementSteps});
+                const auto result = CPU::InvertLinearDiagonal({diagonal, inverse, width, fullBlock, refinementSteps, rowMajor});
                 status(0, 0) = result.status;
-                counts(0, 0) = result ? result.value : 0; }, R::ReadAs<R::TableRows>(_diagonal), R::WriteAs<R::TableRows>(_inverse), R::WriteAs<R::FixedRows<1>>(retained->summary), R::WriteAs<R::FixedRows<1>>(*retained->fallbackCount));
+                counts(0, 0) = result ? result.value : 0; }, R::ReadAs<R::UniformTableRows>(_diagonal), R::WriteAs<R::UniformTableRows>(_inverse), R::WriteAs<R::FixedRows<1>>(retained->summary), R::WriteAs<R::FixedRows<1>>(*retained->fallbackCount));
         }
         else
         {
 #ifdef DNDS_USE_CUDA
             if (!fullBlock)
                 R::SubmitArrays(engine, stream, [retained, width](R::ExecutionContext context, auto diagonal, auto inverse, auto status)
-                                { CUDA::InvertDiagonalEntries(context, diagonal, inverse, status, width); }, R::ReadAs<R::TableRows>(_diagonal), R::WriteAs<R::TableRows>(_inverse), R::WriteAs<R::FixedRows<1>>(retained->rowStatus));
+                                { CUDA::InvertDiagonalEntries(context, diagonal, inverse, status, width); }, R::ReadAs<R::UniformTableRows>(_diagonal), R::WriteAs<R::UniformTableRows>(_inverse), R::WriteAs<R::FixedRows<1>>(retained->rowStatus));
+            else if (retained->kernel == CUDADiagonalInverse::GuardedLU)
+                R::SubmitArrays(engine, stream, [retained, width, refinementSteps, rowMajor](R::ExecutionContext context, auto diagonal, auto inverse, auto status, auto fallback, auto count)
+                                { CUDA::InvertSmallBlocks(context, diagonal, inverse, status, fallback, count, width, refinementSteps, rowMajor); }, R::ReadAs<R::UniformTableRows>(_diagonal), R::WriteAs<R::UniformTableRows>(_inverse), R::WriteAs<R::FixedRows<1>>(retained->rowStatus), R::WriteAs<R::FixedRows<1>>(retained->truncated), R::WriteAs<R::FixedRows<1>>(*retained->fallbackCount));
             else
             {
-                R::SubmitArrays(engine, stream, [retained, width](R::ExecutionContext context, auto diagonal, auto normalized, auto scales, auto status)
-                                { CUDA::PrepareDiagonalSVD(context, diagonal, normalized, scales, status, width); }, R::ReadAs<R::TableRows>(_diagonal), R::WriteAs<R::TableRows>(retained->normalized), R::WriteAs<R::TableRows>(retained->scales), R::WriteAs<R::FixedRows<1>>(retained->rowStatus));
+                R::SubmitArrays(engine, stream, [retained, width, rowMajor](R::ExecutionContext context, auto diagonal, auto normalized, auto scales, auto status)
+                                { CUDA::PrepareDiagonalSVD(context, diagonal, normalized, scales, status, width, rowMajor); }, R::ReadAs<R::UniformTableRows>(_diagonal), R::WriteAs<R::UniformTableRows>(retained->normalized), R::WriteAs<R::UniformTableRows>(retained->scales), R::WriteAs<R::FixedRows<1>>(retained->rowStatus));
                 R::SubmitArrays(engine, stream, [retained](R::ExecutionContext context, auto a, auto s, auto u, auto v, auto work, auto info)
                                 { retained->provider->SubmitBorrowed(context, {a, s, u, v}, work, info); }, R::ReadWrite(retained->normalized), R::Write(retained->singular), R::Write(retained->left), R::Write(retained->right), R::Write(retained->work), R::Write(retained->info));
-                R::SubmitArrays(engine, stream, [retained, width, refinementSteps](R::ExecutionContext context, auto diagonal, auto s, auto u, auto v, auto scales, auto info, auto inverse, auto status, auto truncated)
-                                { CUDA::CompleteDiagonalSVD(context, diagonal, s, u, v, scales, info, inverse, status, truncated, width, refinementSteps); }, R::ReadAs<R::TableRows>(_diagonal), R::ReadAs<R::TableRows>(retained->singular), R::ReadAs<R::TableRows>(retained->left), R::ReadAs<R::TableRows>(retained->right), R::ReadAs<R::TableRows>(retained->scales), R::ReadAs<R::FixedRows<1>>(retained->info), R::WriteAs<R::TableRows>(_inverse), R::ReadWriteAs<R::FixedRows<1>>(retained->rowStatus), R::WriteAs<R::FixedRows<1>>(retained->truncated));
+                R::SubmitArrays(engine, stream, [retained, width, refinementSteps, rowMajor](R::ExecutionContext context, auto diagonal, auto s, auto u, auto v, auto scales, auto info, auto inverse, auto status, auto truncated)
+                                { CUDA::CompleteDiagonalSVD(context, diagonal, s, u, v, scales, info, inverse, status, truncated, width, refinementSteps, rowMajor); }, R::ReadAs<R::UniformTableRows>(_diagonal), R::ReadAs<R::UniformTableRows>(retained->singular), R::ReadAs<R::UniformTableRows>(retained->left), R::ReadAs<R::UniformTableRows>(retained->right), R::ReadAs<R::UniformTableRows>(retained->scales), R::ReadAs<R::FixedRows<1>>(retained->info), R::WriteAs<R::UniformTableRows>(_inverse), R::ReadWriteAs<R::FixedRows<1>>(retained->rowStatus), R::WriteAs<R::FixedRows<1>>(retained->truncated));
             }
             R::SubmitArrays(engine, stream, [retained](R::ExecutionContext context, auto rows, auto scratch, auto summary)
                             { CUDA::ReduceNumericalStatus(context, rows, {}, scratch, summary); }, R::ReadAs<R::FixedRows<1>>(retained->rowStatus), R::WriteAs<R::FixedRows<1>>(retained->statusScratch), R::WriteAs<R::FixedRows<1>>(retained->summary));
@@ -133,7 +147,8 @@ namespace DNDS::Cauchy
                               "inverse operands changed after preparation submission");
         if (retained.fallbackCount)
         {
-            const auto count = retained.fallbackCount->Read();
+            const auto counts = Device() == R::Device::Host() ? *retained.fallbackCount : retained.fallbackCount->To(R::Device::Host());
+            const auto count = counts.Read();
             _inverseFallbacks = count.View<R::FixedRows<1>>()(0, 0);
             _inverseSVDCells = _inverseFallbacks;
         }

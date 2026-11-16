@@ -3,10 +3,10 @@
 namespace DNDS::Cauchy::CPU
 {
     void FillLinearFactor(LinearDiagonalRows diagonal, OffDiagonalView blocks, Algebra::BlockMatrixView<real> factor,
-                          Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::CSRRows> sourceBlocks,
-                          index components, bool fullDiagonal)
+                          LinearColumnsView sourceBlocks,
+                          index components, bool fullDiagonal, bool rowMajorBlocks)
     {
-        const auto d = Algebra::MakeEigenRowMatrices(diagonal, components, fullDiagonal ? components : 1);
+        const auto d = Algebra::MakeEigenRowMatrices(diagonal, components, fullDiagonal ? components : 1, Runtime::Device::Host(), rowMajorBlocks);
         blocks.WithBlocks([&](const auto &values)
                           { FillILUBlocks(d, values, factor, sourceBlocks, fullDiagonal); });
     }

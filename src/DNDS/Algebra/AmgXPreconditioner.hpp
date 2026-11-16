@@ -1,10 +1,16 @@
 #pragma once
 
-#include "DNDS/Runtime/Array/ArrayView.hpp"
+#include "DNDS/Runtime/Array/Array.hpp"
 #include <memory>
+#include <optional>
 
 namespace DNDS::Algebra
 {
+    enum class AmgXBlockFormat
+    {
+        RowMajor,
+        ColumnMajor
+    };
     /// Fixed linear cycle parameters. No residual-based inner stopping or inner
     /// Krylov method: ordinary left GMRES requires a fixed linear action.
     struct AmgXSettings
@@ -14,6 +20,7 @@ namespace DNDS::Algebra
         int maxLevels = 20, minCoarseRows = 16;
         /// Applied explicitly in the Jacobi smoother scope, including coarsest sweeps.
         real relaxation = 0.75;
+        AmgXBlockFormat blockFormat = AmgXBlockFormat::RowMajor;
     };
 
     /** Single-device FP64 AMG for one rank's owned-owned principal matrix.
@@ -48,19 +55,22 @@ namespace DNDS::Algebra
         AmgXPreconditioner(const AmgXPreconditioner &) = delete;
         AmgXPreconditioner &operator=(const AmgXPreconditioner &) = delete;
 
-        /// Copies host CSR indices into private Runtime Arrays. Columns
-        /// must be sorted, unique and local, and each row must contain a diagonal.
+        /// Share the caller's native compact int32 CSR allocations, retaining
+        /// read leases until replacement/destruction. No conversion, sorting or
+        /// index copy occurs. Columns must be unique and local. A separate
+        /// diagonal permits the CSR to contain off-diagonal entries only.
         /// Zero-row ranks use offsets={0}, columns={} and perform an empty apply.
         /// blockSize=1 represents a genuinely scalar system; 5/6/7 use native
-        /// row-major cell blocks. The pinned provider patch enables widths 6/7
+        /// blocks in settings.blockFormat. The pinned provider patch enables widths 6/7
         /// without padding or scalarizing coupled equations.
-        void SetPattern(Runtime::ArrayView<const int> offsets,
-                        Runtime::ArrayView<const int> columns, int blockSize = 1);
-        /// Device values ordered by CSR entry, then row-major block entries,
+        void SetPattern(const Runtime::Array<int> &offsets,
+                        const Runtime::Array<int> &columns, int blockSize = 1, bool separateDiagonal = false);
+        /// Device values ordered by CSR entry, then configured block order,
         /// stored as a compact scalar table. Upload/rebuild is outside
         /// the Krylov solve. Repeated calls reuse the matrix's published pattern.
         void UpdateValuesBorrowed(Runtime::ExecutionContext context,
-                                  Runtime::ArrayView<const real> values);
+                                  Runtime::ArrayView<const real> values,
+                                  std::optional<Runtime::ArrayView<const real>> diagonal = {});
         /// Apply from zero with fixed cycles. Input/output are compact scalar
         /// tables (N x 1), never aliased. Completion is host-visible on return.
         void ApplyBorrowed(Runtime::ExecutionContext context,

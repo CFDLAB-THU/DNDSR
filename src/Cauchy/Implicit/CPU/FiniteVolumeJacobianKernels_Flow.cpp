@@ -243,7 +243,7 @@ namespace DNDS::Cauchy::CPU
             }
             if (request.fullBlock)
                 for (int j = 0; j < 25; ++j)
-                    d(iCell, j) = own.data()[j];
+                    d(iCell, request.rowMajorBlocks ? (j % 5) * 5 + j / 5 : j) = own.data()[j];
             else
                 for (int j = 0; j < 5; ++j)
                     d(iCell, j) = own(j, j);

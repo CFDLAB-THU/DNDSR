@@ -57,7 +57,7 @@ namespace DNDS::Cauchy
     bool FiniteVolume::AddEquationSourceJacobian(const EquationDofs &state,
                                                  const JacobianContext &context,
                                                  const R::Array<real>::WriteLease &diagonal, DiagonalStorage storage, real scale, PointEvaluator &evaluator,
-                                                 OptionalRef<const EquationFVDetail::MeanLinearizationOutput> linearization) const
+                                                 OptionalRef<const EquationFVDetail::MeanLinearizationOutput> linearization, bool rowMajorBlocks) const
     {
         DNDS_check_throw_info(context.reconstruction,
                               "source Jacobian context has no reconstruction publication");
@@ -69,6 +69,6 @@ namespace DNDS::Cauchy
         if (_data->reconstruction)
             finalized.emplace(AcquireFinalizedReconstruction(reconstruction));
         auto activeReconstruction = work.BindReconstruction(reconstruction);
-        return work.AddMeanSourceJacobian(state, diagonal, storage, scale, evaluator, linearization);
+        return work.AddMeanSourceJacobian(state, diagonal, storage, scale, evaluator, linearization, rowMajorBlocks);
     }
 }

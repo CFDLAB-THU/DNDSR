@@ -136,7 +136,7 @@ namespace DNDS::Cauchy
         _ilu->current = false;
         const auto diagonal = _diagonal.Read();
         const auto offDiagonal = ReadOffDiagonal();
-        const auto d = diagonal.View<R::TableRows>();
+        const auto d = diagonal.View<R::UniformTableRows>();
         Clock::time_point gathered{};
         // TODO(large-species factors): support component-partitioned storage
         // through the generic factor algebra, not by zeroing dense factors
@@ -149,7 +149,7 @@ namespace DNDS::Cauchy
         _ilu->factors->FillAndFactorize([&](const auto &matrix)
                                         {
             CPU::FillLinearFactor(d, offDiagonal.View(), matrix, mapping.columns, _components,
-                                  _diagonalStorage == DiagonalStorage::Block);
+                                  _diagonalStorage == DiagonalStorage::Block, _rowMajorBlocks);
             gathered = profile ? Clock::now() : Clock::time_point{}; });
         _ilu->diagonalVersion = _diagonal.Version();
         _ilu->offDiagonalVersion = OffDiagonalGeneration();

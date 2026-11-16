@@ -30,9 +30,9 @@ namespace DNDS::Cauchy::CPU
         {
             constexpr int Size = decltype(width)::value;
             const auto input = Algebra::MakeEigenRowMatrices<Size, Size>(
-                request.diagonal, request.components, request.components);
+                request.diagonal, request.components, request.components, Runtime::Device::Host(), request.rowMajor);
             const auto output = Algebra::MakeEigenRowMatrices<Size, Size>(
-                request.inverse, request.components, request.components);
+                request.inverse, request.components, request.components, Runtime::Device::Host(), request.rowMajor);
             const index cells = request.diagonal.RowCount();
             const index parts = std::min<index>(OMP::DistributedThreads(), std::max<index>(1, cells));
             std::vector<index> counts(parts, 0);

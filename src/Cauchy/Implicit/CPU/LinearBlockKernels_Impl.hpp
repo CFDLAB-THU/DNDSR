@@ -296,7 +296,7 @@ namespace DNDS::Cauchy::CPU
     /// factorization facade; the generic LU implementation owns elimination.
     template <class Diagonal, class Blocks, class Factor>
     void FillILUBlocks(const Diagonal &diagonal, const Blocks &blocks, const Factor &factor,
-                       Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::CSRRows> sourceBlocks,
+                       LinearColumnsView sourceBlocks,
                        bool fullDiagonal)
     {
         OMP::ForRows(0, sourceBlocks.RowCount(), [&](index iCell)

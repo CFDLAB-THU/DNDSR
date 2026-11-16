@@ -20,11 +20,21 @@ namespace DNDS::CFV::Detail
                                       Runtime::PairReadView<real>, Runtime::PairReadView<real>, Runtime::ArrayView<const real>, Runtime::ArrayView<real>, Runtime::ArrayView<int>, bool floatFloat);
     void LaunchJacobiShared(Runtime::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
                             Runtime::PairReadView<real>, Runtime::PairReadView<real>, Runtime::ArrayView<const real>, Runtime::ArrayView<real>, Runtime::ArrayView<const int>);
+    /// Explicit FP64 mapping experiments: 0=wide grid with the reference
+    /// arithmetic, 1=static modal sizes, 2=shared neighbor matrix and row.
+    void LaunchJacobiOptimized(Runtime::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
+                               Runtime::PairReadView<real>, Runtime::PairReadView<real>, Runtime::ArrayView<const real>, Runtime::ArrayView<real>, Runtime::ArrayView<const int>, int mapping);
     /// Limited Jacobi preserves CPU alpha=1 neighbor exclusion and reports
     /// invalid penalties through the retained device status, without a drain.
     void LaunchLimitedJacobi(Runtime::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
                              Runtime::PairReadView<real>, Runtime::PairReadView<real>, Runtime::ArrayView<const real>,
                              Runtime::ArrayView<const real>, Runtime::ArrayView<const real>, Runtime::ArrayView<real>, Runtime::ArrayView<int>);
+    /// Original B gather followed by a local inverse, with independently laid-out
+    /// matrix/vector/inverse payloads. Mapping -1/0/1/2 = reference/wide/static/shared.
+    void LaunchRawJacobi(Runtime::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
+                         Runtime::PairReadView<real>, Runtime::PairReadView<real>, Runtime::ArrayView<const real>,
+                         Runtime::ArrayView<real>, Runtime::ArrayView<const int>, Runtime::ArrayView<const real>,
+                         Runtime::ArrayView<const real>, bool limited, int mapping);
     void LaunchWBAP(Runtime::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
                     Runtime::PairReadView<real>, Runtime::ArrayView<real>, Runtime::ArrayView<real>, DeviceCharacteristicView,
                     Runtime::ArrayView<const real>, Runtime::ArrayView<int>, index, index, real, index);

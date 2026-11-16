@@ -112,7 +112,7 @@ TEST_CASE("CUDA RANS quadrature sources and destruction diagonals match generic 
                 request.walls.cells = wp.View<R::CSRRows, false>();
                 request.ransMean = rans;
                 request.ransOutput = {output.View<R::UniformTableRows>(), 5, width - 5};
-                request.matrix = output.View<R::TableRows>();
+                request.matrix = output.View<R::UniformTableRows>();
                 request.cells = 2;
                 request.components = width;
                 request.flowFirst = 0;
@@ -168,7 +168,7 @@ TEST_CASE("CUDA RANS quadrature sources and destruction diagonals match generic 
                 request.wallMean = wm.View<R::FixedRows<1>>();
                 request.wallPoints = wp.View<R::CSRRows>();
                 request.cells = geo.View<R::FixedRows<8>, false>();
-                request.output = output.View<R::TableRows>();
+                request.output = output.View<R::UniformTableRows>();
                 request.status = errors.View<R::FixedRows<1>>();
                 request.components = width;
                 request.dimension = 2;
