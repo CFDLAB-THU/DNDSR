@@ -635,6 +635,11 @@ namespace DNDS::CFV
         ValidateDeviceStream(*this, stream);
         DNDS_check_throw_info(SupportsKernel(kernel), "requested CUDA reconstruction kernel is unavailable on this device/build");
         ValidateDeviceWorkspace(_device, work, input);
+        if (kernel == ReconstructionDeviceKernel::FP64Pipelined || kernel == ReconstructionDeviceKernel::FP64TensorCore ||
+            kernel == ReconstructionDeviceKernel::FP64TensorCoreWide || kernel == ReconstructionDeviceKernel::FP64TensorCoreShared ||
+            kernel == ReconstructionDeviceKernel::FP64TensorCoreAsync)
+            DNDS_check_throw_info(work.components <= 7,
+                                  "stage-once CUDA VR supports at most seven components; select the generic FP64 kernel for larger systems");
         if (kernel == ReconstructionDeviceKernel::FP64Shared || kernel == ReconstructionDeviceKernel::FP64MatrixShared)
             DNDS_check_throw_info(work.components >= 5 && work.components <= 7,
                                   "shared FP64 SIMT reconstruction requires 5/6/7 components");
@@ -858,6 +863,13 @@ namespace DNDS::CFV
 #ifndef DNDS_USE_CUDA
     namespace Detail
     {
+        ReconstructionSweepResources InspectStagedJacobi(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
+                                                         R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>,
+                                                         R::ArrayView<const int>, const ReconstructionSweepLaunch &, bool)
+        {
+            DNDS_check_throw_info(false, "stage-once CUDA VR resource inspection unavailable in this build");
+            return {};
+        }
         void LaunchStagedJacobi(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
                                 R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>,
                                 R::ArrayView<const int>, const ReconstructionSweepLaunch &, bool)

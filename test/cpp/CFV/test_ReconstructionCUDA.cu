@@ -1059,7 +1059,9 @@ TEST_CASE("CUDA preserves rotated periodic vectors and axisymmetric prepared ope
             cpuHalo.Begin().Wait();
             gpuHalo.Begin(R::ExecutionContext::CUDA(0)).Wait();
             plan.DoReconstructionIter(mean, cpuCoefficients, cpu, boundary);
-            resident.DoReconstructionIter(gpuMean, gpuCoefficients, gpu, gpuBoundary, jacobiKernel);
+            // Large coupled-component coverage belongs to the general kernel;
+            // the stage-once specializations deliberately cover flow5/6/7.
+            resident.DoReconstructionIter(gpuMean, gpuCoefficients, gpu, gpuBoundary, C::ReconstructionDeviceKernel::FP64);
             Equal(cpuCoefficients, gpuCoefficients, 2e-9);
         }
         for (int order = 2; order >= 1; --order)
@@ -1115,7 +1117,7 @@ TEST_CASE("CUDA degree three 3D reconstruction supports 37 coupled components an
             cpuHalo.Begin().Wait();
             gpuHalo.Begin(R::ExecutionContext::CUDA(0)).Wait();
             plan.DoReconstructionIter(mean, cpuCoefficients, cpu, boundary);
-            resident.DoReconstructionIter(gpuMean, gpuCoefficients, gpu, gpuBoundary, jacobiKernel);
+            resident.DoReconstructionIter(gpuMean, gpuCoefficients, gpu, gpuBoundary, C::ReconstructionDeviceKernel::FP64);
             Equal(cpuCoefficients, gpuCoefficients, 2e-9);
         }
         for (int order = 3; order >= 1; --order)

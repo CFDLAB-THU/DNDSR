@@ -51,9 +51,11 @@ TEST_CASE("Stage-once VR pipelines preserve complete modal batches and queued de
         I components;
         bool raw, triangle;
     };
-    // Three complementary shapes cover variable incidence counts/physical BC,
-    // rotated vector components, and 19-mode/7-component MMA/SIMT tails.
-    for (const auto profile : {Profile{0, 3, 5, false, false}, Profile{1, 2, 6, true, false}, Profile{2, 3, 7, true, true}})
+    // Cover the five compiled modal sizes (2/3/5/9/19) with complementary
+    // geometry, physical BC, rotation and 5/6/7-component tails, not a Cartesian
+    // product of geometry/degree/storage choices.
+    for (const auto profile : {Profile{0, 1, 5, false, false}, Profile{2, 1, 6, true, false},
+                               Profile{0, 3, 5, false, false}, Profile{1, 2, 6, true, false}, Profile{2, 3, 7, true, true}})
     {
         CAPTURE(profile.fixture);
         auto mesh = profile.fixture == 0 ? CFVTest::MixedCells(mpi) : profile.fixture == 1 ? CFVTest::Sector(mpi)
