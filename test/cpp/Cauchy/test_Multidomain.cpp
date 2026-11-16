@@ -337,9 +337,26 @@ TEST_CASE("P0 and physical-gradient P1 publish complete multidomain traces witho
             C::Simulation simulation(
                 C::SimulationConfig::ResolveCollective(input, mpi.comm), mpi.comm,
                 factory);
+            I interfaceCenters = 0;
+            for (I iDomain = 0; iDomain < 2; ++iDomain)
+                if (simulation.Local(iDomain))
+                {
+                    const auto &fv = simulation.GetDomain(iDomain).Discretization();
+                    const auto packet = fv.BuildBoundaryInputs();
+                    // Direct FV requests centers only. Matching must not also
+                    // send the same location as a one-point quadrature role.
+                    CHECK(fv.ReadBoundaryPoints().View().RowCount() == 0);
+                    CHECK(packet.QuadratureValues().Space().OwnedRows() == 0);
+                    const auto faces = fv.ReadBoundaryFaces();
+                    CHECK(packet.FaceCenterValues().Space().OwnedRows() == size_t(faces.View().RowCount()));
+                    for (I iFace = 0; iFace < faces.View().RowCount(); ++iFace)
+                        interfaceCenters += faces.View()(iFace, 0).interface;
+                }
+            interfaceCenters = DNDS::MPI::AllreduceValue<DNDS::MPI::Reduction::Sum>(interfaceCenters, mpi.comm);
             REQUIRE(simulation.Advance(.001).accepted);
             const auto diagnostics = simulation.GetInterfaceDiagnostics();
-            CHECK(diagnostics.queryPoints > 0);
+            CHECK(diagnostics.queryPoints == interfaceCenters);
+            CHECK(interfaceCenters > 0);
             CHECK(diagnostics.maximumGap <= .03);
             for (I iDomain = 0; iDomain < 2; ++iDomain)
                 if (simulation.Local(iDomain))

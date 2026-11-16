@@ -1,6 +1,7 @@
 #include "Cauchy/Discretization/FiniteVolumeWorkspaceInternal.hpp"
 #include "Cauchy/Discretization/CPU/FiniteVolumeGradientKernels.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeStateKernels.hpp"
+#include "Cauchy/Discretization/CUDA/FiniteVolumeGradientKernels.hpp"
 #include "Cauchy/Core/NumericalFailure.hpp"
 #include "DNDS/Runtime/Execution/EagerArrayBatch.hpp"
 
@@ -68,13 +69,13 @@ namespace DNDS::Cauchy
         struct Inputs
         {
             std::shared_ptr<const Data> owner;
-            Geom::MeshReadAccess geometry;
+            FiniteVolumeStencilStorage::ReadAccess stencil;
             R::MetadataBuffer<index> logicalField, logicalComponent, vectorStarts;
             std::vector<std::array<index, 2>> means;
             std::vector<index> gradients;
             index components, owned, ghost;
             explicit Inputs(std::shared_ptr<const Data> data) : owner(std::move(data)),
-                                                                geometry(owner->metrics.AcquireMeshRead()) {}
+                                                                stencil(owner->stencil.Read()) {}
         };
         auto pin = std::make_shared<Inputs>(owner);
         pin->logicalField = logicalField;
@@ -108,7 +109,7 @@ namespace DNDS::Cauchy
         outputArrays.push_back(directLimiterScratch);
         writes.push_back(R::WriteAs<R::UniformTableRows>(directLimiterScratch));
         CheckDisjoint(inputArrays, outputArrays);
-        R::SubmitArrayBatch(engine, stream, [pin, barth, count = cpuGradientWorkers](R::ExecutionContext, auto reads, auto writes, auto samples, auto offsets, auto cells)
+        R::SubmitArrayBatch(engine, stream, [pin, barth, count = cpuGradientWorkers](R::ExecutionContext, auto reads, auto writes)
                             {
             const auto columns = MeanColumns(reads, pin->means, pin->logicalField.HostView(), pin->logicalComponent.HostView());
             std::vector<ReadRows> source;
@@ -116,9 +117,8 @@ namespace DNDS::Cauchy
             for (const index slot : pin->gradients) source.push_back(reads[slot]);
             for (index iField = 0; iField < index(pin->gradients.size()); ++iField) destination.push_back(writes[iField]);
             CPU::GradientLimiterRequest request;
-            request.stencil.samples = samples;
-            request.stencil.offsets = offsets;
-            request.metric.cells = cells;
+            request.stencil = pin->stencil.View();
+            request.metric = request.stencil.metric;
             request.means = {{columns.data(), index(columns.size())}, pin->owned, pin->ghost, pin->components};
             request.source = {source.data(), index(source.size())}; request.destination = {destination.data(), index(destination.size())};
             request.logicalField = pin->logicalField.HostView(); request.logicalComponent = pin->logicalComponent.HostView();
@@ -129,7 +129,7 @@ namespace DNDS::Cauchy
             workers.reserve(size_t(count));
             for (index iWorker = 0; iWorker < count; ++iWorker)
                 workers.push_back(ScratchWindow(writes[index(destination.size())], 6 * iWorker, 6));
-            CPU::LimitPhysicalGradients(request, {workers.data(), index(workers.size())}); }, std::move(reads), std::move(writes), std::make_tuple(R::ReadAs<R::FixedRows<1>>(owner->stencil.samples), R::ReadAs<R::FixedRows<1>>(owner->stencil.offsets), R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics())));
+            CPU::LimitPhysicalGradients(request, {workers.data(), index(workers.size())}); }, std::move(reads), std::move(writes));
     }
 
     std::shared_ptr<FiniteVolume::Workspace::GradientPositivitySubmission> FiniteVolume::Workspace::SubmitGradientPositivity(
@@ -138,7 +138,7 @@ namespace DNDS::Cauchy
         FiniteVolume(owner).ValidateWorkspace(state, *this);
         DNDS_check_throw_info(engine.Owns(stream) && stream.Context().device == owner->metrics.Device() && nativeDirectGradient &&
                                   owner->settings.numerics.positivity && directGradients.size() == fields.size() &&
-                                  owner->stencil.positivityOffsets.RowCount() == owner->metrics.NumCell() + 1,
+                                  owner->maximumGradientPoints >= 0,
                               "gradient PP stream, placement or workspace differs");
         DNDS_check_throw_info(!pendingGradientStatistics || pendingGradientStatistics->published,
                               "publish the previous gradient PP diagnostics before resubmission");
@@ -146,22 +146,28 @@ namespace DNDS::Cauchy
         if (owner->metrics.Device() != R::Device::Host())
         {
 #ifdef DNDS_USE_CUDA
-            SubmitDeviceGradientPositivity(engine, stream, state);
             const auto device = owner->metrics.Device();
             if (!gradientStatistics)
             {
-                const index partials = CUDA::StateReductionScratchRows(owner->metrics.NumCell());
+                const index partials = CUDA::GradientPositivitySummaryRows(owner->metrics.NumCell());
                 gradientStatistics.emplace(LimiterStatisticsStorage{
+                    R::Array<NumericalStatus>(R::RowLayout::Dense(partials, 1), device), R::Array<NumericalStatus>(R::RowLayout::Dense(1, 1), device),
                     R::Array<index>(R::RowLayout::Dense(partials, 1), device), R::Array<index>(R::RowLayout::Dense(1, 1), device),
                     R::Array<real>(R::RowLayout::Dense(partials, 1), device), R::Array<real>(R::RowLayout::Dense(1, 1), device)});
+                gradientStatistics->partialStatus.SetName("Cauchy/gradientPP/statusPartials", DNDS_ALLOCATION_SITE());
+                gradientStatistics->status.SetName("Cauchy/gradientPP/statusResult", DNDS_ALLOCATION_SITE());
                 gradientStatistics->partialCount.SetName("Cauchy/gradientPP/countPartials", DNDS_ALLOCATION_SITE());
                 gradientStatistics->count.SetName("Cauchy/gradientPP/count", DNDS_ALLOCATION_SITE());
                 gradientStatistics->partialMinimum.SetName("Cauchy/gradientPP/minimumPartials", DNDS_ALLOCATION_SITE());
                 gradientStatistics->minimum.SetName("Cauchy/gradientPP/minimum", DNDS_ALLOCATION_SITE());
             }
             auto &statistics = *gradientStatistics;
-            R::SubmitArrays(engine, stream, [](R::ExecutionContext context, auto beta, auto counts, auto minima, auto count, auto minimum)
-                            { CUDA::ReduceLimiterStatistics(context, beta, counts, minima, count, minimum); }, R::ReadAs<R::TableRows>(preparationStatus->gradientBeta), R::WriteAs<R::FixedRows<1>>(statistics.partialCount), R::WriteAs<R::FixedRows<1>>(statistics.partialMinimum), R::WriteAs<R::FixedRows<1>>(statistics.count), R::WriteAs<R::FixedRows<1>>(statistics.minimum));
+            SubmitDeviceGradientPositivity(engine, stream, state);
+            R::SubmitArrays(engine, stream, [](R::ExecutionContext context, auto status, auto counts, auto minima, auto outputStatus, auto count, auto minimum)
+                            { CUDA::FinalizeModalPositivity(context, {status, counts, minima}, {outputStatus, count, minimum}); }, R::ReadWriteAs<R::FixedRows<1>>(statistics.partialStatus), R::ReadWriteAs<R::FixedRows<1>>(statistics.partialCount), R::ReadWriteAs<R::FixedRows<1>>(statistics.partialMinimum), R::WriteAs<R::FixedRows<1>>(statistics.status), R::WriteAs<R::FixedRows<1>>(statistics.count), R::WriteAs<R::FixedRows<1>>(statistics.minimum));
+            // Merge one compact status at the reporting boundary; never scan
+            // a cell-sized flag/beta/status field to obtain PP diagnostics.
+            AppendPreparationStatus(engine, stream, statistics.status);
             result->deviceCount = statistics.count;
             result->deviceMinimum = statistics.minimum;
             result->countEpoch = statistics.count.MutationEpoch();
@@ -175,14 +181,14 @@ namespace DNDS::Cauchy
         struct Inputs
         {
             std::shared_ptr<const Data> owner;
-            Geom::MeshReadAccess geometry;
+            FiniteVolumeStencilStorage::ReadAccess stencil;
             ThermalPolicy thermal;
             R::MetadataBuffer<index> logicalField, logicalComponent;
             std::vector<std::array<index, 2>> means;
             index components, ransFirst;
             RANSReconstructionView rans;
             Inputs(std::shared_ptr<const Data> data, const ThermalPolicy &policy)
-                : owner(std::move(data)), geometry(owner->metrics.AcquireMeshRead()), thermal(policy) {}
+                : owner(std::move(data)), stencil(owner->stencil.Read()), thermal(policy) {}
         };
         auto pin = std::make_shared<Inputs>(owner, thermal);
         pin->logicalField = logicalField;
@@ -191,7 +197,7 @@ namespace DNDS::Cauchy
         pin->ransFirst = ransFirst;
         pin->rans = owner->equation.HasRANS() ? ResolveRANSReconstructionPolicy(owner->equation) : RANSReconstructionView{};
         DNDS_check_throw_info(directPPSamples.Layout().Kind() == R::RowLayoutKind::Table &&
-                                  directPPSamples.RowCount() == owner->maximumPositivityPoints * cpuGradientWorkers &&
+                                  directPPSamples.RowCount() == owner->maximumGradientPoints * cpuGradientWorkers &&
                                   directPPSamples.Layout().Width() == size_t(pin->components),
                               "gradient PP scratch shape differs");
         std::vector<ReadOperand> reads;
@@ -208,14 +214,13 @@ namespace DNDS::Cauchy
         outputArrays.push_back(directPPSamples);
         writes.push_back(R::WriteAs<R::UniformTableRows>(directPPSamples));
         CheckDisjoint(inputArrays, outputArrays);
-        R::SubmitArrayBatch(engine, stream, [pin, result, count = cpuGradientWorkers](R::ExecutionContext, auto reads, auto writes, auto offsets, auto displacements)
+        R::SubmitArrayBatch(engine, stream, [pin, result, count = cpuGradientWorkers](R::ExecutionContext, auto reads, auto writes)
                             {
             const auto columns = MeanColumns(reads, pin->means, pin->logicalField.HostView(), pin->logicalComponent.HostView());
             std::vector<WriteRows> gradients;
             for (index iField = 0; iField < index(pin->means.size()); ++iField) gradients.push_back(writes[iField]);
             CPU::GradientPositivityRequest request;
-            request.stencil.positivityOffsets = offsets;
-            request.stencil.positivityDisplacements = displacements;
+            request.stencil = pin->stencil.View();
             request.means = {{columns.data(), index(columns.size())}, pin->owner->metrics.NumCell(), 0, pin->components};
             request.gradients = {gradients.data(), index(gradients.size())};
             request.logicalField = pin->logicalField.HostView(); request.logicalComponent = pin->logicalComponent.HostView();
@@ -226,13 +231,13 @@ namespace DNDS::Cauchy
             request.clippedPolicy = numerics.positivityClippedReferencePolicy == "backtracking"
                 ? ReconstructionClippedReferencePolicy::Backtracking : ReconstructionClippedReferencePolicy::FallbackToBase;
             std::vector<CPU::GradientPositivityWorkerScratch> workers(size_t(count), CPU::GradientPositivityWorkerScratch{});
-            const index points = pin->owner->maximumPositivityPoints;
+            const index points = pin->owner->maximumGradientPoints;
             for (index iWorker = 0; iWorker < count; ++iWorker)
                 workers[iWorker].samples = ScratchWindow(writes[index(gradients.size())], points * iWorker, points);
             const auto value = RequireNumericalSuccess(CPU::LimitPositivePhysicalGradients(request,
                 SpanView<CPU::GradientPositivityWorkerScratch>{workers.data(), index(workers.size())}), "queued gradient positivity");
             result->limited = value.limited; result->minimum = value.minimum;
-            result->completed.store(true, std::memory_order_release); }, std::move(reads), std::move(writes), std::make_tuple(R::ReadAs<R::FixedRows<1>>(owner->stencil.positivityOffsets), R::ReadAs<R::FixedRows<3>>(owner->stencil.positivityDisplacements)));
+            result->completed.store(true, std::memory_order_release); }, std::move(reads), std::move(writes));
         pendingGradientStatistics = result;
         return result;
     }

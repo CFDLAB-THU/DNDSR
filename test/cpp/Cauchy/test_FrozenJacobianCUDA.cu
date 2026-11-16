@@ -1,5 +1,8 @@
-#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
+#define DOCTEST_CONFIG_IMPLEMENT
 #include "doctest.h"
+#include "CompactStencilFixture.hpp"
+#include "CompactManagedStencilFixture.hpp"
+#include "../CFV/RotatedSectorFixture.hpp"
 #include "Cauchy/Implicit/CUDA/FrozenJacobianKernels.hpp"
 #include "Cauchy/Implicit/CUDA/FiniteVolumeJacobianKernels.hpp"
 #include "Cauchy/Implicit/CPU/FiniteVolumeJacobianKernels.hpp"
@@ -33,83 +36,46 @@ namespace
         R::Array<I> columns{R::RowLayout::Ragged({2, 1, 0, 1})};
         R::Array<I> offsets = Table<I>(5, 1, [](I i, I)
                                        { return std::array<I, 5>{0, 2, 3, 3, 4}[i]; });
-        R::Array<C::JacobianPointRecord> points{R::RowLayout::Ragged({2, 1, 1, 1})};
+        R::Array<I> points{R::RowLayout::Ragged({2, 1, 1, 1})};
+        CauchyTest::CompactStencilFixture::Input input;
         Geometry()
         {
-            auto c = columns.Write();
-            c.View()(0, 0) = 1;
-            c.View()(0, 1) = 4;
-            c.View()(1, 0) = 2;
-            c.View()(3, 0) = 0;
-            auto p = points.Write();
-            const auto view = p.View();
-            I sample = 0;
-            for (I iBlock = 0; iBlock < 4; ++iBlock)
-                for (I j = 0; j < view.RowSize(iBlock); ++j, ++sample)
-                {
-                    const bool rotated = sample % 2 == 0;
-                    // Two images of cell 1 share a block. The rotated image
-                    // deliberately mixes selected and unselected momenta.
-                    const std::array<real, 9> rotation = rotated ? std::array<real, 9>{0, 1, 0, -1, 0, 0, 0, 0, 1}
-                                                                 : std::array<real, 9>{1, 0, 0, 0, 1, 0, 0, 0, 1};
-                    view(iBlock, j) = {std::array<I, 4>{1, 4, 2, 0}[iBlock], sample, sample, {.6, .8, 0}, {.2 * sample, -.3, .1}, rotation, .7 + .1 * sample, rotated};
-                }
+            {
+                auto c = columns.Write();
+                c.View()(0, 0) = 1;
+                c.View()(0, 1) = 4;
+                c.View()(1, 0) = 2;
+                c.View()(3, 0) = 0;
+                auto p = points.Write();
+                I next = 0;
+                for (I iBlock = 0; iBlock < 4; ++iBlock)
+                    for (I j = 0; j < p.View().RowSize(iBlock); ++j)
+                        p.View()(iBlock, j) = next++;
+            }
+            // This is an explicit sparse-action incidence fixture, not a
+            // mesh-closure test. Two periodic images address the same block;
+            // one row has no off-diagonal incidence and one needs ghost 4.
+            input.cellFaces = {{0, 1, 2}, {3}, {}, {4}};
+            input.faceCells = {{{0, 1}}, {{0, 1}}, {{0, 4}}, {{1, 2}}, {{3, 0}}};
+            input.faceOffsets = {0, 1, 2, 3, 4, 5};
+            input.codes = {4, 0, 4, 0, 4};
+            input.parameters.rotatedGenerators = 1;
+            input.parameters.generators.rotation[1].map() << 0, -1, 0, 1, 0, 0, 0, 0, 1;
+            input.coreCells = {1, 2, 3};
+            input.dependentCells = {0};
+            input.coreFaces = {0, 1, 3, 4};
+            input.dependentFaces = {2};
+            for (I iCell = 0; iCell < 5; ++iCell)
+                input.cells.insert(input.cells.end(), {1, .2 * iCell, -.1 * iCell, .05, .2 * iCell, -.1 * iCell, .05, 1});
+            for (I iFace = 0; iFace < 5; ++iFace)
+            {
+                const std::initializer_list<real> metric{.2 * iFace, -.3, .1, .6, .8, 0, .7 + .1 * iFace};
+                input.faceMetrics.insert(input.faceMetrics.end(), metric);
+                input.quadrature.insert(input.quadrature.end(), metric);
+            }
         }
     };
-    std::shared_ptr<const C::FrozenJacobianOperator::Geometry> ManagedGeometry(const Geometry &source, R::ExecutionContext context)
-    {
-        const std::vector<std::vector<I>> columns{{1, 4}, {2}, {}, {0}};
-        auto pattern = std::make_shared<C::LinearPatternStorage>(columns,
-                                                                 std::vector<I>{1, 2, 3, 0}, std::vector<I>{3, 0, 1, 2}, std::vector<I>{1, 2, 3}, std::vector<I>{0});
-        R::Array<C::FiniteVolumeDetail::SampleRecord> samples(R::RowLayout::Dense(5, 1));
-        R::Array<I> offsets(R::RowLayout::Dense(5, 1));
-        R::Array<real> faceMeans(R::RowLayout::Dense(5, 7));
-        {
-            const auto c = source.columns.Read(), o = source.offsets.Read();
-            const auto p = source.points.Read();
-            auto s = samples.Write();
-            auto off = offsets.Write();
-            auto f = faceMeans.Write();
-            I next = 0;
-            for (I iCell = 0; iCell < 4; ++iCell)
-            {
-                off.View()(iCell, 0) = next;
-                for (I iBlock = 0; iBlock < c.View().RowSize(iCell); ++iBlock)
-                    for (const auto &point : p.View()[o.View()(iCell, 0) + iBlock])
-                    {
-                        C::FiniteVolumeDetail::SampleRecord value{};
-                        value.cell = iCell;
-                        value.other = point.other;
-                        value.point = next;
-                        value.face = next;
-                        value.auxiliaryFace = point.auxiliary;
-                        value.jacobianColumn = iBlock;
-                        value.normal = point.normal;
-                        value.ownPoint = point.location;
-                        value.rotation = point.rotation;
-                        value.changesFrame = point.changesFrame;
-                        s.View()(next, 0) = value;
-                        for (int j = 0; j < 7; ++j)
-                            f.View()(next, j) = j == 6 ? point.weight : 0;
-                        ++next;
-                    }
-            }
-            off.View()(4, 0) = next;
-            REQUIRE(next == 5);
-        }
-        const auto s = samples.Read();
-        const auto o = offsets.Read();
-        const auto f = faceMeans.Read();
-        C::FiniteVolumeStencilView stencil;
-        stencil.jacobianSamples = s.View<R::FixedRows<1>>();
-        stencil.jacobianOffsets = o.View<R::FixedRows<1>>();
-        DNDS::CFV::FiniteVolumeHostView metric;
-        const auto face = f.View<R::FixedRows<7>>();
-        metric.faceMean = {face.data, nullptr, face.rows, face.width, face.stride, nullptr, face.kind, face.device};
-        C::JacobianGeometryStorage host(stencil, metric, columns);
-        auto resident = std::make_shared<C::JacobianGeometryStorage>(host.Placed(context.device, context));
-        return std::make_shared<C::FrozenJacobianOperator::Geometry>(pattern, resident, context);
-    }
+
 }
 
 TEST_CASE("CUDA frozen Jacobians match CPU blocks and actions including ALE periodic projection and RANS stress")
@@ -118,6 +84,7 @@ TEST_CASE("CUDA frozen Jacobians match CPU blocks and actions including ALE peri
     const auto context = R::ExecutionContext::CUDA(0);
     const auto dc = geometry.columns.To(context.device), doff = geometry.offsets.To(context.device);
     const auto dp = geometry.points.To(context.device);
+    CauchyTest::CompactStencilFixture hostStencil(geometry.input), deviceStencil(geometry.input, context);
     auto all = Table<I>(4, 1, [](I i, I)
                         { return i; });
     auto core = Table<I>(3, 1, [](I i, I)
@@ -127,10 +94,19 @@ TEST_CASE("CUDA frozen Jacobians match CPU blocks and actions including ALE peri
     const auto dall = all.To(context.device), dcore = core.To(context.device), ddep = dependent.To(context.device);
     const auto cRead = geometry.columns.Read(), oRead = geometry.offsets.Read();
     const auto pRead = geometry.points.Read();
-    const C::JacobianGeometryView hostGeometry{cRead.View<R::CSRRows>(), oRead.View<R::FixedRows<1>>(), pRead.View<R::CSRRows>()};
+    const C::JacobianGeometryView hostGeometry{cRead.View<R::CSRRows>(), oRead.View<R::FixedRows<1>>(), pRead.View<R::CSRRows>(), hostStencil.Descriptor()};
     const auto cDevice = dc.Read(context), oDevice = doff.Read(context);
     const auto pDevice = dp.Read(context);
-    const C::JacobianGeometryView deviceGeometry{cDevice.View<R::CSRRows>(), oDevice.View<R::FixedRows<1>>(), pDevice.View<R::CSRRows>()};
+    const C::JacobianGeometryView deviceGeometry{cDevice.View<R::CSRRows>(), oDevice.View<R::FixedRows<1>>(), pDevice.View<R::CSRRows>(), deviceStencil.Descriptor()};
+    // The compact descriptor must preserve the independent prescribed map,
+    // including a translated/rotated image rather than only sharing CPU/GPU code.
+    const auto point0 = hostGeometry.Point(0, 0), point1 = hostGeometry.Point(0, 1);
+    CHECK(point0.changesFrame);
+    CHECK_FALSE(point1.changesFrame);
+    CHECK(point0.rotation[1] == 1);
+    CHECK(point0.rotation[3] == -1);
+    CHECK(point0.normal[0] == .6);
+    CHECK(point0.normal[1] == .8);
     const auto allRead = dall.Read(context), coreRead = dcore.Read(context), depRead = ddep.Read(context);
     const C::EquationSettings settings;
     const auto equation = C::EquationSystem::Resolve(settings);
@@ -207,7 +183,7 @@ TEST_CASE("CUDA frozen Jacobians match CPU blocks and actions including ALE peri
                             flow.selected = subset;
                             for (int j = 0; j < 5; ++j)
                                 flow.active[j] = parameters.active[j];
-                            C::CPU::EvaluateFlowJacobianBlock(flow, equation, iCell, iBlock, block);
+                            C::CPU::EvaluateFlowJacobianBlock(flow, gas, iCell, iBlock, block);
                         }
                         else
                             C::CPU::EvaluateEquationJacobianBlock(reference, iCell, iBlock, block);
@@ -315,44 +291,6 @@ TEST_CASE("CUDA frozen Jacobians match CPU blocks and actions including ALE peri
                         CHECK(resultRead.View()(iCell, j) == doctest::Approx(value[j]).epsilon(4e-12).scale(1));
                 }
             }
-            if (n == 7 && !subset)
-            {
-                // Exercise the managed LinearProblem -> resident provider ->
-                // eager operation entry, not just a bare launch descriptor.
-                const A::DofSpace space(4, 1);
-                auto problem = std::make_shared<C::LinearProblemContext>(space, n,
-                                                                         std::vector<std::vector<I>>{{1, 4}, {2}, {}, {0}}, std::vector<I>{1, 2, 3},
-                                                                         C::DiagonalStorage::Block, C::OffDiagonalStorage::DirectEvaluated, context.device);
-                problem->Diagonal().CopyFrom(diag, context).Wait();
-                auto provider = std::make_shared<C::FrozenJacobianOperator>(space.Pin(), ManagedGeometry(geometry, context),
-                                                                            C::FrozenJacobianOperator::Values{dm, dpr, dd, dr, dmag}, parameters, context);
-                problem->PublishOffDiagonalEvaluator(provider);
-                A::DofField<real> state(space, dx, dg), result(space, n, 0, context.device);
-                R::EagerEngine engine(0, std::make_shared<R::AccessTrackingContext>());
-                const auto stream = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
-                problem->SubmitApply(engine, stream, state, result, C::LinearRegion::Core);
-                problem->SubmitApply(engine, stream, state, result, C::LinearRegion::HaloDependent);
-                provider.reset();
-                problem->CheckQueuedActions(engine, stream);
-                const auto host = result.Owned().To(R::Device::Host());
-                const auto read = host.Read();
-                for (I iCell = 0; iCell < 4; ++iCell)
-                {
-                    Eigen::VectorXd value(n), local(n);
-                    for (int j = 0; j < n; ++j)
-                        local[j] = x.View()(iCell, j);
-                    value = Eigen::Map<const Eigen::MatrixXd>(di.View()[iCell].data(), n, n) * local;
-                    for (I iBlock = 0; iBlock < hostGeometry.columns.RowSize(iCell); ++iBlock)
-                    {
-                        const I column = hostGeometry.columns(iCell, iBlock);
-                        for (int j = 0; j < n; ++j)
-                            local[j] = column < 4 ? x.View()(column, j) : g.View()(column - 4, j);
-                        value += er.View()(iCell, iBlock) * local;
-                    }
-                    for (int j = 0; j < n; ++j)
-                        CHECK(read.View()(iCell, j) == doctest::Approx(value[j]).epsilon(5e-12).scale(1));
-                }
-            }
         }
 }
 
@@ -431,6 +369,8 @@ TEST_CASE("CUDA centered face diagonal matches CPU wall chains Roe matrices and 
     conditions[2].farfield = gas.Conservative({1.1, .12, .02, 0, 1.3});
     auto zoneData = Table<C::PerfectGasBoundaryParameters>(3, 1, [&](I i, I)
                                                            { return conditions[i].PerfectGasKernelParameters(); });
+    // Independent host-only oracle records. They never cross the CUDA
+    // boundary: the tested producer below uses canonical compact geometry.
     auto samples = Table<C::FiniteVolumeDetail::SampleRecord>(4, 1, [](I i, I)
                                                               {
         C::FiniteVolumeDetail::SampleRecord sample{};
@@ -462,17 +402,36 @@ TEST_CASE("CUDA centered face diagonal matches CPU wall chains Roe matrices and 
         return gas.PressureDerivative(u)[j]; });
     auto radius = Table<real>(4, 2, [](I i, I j)
                               { return j == 0 ? 1.6 + .1 * i : .03; });
-    const auto ds = samples.To(context.device);
     const auto dz = zoneData.To(context.device);
-    const auto doff = offsets.To(context.device), dsel = selected.To(context.device);
-    const auto df = faces.To(context.device), dm = means.To(context.device), dp = pressure.To(context.device), dd = derivative.To(context.device), dr = radius.To(context.device);
-    const auto sr = ds.Read(context);
+    const auto dsel = selected.To(context.device);
+    const auto dm = means.To(context.device), dp = pressure.To(context.device), dd = derivative.To(context.device), dr = radius.To(context.device);
     const auto zr = dz.Read(context);
-    const auto offr = doff.Read(context), selr = dsel.Read(context);
-    const auto fr = df.Read(context), mr = dm.Read(context), pr = dp.Read(context), der = dd.Read(context), rr = dr.Read(context);
+    const auto selr = dsel.Read(context);
+    const auto mr = dm.Read(context), pr = dp.Read(context), der = dd.Read(context), rr = dr.Read(context);
     const auto hostSamples = samples.Read();
     const auto hostOffsets = offsets.Read();
     const auto hostFaces = faces.Read(), hostRadius = radius.Read();
+    CauchyTest::CompactStencilFixture::Input geometry;
+    geometry.cellFaces = {{0, 1}, {2, 3}};
+    geometry.faceCells = {{{0, DNDS::UnInitIndex}}, {{0, 0}}, {{1, DNDS::UnInitIndex}}, {{1, DNDS::UnInitIndex}}};
+    geometry.incidenceBits = {{0, 0}, {0, 0}};
+    geometry.faceOffsets = {0, 1, 2, 3, 4};
+    geometry.codes = {0, 4, 0, 0};
+    geometry.parameters.rotatedGenerators = 1;
+    geometry.parameters.generators.rotation[1].map() << 0, -1, 0, 1, 0, 0, 0, 0, 1;
+    geometry.cells = {1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 1};
+    I boundaryRow = 0;
+    for (I iFace = 0; iFace < 4; ++iFace)
+    {
+        const auto &sample = hostSamples.View()(iFace, 0);
+        const std::initializer_list<real> point{sample.ownPoint[0], sample.ownPoint[1], sample.ownPoint[2],
+                                                sample.normal[0], sample.normal[1], sample.normal[2], hostFaces.View()(iFace, 6)};
+        geometry.faceMetrics.insert(geometry.faceMetrics.end(), point);
+        geometry.quadrature.insert(geometry.quadrature.end(), point);
+        const I row = sample.other == DNDS::UnInitIndex ? boundaryRow++ : DNDS::UnInitIndex;
+        geometry.routing.push_back({iFace, sample.condition, row, row, DNDS::UnInitIndex});
+    }
+    CauchyTest::CompactStencilFixture deviceGeometry(std::move(geometry), context);
     for (int mode : {0, 1, 2}) // Euler scalar, physical scalar, Roe matrix
         for (bool full : {false, true})
         {
@@ -488,11 +447,10 @@ TEST_CASE("CUDA centered face diagonal matches CPU wall chains Roe matrices and 
             auto status = statusHost.To(context.device);
             R::Array<real> magnitudes(R::RowLayout::Dense(mode == 2 ? 4 : 0, 3), context.device);
             C::CUDA::JacobianFaceInput request;
-            request.samples = sr.View<R::FixedRows<1>>();
+            request.stencil = deviceGeometry.Descriptor();
             request.conditions = zr.View<R::FixedRows<1>>();
-            request.offsets = offr.View<R::FixedRows<1>>();
-            const auto faceView = fr.View<R::FixedRows<7>>();
-            request.faces = {faceView.data, nullptr, faceView.rows, faceView.width, faceView.stride, nullptr, faceView.kind, faceView.device};
+            request.ownedCells = 2;
+            request.incidences = 4;
             request.means = mr.View<R::UniformTableRows>();
             request.pressure = pr.View<R::TableRows>();
             request.pressureDerivative = der.View<R::TableRows>();
@@ -576,4 +534,132 @@ TEST_CASE("CUDA centered face diagonal matches CPU wall chains Roe matrices and 
                     CHECK(actualRead.View()(iCell, j) == doctest::Approx(full ? expected.data()[j] : expected(j, j)).epsilon(5e-12).scale(1));
             }
         }
+}
+
+TEST_CASE("managed frozen Jacobian retains real periodic mesh geometry through queued application")
+{
+    DNDS::MPIInfo mpi;
+    mpi.setWorld();
+    REQUIRE(mpi.size == 1);
+    const auto context = R::ExecutionContext::CUDA(0);
+    const auto gas = C::EquationSystem::Resolve(C::EquationSettings{}).Gas();
+    constexpr int components = 7;
+    std::shared_ptr<C::LinearProblemContext> problem;
+    std::shared_ptr<C::FrozenJacobianOperator> provider;
+    std::vector<Eigen::VectorXd> expected;
+    std::optional<A::DofSpace> rowSpace;
+    R::Array<real> input;
+    {
+        auto mesh = CFVTest::Sector(mpi);
+        CauchyTest::CompactManagedStencilFixture fixture(mesh, true);
+        const auto shared = fixture.stencil.Read();
+        const auto view = shared.View();
+        const I owned = fixture.metrics.NumCell(), all = fixture.metrics.NumCellProc();
+        REQUIRE(owned == 2);
+        REQUIRE(all == owned);
+        rowSpace.emplace(fixture.metrics.Space());
+        std::vector<std::vector<I>> columns(owned);
+        for (I iCell = 0; iCell < owned; ++iCell)
+        {
+            const auto faces = view.topology.CellFaces(iCell);
+            for (DNDS::rowsize slot = 0; slot < faces.size(); ++slot)
+            {
+                const auto other = view.topology.CellFaceOther(iCell, faces[slot], slot);
+                if (other != DNDS::UnInitIndex && other != iCell)
+                    columns[iCell].push_back(other);
+            }
+            std::sort(columns[iCell].begin(), columns[iCell].end());
+            columns[iCell].erase(std::unique(columns[iCell].begin(), columns[iCell].end()), columns[iCell].end());
+        }
+        const std::vector<I> core{0, 1};
+        problem = std::make_shared<C::LinearProblemContext>(*rowSpace, components, columns, core,
+                                                            C::DiagonalStorage::Block, C::OffDiagonalStorage::DirectEvaluated, context.device);
+        auto means = Table<real>(all, components, [&](I iCell, I j)
+                                 {
+            const auto flow = gas.Conservative({1 + .1 * iCell, .3, -.2, .1, 1.2});
+            return j < 5 ? flow[j] : .02 * (iCell + j); });
+        const auto meanRead = means.Read();
+        auto pressure = Table<real>(all, 1, [&](I iCell, I)
+                                    {
+            C::FlowState flow{}; for (int j = 0; j < 5; ++j) flow[j] = meanRead.View()(iCell, j);
+            return gas.Pressure(flow); });
+        auto derivative = Table<real>(all, components, [&](I iCell, I j)
+                                      {
+            C::FlowState flow{}; for (int k = 0; k < 5; ++k) flow[k] = meanRead.View()(iCell, k);
+            return j < 5 ? gas.PressureDerivative(flow)[j] : 0.; });
+        auto radius = Table<real>(fixture.stencil.stencilFaces.RowCount(), 2, [](I iFace, I j)
+                                  { return j ? .04 : 1.7 + .03 * iFace; });
+        auto state = Table<real>(owned, components, [](I iCell, I j)
+                                 { return .07 * (1 + iCell - 2 * j); });
+        input = state.To(context.device);
+        const auto pressureRead = pressure.Read(), derivativeRead = derivative.Read(), radiusRead = radius.Read(), stateRead = state.Read();
+        const auto geometry = std::make_shared<C::JacobianGeometryStorage>(shared, columns);
+        const auto geometryRead = geometry->Read();
+        C::CPU::EquationJacobianView reference;
+        reference.geometry = geometryRead.View();
+        reference.means = meanRead.View<R::TableRows>();
+        reference.pressure = pressureRead.View<R::TableRows>();
+        reference.pressureDerivative = derivativeRead.View<R::TableRows>();
+        reference.radius = radiusRead.View<R::TableRows>();
+        reference.components = components;
+        reference.flowFirst = 0;
+        reference.kineticFirst = 5;
+        reference.scale = .73;
+        const std::array<uint8_t, components> active{1, 1, 1, 1, 1, 1, 1};
+        reference.active = {active.data(), components};
+        expected.resize(owned);
+        for (I iCell = 0; iCell < owned; ++iCell)
+        {
+            expected[iCell] = 3 * Eigen::Map<const Eigen::VectorXd>(stateRead.View()[iCell].data(), components);
+            for (I iBlock = 0; iBlock < I(columns[iCell].size()); ++iBlock)
+            {
+                Eigen::MatrixXd block(components, components);
+                C::CPU::EvaluateEquationJacobianBlock(reference, iCell, iBlock, block);
+                expected[iCell] += block * Eigen::Map<const Eigen::VectorXd>(stateRead.View()[columns[iCell][iBlock]].data(), components);
+            }
+        }
+        const auto placedMetrics = fixture.metrics.Placed(context.device, context);
+        const auto placedStencil = fixture.stencil.Placed(placedMetrics, context);
+        auto placedGeometry = std::make_shared<C::JacobianGeometryStorage>(placedStencil.Read(context), columns,
+                                                                           view.topology, false, context);
+        auto pattern = std::make_shared<C::LinearPatternStorage>(problem->HostPattern());
+        auto publication = std::make_shared<C::FrozenJacobianOperator::Geometry>(pattern, placedGeometry, context);
+        C::CUDA::FrozenJacobianParameters parameters;
+        parameters.gas = gas;
+        parameters.components = components;
+        parameters.kineticComponent = 5;
+        parameters.scale = .73;
+        provider = std::make_shared<C::FrozenJacobianOperator>(rowSpace->Pin(), publication,
+                                                               C::FrozenJacobianOperator::Values{means.To(context.device), pressure.To(context.device), derivative.To(context.device),
+                                                                                                 radius.To(context.device), R::Array<real>(R::RowLayout::Dense(0, 3), context.device)},
+                                                               parameters, context);
+        auto diagonal = Table<real>(owned, components * components, [](I, I j)
+                                    { return j % components == j / components ? 3. : 0.; });
+        problem->Diagonal().CopyFrom(diagonal.To(context.device), context).Wait();
+    } // No source mesh, CFV plan or temporary geometry owner remains here.
+    problem->PublishOffDiagonalEvaluator(provider);
+    A::DofField<real> state(*rowSpace, input, R::Array<real>(R::RowLayout::Dense(0, components), context.device));
+    A::DofField<real> result(*rowSpace, components, 0, context.device);
+    R::EagerEngine engine(0, std::make_shared<R::AccessTrackingContext>());
+    const auto stream = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
+    problem->SubmitApply(engine, stream, state, result, C::LinearRegion::Core);
+    provider.reset();
+    problem->CheckQueuedActions(engine, stream);
+    const auto host = result.Owned().To(R::Device::Host());
+    const auto read = host.Read();
+    for (I iCell = 0; iCell < I(expected.size()); ++iCell)
+        for (int j = 0; j < components; ++j)
+            CHECK(read.View()(iCell, j) == doctest::Approx(expected[iCell][j]).epsilon(5e-12).scale(1));
+}
+
+int main(int argc, char **argv)
+{
+    DNDS::MPI::Init_thread(&argc, &argv);
+    int result = 0;
+    {
+        doctest::Context context(argc, argv);
+        result = context.run();
+    }
+    DNDS::MPI::Finalize();
+    return result;
 }

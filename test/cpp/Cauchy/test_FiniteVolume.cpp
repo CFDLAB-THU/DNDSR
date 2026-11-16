@@ -385,16 +385,20 @@ TEST_CASE("Euler reconstruction PP selects a mean or progressively truncated ref
                 settings.numerics.reconstruction = "variational";
                 settings.numerics.cfv.maxOrder = 3;
                 settings.numerics.cfv.intOrder = quadratureOrder;
+                settings.numerics.cfv.cacheDiffBase = false;
                 C::FiniteVolume fv(mesh, settings, C::EquationSystem::Resolve(settings.equation));
                 // No source is active: PP still uses the same volume rule.
                 // Quad degree3 uses 2x2 points, degree5 uses 3x3, with no
                 // independent maximum-order PP bank hidden alongside them.
                 bool foundVolume = false;
                 for (const auto &record : R::AllocationDiagnostics::Snapshot().allocations)
-                    if (std::find(record.names.begin(), record.names.end(), "Cauchy/quadrature/volume/cells") != record.names.end())
+                    if (std::find(record.names.begin(), record.names.end(), "Cauchy/quadrature/volume/points") != record.names.end())
                     {
                         foundVolume = true;
-                        CHECK(record.bytes == size_t(fv.Metrics().NumCell() * (quadratureOrder == 3 ? 4 : 9)) * sizeof(DNDS::index));
+                        // Cell-major offsets now imply cell identity: no PP
+                        // per-point cell/scatter map remains. Inspect the
+                        // actual shared coordinates to preserve the rule test.
+                        CHECK(record.bytes == size_t(fv.Metrics().NumCell() * (quadratureOrder == 3 ? 4 : 9) * 3) * sizeof(DNDS::real));
                     }
                 CHECK(foundVolume);
                 const auto shape = layout == 0 ? R::RowLayout::Dense(0, 5) : layout == 1 ? R::RowLayout::ColMajor(0, 5)
@@ -1886,12 +1890,13 @@ TEST_CASE("Auxiliary reuse rejects active writers changed inputs replaced output
     CHECK_NOTHROW(fv.ValidateAuxValues(logical, empty));
     empty.faceWaveJump.emplace(R::RowLayout::Dense(DNDS::index(fv.AuxiliaryFaces().size()), 1));
     CHECK_THROWS(fv.ValidateAuxValues(logical, empty));
-    {
-        auto mutation = mesh->versions.BeginMutation(R::Change::Geometry);
-        mutation.Commit();
-    }
-    CHECK_THROWS(fv.PrepareAuxValues(logical, aux));
-    CHECK_THROWS(fv.ValidateAuxValues(logical, aux));
+    // The immutable stencil publication now pins its geometry generation.
+    // Reject mutation while that publication is alive, rather than creating
+    // an invalid mesh behind it. A failed edit leaves valid aux inputs usable.
+    auto valid = fv.BuildAuxiliaryValues({true, true, true, true, true, true, true});
+    fv.PrepareAuxValues(logical, valid);
+    CHECK_THROWS(mesh->versions.BeginMutation(R::Change::Geometry));
+    CHECK_NOTHROW(fv.ValidateAuxValues(logical, valid));
 }
 TEST_CASE("Mean boundary spectra use stage kinematics while analytic RHS uses boundary stage time")
 {
@@ -2611,10 +2616,12 @@ TEST_CASE("Direct FV consumes physical gradients without coefficients and splits
                 const auto iFace = cellFaces[slot];
                 const auto auxiliaryFaces = fv.AuxiliaryFaces();
                 const auto row = std::lower_bound(auxiliaryFaces.begin(), auxiliaryFaces.end(), iFace) - auxiliaryFaces.begin();
-                const auto parents = topology.FaceCells(iFace);
-                const auto anchor = parents[0] >= 0 && parents[0] < fv.Metrics().NumCell() ? parents[0] : parents[1];
+                // The face buffer is canonical parent-zero flux even when
+                // only parent one is owned here. Incidence slots also retain
+                // the two sides of a periodic self-neighbor.
+                const bool back = topology.CellIsFaceBack(iCell, iFace, slot);
                 for (int j = 0; j < 5; ++j)
-                    gathered[j] += (anchor == iCell ? 1 : -1) * flux.View()(row, j);
+                    gathered[j] += (back ? 1 : -1) * flux.View()(row, j);
                 if (!p0)
                 {
                     const auto point = metric.GetFaceCent(iFace);

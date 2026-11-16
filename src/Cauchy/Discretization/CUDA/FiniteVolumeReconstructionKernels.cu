@@ -21,31 +21,31 @@ namespace DNDS::Cauchy::CUDA
         __global__ void Characteristics(CharacteristicGeometry geometry, Means mean, PerfectGas gas,
                                         CharacteristicOutput forward, CharacteristicOutput inverse, Status status, Flags fallback)
         {
+            const auto &stencil = geometry.stencil(0, 0);
             for (index iFace = index(blockIdx.x) * blockDim.x + threadIdx.x; iFace < forward.RowCount(); iFace += index(gridDim.x) * blockDim.x)
             {
                 for (int j = 0; j < 25; ++j)
                     forward(iFace, j) = inverse(iFace, j) = (j % 6 == 0);
                 status(iFace, 0) = {};
                 fallback(iFace, 0) = 0;
-                const index entry = geometry.faceEntries(iFace, 0);
-                if (entry == UnInitIndex)
+                if (stencil.routing(iFace, 0).auxiliaryFace == UnInitIndex)
                     continue;
-                const auto &sample = geometry.samples(entry, 0);
-                const index leftCell = sample.side ? sample.other : sample.cell;
-                const index rightCell = sample.side ? sample.cell : sample.other;
-                const auto left = Load(mean, leftCell);
-                auto right = rightCell == UnInitIndex ? left : Load(mean, rightCell);
-                if (rightCell != UnInitIndex && sample.changesFrame)
+                const auto parents = stencil.topology.FaceCells(iFace);
+                const auto left = Load(mean, parents[0]);
+                auto right = parents[1] == UnInitIndex ? left : Load(mean, parents[1]);
+                if (parents[1] != UnInitIndex && stencil.metric.periodic.Rotates(iFace))
                 {
+                    const auto rotation = stencil.metric.periodic.OtherRotation(iFace, 0);
                     const auto original = right;
                     for (int i = 0; i < 3; ++i)
                     {
                         right[1 + i] = 0;
                         for (int j = 0; j < 3; ++j)
-                            right[1 + i] += sample.rotation[sample.side ? j + 3 * i : i + 3 * j] * original[1 + j];
+                            right[1 + i] += rotation(i, j) * original[1 + j];
                     }
                 }
-                const Vector3 normal{geometry.quadrature(sample.point, 3), geometry.quadrature(sample.point, 4), geometry.quadrature(sample.point, 5)};
+                const auto direction = stencil.metric.GetFaceMeanNorm(iFace);
+                const Vector3 normal{direction[0], direction[1], direction[2]};
                 const auto result = TryPerfectGasCharacteristics(gas, left, right, normal);
                 status(iFace, 0) = result.status.At(-1, iFace);
                 if (!result)
@@ -155,7 +155,7 @@ namespace DNDS::Cauchy::CUDA
                                   (!mean.ghost.RowCount() || (mean.ghost.kind == R::RowLayoutKind::Table && mean.ghost.Width() == mean.owned.Width())) &&
                                   forward.kind == R::RowLayoutKind::Table && inverse.kind == R::RowLayoutKind::Table &&
                                   forward.Width() == 25 && inverse.Width() == 25 && forward.RowCount() == inverse.RowCount() &&
-                                  geometry.faceEntries.RowCount() == forward.RowCount() && status.RowCount() == forward.RowCount() && fallback.RowCount() == forward.RowCount(),
+                                  geometry.stencil.RowCount() == 1 && status.RowCount() == forward.RowCount() && fallback.RowCount() == forward.RowCount(),
                               "CUDA characteristic field/geometry shape differs");
         R::CheckKernelArgumentBudget<CharacteristicGeometry, Means, PerfectGas, CharacteristicOutput, CharacteristicOutput, Status, Flags>();
         if (!forward.RowCount())

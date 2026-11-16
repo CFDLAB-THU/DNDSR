@@ -27,12 +27,7 @@ namespace DNDS::Cauchy::CUDA::Detail
         RHSInput incoming;
         bool hasPreparedMean = false, hasIncoming = false, hasWave = false, hasPressure = false;
     };
-    struct FaceStageShape
-    {
-        int reconstruction = 0, viscous = 0, width = 0;
-        DNDS_DEVICE_CALLABLE int ViscousFirst() const { return 5 + reconstruction; }
-        DNDS_DEVICE_CALLABLE int AuxFirst() const { return 5 + reconstruction + viscous; }
-    };
+    using FaceStageShape = RHSFaceStageShape;
 
     template <class Fields>
     __device__ const real *FaceStageSource(const Fields &fields, const RHSKernelControls &controls,
@@ -68,7 +63,7 @@ namespace DNDS::Cauchy::CUDA::Detail
             const real *source = nullptr;
             if (iRow < selected.RowCount())
             {
-                const auto &sample = geometry.samples(geometry.faceEntries(selected(iRow, 0), 0), 0);
+                const auto &sample = geometry.FaceAnchor(selected(iRow, 0));
                 source = FaceStageSource(fields, controls, shape, side ? sample.other : sample.cell, column);
             }
             if (source)
@@ -88,9 +83,9 @@ namespace DNDS::Cauchy::CUDA::Detail
         __pipeline_commit();
 #endif
     }
-    __device__ StagedFaceFields BindFaceStage(SpanView<const real, false> bank, FaceStageShape shape,
-                                              int slot, const FiniteVolumeDetail::SampleRecord &sample,
-                                              const RHSKernelControls &controls, const RHSFields &fields)
+    __device__ inline StagedFaceFields BindFaceStage(SpanView<const real, false> bank, FaceStageShape shape,
+                                                     int slot, const FiniteVolumeDetail::SampleRecord &sample,
+                                                     const RHSKernelControls &controls, const RHSFields &fields)
     {
         const auto values = bank.Subspan(index(slot) * 2 * shape.width, 2 * shape.width);
         const auto field = [&](int first, int width)
@@ -145,7 +140,7 @@ namespace DNDS::Cauchy::CUDA::Detail
             if (slot < batchFaces && begin + slot < selected.RowCount())
             {
                 const auto face = selected(begin + slot, 0);
-                const auto &sample = geometry.samples(geometry.faceEntries(face, 0), 0);
+                const auto &sample = geometry.FaceAnchor(face);
                 const auto staged = BindFaceStage(banks[active], shape, slot, sample, controls, fields);
                 index fallbacks = 0;
                 const auto &physics = parameters(0, 0).physics;
@@ -170,23 +165,18 @@ namespace DNDS::Cauchy::CUDA::Detail
                                         RHSParametersView parameters, RHSKernelControls controls, RHSFields fields,
                                         RHSFaceOutputs output, RHSIndices selected)
     {
-        FaceStageShape shape;
-        const bool reconstruct = !controls.firstOrder && (!controls.direct || controls.linear);
-        shape.reconstruction = reconstruct ? 5 * (controls.direct ? controls.dimension : controls.modes) : 0;
-        shape.viscous = controls.primitiveGradient ? 5 * controls.dimension : controls.viscous && controls.distinctViscous ? shape.reconstruction
-                                                                                                                           : 0;
-        shape.width = 5 + shape.reconstruction + shape.viscous + 4;
+        const auto shape = RHSFacePackages::StageShape(controls);
         // Bound the two banks to 32 KiB without requiring opt-in shared memory.
         // Thread/face batches are small at P3; report this occupancy tradeoff.
         const int capacity = (32 * 1024) / (int(sizeof(real)) * 4 * shape.width);
-        const int batchFaces = std::min(controls.warpQuadrature ? controls.blockSize / 32 : controls.blockSize, capacity);
+        const int batchFaces = std::min((controls.mapping == RHSFaceMapping::WarpQuadrature) ? controls.blockSize / 32 : controls.blockSize, capacity);
         DNDS_check_throw_info(batchFaces > 0, "buffered face batch does not fit shared memory");
         const unsigned blocks = unsigned(std::min<index>((selected.RowCount() + batchFaces - 1) / batchFaces,
-                                                         geometry.MultiprocessorCount() * 4));
+                                                         controls.gridBlocks ? index(controls.gridBlocks) : index(geometry.MultiprocessorCount() * 4)));
         const auto bytes = index(batchFaces) * 4 * shape.width * sizeof(real);
         Runtime::CheckKernelArgumentBudget<RHSGeometryView, RHSParametersView, RHSKernelControls, RHSFields, RHSFaceOutputs, RHSIndices, FaceStageShape, int>();
         const auto stream = static_cast<cudaStream_t>(context.stream);
-        if (controls.warpQuadrature)
+        if ((controls.mapping == RHSFaceMapping::WarpQuadrature))
             FluxFacesBuffered<true><<<blocks, controls.blockSize, bytes, stream>>>(geometry.View(), parameters, controls, fields, output, selected, shape, batchFaces);
         else
             FluxFacesBuffered<false><<<blocks, controls.blockSize, bytes, stream>>>(geometry.View(), parameters, controls, fields, output, selected, shape, batchFaces);

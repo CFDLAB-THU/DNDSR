@@ -12,9 +12,9 @@ wall value:
 
 | Consumer | Input/convention |
 |---|---|
-| VR boundary equation | Physical face trace evaluated from the current reconstructed point; never a reflected exterior state |
+| VR boundary equation | Configured `physicalTrace` or `physicalMirrored` target at each face quadrature point |
 | Convective numerical flux | Interior and Euler exterior states |
-| Direct conservative gradients | The same physical face trace used by VR |
+| Direct conservative gradients | Independent physical face trace at the mapped face center; never mirrored |
 | Polynomial viscous flux | Average conservative state, average conservative gradient plus the exterior jump divided by Euler's prepared GRP distance |
 | `noRsOnWall=true` | Replace both convective states by the physical no-slip wall state after forming the viscous jump gradient; use that wall state for flux thermodynamics |
 | Mean auxiliary spectral preparation | Duplicate the owned mean at a physical boundary, as Euler `EvaluateDt` does; interface input is a separate extension |
@@ -105,11 +105,12 @@ ghosts. No BC routine performs MPI or silently refreshes a halo.
 ## Explicit interface packet
 
 `FiniteVolume::BuildBoundaryInputs()` allocates two small boundary tables in
-receiver mesh axes. The quadrature table follows `BoundaryPoints()` and contains
+receiver mesh axes. Center-only midpoint consumers omit the quadrature payload.
+For high-order consumers the quadrature table follows `BoundaryPoints()` and contains
 complete canonical equation rows at RHS/VR quadrature points. The face-center
 table follows `BoundaryFaces()` and contains independently sampled complete
 rows at maintained face centers; these descriptors have `quadrature=-1`.
-Approximate Roe/BC Jacobians read the face-center table without selecting a
+Gradients and approximate Roe/BC Jacobians read the face-center table without selecting a
 quadrature row or averaging quadrature states. Physical BCs compute their
 states directly and need no incoming rows.
 

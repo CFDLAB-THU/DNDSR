@@ -36,34 +36,36 @@ TEST_CASE("CUDA analytic mean characteristics match CPU inverse and canonical pe
         gas.Conservative({1., 1e6, 0, 0, 1.}),
         gas.Conservative({.8, .2, -.4, .3, .9})};
     const std::array<C::Vector3, 4> normals{{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}, {.6, .8, 0}}};
-    auto samples = Table<C::FiniteVolumeDetail::SampleRecord>(4, 1, [](I iFace, I)
-                                                              {
-        C::FiniteVolumeDetail::SampleRecord result{};
-        result.cell = iFace == 1 ? 1 : iFace == 3 ? 2 : 0;
-        result.other = iFace == 0 ? 1 : iFace == 1 ? 3 : DNDS::UnInitIndex;
-        result.side = iFace == 1;
-        result.point = result.face = iFace;
-        result.changesFrame = iFace == 1;
-        result.rotation = result.changesFrame ? std::array<real, 9>{0, 1, 0, -1, 0, 0, 0, 0, 1}
-                                             : std::array<real, 9>{1, 0, 0, 0, 1, 0, 0, 0, 1};
+    const std::array<std::array<I, 2>, 5> parents{{{0, 1}, {3, 1}, {0, DNDS::UnInitIndex}, {2, DNDS::UnInitIndex}, {DNDS::UnInitIndex, DNDS::UnInitIndex}}};
+    const std::array<real, 9> rotation{0, 1, 0, -1, 0, 0, 0, 0, 1};
+    auto cells = Table<I>(5, 2, [&](I iFace, I side)
+                          { return parents[iFace][side]; });
+    auto routing = Table<C::FaceRouting>(5, 1, [](I iFace, I)
+                                         {
+        C::FaceRouting result;
+        result.auxiliaryFace = iFace == 4 ? DNDS::UnInitIndex : iFace;
         return result; });
-    auto entries = Table<I>(5, 1, [](I iFace, I)
-                            { return iFace == 4 ? DNDS::UnInitIndex : iFace; });
-    auto quadrature = Table<real>(4, 7, [&](I iFace, I j)
-                                  { return j >= 3 && j < 6 ? normals[iFace][j - 3] : 0.; });
+    auto codes = Table<uint8_t>(5, 1, [](I iFace, I)
+                                { return uint8_t(iFace == 1 ? 1 : 0); });
+    auto parameters = Table<DNDS::CFV::FacePeriodicParameters>(1, 1, [&](I, I)
+                                                               {
+        DNDS::CFV::FacePeriodicParameters result;
+        result.generators.rotation[1].map() = Eigen::Map<const Eigen::Matrix3d>(rotation.data());
+        result.rotatedGenerators = 1;
+        return result; });
+    auto faceMean = Table<real>(5, 7, [&](I iFace, I j)
+                                { return iFace < 4 && j >= 3 && j < 6 ? normals[iFace][j - 3] : 0.; });
     std::array<C::FlowCharacteristics, 5> expected{};
     {
-        const auto read = samples.Read();
         for (I iFace = 0; iFace < 4; ++iFace)
         {
-            const auto &sample = read.View()(iFace, 0);
-            const auto left = states[sample.side ? sample.other : sample.cell];
-            auto right = sample.other == DNDS::UnInitIndex ? left : states[sample.side ? sample.cell : sample.other];
-            if (sample.changesFrame)
+            const auto left = states[parents[iFace][0]];
+            auto right = parents[iFace][1] == DNDS::UnInitIndex ? left : states[parents[iFace][1]];
+            if (iFace == 1)
             {
-                const Eigen::Map<const Eigen::Matrix3d> rotation(sample.rotation.data());
+                const Eigen::Map<const Eigen::Matrix3d> rotationMap(rotation.data());
                 Eigen::Vector3d momentum{right[1], right[2], right[3]};
-                momentum = (rotation.transpose() * momentum).eval();
+                momentum = (rotationMap.transpose() * momentum).eval();
                 for (int d = 0; d < 3; ++d)
                     right[1 + d] = momentum[d];
             }
@@ -82,9 +84,22 @@ TEST_CASE("CUDA analytic mean characteristics match CPU inverse and canonical pe
     for (int j = 0; j < 25; ++j)
         expected[4].forward[j] = expected[4].inverse[j] = (j % 6 == 0);
     const auto device = R::Device::CUDA(0);
-    auto ds = samples.To(device);
-    auto de = entries.To(device);
-    auto dq = quadrature.To(device);
+    auto dc = cells.To(device);
+    auto dr = routing.To(device);
+    auto dp = parameters.To(device);
+    auto dk = codes.To(device);
+    auto df = faceMean.To(device);
+    const auto cellRead = dc.Read({device, nullptr});
+    const auto routeRead = dr.Read({device, nullptr});
+    const auto parameterRead = dp.Read({device, nullptr});
+    const auto codeRead = dk.Read({device, nullptr});
+    const auto faceRead = df.Read({device, nullptr});
+    C::FiniteVolumeStencilView view;
+    view.topology.faceCells = {cellRead.View<R::RowLayout>(), {}};
+    view.routing = routeRead.View<R::FixedRows<1>>();
+    view.metric.faceMean = faceRead.View<R::FixedRows<7>>();
+    view.metric.periodic = {codeRead.View<R::FixedRows<1>>(), parameterRead.View<R::FixedRows<1>>()};
+    const auto publication = R::MetadataBuffer<C::FiniteVolumeStencilView>({view}).CopyTo(device, {device, nullptr});
     for (const I width : {I(5), I(6), I(7)})
     {
         auto means = Table<real>(3, width, [&](I iCell, I j)
@@ -99,8 +114,8 @@ TEST_CASE("CUDA analytic mean characteristics match CPU inverse and canonical pe
         const auto stream = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
         const auto submit = [&]
         {
-            R::SubmitArrays(engine, stream, [gas](R::ExecutionContext c, auto s, auto e, auto q, auto u, auto g, auto l, auto r, auto errors, auto flags)
-                            { K::PrepareFaceCharacteristicMatrices(c, {s, e, q}, {u, g}, gas, l, r, errors, flags); }, R::ReadAs<R::FixedRows<1>>(ds), R::ReadAs<R::FixedRows<1>>(de), R::ReadAs<R::FixedRows<7>>(dq), R::ReadAs<R::TableRows>(dm), R::ReadAs<R::TableRows>(dg), R::WriteAs<R::TableRows>(forward), R::WriteAs<R::TableRows>(inverse), R::WriteAs<R::FixedRows<1>>(status), R::WriteAs<R::FixedRows<1>>(fallback));
+            R::SubmitArrays(engine, stream, [gas, publication](R::ExecutionContext c, auto u, auto g, auto l, auto r, auto errors, auto flags)
+                            { K::PrepareFaceCharacteristicMatrices(c, {R::MetadataArrayView(publication, c.device)}, {u, g}, gas, l, r, errors, flags); }, R::ReadAs<R::TableRows>(dm), R::ReadAs<R::TableRows>(dg), R::WriteAs<R::TableRows>(forward), R::WriteAs<R::TableRows>(inverse), R::WriteAs<R::FixedRows<1>>(status), R::WriteAs<R::FixedRows<1>>(fallback));
         };
         submit();
         engine.Synchronize();

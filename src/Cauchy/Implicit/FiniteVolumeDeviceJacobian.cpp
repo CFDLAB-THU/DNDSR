@@ -18,19 +18,13 @@ namespace DNDS::Cauchy
             inputOwned.emplace(R::RowLayout::Dense(owned, components), device, "Cauchy/Jacobian/tiledInput");
             inputGhost.emplace(R::RowLayout::Dense(all - owned, components), device, "Cauchy/Jacobian/tiledGhost");
         }
-        // Symbolic setup only. Do not download full CFV metrics or basis caches.
-        const auto samples = owner->stencil.jacobianSamples.To(R::Device::Host(), context);
-        const auto offsets = owner->stencil.jacobianOffsets.To(R::Device::Host(), context);
-        const auto areas = owner->stencil.auxiliaryFaceArea.To(R::Device::Host(), context);
-        const auto s = samples.Read();
-        const auto o = offsets.Read();
-        const auto a = areas.Read();
-        FiniteVolumeStencilView host;
-        host.jacobianSamples = s.View<R::FixedRows<1>>();
-        host.jacobianOffsets = o.View<R::FixedRows<1>>();
-        host.auxiliaryFaceArea = a.View<R::FixedRows<1>>();
-        const JacobianGeometryStorage prepared(host, owner->jacobianColumns->CopyColumns());
-        geometry = std::make_shared<JacobianGeometryStorage>(prepared.Placed(device, context));
+        // Symbolic setup borrows the authoritative CPU topology in the same
+        // local numbering. Only sparse integer incidence routes are uploaded;
+        // centered geometry/periodic maps remain in the shared device stencil.
+        const auto symbolic = owner->mesh->AcquireRead(Geom::MeshReadRequirements::CellFlux());
+        geometry = std::make_shared<JacobianGeometryStorage>(
+            stencil, owner->jacobianColumns->CopyColumns(), symbolic.HostView().CellFaceIncidences(),
+            !owner->hasRotatedFrames, context);
         publicationGeometry = std::make_shared<FrozenJacobianOperator::Geometry>(owner->jacobianColumns, geometry, context);
         geometryRead.emplace(geometry->Read({device, nullptr}));
         if (owner->equation.HasRANS())
@@ -72,7 +66,7 @@ namespace DNDS::Cauchy
         };
         slot->values = {table(all, components, "means"), table(all, 1, "pressure"), table(all, components, "pressureDerivative"),
                         table(owner->stencil.stencilFaces.RowCount(), 2, "radius"),
-                        table(roe ? owner->stencil.jacobianSamples.RowCount() : 0, 3, "magnitudes")};
+                        table(roe ? owner->stencil.IncidenceNumber() : 0, 3, "magnitudes")};
         if (inputOwned)
         {
             slot->values.means.Reset(R::RowLayout::TiledColMajor(all, components, 32), device);

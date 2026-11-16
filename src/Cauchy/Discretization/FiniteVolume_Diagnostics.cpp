@@ -32,7 +32,7 @@ namespace DNDS::Cauchy
                 DNDS_check_throw_info(_data->settings.boundaries.count(std::to_string(zone)), "force zone has no boundary condition");
             DNDS_check_throw_info(lane.Context().device == Device(), "boundary force needs a matching execution stream");
             if (!work.boundaryForceReduction) work.boundaryForceReduction.emplace(lane.Context());
-            force = work.boundaryForceReduction->Evaluate(engine, lane, _data->stencil, work.boundaryMomentumFlux, zones); });
+            force = work.boundaryForceReduction->Evaluate(engine, lane, _data->stencil, _data->boundaryFaces, work.boundaryMomentumFlux, zones); });
         MPI::AllreduceInPlace<MPI::Reduction::Sum>(
             MPI::ContiguousView<real>{force.data(), 3}, mpi.comm);
         return force;

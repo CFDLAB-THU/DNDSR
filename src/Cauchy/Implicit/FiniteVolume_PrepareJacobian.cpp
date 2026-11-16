@@ -27,14 +27,14 @@ namespace DNDS::Cauchy
             std::optional<JacobianGeometryStorage::ReadAccess> read;
         };
         std::shared_ptr<const Geometry> geometryOwner;
-        EquationSystem equation;
+        PerfectGas gas;
         R::Array<real> meanStorage, radiusStorage, magnitudeStorage;
         std::optional<R::Array<real>::ReadLease> meanRead, radiusRead, magnitudeRead;
         MatrixFreeJacobian(const FiniteVolume &fv, const LinearProblemContext &output, JacobianPreparation controls, real time)
-            : equation(fv._data->equation),
+            : gas(fv._data->equation.Gas()),
               meanStorage(R::RowLayout::Dense(fv.Metrics().NumCellProc(), 5)),
               radiusStorage(R::RowLayout::Dense(fv._data->stencil.stencilFaces.RowCount(), 2)),
-              magnitudeStorage(R::RowLayout::Dense(controls.roeDissipation ? fv._data->stencil.jacobianSamples.RowCount() : 0, 3))
+              magnitudeStorage(R::RowLayout::Dense(controls.roeDissipation ? fv._data->stencil.IncidenceNumber() : 0, 3))
         {
             frame = fv._data->motion.At(time);
             scale = controls.residualScale;
@@ -51,9 +51,8 @@ namespace DNDS::Cauchy
                 auto prepared = std::make_shared<Geometry>();
                 prepared->owner = fv._data;
                 prepared->partition = output.Space().Pin();
-                const auto metric = fv.Metrics().AcquireRead();
                 const auto stencil = fv._data->stencil.Read();
-                prepared->storage = std::make_shared<JacobianGeometryStorage>(stencil.View(), metric.HostView(), output.Columns());
+                prepared->storage = std::make_shared<JacobianGeometryStorage>(stencil, output.Columns());
                 prepared->read.emplace(prepared->storage->Read());
                 geometryOwner = std::move(prepared);
             }
@@ -80,11 +79,11 @@ namespace DNDS::Cauchy
         }
         void EvaluateBlock(index iRow, index iBlock, Eigen::Ref<Eigen::MatrixXd> output) const override
         {
-            CPU::EvaluateFlowJacobianBlock(*this, equation, iRow, iBlock, output);
+            CPU::EvaluateFlowJacobianBlock(*this, gas, iRow, iBlock, output);
         }
         void ApplyBlock(index iRow, index iBlock, InputVector input, Eigen::Ref<Eigen::VectorXd> output) const override
         {
-            CPU::ApplyFlowJacobianBlock(*this, equation, iRow, iBlock, input, output);
+            CPU::ApplyFlowJacobianBlock(*this, gas, iRow, iBlock, input, output);
         }
     };
 
@@ -236,7 +235,7 @@ namespace DNDS::Cauchy
         request.evaluated = bool(evaluated);
         request.selected = !selection.All();
         request.active = active;
-        RequireNumericalSuccess(CPU::PrepareFlowJacobian(request, _data->equation, _data->flux), "PrepareFlowJacobian");
+        RequireNumericalSuccess(CPU::PrepareFlowJacobian(request, _data->equation.Gas(), _data->flux), "PrepareFlowJacobian");
         magnitudeWrite.reset();
         diagonal.reset();
         if (evaluated)

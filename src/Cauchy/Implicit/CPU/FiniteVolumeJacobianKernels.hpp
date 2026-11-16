@@ -231,9 +231,9 @@ namespace DNDS::Cauchy::CPU
         std::array<bool, 5> active{};
         bool rowMajorBlocks = false;
     };
-    void EvaluateFlowJacobianBlock(const FlowJacobianView &, const EquationSystem &, index iRow, index iBlock, Eigen::Ref<Eigen::MatrixXd> output);
-    void ApplyFlowJacobianBlock(const FlowJacobianView &, const EquationSystem &, index iRow, index iBlock, JacobianInput input, Eigen::Ref<Eigen::VectorXd> output);
-    NumericalStatus PrepareFlowJacobian(const FlowJacobianPreparation &, const EquationSystem &, const Riemann::RiemannFlux &) noexcept;
+    void EvaluateFlowJacobianBlock(const FlowJacobianView &, const PerfectGas &, index iRow, index iBlock, Eigen::Ref<Eigen::MatrixXd> output);
+    void ApplyFlowJacobianBlock(const FlowJacobianView &, const PerfectGas &, index iRow, index iBlock, JacobianInput input, Eigen::Ref<Eigen::VectorXd> output);
+    NumericalStatus PrepareFlowJacobian(const FlowJacobianPreparation &, const PerfectGas &, const Riemann::RiemannFlux &) noexcept;
     void FreezeFlowJacobian(RHSFlowFieldView mean, RHSScalarView radius,
                             Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::FixedRows<5>> frozenMean,
                             Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::TableRows> frozenRadius);

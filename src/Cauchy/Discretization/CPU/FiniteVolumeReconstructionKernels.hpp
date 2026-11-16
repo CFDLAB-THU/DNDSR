@@ -12,8 +12,7 @@ namespace DNDS::Cauchy::CPU
     /// Supply exactly one provider: inline perfect-gas parameters or frozen
     /// cell-mean p/a/H/beta views. The caller retains their leases and validates
     /// host residency before entry. No EOS call, inversion or throw in this leaf.
-    NumericalResult<index> PrepareFaceCharacteristicMatrices(FiniteVolumeStencilView stencil, Geom::UnstructuredMeshView mesh,
-                                                             CFV::FiniteVolumeHostView metric, RHSFieldView u, index firstComponent,
+    NumericalResult<index> PrepareFaceCharacteristicMatrices(FiniteVolumeStencilView stencil, RHSFieldView u, index firstComponent,
                                                              Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::TableRows> l,
                                                              Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::TableRows> r,
                                                              std::optional<PerfectGas> gas,

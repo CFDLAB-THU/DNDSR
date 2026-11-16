@@ -1,6 +1,7 @@
 #include "Cauchy/Discretization/CUDA/FiniteVolumeGradientKernels.hpp"
 #include "Cauchy/Physics/PerfectGasPoint.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
+#include "Cauchy/Discretization/CUDA/PositivityReduction.cuh"
 #include <cuda_runtime.h>
 
 namespace DNDS::Cauchy::CUDA
@@ -8,11 +9,11 @@ namespace DNDS::Cauchy::CUDA
     namespace R = Runtime;
     namespace
     {
-        using BetaOutput = R::ArrayView<real, R::AccessBoundsChecks, R::FixedRows<1>>;
         template <int Components>
         __global__ void Barth(GradientLimiterGeometry geometry, GradientMeans means, GradientInput source,
                               GradientOutput destination, GradientIndices selected, int dimension, bool barth)
         {
+            const auto &stencil = geometry.stencil(0, 0);
             for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
             {
                 const index iCell = selected(iRow, 0);
@@ -20,9 +21,9 @@ namespace DNDS::Cauchy::CUDA
                 for (int j = 0; j < Components; ++j)
                     lower[j] = upper[j] = means(iCell, j);
                 if (barth)
-                    for (index entry = geometry.offsets(iCell, 0); entry < geometry.offsets(iCell + 1, 0); ++entry)
+                    for (rowsize slot = 0; slot < rowsize(stencil.topology.CellFaces(iCell).size()); ++slot)
                     {
-                        const auto &sample = geometry.samples(entry, 0);
+                        const auto sample = stencil.GradientSample(iCell, slot);
                         if (sample.other != UnInitIndex)
                         {
                             std::array<real, Components> neighbor;
@@ -44,11 +45,12 @@ namespace DNDS::Cauchy::CUDA
                                 upper[j] = std::max(upper[j], neighbor[j]);
                             }
                         }
+                        const auto displacement = stencil.GradientDisplacement(iCell, slot);
                         for (int j = 0; j < Components; ++j)
                         {
                             real delta = 0;
                             for (int d = 0; d < dimension; ++d)
-                                delta += source(iCell, j * dimension + d) * (sample.ownPoint[d] - geometry.cells(iCell, 1 + d));
+                                delta += source(iCell, j * dimension + d) * displacement[d];
                             positive[j] = std::max(positive[j], delta);
                             negative[j] = std::min(negative[j], delta);
                         }
@@ -72,13 +74,25 @@ namespace DNDS::Cauchy::CUDA
         {
             std::array<real, Components> mean;
             std::array<Vector3, Components> gradients{};
-            R::ArrayView<const real, R::AccessBoundsChecks, R::FixedRows<3>> displacement;
+            Runtime::ArrayView<const FiniteVolumeStencilView, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> stencil;
+            index cell = 0;
+            mutable index cachedPoint = -1;
+            mutable Vector3 displacement{};
+            GradientOutput stored;
+            bool readStored = false;
             int dimension;
             DNDS_DEVICE_CALLABLE real operator()(index q, index j) const
             {
                 real value = mean[j];
+                if (cachedPoint != q)
+                {
+                    const auto point = stencil(0, 0).GradientDisplacement(cell, rowsize(q));
+                    for (int d = 0; d < 3; ++d)
+                        displacement[d] = point[d];
+                    cachedPoint = q;
+                }
                 for (int d = 0; d < dimension; ++d)
-                    value += gradients[j][d] * displacement(q, d);
+                    value += (readStored ? stored(cell, j * dimension + d) : gradients[j][d]) * displacement[d];
                 return value;
             }
         };
@@ -90,10 +104,11 @@ namespace DNDS::Cauchy::CUDA
         };
         template <int Components>
         DNDS_DEVICE_CALLABLE NumericalStatus PositiveCell(GradientLimiterGeometry geometry, GradientInput means,
-                                                          GradientOutput gradients, index iCell, GradientPositivityParameters p, BetaOutput output) noexcept
+                                                          GradientOutput gradients, index iCell, GradientPositivityParameters p, real &outputBeta) noexcept
         {
             PointValues<Components> points;
-            points.displacement = geometry.displacements;
+            points.stencil = geometry.stencil;
+            points.cell = iCell;
             points.dimension = p.dimension;
             for (int j = 0; j < Components; ++j)
             {
@@ -104,7 +119,7 @@ namespace DNDS::Cauchy::CUDA
             if (!p.bounds.Admissible(points.mean))
                 return NumericalStatus{NumericalError::InvalidState, 1}.At(iCell);
             const MeanValues<Components> base{points.mean};
-            const index begin = geometry.positivityOffsets(iCell, 0), end = geometry.positivityOffsets(iCell + 1, 0);
+            const index begin = 0, end = index(geometry.stencil(0, 0).topology.CellFaces(iCell).size());
             real beta = p.bounds.ReconstructionFraction(points.mean, base, points, begin, end, p.betaPower, p.betaCutoff, 1, p.clippedPolicy);
             if (!(std::isfinite(beta) && beta >= 0 && beta <= 1))
                 return NumericalStatus{NumericalError::InvalidState, 2}.At(iCell);
@@ -114,6 +129,15 @@ namespace DNDS::Cauchy::CUDA
             for (int j = 0; j < Components; ++j)
                 for (int d = 0; d < p.dimension; ++d)
                     points.gradients[j][d] *= j < 5 ? beta : ransScale;
+            points.stored = gradients;
+            const auto publish = [&]()
+            {
+                for (int j = 0; j < Components; ++j)
+                    for (int d = 0; d < p.dimension; ++d)
+                        gradients(iCell, j * p.dimension + d) = points.gradients[j][d];
+            };
+            publish();
+            points.readStored = true;
             const auto accepted = [&]()
             {
                 bool good = true;
@@ -134,24 +158,33 @@ namespace DNDS::Cauchy::CUDA
                 for (int j = 0; j < 5; ++j)
                     for (int d = 0; d < p.dimension; ++d)
                         points.gradients[j][d] *= beta / previous;
+                publish();
             }
             if (!accepted())
                 return NumericalStatus{NumericalError::InvalidState, 5}.At(iCell);
-            for (int j = 0; j < Components; ++j)
-                for (int d = 0; d < p.dimension; ++d)
-                    gradients(iCell, j * p.dimension + d) = points.gradients[j][d];
-            output(iCell, 0) = beta;
+            outputBeta = beta;
             return {};
         }
         template <int Components>
         __global__ void Positive(GradientLimiterGeometry geometry, GradientInput means, GradientOutput gradients,
-                                 GradientIndices selected, GradientPositivityParameters p, BetaOutput beta, GradientStatus status)
+                                 GradientIndices selected, GradientPositivityParameters p, ModalPositivitySummary partials)
         {
+            NumericalStatus failure;
+            index limited = 0;
+            real minimum = 1;
             for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
             {
                 const index iCell = selected(iRow, 0);
-                status(iCell, 0) = PositiveCell<Components>(geometry, means, gradients, iCell, p, beta);
+                real beta = 1;
+                const auto status = PositiveCell<Components>(geometry, means, gradients, iCell, p, beta);
+                failure = PositivityReductionDetail::FirstFailure{}(failure, status);
+                if (status && beta < 1)
+                {
+                    ++limited;
+                    minimum = std::min(minimum, beta);
+                }
             }
+            PositivityReductionDetail::PublishPositivitySummary<128>({failure, limited, minimum}, partials);
         }
         __global__ void Primitive(GradientInput input, GradientOutput output, PerfectGas gas, GradientStatus status)
         {
@@ -191,10 +224,10 @@ namespace DNDS::Cauchy::CUDA
         CheckTable(destination, owned, components * dimension);
         if (barth)
         {
-            R::ValidateViewDevices(context.device, geometry.cells, geometry.offsets, geometry.samples);
-            DNDS_check_throw_info(geometry.offsets.RowCount() == owned + 1 && geometry.cells.RowCount() >= owned, "CUDA Barth geometry differs");
+            R::ValidateViewDevices(context.device, geometry.stencil);
+            DNDS_check_throw_info(geometry.stencil.RowCount() == 1 && geometry.ownedCells == owned && geometry.allCells >= owned, "CUDA Barth geometry differs");
             if (requireGhost || means.ghost.RowCount())
-                CheckTable(means.ghost, geometry.cells.RowCount() - owned, components);
+                CheckTable(means.ghost, geometry.allCells - owned, components);
         }
         R::CheckKernelArgumentBudget<GradientLimiterGeometry, GradientMeans, GradientInput, GradientOutput, GradientIndices, int, bool>();
         if (!selected.RowCount())
@@ -216,36 +249,43 @@ namespace DNDS::Cauchy::CUDA
     }
     void LimitPositivePhysicalGradients(R::ExecutionContext context, GradientLimiterGeometry geometry, GradientInput means,
                                         GradientOutput gradients, GradientIndices selected, GradientPositivityParameters p,
-                                        BetaOutput beta, GradientStatus status)
+                                        ModalPositivitySummary partials)
     {
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && (p.dimension == 2 || p.dimension == 3), "CUDA gradient PP context/dimension differs");
-        R::ValidateViewDevices(context.device, means, gradients, selected, beta, status, geometry.positivityOffsets, geometry.displacements);
+        R::ValidateViewDevices(context.device, means, gradients, selected, partials, geometry.stencil);
         const index owned = means.RowCount(), components = means.Width();
         DNDS_check_throw_info(components >= 5 && components <= 7 && p.bounds.components == components && p.bounds.flowFirst == 0 && p.bounds.independent == 0 &&
                                   p.bounds.speciesEnergies[0].empty() && p.bounds.speciesEnergies[1].empty() && p.rans.components + 5 == components &&
                                   p.betaPower >= 0 && std::isfinite(p.betaCutoff) && p.betaCutoff >= 0 && p.betaCutoff <= 1 &&
                                   (p.clippedPolicy == ReconstructionClippedReferencePolicy::FallbackToBase || p.clippedPolicy == ReconstructionClippedReferencePolicy::Backtracking) &&
-                                  geometry.positivityOffsets.RowCount() == owned + 1 && beta.RowCount() == owned && status.RowCount() == owned,
+                                  geometry.stencil.RowCount() == 1 && geometry.ownedCells == owned &&
+                                  partials.status.RowCount() == GradientPositivitySummaryRows(selected.RowCount()) &&
+                                  partials.count.RowCount() == partials.status.RowCount() && partials.minimum.RowCount() == partials.status.RowCount(),
                               "unsupported CUDA gradient PP profile/shape");
         CheckTable(means, owned, components);
         CheckTable(gradients, owned, components * p.dimension);
-        R::CheckKernelArgumentBudget<GradientLimiterGeometry, GradientInput, GradientOutput, GradientIndices, GradientPositivityParameters, BetaOutput, GradientStatus>();
+        R::CheckKernelArgumentBudget<GradientLimiterGeometry, GradientInput, GradientOutput, GradientIndices, GradientPositivityParameters, ModalPositivitySummary>();
         if (!selected.RowCount())
             return;
         const auto stream = static_cast<cudaStream_t>(context.stream);
         switch (components)
         {
         case 5:
-            Positive<5><<<Blocks(selected.RowCount()), 128, 0, stream>>>(geometry, means, gradients, selected, p, beta, status);
+            Positive<5><<<Blocks(selected.RowCount()), 128, 0, stream>>>(geometry, means, gradients, selected, p, partials);
             break;
         case 6:
-            Positive<6><<<Blocks(selected.RowCount()), 128, 0, stream>>>(geometry, means, gradients, selected, p, beta, status);
+            Positive<6><<<Blocks(selected.RowCount()), 128, 0, stream>>>(geometry, means, gradients, selected, p, partials);
             break;
         case 7:
-            Positive<7><<<Blocks(selected.RowCount()), 128, 0, stream>>>(geometry, means, gradients, selected, p, beta, status);
+            Positive<7><<<Blocks(selected.RowCount()), 128, 0, stream>>>(geometry, means, gradients, selected, p, partials);
             break;
         }
         CheckLaunch();
+    }
+    index GradientPositivitySummaryRows(index selectedCells)
+    {
+        DNDS_check_throw_info(selectedCells >= 0, "gradient PP selected-cell count is negative");
+        return index(Blocks(selectedCells));
     }
     void FillPrimitiveMeans(R::ExecutionContext context, GradientInput input, GradientOutput output, PerfectGas gas, GradientStatus status)
     {

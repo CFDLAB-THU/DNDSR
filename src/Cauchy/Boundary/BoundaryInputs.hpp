@@ -26,6 +26,17 @@ namespace DNDS::Cauchy
         Vector3 point, normal;
         bool interface;
     };
+    /// One immutable receiver-face range. Actual cell/zone/normal/position are
+    /// queried from Geom/CFV; no persistent per-quadrature geometry is copied.
+    /// quadratureCount may be zero for a center-only receiver. The center row
+    /// is this record's ordinal in the boundary-face registry.
+    struct BoundaryFaceRange
+    {
+        index face = UnInitIndex;
+        index quadratureBegin = 0;
+        index quadratureCount = 0;
+        bool interface = false;
+    };
     /// One completed inter-domain matching/sampling source retained by a
     /// boundary publication. Poses are exact values for this physical stage;
     /// routeGeneration changes whenever matching is rebuilt. routeOwner pins
@@ -70,6 +81,10 @@ namespace DNDS::Cauchy
         EquationPropertyKey _property;
         std::shared_ptr<const ThermalPolicy> _thermal;
         std::shared_ptr<const Detail::BoundaryPointLayout> _layout;
+        /// Optional validated consumer of a superset packet, e.g. a pMG
+        /// center-only reader of the live fine packet. Provider sections and
+        /// publication identity remain unchanged; the alias never deletes data.
+        std::shared_ptr<const Detail::BoundaryPointLayout> _consumerLayout;
         /// Optional resident validation workspaces; shared packet copies refer
         /// to the same serial publication round, never concurrent checks.
         std::shared_ptr<MeanStateCheck> _quadratureCheck, _faceCheck;

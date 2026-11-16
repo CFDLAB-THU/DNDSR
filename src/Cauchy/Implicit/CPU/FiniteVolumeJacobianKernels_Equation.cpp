@@ -6,7 +6,7 @@ namespace DNDS::Cauchy::CPU
     {
         output.setZero();
         for (const auto &record : snapshot.geometry.Points(iRow, iBlock))
-            AddEquationJacobianPoint(snapshot, ExpandJacobianPoint(record), output, snapshot.means);
+            AddEquationJacobianPoint(snapshot, ExpandJacobianPoint(snapshot.geometry.Point(iRow, record)), output, snapshot.means);
     }
     void ApplyEquationJacobianBlock(const EquationJacobianView &snapshot, index iRow, index iBlock, JacobianInput input, Eigen::Ref<Eigen::VectorXd> output)
     {
@@ -22,7 +22,7 @@ namespace DNDS::Cauchy::CPU
                 product[j] = 0;
             for (const auto &record : snapshot.geometry.Points(iRow, iBlock))
             {
-                const auto point = ExpandJacobianPoint(record);
+                const auto point = ExpandJacobianPoint(snapshot.geometry.Point(iRow, record));
                 AddFrozenFluxProduct6({snapshot.means[point.other].data(), 6},
                                       {snapshot.pressureDerivative[point.other].data(), 6}, snapshot.pressure(point.other, 0),
                                       point.normal, snapshot.frame.GridVelocity(point.location), .5 * snapshot.scale * point.weight,
@@ -33,7 +33,7 @@ namespace DNDS::Cauchy::CPU
         output.setZero();
         for (const auto &record : snapshot.geometry.Points(iRow, iBlock))
         {
-            const auto point = ExpandJacobianPoint(record);
+            const auto point = ExpandJacobianPoint(snapshot.geometry.Point(iRow, record));
             FlowState flow{}, direction{};
             real dp = 0;
             for (index j = 0; j < snapshot.components; ++j)

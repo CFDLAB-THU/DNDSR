@@ -1,5 +1,6 @@
 #pragma once
 #include "Cauchy/Discretization/FiniteVolumeStencil.hpp"
+#include "Cauchy/Boundary/BoundaryInputs.hpp"
 #include "DNDS/Runtime/Execution/EagerEngine.hpp"
 
 namespace DNDS::Cauchy
@@ -16,7 +17,8 @@ namespace DNDS::Cauchy
     public:
         explicit BoundaryForceReduction(Runtime::ExecutionContext);
         Vector3 Evaluate(Runtime::EagerEngine &, const Runtime::ExecutionStream &,
-                         const FiniteVolumeStencilStorage &, const Runtime::Array<real> &momentum,
+                         const FiniteVolumeStencilStorage &, const Runtime::Array<BoundaryFaceRange> &,
+                         const Runtime::Array<real> &momentum,
                          const std::vector<int> &zones);
     };
 }

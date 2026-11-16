@@ -70,7 +70,8 @@ namespace DNDS::Cauchy
     {
         std::string stateInputLayout = "aos", reconstructionInputLayout = "aos";
         std::string polynomialArithmetic = "fp64", dissipationArithmetic = "fp64", fluxArithmetic = "fp64";
-        std::string rhsMapping = "thread";
+        std::string rhsMapping = "thread", rhsReduction = "serial";
+        int rhsGridBlocks = 0;
         int rhsBlockSize = 128;
         bool rhsDoubleBuffer = false;
         DNDS_DECLARE_CONFIG(KernelExecutionSettings)
@@ -80,15 +81,17 @@ namespace DNDS::Cauchy
             DNDS_FIELD(polynomialArithmetic, "Point-local polynomial compute: fp64, fp32 or f32f32; coefficients remain FP64");
             DNDS_FIELD(dissipationArithmetic, "Gas-agnostic Riemann dissipation arithmetic: fp64, fp32 or f32f32");
             DNDS_FIELD(fluxArithmetic, "Point physics and full flux arithmetic: fp64, fp32 or f32f32; residual sums remain FP64");
-            DNDS_FIELD(rhsMapping, "CUDA FP64 face mapping: thread (ordered quadrature) or warpQuadrature (deterministic warp sum)");
-            DNDS_FIELD(rhsBlockSize, "Experimental CUDA RHS threads per block: 64, 128 or 256");
+            DNDS_FIELD(rhsMapping, "CUDA FP64 mapping: thread, warpQuadrature, warpSegments, or ctaSegments");
+            DNDS_FIELD(rhsReduction, "Segmented mapping face sum: serial quadrature order or deterministic segmented tree");
+            DNDS_FIELD(rhsGridBlocks, "CUDA RHS maximum grid blocks; 0 keeps the mapping default cap");
+            DNDS_FIELD(rhsBlockSize, "CUDA RHS threads per block: 64, 128, 256 or 512; segments require at least 128");
             DNDS_FIELD(rhsDoubleBuffer, "Experimental FP64 flow5 double-buffered shared means/coefficient/auxiliary face batches");
         }
         bool Default() const
         {
             return stateInputLayout == "aos" && reconstructionInputLayout == "aos" &&
                    polynomialArithmetic == "fp64" && dissipationArithmetic == "fp64" && fluxArithmetic == "fp64" && rhsMapping == "thread" &&
-                   rhsBlockSize == 128 && !rhsDoubleBuffer;
+                   rhsBlockSize == 128 && !rhsDoubleBuffer && rhsReduction == "serial" && rhsGridBlocks == 0;
         }
     };
     struct ExecutionSettings

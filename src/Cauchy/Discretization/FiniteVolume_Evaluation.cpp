@@ -311,7 +311,7 @@ namespace DNDS::Cauchy
                               "FV execution lanes belong to another runtime");
         std::optional<AuxiliaryPreparation> auxiliaryPreparation;
         std::optional<BoundaryInputs> boundary;
-        OptionalRef<const R::Array<real>> incoming;
+        OptionalRef<const R::Array<real>> incoming, incomingCenters;
         std::vector<std::shared_ptr<Workspace::RHSSubmission>> rhsSubmissions;
         std::shared_ptr<Workspace::CharacteristicSubmission> characteristicSubmission;
         std::shared_ptr<Workspace::GradientPositivitySubmission> gradientPositivitySubmission;
@@ -371,7 +371,11 @@ namespace DNDS::Cauchy
                 ValidateBoundaryInputs(*boundary, time);
             }
             if (boundary)
-                incoming.Emplace(boundary->QuadratureValues().CoupledField().Owned());
+            {
+                incomingCenters.Emplace(boundary->FaceCenterValues().CoupledField().Owned());
+                incoming.Emplace(_data->stencil.quadratureBoundaryValues
+                    ? boundary->QuadratureValues().CoupledField().Owned() : *incomingCenters);
+            }
             _data->partition.Validate();
             work.boundaryMomentumCurrent = false; });
         const bool needsAuxiliaryPreparation = auxiliary && !work.meanGradients;
@@ -448,7 +452,7 @@ namespace DNDS::Cauchy
         }
         if (!dependency)
             work.SubmitBoundary(engine, stream, state, variational && numerics.reconstructionBoundaryFromPolynomial,
-                                time, {}, incoming);
+                                time, {}, incoming, incomingCenters);
         // P0 RANS sources still need physical gradients during a mean-only
         // timestep forecast; disabling reconstruction must not skip this pass.
         const bool directGradientWork = (!work.meanOnly && numerics.reconstruction == "gradient") ||
@@ -475,7 +479,7 @@ namespace DNDS::Cauchy
                     auxiliaryPreparation->Apply(engine, stream, CFV::ReconstructionRegion::Core);
             }
             work.SubmitBoundary(engine, stream, state, variational && numerics.reconstructionBoundaryFromPolynomial,
-                                time, {}, incoming);
+                                time, {}, incoming, incomingCenters);
             // MPI-local core does not imply interface independence.
             if (gradientWork && overlap)
                 gradient(CFV::ReconstructionRegion::Core);
@@ -527,7 +531,7 @@ namespace DNDS::Cauchy
             if (work.flowCharacteristic)
                 characteristicSubmission = work.SubmitCharacteristics(engine, stream, state, OptionalRef<const AuxiliaryValues>(auxiliary));
             DNDS_check_throw_info(reconstruction.limitedVRHistory, "LVR reconstruction state has no history");
-            work.limitedVR->Build(*_data, state.CoupledField(), *reconstruction.limitedVRHistory,
+            work.limitedVR->Build(*_data, state.CoupledField(), *work.fields.front().gradient, *reconstruction.limitedVRHistory,
                                   work.flowCharacteristic ? CFV::FaceCharacteristicTransformRef(std::cref(*work.flowCharacteristic))
                                                           : std::nullopt,
                                   engine, stream, communication);
@@ -544,7 +548,7 @@ namespace DNDS::Cauchy
                 else
                 {
                     if (numerics.reconstructionBoundaryFromPolynomial)
-                        work.SubmitBoundary(engine, stream, state, true, time, {}, incoming);
+                        work.SubmitBoundary(engine, stream, state, true, time, {}, incoming, incomingCenters);
                     operations = schedule.BeginAfterCompute(reconstruction.coefficientHalo);
                     if (overlap)
                         sweep(CFV::ReconstructionRegion::Core);
@@ -662,9 +666,9 @@ namespace DNDS::Cauchy
             local([&]
                   {
                 // One controller sequence for inline CPU, worker CPU and CUDA.
-                // PP owns explicit observation points for its numerical recovery
-                // decisions; its leaves declare queued array operands. Never
-                // invoke this controller from an execution-worker callback.
+                // PP performs point-local recovery inside its queued producer.
+                // Only the enclosing reporting drain observes its compact
+                // summary; no host decision interrupts local backtracking.
                 work.positivity->Apply(engine, stream, state, reconstruction.WarmValues(), reconstruction.MutableFinalized(), false); });
         work.EndQueuedPhase(engine, stream, positivityTiming);
         auto operations = work.nativeDirectGradient
@@ -697,6 +701,8 @@ namespace DNDS::Cauchy
               {
             schedule.Join();
             work.CheckNumericalStatus(bool(residual));
+            if (work.positivity)
+                (void)work.positivity->LocalStatistics();
             reconstruction.PublishFinalized();
             if (_data->settings.CheckHaloFreshness())
                 for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)

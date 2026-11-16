@@ -686,11 +686,12 @@ namespace DNDS::Cauchy
         Geom::MeshReadAccess AcquireMeshRead(Geom::MeshReadRequirements requirements) const;
         const RigidMotion &Motion() const;
         std::vector<BoundaryPoint> BoundaryPoints() const;
-        /// Retain canonical quadrature-point geometry for an operator submission.
+        /// Materialize a caller-owned matching/debug quadrature snapshot.
+        /// Ordinary boundary kernels read the compact shared face registry.
         Runtime::Array<BoundaryPoint>::ReadLease ReadBoundaryPoints() const;
         /// Maintained face-center rows, in faceFlow order; quadrature=-1.
         std::vector<BoundaryPoint> BoundaryFaces() const;
-        /// Retain canonical face-center geometry for an operator submission.
+        /// Materialize a caller-owned canonical face-center snapshot.
         Runtime::Array<BoundaryPoint>::ReadLease ReadBoundaryFaces() const;
         /// Direct owned-boundary selection for a physical coupling adapter.
         /// The result retains the reference mesh without exposing a mutable

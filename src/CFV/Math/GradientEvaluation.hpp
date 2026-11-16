@@ -16,8 +16,12 @@ namespace DNDS::CFV::Math
             result[j] = 0;
         for (index entry = plan.offsets(iCell, 0); entry < plan.offsets(iCell + 1, 0); ++entry)
         {
-            const index other = plan.neighbors(entry, 0);
-            const bool rotated = other != UnInitIndex && plan.hasRotatedFrames && plan.rotationActive(entry, 0);
+            const rowsize slot = rowsize(entry - plan.offsets(iCell, 0));
+            const index face = plan.topology.CellFaces(iCell)[slot];
+            const index other = plan.topology.CellFaceOther(iCell, face, slot);
+            const int side = plan.topology.CellIsFaceBack(iCell, face, slot) ? 0 : 1;
+            const bool rotated = other != UnInitIndex && plan.periodic.Rotates(face);
+            const auto rotation = rotated ? plan.periodic.OtherRotation(face, side) : Geom::tGPoint::Identity().eval();
             for (index component = 0; component < components; ++component)
             {
                 real value = other == UnInitIndex ? boundary(plan.boundaryIds(entry, 0), component) : mean(other, component);
@@ -26,7 +30,7 @@ namespace DNDS::CFV::Math
                 {
                     value = 0;
                     for (int d = 0; d < 3; ++d)
-                        value += plan.rotations(entry, component - first + 3 * d) * mean(other, first + d);
+                        value += rotation(component - first, d) * mean(other, first + d);
                 }
                 const real difference = value - mean(iCell, component);
                 for (int d = 0; d < plan.dimension; ++d)

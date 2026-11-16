@@ -27,7 +27,7 @@ namespace DNDS::Cauchy
             Field field;
             field.vectorStarts = vectors;
             field.boundaryValues = R::Array<real>(R::RowLayout::Dense(
-                                                      data.stencil.boundaryEntries.RowCount(), index(physical.Width())),
+                                                      data.BoundaryValueRows(), index(physical.Width())),
                                                   data.metrics.Device());
             if (data.reconstruction)
             {
@@ -56,10 +56,17 @@ namespace DNDS::Cauchy
                   (meanOnly && data.settings.numerics.reconstruction == "gradient"))))
             {
                 field.gradient.emplace(data.metrics.BuildField(index(physical.Width()) * data.metrics.Dimension()));
-                field.gradientBoundary.emplace(data.gradient.BuildBoundaryValues(index(physical.Width())));
+                field.gradientBoundary.emplace(data.settings.numerics.reconstruction == "variational"
+                                                   ? data.gradient.BuildBoundaryValues(index(physical.Width()))
+                                                   : field.boundaryValues);
             }
             else if (!meanOnly && data.limitedVRGeometry)
-                field.gradientBoundary.emplace(data.gradient.BuildBoundaryValues(index(physical.Width())));
+            {
+                field.gradient.emplace(data.metrics.BuildField(index(physical.Width()) * data.metrics.Dimension()));
+                field.gradientBoundary.emplace(data.settings.numerics.reconstruction == "variational"
+                                                   ? data.gradient.BuildBoundaryValues(index(physical.Width()))
+                                                   : field.boundaryValues);
+            }
             if (field.gradient)
                 field.gradientExecution.emplace(data.gradient.BuildWorkspace(index(physical.Width()), vectors,
                                                                              !meanOnly && data.settings.numerics.limiter == "WBAP"));
@@ -123,13 +130,13 @@ namespace DNDS::Cauchy
                                        std::optional<Physics::Chemistry::ChemicalWorkerPool> pool, bool meanTrial)
         : owner(std::move(data)), meanOnly(meanTrial), componentNumber(state.ComponentNumber()), physicalFieldNumber(state.PhysicalFieldNumber()),
           fields(BuildFields(*owner, state, meanOnly)),
-          boundary(BindBoundary(state, fields, owner->stencil.boundaryEntries.RowCount())),
+          boundary(BindBoundary(state, fields, owner->BoundaryValueRows())),
           thermal(owner->equation, owner->settings.numerics.densityFloor, owner->settings.numerics.temperatureFloor,
                   owner->settings.numerics.sensibleEnergyFloor, owner->settings.numerics.pressureFloor,
                   pool ? pool->Acquire() : Physics::Chemistry::ChemicalWorkerPool::Lease{}),
           diagnostics(owner->forceZones),
           workers(std::move(pool)),
-          boundaryMomentumFlux(R::RowLayout::Dense(owner->stencil.boundaryEntries.RowCount(), 3), owner->metrics.Device()),
+          boundaryMomentumFlux(R::RowLayout::Dense(owner->BoundaryValueRows(), 3), owner->metrics.Device()),
           faceFlux(R::RowLayout::Dense(owner->stencil.stencilFaces.RowCount(), state.ComponentNumber()), owner->metrics.Device()),
           chemical(owner->settings.equation.source == "chemical")
     {
@@ -164,11 +171,10 @@ namespace DNDS::Cauchy
         {
             if (owner->settings.numerics.reconstruction == "variational")
             {
-                // Polynomial positivity retains only its own reference and
-                // sample buffers. Direct P0/P1 policies do not manufacture
-                // a modal prototype merely to reuse this implementation.
-                auto coefficientPrototype = ReconstructionState::BuildCoefficients(*owner, state);
-                positivity = std::make_shared<PositivityWorkspace>(owner, state, coefficientPrototype, workers);
+                // Modal PP owns bounded point scratch and compact decisions.
+                // It borrows the supplied coefficient fields at submission;
+                // no dormant coefficient prototype or halo binding is needed.
+                positivity = std::make_shared<PositivityWorkspace>(owner, state, workers);
             }
             // Conservative explicit flux blending is currently the
             // established pure-flow policy. Extended RANS/species stages
@@ -203,7 +209,7 @@ namespace DNDS::Cauchy
                 cpuGradientWorkers = OMP::DistributedThreads();
                 directLimiterScratch = R::Array<real>(R::RowLayout::Dense(6 * cpuGradientWorkers, componentNumber));
                 if (owner->settings.numerics.positivity)
-                    directPPSamples = R::Array<real>(R::RowLayout::Dense(owner->maximumPositivityPoints * cpuGradientWorkers, componentNumber));
+                    directPPSamples = R::Array<real>(R::RowLayout::Dense(owner->maximumGradientPoints * cpuGradientWorkers, componentNumber));
             }
         }
         if (!meanOnly && (owner->settings.numerics.limiter == "WBAP" || limitedVR) && owner->settings.numerics.characteristicLimiter)

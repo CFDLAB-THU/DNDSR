@@ -58,6 +58,55 @@ namespace DNDS::Geom
         Periodicity periodicInfo{};
     };
 
+    /** @brief Minimal borrowed cell/face incidence data for numerical kernels.
+     * @details MeshReadAccess retains every allocation. This projection neither
+     * copies topology nor adds a solver-private mapping. Preserve the actual
+     * cell-face slot: self-periodic faces contain two distinct incidences even
+     * when both parent cell numbers are equal. Residency is checked once by the
+     * host launcher, never while traversing an individual incidence.
+     */
+    struct CellFaceIncidenceView
+    {
+        Runtime::PairReadView<index> cellFaces{}, faceCells{};
+        Runtime::PairReadView<NodePeriodicBits> cellFaceBits{};
+        Runtime::PairReadView<ElemInfo> faceInfo{};
+        bool periodic = false;
+
+        void ValidateDevice(Runtime::Device device) const
+        {
+            Runtime::ValidateViewDevices(device, cellFaces, faceCells);
+            faceInfo.ValidateDevice(device);
+            if (periodic)
+                cellFaceBits.ValidateDevice(device);
+        }
+        DNDS_DEVICE_CALLABLE auto CellFaces(index iCell) const { return cellFaces[iCell]; }
+        DNDS_DEVICE_CALLABLE Runtime::RowSpan<const index, Runtime::AccessBoundsChecks, 2, 2> FaceCells(index iFace) const
+        {
+            // Publication proves logical width two. Keep physical component
+            // stride (including a future non-AoS mesh) without a dynamic row
+            // size in repeated parent indexing inside numerical kernels.
+            const auto row = faceCells[iFace];
+            return {row.data(), 2, row.ElementStride()};
+        }
+        DNDS_DEVICE_CALLABLE int GetFaceZone(index iFace) const { return faceInfo(iFace, 0).zone; }
+        DNDS_DEVICE_CALLABLE bool CellIsFaceBack(index iCell, index iFace, rowsize slot) const
+        {
+            const auto cells = FaceCells(iFace);
+            DNDS_HD_assert(cells[0] == iCell || cells[1] == iCell);
+            if (cells[0] == iCell && cells[1] == iCell)
+            {
+                DNDS_HD_assert(periodic && slot >= 0);
+                return !bool(cellFaceBits(iCell, slot));
+            }
+            return cells[0] == iCell;
+        }
+        DNDS_DEVICE_CALLABLE index CellFaceOther(index iCell, index iFace, rowsize slot) const
+        {
+            return FaceCells(iFace)[CellIsFaceBack(iCell, iFace, slot) ? 1 : 0];
+        }
+    };
+    static_assert(std::is_trivially_copyable_v<CellFaceIncidenceView>);
+
     /// A storage-independent kernel query view. It owns no leases or allocations.
     /// Host/device placement and dependency ordering belong to MeshReadAccess.
     /// Copying a view or row span does not extend its owner's lifetime.
@@ -151,6 +200,12 @@ namespace DNDS::Geom
         DNDS_DEVICE_CALLABLE int Dimension() const { return _storage.dim; }
         DNDS_DEVICE_CALLABLE bool IsPeriodic() const { return _storage.isPeriodic; }
         DNDS_DEVICE_CALLABLE const Periodicity &Periodic() const { return _storage.periodicInfo; }
+        /// Borrow only cell/face topology for a compact numerical launch.
+        DNDS_DEVICE_CALLABLE CellFaceIncidenceView CellFaceIncidences() const
+        {
+            return {RelationData(MeshRelation::CellFaces), RelationData(MeshRelation::FaceCells),
+                    _storage.cell2facePbi, _storage.faceElemInfo, _storage.isPeriodic};
+        }
         DNDS_DEVICE_CALLABLE bool HasNodeWallDist() const { return _storage.hasNodeWallDist; }
         DNDS_DEVICE_CALLABLE bool HasRelation(MeshRelation relation) const
         {

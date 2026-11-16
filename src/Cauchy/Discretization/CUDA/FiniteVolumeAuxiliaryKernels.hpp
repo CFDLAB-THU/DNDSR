@@ -33,10 +33,8 @@ namespace DNDS::Cauchy::CUDA
     struct AuxiliaryFaceRequest
     {
         AuxiliaryStateInput state;
-        Runtime::ArrayView<const FiniteVolumeDetail::SampleRecord, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> samples;
-        AuxiliaryIndices entries, stencilFaces, quadratureOffsets;
-        Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::FixedRows<8>> geometry;
-        Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> area;
+        Runtime::ArrayView<const FiniteVolumeStencilView, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> stencil;
+        index faceNumber = 0, allCells = 0;
         Runtime::ArrayView<const BoundaryKind, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> conditions;
         Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::CSRRows> wallFaces;
         AuxiliaryInput preparedMeans, incoming;
@@ -49,9 +47,8 @@ namespace DNDS::Cauchy::CUDA
     /// subsets are already classified by the mesh work-partition facility.
     struct AuxiliaryCellRequest
     {
-        AuxiliaryIndices offsets, faces;
-        Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> area;
-        Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::FixedRows<8>> geometry;
+        Runtime::ArrayView<const FiniteVolumeStencilView, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> stencil;
+        index ownedCells = 0, faceNumber = 0;
         AuxiliaryInput spectral, wave, pressure, scratch;
         AuxiliaryOutput spectralSum, waveMaximum, pressureMinimum;
         real angularSpeed = 0;

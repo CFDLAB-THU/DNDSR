@@ -15,6 +15,7 @@
 #include "Cauchy/Implicit/NonlinearOperators.hpp"
 #include "DNDS/Runtime/Execution/CUDAExecution.hpp"
 #include "../CFV/ReconstructionFixture.hpp"
+#include "CompactManagedStencilFixture.hpp"
 
 namespace C = DNDS::Cauchy;
 namespace R = DNDS::Runtime;
@@ -185,48 +186,42 @@ TEST_CASE("Boundary packet publication and frozen snapshots retain device placem
     }
 }
 
-TEST_CASE("Boundary momentum reduction selects zones once across inline worker and CUDA")
+TEST_CASE("Boundary momentum reduction selects compact face ranges across inline worker and CUDA")
 {
-    constexpr I points = 1031;
-    C::FiniteVolumeStencilStorage stencil;
-    stencil.samples = R::Array<C::FiniteVolumeDetail::SampleRecord>(R::RowLayout::Dense(points + 1, 1));
-    stencil.boundaryEntries = R::Array<I>(R::RowLayout::Dense(points, 1));
-    R::Array<real> momentum(R::RowLayout::Dense(points, 3));
-    C::Vector3 expected{};
+    // More than one reduction block of real boundary faces. Both the center
+    // and quadrature contracts exercise the same canonical registry; no mock
+    // point-to-expanded-sample map masks a missing production topology input.
+    for (const bool centers : {false, true})
     {
-        auto samples = stencil.samples.Write();
-        auto entries = stencil.boundaryEntries.Write();
-        auto values = momentum.Write();
-        for (I iPoint = 0; iPoint < points; ++iPoint)
+        CauchyTest::CompactManagedStencilFixture fixture(CFVTest::CartesianHexes(mpi, 5), centers);
+        R::Array<real> momentum(R::RowLayout::Dense(fixture.boundaryRows, 3));
+        C::Vector3 expected{};
         {
-            C::FiniteVolumeDetail::SampleRecord sample{};
-            sample.zone = iPoint % 3 == 0 ? 7 : iPoint % 3 == 1 ? 9
-                                                                : 11;
-            samples.View()(iPoint + 1, 0) = sample;
-            entries.View()(iPoint, 0) = iPoint + 1;
-            for (int d = 0; d < 3; ++d)
-            {
-                values.View()(iPoint, d) = (d + 1) * .01 * (iPoint + 1);
-                if (sample.zone != 11)
+            auto values = momentum.Write();
+            for (I iPoint = 0; iPoint < momentum.RowCount(); ++iPoint)
+                for (int d = 0; d < 3; ++d)
+                {
+                    values.View()(iPoint, d) = (d + 1) * .01 * (iPoint + 1);
                     expected[d] += values.View()(iPoint, d);
-            }
+                }
         }
-    }
-    for (const int backend : {0, 1, 2})
-    {
-        const auto device = backend == 2 ? R::Device::CUDA(0) : R::Device::Host();
-        R::EagerEngine engine(backend == 1 ? 1 : 0);
-        const auto stream = backend == 2 ? engine.CreateStream(std::make_shared<R::CUDALauncher>(0)) : engine.CreateCPUStream();
-        C::FiniteVolumeStencilStorage resident;
-        resident.samples = stencil.samples.To(device, stream.Context());
-        resident.boundaryEntries = stencil.boundaryEntries.To(device, stream.Context());
-        const auto flux = momentum.To(device, stream.Context());
-        C::BoundaryForceReduction reduction(stream.Context());
-        const auto force = reduction.Evaluate(engine, stream, resident, flux, {7, 9, 7});
-        for (int d = 0; d < 3; ++d)
-            CHECK(force[d] == doctest::Approx(expected[d]).epsilon(3e-12));
-        CHECK(reduction.Evaluate(engine, stream, resident, flux, {7, 9, 7}) == force);
-        CHECK(reduction.Evaluate(engine, stream, resident, flux, {}) == C::Vector3{});
+        for (const int backend : {0, 1, 2})
+        {
+            const auto device = backend == 2 ? R::Device::CUDA(0) : R::Device::Host();
+            R::EagerEngine engine(backend == 1 ? 1 : 0);
+            const auto stream = backend == 2 ? engine.CreateStream(std::make_shared<R::CUDALauncher>(0)) : engine.CreateCPUStream();
+            const auto metrics = backend == 2 ? fixture.metrics.Placed(device, stream.Context()) : fixture.metrics;
+            const auto resident = backend == 2 ? fixture.stencil.Placed(metrics, stream.Context()) : fixture.stencil;
+            const auto ranges = fixture.boundaryFaces.To(device, stream.Context());
+            const auto flux = momentum.To(device, stream.Context());
+            C::BoundaryForceReduction reduction(stream.Context());
+            const auto force = reduction.Evaluate(engine, stream, resident, ranges, flux, {7, 9, 7});
+            for (int d = 0; d < 3; ++d)
+                CHECK(force[d] == doctest::Approx(expected[d]).epsilon(3e-12));
+            CHECK(reduction.Evaluate(engine, stream, resident, ranges, flux, {7, 9, 7}) == force);
+            CHECK(reduction.Evaluate(engine, stream, resident, ranges, flux, {9}) == C::Vector3{});
+            CHECK(reduction.Evaluate(engine, stream, resident, ranges, flux, {}) == C::Vector3{});
+        }
     }
 }
 TEST_CASE("Spatial residual uses one managed schedule for inline worker and CUDA")

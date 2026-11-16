@@ -37,16 +37,17 @@ namespace DNDS::CFV::Math
             valid[j] = 1;
         }
         const real epsilon = std::pow(verySmallReal, .25);
-        index lastFace = UnInitIndex;
         for (index entry = plan.offsets(iCell, 0); entry < plan.offsets(iCell + 1, 0); ++entry)
         {
-            const index iFace = plan.faces(entry, 0), neighbor = plan.neighbors(entry, 0);
-            if (iFace == lastFace)
-                continue;
-            lastFace = iFace;
+            const rowsize slot = rowsize(entry - plan.offsets(iCell, 0));
+            const index iFace = plan.topology.CellFaces(iCell)[slot];
+            const index neighbor = plan.topology.CellFaceOther(iCell, iFace, slot);
             if (neighbor == UnInitIndex)
                 continue;
-            if (!plan.hasRotatedFrames || !plan.rotationActive(entry, 0))
+            const bool rotated = plan.periodic.Rotates(iFace);
+            const int side = plan.topology.CellIsFaceBack(iCell, iFace, slot) ? 0 : 1;
+            const auto rotation = rotated ? plan.periodic.OtherRotation(iFace, side) : Geom::tGPoint::Identity().eval();
+            if (!rotated)
                 for (index j = 0; j < width; ++j)
                     other[j] = values.input(neighbor, j);
             else
@@ -58,12 +59,12 @@ namespace DNDS::CFV::Math
                         real value = 0;
                         if (first < 0)
                             for (index k = 0; k < dim; ++k)
-                                value += plan.rotations(entry, d + 3 * k) * values.input(neighbor, component * dim + k);
+                                value += rotation(d, k) * values.input(neighbor, component * dim + k);
                         else
                             for (index v = 0; v < 3; ++v)
                                 for (index k = 0; k < dim; ++k)
-                                    value += plan.rotations(entry, component - first + 3 * v) *
-                                             values.input(neighbor, (first + v) * dim + k) * plan.rotations(entry, d + 3 * k);
+                                    value += rotation(component - first, v) *
+                                             values.input(neighbor, (first + v) * dim + k) * rotation(d, k);
                         other[component * dim + d] = value;
                     }
                 }

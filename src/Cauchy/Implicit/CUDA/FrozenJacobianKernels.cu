@@ -48,9 +48,9 @@ namespace DNDS::Cauchy::CUDA
                     {
                         std::array<real, N> direction{}, product{};
                         direction[j] = 1;
-                        for (const auto &point : s.geometry.Points(iCell, iBlock))
+                        for (const auto incidence : s.geometry.Points(iCell, iBlock))
                         {
-                            checked = AddPoint<N>(s, iCell, point, direction, product);
+                            checked = AddPoint<N>(s, iCell, s.geometry.Point(iCell, incidence), direction, product);
                             if (!checked)
                                 break;
                         }
@@ -95,9 +95,9 @@ namespace DNDS::Cauchy::CUDA
                     std::array<real, N> neighbor{}, product{};
                     for (int j = 0; j < N; ++j)
                         neighbor[j] = column < owned.RowCount() ? owned(column, j) : ghost(column - owned.RowCount(), j);
-                    for (const auto &point : s.geometry.Points(iCell, iBlock))
+                    for (const auto incidence : s.geometry.Points(iCell, iBlock))
                     {
-                        checked = AddPoint<N>(s, iCell, point, neighbor, product);
+                        checked = AddPoint<N>(s, iCell, s.geometry.Point(iCell, incidence), neighbor, product);
                         if (!checked)
                             break;
                     }
@@ -178,7 +178,7 @@ namespace DNDS::Cauchy::CUDA
         output.ValidateDevice(context.device);
         DNDS_check_throw_info(output.RowNumber() == s.geometry.columns.RowCount() && output.blockSize == s.parameters.components,
                               "frozen CUDA Jacobian block shape differs");
-        Table(output.values, s.geometry.points.RowCount(), s.parameters.components * s.parameters.components);
+        Table(output.values, s.geometry.incidences.RowCount(), s.parameters.components * s.parameters.components);
         DNDS_check_throw_info(!output.values.data || (output.values.data != s.means.data && output.values.data != s.pressure.data &&
                                                       output.values.data != s.pressureDerivative.data && output.values.data != s.radius.data &&
                                                       output.values.data != s.magnitudes.data),

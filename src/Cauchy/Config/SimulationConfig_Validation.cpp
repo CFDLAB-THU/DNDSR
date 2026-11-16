@@ -310,14 +310,19 @@ namespace DNDS::Cauchy
 #endif
         const auto &kernels = s.execution.kernels;
         require(cuda || kernels.Default(), "operator compute/layout experiments require CUDA");
-        require(kernels.rhsMapping == "thread" || kernels.rhsMapping == "warpQuadrature", "RHS kernel mapping " + kernels.rhsMapping);
-        require(kernels.rhsBlockSize == 64 || kernels.rhsBlockSize == 128 || kernels.rhsBlockSize == 256, "RHS block size must be 64, 128 or 256");
+        require(kernels.rhsMapping == "thread" || kernels.rhsMapping == "warpQuadrature" || kernels.rhsMapping == "warpSegments" || kernels.rhsMapping == "ctaSegments", "RHS kernel mapping " + kernels.rhsMapping);
+        require(kernels.rhsBlockSize == 64 || kernels.rhsBlockSize == 128 || kernels.rhsBlockSize == 256 || kernels.rhsBlockSize == 512, "RHS block size must be 64, 128, 256 or 512");
         require(!kernels.rhsDoubleBuffer || (kernels.polynomialArithmetic == "fp64" &&
                                              kernels.dissipationArithmetic == "fp64" && kernels.fluxArithmetic == "fp64"),
                 "double buffering currently qualifies FP64 only");
         require(kernels.rhsMapping == "thread" || (kernels.polynomialArithmetic == "fp64" &&
                                                    kernels.dissipationArithmetic == "fp64" && kernels.fluxArithmetic == "fp64"),
                 "warp quadrature currently qualifies FP64 arithmetic only");
+        require(kernels.rhsReduction == "serial" || kernels.rhsReduction == "segmented", "unknown RHS face reduction");
+        require(kernels.rhsGridBlocks >= 0, "RHS grid block cap cannot be negative");
+        require((kernels.rhsMapping != "warpSegments" && kernels.rhsMapping != "ctaSegments") ||
+                    (!kernels.rhsDoubleBuffer && kernels.rhsBlockSize >= 128),
+                "RHS segment mappings require their own staging and 128/256/512 threads");
         for (const auto *layout : {&kernels.stateInputLayout, &kernels.reconstructionInputLayout})
             require(*layout == "aos" || *layout == "aosoa32", "kernel input layout " + *layout);
         for (const auto *precision : {&kernels.polynomialArithmetic, &kernels.dissipationArithmetic, &kernels.fluxArithmetic})

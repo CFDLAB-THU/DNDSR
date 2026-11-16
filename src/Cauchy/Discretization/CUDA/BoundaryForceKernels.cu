@@ -19,17 +19,23 @@ namespace DNDS::Cauchy::CUDA
                 return a;
             }
         };
-        __global__ void Rows(ForceSamples samples, ForceEntries entries, ForceInput values,
+        __global__ void Rows(ForceGeometry geometry, ForceInput values,
                              SpanView<const int> zones, ForceOutput partial, ForceOutput result, ForceCounter completed)
         {
+            const auto &stencil = geometry.stencil(0, 0);
             Vector3 value{};
-            for (index iPoint = index(blockIdx.x) * Threads + threadIdx.x; iPoint < entries.RowCount(); iPoint += index(gridDim.x) * Threads)
+            for (index iBoundary = index(blockIdx.x) * Threads + threadIdx.x; iBoundary < geometry.faces.RowCount(); iBoundary += index(gridDim.x) * Threads)
             {
-                const auto &sample = samples(entries(iPoint, 0), 0);
+                const auto range = geometry.faces(iBoundary, 0);
+                const int zone = stencil.topology.GetFaceZone(range.face);
                 bool selected = false;
                 for (index iZone = 0; iZone < zones.size(); ++iZone)
-                    selected |= zones[iZone] == sample.zone;
-                if (selected)
+                    selected |= zones[iZone] == zone;
+                if (!selected)
+                    continue;
+                const index begin = stencil.quadratureBoundaryValues ? range.quadratureBegin : iBoundary;
+                const index end = begin + (stencil.quadratureBoundaryValues ? range.quadratureCount : 1);
+                for (index iPoint = begin; iPoint < end; ++iPoint)
                     for (int d = 0; d < 3; ++d)
                         value[d] += values(iPoint, d);
             }
@@ -61,25 +67,25 @@ namespace DNDS::Cauchy::CUDA
         DNDS_check_throw_info(points >= 0, "negative boundary force point count");
         return std::max(index(1), std::min(index(256), points / Threads + (points % Threads != 0)));
     }
-    void AccumulateBoundaryForce(R::ExecutionContext context, ForceSamples samples, ForceEntries entries, ForceInput values,
+    void AccumulateBoundaryForce(R::ExecutionContext context, ForceGeometry geometry, ForceInput values,
                                  SpanView<const int> zones, ForceOutput partial, ForceOutput result, ForceCounter completed)
     {
-        R::ValidateViewDevices(context.device, samples, entries, values, partial, result, completed);
-        DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && values.RowCount() == entries.RowCount() &&
-                                  partial.RowCount() == BoundaryForceScratchRows(entries.RowCount()) && result.RowCount() == 1 && completed.RowCount() == 1,
+        R::ValidateViewDevices(context.device, geometry, values, partial, result, completed);
+        DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && geometry.stencil.RowCount() == 1 &&
+                                  partial.RowCount() == BoundaryForceScratchRows(geometry.faces.RowCount()) && result.RowCount() == 1 && completed.RowCount() == 1,
                               "invalid CUDA boundary force views");
         const std::array<const void *, 3> outputs{partial.data, result.data, completed.data};
         for (index i = 0; i < index(outputs.size()); ++i)
         {
             for (index j = 0; j < i; ++j)
                 DNDS_check_throw_info(outputs[i] != outputs[j], "CUDA boundary force outputs alias");
-            for (const void *input : {static_cast<const void *>(samples.data), static_cast<const void *>(entries.data), static_cast<const void *>(values.data)})
+            for (const void *input : {static_cast<const void *>(geometry.stencil.data), static_cast<const void *>(geometry.faces.data), static_cast<const void *>(values.data)})
                 DNDS_check_throw_info(!input || outputs[i] != input, "CUDA boundary force output aliases input");
         }
-        R::CheckKernelArgumentBudget<ForceSamples, ForceEntries, ForceInput, SpanView<const int>, ForceOutput, ForceOutput, ForceCounter>();
+        R::CheckKernelArgumentBudget<ForceGeometry, ForceInput, SpanView<const int>, ForceOutput, ForceOutput, ForceCounter>();
         const auto stream = static_cast<cudaStream_t>(context.stream);
         DNDS_check_throw_info(cudaMemsetAsync(completed.data, 0, sizeof(unsigned int), stream) == cudaSuccess, "CUDA boundary force counter reset failed");
-        Rows<<<unsigned(partial.RowCount()), Threads, 0, stream>>>(samples, entries, values, zones, partial, result, completed);
+        Rows<<<unsigned(partial.RowCount()), Threads, 0, stream>>>(geometry, values, zones, partial, result, completed);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA boundary force reduction launch failed");
     }
 }

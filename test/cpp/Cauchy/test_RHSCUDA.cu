@@ -1,5 +1,6 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
+#include "CompactStencilFixture.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels.hpp"
 #include "Cauchy/Discretization/CPU/FiniteVolumeRHSKernels.hpp"
 #include "Cauchy/Config/SimulationConfig.hpp"
@@ -37,7 +38,10 @@ namespace
     struct Fixture
     {
         std::vector<C::BoundaryCondition> conditions{3};
-        R::Array<C::FiniteVolumeDetail::SampleRecord> samples;
+        // Independent legacy-shaped point oracle for preparing cached basis
+        // values only. Production leaves consume the compact publication below.
+        std::vector<C::FiniteVolumeDetail::SampleRecord> samples;
+        CauchyTest::CompactStencilFixture::Input geometry;
         R::Array<I> offsets = Rows<I>({0, 6, 10}), entries = Rows<I>({0, 2, 4, 8});
         R::Array<I> faceOffsets = Rows<I>({0, 2, 4, 6, 8});
         R::Array<I> coreFaces = Rows<I>({3, 1, 0}), dependentFaces = Rows<I>({2});
@@ -122,8 +126,34 @@ namespace
                     }
                     records.push_back(s);
                 }
-            samples = Rows(records);
+            samples = std::move(records);
             quadrature = Rows(points, 7);
+            geometry.cellFaces = {{0, 1, 2}, {1, 3}};
+            geometry.faceCells = {{{0, DNDS::UnInitIndex}}, {{0, 1}}, {{0, 2}}, {{1, DNDS::UnInitIndex}}};
+            geometry.cells = {1, 0, 0, 0, 0, 0, 0, 1,
+                              1, 1, 0, 0, 1, 0, 0, 1,
+                              1, 0, 1, 0, 0, 1, 0, 1};
+            geometry.quadrature = points;
+            geometry.faceOffsets = {0, 2, 4, 6, 8};
+            geometry.codes = {0, uint8_t(periodic ? 4 : 0), 0, 0};
+            geometry.parameters.rotatedGenerators = periodic ? 1 : 0;
+            geometry.parameters.generators.rotation[1].map() << 0, -1, 0, 1, 0, 0, 0, 0, 1;
+            geometry.parameters.generators.rotationCenter[1].map() = DNDS::Geom::tPoint{1, 0, 0};
+            geometry.parameters.generators.translation[1].map().setZero();
+            geometry.routing = {{0, 1, 0, 0, DNDS::UnInitIndex},
+                                {1, 0, DNDS::UnInitIndex, DNDS::UnInitIndex, DNDS::UnInitIndex},
+                                {2, 0, DNDS::UnInitIndex, DNDS::UnInitIndex, DNDS::UnInitIndex},
+                                {3, 2, 1, 2, DNDS::UnInitIndex}};
+            geometry.coreCells = {1};
+            geometry.dependentCells = {0};
+            geometry.coreFaces = {3, 1, 0};
+            geometry.dependentFaces = {2};
+            for (I iFace = 0; iFace < 4; ++iFace)
+            {
+                for (int d = 0; d < 6; ++d)
+                    geometry.faceMetrics.push_back(d < 3 ? .5 * (points[14 * iFace + d] + points[14 * iFace + 7 + d]) : points[14 * iFace + d]);
+                geometry.faceMetrics.push_back(1);
+            }
             auto wall = wallFaces.Write();
             for (I iFace = 0; iFace < 4; ++iFace)
                 for (I iQ = 0; iQ < 2; ++iQ)
@@ -152,12 +182,28 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
 {
     const auto device = R::Device::CUDA(0), host = R::Device::Host();
     const auto context = R::ExecutionContext::CUDA(0);
+    using Precision = DNDS::Math::ComputePrecision;
+    // Exercise all five reduced-arithmetic combinations per scalar, including
+    // the two coupled choices whose launch definitions live in separate TUs.
+    constexpr std::array precisionCases{
+        std::array{Precision::FP64, Precision::FP64, Precision::FP64},
+        std::array{Precision::FP64, Precision::FP64, Precision::FP64}, // tiled input
+        std::array{Precision::FP32, Precision::FP64, Precision::FP64},
+        std::array{Precision::FP64, Precision::FP32, Precision::FP64},
+        std::array{Precision::FP64, Precision::FP64, Precision::FP32},
+        std::array{Precision::FP32, Precision::FP32, Precision::FP64},
+        std::array{Precision::FP32, Precision::FP64, Precision::FP32},
 #ifdef DNDS_USE_CCCL_COMPUTE
-    constexpr int firstMapping = 8;
-#else
-    constexpr int firstMapping = 5;
+        std::array{Precision::FloatFloat, Precision::FP64, Precision::FP64},
+        std::array{Precision::FP64, Precision::FloatFloat, Precision::FP64},
+        std::array{Precision::FP64, Precision::FP64, Precision::FloatFloat},
+        std::array{Precision::FloatFloat, Precision::FloatFloat, Precision::FP64},
+        std::array{Precision::FloatFloat, Precision::FP64, Precision::FloatFloat},
 #endif
-    constexpr int experimentalVariants = firstMapping + 4;
+    };
+    constexpr int firstMapping = int(precisionCases.size());
+    constexpr int firstSegmented = firstMapping + 4;
+    constexpr int experimentalVariants = firstSegmented + 12;
     for (const std::string model : {"none", "SA", "KOmegaWilcox", "KOmegaSST"})
         for (const int reconstruction : {0, 1, 2, 3})
             for (int experiment = 0; experiment < (model == "none" && reconstruction == 3 ? experimentalVariants : 1); ++experiment)
@@ -165,9 +211,11 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
                 // Retain the canonical model/reconstruction matrix. Experimental
                 // policies add only one uncached P3 flow5 fixture per selection.
                 INFO("model=" << model << ", reconstruction=" << reconstruction << ", experiment=" << experiment);
-                const real tolerance = experiment >= firstMapping ? 3e-11 : experiment >= 5 ? 2e-10
-                                                                        : experiment >= 2   ? 5e-5
-                                                                                            : 3e-11;
+                const auto arithmetic = precisionCases[experiment < firstMapping ? experiment : 0];
+                const bool fp32 = std::find(arithmetic.begin(), arithmetic.end(), Precision::FP32) != arithmetic.end();
+                const bool floatFloat = std::find(arithmetic.begin(), arithmetic.end(), Precision::FloatFloat) != arithmetic.end();
+                const real tolerance = fp32 ? 5e-5 : floatFloat ? 2e-10
+                                                                : 3e-11;
                 C::EquationSettings settings;
                 settings.transport = "NewtonianFourier";
                 settings.viscosity = .002;
@@ -179,6 +227,7 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
                 const int width = 5 + (equation.HasRANS() ? equation.RANS().ComponentNumber() : 0);
                 const int modes = reconstruction < 2 ? 2 : 9;
                 Fixture fixture(reconstruction != 0);
+                CauchyTest::CompactStencilFixture hostStencil(fixture.geometry), deviceStencil(fixture.geometry, context);
                 const auto frame = C::RigidMotion({}, 2).At(.2);
                 C::ThermalPolicy thermal(equation, 1e-10, 1e-10, 0, 1e-10);
                 K::RHSKernelParameters parameters;
@@ -199,25 +248,26 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
                 controls.produceLow = width == 5;
                 controls.positivity = true;
                 controls.solver = model == "SA" ? C::Riemann::Solver::Roe_M9 : C::Riemann::Solver::AUSMPWPlus;
-                using Precision = DNDS::Math::ComputePrecision;
-                if (experiment == 2)
-                    controls.polynomialPrecision = Precision::FP32;
-                if (experiment == 3)
-                    controls.dissipationPrecision = Precision::FP32;
-                if (experiment == 4)
-                    controls.fluxPrecision = Precision::FP32;
-                if (experiment == 5 && experiment < firstMapping)
-                    controls.polynomialPrecision = Precision::FloatFloat;
-                if (experiment == 6 && experiment < firstMapping)
-                    controls.dissipationPrecision = Precision::FloatFloat;
-                if (experiment == 7 && experiment < firstMapping)
-                    controls.fluxPrecision = Precision::FloatFloat;
-                if (experiment == 3 || experiment == 6)
+                controls.polynomialPrecision = arithmetic[0];
+                controls.dissipationPrecision = arithmetic[1];
+                controls.fluxPrecision = arithmetic[2];
+                if (controls.dissipationPrecision != Precision::FP64)
                     controls.solver = C::Riemann::Solver::Roe_M1;
-                controls.warpQuadrature = experiment == firstMapping || experiment == firstMapping + 2;
-                controls.doubleBuffer = experiment > firstMapping;
+                controls.mapping = experiment == firstMapping || experiment == firstMapping + 2 ? K::RHSFaceMapping::WarpQuadrature : K::RHSFaceMapping::Thread;
+                controls.doubleBuffer = experiment > firstMapping && experiment < firstSegmented;
                 controls.blockSize = experiment == firstMapping + 1 ? 64 : experiment == firstMapping + 3 ? 256
                                                                                                           : 128;
+                if (experiment >= firstSegmented)
+                {
+                    const int variant = experiment - firstSegmented;
+                    controls.mapping = variant / 6 ? K::RHSFaceMapping::CTASegments : K::RHSFaceMapping::WarpSegments;
+                    controls.reduction = (variant / 3) % 2 ? K::RHSFaceReduction::Segmented : K::RHSFaceReduction::Serial;
+                    controls.blockSize = std::array<int, 3>{128, 256, 512}[variant % 3];
+                    // 512 lanes with high+low vectors exceed the portable
+                    // 48KiB budget. Qualify that block with high-order output
+                    // only, matching the implicit campaign's real contract.
+                    controls.produceLow = controls.blockSize != 512;
+                }
                 // Two points per face exercise idle lanes and fixed warp
                 // quadrature accumulation against the same CPU oracle.
                 controls.fluxPolicy.required = C::Riemann::RequiredInputs(controls.solver);
@@ -261,7 +311,7 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
                 {
                     auto mom = moments.Write(), cached = cache.Write();
                     auto cells = fixture.cells.Read();
-                    auto samples = fixture.samples.Read();
+
                     auto entries = fixture.entries.Read();
                     for (I iCell = 0; iCell < 3; ++iCell)
                         for (int j = 0; j < 10; ++j)
@@ -270,7 +320,7 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
                         for (I iQ = 0; iQ < 2; ++iQ)
                             for (int side = 0; side < 2; ++side)
                             {
-                                const auto &s = samples.View()(entries.View()(iFace, 0) + iQ, 0);
+                                const auto &s = fixture.samples[size_t(entries.View()(iFace, 0) + iQ)];
                                 const I iCell = side && s.other != DNDS::UnInitIndex ? s.other : s.cell;
                                 C::Vector3 x{};
                                 for (int d = 0; d < 3; ++d)
@@ -292,7 +342,6 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
                 {
                     const auto a = u.Read(), b = ug.Read(), r = rec.Read(), rg = recg.Read(), v = vis.Read(), vg = visg.Read();
                     const auto geo = fixture.cells.Read(), quad = fixture.quadrature.Read(), wall = fixture.wallFaces.Read(), wm = fixture.wallMean.Read();
-                    const auto s = fixture.samples.Read();
                     const auto off = fixture.offsets.Read(), e = fixture.entries.Read(), fo = fixture.faceOffsets.Read();
                     const auto packetRead = incoming.Read(), aux = meanAux.Read(), w = wave.Read(), wg = waveg.Read(), p = pressure.Read(), pg = pressureg.Read(), cached = cache.Read();
                     auto face = cpuFaces.Write(), lowFace = cpuLowFaces.Write(), rhs = cpuRHS.Write(), low = cpuLow.Write(), force = cpuForces.Write();
@@ -312,12 +361,8 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
                     }
                     std::vector<C::RHSFieldView> gradients{{r.View<R::UniformTableRows>(), rg.View<R::UniformTableRows>()}}, viscousGradients{{v.View<R::UniformTableRows>(), vg.View<R::UniformTableRows>()}};
                     C::CPU::EquationRHSRequest request;
-                    request.stencil.samples = s.View<R::FixedRows<1>>();
-                    request.stencil.offsets = off.View<R::FixedRows<1>>();
-                    request.stencil.faceEntries = e.View<R::FixedRows<1>>();
-                    request.metric.cells = geo.View<R::FixedRows<8>, false>();
-                    request.metric.quadrature = quad.View<R::FixedRows<7>, false>();
-                    request.metric.faceOffsets = fo.View<R::FixedRows<1>, false>();
+                    request.stencil = hostStencil.View();
+                    request.metric = request.stencil.metric;
                     F::ReconstructionBasisEvaluationView basis;
                     basis.cached = cached.View<R::TableRows>();
                     basis.dimension = 2;
@@ -411,31 +456,36 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
                 }
                 auto du = u.To(device), dug = ug.To(device), dr = rec.To(device), drg = recg.To(device), dv = vis.To(device), dvg = visg.To(device);
                 auto di = incoming.To(device), da = meanAux.To(device), dw = wave.To(device), dwg = waveg.To(device), dp = pressure.To(device), dpg = pressureg.To(device);
-                auto ds = fixture.samples.To(device);
                 auto db = fixture.boundary.To(device);
                 auto doff = fixture.offsets.To(device), de = fixture.entries.To(device), dfo = fixture.faceOffsets.To(device);
                 auto dcells = fixture.cells.To(device), dquad = fixture.quadrature.To(device), dwall = fixture.wallFaces.To(device), dwm = fixture.wallMean.To(device), dcache = cache.To(device), dm = moments.To(device);
                 auto dcore = fixture.coreFaces.To(device), ddependent = fixture.dependentFaces.To(device), dcoreCells = fixture.coreCells.To(device), ddependentCells = fixture.dependentCells.To(device);
                 auto dparameters = Rows<K::RHSKernelParameters>({parameters}).To(device);
+                std::optional<K::RHSFacePackages> corePackages, dependentPackages;
+                if (controls.mapping == K::RHSFaceMapping::WarpSegments || controls.mapping == K::RHSFaceMapping::CTASegments)
+                {
+                    const std::array<I, 4> pointCounts{2, 2, 2, 2};
+                    const DNDS::SpanView<const I> counts{pointCounts.data(), I(pointCounts.size())};
+                    corePackages.emplace(K::RHSFacePackages::Prepare(dcore, counts, controls, context));
+                    dependentPackages.emplace(K::RHSFacePackages::Prepare(ddependent, counts, controls, context));
+                }
+
                 R::Array<real> faces(R::RowLayout::Dense(4, width), device), lowFaces(R::RowLayout::Dense(4, width), device), rhs(R::RowLayout::Dense(2, width), device), low(R::RowLayout::Dense(2, width), device), forces(R::RowLayout::Dense(4, 3), device);
                 R::Array<DNDS::NumericalStatus> faceStatus(R::RowLayout::Dense(4, 1), device), cellStatus(R::RowLayout::Dense(2, 1), device);
                 R::Array<I> fallback(R::RowLayout::Dense(4, 1), device);
                 {
                     const auto a = du.Read(context), b = dug.Read(context), r = dr.Read(context), rg = drg.Read(context), v = dv.Read(context), vg = dvg.Read(context);
                     const auto geo = dcells.Read(context), quad = dquad.Read(context), wall = dwall.Read(context), wm = dwm.Read(context), cached = dcache.Read(context), mom = dm.Read(context);
-                    const auto s = ds.Read(context);
                     const auto conditions = db.Read(context);
                     const auto off = doff.Read(context), e = de.Read(context), fo = dfo.Read(context);
                     const auto parametersRead = dparameters.Read(context);
                     const auto packetRead = di.Read(context), aux = da.Read(context), w = dw.Read(context), wg = dwg.Read(context), p = dp.Read(context), pg = dpg.Read(context);
                     const auto core = dcore.Read(context), dependent = ddependent.Read(context), coreCells = dcoreCells.Read(context), dependentCells = ddependentCells.Read(context);
                     K::RHSGeometry geometry;
-                    geometry.samples = s.View<R::FixedRows<1>>();
-                    geometry.offsets = off.View<R::FixedRows<1>>();
-                    geometry.faceEntries = e.View<R::FixedRows<1>>();
-                    geometry.faceOffsets = fo.View<R::FixedRows<1>, false>();
-                    geometry.cells = geo.View<R::FixedRows<8>, false>();
-                    geometry.quadrature = quad.View<R::FixedRows<7>, false>();
+                    geometry.stencil = deviceStencil.View();
+                    geometry.faceOffsets = geometry.stencil.metric.faceOffsets;
+                    geometry.cells = geometry.stencil.metric.cells;
+                    geometry.quadrature = geometry.stencil.metric.quadrature;
                     geometry.conditions = conditions.View<R::FixedRows<1>>();
                     geometry.wallMean = wm.View<R::FixedRows<1>>();
                     geometry.wallFaces = wall.View<R::CSRRows>();
@@ -468,8 +518,10 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
                         coreFields.viscousData.ghost = {};
                         coreFields.waveJump.ghost = {};
                         coreFields.pressureMinimum.ghost = {};
-                        K::EvaluateFluxFaces(context, published, parametersRead.View<R::FixedRows<1>>(), controls, coreFields, outputs, core.View<R::FixedRows<1>>(), false);
-                        K::EvaluateFluxFaces(context, published, parametersRead.View<R::FixedRows<1>>(), controls, fields, outputs, dependent.View<R::FixedRows<1>>());
+                        K::EvaluateFluxFaces(context, published, parametersRead.View<R::FixedRows<1>>(), controls, coreFields, outputs, core.View<R::FixedRows<1>>(), false,
+                                             corePackages ? corePackages->View() : K::RHSFacePackageView{});
+                        K::EvaluateFluxFaces(context, published, parametersRead.View<R::FixedRows<1>>(), controls, fields, outputs, dependent.View<R::FixedRows<1>>(), true,
+                                             dependentPackages ? dependentPackages->View() : K::RHSFacePackageView{});
                         REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
                     }
                     const auto face = faces.Read(context), lowFace = lowFaces.Read(context);
@@ -515,4 +567,136 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
                     CHECK(bool(ce.View()(iCell, 0)));
                 CHECK(sum == cpuFallbacks);
             }
+}
+
+TEST_CASE("CUDA canonical ghost-left and self-periodic faces preserve owned signs and incidence frames")
+{
+    const auto context = R::ExecutionContext::CUDA(0);
+    const auto equation = C::EquationSystem::Resolve(C::EquationSettings{});
+    const auto gas = equation.Gas();
+    const auto rotate = [](C::FlowState state, bool inverse)
+    {
+        const real x = state[1], y = state[2];
+        state[1] = inverse ? y : -y;
+        state[2] = inverse ? -x : x;
+        return state;
+    };
+    const auto physicalFlux = [&](const C::FlowState &state)
+    {
+        const real pressure = gas.Pressure(state), velocity = state[1] / state[0];
+        return C::FlowState{state[1], state[1] * velocity + pressure,
+                            state[2] * velocity, state[3] * velocity, (state[4] + pressure) * velocity};
+    };
+    for (bool self : {false, true})
+    {
+        CAPTURE(self);
+        CauchyTest::CompactStencilFixture::Input input;
+        input.cellFaces = self ? std::vector<std::vector<I>>{{0, 0}} : std::vector<std::vector<I>>{{0}};
+        input.incidenceBits = self ? std::vector<std::vector<uint8_t>>{{0, 1}} : std::vector<std::vector<uint8_t>>{{0}};
+        input.faceCells = self ? std::vector<std::array<I, 2>>{{{0, 0}}} : std::vector<std::array<I, 2>>{{{1, 0}}};
+        input.faceOffsets = {0, 1};
+        input.cells = {1, 1, 0, 0, 1, 0, 0, 1};
+        if (!self)
+            input.cells.insert(input.cells.end(), {1, -1, 0, 0, -1, 0, 0, 1});
+        constexpr real area = .75;
+        input.faceMetrics = input.quadrature = {.25, .2, 0, 1, 0, 0, area};
+        input.codes = {4};
+        input.parameters.rotatedGenerators = 1;
+        input.parameters.generators.rotation[1].map() << 0, -1, 0, 1, 0, 0, 0, 0, 1;
+        input.parameters.generators.translation[1].map().setZero();
+        input.quadratureBoundaryValues = false;
+        input.coreCells = self ? std::vector<I>{0} : std::vector<I>{};
+        input.dependentCells = self ? std::vector<I>{} : std::vector<I>{0};
+        input.coreFaces = self ? std::vector<I>{0} : std::vector<I>{};
+        input.dependentFaces = self ? std::vector<I>{} : std::vector<I>{0};
+        CauchyTest::CompactStencilFixture hostGeometry(input), geometry(input, context);
+        const auto leftRecord = hostGeometry.View().RHSFaceSample(0, 0, 0);
+        CHECK(leftRecord.cell == (self ? 0 : 1)); // The canonical ghost stays on the left.
+        const auto rightRecord = hostGeometry.View().GradientSample(0, self ? 1 : 0);
+        CHECK(rightRecord.side == 1);
+        if (self)
+        {
+            CHECK(hostGeometry.View().topology.CellFaces(0).size() == 2);
+            CHECK(hostGeometry.View().GradientSample(0, 0).side == 0);
+        }
+        const auto owned = gas.Conservative({1.2, .3, -.2, .04, 1.1});
+        const auto remote = gas.Conservative({.9, -.1, .15, -.02, .8});
+        const auto left = self ? owned : remote;
+        const auto right = rotate(owned, false); // right stored -> canonical left
+        const auto fl = physicalFlux(left), fr = physicalFlux(right);
+        const real signal = std::max(std::abs(left[1] / left[0]) + std::sqrt(gas.gamma * gas.Pressure(left) / left[0]),
+                                     std::abs(right[1] / right[0]) + std::sqrt(gas.gamma * gas.Pressure(right) / right[0]));
+        C::FlowState flux{}, expected{};
+        for (int j = 0; j < 5; ++j)
+            flux[j] = .5 * (fl[j] + fr[j]) - .5 * signal * (right[j] - left[j]);
+        const auto rightFlux = rotate(flux, true); // canonical left -> stored right
+        for (int j = 0; j < 5; ++j)
+            expected[j] = area * (rightFlux[j] - (self ? flux[j] : 0));
+        auto means = Rows<real>({owned.begin(), owned.end()}, 5).To(context.device);
+        auto ghosts = Rows<real>(self ? std::vector<real>{} : std::vector<real>{remote.begin(), remote.end()}, 5).To(context.device);
+        auto selected = Rows<I>({0}).To(context.device), noRows = Rows<I>({}).To(context.device);
+        C::PerfectGasBoundaryParameters interior;
+        interior.kind = C::BoundaryKind::Interior;
+        auto conditions = Rows<C::PerfectGasBoundaryParameters>({interior}).To(context.device);
+        C::ThermalPolicy thermal(equation, 1e-12, 1e-12, 0, 1e-12);
+        K::RHSKernelParameters parameters;
+        parameters.physics = C::PerfectGasSpatialParameters::FromEquation(equation, 2);
+        parameters.thermal = thermal.View();
+        auto policy = Rows<K::RHSKernelParameters>({parameters}).To(context.device);
+        const auto meanRead = means.Read(context), ghostRead = ghosts.Read(context);
+        const auto conditionRead = conditions.Read(context);
+        const auto selectedRead = selected.Read(context), emptyRead = noRows.Read(context);
+        const auto policyRead = policy.Read(context);
+        K::RHSGeometry numerical;
+        numerical.stencil = geometry.View();
+        numerical.cells = numerical.stencil.metric.cells;
+        numerical.faceOffsets = numerical.stencil.metric.faceOffsets;
+        numerical.quadrature = numerical.stencil.metric.quadrature;
+        numerical.conditions = conditionRead.View<R::FixedRows<1>>();
+        K::RHSGeometryPublication publication(numerical, context);
+        K::RHSFields fields;
+        fields.mean = {meanRead.View<R::UniformTableRows>(), ghostRead.View<R::UniformTableRows>()};
+        K::RHSKernelControls controls;
+        controls.components = 5;
+        controls.dimension = 2;
+        controls.direct = controls.firstOrder = true;
+        controls.solver = C::Riemann::Solver::Rusanov;
+        controls.fluxPolicy.rusanov = true;
+        controls.fluxPolicy.required = C::Riemann::RequiredInputs(controls.solver);
+        R::Array<real> faces(R::RowLayout::Dense(1, 5), context.device), result(R::RowLayout::Dense(1, 5), context.device);
+        R::Array<DNDS::NumericalStatus> faceStatus(R::RowLayout::Dense(1, 1), context.device), cellStatus(R::RowLayout::Dense(1, 1), context.device);
+        R::Array<I> counts(R::RowLayout::Dense(1, 1), context.device);
+        {
+            auto out = faces.Write(context);
+            auto status = faceStatus.Write(context);
+            auto count = counts.Write(context);
+            K::RHSFaceOutputs outputs{out.View<R::TableRows>(), {}, {}, status.View<R::FixedRows<1>>(), count.View<R::FixedRows<1>>()};
+            auto core = fields;
+            core.mean.ghost = {};
+            // The core launch intentionally has no ghost allocation. For the
+            // right-owned case it is empty; dependent work sees the ghost.
+            K::EvaluateFluxFaces(context, publication, policyRead.View<R::FixedRows<1>>(), controls, core, outputs,
+                                 self ? selectedRead.View<R::FixedRows<1>>() : emptyRead.View<R::FixedRows<1>>(), false);
+            if (!self)
+                K::EvaluateFluxFaces(context, publication, policyRead.View<R::FixedRows<1>>(), controls, fields, outputs,
+                                     selectedRead.View<R::FixedRows<1>>(), true);
+            REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
+        }
+        {
+            const auto face = faces.Read(context);
+            const auto status = faceStatus.Read(context);
+            auto out = result.Write(context);
+            auto error = cellStatus.Write(context);
+            K::GatherFluxCells(context, publication, face.View<R::TableRows>(), {}, status.View<R::FixedRows<1>>(),
+                               out.View<R::TableRows>(), {}, error.View<R::FixedRows<1>>(), selectedRead.View<R::FixedRows<1>>(), false);
+            REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
+        }
+        const auto downloaded = result.To(R::Device::Host());
+        const auto checked = cellStatus.To(R::Device::Host());
+        const auto values = downloaded.Read();
+        const auto status = checked.Read();
+        REQUIRE(bool(status.View()(0, 0)));
+        for (int j = 0; j < 5; ++j)
+            CHECK(values.View()(0, j) == doctest::Approx(expected[j]).epsilon(3e-12).scale(1));
+    }
 }

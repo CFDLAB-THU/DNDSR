@@ -4,34 +4,26 @@
 
 namespace DNDS::Cauchy::Detail
 {
-    /// PP queries preserve their canonical cell-major order while borrowing
-    /// basis rows from face/source publications. Each segment writes a disjoint
-    /// subset of the output. Setup establishes complete coverage; all segments
-    /// are submitted on the same stream, with ordinary Runtime access retention.
-    /// No mutable solution or sampled values belong to this immutable plan.
-    struct QuadratureSampling
+    /** @brief Cell-major modal PP volume geometry, shared with source sampling.
+     * @details Face points and parent-side basis rows are derived from canonical
+     * mesh/CFV incidence. Volume coordinates exist only for uncached evaluation;
+     * otherwise this owner retains the source's basis or a value-only PP cache.
+     * There are no repeated cell IDs, output maps or sampled solution fields.
+     */
+    struct ModalPositivityQuadrature
     {
-        index rows = 0;
-        std::vector<CFV::PolynomialSamplingPlan> segments;
+        Runtime::Array<index> volumeOffsets{Runtime::RowLayout::Dense(0, 1)};
+        Runtime::Array<real> volumePoints{Runtime::RowLayout::Dense(0, 3)},
+            volumeBasis{Runtime::RowLayout::Dense(0, 0)};
+        int cachedDerivatives = 0;
+        index rows = 0, maximumCellPoints = 0;
         index Size() const { return rows; }
-        void EvaluateValues(const CFV::FVField &mean, const CFV::FVField &coefficients,
-                            Runtime::Array<real> &output) const
-        {
-            for (const auto &segment : segments)
-                segment.EvaluateValues(mean, coefficients, output);
-        }
-        void Evaluate(Runtime::EagerEngine &engine, const Runtime::ExecutionStream &stream,
-                      const CFV::FVField &mean, const CFV::FVField &coefficients,
-                      Runtime::Array<real> &output) const
-        {
-            for (const auto &segment : segments)
-                segment.Evaluate(engine, stream, mean, coefficients, output);
-        }
-        QuadratureSampling Placed(CFV::SamplingPlacementMemo &memo) const
+        ModalPositivityQuadrature Placed(CFV::SamplingPlacementMemo &memo) const
         {
             auto result = *this;
-            for (auto &segment : result.segments)
-                segment = segment.Placed(memo);
+            result.volumeOffsets = memo.Place(volumeOffsets);
+            result.volumePoints = memo.Place(volumePoints);
+            result.volumeBasis = memo.Place(volumeBasis);
             return result;
         }
     };
@@ -48,14 +40,14 @@ namespace DNDS::Cauchy::Detail
 
     /// One immutable hot-path publication per spatial plan and placement.
     /// Face quadrature coordinates/weights are in the shared CFV metric plan;
-    /// faceBasis aliases its reconstruction basis publication. Source and PP
-    /// samplers share that allocation or the same volume basis. With no source,
-    /// volume PP owns a value-only cache of that same rule. VR matrix assembly
+    /// faceBasis aliases its reconstruction basis publication. Fused modal PP
+    /// and source sampling share volume geometry/basis. With no source, modal
+    /// PP owns a value-only cache or direct points of that rule. VR matrix assembly
     /// uses independent full-derivative scratch, never this hot-path cache.
     struct FiniteVolumeQuadrature
     {
         Runtime::Array<real> faceBasis{Runtime::RowLayout::Dense(0, 0)};
-        std::optional<QuadratureSampling> positivity;
+        std::optional<ModalPositivityQuadrature> positivity;
         std::shared_ptr<const SourceQuadrature> source;
     };
 }

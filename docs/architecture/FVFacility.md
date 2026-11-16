@@ -296,13 +296,17 @@ speedup evidence; MPI may finish payloads early while leases remain active.
 
 `GradientPlan::Prepare(mesh,metrics,method)` prepares Green–Gauss, weighted
 least squares or GGMP without constructing a legacy VR object. It counts and
-allocates Runtime incidence tables, then fills per-sample gradient weights.
-The boundary buffer contains **physical boundary values** at the points exposed
+allocates Runtime incidence weights and boundary-row IDs, one entry per owned
+cell-face incidence. Canonical topology supplies face/neighbor IDs; there are
+no duplicated topology or per-incidence rotation payloads. The default sample
+is the mapped reference face center with normalized integrated normal and
+separately integrated area. The boundary buffer contains **physical boundary
+values**, one per boundary face, at the center points exposed
 by `GetBoundaryQuadrature`; it never expects reflected ghost states. Output
 holds `[component*dimension+direction]` in an ordinary DNDS numerical field.
 
 Least squares uses inverse-distance-squared residual weighting with face
-quadrature measure weighting; it factors the weighted design matrix using SVD
+face-area measure weighting; it factors the weighted design matrix using SVD
 rather than forming normal equations. GGMP eliminates the face unknowns from
 the corrected Green–Gauss system before SVD inversion. Uncorrected Green–Gauss
 does not promise linear exactness on general skew cells. Current tests establish

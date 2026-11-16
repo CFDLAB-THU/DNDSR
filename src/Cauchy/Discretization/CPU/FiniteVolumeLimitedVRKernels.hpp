@@ -1,34 +1,25 @@
 #pragma once
 #include "DNDS/Core/NumericalStatus.hpp"
-#include "Cauchy/Discretization/LimitedVRFace.hpp"
+#include "Cauchy/Discretization/LimitedVREvaluation.hpp"
 #include "Cauchy/Discretization/FiniteVolumeViews.hpp"
 #include "Cauchy/Physics/ReconstructionPositivity.hpp"
 #include "CFV/Plans/LimitedVRPlan.hpp"
 namespace DNDS::Cauchy::CPU
 {
-    NumericalStatus LimitLVRTarget(RHSScalarView means, RHSScalarView points, RHSOutputView coefficients,
-                                   Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> offsets,
-                                   const ThermalBounds &bounds, real betaPower, real betaCutoff) noexcept;
+    NumericalStatus LimitLVRTarget(FiniteVolumeStencilView stencil, RHSScalarView means, RHSOutputView coefficients,
+                                   int dimension, const ThermalBounds &bounds, int betaPower, real betaCutoff) noexcept;
     void FillLVRScalars(RHSScalarView input, RHSOutputView output, const PerfectGas &gas);
-    /// Independent face sensors: [shock, contact, mean-density support].
-    /// Samples 2*f and 2*f+1 are in their parent-cell frames. The caller
-    /// supplies a face-count by 3 output Array and checks status before gather.
-    NumericalStatus BuildLVRFaceSensors(RHSScalarView samples, RHSFieldView means,
-                                        Runtime::ArrayView<const LimitedVRFace, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> faces,
+    /// Accepted affine target evaluated on site at both parent images of the
+    /// shared face center. Output has one [shock,contact,density support] row
+    /// per active face; physical boundary rows are zero. No sampled field.
+    NumericalStatus BuildLVRFaceSensors(FiniteVolumeStencilView stencil, RHSFieldView means,
+                                        RHSFieldView targetCoefficients, int dimension,
                                         const PerfectGas &, const ThermalBounds &, const CFV::LimitedVRSettings &,
                                         RHSOutputView sensors) noexcept;
-    /// Owned-cell maximum using the same setup incidence CSR as CUDA.
-    /// Independent rows replace the serial face scatter; duplicate and
-    /// self-periodic incidences preserve the maximum exactly.
-    void GatherLVRBranches(Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> offsets,
-                           Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> faceIndices,
-                           RHSScalarView sensors, RHSOutputView branches,
+    /// Deterministic cell gather through canonical cell-face incidences.
+    /// Repeated self-periodic incidences retain their semantic multiplicity.
+    void GatherLVRBranches(FiniteVolumeStencilView stencil, RHSScalarView sensors, RHSOutputView branches,
                            Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::FixedRows<2>> base);
-    NumericalStatus BuildLVRBranches(RHSScalarView samples, RHSFieldView means,
-                                     Runtime::ArrayView<const LimitedVRFace, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> faces,
-                                     const PerfectGas &gas, const ThermalBounds &bounds,
-                                     const CFV::LimitedVRSettings &settings, RHSOutputView branches,
-                                     Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::FixedRows<2>> base) noexcept;
     void MergeLVRBase(Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::FixedRows<2>> base,
                       RHSOutputView seeds, int column);
     void PublishLVRPenalty(RHSScalarView branches,

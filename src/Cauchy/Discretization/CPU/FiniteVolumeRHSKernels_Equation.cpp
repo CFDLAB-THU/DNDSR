@@ -174,16 +174,16 @@ namespace DNDS::Cauchy::CPU
         };
         const auto computeFace = [&](index iAux) -> NumericalStatus
         {
-            const index first = request.stencil.faceEntries(iAux, 0);
-            const auto &anchor = FiniteVolumeDetail::ExpandSample(request.stencil.samples(first, 0), request.conditions);
+            const index iFace = request.stencil.stencilFaces(iAux, 0);
+            const index first = metric.FaceQuadratureBegin(iFace), end = metric.FaceQuadratureEnd(iFace);
+            const auto anchor = FiniteVolumeDetail::ExpandSample(request.stencil.RHSFaceSample(iFace, 0, first), request.conditions);
             const index iCell = anchor.cell;
-            const index end = first + metric.FaceQuadratureEnd(anchor.face) - metric.FaceQuadratureBegin(anchor.face);
             std::fill(integrated.begin(), integrated.end(), 0);
             if (request.produceLow)
                 std::fill(integratedLow.begin(), integratedLow.end(), 0);
             for (index entry = first; entry < end; ++entry)
             {
-                const auto &sample = FiniteVolumeDetail::ExpandSample(request.stencil.samples(entry, 0), request.conditions);
+                const auto &sample = FiniteVolumeDetail::ExpandSample(request.stencil.RHSFaceSample(iFace, 0, entry), request.conditions);
                 const bool internal = sample.other != UnInitIndex;
                 const auto boundaryKind = sample.boundary.kind;
                 const real weight = metric.GetFaceWeight(sample.point);
@@ -548,12 +548,13 @@ namespace DNDS::Cauchy::CPU
             std::fill(integrated.begin(), integrated.end(), 0);
             if (request.produceLow)
                 std::fill(integratedLow.begin(), integratedLow.end(), 0);
-            for (index entry = request.stencil.offsets(iCell, 0); entry < request.stencil.offsets(iCell + 1, 0);)
+            const auto faces = request.stencil.topology.CellFaces(iCell);
+            for (rowsize slot = 0; slot < faces.size(); ++slot)
             {
-                const auto &sample = FiniteVolumeDetail::ExpandSample(request.stencil.samples(entry, 0), request.conditions);
+                const auto sample = request.stencil.GradientSample(iCell, slot);
                 const index iAux = sample.auxiliaryFace;
-                const auto &anchor = FiniteVolumeDetail::ExpandSample(request.stencil.samples(request.stencil.faceEntries(iAux, 0), 0), request.conditions);
-                const bool opposite = sample.side != anchor.side;
+                const bool opposite = sample.side != 0;
+                const Eigen::Map<const Geom::tGPoint> rotation(sample.rotation.data());
                 for (index j = 0; j < width; ++j)
                 {
                     flux[j] = (opposite ? -1 : 1) * request.faceValues(iAux, j);
@@ -567,13 +568,13 @@ namespace DNDS::Cauchy::CPU
                     for (const index first : request.vectorStarts)
                     {
                         const Geom::tPoint value{flux[first], flux[first + 1], flux[first + 2]};
-                        const Geom::tPoint rotated = sample.rotation * value;
+                        const Geom::tPoint rotated = rotation * value;
                         for (int d = 0; d < 3; ++d)
                             flux[first + d] = rotated[d];
                         if (request.produceLow)
                         {
                             const Geom::tPoint lowValue{lowFlux[first], lowFlux[first + 1], lowFlux[first + 2]};
-                            const Geom::tPoint lowRotated = sample.rotation * lowValue;
+                            const Geom::tPoint lowRotated = rotation * lowValue;
                             for (int d = 0; d < 3; ++d)
                                 lowFlux[first + d] = lowRotated[d];
                         }
@@ -584,7 +585,6 @@ namespace DNDS::Cauchy::CPU
                     if (request.produceLow)
                         integratedLow[j] += lowFlux[j];
                 }
-                entry += metric.FaceQuadratureEnd(sample.face) - metric.FaceQuadratureBegin(sample.face);
             }
             for (index j = 0; j < destination.ComponentNumber(); ++j)
             {
@@ -603,7 +603,7 @@ namespace DNDS::Cauchy::CPU
         index EquationRowCount(const EquationRHSRequest &request, CFV::ReconstructionRegion region, bool face)
         {
             if (region == CFV::ReconstructionRegion::All)
-                return face ? request.stencil.faceEntries.RowCount() : request.ownedCells;
+                return face ? request.stencil.stencilFaces.RowCount() : request.ownedCells;
             if (face)
                 return (region == CFV::ReconstructionRegion::Core ? request.stencil.rhsCoreFaces : request.stencil.rhsDependentFaces).RowCount();
             return (region == CFV::ReconstructionRegion::Core ? request.stencil.coreCells : request.stencil.dependentCells).RowCount();

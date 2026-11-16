@@ -147,7 +147,7 @@ namespace DNDS::Cauchy
                 if (boundary)
                 {
                     owner.ValidateBoundaryInputs(*boundary, time);
-                    boundaryRead.emplace(boundary->QuadratureValues().CoupledField().Owned().Read());
+                    boundaryRead.emplace((data->stencil.quadratureBoundaryValues ? boundary->QuadratureValues() : boundary->FaceCenterValues()).CoupledField().Owned().Read());
                     incoming = boundaryRead->View<R::UniformTableRows>();
                 }
                 for (const auto *derived : {&buffers.derivedOwned, &buffers.derivedGhost})
@@ -314,7 +314,7 @@ namespace DNDS::Cauchy
             boundary = input;
             if (mode == Mode::Immediate)
             {
-                boundaryRead.emplace(boundary->QuadratureValues().CoupledField().Owned().Read());
+                boundaryRead.emplace((data->stencil.quadratureBoundaryValues ? boundary->QuadratureValues() : boundary->FaceCenterValues()).CoupledField().Owned().Read());
                 incoming = boundaryRead->View<R::UniformTableRows>();
             }
             boundaryPending = false;
@@ -404,7 +404,7 @@ namespace DNDS::Cauchy
             if (!independent && boundary)
             {
                 slots->boundary = boundary;
-                slots->packet = addRead(boundary->QuadratureValues().CoupledField().Owned());
+                slots->packet = addRead((data->stencil.quadratureBoundaryValues ? boundary->QuadratureValues() : boundary->FaceCenterValues()).CoupledField().Owned());
                 // The completed packet includes both point sets. Its metadata
                 // validator checks both, so declare both even though this
                 // numerical operation uses quadrature rows only.

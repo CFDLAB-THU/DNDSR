@@ -9,6 +9,7 @@
 #include "Cauchy/State/MeanStateCheck.hpp"
 #include "DNDS/Runtime/Execution/CUDAExecution.hpp"
 #include "Geom/Interface/BoundaryInterface.hpp"
+#include "Geom/Quadratures/Quadrature.hpp"
 #include "DNDS/MPI/CollectiveStage.hpp"
 
 namespace DNDS::Cauchy
@@ -16,6 +17,75 @@ namespace DNDS::Cauchy
     namespace R = Runtime;
     namespace
     {
+        /// Materialize a requested matching/debug snapshot under its caller's
+        /// owner. Ordinary boundary kernels use the compact CFV/face registry;
+        /// no persistent duplicate point/normal table belongs to FiniteVolume.
+        template <class Record = BoundaryPoint>
+        R::Array<Record> BoundarySnapshot(Geom::UnstructuredMesh &mesh,
+                                          const Detail::BoundaryPointLayout &layout, bool centers,
+                                          SpanView<const int> zones = {})
+        {
+            const auto meshRead = mesh.AcquireRead(Geom::MeshReadRequirements::CellFlux());
+            const auto topology = meshRead.HostView();
+            const auto faceRead = layout.faces.Read();
+            const auto faces = faceRead.View<R::FixedRows<1>>();
+            R::Array<Record> result(R::RowLayout::Dense(centers ? faces.RowCount() : layout.quadratureRows, 1));
+            auto write = result.Write();
+            const auto output = write.template View<R::FixedRows<1>>();
+            for (index iBoundary = 0; iBoundary < faces.RowCount(); ++iBoundary)
+            {
+                const auto range = faces(iBoundary, 0);
+                if (!centers && !range.quadratureCount)
+                    continue;
+                const auto element = topology.GetFaceElement(range.face);
+                Geom::tSmallCoords coords;
+                topology.GetCoordsOnFace(range.face, coords);
+                Geom::tPoint meanNormal = Geom::tPoint::Zero(), geometricNormal = Geom::tPoint::Zero();
+                real area = 0;
+                const auto normalAt = [&](const auto &shape)
+                {
+                    const auto jacobian = Geom::Elem::ShapeJacobianCoordD01Nj(coords, shape);
+                    return topology.Dimension() == 2 ? Geom::FacialJacobianToNormVec<2>(jacobian) : Geom::FacialJacobianToNormVec<3>(jacobian);
+                };
+                if (centers)
+                {
+                    const Geom::Elem::Quadrature measure(element, layout.meanIntegrationOrder);
+                    for (int q = 0; q < measure.GetNumPoints(); ++q)
+                    {
+                        const auto &shape = Geom::Elem::GetCachedShapeAtQuadrature(element.type, layout.meanIntegrationOrder, q);
+                        const auto normal = normalAt(shape);
+                        const auto point = Geom::Elem::PPhysicsCoordD01Nj(coords, shape);
+                        area += normal.norm() * measure.GetWeight(q) * (layout.axisymmetric ? point[1] : 1.);
+                        geometricNormal += normal * measure.GetWeight(q);
+                        meanNormal += normal * measure.GetWeight(q) * (layout.axisymmetric ? point[1] : 1.);
+                    }
+                    if (meanNormal.squaredNorm() == 0)
+                        meanNormal = geometricNormal;
+                    DNDS_check_throw_info(meanNormal.allFinite() && meanNormal.norm() > 0, "invalid boundary snapshot normal");
+                    meanNormal.normalize();
+                }
+                const int count = centers ? 1 : int(range.quadratureCount);
+                for (int q = 0; q < count; ++q)
+                {
+                    const auto &shape = Geom::Elem::GetCachedShapeAtQuadrature(element.type, centers ? 1 : layout.integrationOrder, q);
+                    const Geom::tPoint point = Geom::Elem::PPhysicsCoordD01Nj(coords, shape);
+                    const Geom::tPoint normal = centers ? meanNormal : Geom::tPoint(normalAt(shape).normalized());
+                    const index row = centers ? iBoundary : range.quadratureBegin + q;
+                    const int zone = topology.GetFaceZone(range.face);
+                    if constexpr (std::is_same_v<Record, BoundaryPoint>)
+                        output(row, 0) = {topology.FaceCells(range.face)[0], range.face, centers ? -1 : q, zone, {point[0], point[1], point[2]}, {normal[0], normal[1], normal[2]}, range.interface};
+                    else
+                    {
+                        const auto condition = std::lower_bound(zones.begin(), zones.end(), zone);
+                        DNDS_check_throw_info(condition != zones.end() && *condition == zone, "snapshot boundary condition is absent");
+                        const Geom::Elem::Quadrature rule(element, layout.integrationOrder);
+                        const real weight = centers ? area : normalAt(shape).norm() * rule.GetWeight(q) * (layout.axisymmetric ? point[1] : 1.);
+                        output(row, 0) = {topology.FaceCells(range.face)[0], range.face, centers ? -1 : q, index(condition - zones.begin()), row, 0, {normal[0], normal[1], normal[2]}, {point[0], point[1], point[2]}, weight};
+                    }
+                }
+            }
+            return result;
+        }
         R::ExecutionStream PacketStream(R::EagerEngine &engine, R::Device device,
                                         const std::optional<R::ExecutionStream> &requested)
         {
@@ -88,10 +158,16 @@ namespace DNDS::Cauchy
             if(view.GetBndZone(iBnd)==zone) selected.push_back(iBnd); });
         return Geom::BoundaryPatch::Create(_data->mesh, selected);
     }
+    R::Array<BoundaryTraceGeometry> FiniteVolume::Data::BoundaryTraceSnapshot() const
+    {
+        metrics.Validate();
+        return BoundarySnapshot<BoundaryTraceGeometry>(*mesh, *boundaryLayout, !stencil.quadratureBoundaryValues,
+                                                       {forceZones.data(), index(forceZones.size())});
+    }
     std::vector<BoundaryPoint> FiniteVolume::BoundaryPoints() const
     {
         Metrics().Validate();
-        const auto read = _data->boundaryLayout->points.Read();
+        const auto read = ReadBoundaryPoints();
         const auto view = read.View<Runtime::FixedRows<1>>();
         std::vector<BoundaryPoint> result(view.RowCount());
         for (index iRow = 0; iRow < view.RowCount(); ++iRow)
@@ -101,7 +177,7 @@ namespace DNDS::Cauchy
     std::vector<BoundaryPoint> FiniteVolume::BoundaryFaces() const
     {
         Metrics().Validate();
-        const auto read = _data->boundaryLayout->faces.Read();
+        const auto read = ReadBoundaryFaces();
         const auto view = read.View<Runtime::FixedRows<1>>();
         std::vector<BoundaryPoint> result(view.RowCount());
         for (index iRow = 0; iRow < view.RowCount(); ++iRow)
@@ -111,12 +187,12 @@ namespace DNDS::Cauchy
     Runtime::Array<BoundaryPoint>::ReadLease FiniteVolume::ReadBoundaryPoints() const
     {
         Metrics().Validate();
-        return _data->boundaryLayout->points.Read();
+        return BoundarySnapshot(*_data->mesh, *_data->boundaryLayout, false).Read();
     }
     Runtime::Array<BoundaryPoint>::ReadLease FiniteVolume::ReadBoundaryFaces() const
     {
         Metrics().Validate();
-        return _data->boundaryLayout->faces.Read();
+        return BoundarySnapshot(*_data->mesh, *_data->boundaryLayout, true).Read();
     }
     bool FiniteVolume::HasInterfaces() const { return _data->hasInterfaces; }
     BoundaryInputs FiniteVolume::BuildBoundaryInputs(
@@ -135,7 +211,7 @@ namespace DNDS::Cauchy
                     : Physics::Chemistry::ChemicalWorkerPool::Lease{});
         BoundaryInputs input(
             BuildPacketRows(_data->equation.Schema(),
-                            _data->boundaryLayout->points.RowCount(),
+                            _data->boundaryLayout->quadratureRows,
                             "boundary quadrature", Device()),
             BuildPacketRows(_data->equation.Schema(),
                             _data->boundaryLayout->faces.RowCount(),
@@ -153,10 +229,11 @@ namespace DNDS::Cauchy
             EquationDofOperations::NewVector(input._quadrature),
             EquationDofOperations::NewVector(input._faceCenters),
             input._property, input._thermal);
-        frozen._layout = _data->boundaryLayout;
+        frozen._layout = input._layout;
+        frozen._consumerLayout = _data->boundaryLayout;
         auto engine = stream ? stream->LockEngine() : R::EagerEngine{};
         const auto lane = PacketStream(engine, Device(), stream);
-        BeginBoundaryUpdate(frozen, lane);
+        frozen._publication = std::make_shared<BoundaryInputs::PublicationSlot>();
         EquationDofOperations::Copy(engine, lane, frozen._quadrature, input._quadrature);
         EquationDofOperations::Copy(engine, lane, frozen._faceCenters, input._faceCenters);
         engine.Synchronize();
@@ -167,8 +244,8 @@ namespace DNDS::Cauchy
     void FiniteVolume::ValidateBoundaryLayout(const BoundaryInputs &input) const
     {
         Metrics().Validate();
-        DNDS_check_throw_info(input._layout == _data->boundaryLayout &&
-                                  input._layout->stamp.Valid(),
+        DNDS_check_throw_info(input._layout && input._layout->stamp.Valid() &&
+                                  (input._layout == _data->boundaryLayout || input._consumerLayout == _data->boundaryLayout),
                               "boundary packet point order or geometry differs");
         DNDS_check_throw_info(input._property == _data->equation.PropertyKey() &&
                                   input._thermal,
@@ -185,12 +262,14 @@ namespace DNDS::Cauchy
                     !values.PhysicalField(iField).Owned().Layout().IsVariable(),
                     "boundary packet field needs uniform rows");
         };
-        validate(input._quadrature, input._layout->points.RowCount());
+        validate(input._quadrature, input._layout->quadratureRows);
         validate(input._faceCenters, input._layout->faces.RowCount());
     }
     void FiniteVolume::BeginBoundaryUpdate(BoundaryInputs &input, std::optional<R::ExecutionStream> stream) const
     {
         ValidateBoundaryLayout(input);
+        DNDS_check_throw_info(input._layout == _data->boundaryLayout,
+                              "only the provider may begin an aliased boundary update");
         input._publication = std::make_shared<BoundaryInputs::PublicationSlot>();
         if (Device() != R::Device::Host() || stream)
         {
@@ -221,55 +300,69 @@ namespace DNDS::Cauchy
         // satisfy the stored-state simplex and clipped EOS/T invariant, while
         // RANS uses its independent model bounds. Sampling never writes a
         // temporary EOS composition back into these transported packet values.
-        const auto validate = [&](const EquationDofs &values,
-                                  const auto &points)
+        const auto validate = [&](const EquationDofs &values, bool centers)
         {
             const auto read = values.ReadOwned();
             const auto layout = read.ComponentLayout();
-            const auto rows = layout.View();
-            const auto pointRead = points.Read();
-            const auto pointView = pointRead.template View<Runtime::FixedRows<1>>();
-            const auto thermal = input._thermal->View();
+            const auto ranges = input._layout->faces.Read();
             const auto rans = _data->equation.HasRANS()
-                                  ? RANSStateView{_data->equation.RANS().Kind(),
-                                                  _data->equation.RANS().ComponentNumber()}
+                                  ? RANSStateView{_data->equation.RANS().Kind(), _data->equation.RANS().ComponentNumber()}
                                   : RANSStateView{};
-            const auto ransBlock = rans.components ? read.Block("rans")
-                                                   : EquationBlockReadView{};
-            RequireNumericalSuccess(CPU::ValidateInterfacePacketRows(rows, pointView, thermal, rans, ransBlock), "ValidateInterfacePacketRows");
+            const auto ransBlock = rans.components ? read.Block("rans") : EquationBlockReadView{};
+            RequireNumericalSuccess(CPU::ValidateInterfacePacketRanges(layout.View(), ranges.View<R::FixedRows<1>>(),
+                                                                       centers, input._thermal->View(), rans, ransBlock),
+                                    "ValidateInterfacePacketRows");
         };
         if (Device() == R::Device::Host())
         {
             if (stream)
                 stream->Record().WaitHost();
-            validate(input._quadrature, input._layout->points);
-            validate(input._faceCenters, input._layout->faces);
+            validate(input._quadrature, false);
+            validate(input._faceCenters, true);
         }
         else
         {
             auto engine = stream ? stream->LockEngine() : R::EagerEngine{};
             const auto lane = PacketStream(engine, Device(), stream);
-            const auto check = [&](const EquationDofs &values, const R::Array<BoundaryPoint> &points, std::shared_ptr<MeanStateCheck> &checker)
+            const auto check = [&](const EquationDofs &values, bool centers, std::shared_ptr<MeanStateCheck> &checker)
             {
+                const index rows = index(values.Space().OwnedRows());
+                if (!rows)
+                    return; // An omitted section has no required rows to validate.
                 if (!checker)
                 {
-                    R::Array<uint8_t> active(R::RowLayout::Dense(points.RowCount(), 1));
+                    R::Array<uint8_t> active(R::RowLayout::Dense(rows, 1));
                     {
-                        const auto read = points.Read();
+                        const auto read = input._layout->faces.Read();
+                        const auto ranges = read.View<R::FixedRows<1>>();
                         auto write = active.Write();
-                        for (index iPoint = 0; iPoint < points.RowCount(); ++iPoint)
-                            write.View()(iPoint, 0) = read.View()(iPoint, 0).interface;
+                        const auto flags = write.View<R::FixedRows<1>>();
+                        for (index i = 0; i < rows; ++i)
+                            flags(i, 0) = 0;
+                        for (index iFace = 0; iFace < ranges.RowCount(); ++iFace)
+                        {
+                            const auto range = ranges(iFace, 0);
+                            if (!range.interface)
+                                continue;
+                            const index begin = centers ? iFace : range.quadratureBegin;
+                            const index end = begin + (centers ? 1 : range.quadratureCount);
+                            for (index i = begin; i < end; ++i)
+                                flags(i, 0) = 1;
+                        }
                     }
                     const auto &n = _data->settings.numerics;
-                    const auto rans = _data->equation.HasRANS() ? RANSStateView{_data->equation.RANS().Kind(), _data->equation.RANS().ComponentNumber()} : RANSStateView{};
+                    const auto rans = _data->equation.HasRANS()
+                                          ? RANSStateView{_data->equation.RANS().Kind(), _data->equation.RANS().ComponentNumber()}
+                                          : RANSStateView{};
                     checker = std::make_shared<MeanStateCheck>(values.Space(),
-                                                               AdmissibilityPolicy(_data->equation, n.densityFloor, n.temperatureFloor, n.sensibleEnergyFloor, n.pressureFloor, rans),
+                                                               AdmissibilityPolicy(_data->equation, n.densityFloor, n.temperatureFloor,
+                                                                                   n.sensibleEnergyFloor, n.pressureFloor, rans),
                                                                lane.Context(), active.To(Device(), lane.Context()));
                 }
                 RequireNumericalSuccess(checker->Evaluate(engine, lane, values), "ValidateInterfacePacketRows");
             };
-            check(input._quadrature, input._layout->points, input._quadratureCheck);
-            check(input._faceCenters, input._layout->faces, input._faceCheck);
+            check(input._quadrature, false, input._quadratureCheck);
+            check(input._faceCenters, true, input._faceCheck);
         }
         for (const auto &source : sources)
         {
@@ -327,40 +420,26 @@ namespace DNDS::Cauchy
                               "cannot alias an unpublished or modified boundary packet");
         if (input._layout != _data->boundaryLayout)
         {
-            const auto validate = [&](const auto &a, const auto &b,
-                                      const EquationDofs &values)
+            const auto source = input._layout->faces.Read(), target = _data->boundaryLayout->faces.Read();
+            const auto a = source.View<R::FixedRows<1>>(), b = target.View<R::FixedRows<1>>();
+            DNDS_check_throw_info(a.RowCount() == b.RowCount(), "boundary alias face counts differ");
+            const bool needsQuadrature = _data->boundaryLayout->quadratureRows != 0;
+            if (needsQuadrature)
+                DNDS_check_throw_info(input._layout->integrationOrder == _data->boundaryLayout->integrationOrder &&
+                                          input._layout->quadratureRows == _data->boundaryLayout->quadratureRows,
+                                      "boundary alias lacks the required quadrature section");
+            for (index i = 0; i < a.RowCount(); ++i)
             {
-                DNDS_check_throw_info(a.RowCount() == b.RowCount(), "boundary alias point counts differ");
-                const auto aRead = a.Read(), bRead = b.Read();
-                const auto av = aRead.template View<Runtime::FixedRows<1>>(), bv = bRead.template View<Runtime::FixedRows<1>>();
-                if (Device() != R::Device::Host())
-                {
-                    // Pure host geometry/provenance check: publication already
-                    // validated resident values and the generation checks above
-                    // prove they have not changed. Do not download the packet
-                    // just to repeat its thermodynamic predicate during pMG.
-                    for (index iPoint = 0; iPoint < a.RowCount(); ++iPoint)
-                    {
-                        const auto x = av(iPoint, 0), y = bv(iPoint, 0);
-                        DNDS_check_throw_info(x.cell == y.cell && x.face == y.face && x.quadrature == y.quadrature &&
-                                                  x.zone == y.zone && x.point == y.point && x.normal == y.normal && x.interface == y.interface,
-                                              "boundary alias point order or geometry differs");
-                    }
-                    return;
-                }
-                const auto valueRead = values.ReadOwned();
-                const auto layout = valueRead.ComponentLayout();
-                const auto rows = layout.View();
-                const auto thermal = input._thermal->View();
-                RequireNumericalSuccess(CPU::ValidateInterfaceAliasRows(rows, av, bv, thermal), "ValidateInterfaceAliasRows");
-            };
-            validate(input._layout->points, _data->boundaryLayout->points,
-                     input._quadrature);
-            validate(input._layout->faces, _data->boundaryLayout->faces,
-                     input._faceCenters);
+                const auto x = a(i, 0), y = b(i, 0);
+                DNDS_check_throw_info(x.face == y.face && x.interface == y.interface &&
+                                          (!needsQuadrature || (x.quadratureBegin == y.quadratureBegin && x.quadratureCount == y.quadratureCount)),
+                                      "boundary alias face order or requested rows differ");
+            }
         }
         auto alias = input;
-        alias._layout = _data->boundaryLayout;
+        // Keep the provider's superset alive. A center-only pMG consumer never
+        // repacks or destroys quadrature values still needed by a fine reader.
+        alias._consumerLayout = _data->boundaryLayout;
         ValidateBoundaryInputs(alias, alias.Time());
         return alias;
     }

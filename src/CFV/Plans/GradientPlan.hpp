@@ -51,7 +51,9 @@ namespace DNDS::CFV
     };
 
     /// Independent cell-centered FV gradient preparation. BC inputs are physical
-    /// face-quadrature values, not reflected ghost states. LS minimizes residuals
+    /// face-center values, not reflected ghost states. Each owned cell-face
+    /// incidence has one weight and boundary-ID entry, independent of the RHS
+    /// quadrature degree. LS minimizes residuals
     /// with inverse-distance-squared weights using the design matrix SVD (not
     /// normal equations). GGMP eliminates face values from the coupled corrected
     /// Green-Gauss equations. No legacy VR owner or boundary callback is used.
@@ -63,11 +65,9 @@ namespace DNDS::CFV
                 std::make_shared<const Detail::GradientIdentity>();
             FiniteVolumePlan metrics;
             Geom::EntityWorkPartition partition;
-            Runtime::Array<index> offsets, neighbors, faces, boundaryIds;
+            Runtime::Array<index> offsets, boundaryIds;
             Runtime::Array<index> core, dependent;
-            Runtime::Array<uint8_t> rotationActive;
-            Runtime::Array<real> weights, rotations;
-            bool hasRotatedFrames = false;
+            Runtime::Array<real> weights;
             std::vector<BoundaryQuadraturePoint> boundary;
             index boundaryCount = 0;
             Data(FiniteVolumePlan plan) : metrics(std::move(plan)), partition(metrics.CellWorkPartition()) {}
@@ -98,6 +98,8 @@ namespace DNDS::CFV
         GradientPlan Placed(Runtime::Device device, Runtime::ExecutionContext context) const;
         GradientPlan Placed(FiniteVolumePlan metrics, Runtime::ExecutionContext context) const;
         GradientWorkspace BuildWorkspace(index components, const std::vector<index> &periodicVectorStarts = {}, bool withLimiter = false) const;
+        /// Number of face-center BC rows; retained API spelling does not imply
+        /// expansion by the metric's high-order face quadrature rule.
         index NumBoundaryQuadrature() const;
         BoundaryQuadraturePoint GetBoundaryQuadrature(index iPoint) const;
         Runtime::Array<real> BuildBoundaryValues(index components) const;

@@ -46,6 +46,8 @@ in [Cauchy implicit operator contracts](architecture/CauchyImplicit.md).
 The [boundary convention guide](architecture/CauchyBoundary.md) distinguishes
 Euler exterior targets, conservative gradient traces, viscous wall laws,
 farfield switching and approximate implicit boundary derivatives.
+The [compact geometry and cell-local PP contract](architecture/CauchyCompactGeometry.md)
+describes canonical face incidence, center consumers, immutable placement and fused positivity.
 The [Cauchy positivity policy](architecture/CauchyPositivity.md) specifies
 thermal constraints, component scopes and preserved Euler repair ordering.
 The [Cauchy output contract](architecture/CauchyOutput.md) defines centralized

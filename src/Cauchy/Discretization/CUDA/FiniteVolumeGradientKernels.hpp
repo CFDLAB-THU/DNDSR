@@ -3,6 +3,7 @@
 #include "Cauchy/Discretization/FiniteVolumeStencil.hpp"
 #include "Cauchy/Discretization/RANSReconstruction.hpp"
 #include "Cauchy/Physics/ThermalAdmissibility.hpp"
+#include "Cauchy/Discretization/CUDA/ModalPositivityKernels.hpp"
 
 namespace DNDS::Cauchy::CUDA
 {
@@ -13,10 +14,8 @@ namespace DNDS::Cauchy::CUDA
     using GradientStatus = Runtime::ArrayView<NumericalStatus, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
     struct GradientLimiterGeometry
     {
-        Runtime::ArrayView<const FiniteVolumeDetail::SampleRecord, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> samples;
-        GradientIndices offsets, positivityOffsets;
-        Runtime::ArrayView<const real, false, Runtime::FixedRows<8>> cells;
-        Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::FixedRows<3>> displacements;
+        Runtime::ArrayView<const FiniteVolumeStencilView, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> stencil;
+        index ownedCells = 0, allCells = 0;
     };
     /// Independent Barth limiting of physical gradients. Writes a disjoint
     /// output field; equation momentum is rotated on periodic neighbor reads.
@@ -39,13 +38,14 @@ namespace DNDS::Cauchy::CUDA
      * the selected whole-flow endpoint recovery. No mean increment is repaired.
      * Point samples are evaluated from bounded per-cell gradient scratch, so
      * the number of quadrature points imposes no local-memory array bound.
-     * beta/status are per selected owned cell and are reduced by the operator.
+     * The producing CTA writes one status/count/minimum summary; a compact
+     * finalizer merges summaries without rescanning cell fields.
      */
     void LimitPositivePhysicalGradients(Runtime::ExecutionContext, GradientLimiterGeometry,
                                         GradientInput means, GradientOutput gradients, GradientIndices selected,
                                         GradientPositivityParameters,
-                                        Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> beta,
-                                        GradientStatus status);
+                                        ModalPositivitySummary partials);
+    index GradientPositivitySummaryRows(index selectedCells);
     /// Mean [rho,u,v,w,T] preparation, with explicit point failure status.
     /// Input may be any selected-profile combined AoS row; output has width5.
     void FillPrimitiveMeans(Runtime::ExecutionContext, GradientInput input, GradientOutput output,

@@ -53,6 +53,7 @@ set(CPPS
     Discretization/FiniteVolume.cpp
     Discretization/FiniteVolume_Placement.cpp
     Discretization/FiniteVolumeInternal_SourceQuadrature.cpp
+    Discretization/FiniteVolumeInternal_Stencil.cpp
     Discretization/FiniteVolumeInternal_PositivityQuadrature.cpp
     Discretization/FiniteVolumeViews.cpp
     Discretization/FiniteVolume_RHSOperator.cpp
@@ -81,7 +82,6 @@ set(CPPS
     Discretization/FiniteVolume_BoundaryInputs.cpp
     Discretization/FiniteVolume_BoundaryQueued.cpp
     Discretization/FiniteVolume_BoundaryHostQueued.cpp
-    Discretization/FiniteVolume_Boundary.cpp
     Discretization/FiniteVolume_Flux.cpp
     Discretization/FiniteVolume_Source.cpp
     Discretization/FiniteVolume_Diagnostics.cpp
@@ -91,6 +91,7 @@ set(CPPS
     Discretization/CPU/FiniteVolumeBoundaryKernels.cpp
     Discretization/CPU/FiniteVolumeLimitedVRKernels.cpp
     Discretization/CPU/FiniteVolumeAuxiliaryKernels.cpp
+    Discretization/CPU/ModalPositivityKernels.cpp
     Discretization/CPU/FiniteVolumePositivityKernels.cpp
     Discretization/CPU/FiniteVolumeRHSKernels_Flow5.cpp
     Discretization/CPU/FiniteVolumeRHSKernels_Equation.cpp
@@ -177,9 +178,25 @@ if(DNDS_USE_CUDA)
     list(APPEND CPPS Multigrid/CUDA/PolynomialMultigridKernels.cu)
     list(APPEND CPPS Discretization/CUDA/FiniteVolumeAuxiliaryKernels.cu Discretization/CUDA/FiniteVolumeBoundaryKernels.cu)
     list(APPEND CPPS Discretization/CUDA/FiniteVolumeRHSKernels.cu Discretization/CUDA/FiniteVolumeRHSKernels_Placement.cpp)
-    list(APPEND CPPS Discretization/CUDA/FiniteVolumeRHSKernels_Compute.cu)
+    # Keep reduced-precision face kernels in bounded instantiation groups.
+    # Their host dispatcher does not include the numerical kernel definitions.
+    list(APPEND CPPS
+        Discretization/CUDA/FiniteVolumeRHSKernels_Compute.cpp
+        Discretization/CUDA/FiniteVolumeRHSKernels_Compute_FP32_Polynomial.cu
+        Discretization/CUDA/FiniteVolumeRHSKernels_Compute_FP32_Dissipation.cu
+        Discretization/CUDA/FiniteVolumeRHSKernels_Compute_FP32_Flux.cu
+        Discretization/CUDA/FiniteVolumeRHSKernels_Compute_FloatFloat_Polynomial.cu
+        Discretization/CUDA/FiniteVolumeRHSKernels_Compute_FloatFloat_Dissipation.cu
+        Discretization/CUDA/FiniteVolumeRHSKernels_Compute_FloatFloat_Flux.cu)
+    list(APPEND CPPS Discretization/CUDA/FiniteVolumeRHSFacePackages.cpp Discretization/CUDA/FiniteVolumeRHSKernels_Segments.cu)
+    # A 512-thread segment CTA has at most 128 registers per lane on the
+    # qualified SM80/SM86 devices. Apply the same bound to its out-of-line
+    # numerical callees; launch_bounds alone constrains only the entry kernel.
+    # Keep this local to the experimental segments TU, never all RHS policies.
+    set_property(SOURCE Discretization/CUDA/FiniteVolumeRHSKernels_Segments.cu
+        APPEND PROPERTY COMPILE_OPTIONS "--maxrregcount=128")
     list(APPEND CPPS Discretization/CUDA/FiniteVolumeSourceKernels.cu)
-    list(APPEND CPPS Discretization/CUDA/FiniteVolumePositivityKernels.cu)
+    list(APPEND CPPS Discretization/CUDA/ModalPositivityKernels.cu Discretization/CUDA/FiniteVolumePositivityKernels.cu)
     list(APPEND CPPS Discretization/CUDA/FiniteVolumeGradientKernels.cu)
     list(APPEND CPPS Discretization/CUDA/FiniteVolumeLimitedVRKernels.cu)
     list(APPEND CPPS Discretization/CUDA/FiniteVolumeReconstructionKernels.cu)

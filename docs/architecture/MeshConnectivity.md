@@ -497,6 +497,20 @@ completion. Readonly Python rows retain their leases after a scope closes.
 Tracked publication rejects active facade readers. See [MeshFacade](MeshFacade.md),
 [publication](NativeMeshPublication.md), and [managed edits](ManagedMeshEdit.md).
 
+`Geom/Access/CellFaceIncidence.hpp` provides a minimal canonical incidence
+publication for numerical operators that need only cell-to-face slots,
+ordered face parents, face zones and periodic side bits. Host capture shares
+the native arrays. Explicit `Placed` copies only those owned/ghost buffers and
+their existing row layouts; it does not upload coordinates, node cones or
+unrelated metadata. `AcquireRead` validates numbering generations and pins the
+source through operator completion without performing an upload or device
+fence. Keep the returned `CellFaceIncidenceRead` through every asynchronous
+use. The cache owner alone does not prevent source replacement: topology,
+distribution, layout or interface changes reject a subsequent acquisition;
+geometry-only edits leave this purely topological publication valid. CFV's
+finite-volume geometry uses this facility instead of a full device mesh
+snapshot for its gradient/RHS/linear incidence consumers.
+
 This page describes current contracts. Historical `AdjPairTracked`,
 `AdjIndexInfo`, mutable SerialRW ingress and legacy global/local build chains
 belong to migration records, not the current construction API. Test definitions

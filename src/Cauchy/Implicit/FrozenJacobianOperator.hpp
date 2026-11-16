@@ -6,7 +6,7 @@
 
 namespace DNDS::Cauchy
 {
-    /** @brief Immutable resident evaluated Jacobian, independent of FV owners.
+    /** @brief Immutable resident evaluated Jacobian over retained FV geometry.
      * @details Preparation finishes and validates before construction. The
      * retained read scopes seal numerical arrays and geometry against writes.
      * Only canonical column metadata stays on host for publication checks;
@@ -15,7 +15,9 @@ namespace DNDS::Cauchy
      * preparation-stream address past its owner's destruction. Actual queued
      * uses retain the publication until their own stream completion.
      * All asynchronous uses retain this operation object plus their explicit
-     * I/O operands. No communicator, EOS worker or live equation state is kept.
+     * I/O operands. Shared immutable stencil/CFV publications stay alive with
+     * geometry; no MPI operation, mutable EOS worker or live equation field
+     * participates in an evaluated action.
      * The initial provider supports CUDA combined-AoS perfect-gas 5/6/7 only.
      * Its host block methods reject use rather than performing device copies.
      */

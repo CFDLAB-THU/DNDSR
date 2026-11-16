@@ -17,7 +17,7 @@ namespace DNDS::Cauchy
                         {
             DNDS_check_throw_info(Device().space == R::MemorySpace::CUDA && !Equation().HasMixture(),
                                   "resident surface output requires the CUDA perfect-gas profile");
-            const index rows = _data->boundaryTraceGeometry.RowCount(), components = state.ComponentNumber();
+            const index rows = _data->BoundaryValueRows(), components = state.ComponentNumber();
             const Algebra::DofSpace space(size_t(rows), 0, "output/boundaryPoints");
             auto points = EquationDofs::Coupled(state.Schema(),
                 Algebra::DofField<real>(space, R::RowLayout::Dense(0, components), Device()), "equation");
@@ -37,7 +37,7 @@ namespace DNDS::Cauchy
             if (boundary)
             {
                 ValidateBoundaryInputs(*boundary, time);
-                incoming.Emplace(boundary->QuadratureValues().CoupledField().Owned());
+                incoming.Emplace((_data->stencil.quadratureBoundaryValues ? boundary->QuadratureValues() : boundary->FaceCenterValues()).CoupledField().Owned());
             }
             BoundarySubmission request;
             request.time = time;
@@ -54,7 +54,7 @@ namespace DNDS::Cauchy
             auto fields = OutputFields::Submit(engine, stream, points, Equation());
             engine.Synchronize();
             const auto hostFields = fields.CopyToHost(stream.Context());
-            const auto hostGeometry = _data->boundaryTraceGeometry.To(R::Device::Host(), stream.Context());
+            const auto hostGeometry = _data->BoundaryTraceSnapshot();
             const auto valuesRead = hostFields.Read();
             const auto geometryRead = hostGeometry.Read();
             const auto values = valuesRead.View<R::TableRows>();

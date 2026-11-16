@@ -53,9 +53,8 @@ namespace DNDS::Cauchy::CUDA
      */
     struct JacobianFaceInput
     {
-        Runtime::ArrayView<const FiniteVolumeDetail::SampleRecord, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> samples;
-        LinearIndexRows offsets;
-        Runtime::ArrayView<const real, false, Runtime::FixedRows<7>> faces;
+        Runtime::ArrayView<const FiniteVolumeStencilView, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> stencil;
+        index ownedCells = 0, incidences = 0;
         Runtime::ArrayView<const PerfectGasBoundaryParameters, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> conditions;
         VectorReadRows means;
         LinearReadRows pressure, pressureDerivative, radius, incoming;

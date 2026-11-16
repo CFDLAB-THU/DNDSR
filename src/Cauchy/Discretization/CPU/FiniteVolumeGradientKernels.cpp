@@ -26,10 +26,9 @@ namespace DNDS::Cauchy::CPU
                 positive[j] = negative[j] = 0;
             }
             if (request.barth)
-                for (index entry = request.stencil.offsets(iCell, 0);
-                     entry < request.stencil.offsets(iCell + 1, 0); ++entry)
+                for (rowsize slot = 0; slot < rowsize(request.stencil.topology.CellFaces(iCell).size()); ++slot)
                 {
-                    const auto &sample = request.stencil.samples(entry, 0);
+                    const auto sample = request.stencil.GradientSample(iCell, slot);
                     if (sample.other != UnInitIndex)
                     {
                         for (index j = 0; j < components; ++j)
@@ -53,8 +52,7 @@ namespace DNDS::Cauchy::CPU
                     // Own the evaluated vector: both operands are temporary
                     // Eigen values, so an auto expression would dangle before
                     // the component loop (and depend on caller stack layout).
-                    const Geom::tPoint displacement = Geom::tPoint{sample.ownPoint[0], sample.ownPoint[1], sample.ownPoint[2]} -
-                                                      request.metric.GetCellCent(iCell);
+                    const Geom::tPoint displacement = request.stencil.GradientDisplacement(iCell, slot);
                     for (index j = 0; j < components; ++j)
                     {
                         real increment = 0;
@@ -112,21 +110,24 @@ namespace DNDS::Cauchy::CPU
                 request.means, iCell};
             if (!(bounds.Admissible(mean)))
                 return NumericalStatus{NumericalError::InvalidState, 1, iCell};
-            const index begin = request.stencil.positivityOffsets(iCell, 0);
-            const index end = request.stencil.positivityOffsets(iCell + 1, 0);
-            const index points = end - begin;
+            // Gradient PP checks each face center once. The admissible mean
+            // was checked above; it is not another sampled point. This is
+            // independent of the parent domain's modal/source quadrature.
+            const index points = index(request.stencil.topology.CellFaces(iCell).size());
             for (index q = 0; q < points; ++q)
+            {
+                const auto displacement = request.stencil.GradientDisplacement(iCell, rowsize(q));
                 for (index j = 0; j < components; ++j)
                 {
                     const index field = request.logicalField[size_t(j)];
                     const index component = request.logicalComponent[size_t(j)];
                     real value = mean[j];
-                    const auto displacement = request.stencil.positivityDisplacements[begin + q];
                     for (int d = 0; d < dim; ++d)
                         value += request.gradients[field](iCell, component * dim + d) *
                                  displacement[d];
                     request.samples(q, j) = value;
                 }
+            }
             base.cell = iCell;
             const auto clippedPolicy = request.clippedPolicy;
             real beta = bounds.ReconstructionFraction(
@@ -162,12 +163,12 @@ namespace DNDS::Cauchy::CPU
                 bool clippedGood = true;
                 for (index q = 0; q < points; ++q)
                 {
+                    const auto displacement = request.stencil.GradientDisplacement(iCell, rowsize(q));
                     for (index j = 0; j < components; ++j)
                     {
                         const index field = request.logicalField[size_t(j)];
                         const index component = request.logicalComponent[size_t(j)];
                         real value = mean[j];
-                        const auto displacement = request.stencil.positivityDisplacements[begin + q];
                         for (int d = 0; d < dim; ++d)
                             value += request.gradients[field](iCell, component * dim + d) * displacement[d];
                         request.samples(q, j) = value;
@@ -203,12 +204,12 @@ namespace DNDS::Cauchy::CPU
             }
             for (index q = 0; q < points; ++q)
             {
+                const auto displacement = request.stencil.GradientDisplacement(iCell, rowsize(q));
                 for (index j = 0; j < components; ++j)
                 {
                     const index field = request.logicalField[size_t(j)];
                     const index component = request.logicalComponent[size_t(j)];
                     real value = mean[j];
-                    const auto displacement = request.stencil.positivityDisplacements[begin + q];
                     for (int d = 0; d < dim; ++d)
                         value += request.gradients[field](iCell, component * dim + d) * displacement[d];
                     request.samples(q, j) = value;

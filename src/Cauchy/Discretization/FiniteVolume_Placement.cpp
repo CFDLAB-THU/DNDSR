@@ -52,7 +52,10 @@ namespace DNDS::Cauchy
         {
             CFV::ReconstructionResidencyOptions options;
             options.retainHostPayloads = false;
-            options.arbitraryPointSampling = _data->hasInterfaces;
+            // Centered boundary consumers evaluate independently of the face
+            // quadrature cache and therefore retain central moments/scale.
+            options.arbitraryPointSampling = _data->hasInterfaces ||
+                                             _data->settings.numerics.reconstructionBoundaryFromPolynomial;
             options.basis = true;
             options.basisDerivativeOrder = 1;
             placed->reconstructionKernel = _data->settings.execution.ReconstructionKernel();
@@ -79,15 +82,14 @@ namespace DNDS::Cauchy
             DNDS_check_throw_info(placed->reconstruction->SupportsKernel(placed->reconstructionKernel),
                                   "requested CFV reconstruction kernel is unsupported on this CUDA device");
         }
-        placed->stencil = _data->stencil.Placed(device, context);
+        placed->stencil = _data->stencil.Placed(placed->metrics, context);
         const auto moveField = [&](const auto &source, const char *name)
         {
             auto target = source.To(device, context);
             target.SetName(std::string("Cauchy/") + name, DNDS_ALLOCATION_SITE());
             return target;
         };
-        placed->boundaryTraceGeometry = moveField(_data->boundaryTraceGeometry, "boundaryTraceGeometry");
-        placed->gradientBoundaryRows = moveField(_data->gradientBoundaryRows, "gradientBoundaryRows");
+        placed->boundaryFaces = moveField(_data->boundaryFaces, "boundary/faces");
         placed->ransCellLength = moveField(_data->ransCellLength, "ransCellLength");
         placed->deviceBoundaryConditions = R::MetadataBuffer<PerfectGasBoundaryParameters>(conditions).CopyTo(device, context);
         placed->deviceBoundaryConditions.SetDiagnosticName("Cauchy/boundaryConditions", DNDS_ALLOCATION_SITE());
@@ -119,7 +121,9 @@ namespace DNDS::Cauchy
         if (_data->quadrature.source)
         {
             auto source = std::make_shared<Detail::SourceQuadrature>(*_data->quadrature.source);
-            source->offsets = moveField(source->offsets, "sourceOffsets");
+            // PP and source must share row boundaries on the placed backend,
+            // just as their volume point/basis storage does.
+            source->offsets = samplingPlacement.Place(source->offsets);
             source->weights = moveField(source->weights, "sourceWeights");
             if (source->sampling)
                 source->sampling = source->sampling->Placed(samplingPlacement);
@@ -130,13 +134,7 @@ namespace DNDS::Cauchy
         if (_data->limitedVRGeometry)
         {
             auto limited = std::make_shared<LimitedVRGeometry>(*_data->limitedVRGeometry);
-            limited->gradient = _data->limitedVRGeometry->gradient.Placed(placed->metrics, context);
             limited->gates = _data->limitedVRGeometry->gates.Placed(placed->metrics, context);
-            limited->faces = moveField(_data->limitedVRGeometry->faces, "lvrFaces");
-            limited->cellFaceOffsets = moveField(_data->limitedVRGeometry->cellFaceOffsets, "lvrCellFaceOffsets");
-            limited->cellFaces = moveField(_data->limitedVRGeometry->cellFaces, "lvrCellFaces");
-            if (_data->limitedVRGeometry->sampling)
-                limited->sampling = _data->limitedVRGeometry->sampling->Placed(samplingPlacement);
             placed->limitedVRGeometry = std::move(limited);
         }
         placed->settings.execution.device = "cuda";

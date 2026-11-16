@@ -46,7 +46,7 @@ namespace DNDS::Cauchy::CPU
             return NumericalStatus{NumericalError::InvalidState, 2, -1};
         const auto incoming = input.boundary.value_or(RHSScalarView{});
         if (input.boundary)
-            if (!(incoming.RowCount() == request.stencil.boundaryEntries.RowCount() && incoming.Width() == 5))
+            if (!(incoming.Width() == 5))
                 return NumericalStatus{NumericalError::InvalidState, 3, -1};
         const bool viscous = equation.Viscous() && input.includeViscosity;
         const bool direct = request.direct;
@@ -146,236 +146,241 @@ namespace DNDS::Cauchy::CPU
         {
             FlowState integrated{};
             FlowState integratedLow{};
-            for (index entry = request.stencil.offsets(iCell, 0); entry < request.stencil.offsets(iCell + 1, 0); ++entry)
+            const auto faces = request.stencil.topology.CellFaces(iCell);
+            for (rowsize slot = 0; slot < faces.size(); ++slot)
             {
-                const auto &sample = FiniteVolumeDetail::ExpandSample(request.stencil.samples(entry, 0), request.conditions);
-                const bool internal = sample.other != UnInitIndex;
-                const auto boundaryKind = sample.boundary.kind;
-                const real weight = metric.GetFaceWeight(sample.point);
-                if (writeFace && sample.point == metric.FaceQuadratureBegin(sample.face))
-                    for (int j = 0; j < 5; ++j)
-                        (*output.faceFlux)(sample.auxiliaryFace, j) = 0;
-                auto reconstruct = [&](index cell, int parent)
+                const index iFace = faces[slot];
+                const int side = request.stencil.topology.CellIsFaceBack(iCell, iFace, slot) ? 0 : 1;
+                for (index iPoint = metric.FaceQuadratureBegin(iFace); iPoint < metric.FaceQuadratureEnd(iFace); ++iPoint)
                 {
-                    auto state = Load(mean, cell);
-                    auto viscousState = state;
-                    FlowGradient gradient{};
-                    if (direct && !input.meanOnly && request.linear && !request.firstOrder)
+                    const auto sample = FiniteVolumeDetail::ExpandSample(request.stencil.RHSFaceSample(iFace, side, iPoint), request.conditions);
+                    const bool internal = sample.other != UnInitIndex;
+                    const auto boundaryKind = sample.boundary.kind;
+                    const real weight = metric.GetFaceWeight(sample.point);
+                    if (writeFace && sample.point == metric.FaceQuadratureBegin(sample.face))
+                        for (int j = 0; j < 5; ++j)
+                            (*output.faceFlux)(sample.auxiliaryFace, j) = 0;
+                    auto reconstruct = [&](index cell, int parent)
                     {
-                        const auto displacement = FiniteVolumeDetail::DirectFVDisplacement(metric, sample, parent != 0);
-                        const auto row = physicalGradient[cell];
-                        const auto viscousRow = physicalViscousGradient[cell];
-                        for (int component = 0; component < 5; ++component)
-                            for (int d = 0; d < dim; ++d)
-                            {
-                                state[component] += row[component * dim + d] * displacement[d];
-                                if (polynomialViscosity)
-                                {
-                                    viscousState[component] += viscousRow[component * dim + d] * displacement[d];
-                                    gradient[component][d] = viscousRow[component * dim + d];
-                                }
-                            }
-                    }
-                    else if (!direct && !input.meanOnly && !request.firstOrder)
-                    {
-                        CFV::Math::SmallMatrix basisScratch;
-                        const auto basis = CFV::CPU::EvaluateFaceBasis(*request.basis, sample.face, parent == 0 ? sample.side : 1 - sample.side,
-                                                                       sample.point, polynomialViscosity ? 1 : 0, basisScratch);
-                        const auto row = coefficient[cell];
-                        const auto viscousRow = polynomialViscosity ? viscousCoefficient[cell] : decltype(viscousCoefficient[cell]){};
-                        for (int component = 0; component < 5; ++component)
-                            for (int mode = 0; mode < modes; ++mode)
-                            {
-                                const real value = row[component * modes + mode];
-                                state[component] += value * basis(0, mode);
-                                if (polynomialViscosity)
-                                {
-                                    const real viscousValue = input.viscousCoefficients ? viscousRow[component * modes + mode] : value;
-                                    if (input.viscousCoefficients)
-                                        viscousState[component] += viscousValue * basis(0, mode);
-                                    for (int d = 0; d < dim; ++d)
-                                        gradient[component][d] += viscousValue * basis(1 + d, mode);
-                                }
-                            }
-                    }
-                    if (!distinctViscousState)
-                        viscousState = state;
-                    // Explicit local first-order fallback keeps the mean
-                    // unchanged when a high-order face value is inadmissible.
-                    if (!ThermallyAdmissible(state, thermalBounds))
-                    {
-                        diagnostics.AddFaceFallback();
-                        state = Load(mean, cell);
-                    }
-                    if (viscous && !polynomialViscosity)
-                        for (int component = 0; component < 5; ++component)
-                            for (int d = 0; d < dim; ++d)
-                                gradient[component][d] = gradientInput(cell, component * dim + d);
-                    struct PointState
-                    {
-                        FlowState state, viscousState;
-                        FlowGradient gradient;
-                    };
-                    return PointState{state, viscousState, gradient};
-                };
-                const auto left = reconstruct(iCell, 0);
-                FlowState right{}, viscousRight{};
-                FlowGradient rightGradient{};
-                if (internal)
-                {
-                    auto other = reconstruct(sample.other, 1);
-                    right = sample.changesFrame ? RotateState(other.state, sample.rotation) : other.state;
-                    if (viscous)
-                    {
-                        viscousRight = sample.changesFrame ? RotateState(other.viscousState, sample.rotation) : other.viscousState;
-                        rightGradient = sample.changesFrame ? RotateGradient(other.gradient, sample.rotation) : other.gradient;
-                    }
-                }
-                else
-                {
-                    const auto exterior = FiniteVolumeDetail::BoundaryExterior(sample, gas, left.state, request.time, frame, incoming);
-                    if (!exterior)
-                        return exterior.status.At(iCell, sample.point);
-                    right = exterior.value;
-                    viscousRight = right;
-                    rightGradient = left.gradient;
-                }
-                const Vector3 normal{sample.normal[0], sample.normal[1], sample.normal[2]};
-                const Vector3 point{sample.ownPoint[0], sample.ownPoint[1], sample.ownPoint[2]};
-                const bool wallFluxState = noRsOnWall && !internal && boundaryKind == BoundaryKind::NoSlipWall;
-                const auto convectiveLeftResult = wallFluxState ? FiniteVolumeDetail::BoundaryFaceValue(sample, gas, left.state, request.time, frame, incoming)
-                                                                : NumericalResult<FlowState>{left.state};
-                if (!convectiveLeftResult)
-                    return convectiveLeftResult.status.At(iCell, sample.point);
-                const auto &convectiveLeft = convectiveLeftResult.value;
-                const auto convectiveRight = wallFluxState ? convectiveLeft : right;
-                const auto leftFlux = equation.PrepareFluxState(convectiveLeft), rightFlux = equation.PrepareFluxState(convectiveRight);
-                const auto gridVelocity = frame.GridVelocity(point);
-                const auto leftMean = Load(mean, iCell);
-                const auto otherMean = internal ? Load(mean, sample.other) : FlowState{};
-                const auto rightMeanResult = !internal ? FiniteVolumeDetail::BoundaryExterior(sample, gas, leftMean, request.time, frame, incoming)
-                                                       : NumericalResult<FlowState>{sample.changesFrame ? RotateState(otherMean, sample.rotation) : otherMean};
-                if (!rightMeanResult)
-                    return rightMeanResult.status.At(iCell, sample.point);
-                const auto &rightMean = rightMeanResult.value;
-                const auto leftMeanData = hasThermo ? Riemann::AcousticState{{leftMean, thermo(iCell, 0)}, thermo(iCell, 1)} : equation.PrepareFluxState(leftMean);
-                const auto rightMeanData = !internal || !hasThermo ? equation.PrepareFluxState(rightMean) : Riemann::AcousticState{{rightMean, thermo(sample.other, 0)}, thermo(sample.other, 1)};
-                auto fluxSettings = baseFluxSettings;
-                if (useWave)
-                {
-                    real jump = waveInput(iCell, 0);
-                    if (internal)
-                        jump = std::max(jump, waveInput(sample.other, 0));
-                    fluxSettings.dLambda = std::max(fluxSettings.dLambda, jump);
-                }
-                if (usePressure)
-                {
-                    real minimum = pressureInput(iCell, 0);
-                    if (internal)
-                        minimum = std::min(minimum, pressureInput(sample.other, 0));
-                    fluxSettings.pressureStencilMin = std::min(fluxSettings.pressureStencilMin, minimum);
-                }
-                const auto preparedFlux = PreparePerfectGasRiemann(gas, fluxOperator.Kind(), leftFlux, rightFlux, leftMeanData, rightMeanData, normal, gridVelocity);
-                auto flux = Riemann::Math::Evaluate(fluxOperator.Kind(), preparedFlux.Input(leftFlux, rightFlux, normal, gridVelocity), fluxSettings).flux;
-                FlowState lowFlux{};
-                if (produceLow)
-                    lowFlux = wallFluxState ? Riemann::Rusanov(leftFlux, rightFlux, normal, gridVelocity) : Riemann::Rusanov(leftMeanData, rightMeanData, normal, gridVelocity);
-                if (polynomialViscosity && (internal || boundaryKind == BoundaryKind::NoSlipWall || boundaryKind == BoundaryKind::Interface))
-                {
-                    FlowState rightLinearization = convectiveRight;
-                    FlowState faceMean{};
-                    for (int j = 0; j < 5; ++j)
-                        faceMean[j] = .5 * (convectiveLeft[j] + rightLinearization[j]);
-                    if (!(ThermallyAdmissible(faceMean, thermalBounds)))
-                        return NumericalStatus{NumericalError::InvalidState, 13, iCell, sample.point};
-                    const bool wall = !internal && boundaryKind == BoundaryKind::NoSlipWall;
-                    const real inverseDistance = wall && noGRPOnWall ? 0 : 1 / sample.viscousDistance;
-                    const auto diffusion = PolynomialViscousFlux(equation, convectiveLeft, rightLinearization, left.viscousState, viscousRight,
-                                                                 left.gradient, rightGradient, normal, inverseDistance, wall && !sample.boundary.isothermal);
-                    for (int component = 0; component < 5; ++component)
-                    {
-                        flux[component] -= diffusion[component];
-                        lowFlux[component] -= diffusion[component];
-                    }
-                }
-                else if (viscous && !polynomialViscosity &&
-                         (internal || boundaryKind == BoundaryKind::NoSlipWall || boundaryKind == BoundaryKind::Interface))
-                {
-                    auto primitive = gas.Primitive(left.state);
-                    auto gradient = left.gradient;
-                    const auto ownPrimitive = gas.Primitive(Load(mean, iCell));
-                    const auto neighborResult = !internal ? FiniteVolumeDetail::BoundaryGradientValue(sample, gas, Load(mean, iCell), request.time, frame, incoming)
-                                                          : NumericalResult<FlowState>{sample.changesFrame ? RotateState(Load(mean, sample.other), sample.rotation) : Load(mean, sample.other)};
-                    if (!neighborResult)
-                        return neighborResult.status.At(iCell, sample.point);
-                    const auto rightPrimitive = gas.Primitive(neighborResult.value);
-                    // Evaluate into an owning vector: an Eigen expression
-                    // would retain a dangling temporary cell barycenter.
-                    const Geom::tPoint distance = !internal ? Geom::tPoint(sample.ownPoint - metric.GetCellBary(iCell)) : Geom::tPoint(sample.otherPoint - metric.GetCellBary(iCell));
-                    const real lengthSquared = distance.squaredNorm();
-                    if (!(lengthSquared > 0))
-                        return NumericalStatus{NumericalError::InvalidState, 14, iCell, sample.point};
-                    const std::array<real, 5> own{ownPrimitive.density, ownPrimitive.velocity[0], ownPrimitive.velocity[1], ownPrimitive.velocity[2], ownPrimitive.temperature};
-                    const std::array<real, 5> neighbor{rightPrimitive.density, rightPrimitive.velocity[0], rightPrimitive.velocity[1], rightPrimitive.velocity[2], rightPrimitive.temperature};
-                    for (int component = 0; component < 5; ++component)
-                    {
-                        real projected = 0;
-                        for (int d = 0; d < 3; ++d)
+                        auto state = Load(mean, cell);
+                        auto viscousState = state;
+                        FlowGradient gradient{};
+                        if (direct && !input.meanOnly && request.linear && !request.firstOrder)
                         {
-                            if (internal)
-                                gradient[component][d] = .5 * (gradient[component][d] + rightGradient[component][d]);
-                            projected += gradient[component][d] * distance[d];
+                            const auto displacement = FiniteVolumeDetail::DirectFVDisplacement(metric, sample, parent != 0);
+                            const auto row = physicalGradient[cell];
+                            const auto viscousRow = physicalViscousGradient[cell];
+                            for (int component = 0; component < 5; ++component)
+                                for (int d = 0; d < dim; ++d)
+                                {
+                                    state[component] += row[component * dim + d] * displacement[d];
+                                    if (polynomialViscosity)
+                                    {
+                                        viscousState[component] += viscousRow[component * dim + d] * displacement[d];
+                                        gradient[component][d] = viscousRow[component * dim + d];
+                                    }
+                                }
                         }
-                        for (int d = 0; d < 3; ++d)
-                            gradient[component][d] += (neighbor[component] - own[component] - projected) * distance[d] / lengthSquared;
-                    }
+                        else if (!direct && !input.meanOnly && !request.firstOrder)
+                        {
+                            CFV::Math::SmallMatrix basisScratch;
+                            const auto basis = CFV::CPU::EvaluateFaceBasis(*request.basis, sample.face, parent == 0 ? sample.side : 1 - sample.side,
+                                                                           sample.point, polynomialViscosity ? 1 : 0, basisScratch);
+                            const auto row = coefficient[cell];
+                            const auto viscousRow = polynomialViscosity ? viscousCoefficient[cell] : decltype(viscousCoefficient[cell]){};
+                            for (int component = 0; component < 5; ++component)
+                                for (int mode = 0; mode < modes; ++mode)
+                                {
+                                    const real value = row[component * modes + mode];
+                                    state[component] += value * basis(0, mode);
+                                    if (polynomialViscosity)
+                                    {
+                                        const real viscousValue = input.viscousCoefficients ? viscousRow[component * modes + mode] : value;
+                                        if (input.viscousCoefficients)
+                                            viscousState[component] += viscousValue * basis(0, mode);
+                                        for (int d = 0; d < dim; ++d)
+                                            gradient[component][d] += viscousValue * basis(1 + d, mode);
+                                    }
+                                }
+                        }
+                        if (!distinctViscousState)
+                            viscousState = state;
+                        // Explicit local first-order fallback keeps the mean
+                        // unchanged when a high-order face value is inadmissible.
+                        if (!ThermallyAdmissible(state, thermalBounds))
+                        {
+                            diagnostics.AddFaceFallback();
+                            state = Load(mean, cell);
+                        }
+                        if (viscous && !polynomialViscosity)
+                            for (int component = 0; component < 5; ++component)
+                                for (int d = 0; d < dim; ++d)
+                                    gradient[component][d] = gradientInput(cell, component * dim + d);
+                        struct PointState
+                        {
+                            FlowState state, viscousState;
+                            FlowGradient gradient;
+                        };
+                        return PointState{state, viscousState, gradient};
+                    };
+                    const auto left = reconstruct(iCell, 0);
+                    FlowState right{}, viscousRight{};
+                    FlowGradient rightGradient{};
                     if (internal)
                     {
-                        const auto p = gas.Primitive(right);
-                        for (int d = 0; d < 3; ++d)
-                            primitive.velocity[d] = .5 * (primitive.velocity[d] + p.velocity[d]);
+                        auto other = reconstruct(sample.other, 1);
+                        right = sample.changesFrame ? RotateState(other.state, sample.rotation) : other.state;
+                        if (viscous)
+                        {
+                            viscousRight = sample.changesFrame ? RotateState(other.viscousState, sample.rotation) : other.viscousState;
+                            rightGradient = sample.changesFrame ? RotateGradient(other.gradient, sample.rotation) : other.gradient;
+                        }
                     }
-                    else if (boundaryKind == BoundaryKind::SlipWall || boundaryKind == BoundaryKind::NoSlipWall)
+                    else
                     {
+                        const auto exterior = FiniteVolumeDetail::BoundaryExterior(sample, gas, left.state, request.time, frame, incoming);
+                        if (!exterior)
+                            return exterior.status.At(iCell, sample.point);
+                        right = exterior.value;
+                        viscousRight = right;
+                        rightGradient = left.gradient;
+                    }
+                    const Vector3 normal{sample.normal[0], sample.normal[1], sample.normal[2]};
+                    const Vector3 point{sample.ownPoint[0], sample.ownPoint[1], sample.ownPoint[2]};
+                    const bool wallFluxState = noRsOnWall && !internal && boundaryKind == BoundaryKind::NoSlipWall;
+                    const auto convectiveLeftResult = wallFluxState ? FiniteVolumeDetail::BoundaryFaceValue(sample, gas, left.state, request.time, frame, incoming)
+                                                                    : NumericalResult<FlowState>{left.state};
+                    if (!convectiveLeftResult)
+                        return convectiveLeftResult.status.At(iCell, sample.point);
+                    const auto &convectiveLeft = convectiveLeftResult.value;
+                    const auto convectiveRight = wallFluxState ? convectiveLeft : right;
+                    const auto leftFlux = equation.PrepareFluxState(convectiveLeft), rightFlux = equation.PrepareFluxState(convectiveRight);
+                    const auto gridVelocity = frame.GridVelocity(point);
+                    const auto leftMean = Load(mean, iCell);
+                    const auto otherMean = internal ? Load(mean, sample.other) : FlowState{};
+                    const auto rightMeanResult = !internal ? FiniteVolumeDetail::BoundaryExterior(sample, gas, leftMean, request.time, frame, incoming)
+                                                           : NumericalResult<FlowState>{sample.changesFrame ? RotateState(otherMean, sample.rotation) : otherMean};
+                    if (!rightMeanResult)
+                        return rightMeanResult.status.At(iCell, sample.point);
+                    const auto &rightMean = rightMeanResult.value;
+                    const auto leftMeanData = hasThermo ? Riemann::AcousticState{{leftMean, thermo(iCell, 0)}, thermo(iCell, 1)} : equation.PrepareFluxState(leftMean);
+                    const auto rightMeanData = !internal || !hasThermo ? equation.PrepareFluxState(rightMean) : Riemann::AcousticState{{rightMean, thermo(sample.other, 0)}, thermo(sample.other, 1)};
+                    auto fluxSettings = baseFluxSettings;
+                    if (useWave)
+                    {
+                        real jump = waveInput(iCell, 0);
+                        if (internal)
+                            jump = std::max(jump, waveInput(sample.other, 0));
+                        fluxSettings.dLambda = std::max(fluxSettings.dLambda, jump);
+                    }
+                    if (usePressure)
+                    {
+                        real minimum = pressureInput(iCell, 0);
+                        if (internal)
+                            minimum = std::min(minimum, pressureInput(sample.other, 0));
+                        fluxSettings.pressureStencilMin = std::min(fluxSettings.pressureStencilMin, minimum);
+                    }
+                    const auto preparedFlux = PreparePerfectGasRiemann(gas, fluxOperator.Kind(), leftFlux, rightFlux, leftMeanData, rightMeanData, normal, gridVelocity);
+                    auto flux = Riemann::Math::Evaluate(fluxOperator.Kind(), preparedFlux.Input(leftFlux, rightFlux, normal, gridVelocity), fluxSettings).flux;
+                    FlowState lowFlux{};
+                    if (produceLow)
+                        lowFlux = wallFluxState ? Riemann::Rusanov(leftFlux, rightFlux, normal, gridVelocity) : Riemann::Rusanov(leftMeanData, rightMeanData, normal, gridVelocity);
+                    if (polynomialViscosity && (internal || boundaryKind == BoundaryKind::NoSlipWall || boundaryKind == BoundaryKind::Interface))
+                    {
+                        FlowState rightLinearization = convectiveRight;
                         FlowState faceMean{};
                         for (int j = 0; j < 5; ++j)
-                            faceMean[j] = .5 * (convectiveLeft[j] + convectiveRight[j]);
-                        primitive = gas.Primitive(faceMean);
-                        if (!sample.boundary.isothermal)
+                            faceMean[j] = .5 * (convectiveLeft[j] + rightLinearization[j]);
+                        if (!(ThermallyAdmissible(faceMean, thermalBounds)))
+                            return NumericalStatus{NumericalError::InvalidState, 13, iCell, sample.point};
+                        const bool wall = !internal && boundaryKind == BoundaryKind::NoSlipWall;
+                        const real inverseDistance = wall && noGRPOnWall ? 0 : 1 / sample.viscousDistance;
+                        const auto diffusion = PolynomialViscousFlux(equation, convectiveLeft, rightLinearization, left.viscousState, viscousRight,
+                                                                     left.gradient, rightGradient, normal, inverseDistance, wall && !sample.boundary.isothermal);
+                        for (int component = 0; component < 5; ++component)
                         {
-                            real heat = 0;
-                            for (int d = 0; d < 3; ++d)
-                                heat += gradient[4][d] * normal[d];
-                            for (int d = 0; d < 3; ++d)
-                                gradient[4][d] -= heat * normal[d];
+                            flux[component] -= diffusion[component];
+                            lowFlux[component] -= diffusion[component];
                         }
                     }
-                    const auto viscous = gas.ViscousFlux(primitive, gradient, normal);
+                    else if (viscous && !polynomialViscosity &&
+                             (internal || boundaryKind == BoundaryKind::NoSlipWall || boundaryKind == BoundaryKind::Interface))
+                    {
+                        auto primitive = gas.Primitive(left.state);
+                        auto gradient = left.gradient;
+                        const auto ownPrimitive = gas.Primitive(Load(mean, iCell));
+                        const auto neighborResult = !internal ? FiniteVolumeDetail::BoundaryGradientValue(sample, gas, Load(mean, iCell), request.time, frame, incoming)
+                                                              : NumericalResult<FlowState>{sample.changesFrame ? RotateState(Load(mean, sample.other), sample.rotation) : Load(mean, sample.other)};
+                        if (!neighborResult)
+                            return neighborResult.status.At(iCell, sample.point);
+                        const auto rightPrimitive = gas.Primitive(neighborResult.value);
+                        // Evaluate into an owning vector: an Eigen expression
+                        // would retain a dangling temporary cell barycenter.
+                        const Geom::tPoint distance = !internal ? Geom::tPoint(sample.ownPoint - metric.GetCellBary(iCell)) : Geom::tPoint(sample.otherPoint - metric.GetCellBary(iCell));
+                        const real lengthSquared = distance.squaredNorm();
+                        if (!(lengthSquared > 0))
+                            return NumericalStatus{NumericalError::InvalidState, 14, iCell, sample.point};
+                        const std::array<real, 5> own{ownPrimitive.density, ownPrimitive.velocity[0], ownPrimitive.velocity[1], ownPrimitive.velocity[2], ownPrimitive.temperature};
+                        const std::array<real, 5> neighbor{rightPrimitive.density, rightPrimitive.velocity[0], rightPrimitive.velocity[1], rightPrimitive.velocity[2], rightPrimitive.temperature};
+                        for (int component = 0; component < 5; ++component)
+                        {
+                            real projected = 0;
+                            for (int d = 0; d < 3; ++d)
+                            {
+                                if (internal)
+                                    gradient[component][d] = .5 * (gradient[component][d] + rightGradient[component][d]);
+                                projected += gradient[component][d] * distance[d];
+                            }
+                            for (int d = 0; d < 3; ++d)
+                                gradient[component][d] += (neighbor[component] - own[component] - projected) * distance[d] / lengthSquared;
+                        }
+                        if (internal)
+                        {
+                            const auto p = gas.Primitive(right);
+                            for (int d = 0; d < 3; ++d)
+                                primitive.velocity[d] = .5 * (primitive.velocity[d] + p.velocity[d]);
+                        }
+                        else if (boundaryKind == BoundaryKind::SlipWall || boundaryKind == BoundaryKind::NoSlipWall)
+                        {
+                            FlowState faceMean{};
+                            for (int j = 0; j < 5; ++j)
+                                faceMean[j] = .5 * (convectiveLeft[j] + convectiveRight[j]);
+                            primitive = gas.Primitive(faceMean);
+                            if (!sample.boundary.isothermal)
+                            {
+                                real heat = 0;
+                                for (int d = 0; d < 3; ++d)
+                                    heat += gradient[4][d] * normal[d];
+                                for (int d = 0; d < 3; ++d)
+                                    gradient[4][d] -= heat * normal[d];
+                            }
+                        }
+                        const auto viscous = gas.ViscousFlux(primitive, gradient, normal);
+                        for (int component = 0; component < 5; ++component)
+                        {
+                            flux[component] -= viscous[component];
+                            lowFlux[component] -= viscous[component];
+                        }
+                    }
+                    if (sample.forceSlot != UnInitIndex)
+                        for (int d = 0; d < 3; ++d)
+                            diagnostics.AddBoundaryForce(sample.forceSlot, d, weight * flux[1 + d]);
+                    FlowState canonical{};
+                    if (writeFace)
+                    {
+                        canonical = sample.side == 0 || !sample.changesFrame ? flux : RotateState(flux, sample.rotation.transpose());
+                        if (sample.side != 0)
+                            for (auto &value : canonical)
+                                value = -value;
+                    }
                     for (int component = 0; component < 5; ++component)
                     {
-                        flux[component] -= viscous[component];
-                        lowFlux[component] -= viscous[component];
+                        integrated[component] -= weight * flux[component];
+                        if (writeFace)
+                            (*output.faceFlux)(sample.auxiliaryFace, component) -= weight * canonical[component];
+                        if (produceLow)
+                            integratedLow[component] -= weight * lowFlux[component];
                     }
-                }
-                if (sample.forceSlot != UnInitIndex)
-                    for (int d = 0; d < 3; ++d)
-                        diagnostics.AddBoundaryForce(sample.forceSlot, d, weight * flux[1 + d]);
-                FlowState canonical{};
-                if (writeFace)
-                {
-                    const auto &anchor = FiniteVolumeDetail::ExpandSample(request.stencil.samples(request.stencil.faceEntries(sample.auxiliaryFace, 0), 0), request.conditions);
-                    canonical = sample.side == anchor.side || !sample.changesFrame ? flux : RotateState(flux, sample.rotation.transpose());
-                    if (sample.side != anchor.side)
-                        for (auto &value : canonical)
-                            value = -value;
-                }
-                for (int component = 0; component < 5; ++component)
-                {
-                    integrated[component] -= weight * flux[component];
-                    if (writeFace)
-                        (*output.faceFlux)(sample.auxiliaryFace, component) -= weight * canonical[component];
-                    if (produceLow)
-                        integratedLow[component] -= weight * lowFlux[component];
                 }
             }
             for (int component = 0; component < 5; ++component)

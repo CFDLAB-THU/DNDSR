@@ -9,7 +9,6 @@
 #include "DNDS/Runtime/Execution/EagerArray.hpp"
 #include "Cauchy/Physics/ReconstructionPositivity.hpp"
 #include "Cauchy/State/CPU/FieldKernels.hpp"
-#include "CFV/Math/PeriodicFrame.hpp"
 
 namespace DNDS::Cauchy
 {
@@ -28,7 +27,7 @@ namespace DNDS::Cauchy
         }
     }
 
-    void FiniteVolume::LimitedVRWorkspace::Build(const Data &data, const CFV::FVField &mean,
+    void FiniteVolume::LimitedVRWorkspace::Build(const Data &data, const CFV::FVField &mean, const CFV::FVField &selectedGradients,
                                                  R::Array<real> &previous,
                                                  CFV::FaceCharacteristicTransformRef transform,
                                                  R::EagerEngine &engine,
@@ -43,6 +42,10 @@ namespace DNDS::Cauchy
         const auto placement = data.metrics.Device();
         const bool cuda = placement != R::Device::Host();
         const bool overlap = data.settings.execution.overlap;
+        const int dimension = data.metrics.Dimension();
+        // The immutable shared publication pins topology, metric fields and
+        // compact periodic maps through all CPU worker/device submissions.
+        const auto stencil = std::make_shared<FiniteVolumeStencilStorage::ReadAccess>(data.stencil.Read({placement, nullptr}));
         // Admission belongs before queued kernels and matched transfers. A
         // retained external history reader is a local access error, not a
         // numerical worker failure that should poison an otherwise reusable
@@ -69,15 +72,17 @@ namespace DNDS::Cauchy
 #ifdef DNDS_USE_CUDA
             if (!device)
             {
-                const index cells = data.metrics.NumCell(), ghosts = data.metrics.NumCellProc() - cells, faces = geometry.faces.RowCount();
+                const index cells = data.metrics.NumCell(), ghosts = data.metrics.NumCellProc() - cells, faces = data.stencil.stencilFaces.RowCount();
                 device.emplace(DeviceStorage{
                     R::Array<real>(R::RowLayout::Dense(faces, 3), placement),
                     R::Array<NumericalStatus>(R::RowLayout::Dense(cells, 1), placement),
                     R::Array<NumericalStatus>(R::RowLayout::Dense(ghosts, 1), placement),
                     R::Array<NumericalStatus>(R::RowLayout::Dense(faces, 1), placement),
                     R::Array<NumericalStatus>(R::RowLayout::Dense(CUDA::StateReductionScratchRows(std::max({cells, ghosts, faces}) + 1), 1), placement),
-                    R::Array<NumericalStatus>(R::RowLayout::Dense(1, 1), placement)});
+                    R::Array<NumericalStatus>(R::RowLayout::Dense(1, 1), placement),
+                    R::Array<NumericalStatus>(R::RowLayout::Dense(std::min<index>((cells + 127) / 128, 1024), 1), placement)});
                 device->sensors.SetName("Cauchy/LVR/faceSensors", DNDS_ALLOCATION_SITE());
+                device->targetStatus.SetName("Cauchy/LVR/targetBlockStatus", DNDS_ALLOCATION_SITE());
                 device->ownedStatus.SetName("Cauchy/LVR/ownedStatus", DNDS_ALLOCATION_SITE());
                 device->ghostStatus.SetName("Cauchy/LVR/ghostStatus", DNDS_ALLOCATION_SITE());
                 device->faceStatus.SetName("Cauchy/LVR/faceStatus", DNDS_ALLOCATION_SITE());
@@ -98,7 +103,7 @@ namespace DNDS::Cauchy
                                 { CUDA::ReduceNumericalStatus(context, rows, result.ConstView(), partial, result); }, R::ReadAs<R::FixedRows<1>>(rows), R::WriteAs<R::FixedRows<1>>(device->partialStatus), R::ReadWriteAs<R::FixedRows<1>>(device->resultStatus));
 #endif
         };
-        geometry.gradient.ConvertToCoefficients(engine, stream, gradients, *data.reconstruction, targetCoefficients);
+        data.gradient.ConvertToCoefficients(engine, stream, selectedGradients, *data.reconstruction, targetCoefficients);
         {
             auto transfer = schedule.BeginAfterCompute(targetHalo);
             if (overlap)
@@ -110,24 +115,21 @@ namespace DNDS::Cauchy
                 overlap ? CFV::ReconstructionRegion::HaloDependent : CFV::ReconstructionRegion::All);
             data.reconstruction->SubmitCommitReconstruction(engine, stream, targetCoefficients, target);
         }
-        // PP POLICY -- this is the pure-flow5 O2 target guard inside LVR,
-        // distinct from the later equation-aware high-order publication policy.
-        // Reuse the Euler common-beta mathematics on a mean-based O2 target,
-        // independently of the final high-order PP policy. No alternate limiter
-        // or mean clipping is introduced. All PP samples belong to owned cells.
-        data.quadrature.positivity->Evaluate(engine, stream, mean, targetCoefficients, sampledPP);
+        // PP POLICY -- the accepted O2 target is guarded at face centers,
+        // independently of the high-order final modal PP point set. Sampling,
+        // scaling and final stored-state acceptance are fused in each cell.
         auto &ownedStatus = cuda ? device->ownedStatus : emptyStatus;
-        R::SubmitArrays(engine, stream, [bounds, power = controls.positivityBetaPower, cutoff = controls.positivityBetaCutoff](R::ExecutionContext context, auto means, auto points, auto coefficients, auto offsets, auto status)
+        R::SubmitArrays(engine, stream, [stencil, dimension, bounds, power = controls.positivityBetaPower, cutoff = controls.positivityBetaCutoff](R::ExecutionContext context, auto means, auto coefficients, auto status)
                         {
                             if (context.device == R::Device::Host())
-                                RequireNumericalSuccess(CPU::LimitLVRTarget(means, points, coefficients, offsets, bounds, power, cutoff), "LimitLVRTarget");
+                                RequireNumericalSuccess(CPU::LimitLVRTarget(stencil->View(), means, coefficients, dimension, bounds, power, cutoff), "LimitLVRTarget");
 #ifdef DNDS_USE_CUDA
                             else
-                                CUDA::LimitLVRTarget(context, AoS(means), AoS(points), AoS(coefficients), offsets, bounds, power, cutoff, status);
+                                CUDA::LimitLVRTarget(context, stencil->KernelDescriptor(), AoS(means), AoS(coefficients), dimension, bounds, power, cutoff, status);
 #endif
                         },
-                        R::ReadAs<R::UniformTableRows>(mean.Owned()), R::ReadAs<R::UniformTableRows>(sampledPP), R::ReadWriteAs<R::UniformTableRows>(targetCoefficients.Owned()), R::ReadAs<R::FixedRows<1>>(data.stencil.positivityOffsets), R::WriteAs<R::FixedRows<1>>(ownedStatus));
-        accumulateStatus(ownedStatus);
+                        R::ReadAs<R::UniformTableRows>(mean.Owned()), R::ReadWriteAs<R::UniformTableRows>(targetCoefficients.Owned()), R::WriteAs<R::FixedRows<1>>(cuda ? device->targetStatus : emptyStatus));
+        accumulateStatus(cuda ? device->targetStatus : emptyStatus);
         {
             auto transfer = schedule.BeginAfterCompute(targetHalo);
             // The mean halo is already observed. Derived mean scalars need no
@@ -150,27 +152,26 @@ namespace DNDS::Cauchy
             fill(mean.Ghost(), scalars.Ghost(), cuda ? device->ghostStatus : emptyStatus);
             schedule.Await(transfer);
         }
-        geometry.sampling->Evaluate(engine, stream, mean, targetCoefficients, sampledFaces);
         if (!cuda)
         {
             if (!cpuSensors)
             {
-                cpuSensors.emplace(R::RowLayout::Dense(geometry.faces.RowCount(), 3));
+                cpuSensors.emplace(R::RowLayout::Dense(data.stencil.stencilFaces.RowCount(), 3));
                 cpuSensors->SetName("Cauchy/LVR/faceSensors", DNDS_ALLOCATION_SITE());
             }
-            R::SubmitArrays(engine, stream, [gas, bounds, settings](R::ExecutionContext, auto samples, auto own, auto ghost, auto faces, auto sensors)
-                            { RequireNumericalSuccess(CPU::BuildLVRFaceSensors(samples, {own, ghost}, faces, gas, bounds, settings, sensors), "BuildLVRFaceSensors"); }, R::ReadAs<R::UniformTableRows>(sampledFaces), R::ReadAs<R::UniformTableRows>(mean.Owned()), R::ReadAs<R::UniformTableRows>(mean.Ghost()), R::ReadAs<R::FixedRows<1>>(geometry.faces), R::WriteAs<R::UniformTableRows>(*cpuSensors));
-            R::SubmitArrays(engine, stream, [](R::ExecutionContext, auto offsets, auto indices, auto sensors, auto branches, auto base)
-                            { CPU::GatherLVRBranches(offsets, indices, sensors, branches, base); }, R::ReadAs<R::FixedRows<1>>(geometry.cellFaceOffsets), R::ReadAs<R::FixedRows<1>>(geometry.cellFaces), R::ReadAs<R::UniformTableRows>(*cpuSensors), R::WriteAs<R::UniformTableRows>(branches.Owned()), R::WriteAs<R::FixedRows<2>>(base));
+            R::SubmitArrays(engine, stream, [stencil, dimension, gas, bounds, settings](R::ExecutionContext, auto own, auto ghost, auto targetOwn, auto targetGhost, auto sensors)
+                            { RequireNumericalSuccess(CPU::BuildLVRFaceSensors(stencil->View(), {own, ghost}, {targetOwn, targetGhost}, dimension, gas, bounds, settings, sensors), "BuildLVRFaceSensors"); }, R::ReadAs<R::UniformTableRows>(mean.Owned()), R::ReadAs<R::UniformTableRows>(mean.Ghost()), R::ReadAs<R::UniformTableRows>(targetCoefficients.Owned()), R::ReadAs<R::UniformTableRows>(targetCoefficients.Ghost()), R::WriteAs<R::UniformTableRows>(*cpuSensors));
+            R::SubmitArrays(engine, stream, [stencil](R::ExecutionContext, auto sensors, auto branches, auto base)
+                            { CPU::GatherLVRBranches(stencil->View(), sensors, branches, base); }, R::ReadAs<R::UniformTableRows>(*cpuSensors), R::WriteAs<R::UniformTableRows>(branches.Owned()), R::WriteAs<R::FixedRows<2>>(base));
         }
 #ifdef DNDS_USE_CUDA
         else
         {
-            R::SubmitArrays(engine, stream, [gas, bounds, settings = CFV::LimitedVRKernelParameters::FromSettings(settings)](R::ExecutionContext context, auto samples, auto own, auto ghost, auto faces, auto sensors, auto status)
-                            { CUDA::BuildLVRFaceSensors(context, samples, {own, ghost}, faces, gas, bounds, settings, sensors, status); }, R::ReadAs<R::TableRows>(sampledFaces), R::ReadAs<R::TableRows>(mean.Owned()), R::ReadAs<R::TableRows>(mean.Ghost()), R::ReadAs<R::FixedRows<1>>(geometry.faces), R::WriteAs<R::TableRows>(device->sensors), R::WriteAs<R::FixedRows<1>>(device->faceStatus));
+            R::SubmitArrays(engine, stream, [stencil, dimension, gas, bounds, settings = CFV::LimitedVRKernelParameters::FromSettings(settings)](R::ExecutionContext context, auto own, auto ghost, auto targetOwn, auto targetGhost, auto sensors, auto status)
+                            { CUDA::BuildLVRFaceSensors(context, stencil->KernelDescriptor(), {own, ghost}, {targetOwn, targetGhost}, dimension, gas, bounds, settings, sensors, status); }, R::ReadAs<R::TableRows>(mean.Owned()), R::ReadAs<R::TableRows>(mean.Ghost()), R::ReadAs<R::TableRows>(targetCoefficients.Owned()), R::ReadAs<R::TableRows>(targetCoefficients.Ghost()), R::WriteAs<R::TableRows>(device->sensors), R::WriteAs<R::FixedRows<1>>(device->faceStatus));
             accumulateStatus(device->faceStatus);
-            R::SubmitArrays(engine, stream, [](R::ExecutionContext context, auto offsets, auto indices, auto sensors, auto faceStatus, auto branches, auto base, auto status)
-                            { CUDA::GatherLVRBranches(context, offsets, indices, sensors, faceStatus, branches, base, status); }, R::ReadAs<R::FixedRows<1>>(geometry.cellFaceOffsets), R::ReadAs<R::FixedRows<1>>(geometry.cellFaces), R::ReadAs<R::TableRows>(device->sensors), R::ReadAs<R::FixedRows<1>>(device->faceStatus), R::WriteAs<R::TableRows>(branches.Owned()), R::WriteAs<R::FixedRows<2>>(base), R::WriteAs<R::FixedRows<1>>(ownedStatus));
+            R::SubmitArrays(engine, stream, [stencil](R::ExecutionContext context, auto sensors, auto faceStatus, auto branches, auto base, auto status)
+                            { CUDA::GatherLVRBranches(context, stencil->KernelDescriptor(), sensors, faceStatus, branches, base, status); }, R::ReadAs<R::TableRows>(device->sensors), R::ReadAs<R::FixedRows<1>>(device->faceStatus), R::WriteAs<R::TableRows>(branches.Owned()), R::WriteAs<R::FixedRows<2>>(base), R::WriteAs<R::FixedRows<1>>(ownedStatus));
             accumulateStatus(ownedStatus);
         }
 #endif

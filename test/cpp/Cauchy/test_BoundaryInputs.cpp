@@ -1,6 +1,8 @@
 #define DOCTEST_CONFIG_IMPLEMENT
 #include "doctest.h"
 #include "Cauchy/Discretization/FiniteVolume.hpp"
+#include "Cauchy/Discretization/CPU/FiniteVolumeBoundaryKernels.hpp"
+#include "CompactManagedStencilFixture.hpp"
 #include "Cauchy/Input/FlowProfile.hpp"
 #include "Cauchy/Input/StateInput.hpp"
 #include "Cauchy/Boundary/BoundaryPointOperator.hpp"
@@ -419,6 +421,105 @@ TEST_CASE("Published interface packets reproduce analytic P3 boundaries through 
     CHECK_THROWS(coupled.ValidateAuxValues(equationB, auxB, time));
     CHECK_NOTHROW(coupled.ValidateBoundaryInputs(frozen, time));
 }
+
+TEST_CASE("Physical and interface gradient targets evaluate nonconstant fields at actual face centers")
+{
+    // Use real three-dimensional P5 face quadrature: on faces tangent to y,
+    // y^2 differs at the center and every noncentral quadrature point. A copy
+    // of the first quadrature trace or a quadrature average cannot pass.
+    const auto mesh = CFVTest::CartesianHexes(mpi, 2);
+    CauchyTest::CompactManagedStencilFixture geometry(mesh);
+    DNDS::CFV::ReconstructionSettings settings;
+    settings.maxOrder = 2;
+    settings.cacheDiffBase = true;
+    const auto reconstruction = DNDS::CFV::VariationalReconstructionPlan::ConstructRecCoeff(geometry.metrics, settings);
+    const auto basisRead = reconstruction.AcquireBasisRead();
+    const auto &basis = basisRead.EvaluationView();
+    const auto polynomial = DNDS::CFV::Math::TaylorBasis(3, 2).KernelParameters();
+    I quadratic = -1;
+    for (int mode = 0; mode < reconstruction.NRecDOF(); ++mode)
+        if (polynomial.orders[mode + 1] == std::array<int, 3>{0, 2, 0})
+            quadratic = mode;
+    REQUIRE(quadratic >= 0);
+    const C::EquationSystem equation = C::EquationSystem::Resolve(C::EquationSettings{});
+    const auto flow = equation.Gas().Conservative({1, 0, 0, 0, 1});
+    const I cells = geometry.metrics.NumCell(), faces = geometry.boundaryFaces.RowCount();
+    const int modes = reconstruction.NRecDOF();
+    R::Array<double> means(R::RowLayout::Dense(cells, 5)), coefficients(R::RowLayout::Dense(cells, 5 * modes)),
+        centers(R::RowLayout::Dense(faces, 5)), incoming(R::RowLayout::Dense(faces, 5));
+    const auto stencilRead = geometry.stencil.Read();
+    const auto stencil = stencilRead.View();
+    const auto rangesRead = geometry.boundaryFaces.Read();
+    const auto ranges = rangesRead.View<R::FixedRows<1>>();
+    {
+        auto mean = means.Write(), coefficient = coefficients.Write(), packet = incoming.Write();
+        for (I iCell = 0; iCell < cells; ++iCell)
+        {
+            for (int j = 0; j < 5; ++j)
+                mean.View()(iCell, j) = flow[j];
+            for (int j = 0; j < 5 * modes; ++j)
+                coefficient.View()(iCell, j) = j == quadratic ? .2 : 0;
+        }
+        for (I iFace = 0; iFace < faces; ++iFace)
+        {
+            const auto location = stencil.metric.GetFaceCent(ranges(iFace, 0).face);
+            const auto value = equation.Gas().Conservative({2 + .2 * location[0] + .3 * location[1] * location[1], 0, 0, 0, 1});
+            for (int j = 0; j < 5; ++j)
+                packet.View()(iFace, j) = value[j];
+        }
+    }
+    const auto mean = means.Read(), coefficient = coefficients.Read(), packet = incoming.Read();
+    const C::EquationBlockReadView meanBlock{{mean.View<R::UniformTableRows>(), 0, 5}, {{}, 0, 5}};
+    const C::EquationBlockReadView coefficientBlock{{coefficient.View<R::UniformTableRows>(), 0, 5 * modes}, {{}, 0, 5 * modes}};
+    const I logicalFirst = 0;
+    const C::BoundaryPointOperator boundary(equation);
+    for (const auto kind : {C::BoundaryKind::Extrapolate, C::BoundaryKind::Interface})
+    {
+        auto evaluator = equation.MakePointEvaluator();
+        C::BoundaryCondition condition;
+        condition.kind = kind;
+        auto output = centers.Write();
+        const C::EquationBlockArrayView<double> target{output.View<R::UniformTableRows>(), 0, 5};
+        C::CPU::BoundaryTraceRequest request;
+        request.stencil = stencil;
+        request.faces = ranges;
+        request.means = {&meanBlock, 1};
+        request.coefficients = {&coefficientBlock, 1};
+        request.output = {&target, 1};
+        request.logicalFirst = {&logicalFirst, 1};
+        request.basis = basis;
+        request.componentNumber = 5;
+        request.modes = modes;
+        request.polynomial = request.centers = true;
+        request.incoming = packet.View<R::UniformTableRows>();
+        REQUIRE(bool(C::CPU::FillBoundaryTraces(request, {&condition, 1}, boundary, evaluator)));
+        I distinguished = 0;
+        for (I iFace = 0; iFace < faces; ++iFace)
+        {
+            const I face = ranges(iFace, 0).face;
+            const auto location = stencil.metric.GetFaceCent(face);
+            const I cell = stencil.topology.FaceCells(face)[0];
+            const auto prepared = DNDS::CFV::Math::TaylorPointEvaluation::FromPoint(
+                std::array<double, 3>{location[0], location[1], location[2]},
+                std::array<double, 3>{stencil.metric.cells(cell, 1), stencil.metric.cells(cell, 2), stencil.metric.cells(cell, 3)},
+                stencil.metric.cells(cell, 7));
+            const double centered = flow[0] + .2 * (polynomial.Derivative(0, int(quadratic + 1), prepared) - basis.moments(cell, quadratic + 1));
+            if (kind == C::BoundaryKind::Extrapolate)
+            {
+                CHECK(output.View()(iFace, 0) == doctest::Approx(centered).epsilon(1e-13));
+                const I q = stencil.metric.FaceQuadratureBegin(face);
+                const double firstQuadrature = flow[0] + .2 * basis.cached(2 * q, quadratic * basis.cachedDerivatives);
+                distinguished += std::abs(firstQuadrature - centered) > 1e-6;
+            }
+            else
+                for (int j = 0; j < 5; ++j)
+                    CHECK(output.View()(iFace, j) == packet.View()(iFace, j));
+        }
+        if (kind == C::BoundaryKind::Extrapolate)
+            CHECK(DNDS::MPI::AllreduceValue<DNDS::MPI::Reduction::Sum>(distinguished, mpi.comm) > 0);
+    }
+}
+
 int main(int argc, char **argv)
 {
     if (DNDS::MPI::Init_thread(&argc, &argv) != MPI_SUCCESS)

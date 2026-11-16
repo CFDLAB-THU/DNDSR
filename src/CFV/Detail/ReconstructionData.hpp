@@ -6,6 +6,7 @@
 #include "CFV/Math/TaylorBasis.hpp"
 #include "CFV/Math/PeriodicFrame.hpp"
 #include "Geom/Access/EntityWorkPartition.hpp"
+#include "Geom/Access/CellFaceIncidence.hpp"
 #include "DNDS/Core/OMP.hpp"
 #include <mutex>
 
@@ -39,25 +40,42 @@ namespace DNDS::CFV::Detail
         // integrated normal, and scalar area. Independent of RHS quadrature.
         Runtime::Array<real> faceMean;
         Runtime::Array<index> faceOffsets;
+        Runtime::Array<uint8_t> facePeriodicCodes;
+        Runtime::Array<FacePeriodicParameters> periodicParameters;
+        Runtime::Array<real> neighborCenters;
+        /// Canonical incidence-only placement. It shares host native arrays
+        /// and copies only the requested topology when placed on a device.
+        /// Operator read scopes pin the source generation through queued use.
+        std::optional<Geom::CellFaceIncidenceStorage> topology;
         FiniteVolumeData(ssp<Geom::UnstructuredMesh> m, int order, bool axis, std::shared_ptr<Runtime::CommunicationContext> context)
             : mesh(std::move(m)), stamp(mesh->versions.Stamp(Runtime::Change::Topology | Runtime::Change::Geometry |
                                                              Runtime::Change::Distribution | Runtime::Change::Layout)),
               cells(mesh->Entities(Geom::EntityKind::Cell)),
               communication(std::move(context)), dofs(communication, cells.NumOwned(), cells.NumGhost(), "FV cells"),
-              dim(mesh->getDim()), intOrder(order), axisymmetric(axis) {}
+              dim(mesh->getDim()), intOrder(order), axisymmetric(axis)
+        {
+            topology.emplace(Geom::CellFaceIncidenceStorage::Capture(mesh));
+        }
         FiniteVolumeData(const FiniteVolumeData &source, Runtime::Device device, Runtime::ExecutionContext context)
             : mesh(source.mesh), stamp(source.stamp), cells(source.cells), communication(source.communication),
               dofs(source.dofs), halo(source.halo), workPartition(source.workPartition),
               dim(source.dim), intOrder(source.intOrder), axisymmetric(source.axisymmetric),
               cell(source.cell.To(device, context)), radialMoment(source.radialMoment.To(device, context)),
               faceQuadrature(source.faceQuadrature.To(device, context)), faceMean(source.faceMean.To(device, context)),
-              faceOffsets(source.faceOffsets.To(device, context))
+              faceOffsets(source.faceOffsets.To(device, context)),
+              facePeriodicCodes(source.facePeriodicCodes.To(device, context)),
+              periodicParameters(source.periodicParameters.To(device, context)),
+              neighborCenters(source.neighborCenters.To(device, context)),
+              topology(source.topology->Placed(device, context))
         {
             cell.SetName("CFV/metrics/cell", DNDS_ALLOCATION_SITE());
             radialMoment.SetName("CFV/metrics/radialMoment", DNDS_ALLOCATION_SITE());
             faceQuadrature.SetName("CFV/metrics/faceQuadrature", DNDS_ALLOCATION_SITE());
             faceMean.SetName("CFV/metrics/faceMean", DNDS_ALLOCATION_SITE());
             faceOffsets.SetName("CFV/metrics/faceOffsets", DNDS_ALLOCATION_SITE());
+            facePeriodicCodes.SetName("CFV/metrics/facePeriodicCodes", DNDS_ALLOCATION_SITE());
+            periodicParameters.SetName("CFV/metrics/periodicParameters", DNDS_ALLOCATION_SITE());
+            neighborCenters.SetName("CFV/metrics/neighborCenters", DNDS_ALLOCATION_SITE());
         }
     };
     struct ReconstructionData

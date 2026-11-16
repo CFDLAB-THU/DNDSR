@@ -52,15 +52,15 @@ namespace DNDS::CFV
 #ifndef DNDS_USE_CUDA
         DNDS_check_throw_info(Device() == R::Device::Host(), "CUDA gradients are not built");
 #endif
-        // The kernel consumes no metric arrays. Pin only its mesh generation;
-        // the captured guard retires with this operation, not an engine drain.
-        auto geometry = std::make_shared<Geom::MeshReadAccess>(_data->metrics.AcquireMeshRead());
+        // Retain the canonical incidence placement and source generation.
+        // Neither topology nor periodic metadata is uploaded during submission.
+        auto geometry = std::make_shared<FiniteVolumeTopologyRead>(_data->metrics.AcquireTopologyRead());
         const auto &selected = region == ReconstructionRegion::HaloDependent ? _data->dependent : _data->core;
         const index count = region == ReconstructionRegion::All ? _data->metrics.NumCell() : selected.RowCount();
         const int dimension = _data->metrics.Dimension();
-        R::SubmitArrays(engine, stream, [geometry, region, count, dimension, rotated = _data->hasRotatedFrames](R::ExecutionContext context, auto offsets, auto neighbors, auto boundaryIds, auto weights, auto rotations, auto rotationActive, auto rows, auto owned, auto ghost, auto boundary, auto starts, auto output)
+        R::SubmitArrays(engine, stream, [geometry, region, count, dimension](R::ExecutionContext context, auto offsets, auto boundaryIds, auto weights, auto codes, auto parameters, auto rows, auto owned, auto ghost, auto boundary, auto starts, auto output)
                         {
-                            const Detail::GradientKernelView plan{offsets, neighbors, boundaryIds, weights, rotations, rotationActive, dimension, rotated};
+                            const Detail::GradientKernelView plan{offsets, boundaryIds, weights, geometry->View(), {codes, parameters}, dimension};
                             const Detail::DeviceWorkSelection selection{rows.DynamicView(), count, region != ReconstructionRegion::All};
                             const Detail::GradientField values{owned, ghost};
                             if (context.device == R::Device::Host())
@@ -70,6 +70,6 @@ namespace DNDS::CFV
                                 Detail::LaunchGradient(context, plan, selection, {starts.DynamicView()}, values, boundary, output);
 #endif
                         },
-                        R::ReadAs<R::FixedRows<1>>(_data->offsets), R::ReadAs<R::FixedRows<1>>(_data->neighbors), R::ReadAs<R::FixedRows<1>>(_data->boundaryIds), R::ReadAs<R::FixedRows<3>>(_data->weights), R::ReadAs<R::FixedRows<9>>(_data->rotations), R::ReadAs<R::FixedRows<1>>(_data->rotationActive), R::ReadAs<R::FixedRows<1>>(selected), R::ReadAs<R::UniformTableRows>(mean.Owned()), R::ReadAs<R::UniformTableRows>(region == ReconstructionRegion::Core ? workspace.empty : mean.Ghost()), R::ReadAs<R::UniformTableRows>(boundaryValues), R::ReadAs<R::FixedRows<1>>(workspace.periodicVectorStarts), R::WriteAs<R::UniformTableRows>(gradient.Owned()));
+                        R::ReadAs<R::FixedRows<1>>(_data->offsets), R::ReadAs<R::FixedRows<1>>(_data->boundaryIds), R::ReadAs<R::FixedRows<3>>(_data->weights), R::ReadAs<R::FixedRows<1>>(_data->metrics.FacePeriodicCodes()), R::ReadAs<R::FixedRows<1>>(_data->metrics.PeriodicParameters()), R::ReadAs<R::FixedRows<1>>(selected), R::ReadAs<R::UniformTableRows>(mean.Owned()), R::ReadAs<R::UniformTableRows>(region == ReconstructionRegion::Core ? workspace.empty : mean.Ghost()), R::ReadAs<R::UniformTableRows>(boundaryValues), R::ReadAs<R::FixedRows<1>>(workspace.periodicVectorStarts), R::WriteAs<R::UniformTableRows>(gradient.Owned()));
     }
 }

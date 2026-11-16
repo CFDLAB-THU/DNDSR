@@ -1,4 +1,5 @@
 #pragma once
+#include "Cauchy/Discretization/CUDA/FiniteVolumeRHSFacePackages.hpp"
 
 #include "Cauchy/Discretization/PerfectGasKernelPoint.hpp"
 #include "Cauchy/Discretization/FiniteVolumeStencil.hpp"
@@ -22,8 +23,7 @@ namespace DNDS::Cauchy::CUDA
     /// cache read scopes through every launch using this descriptor.
     struct RHSGeometry
     {
-        Runtime::ArrayView<const FiniteVolumeDetail::SampleRecord, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> samples;
-        RHSIndices offsets, faceEntries;
+        FiniteVolumeStencilView stencil;
         Runtime::ArrayView<const index, false, Runtime::FixedRows<1>> faceOffsets;
         Runtime::ArrayView<const real, false, Runtime::FixedRows<8>> cells;
         Runtime::ArrayView<const real, false, Runtime::FixedRows<7>> quadrature;
@@ -33,6 +33,15 @@ namespace DNDS::Cauchy::CUDA
         Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::CSRRows> wallFaces;
         bool hasBasis = false, hasWall = false;
         void ValidateDevice(Runtime::Device device) const;
+        DNDS_DEVICE_CALLABLE FiniteVolumeDetail::SampleRecord FaceSample(index iAux, index iPoint) const
+        {
+            return stencil.RHSFaceSample(stencil.stencilFaces(iAux, 0), 0, iPoint);
+        }
+        DNDS_DEVICE_CALLABLE FiniteVolumeDetail::SampleRecord FaceAnchor(index iAux) const
+        {
+            const index face = stencil.stencilFaces(iAux, 0);
+            return FaceSample(iAux, faceOffsets(face, 0));
+        }
     };
 
     /** Small immutable device publication of a large borrowed descriptor.
@@ -80,7 +89,9 @@ namespace DNDS::Cauchy::CUDA
         bool direct = false, linear = false, firstOrder = false;
         bool viscous = false, primitiveGradient = false, distinctViscous = false;
         bool positivity = false, faceFallback = false, useStencil = false, produceLow = false;
-        bool warpQuadrature = false;
+        RHSFaceMapping mapping = RHSFaceMapping::Thread;
+        RHSFaceReduction reduction = RHSFaceReduction::Serial;
+        int gridBlocks = 0;
         int blockSize = 128;
         bool doubleBuffer = false;
         void Validate() const;
@@ -125,7 +136,7 @@ namespace DNDS::Cauchy::CUDA
     /// declares ghosts only for dependent work. No MPI or atomics occur here.
     void EvaluateFluxFaces(Runtime::ExecutionContext context, const RHSGeometryPublication &geometry,
                            Runtime::ArrayView<const RHSKernelParameters, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> parameters,
-                           RHSKernelControls controls, RHSFields fields, RHSFaceOutputs output, RHSIndices faces, bool requireGhost = true);
+                           RHSKernelControls controls, RHSFields fields, RHSFaceOutputs output, RHSIndices faces, bool requireGhost = true, RHSFacePackageView packages = {});
     /// Gather face contributions in canonical cell order. Opposite periodic
     /// faces rotate momentum only, including self-periodic neighbors. Outputs
     /// are integrated residuals (no division by volume). Failed face status

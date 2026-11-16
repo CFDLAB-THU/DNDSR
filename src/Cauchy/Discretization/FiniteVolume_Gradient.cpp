@@ -182,7 +182,7 @@ namespace DNDS::Cauchy
     {
         DNDS_check_throw_info(nativeDirectGradient &&
                                   owner->settings.numerics.positivity &&
-                                  owner->stencil.positivityOffsets.RowCount() == owner->metrics.NumCell() + 1,
+                                  owner->maximumGradientPoints >= 0,
                               "direct-P1 positivity workspace is incomplete");
         const int dim = owner->metrics.Dimension();
         const index components = state.ComponentNumber();

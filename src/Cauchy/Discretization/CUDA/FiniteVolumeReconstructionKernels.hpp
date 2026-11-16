@@ -6,18 +6,14 @@ namespace DNDS::Cauchy::CUDA
 {
     using CharacteristicIndices = Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
     using CharacteristicOutput = Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::TableRows>;
-    /// Small projection of the canonical geometry. faceEntries has one row per
-    /// canonical face, mapping to its first quadrature incidence or UnInitIndex
-    /// for unused faces. Mean/rotation handling restores canonical parent-zero
-    /// coordinates even when the retained incidence was assembled from side 1.
+    /// Immutable shared stencil descriptor, uploaded once during placement.
+    /// Parent zero is canonical even when it is a ghost on this rank.
     struct CharacteristicGeometry
     {
-        Runtime::ArrayView<const FiniteVolumeDetail::SampleRecord, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> samples;
-        CharacteristicIndices faceEntries;
-        Runtime::ArrayView<const real, false, Runtime::FixedRows<7>> quadrature;
+        Runtime::ArrayView<const FiniteVolumeStencilView, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> stencil;
         void ValidateDevice(Runtime::Device device) const
         {
-            Runtime::ValidateViewDevices(device, samples, faceEntries, quadrature);
+            stencil.ValidateDevice(device);
         }
     };
     /** @brief Enqueue the perfect-gas flow-five characteristic producer.

@@ -98,8 +98,8 @@ namespace DNDS::Cauchy::CPU
             for (index iRow = begin; iRow < end; ++iRow)
             {
                 const index iAux = faces(iRow, 0);
-                const auto iFace = request.stencil.stencilFaces(iAux, 0), first = request.stencil.faceEntries(iAux, 0);
-                const auto &anchor = FiniteVolumeDetail::ExpandSample(request.stencil.samples(first, 0), request.conditions);
+                const auto iFace = request.stencil.stencilFaces(iAux, 0), first = metric.FaceQuadratureBegin(iFace);
+                const auto &anchor = FiniteVolumeDetail::ExpandSample(request.stencil.RHSFaceSample(iFace, 0, first), request.conditions);
                 EquationFVDetail::Gather(request.blocks, anchor.cell, left);
                 LoadGradients(request, anchor.cell, left);
                 const auto leftResult = prepared(anchor.cell, left);
@@ -111,7 +111,7 @@ namespace DNDS::Cauchy::CPU
                 const auto count = metric.FaceQuadratureEnd(iFace) - metric.FaceQuadratureBegin(iFace);
                 for (index q = 0; q < count; ++q)
                 {
-                    const auto &sample = FiniteVolumeDetail::ExpandSample(request.stencil.samples(first + q, 0), request.conditions);
+                    const auto &sample = FiniteVolumeDetail::ExpandSample(request.stencil.RHSFaceSample(iFace, 0, first + q), request.conditions);
                     if (sample.other == UnInitIndex)
                     {
                         right.values = left.values;
@@ -176,7 +176,7 @@ namespace DNDS::Cauchy::CPU
                                 return faceResult.status.At(sample.cell, sample.point);
                             bound = std::max(bound, faceResult.value[2]);
                         }
-                        diffusion = std::max(diffusion, bound * request.stencil.auxiliaryFaceArea(iAux, 0) *
+                        diffusion = std::max(diffusion, bound * metric.GetFaceArea(request.stencil.stencilFaces(iAux, 0)) *
                                                             (1 / metric.GetCellVol(sample.cell) + 1 / metric.GetCellVol(sample.other == UnInitIndex ? sample.cell : sample.other)));
                     }
                     if (wave)
@@ -227,7 +227,7 @@ namespace DNDS::Cauchy::CPU
             {
                 const index iAux = request.stencil.auxiliaryCellFaces(entry, 0);
                 if (request.enabled[4])
-                    sum += request.stencil.auxiliaryFaceArea(iAux, 0) *
+                    sum += metric.GetFaceArea(request.stencil.stencilFaces(iAux, 0)) *
                            (request.enabled[1] ? request.values[1](iAux, 0) + request.values[1](iAux, 1) : request.scratch(iAux, 0));
                 if (request.enabled[5])
                     wave = std::max(wave, request.enabled[2] ? request.values[2](iAux, 0) : request.scratch(iAux, 1));

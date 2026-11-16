@@ -15,7 +15,7 @@ namespace DNDS::Cauchy
     namespace R = Runtime;
     /// Immutable physical snapshot. Evaluated blocks own no MPI, worker, live
     /// input or FV owner. Geometry is retained only for evaluated storage;
-    /// assembled filling traverses the existing FV samples directly.
+    /// assembled filling derives centered points from canonical FV incidences.
     /// TODO(large-species Jacobian): an explicit approximation may omit
     /// flow5<->scalar derivatives and diagonalize extended diagonal blocks.
     /// Its off-diagonal storage can then be flow5 dense plus scalar entries;
@@ -54,8 +54,8 @@ namespace DNDS::Cauchy
         JacobianData(const FiniteVolume &fv, const EquationDofs &state,
                      LinearProblemContext &output, JacobianPreparation controls, real time)
             : meanStorage(R::RowLayout::Dense(output.HasAssembledOffDiagonal() ? 0 : fv.Metrics().NumCellProc(), state.ComponentNumber())),
-              derivativeStorage(R::RowLayout::Dense(fv.Metrics().NumCellProc() + fv._data->stencil.jacobianSamples.RowCount(), state.ComponentNumber())),
-              pressureStorage(R::RowLayout::Dense(fv.Metrics().NumCellProc() + fv._data->stencil.jacobianSamples.RowCount(), 1)),
+              derivativeStorage(R::RowLayout::Dense(fv.Metrics().NumCellProc() + fv._data->stencil.IncidenceNumber(), state.ComponentNumber())),
+              pressureStorage(R::RowLayout::Dense(fv.Metrics().NumCellProc() + fv._data->stencil.IncidenceNumber(), 1)),
               radiusStorage(R::RowLayout::Dense(fv._data->stencil.stencilFaces.RowCount(), 2)),
               independent(fv._data->equation.HasMixture() ? fv._data->equation.Mixture().SpeciesNumber() - 1 : 0)
         {
@@ -93,9 +93,8 @@ namespace DNDS::Cauchy
                 auto prepared = std::make_shared<Geometry>();
                 prepared->owner = fv._data;
                 prepared->partition = output.Space().Pin();
-                const auto metric = fv.Metrics().AcquireRead();
                 const auto stencil = fv._data->stencil.Read();
-                prepared->storage = std::make_shared<JacobianGeometryStorage>(stencil.View(), metric.HostView(), output.Columns());
+                prepared->storage = std::make_shared<JacobianGeometryStorage>(stencil, output.Columns());
                 prepared->read.emplace(prepared->storage->Read());
                 geometryOwner = std::move(prepared);
             }
@@ -258,7 +257,7 @@ namespace DNDS::Cauchy
         std::optional<Algebra::BlockMatrixView<real>> b;
         if (off)
             b.emplace(off->View());
-        R::Array<real> boundaryMeans(R::RowLayout::Dense(_data->stencil.jacobianSamples.RowCount(), nv));
+        R::Array<real> boundaryMeans(R::RowLayout::Dense(_data->stencil.IncidenceNumber(), nv));
         auto boundaryMeansWrite = boundaryMeans.Write();
         const auto stencilRead = _data->stencil.Read();
         const R::MetadataBuffer<EquationBlockReadView> blockMetadata(blocks);

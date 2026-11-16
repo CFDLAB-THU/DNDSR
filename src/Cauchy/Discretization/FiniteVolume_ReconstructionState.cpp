@@ -412,10 +412,6 @@ namespace DNDS::Cauchy
         }
         else
             gas.emplace(_data->equation.Gas());
-        auto geometry = Metrics().AcquireRead();
-        const auto metric = geometry.HostView();
-        auto meshRead = _data->mesh->AcquireRead(Geom::MeshReadRequirements::CellFlux());
-        const auto mesh = meshRead.HostView();
         index fallbacks = 0;
         {
             const auto flowViews = means.Block("flow");
@@ -427,7 +423,7 @@ namespace DNDS::Cauchy
             R::ValidateViewDevices(R::Device::Host(), u, forward.View<R::TableRows>(), inverse.View<R::TableRows>());
             if (thermal)
                 thermal->values.ValidateDevice(R::Device::Host());
-            fallbacks = RequireNumericalSuccess(CPU::PrepareFaceCharacteristicMatrices(stencilRead.View(), mesh, metric, u, flow.firstComponent,
+            fallbacks = RequireNumericalSuccess(CPU::PrepareFaceCharacteristicMatrices(stencilRead.View(), u, flow.firstComponent,
                                                                                        forward.View<R::TableRows>(), inverse.View<R::TableRows>(), gas, thermal),
                                                 "PrepareFaceCharacteristicMatrices");
         }

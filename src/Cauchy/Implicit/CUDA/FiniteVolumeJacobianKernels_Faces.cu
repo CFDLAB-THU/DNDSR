@@ -25,12 +25,17 @@ namespace DNDS::Cauchy::CUDA
             for (int j = 0; j < N; ++j)
                 mean[j] = q.means(iCell, j);
             const FlowState left{mean[0], mean[1], mean[2], mean[3], mean[4]};
-            for (index entry = q.offsets(iCell, 0); entry < q.offsets(iCell + 1, 0); ++entry)
+            const auto &stencil = q.stencil(0, 0);
+            for (index entry = stencil.jacobianOffsets(iCell, 0); entry < stencil.jacobianOffsets(iCell + 1, 0); ++entry)
             {
-                const auto &sample = q.samples(entry, 0);
-                const real weight = q.faces(sample.face, 6), convection = q.radius(sample.auxiliaryFace, 0), diffusion = q.radius(sample.auxiliaryFace, 1);
-                if (!(std::isfinite(weight) && weight > 0 && std::isfinite(convection) && convection >= 0 && std::isfinite(diffusion) && diffusion >= 0))
+                const auto sample = stencil.JacobianSample(iCell, entry);
+                const real weight = stencil.metric.GetFaceArea(sample.face), convection = q.radius(sample.auxiliaryFace, 0), diffusion = q.radius(sample.auxiliaryFace, 1);
+                if (!(std::isfinite(weight) && weight >= 0 && std::isfinite(convection) && convection >= 0 && std::isfinite(diffusion) && diffusion >= 0))
                     return NumericalStatus{NumericalError::InvalidState, 1, iCell, entry};
+                // The axisymmetric axis has zero weighted area but a valid
+                // geometric normal. It contributes no approximate flux block.
+                if (weight == 0)
+                    continue;
                 const real factor = .5 * p.scale * weight, lambda = convection + diffusion;
                 const bool boundary = sample.other == UnInitIndex;
                 if (!p.roe)
@@ -211,9 +216,9 @@ namespace DNDS::Cauchy::CUDA
                                   (p.components == 6 && input.rans == Kind::SA) ||
                                   (p.components == 7 && (input.rans == Kind::KOmegaWilcox || input.rans == Kind::KOmegaSST)),
                               "CUDA Jacobian boundary closure does not match its component profile");
-        R::ValidateViewDevices(context.device, input.samples, input.offsets, input.faces, input.conditions,
+        R::ValidateViewDevices(context.device, input.stencil, input.conditions,
                                input.means, input.pressure, input.pressureDerivative, input.radius, selected, diagonal, status);
-        DNDS_check_throw_info(all >= rows && input.offsets.RowCount() == rows + 1 && status.RowCount() == rows,
+        DNDS_check_throw_info(all >= rows && input.ownedCells == rows && input.incidences >= 0 && input.stencil.RowCount() == 1 && status.RowCount() == rows,
                               "CUDA Jacobian face row spaces differ");
         DNDS_check_throw_info(input.means.RowCount() == all && input.means.Width() == p.components &&
                                   (input.means.kind == R::RowLayoutKind::Table ||
@@ -236,7 +241,7 @@ namespace DNDS::Cauchy::CUDA
         if (p.roe)
         {
             magnitudes.ValidateDevice(context.device);
-            Table(magnitudes, input.samples.RowCount(), 3);
+            Table(magnitudes, input.incidences, 3);
             for (const auto field : {input.waveJump, input.pressureMinimum})
                 if (field.RowCount())
                 {

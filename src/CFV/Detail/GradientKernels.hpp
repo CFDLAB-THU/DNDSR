@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CFV/Detail/ReconstructionDeviceView.hpp"
+#include "CFV/Math/FaceGeometry.hpp"
 #include "DNDS/Runtime/Storage/Buffer.hpp"
 #include "DNDS/Core/Span.hpp"
 
@@ -13,19 +14,18 @@ namespace DNDS::CFV::Detail
     using GradientCellGeometry = Runtime::ArrayView<const real, false, Runtime::FixedRows<8>>;
 
     /// Prepared incidence weights for GG/LS/GGMP. Boundary IDs index physical
-    /// face quadrature targets. A weight has three directions; the unused third
+    /// face-center targets. A weight has three directions; the unused third
     /// direction is ignored for 2D geometry. No PDE/boundary callback lives here.
     struct GradientKernelView
     {
-        GradientIndices offsets, neighbors, boundaryIds;
+        GradientIndices offsets, boundaryIds;
         Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::FixedRows<3>> weights;
-        Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::FixedRows<9>> rotations;
-        Runtime::ArrayView<const uint8_t, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> rotationActive;
+        Geom::CellFaceIncidenceView topology;
+        FacePeriodicView periodic;
         int dimension = 0;
-        bool hasRotatedFrames = false;
         void ValidateDevice(Runtime::Device device) const
         {
-            Runtime::ValidateViewDevices(device, offsets, neighbors, boundaryIds, weights, rotations, rotationActive);
+            Runtime::ValidateViewDevices(device, offsets, boundaryIds, weights, topology, periodic);
         }
     };
     /// Small host metadata range, retained by its enclosing synchronous call.
@@ -56,18 +56,16 @@ namespace DNDS::CFV::Detail
     void LaunchGradientConversion(Runtime::ExecutionContext context, GradientCellGeometry cells, GradientInput input, GradientOutput output,
                                   index firstCell, int dimension, index modes, bool toCoefficients);
 
-    /// Incidence/rotation data for one-level physical-gradient WBAP. Repeated
-    /// quadrature incidences on one face are visited once for limiting.
+    /// Canonical topology and shared periodic maps for one-level gradient WBAP.
     struct GradientLimiterView
     {
-        GradientIndices offsets, neighbors, faces;
-        Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::FixedRows<9>> rotations;
-        Runtime::ArrayView<const uint8_t, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> rotationActive;
+        GradientIndices offsets;
+        Geom::CellFaceIncidenceView topology;
+        FacePeriodicView periodic;
         int dimension = 0;
-        bool hasRotatedFrames = false;
         void ValidateDevice(Runtime::Device device) const
         {
-            Runtime::ValidateViewDevices(device, offsets, neighbors, faces, rotations, rotationActive);
+            Runtime::ValidateViewDevices(device, offsets, topology, periodic);
         }
     };
     struct GradientLimiterValues

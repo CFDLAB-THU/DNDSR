@@ -67,3 +67,54 @@ Python exposes `Runtime.enable_allocation_diagnostics()`,
 `Runtime.allocation_snapshot()` and `array.name`. Snapshots expose allocation
 identity, device, capacity, labels, source site and activity; they contain no
 payload and can outlive the original Arrays safely.
+
+## Offline allocation explorer
+
+The maintained converter is `scripts/diagnostics/allocation_explorer.py`.
+It produces a standalone HTML file with all snapshot data, styles and scripts
+embedded. It needs neither a server, network connection nor this application.
+The rectangular explorer renders one hierarchy level at a time, with a path
+bar, immediate hover/focus previews, keyboard navigation and exact identity
+details. Small entries are also accessible through the child list. The same
+export supports host/CUDA placement and setup comparisons without counting
+shared aliases twice.
+
+Keep solver traces, compressed snapshot archives and generated HTML in the
+study/plan evidence repository, outside DNDSR's tracked source tree. DNDSR
+contains only the converter, its UI assets, tests and this guide. For example,
+from the implementation checkout, substituting actual evidence paths:
+
+```sh
+python3 scripts/diagnostics/allocation_explorer.py \
+  --input 'baseline=/path/to/evidence/baseline-memory.txt.gz' \
+  --input 'compact=/path/to/evidence/compact-memory.txt.gz' \
+  --json /path/to/evidence/allocations.json.gz \
+  --output /path/to/evidence/explorer.html
+
+# Regenerate from the exact archived identity records alone:
+python3 scripts/diagnostics/allocation_explorer.py \
+  --data /path/to/evidence/allocations.json.gz \
+  --output /path/to/evidence/explorer.html
+```
+
+Both plain text and gzip-compressed snapshot dumps are accepted. `--json`
+selects gzip when its output ends in `.gz`. Separate ranks and snapshots remain
+separate accounting scopes. A conflicting repeated identity is rejected;
+missing bytes relative to the registry total are visibly reported. Optional
+creation stacks remain in the archived text; the compact JSON keeps names,
+sites, capacity, device/provider and activity rather than duplicating stacks.
+
+Parser/export checks require only Python's standard library:
+
+```sh
+python3 -m unittest discover -s scripts/tests -p test_allocation_explorer.py -v
+```
+
+The browser interaction check uses installed Node (with WebSocket support)
+and Chrome, never downloads a browser, and writes its screenshots and receipt
+only to a caller-selected evidence directory:
+
+```sh
+node scripts/diagnostics/test_allocation_explorer.mjs \
+  /path/to/evidence/explorer.html /path/to/evidence/browser-checks
+```

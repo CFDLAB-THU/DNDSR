@@ -57,7 +57,7 @@ namespace DNDS::Cauchy
         AuxiliaryValues buffers;
         std::shared_ptr<AuxiliaryValues::QueuedStorage> scratch;
         R::SessionAccess::Lease session;
-        Geom::MeshReadAccess geometry;
+        FiniteVolumeStencilStorage::ReadAccess stencil;
         bool hasWall = false;
         std::optional<MeanGradients> gradients;
         std::optional<BoundaryInputs> boundary;
@@ -69,7 +69,7 @@ namespace DNDS::Cauchy
 
         QueuedState(const FiniteVolume &plan, const EquationDofs &state, AuxiliaryValues output, real atTime, AuxiliaryInputs input)
             : owner(plan), data(plan._data), source(state.NumericAlias()), buffers(std::move(output)), scratch(buffers._queuedStorage),
-              session(scratch->session.Acquire()), geometry(data->metrics.AcquireMeshRead(bool(data->wallDistance))),
+              session(scratch->session.Acquire()), stencil(data->stencil.Read({data->metrics.Device(), nullptr})),
               frame(data->motion.At(atTime).KernelParameters()), time(atTime), boundaryPending(input.deferBoundary)
         {
             if (input.meanGradients)
@@ -167,19 +167,19 @@ namespace DNDS::Cauchy
                                 { CUDA::PrepareAuxiliaryMeans(context, pin->StateInput(u, ug, g, gg, wall), out, status, first, end); }, R::ReadAs<R::TableRows>(field.Owned()), R::ReadAs<R::TableRows>(uGhost), R::ReadAs<R::TableRows>(gOwned), R::ReadAs<R::TableRows>(gGhost), R::WriteAs<R::TableRows>(*buffers.meanThermodynamics), R::WriteAs<R::FixedRows<1>>(scratch->meanStatus), R::ReadAs<R::TableRows>(hasWall ? data->wallDistance->CellMeans() : scratch->empty));
             if (!needFaces)
                 return;
-            const auto &incoming = boundary ? boundary->QuadratureValues().CoupledField().Owned() : scratch->empty;
+            const auto &incoming = boundary ? (data->stencil.quadratureBoundaryValues
+                                                   ? boundary->QuadratureValues().CoupledField().Owned()
+                                                   : boundary->FaceCenterValues().CoupledField().Owned())
+                                            : scratch->empty;
             if (boundary)
                 inputs.emplace_back(incoming);
-            R::SubmitArrays(engine, stream, [pin](R::ExecutionContext context, auto u, auto ug, auto g, auto gg, auto prepared, auto incoming, auto spectral, auto wave, auto pressure, auto scratchValues, auto status, auto selected, auto samples, auto entries, auto stencilFaces, auto quadratureOffsets, auto geometry, auto area, auto wall, auto wallFaces)
+            R::SubmitArrays(engine, stream, [pin](R::ExecutionContext context, auto u, auto ug, auto g, auto gg, auto prepared, auto incoming, auto spectral, auto wave, auto pressure, auto scratchValues, auto status, auto selected, auto wall, auto wallFaces)
                             {
                     CUDA::AuxiliaryFaceRequest request;
                     request.state = pin->StateInput(u, ug, g, gg, wall);
-                    request.samples = samples;
-                    request.entries = entries;
-                    request.stencilFaces = stencilFaces;
-                    request.quadratureOffsets = quadratureOffsets;
-                    request.geometry = geometry;
-                    request.area = area;
+                    request.stencil = pin->stencil.KernelDescriptor();
+                    request.faceNumber = pin->data->stencil.stencilFaces.RowCount();
+                    request.allCells = pin->data->metrics.NumCellProc();
                     request.conditions = R::MetadataArrayView(pin->data->deviceBoundaryKinds, context.device);
                     if (pin->hasWall) request.wallFaces = {wallFaces.data, wallFaces.offsets, wallFaces.rows, wallFaces.width, wallFaces.stride, wallFaces.sizes, wallFaces.kind, wallFaces.device};
                     request.preparedMeans = prepared;
@@ -189,19 +189,20 @@ namespace DNDS::Cauchy
                     request.needSpectral = bool(pin->buffers.faceSpectralRadius || pin->buffers.cellSpectralSum);
                     request.needWave = bool(pin->buffers.faceWaveJump || pin->buffers.cellWaveJump);
                     request.needPressure = bool(pin->buffers.facePressureMinimum || pin->buffers.cellPressureMinimum);
-                    CUDA::PrepareAuxiliaryFaces(context, request, selected); }, R::ReadAs<R::TableRows>(field.Owned()), R::ReadAs<R::TableRows>(uGhost), R::ReadAs<R::TableRows>(gOwned), R::ReadAs<R::TableRows>(gGhost), R::ReadAs<R::TableRows>(Output(0)), R::ReadAs<R::TableRows>(incoming), R::WriteAs<R::TableRows>(Output(1)), R::WriteAs<R::TableRows>(Output(2)), R::WriteAs<R::TableRows>(Output(3)), R::WriteAs<R::TableRows>(Output(7)), R::WriteAs<R::FixedRows<1>>(scratch->faceStatus), R::ReadAs<R::FixedRows<1>>(faces), R::ReadAs<R::FixedRows<1>>(data->stencil.samples), R::ReadAs<R::FixedRows<1>>(data->stencil.faceEntries), R::ReadAs<R::FixedRows<1>>(data->stencil.stencilFaces), R::ReadAs<R::FixedRows<1>>(data->metrics.FaceOffsets()), R::ReadAs<R::FixedRows<8>>(data->metrics.CellMetrics()), R::ReadAs<R::FixedRows<1>>(data->stencil.auxiliaryFaceArea), R::ReadAs<R::TableRows>(hasWall ? data->wallDistance->CellMeans() : scratch->empty), R::Read(hasWall ? data->wallDistance->FaceValues() : scratch->empty));
+                    CUDA::PrepareAuxiliaryFaces(context, request, selected); }, R::ReadAs<R::TableRows>(field.Owned()), R::ReadAs<R::TableRows>(uGhost), R::ReadAs<R::TableRows>(gOwned), R::ReadAs<R::TableRows>(gGhost), R::ReadAs<R::TableRows>(Output(0)), R::ReadAs<R::TableRows>(incoming), R::WriteAs<R::TableRows>(Output(1)), R::WriteAs<R::TableRows>(Output(2)), R::WriteAs<R::TableRows>(Output(3)), R::WriteAs<R::TableRows>(Output(7)), R::WriteAs<R::FixedRows<1>>(scratch->faceStatus), R::ReadAs<R::FixedRows<1>>(faces), R::ReadAs<R::TableRows>(hasWall ? data->wallDistance->CellMeans() : scratch->empty), R::Read(hasWall ? data->wallDistance->FaceValues() : scratch->empty));
             if (!buffers.cellSpectralSum && !buffers.cellWaveJump && !buffers.cellPressureMinimum)
                 return;
-            R::SubmitArrays(engine, stream, [pin](R::ExecutionContext context, auto spectral, auto wave, auto pressure, auto scratchValues, auto sum, auto jump, auto minimum, auto selected, auto offsets, auto faces, auto area, auto geometry)
+            R::SubmitArrays(engine, stream, [pin](R::ExecutionContext context, auto spectral, auto wave, auto pressure, auto scratchValues, auto sum, auto jump, auto minimum, auto selected)
                             {
                     CUDA::AuxiliaryCellRequest request;
-                    request.offsets = offsets; request.faces = faces;
-                    request.area = area; request.geometry = geometry;
+                    request.stencil = pin->stencil.KernelDescriptor();
+                    request.ownedCells = pin->data->metrics.NumCell();
+                    request.faceNumber = pin->data->stencil.stencilFaces.RowCount();
                     request.spectral = spectral; request.wave = wave; request.pressure = pressure; request.scratch = scratchValues;
                     request.spectralSum = sum; request.waveMaximum = jump; request.pressureMinimum = minimum;
                     const auto &w = pin->frame.angularVelocity;
                     request.angularSpeed = std::sqrt(w[0] * w[0] + w[1] * w[1] + w[2] * w[2]);
-                    CUDA::ReduceAuxiliaryCells(context, request, selected); }, R::ReadAs<R::TableRows>(Output(1)), R::ReadAs<R::TableRows>(Output(2)), R::ReadAs<R::TableRows>(Output(3)), R::ReadAs<R::TableRows>(Output(7)), R::WriteAs<R::TableRows>(Output(4)), R::WriteAs<R::TableRows>(Output(5)), R::WriteAs<R::TableRows>(Output(6)), R::ReadAs<R::FixedRows<1>>(cells), R::ReadAs<R::FixedRows<1>>(data->stencil.auxiliaryCellOffsets), R::ReadAs<R::FixedRows<1>>(data->stencil.auxiliaryCellFaces), R::ReadAs<R::FixedRows<1>>(data->stencil.auxiliaryFaceArea), R::ReadAs<R::FixedRows<8>>(data->metrics.CellMetrics()));
+                    CUDA::ReduceAuxiliaryCells(context, request, selected); }, R::ReadAs<R::TableRows>(Output(1)), R::ReadAs<R::TableRows>(Output(2)), R::ReadAs<R::TableRows>(Output(3)), R::ReadAs<R::TableRows>(Output(7)), R::WriteAs<R::TableRows>(Output(4)), R::WriteAs<R::TableRows>(Output(5)), R::WriteAs<R::TableRows>(Output(6)), R::ReadAs<R::FixedRows<1>>(cells));
         }
         void ReduceStatus(R::EagerEngine &engine, const R::ExecutionStream &stream)
         {

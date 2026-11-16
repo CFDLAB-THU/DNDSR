@@ -52,7 +52,7 @@ namespace DNDS::Cauchy::CPU
     };
     struct GradientPositivityWorkerScratch
     {
-        /// At least max-cell-quadrature-count rows by component count.
+        /// At least the largest cell-face count rows by component count.
         GradientScratchView samples;
         NumericalResult<GradientPositivityResult> result{GradientPositivityResult{}};
     };

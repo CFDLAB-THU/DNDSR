@@ -2,6 +2,9 @@
 #include "doctest.h"
 #include "Cauchy/Discretization/CUDA/FiniteVolumePositivityKernels.hpp"
 #include "Cauchy/Discretization/CPU/FiniteVolumePositivityKernels.hpp"
+#include "Cauchy/Discretization/CPU/ModalPositivityKernels.hpp"
+#include "Cauchy/Discretization/CUDA/ModalPositivityKernels.hpp"
+#include "CFV/Math/TaylorBasis.hpp"
 #include "Cauchy/Config/SimulationConfig.hpp"
 #include <cuda_runtime.h>
 
@@ -51,6 +54,139 @@ namespace
             for (I j = 0; j < cpu.Layout().Width(); ++j)
                 CHECK(a.View()(i, j) == doctest::Approx(real(b.View()(i, j))).epsilon(2e-12).scale(1));
     }
+    // A focused frozen-basis kernel fixture. Its two volume rows per cell use
+    // exactly Sample()'s independently established products, so the old staged
+    // CPU leaves above remain a numerical oracle for the fused implementation.
+    // Mesh/face point enumeration is covered by the FV integration fixtures.
+    void CheckFusedModal(const R::Array<real> &means, const R::Array<real> &initial,
+                         const R::Array<real> &expected, const R::Array<real> &expectedBeta,
+                         const C::CPU::PolynomialPositivityRequest &old)
+    {
+        const I cells = means.RowCount(), components = means.Layout().Width();
+        const auto device = R::Device::CUDA(0), host = R::Device::Host();
+        const auto context = R::ExecutionContext::CUDA(0);
+        auto faceRows = Table<I>(cells, 0, [](I, I)
+                                 { return I(0); });
+        auto offsets = Table<I>(cells + 1, 1, [](I i, I)
+                                { return 2 * i; });
+        auto basis = Table<real>(2 * cells, old.modes, [](I q, I mode)
+                                 { return (q % 2 ? -1. : 1.) / (mode + 1); });
+        R::Array<real> points(R::RowLayout::Dense(0, 3)), empty(R::RowLayout::Dense(0, 0)), cellGeometry(R::RowLayout::Dense(0, 8));
+        const auto faceRead = faceRows.Read(), offsetsRead = offsets.Read();
+        const auto basisRead = basis.Read(), pointRead = points.Read(), emptyRead = empty.Read(), geometryRead = cellGeometry.Read();
+        C::FiniteVolumeStencilView stencil;
+        stencil.topology.cellFaces = {faceRead.View(), {}};
+        auto descriptors = Table<C::FiniteVolumeStencilView>(1, 1, [&](I, I)
+                                                             { return stencil; });
+        const auto descriptorRead = descriptors.Read();
+        C::ModalPositivityGeometry geometry;
+        geometry.stencil = descriptorRead.View<R::FixedRows<1>>();
+        geometry.volumeOffsets = offsetsRead.View<R::FixedRows<1>>();
+        geometry.volumeBasis = basisRead.View<R::TableRows>();
+        geometry.volumePoints = pointRead.View<R::FixedRows<3>>();
+        geometry.volumeCachedDerivatives = 1;
+        geometry.maximumCellPoints = 2;
+        geometry.basis.cached = emptyRead.View<R::TableRows>();
+        geometry.basis.moments = emptyRead.View<R::TableRows>();
+        geometry.basis.cells = geometryRead.View<R::FixedRows<8>>();
+        geometry.basis.polynomial = DNDS::CFV::Math::TaylorBasis(2, 3).KernelParameters();
+        geometry.basis.availableDerivatives = 1;
+        C::ModalPositivityPolicy policy;
+        policy.bounds = old.bounds;
+        policy.rans = old.rans;
+        policy.ransFirst = old.ransFirst;
+        policy.components = int(components);
+        policy.modes = old.modes;
+        policy.maxOrder = old.maxOrder;
+        policy.betaPower = int(old.betaPower);
+        policy.betaCutoff = old.betaCutoff;
+        policy.clippedPolicy = old.clippedPolicy;
+        policy.modeEnd = {0, 2, 5, 9};
+        auto dmeans = means.To(device), dbasis = basis.To(device);
+        auto dfaces = faceRows.To(device), doffsets = offsets.To(device);
+        auto dpoints = points.To(device), dempty = empty.To(device), dcells = cellGeometry.To(device);
+        const auto deviceFaces = dfaces.Read(context), deviceOffsets = doffsets.Read(context);
+        const auto deviceBasis = dbasis.Read(context), devicePoints = dpoints.Read(context), deviceEmpty = dempty.Read(context), deviceCells = dcells.Read(context);
+        auto deviceStencil = stencil;
+        deviceStencil.topology.cellFaces.owned = deviceFaces.View();
+        auto deviceDescriptorSource = Table<C::FiniteVolumeStencilView>(1, 1, [&](I, I)
+                                                                        { return deviceStencil; });
+        auto deviceDescriptors = deviceDescriptorSource.To(device);
+        const auto deviceDescriptor = deviceDescriptors.Read(context);
+        auto resident = geometry;
+        resident.stencil = deviceDescriptor.View<R::FixedRows<1>>();
+        resident.volumeOffsets = deviceOffsets.View<R::FixedRows<1>>();
+        resident.volumeBasis = deviceBasis.View<R::TableRows>();
+        resident.volumePoints = devicePoints.View<R::FixedRows<3>>();
+        resident.basis.cached = deviceEmpty.View<R::TableRows>();
+        resident.basis.moments = deviceEmpty.View<R::TableRows>();
+        resident.basis.cells = deviceCells.View<R::FixedRows<8>>();
+        auto deviceInitial = initial.To(device);
+        const auto initialRead = deviceInitial.Read(context);
+        const auto meanRead = means.Read(), deviceMean = dmeans.Read(context);
+        const auto meanLayout = Components(meanRead.View<R::UniformTableRows>());
+        for (const bool meanBase : {true, false})
+        {
+            INFO("fused mean-base=" << meanBase);
+            policy.meanBase = meanBase;
+            auto cpuOutput = initial.To(host);
+            R::Array<real> cpuBeta(R::RowLayout::Dense(cells, 1));
+            R::Array<I> cpuDegree(R::RowLayout::Dense(cells, 1));
+            C::ModalPositivityStatistics cpuStatistics;
+            {
+                auto write = cpuOutput.Write(), betaWrite = cpuBeta.Write();
+                auto degreeWrite = cpuDegree.Write();
+                const auto output = Components(write.View<R::UniformTableRows>());
+                std::vector<C::CPU::ModalPositivityWorkerScratch> workers;
+                workers.emplace_back(components, old.modes, 2, meanBase);
+                const C::CPU::ModalPositivityRequest request{geometry, policy, meanLayout.View(), {}, output.View(), betaWrite.View<R::FixedRows<1>>(), degreeWrite.View<R::FixedRows<1>>(), false};
+                const auto result = C::CPU::LimitPositiveModalCoefficients(request, {workers.data(), I(workers.size())});
+                REQUIRE(bool(result));
+                cpuStatistics = result.value;
+            }
+            Compare(cpuOutput, expected);
+            Compare(cpuBeta, expectedBeta);
+            for (const auto mapping : {K::ModalPositivityMapping::WarpPerCell, K::ModalPositivityMapping::BlockPerCell})
+                for (const int threads : {128, 256, 512})
+                    for (const bool refresh : {false, true})
+                    {
+                        INFO("fused mapping=" << int(mapping) << ", threads=" << threads << ", refresh=" << refresh);
+                        const K::ModalPositivityLaunch launch{mapping, threads, 0};
+                        const I summaries = K::ModalPositivitySummaryRows(cells, launch);
+                        // A refresh must replace a different stored polynomial before
+                        // accepting it. Merely testing initial==output would miss a
+                        // kernel that accidentally checked the old output buffer.
+                        auto output = (refresh ? expected : initial).To(device);
+                        R::Array<real> beta(R::RowLayout::Dense(cells, 1), device);
+                        R::Array<I> degree(R::RowLayout::Dense(cells, 1), device);
+                        R::Array<DNDS::NumericalStatus> status(R::RowLayout::Dense(summaries, 1), device), finalStatus(R::RowLayout::Dense(1, 1), device);
+                        R::Array<I> counts(R::RowLayout::Dense(summaries, 1), device), finalCount(R::RowLayout::Dense(1, 1), device);
+                        R::Array<real> minima(R::RowLayout::Dense(summaries, 1), device), finalMinimum(R::RowLayout::Dense(1, 1), device);
+                        {
+                            auto coefficients = output.Write(context), b = beta.Write(context), minimum = minima.Write(context), finalMin = finalMinimum.Write(context);
+                            auto d = degree.Write(context), count = counts.Write(context), finalN = finalCount.Write(context);
+                            auto errors = status.Write(context), finalError = finalStatus.Write(context);
+                            const K::ModalPositivitySummary partials{errors.View<R::FixedRows<1>>(), count.View<R::FixedRows<1>>(), minimum.View<R::FixedRows<1>>()};
+                            const K::ModalPositivitySummary final{finalError.View<R::FixedRows<1>>(), finalN.View<R::FixedRows<1>>(), finalMin.View<R::FixedRows<1>>()};
+                            K::LimitPositiveModalCoefficients(context,
+                                                              {resident, policy, deviceMean.View<R::TableRows>(), refresh ? initialRead.View<R::TableRows>() : K::ModalInput{}, coefficients.View<R::TableRows>(),
+                                                               b.View<R::FixedRows<1>>(), d.View<R::FixedRows<1>>(), refresh},
+                                                              partials, launch);
+                            K::FinalizeModalPositivity(context, partials, final);
+                            REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
+                        }
+                        Compare(output, cpuOutput);
+                        Compare(beta, cpuBeta);
+                        const auto errors = finalStatus.To(host);
+                        const auto count = finalCount.To(host);
+                        const auto minimum = finalMinimum.To(host);
+                        REQUIRE(bool(errors.Read().View()(0, 0)));
+                        CHECK(count.Read().View()(0, 0) == cpuStatistics.limited);
+                        CHECK(minimum.Read().View()(0, 0) == doctest::Approx(cpuStatistics.minimum).epsilon(2e-12));
+                    }
+        }
+    }
+
 }
 
 TEST_CASE("CUDA physical-dt forecast ignores RANS bounds and reports invalid means")
@@ -277,6 +413,7 @@ TEST_CASE("CUDA polynomial positivity matches CPU flow compression and independe
                 K::VerifyReconstructedPoints(context, gpu, ds.View<R::TableRows>());
                 checkStatus();
             }
+            CheckFusedModal(means, initial, coefficients, beta, cpu);
             // Explicit recovery input: the uncompressed samples correspond to
             // an initially unit beta. Compare one controller recovery pass for
             // both policies; backtracking need not finish in a single pass.

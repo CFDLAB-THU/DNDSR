@@ -1,0 +1,40 @@
+#ROOT {color:var(--foreground); min-width:0; background:transparent}
+#ROOT * {box-sizing:border-box}
+#ROOT .controls {display:flex; flex-wrap:wrap; gap:calc(var(--font-size-base,14px)*.75); margin-bottom:1em}
+#ROOT .control {flex:1 1 16em; min-width:0; display:grid; gap:.35em}
+#ROOT .crumbs {display:flex; align-items:center; flex-wrap:wrap; gap:.3em; margin-bottom:.75em}
+#ROOT .crumb-separator {color:var(--muted-foreground)}
+#ROOT .summary {display:flex; flex-wrap:wrap; align-items:baseline; gap:.35em 1em; margin-bottom:.75em}
+#ROOT .total {font-weight:500}
+#ROOT .inspect {min-height:3.3em; display:grid; align-content:center; gap:.2em; margin-bottom:.5em; overflow-wrap:anywhere}
+#ROOT .inspect-path {font-weight:500}
+#ROOT .inspect-values {color:var(--muted-foreground)}
+#ROOT .map {position:relative; height:clamp(260px,43vw,410px); overflow:hidden}
+#ROOT .tile {position:absolute; display:flex; flex-direction:column; justify-content:center; gap:.4em; text-align:left; padding:.65em; border:0; border-radius:0; font:inherit; color:var(--foreground); background:var(--tile-fill); overflow:hidden; min-width:0; min-height:0; touch-action:manipulation}
+#ROOT .tile[data-active] {background:color-mix(in srgb,var(--tile-color) 38%,var(--background))}
+#ROOT .tile.tiny {padding:0; gap:0}
+#ROOT .tile-name {font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+#ROOT .tile.wide .tile-name {white-space:normal; overflow-wrap:anywhere}
+#ROOT .tile-value {white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+#ROOT .tile-ratio {color:var(--muted-foreground); white-space:nowrap}
+#ROOT .details {margin-top:.75em}
+#ROOT .details summary {color:var(--muted-foreground)}
+#ROOT .records {display:grid; gap:.45em; margin-top:.75em; min-width:0}
+#ROOT .leaf-record {display:grid; gap:.6em; overflow-wrap:anywhere}
+#ROOT .leaf-record dl {display:grid; grid-template-columns:max-content minmax(0,1fr); gap:.4em .8em; margin:0}
+#ROOT .leaf-record dt {color:var(--muted-foreground)}
+#ROOT .leaf-record dd {margin:0; overflow-wrap:anywhere}
+#ROOT .leaf-record ul {margin:0; padding-left:1.2em}
+#ROOT .provenance {margin-top:1em; color:var(--muted-foreground)}
+#ROOT .provenance details {margin-top:.5em}
+#ROOT .source-path {overflow-wrap:anywhere; margin-top:.4em}
+#ROOT .warning {color:var(--destructive); margin:.5em 0}
+#ROOT .warning:empty {display:none}
+#ROOT .sr-announcement {position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0}
+#ROOT.is-leaf .map {display:none}
+@media (max-width:480px) {
+  #ROOT .controls {gap:.6em}
+  #ROOT .tile {padding:.35em}
+  #ROOT .inspect {min-height:4.4em}
+  #ROOT .leaf-record dl {grid-template-columns:1fr}
+}

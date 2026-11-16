@@ -17,18 +17,14 @@ namespace DNDS::Cauchy::CPU
 {
     struct BoundaryTraceRequest
     {
-        Runtime::ArrayView<const BoundaryTraceGeometry,
-                           Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>
-            points;
-        Runtime::ArrayView<const index, Runtime::AccessBoundsChecks,
-                           Runtime::FixedRows<1>>
-            pointRows;
+        FiniteVolumeStencilView stencil;
+        Runtime::ArrayView<const BoundaryFaceRange, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> faces;
         SpanView<const EquationBlockReadView> means, coefficients;
         SpanView<const EquationBlockArrayView<real>> output;
         SpanView<const index> logicalFirst;
         CFV::ReconstructionBasisEvaluationView basis;
         index componentNumber = 0;
-        bool polynomial = false, usePointRows = false, repairRANS = true;
+        bool polynomial = false, centers = false, repairRANS = true;
         /// Point-local repair of an unlimited VR iterate before physical BC
         /// evaluation. Never modifies means or reconstruction coefficients.
         bool allowPointFallback = false;
@@ -85,12 +81,8 @@ namespace DNDS::Cauchy::CPU
 
     struct PrimitiveBoundaryRequest
     {
-        Runtime::ArrayView<const BoundaryTraceGeometry,
-                           Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>
-            points;
-        Runtime::ArrayView<const index, Runtime::AccessBoundsChecks,
-                           Runtime::FixedRows<1>>
-            sourceRows;
+        FiniteVolumeStencilView stencil;
+        Runtime::ArrayView<const BoundaryFaceRange, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> faces;
         SpanView<const EquationBlockReadView> means;
         Runtime::ArrayView<real, Runtime::AccessBoundsChecks,
                            Runtime::UniformTableRows>
@@ -109,9 +101,13 @@ namespace DNDS::Cauchy::CPU
     using BoundaryPointRows = Runtime::ArrayView<const BoundaryPoint, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
     NumericalStatus ValidateInterfacePacketRows(Algebra::DofComponentView<const real> rows, BoundaryPointRows points,
                                                 ThermalView thermal, RANSStateView rans, EquationBlockReadView ransValues) noexcept;
+    NumericalStatus ValidateInterfacePacketRanges(Algebra::DofComponentView<const real> rows,
+                                                  Runtime::ArrayView<const BoundaryFaceRange, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> ranges,
+                                                  bool centers, ThermalView thermal, RANSStateView rans, EquationBlockReadView ransValues) noexcept;
     /// Optional caller-owned worker slots enable independent contiguous scans
     /// and an ordered FP sum. Empty slots retain the serial reference path.
     Vector3 AccumulateBoundaryForce(FiniteVolumeStencilView stencil,
+                                    Runtime::ArrayView<const BoundaryFaceRange, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> ranges,
                                     Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::FixedRows<3>> values,
                                     SpanView<const int> zones, SpanView<Vector3> workerSums = {});
     /// Check an alias between identical point layouts under retained scopes.

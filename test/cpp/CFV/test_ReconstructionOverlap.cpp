@@ -208,7 +208,12 @@ TEST_CASE("CFV split operators share eager ordering across inline and worker CPU
         R::EagerEngine engine(workers, std::make_shared<R::AccessTrackingContext>());
         auto core = engine.CreateCPUStream(), ring = engine.CreateCPUStream();
         R::MPIProgress progress;
-        const auto communication = progress.Import(halo.Begin());
+        // Register MPI with the same checked-access context as its consumers.
+        // An immediate Begin() keeps a host-visible send lease until Drain(),
+        // so queuing the later owned write before Drain() is correctly refused
+        // when MPI has not already completed. The checked bridge records the
+        // communication frontier imported by ring.WaitFor below.
+        const auto communication = progress.Import(halo.BeginChecked(core));
         // Repeating a pure out-of-place core pass increases its work while
         // preserving the exact same numerical reference result. Each record
         // retains its operands and declares reads/writes at submission.

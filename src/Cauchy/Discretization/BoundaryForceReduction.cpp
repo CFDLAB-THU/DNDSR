@@ -22,13 +22,15 @@ namespace DNDS::Cauchy
     };
     BoundaryForceReduction::BoundaryForceReduction(R::ExecutionContext context) : _data(std::make_shared<Data>(context)) {}
     Vector3 BoundaryForceReduction::Evaluate(R::EagerEngine &engine, const R::ExecutionStream &stream,
-                                             const FiniteVolumeStencilStorage &stencil, const R::Array<real> &momentum, const std::vector<int> &zones)
+                                             const FiniteVolumeStencilStorage &stencil, const R::Array<BoundaryFaceRange> &faces,
+                                             const R::Array<real> &momentum, const std::vector<int> &zones)
     {
         const auto retained = _data;
         DNDS_check_throw_info(engine.Owns(stream) && stream.Context().device == retained->context.device &&
                                   stream.Context().stream == retained->context.stream && momentum.GetDevice() == retained->context.device &&
-                                  momentum.RowCount() == stencil.boundaryEntries.RowCount(),
+                                  faces.GetDevice() == retained->context.device && momentum.Layout().Width() == 3,
                               "boundary force reduction context or shape differs");
+        const auto publication = std::make_shared<FiniteVolumeStencilStorage::ReadAccess>(stencil.Read(retained->context));
         if (retained->selected != zones || retained->zones.GetDevice() != retained->context.device)
         {
             engine.Synchronize();
@@ -39,17 +41,14 @@ namespace DNDS::Cauchy
         if (retained->context.device == R::Device::Host())
         {
             retained->workerSums.resize(OMP::DistributedThreads());
-            R::SubmitArrays(engine, stream, [retained](auto, auto samples, auto entries, auto values)
-                            {
-                FiniteVolumeStencilView view;
-                view.samples = samples; view.boundaryEntries = entries;
-                retained->hostResult = CPU::AccumulateBoundaryForce(view, values, retained->zones.HostView(),
-                    {retained->workerSums.data(), index(retained->workerSums.size())}); }, R::ReadAs<R::FixedRows<1>>(stencil.samples), R::ReadAs<R::FixedRows<1>>(stencil.boundaryEntries), R::ReadAs<R::FixedRows<3>>(momentum));
+            R::SubmitArrays(engine, stream, [retained, publication](auto, auto ranges, auto values)
+                            { retained->hostResult = CPU::AccumulateBoundaryForce(publication->View(), ranges, values, retained->zones.HostView(),
+                                                                                  {retained->workerSums.data(), index(retained->workerSums.size())}); }, R::ReadAs<R::FixedRows<1>>(faces), R::ReadAs<R::FixedRows<3>>(momentum));
             engine.Synchronize();
             return retained->hostResult;
         }
 #ifdef DNDS_USE_CUDA
-        const auto partialRows = CUDA::BoundaryForceScratchRows(momentum.RowCount());
+        const auto partialRows = CUDA::BoundaryForceScratchRows(faces.RowCount());
         if (retained->partial.RowCount() != partialRows)
         {
             engine.Synchronize();
@@ -61,13 +60,10 @@ namespace DNDS::Cauchy
             retained->completed.SetName("boundaryForce/completedBlocks", DNDS_ALLOCATION_SITE());
         }
         DNDS_check_throw_info(retained->zones.GetDevice() == retained->context.device, "boundary zone metadata residency differs");
-        const auto zoneRead = std::make_shared<R::ReadAccess>(retained->zones.Read(retained->context));
-        R::SubmitArrays(engine, stream, [retained, zoneRead](auto context, auto samples, auto entries, auto values, auto partial, auto result, auto completed)
-                        {
-            const auto metadata = zoneRead->View<int>();
-            CUDA::AccumulateBoundaryForce(context, samples, entries, values, {metadata.data, index(retained->zones.size())}, partial, result, completed); }, R::ReadAs<R::FixedRows<1>>(stencil.samples), R::ReadAs<R::FixedRows<1>>(stencil.boundaryEntries), R::ReadAs<R::FixedRows<3>>(momentum), R::WriteAs<R::FixedRows<3>>(retained->partial), R::WriteAs<R::FixedRows<3>>(retained->result), R::WriteAs<R::FixedRows<1>>(retained->completed));
+        R::SubmitArrays(engine, stream, [retained, publication](auto context, auto ranges, auto values, auto partial, auto result, auto completed)
+                        { CUDA::AccumulateBoundaryForce(context, {publication->KernelDescriptor(), ranges}, values,
+                                                        retained->zones.View(context.device), partial, result, completed); }, R::ReadAs<R::FixedRows<1>>(faces), R::ReadAs<R::FixedRows<3>>(momentum), R::WriteAs<R::FixedRows<3>>(retained->partial), R::WriteAs<R::FixedRows<3>>(retained->result), R::WriteAs<R::FixedRows<1>>(retained->completed));
         engine.Synchronize();
-        zoneRead->Complete(R::Completion::FromExternalCompletion(retained->context));
         const auto host = retained->result.To(R::Device::Host(), stream.Context());
         const auto read = host.Read();
         return {read.View()(0, 0), read.View()(0, 1), read.View()(0, 2)};

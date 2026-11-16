@@ -29,23 +29,15 @@ namespace DNDS::CFV
         placed->metrics = std::move(metrics);
         const auto device = placed->metrics.Device();
         placed->offsets = _data->offsets.To(device, context);
-        placed->neighbors = _data->neighbors.To(device, context);
-        placed->faces = _data->faces.To(device, context);
         placed->boundaryIds = _data->boundaryIds.To(device, context);
         placed->core = _data->core.To(device, context);
         placed->dependent = _data->dependent.To(device, context);
-        placed->rotationActive = _data->rotationActive.To(device, context);
         placed->weights = _data->weights.To(device, context);
-        placed->rotations = _data->rotations.To(device, context);
         placed->offsets.SetName("CFV/gradient/offsets", DNDS_ALLOCATION_SITE());
-        placed->neighbors.SetName("CFV/gradient/neighbors", DNDS_ALLOCATION_SITE());
-        placed->faces.SetName("CFV/gradient/faces", DNDS_ALLOCATION_SITE());
         placed->boundaryIds.SetName("CFV/gradient/boundaryIds", DNDS_ALLOCATION_SITE());
         placed->core.SetName("CFV/gradient/core", DNDS_ALLOCATION_SITE());
         placed->dependent.SetName("CFV/gradient/dependent", DNDS_ALLOCATION_SITE());
-        placed->rotationActive.SetName("CFV/gradient/rotationActive", DNDS_ALLOCATION_SITE());
         placed->weights.SetName("CFV/gradient/weights", DNDS_ALLOCATION_SITE());
-        placed->rotations.SetName("CFV/gradient/rotations", DNDS_ALLOCATION_SITE());
         // Boundary coordinates are setup inputs, not device gradient operands.
         // The boundary-row count survives without retaining their CPU payload.
         std::vector<BoundaryQuadraturePoint>().swap(placed->boundary);

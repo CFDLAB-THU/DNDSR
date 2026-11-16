@@ -129,10 +129,48 @@ namespace DNDS::CFV
             auto points = data->faceQuadrature.Write();
             const auto point = points.View<R::FixedRows<7>>();
             data->faceMean = R::Array<real>(R::RowLayout::Dense(view.NumFaceProc(), 7));
+            data->facePeriodicCodes = R::Array<uint8_t>(R::RowLayout::Dense(view.IsPeriodic() ? view.NumFaceProc() : 0, 1));
+            data->periodicParameters = R::Array<FacePeriodicParameters>(R::RowLayout::Dense(1, 1));
+            data->neighborCenters = R::Array<real>(R::RowLayout::Dense(view.NumFaceProc(), 6));
+            data->facePeriodicCodes.SetName("CFV/metrics/facePeriodicCodes", DNDS_ALLOCATION_SITE());
+            data->periodicParameters.SetName("CFV/metrics/periodicParameters", DNDS_ALLOCATION_SITE());
+            data->neighborCenters.SetName("CFV/metrics/neighborCenters", DNDS_ALLOCATION_SITE());
+            auto periodicWrite = data->periodicParameters.Write();
+            auto codesWrite = data->facePeriodicCodes.Write();
+            auto neighborWrite = data->neighborCenters.Write();
+            const auto parameters = periodicWrite.View<R::FixedRows<1>, false>();
+            const auto codes = codesWrite.View<R::FixedRows<1>, false>();
+            const auto neighbor = neighborWrite.View<R::FixedRows<6>, false>();
+            parameters(0, 0).generators = view.Periodic();
+            parameters(0, 0).rotatedGenerators = 0;
+            for (int generator = 1; generator <= 3; ++generator)
+                if (!(view.Periodic().rotation[generator].map().array() == tGPoint::Identity().array()).all())
+                    parameters(0, 0).rotatedGenerators |= uint8_t(1) << (generator - 1);
+            const FacePeriodicView periodic{codes.ConstView(), parameters.ConstView()};
             auto meanWrite = data->faceMean.Write();
             const auto mean = meanWrite.View<R::FixedRows<7>>();
             OMP::ForSetupRows(0, view.NumFaceProc(), [&](index iFace)
             {
+                if (view.IsPeriodic())
+                {
+                    const int zone = view.GetFaceZone(iFace);
+                    // The zone encodes the canonical parent-zero -> parent-one
+                    // map even if the local own-side Pbi is the base image.
+                    codes(iFace, 0) = FaceIDIsPeriodicMain(zone) ? uint8_t(-zone)
+                                        : FaceIDIsPeriodicDonor(zone) ? uint8_t(-zone) : 0;
+                    DNDS_check_throw_info(codes(iFace, 0) < uint8_t(FacePeriodicCode::Composed),
+                                          "a composed face transform requires an explicit shared registry");
+                }
+                const auto parents = view.FaceCells(iFace);
+                for (int side = 0; side < 2; ++side)
+                {
+                    const index other = parents[1 - side] == UnInitIndex ? parents[side] : parents[1 - side];
+                    tPoint position = tPoint::Zero();
+                    if (other >= 0 && other < view.NumCellProc())
+                        position = periodic.OtherPoint(iFace, side, tPoint{cell(other, 1), cell(other, 2), cell(other, 3)});
+                    for (int d = 0; d < 3; ++d)
+                        neighbor(iFace, 3 * side + d) = position[d];
+                }
                 tSmallCoords coords;
                 view.GetCoordsOnFace(iFace, coords);
                 const auto element = view.GetFaceElement(iFace);
@@ -196,7 +234,9 @@ namespace DNDS::CFV
     FiniteVolumeRead::FiniteVolumeRead(std::shared_ptr<const Detail::FiniteVolumeData> data, R::ExecutionContext context)
         : _data(std::move(data)),
           _meshRead(std::make_shared<MeshReadAccess>(_data->mesh->AcquireRead(MeshReadRequirements::CellFlux()))),
-          _cells(_data->cell.Read(context)), _quadrature(_data->faceQuadrature.Read(context)), _radialMoment(_data->radialMoment.Read(context)), _faceMean(_data->faceMean.Read(context)), _offsets(_data->faceOffsets.Read(context))
+          _cells(_data->cell.Read(context)), _quadrature(_data->faceQuadrature.Read(context)), _radialMoment(_data->radialMoment.Read(context)), _faceMean(_data->faceMean.Read(context)),
+          _neighborCenters(_data->neighborCenters.Read(context)), _periodicCodes(_data->facePeriodicCodes.Read(context)),
+          _periodicParameters(_data->periodicParameters.Read(context)), _offsets(_data->faceOffsets.Read(context))
     {
         DNDS_check_throw_info(_data->stamp.Valid(), "finite-volume metrics changed before acquisition");
     }
@@ -207,7 +247,7 @@ namespace DNDS::CFV
     }
     FiniteVolumeHostView FiniteVolumeRead::View() const
     {
-        return {_cells.View<R::FixedRows<8>>(), _offsets.View<R::FixedRows<1>>(), _quadrature.View<R::FixedRows<7>>(), _radialMoment.View<R::FixedRows<3>>(), _faceMean.View<R::FixedRows<7>>()};
+        return {_cells.View<R::FixedRows<8>>(), _offsets.View<R::FixedRows<1>>(), _quadrature.View<R::FixedRows<7>>(), _radialMoment.View<R::FixedRows<3>>(), _faceMean.View<R::FixedRows<7>>(), {_periodicCodes.View<R::FixedRows<1>, false>(), _periodicParameters.View<R::FixedRows<1>, false>()}, _neighborCenters.View<R::FixedRows<6>, false>()};
     }
     FiniteVolumeRead FiniteVolumePlan::AcquireRead(R::ExecutionContext context) const
     {
@@ -220,6 +260,23 @@ namespace DNDS::CFV
     const R::Array<real> &FiniteVolumePlan::FaceMetrics() const { return _data->faceMean; }
     const R::Array<real> &FiniteVolumePlan::RadialMoments() const { return _data->radialMoment; }
     const R::Array<index> &FiniteVolumePlan::FaceOffsets() const { return _data->faceOffsets; }
+    const R::Array<uint8_t> &FiniteVolumePlan::FacePeriodicCodes() const { return _data->facePeriodicCodes; }
+    const R::Array<FacePeriodicParameters> &FiniteVolumePlan::PeriodicParameters() const { return _data->periodicParameters; }
+    const R::Array<real> &FiniteVolumePlan::NeighborCenters() const { return _data->neighborCenters; }
+    FiniteVolumeTopologyRead::FiniteVolumeTopologyRead(std::shared_ptr<const Detail::FiniteVolumeData> data)
+        : _data(std::move(data)), _source(std::make_shared<CellFaceIncidenceRead>(_data->topology->AcquireRead()))
+    {
+        DNDS_check_throw_info(_data->stamp.Valid(), "FV topology changed before acquisition");
+    }
+    CellFaceIncidenceView FiniteVolumeTopologyRead::View() const
+    {
+        return _source->View();
+    }
+    FiniteVolumeTopologyRead FiniteVolumePlan::AcquireTopologyRead() const
+    {
+        Validate();
+        return FiniteVolumeTopologyRead(_data);
+    }
     MeshReadAccess FiniteVolumePlan::AcquireMeshRead(bool wallDistance) const
     {
         auto requirements = MeshReadRequirements::CellFlux();

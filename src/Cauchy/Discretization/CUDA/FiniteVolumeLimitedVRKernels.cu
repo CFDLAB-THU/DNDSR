@@ -1,5 +1,6 @@
 #include "Cauchy/Discretization/CUDA/FiniteVolumeLimitedVRKernels.hpp"
 #include "Cauchy/Physics/PerfectGasPoint.hpp"
+#include "Cauchy/Discretization/CUDA/PositivityReduction.cuh"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include <cuda_runtime.h>
 
@@ -11,7 +12,6 @@ namespace DNDS::Cauchy::CUDA
         using BaseInput = R::ArrayView<const real, R::AccessBoundsChecks, R::FixedRows<2>>;
         using BaseOutput = R::ArrayView<real, R::AccessBoundsChecks, R::FixedRows<2>>;
         using ScalarOutput = R::ArrayView<real, R::AccessBoundsChecks, R::FixedRows<1>>;
-        using Faces = R::ArrayView<const LimitedVRFace, R::AccessBoundsChecks, R::FixedRows<1>>;
         using StatusInput = R::ArrayView<const NumericalStatus, R::AccessBoundsChecks, R::FixedRows<1>>;
         DNDS_DEVICE_CALLABLE FlowState Load(LVRInput input, index row)
         {
@@ -20,36 +20,21 @@ namespace DNDS::Cauchy::CUDA
                 value[j] = input(row, j);
             return value;
         }
-        struct MeanValues
-        {
-            FlowState value;
-            DNDS_DEVICE_CALLABLE real operator()(index, int j) const { return value[j]; }
-        };
-        __global__ void Target(LVRInput means, LVRInput points, LVROutput coefficients, LVRIndices offsets,
+        __global__ void Target(LVRStencil descriptor, LVRInput means, LVROutput coefficients, int dimension,
                                ThermalBounds bounds, int power, real cutoff, LVRStatus status)
         {
+            const auto &stencil = descriptor(0, 0);
+            const int modes = int(coefficients.Width() / 5);
+            NumericalStatus result;
             for (index iCell = index(blockIdx.x) * blockDim.x + threadIdx.x; iCell < means.RowCount(); iCell += index(gridDim.x) * blockDim.x)
             {
-                NumericalStatus result;
-                const auto mean = Load(means, iCell);
-                const index begin = offsets(iCell, 0), end = offsets(iCell + 1, 0);
-                for (index q = begin; q < end; ++q)
-                    for (int j = 0; j < 5; ++j)
-                        if (!std::isfinite(points(q, j)))
-                            result = NumericalStatus{NumericalError::InvalidState, 1}.At(iCell, q);
-                if (!ThermallyAdmissible(mean, bounds))
-                    result = NumericalStatus{NumericalError::InvalidState, 2}.At(iCell);
-                if (result)
-                {
-                    const real beta = ReconstructionFraction(mean, MeanValues{mean}, points, begin, end, bounds, power, cutoff);
-                    if (!(std::isfinite(beta) && beta >= 0 && beta <= 1))
-                        result = NumericalStatus{NumericalError::InvalidState, 3}.At(iCell);
-                    else if (beta < 1)
-                        for (index j = 0; j < coefficients.Width(); ++j)
-                            coefficients(iCell, j) *= beta;
-                }
-                status(iCell, 0) = result;
+                const auto cell = LimitLVRTargetCell(stencil, means, coefficients, iCell, dimension, modes, bounds, power, cutoff);
+                if (result && !cell)
+                    result = cell;
             }
+            // Producer epilogue: only compact block errors leave the PP
+            // kernel. The shared helper handles tails and deterministic errors.
+            PositivityReductionDetail::PublishStatusSummary<128>(result, status);
         }
         __global__ void Scalars(LVRInput means, LVROutput scalars, PerfectGas gas, LVRStatus status)
         {
@@ -65,61 +50,80 @@ namespace DNDS::Cauchy::CUDA
                 }
             }
         }
-        __global__ void Sensors(LVRInput samples, LVRMeans means, Faces faces, PerfectGas gas, ThermalBounds bounds,
-                                CFV::LimitedVRKernelParameters settings, LVROutput output, LVRStatus status)
+        __global__ void Sensors(LVRStencil descriptor, LVRMeans means, LVRMeans target, int dimension,
+                                PerfectGas gas, ThermalBounds bounds, CFV::LimitedVRKernelParameters settings,
+                                LVROutput output, LVRStatus status)
         {
-            for (index iFace = index(blockIdx.x) * blockDim.x + threadIdx.x; iFace < faces.RowCount(); iFace += index(gridDim.x) * blockDim.x)
+            const auto &stencil = descriptor(0, 0);
+            const int modes = int(target.owned.Width() / 5);
+            for (index iAux = index(blockIdx.x) * blockDim.x + threadIdx.x; iAux < output.RowCount(); iAux += index(gridDim.x) * blockDim.x)
             {
-                const auto &face = faces(iFace, 0);
-                const auto left = Load(samples, 2 * iFace);
-                auto right = Load(samples, 2 * iFace + 1);
-                if (face.changesFrame)
+                const index iFace = stencil.stencilFaces(iAux, 0);
+                const auto parents = stencil.topology.FaceCells(iFace);
+                if (parents[1] == UnInitIndex)
                 {
+                    for (int j = 0; j < 3; ++j)
+                        output(iAux, j) = 0;
+                    status(iAux, 0) = {};
+                    continue;
+                }
+                const auto center = stencil.metric.GetFaceCent(iFace);
+                const auto left = EvaluateLVRLinearTarget(stencil, means, target, parents[0], center, dimension, modes);
+                auto right = EvaluateLVRLinearTarget(stencil, means, target, parents[1],
+                                                     stencil.metric.periodic.FacePoint(iFace, 1, center), dimension, modes);
+                if (stencil.metric.periodic.Rotates(iFace))
+                {
+                    const auto rotation = stencil.metric.periodic.OtherRotation(iFace, 0);
                     const auto old = right;
                     for (int d = 0; d < 3; ++d)
                     {
                         right[1 + d] = 0;
                         for (int k = 0; k < 3; ++k)
-                            right[1 + d] += face.rotation[d + 3 * k] * old[1 + k];
+                            right[1 + d] += rotation(d, k) * old[1 + k];
                     }
                 }
                 if (!(ThermallyAdmissible(left, bounds) && ThermallyAdmissible(right, bounds)))
                 {
-                    status(iFace, 0) = NumericalStatus{NumericalError::InvalidState, 1}.At(-1, iFace);
+                    status(iAux, 0) = NumericalStatus{NumericalError::InvalidState, 1}.At(parents[0], iFace);
                     continue;
                 }
                 const auto l = gas.Primitive(left), r = gas.Primitive(right);
+                const auto normal = stencil.metric.GetFaceMeanNorm(iFace);
                 real unLeft = 0, unRight = 0;
                 for (int d = 0; d < 3; ++d)
                 {
-                    unLeft += l.velocity[d] * face.normal[d];
-                    unRight += r.velocity[d] * face.normal[d];
+                    unLeft += l.velocity[d] * normal[d];
+                    unRight += r.velocity[d] * normal[d];
                 }
-                const auto sensor = CFV::Math::EvaluateLimitedVRFaceSensor(l.density, r.density, l.pressure, r.pressure, unLeft, unRight, l.soundSpeed, r.soundSpeed, settings);
-                const auto support = CFV::Math::EvaluateLimitedVRFaceSensor(means(face.cell, 0), means(face.other, 0), 1, 1, 0, 0, 1, 1, settings).contact;
-                output(iFace, 0) = sensor.shock;
-                output(iFace, 1) = sensor.contact;
-                output(iFace, 2) = support;
-                status(iFace, 0) = {};
+                const auto sensor = CFV::Math::EvaluateLimitedVRFaceSensor(l.density, r.density, l.pressure, r.pressure,
+                                                                           unLeft, unRight, l.soundSpeed, r.soundSpeed, settings);
+                const auto support = CFV::Math::EvaluateLimitedVRFaceSensor(means(parents[0], 0), means(parents[1], 0),
+                                                                            1, 1, 0, 0, 1, 1, settings)
+                                         .contact;
+                output(iAux, 0) = sensor.shock;
+                output(iAux, 1) = sensor.contact;
+                output(iAux, 2) = support;
+                status(iAux, 0) = {};
             }
         }
-        __global__ void Gather(LVRIndices offsets, LVRIndices indices, LVRInput sensors, StatusInput faceStatus,
+        __global__ void Gather(LVRStencil descriptor, LVRInput sensors, StatusInput faceStatus,
                                LVROutput branches, BaseOutput base, LVRStatus status)
         {
+            const auto &stencil = descriptor(0, 0);
             for (index iCell = index(blockIdx.x) * blockDim.x + threadIdx.x; iCell < branches.RowCount(); iCell += index(gridDim.x) * blockDim.x)
             {
                 std::array<real, 3> values{};
                 NumericalStatus result;
-                for (index entry = offsets(iCell, 0); entry < offsets(iCell + 1, 0); ++entry)
+                for (const index iFace : stencil.topology.CellFaces(iCell))
                 {
-                    const index face = indices(entry, 0);
-                    if (!faceStatus(face, 0))
+                    const index iAux = stencil.routing(iFace, 0).auxiliaryFace;
+                    if (!faceStatus(iAux, 0))
                     {
-                        result = faceStatus(face, 0).At(iCell, face);
+                        result = faceStatus(iAux, 0).At(iCell, iFace);
                         break;
                     }
                     for (int j = 0; j < 3; ++j)
-                        values[j] = std::max(values[j], sensors(face, j));
+                        values[j] = std::max(values[j], sensors(iAux, j));
                 }
                 status(iCell, 0) = result;
                 if (result)
@@ -160,20 +164,20 @@ namespace DNDS::Cauchy::CUDA
                                   "CUDA physical LVR table shape differs");
         }
     }
-    void LimitLVRTarget(R::ExecutionContext c, LVRInput means, LVRInput points, LVROutput coefficients,
-                        LVRIndices offsets, ThermalBounds bounds, int power, real cutoff, LVRStatus status)
+    void LimitLVRTarget(R::ExecutionContext c, LVRStencil stencil, LVRInput means, LVROutput coefficients,
+                        int dimension, ThermalBounds bounds, int power, real cutoff, LVRStatus status)
     {
-        CheckDevice(c, means, points, coefficients, offsets, status);
+        CheckDevice(c, stencil, means, coefficients, status);
         Table(means, means.RowCount(), 5);
-        Table(points, points.RowCount(), 5);
         Table(coefficients, means.RowCount(), coefficients.Width());
-        DNDS_check_throw_info(coefficients.Width() % 5 == 0 && coefficients.Width() > 0 && offsets.RowCount() == means.RowCount() + 1 &&
-                                  status.RowCount() == means.RowCount() && power >= 0 && std::isfinite(cutoff) && cutoff >= 0 && cutoff <= 1,
+        DNDS_check_throw_info(stencil.RowCount() == 1 && (dimension == 2 || dimension == 3) &&
+                                  coefficients.Width() % 5 == 0 && coefficients.Width() >= 5 * dimension &&
+                                  status.RowCount() == Blocks(means.RowCount()) && power >= 0 && std::isfinite(cutoff) && cutoff >= 0 && cutoff <= 1,
                               "invalid CUDA LVR target controls/shape");
-        R::CheckKernelArgumentBudget<LVRInput, LVRInput, LVROutput, LVRIndices, ThermalBounds, int, real, LVRStatus>();
+        R::CheckKernelArgumentBudget<LVRStencil, LVRInput, LVROutput, int, ThermalBounds, int, real, LVRStatus>();
         if (!means.RowCount())
             return;
-        Target<<<Blocks(means.RowCount()), 128, 0, static_cast<cudaStream_t>(c.stream)>>>(means, points, coefficients, offsets, bounds, power, cutoff, status);
+        Target<<<Blocks(means.RowCount()), 128, 0, static_cast<cudaStream_t>(c.stream)>>>(stencil, means, coefficients, dimension, bounds, power, cutoff, status);
         CheckLaunch();
     }
     void FillLVRScalars(R::ExecutionContext c, LVRInput means, LVROutput scalars, PerfectGas gas, LVRStatus status)
@@ -189,34 +193,43 @@ namespace DNDS::Cauchy::CUDA
         Scalars<<<Blocks(means.RowCount()), 128, 0, static_cast<cudaStream_t>(c.stream)>>>(means, scalars, gas, status);
         CheckLaunch();
     }
-    void BuildLVRFaceSensors(R::ExecutionContext c, LVRInput samples, LVRMeans means, Faces faces, PerfectGas gas, ThermalBounds bounds,
-                             CFV::LimitedVRKernelParameters settings, LVROutput sensors, LVRStatus status)
+    void BuildLVRFaceSensors(R::ExecutionContext c, LVRStencil stencil, LVRMeans means, LVRMeans target, int dimension,
+                             PerfectGas gas, ThermalBounds bounds, CFV::LimitedVRKernelParameters settings,
+                             LVROutput sensors, LVRStatus status)
     {
-        CheckDevice(c, samples, means, faces, sensors, status);
+        CheckDevice(c, stencil, means, target, sensors, status);
         gas.Validate();
-        Table(samples, 2 * faces.RowCount(), 5);
         Table(means.owned, means.owned.RowCount(), 5);
+        Table(target.owned, means.owned.RowCount(), target.owned.Width());
         if (means.ghost.RowCount())
+        {
             Table(means.ghost, means.ghost.RowCount(), 5);
-        Table(sensors, faces.RowCount(), 3);
-        DNDS_check_throw_info(status.RowCount() == faces.RowCount(), "invalid CUDA LVR face status shape");
-        R::CheckKernelArgumentBudget<LVRInput, LVRMeans, Faces, PerfectGas, ThermalBounds, CFV::LimitedVRKernelParameters, LVROutput, LVRStatus>();
-        if (!faces.RowCount())
+            Table(target.ghost, means.ghost.RowCount(), target.owned.Width());
+        }
+        Table(sensors, sensors.RowCount(), 3);
+        DNDS_check_throw_info(stencil.RowCount() == 1 && (dimension == 2 || dimension == 3) &&
+                                  target.owned.Width() % 5 == 0 && target.owned.Width() >= 5 * dimension &&
+                                  status.RowCount() == sensors.RowCount(),
+                              "invalid CUDA LVR face status/target shape");
+        R::CheckKernelArgumentBudget<LVRStencil, LVRMeans, LVRMeans, int, PerfectGas, ThermalBounds, CFV::LimitedVRKernelParameters, LVROutput, LVRStatus>();
+        if (!sensors.RowCount())
             return;
-        Sensors<<<Blocks(faces.RowCount()), 128, 0, static_cast<cudaStream_t>(c.stream)>>>(samples, means, faces, gas, bounds, settings, sensors, status);
+        Sensors<<<Blocks(sensors.RowCount()), 128, 0, static_cast<cudaStream_t>(c.stream)>>>(stencil, means, target, dimension, gas, bounds, settings, sensors, status);
         CheckLaunch();
     }
-    void GatherLVRBranches(R::ExecutionContext c, LVRIndices offsets, LVRIndices faceIndices, LVRInput sensors, StatusInput faceStatus,
+    void GatherLVRBranches(R::ExecutionContext c, LVRStencil stencil, LVRInput sensors, StatusInput faceStatus,
                            LVROutput branches, BaseOutput base, LVRStatus status)
     {
-        CheckDevice(c, offsets, faceIndices, sensors, faceStatus, branches, base, status);
+        CheckDevice(c, stencil, sensors, faceStatus, branches, base, status);
         Table(sensors, sensors.RowCount(), 3);
         Table(branches, branches.RowCount(), 3);
-        DNDS_check_throw_info(offsets.RowCount() == branches.RowCount() + 1 && base.RowCount() == branches.RowCount() && status.RowCount() == branches.RowCount() && faceStatus.RowCount() == sensors.RowCount(), "invalid CUDA LVR gather shape");
-        R::CheckKernelArgumentBudget<LVRIndices, LVRIndices, LVRInput, StatusInput, LVROutput, BaseOutput, LVRStatus>();
+        DNDS_check_throw_info(stencil.RowCount() == 1 && base.RowCount() == branches.RowCount() && status.RowCount() == branches.RowCount() &&
+                                  faceStatus.RowCount() == sensors.RowCount(),
+                              "invalid CUDA LVR gather shape");
+        R::CheckKernelArgumentBudget<LVRStencil, LVRInput, StatusInput, LVROutput, BaseOutput, LVRStatus>();
         if (!branches.RowCount())
             return;
-        Gather<<<Blocks(branches.RowCount()), 128, 0, static_cast<cudaStream_t>(c.stream)>>>(offsets, faceIndices, sensors, faceStatus, branches, base, status);
+        Gather<<<Blocks(branches.RowCount()), 128, 0, static_cast<cudaStream_t>(c.stream)>>>(stencil, sensors, faceStatus, branches, base, status);
         CheckLaunch();
     }
     void MergeLVRBase(R::ExecutionContext c, BaseInput base, LVROutput seeds, int column)

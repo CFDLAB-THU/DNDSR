@@ -238,9 +238,10 @@ static void RunBatch(E::EulerSolver<E::NS_SA> &solver, C::DomainSettings setting
                 for (I iCell = 0; iCell < values.RowCount(); ++iCell)
                 {
                     int boundaryZone = -1;
-                    for (I iEntry = stencil.offsets(iCell, 0); iEntry < stencil.offsets(iCell + 1, 0); ++iEntry)
+                    const auto faces = stencil.topology.CellFaces(iCell);
+                    for (DNDS::rowsize slot = 0; slot < faces.size(); ++slot)
                     {
-                        const auto sample = stencil.samples(iEntry, 0);
+                        const auto sample = stencil.GradientSample(iCell, slot);
                         if (sample.other < 0)
                             boundaryZone = sample.zone;
                     }
@@ -263,7 +264,10 @@ static void RunBatch(E::EulerSolver<E::NS_SA> &solver, C::DomainSettings setting
                 const auto boundaryRead = work->boundary.ReadOwned();
                 const auto boundaryLayout = boundaryRead.ComponentLayout();
                 const auto boundaryValues = boundaryLayout.View();
-                const auto pointsRead = work->owner->boundaryTraceGeometry.Read();
+                // Explicit diagnostic-only boundary snapshot. Its point member
+                // is a boundary-local quadrature ordinal, or -1 for centers.
+                const auto pointSnapshot = work->owner->BoundaryTraceSnapshot();
+                const auto pointsRead = pointSnapshot.Read();
                 const auto points = pointsRead.View<R::FixedRows<1>>();
                 std::ofstream boundaryDump(std::string(prefix) + "-boundary-rank" + std::to_string(mpi.rank) + ".csv");
                 DNDS_check_throw_info(bool(boundaryDump), "cannot open boundary diagnostic dump");
@@ -279,7 +283,7 @@ static void RunBatch(E::EulerSolver<E::NS_SA> &solver, C::DomainSettings setting
                     const auto normalBase = DNDS::Geom::NormBuildLocalBaseV<3>(normal);
                     const DNDS::Geom::tPoint point(sample.location[0], sample.location[1], sample.location[2]);
                     E::EulerEvaluator<E::NS_SA>::TU left = solver.getU()[sample.cell];
-                    const int quadrature = int(sample.point - metric.FaceQuadratureBegin(sample.face));
+                    const int quadrature = int(sample.point);
                     const auto old = solver.getEval().generateBoundaryValue(
                         left, solver.getU()[sample.cell], sample.cell, sample.face, quadrature,
                         normal, normalBase, point, 0., zone, true, 1);
@@ -305,16 +309,17 @@ static void RunBatch(E::EulerSolver<E::NS_SA> &solver, C::DomainSettings setting
     }
     std::array<I, 10> localWork{fv.Metrics().NumCell(), fv.Metrics().NumCellProc() - fv.Metrics().NumCell(),
                                 I(work->owner->partition.Core().size()), I(work->owner->partition.HaloDependent().size()),
-                                work->owner->stencil.jacobianSamples.RowCount(), work->owner->stencil.faceEntries.RowCount(), 0, 0, 0,
+                                work->owner->stencil.IncidenceNumber(), work->owner->stencil.stencilFaces.RowCount(), 0, 0, 0,
                                 sourcePointNumber};
     {
         const auto geometry = fv.Metrics().AcquireRead();
         const auto metric = geometry.HostView();
         const auto stencilRead = work->owner->stencil.Read();
         const auto stencil = stencilRead.View();
-        for (I iRow = 0; iRow < stencil.faceEntries.RowCount(); ++iRow)
+        for (I iRow = 0; iRow < stencil.stencilFaces.RowCount(); ++iRow)
         {
-            const auto &sample = stencil.samples(stencil.faceEntries(iRow, 0), 0);
+            const I iFace = stencil.stencilFaces(iRow, 0);
+            const auto sample = stencil.CanonicalFaceSample(iFace, metric.FaceQuadratureBegin(iFace));
             localWork[8] += metric.FaceQuadratureEnd(sample.face) - metric.FaceQuadratureBegin(sample.face);
             if (sample.other == DNDS::UnInitIndex)
             {

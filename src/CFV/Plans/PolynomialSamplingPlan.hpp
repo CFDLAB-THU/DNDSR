@@ -174,6 +174,11 @@ namespace DNDS::CFV
         /// retain their original names. Copies continue sharing the allocations.
         PolynomialSamplingPlan Named(std::string name) const;
         const Runtime::Array<real> &BasisStorage() const { return _basis; }
+        /// Immutable direct-point coordinates retained only when a requested
+        /// derivative is uncached. Cell-major consumers with an independently
+        /// proven row order may share this allocation without another sampler.
+        /// Fully cached plans expose an empty point allocation.
+        const Runtime::Array<real> &PointStorage() const { return _points; }
         int CachedDerivativeNumber() const { return _cachedDerivatives; }
         /// Checks geometry/order generations and frozen basis/normalization provenance before
         /// execution. Aliased writes, including queued write intent, invalidate

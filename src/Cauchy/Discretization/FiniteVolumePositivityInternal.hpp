@@ -1,8 +1,12 @@
 #pragma once
 #include "Cauchy/Discretization/FiniteVolumeInternal.hpp"
-#include "Cauchy/Physics/ThermalAdmissibility.hpp"
-#include "Cauchy/Discretization/RANSReconstruction.hpp"
-#include "Cauchy/State/EquationDofAlgebra.hpp"
+#include "Cauchy/Discretization/CPU/ModalPositivityKernels.hpp"
+#include "Cauchy/Discretization/CUDA/ModalPositivityKernels.hpp"
+#include "CFV/Math/TaylorBasis.hpp"
+#include "DNDS/Core/OMP.hpp"
+#include <charconv>
+#include <cstdlib>
+#include <cstring>
 
 namespace DNDS::Cauchy
 {
@@ -11,77 +15,145 @@ namespace DNDS::Cauchy
     {
         std::shared_ptr<const Data> owner;
         EquationDofs prototype;
-        ThermalPolicy policy;
-        RANSReconstructionView rans;
-        index ransFirst = -1;
-        std::vector<R::Array<real>> higherValues, baseValues;
-        std::optional<EquationDofs> reference;
+        ThermalPolicy thermal;
+        ModalPositivityPolicy policy;
+        FiniteVolumeStencilStorage::ReadAccess stencil;
+        std::optional<CFV::ReconstructionBasisRead> hostBasis;
+        std::optional<CFV::ReconstructionResidentRead> residentBasis;
+        std::optional<R::Array<index>::ReadLease> volumeOffsets;
+        std::optional<R::Array<real>::ReadLease> volumePoints, volumeBasis;
+        ModalPositivityGeometry geometry;
         R::Array<index> degree;
-        R::Array<real> beta, recoveryScale;
-        R::Array<uint8_t> recover;
-        R::Array<NumericalStatus> emptyStatus{R::RowLayout::Dense(0, 1)};
+        R::Array<real> beta;
+        std::vector<CPU::ModalPositivityWorkerScratch> cpuWorkers;
+        CUDA::ModalPositivityLaunch launch;
         struct DeviceStorage
         {
-            R::Array<NumericalStatus> status, statusPartial, statusResult;
+            R::Array<NumericalStatus> partialStatus, status;
             R::Array<index> partialCount, count;
             R::Array<real> partialMinimum, minimum;
         };
         std::optional<DeviceStorage> device;
-        bool decision = false;
+        bool pending = false;
         index limited = 0;
         real minimum = 1;
-        State(std::shared_ptr<const Data> data, const EquationDofs &input, const EquationDofs &coefficients,
+
+        static index EnvironmentInteger(const char *name, index fallback)
+        {
+            const char *text = std::getenv(name);
+            if (!text)
+                return fallback;
+            index value = 0;
+            const char *last = text + std::strlen(text);
+            const auto parsed = std::from_chars(text, last, value);
+            DNDS_check_throw_info(parsed.ec == std::errc{} && parsed.ptr == last && value >= 0,
+                                  std::string("invalid modal PP launch control: ") + name);
+            return value;
+        }
+        State(std::shared_ptr<const Data> data, const EquationDofs &input,
               std::optional<Physics::Chemistry::ChemicalWorkerPool> workers)
             : owner(std::move(data)), prototype(input.NumericAlias()),
-              policy(owner->equation, owner->settings.numerics.densityFloor, owner->settings.numerics.temperatureFloor,
-                     owner->settings.numerics.sensibleEnergyFloor, owner->settings.numerics.pressureFloor,
-                     workers ? workers->Acquire() : Physics::Chemistry::ChemicalWorkerPool::Lease{}),
+              thermal(owner->equation, owner->settings.numerics.densityFloor, owner->settings.numerics.temperatureFloor,
+                      owner->settings.numerics.sensibleEnergyFloor, owner->settings.numerics.pressureFloor,
+                      workers ? workers->Acquire() : Physics::Chemistry::ChemicalWorkerPool::Lease{}),
+              stencil(owner->stencil.Read({owner->metrics.Device(), nullptr})),
               degree(R::RowLayout::Dense(owner->metrics.NumCell(), 1), owner->metrics.Device()),
-              beta(degree.Layout(), owner->metrics.Device()), recoveryScale(degree.Layout(), owner->metrics.Device()), recover(degree.Layout(), owner->metrics.Device())
+              beta(degree.Layout(), owner->metrics.Device())
         {
-            DNDS_check_throw_info(owner->quadrature.positivity, "equation PP sampling geometry is unavailable");
+            DNDS_check_throw_info(owner->quadrature.positivity && owner->reconstruction,
+                                  "modal PP requires prepared cell-local geometry and a variational plan");
+            volumeOffsets.emplace(owner->quadrature.positivity->volumeOffsets.Read({owner->metrics.Device(), nullptr}));
+            volumePoints.emplace(owner->quadrature.positivity->volumePoints.Read({owner->metrics.Device(), nullptr}));
+            volumeBasis.emplace(owner->quadrature.positivity->volumeBasis.Read({owner->metrics.Device(), nullptr}));
+            const auto &numerics = owner->settings.numerics;
+            policy.bounds = thermal.View();
+            policy.components = int(input.ComponentNumber());
+            policy.modes = owner->reconstruction->NRecDOF();
+            policy.maxOrder = numerics.cfv.maxOrder;
+            policy.betaPower = numerics.positivityBetaPower;
+            policy.betaCutoff = numerics.positivityBetaCutoff;
+            policy.meanBase = numerics.positivityCompressToMean;
+            policy.clippedPolicy = numerics.positivityClippedReferencePolicy == "backtracking"
+                                       ? ReconstructionClippedReferencePolicy::Backtracking
+                                       : ReconstructionClippedReferencePolicy::FallbackToBase;
+            for (int order = 1; order <= policy.maxOrder; ++order)
+                policy.modeEnd[order] = CFV::Math::PolynomialSize(owner->metrics.Dimension(), order) - 1;
+            if (numerics.positivityReconstruction == "Segment")
+            {
+                DNDS_check_throw_info(!owner->equation.HasMixture() && !owner->equation.HasRANS() && input.ComponentNumber() == 5,
+                                      "Segment reconstruction PP is a flow5 compatibility policy");
+                policy.segment = true;
+                policy.segmentBounds = owner->FixedFlowThermalBounds();
+            }
             if (owner->equation.HasRANS())
             {
-                rans = ResolveRANSReconstructionPolicy(owner->equation);
+                policy.rans = ResolveRANSReconstructionPolicy(owner->equation);
                 index first = 0;
                 for (const auto &block : owner->equation.Schema().blocks)
                 {
                     if (block.name == "rans")
-                        ransFirst = first;
+                        policy.ransFirst = first;
                     first += index(block.components.size());
                 }
-                DNDS_assert(ransFirst >= 0);
+                DNDS_assert(policy.ransFirst >= 0);
             }
-            for (index iField = 0; iField < input.PhysicalFieldNumber(); ++iField)
+            geometry.stencil = stencil.KernelDescriptor();
+            geometry.volumeOffsets = volumeOffsets->View<R::FixedRows<1>>();
+            geometry.volumePoints = volumePoints->View<R::FixedRows<3>>();
+            geometry.volumeBasis = volumeBasis->View<R::TableRows>();
+            geometry.volumeCachedDerivatives = owner->quadrature.positivity->cachedDerivatives;
+            geometry.maximumCellPoints = owner->quadrature.positivity->maximumCellPoints;
+            const auto deviceLocation = owner->metrics.Device();
+            if (deviceLocation == R::Device::Host())
             {
-                higherValues.emplace_back(FiniteVolumeDetail::FieldLayout(input.PhysicalField(iField).Owned().Layout(), owner->quadrature.positivity->Size(), index(input.PhysicalField(iField).Width())), owner->metrics.Device());
-                higherValues.back().SetName("Cauchy/positivity/sampledValues/" + std::to_string(iField), DNDS_ALLOCATION_SITE());
+                hostBasis.emplace(owner->reconstruction->AcquireBasisRead());
+                const auto &view = hostBasis->EvaluationView();
+                geometry.basis = {view.cached, view.moments, view.geometry.cells,
+                                  CFV::Math::TaylorBasis(view.dimension, view.degree).KernelParameters(), view.cachedDerivatives, 1};
+                const index threads = std::min<index>(OMP::DistributedThreads(), std::max<index>(1, owner->metrics.NumCell()));
+                for (index iWorker = 0; iWorker < threads; ++iWorker)
+                    cpuWorkers.emplace_back(policy.components, policy.modes, geometry.maximumCellPoints, policy.meanBase);
             }
+            else
+            {
+#ifdef DNDS_USE_CUDA
+                DNDS_check_throw_info(input.PhysicalFieldNumber() == 1 && !owner->equation.HasMixture() &&
+                                          input.ComponentNumber() >= 5 && input.ComponentNumber() <= 7,
+                                      "CUDA modal PP requires combined perfect-gas flow5/SA/2EQ fields");
+                residentBasis.emplace(owner->reconstruction->AcquireResidentRead());
+                geometry.basis = residentBasis->PointBasisView();
+                if (const char *mapping = std::getenv("DNDS_CAUCHY_CUDA_MODAL_PP_MAPPING"))
+                {
+                    const std::string value(mapping);
+                    DNDS_check_throw_info(value == "warpPerCell" || value == "blockPerCell", "unknown modal PP CUDA mapping");
+                    launch.mapping = value == "blockPerCell" ? CUDA::ModalPositivityMapping::BlockPerCell : CUDA::ModalPositivityMapping::WarpPerCell;
+                }
+                const index threads = EnvironmentInteger("DNDS_CAUCHY_CUDA_MODAL_PP_THREADS", 128);
+                DNDS_check_throw_info(threads <= INT_MAX, "modal PP block size overflows int");
+                launch.threads = int(threads);
+                launch.blocks = EnvironmentInteger("DNDS_CAUCHY_CUDA_MODAL_PP_BLOCKS", 0);
+                CUDA::PrepareModalPositivityLaunch(deviceLocation, policy, geometry.maximumCellPoints, launch);
+                const index partials = CUDA::ModalPositivitySummaryRows(owner->metrics.NumCell(), launch);
+                device.emplace(DeviceStorage{
+                    R::Array<NumericalStatus>(R::RowLayout::Dense(partials, 1), deviceLocation),
+                    R::Array<NumericalStatus>(R::RowLayout::Dense(1, 1), deviceLocation),
+                    R::Array<index>(R::RowLayout::Dense(partials, 1), deviceLocation),
+                    R::Array<index>(R::RowLayout::Dense(1, 1), deviceLocation),
+                    R::Array<real>(R::RowLayout::Dense(partials, 1), deviceLocation),
+                    R::Array<real>(R::RowLayout::Dense(1, 1), deviceLocation)});
+                device->partialStatus.SetName("Cauchy/modalPP/statusPartials", DNDS_ALLOCATION_SITE());
+                device->status.SetName("Cauchy/modalPP/statusResult", DNDS_ALLOCATION_SITE());
+                device->partialCount.SetName("Cauchy/modalPP/countPartials", DNDS_ALLOCATION_SITE());
+                device->count.SetName("Cauchy/modalPP/count", DNDS_ALLOCATION_SITE());
+                device->partialMinimum.SetName("Cauchy/modalPP/minimumPartials", DNDS_ALLOCATION_SITE());
+                device->minimum.SetName("Cauchy/modalPP/minimum", DNDS_ALLOCATION_SITE());
+#else
+                DNDS_check_throw_info(false, "CUDA modal PP is unavailable in this build");
+#endif
+            }
+            geometry.ValidateDevice(deviceLocation);
             degree.SetName("Cauchy/positivity/degree", DNDS_ALLOCATION_SITE());
             beta.SetName("Cauchy/positivity/beta", DNDS_ALLOCATION_SITE());
-            recoveryScale.SetName("Cauchy/positivity/recoveryScale", DNDS_ALLOCATION_SITE());
-            recover.SetName("Cauchy/positivity/recover", DNDS_ALLOCATION_SITE());
-            if (!owner->settings.numerics.positivityCompressToMean)
-            {
-                reference.emplace(EquationDofOperations::NewVector(coefficients));
-                reference->Fields().SetName("Cauchy/positivity/referenceCoefficients", DNDS_ALLOCATION_SITE());
-                for (const auto &array : higherValues)
-                {
-                    baseValues.emplace_back(array.Layout(), owner->metrics.Device());
-                    baseValues.back().SetName("Cauchy/positivity/baseValues/" + std::to_string(baseValues.size() - 1), DNDS_ALLOCATION_SITE());
-                }
-            }
-        }
-        void Sample(const EquationDofs &input, const EquationDofs &coefficients, std::vector<R::Array<real>> &values) const
-        {
-            for (index iField = 0; iField < input.PhysicalFieldNumber(); ++iField)
-                owner->quadrature.positivity->EvaluateValues(input.PhysicalField(iField), coefficients.PhysicalField(iField), values[iField]);
-        }
-        void Sample(R::EagerEngine &engine, const R::ExecutionStream &stream,
-                    const EquationDofs &input, const EquationDofs &coefficients, std::vector<R::Array<real>> &values) const
-        {
-            for (index iField = 0; iField < input.PhysicalFieldNumber(); ++iField)
-                owner->quadrature.positivity->Evaluate(engine, stream, input.PhysicalField(iField), coefficients.PhysicalField(iField), values[iField]);
         }
     };
 }

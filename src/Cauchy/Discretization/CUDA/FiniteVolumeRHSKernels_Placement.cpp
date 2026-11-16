@@ -9,7 +9,7 @@ namespace DNDS::Cauchy::CUDA
     namespace R = Runtime;
     void RHSGeometry::ValidateDevice(R::Device device) const
     {
-        R::ValidateViewDevices(device, samples, offsets, faceEntries, faceOffsets, cells, quadrature, conditions);
+        R::ValidateViewDevices(device, stencil, faceOffsets, cells, quadrature, conditions);
         if (hasBasis)
             basis.ValidateDevice(device);
         if (hasWall)
@@ -29,8 +29,8 @@ namespace DNDS::Cauchy::CUDA
             DNDS_check_throw_info(cudaGetDeviceProperties(&properties, context.device.ordinal) == cudaSuccess, "RHS placement device query failed");
             multiprocessors = properties.multiProcessorCount;
 #endif
-            DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && host.offsets.RowCount() > 0 &&
-                                      host.offsets.RowCount() - 1 <= host.cells.RowCount(),
+            DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && host.stencil.jacobianOffsets.RowCount() > 0 &&
+                                      host.stencil.jacobianOffsets.RowCount() - 1 <= host.cells.RowCount(),
                                   "invalid CUDA RHS geometry publication");
             R::Array<RHSGeometry> staging(R::RowLayout::Dense(1, 1));
             {
@@ -66,13 +66,18 @@ namespace DNDS::Cauchy::CUDA
         DNDS_check_throw_info(!primitiveGradient || components == 5, "primitive viscous gradients require pure flow5");
         DNDS_check_throw_info(!produceLow || components == 5, "low-order flux blending applies to flow5 only");
         using P = DNDS::Math::ComputePrecision;
-        DNDS_check_throw_info(blockSize == 64 || blockSize == 128 || blockSize == 256, "invalid CUDA RHS block size");
+        DNDS_check_throw_info(blockSize == 64 || blockSize == 128 || blockSize == 256 || blockSize == 512, "invalid CUDA RHS block size");
         DNDS_check_throw_info(!doubleBuffer || (components == 5 && polynomialPrecision == P::FP64 &&
                                                 dissipationPrecision == P::FP64 && fluxPrecision == P::FP64),
                               "double buffering currently qualifies FP64 flow5 only");
-        DNDS_check_throw_info(!warpQuadrature || (components == 5 && polynomialPrecision == P::FP64 &&
-                                                  dissipationPrecision == P::FP64 && fluxPrecision == P::FP64),
+        DNDS_check_throw_info(mapping == RHSFaceMapping::Thread || (components == 5 && polynomialPrecision == P::FP64 &&
+                                                                    dissipationPrecision == P::FP64 && fluxPrecision == P::FP64),
                               "warp quadrature currently qualifies FP64 flow5 only");
+        DNDS_check_throw_info(mapping >= RHSFaceMapping::Thread && mapping <= RHSFaceMapping::CTASegments &&
+                                  reduction >= RHSFaceReduction::Serial && reduction <= RHSFaceReduction::Segmented && gridBlocks >= 0,
+                              "invalid CUDA RHS mapping/reduction/grid selector");
+        DNDS_check_throw_info(mapping < RHSFaceMapping::WarpSegments || (!doubleBuffer && blockSize >= 128),
+                              "segmented RHS uses its own shared staging and 128/256/512 threads");
         P selected = P::FP64;
         for (const auto precision : {polynomialPrecision, dissipationPrecision, fluxPrecision})
         {

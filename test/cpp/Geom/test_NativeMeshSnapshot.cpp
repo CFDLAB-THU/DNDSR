@@ -2,12 +2,47 @@
 #include "doctest.h"
 #include "NativeMeshOverlapFixture.hpp"
 #include "Geom/Unstructured/UnstructuredMeshSnapshot.hpp"
+#include "Geom/Access/CellFaceIncidence.hpp"
 #include "Geom/Transition/NativeMeshAssembler.hpp"
 #include "NativePeriodicFixtures.hpp"
 #include <optional>
+#include <set>
 
 namespace G = DNDS::Geom;
 namespace R = DNDS::Runtime;
+
+TEST_CASE("Canonical incidence projection shares host rows and guards source numbering")
+{
+    DNDS::MPIInfo mpi;
+    mpi.setWorld();
+    auto fixture = G::OverlapTest::BuildNativeFixture(mpi);
+    const auto projection = G::CellFaceIncidenceStorage::Capture(fixture.mesh);
+    CHECK(projection.GetDevice() == R::Device::Host());
+    {
+        const auto read = projection.AcquireRead();
+        const auto ordinary = fixture.mesh->AcquireRead(G::MeshReadRequirements::CellFlux());
+        const auto projected = read.View();
+        const auto canonical = ordinary.HostView().CellFaceIncidences();
+        CHECK(projected.cellFaces.owned.data == canonical.cellFaces.owned.data);
+        CHECK(projected.cellFaces.ghost.data == canonical.cellFaces.ghost.data);
+        CHECK(projected.faceCells.owned.data == canonical.faceCells.owned.data);
+        CHECK(projected.faceInfo.owned.data == canonical.faceInfo.owned.data);
+        CHECK_FALSE(fixture.mesh->versions.CanMutate());
+    }
+    CHECK(fixture.mesh->versions.CanMutate());
+    std::set<uint64_t> compact, complete;
+    projection.VisitAllocations([&](uint64_t id, size_t, R::Device)
+                                { compact.insert(id); });
+    fixture.mesh->CurrentNativeState()->Snapshot(R::Device::Host()).VisitAllocations([&](uint64_t id, size_t, R::Device)
+                                                                                     { complete.insert(id); });
+    CHECK(compact.size() < complete.size());
+    for (const auto id : compact)
+        CHECK(complete.count(id) == 1);
+    // A cache owner does not permanently pin facade mutation. The operator
+    // read scope does; after reordering, old numbering cannot be reacquired.
+    fixture.mesh->ReorderLocalCells(2, 1);
+    CHECK_THROWS(projection.AcquireRead());
+}
 
 TEST_CASE("Detached native mesh snapshots retain values metadata and independent validity")
 {

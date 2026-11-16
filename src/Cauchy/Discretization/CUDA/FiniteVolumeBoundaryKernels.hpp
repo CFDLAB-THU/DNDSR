@@ -29,8 +29,8 @@ namespace DNDS::Cauchy::CUDA
     {
         Runtime::ArrayView<const BoundaryKernelParameters, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> parameters;
         Runtime::ArrayView<const PerfectGasBoundaryParameters, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> conditions;
-        Runtime::ArrayView<const BoundaryTraceGeometry, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> points;
-        BoundaryRows sourceRows;
+        Runtime::ArrayView<const FiniteVolumeStencilView, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> stencil;
+        Runtime::ArrayView<const BoundaryFaceRange, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> faces;
         BoundaryInput means, coefficients, incoming;
         Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> wallMean;
         CFV::ReconstructionPointBasisView basis;
@@ -39,7 +39,7 @@ namespace DNDS::Cauchy::CUDA
         RigidFrameParameters frame;
         real time = 0;
         int components = 5, modes = 0;
-        bool useSourceRows = false, polynomial = false, exterior = false, hasIncoming = false, repairRANS = true;
+        bool centers = false, polynomial = false, exterior = false, hasIncoming = false, repairRANS = true;
         bool forcePointFallback = false;
     };
 
@@ -51,8 +51,9 @@ namespace DNDS::Cauchy::CUDA
      */
     void FillBoundaryTraces(Runtime::ExecutionContext context, const BoundaryTraceRequest &request);
     /// Mean-based primitive [rho,u,v,w,T] targets for gradient preparation.
-    /// Physical faces average interior and reflected exterior; interface rows
-    /// use the received physical state directly. Polynomial input is unused.
+    /// Physical faces evaluate the selected center trace with a temporary left
+    /// state; interface rows use the independently sampled center packet.
+    /// Polynomial input is unused.
     void FillPrimitiveBoundary(Runtime::ExecutionContext context, const BoundaryTraceRequest &request);
     void CopyBoundaryRows(Runtime::ExecutionContext context, BoundaryInput source, BoundaryOutput output, BoundaryRows rows);
 }

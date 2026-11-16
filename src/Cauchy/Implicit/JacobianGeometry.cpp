@@ -2,44 +2,55 @@
 
 namespace DNDS::Cauchy
 {
-    JacobianGeometryStorage JacobianGeometryStorage::Placed(Runtime::Device device, Runtime::ExecutionContext context) const
+    JacobianGeometryStorage::JacobianGeometryStorage(FiniteVolumeStencilStorage::ReadAccess stencil,
+                                                     const std::vector<std::vector<index>> &columns)
+        : _stencil(std::move(stencil))
     {
-        JacobianGeometryStorage result;
-        result._columns = _columns.To(device, context);
-        result._blockOffsets = _blockOffsets.To(device, context);
-        result._points = _points.To(device, context);
-        result.sameComponentFrames = sameComponentFrames;
-        return result;
+        const auto view = _stencil.View();
+        view.ValidateDevice(Runtime::Device::Host());
+        sameComponentFrames = true;
+        for (index iCell = 0; iCell < index(columns.size()); ++iCell)
+            for (const auto iFace : view.topology.CellFaces(iCell))
+                sameComponentFrames = sameComponentFrames && !view.metric.periodic.Rotates(iFace);
+        Build(columns, view.topology, Runtime::ExecutionContext::Host());
     }
-    JacobianGeometryStorage::JacobianGeometryStorage(FiniteVolumeStencilView stencil,
-                                                     CFV::FiniteVolumeHostView metric, const std::vector<std::vector<index>> &columns)
+    JacobianGeometryStorage::JacobianGeometryStorage(FiniteVolumeStencilStorage::ReadAccess stencil,
+                                                     const std::vector<std::vector<index>> &columns,
+                                                     Geom::CellFaceIncidenceView symbolicTopology,
+                                                     bool sameFrames, Runtime::ExecutionContext context)
+        : _stencil(std::move(stencil)), sameComponentFrames(sameFrames)
     {
-        Build(stencil, metric, columns, false);
+        Build(columns, symbolicTopology, context);
     }
-    JacobianGeometryStorage::JacobianGeometryStorage(FiniteVolumeStencilView stencil, const std::vector<std::vector<index>> &columns)
+    void JacobianGeometryStorage::Build(const std::vector<std::vector<index>> &columns,
+                                        Geom::CellFaceIncidenceView topology, Runtime::ExecutionContext context)
     {
-        Build(stencil, {}, columns, true);
-    }
-    void JacobianGeometryStorage::Build(FiniteVolumeStencilView stencil,
-                                        CFV::FiniteVolumeHostView metric, const std::vector<std::vector<index>> &columns, bool auxiliaryAreas)
-    {
-        Runtime::ValidateViewDevices(Runtime::Device::Host(), stencil.jacobianSamples, stencil.jacobianOffsets);
-        if (auxiliaryAreas)
-            stencil.auxiliaryFaceArea.ValidateDevice(Runtime::Device::Host());
-        else
-            metric.faceMean.ValidateDevice(Runtime::Device::Host());
+        topology.ValidateDevice(Runtime::Device::Host());
+        DNDS_check_throw_info(_stencil.View().routing.GetDevice() == context.device &&
+                                  _stencil.View().jacobianOffsets.RowCount() == index(columns.size()) + 1 &&
+                                  topology.cellFaces.RowCount() >= index(columns.size()),
+                              "Jacobian symbolic routing and retained stencil row spaces/devices differ");
         std::vector<size_t> columnLengths;
         index blocks = 0;
         for (const auto &row : columns)
         {
+            DNDS_check_throw_info(std::is_sorted(row.begin(), row.end()) &&
+                                      std::adjacent_find(row.begin(), row.end()) == row.end(),
+                                  "Jacobian symbolic columns must be sorted and unique");
             columnLengths.push_back(row.size());
             blocks += index(row.size());
         }
         _columns = Runtime::Array<index>(Runtime::RowLayout::Ragged(columnLengths));
-        _blockOffsets = Runtime::Array<index>(Runtime::RowLayout::Dense(columns.size() + 1, 1));
-        _columns.SetName("Cauchy/linear/jacobianGeometry/columns", DNDS_ALLOCATION_SITE());
-        _blockOffsets.SetName("Cauchy/linear/jacobianGeometry/blockOffsets", DNDS_ALLOCATION_SITE());
-        std::vector<size_t> pointLengths(blocks, 0);
+        _blockOffsets = Runtime::Array<index>(Runtime::RowLayout::Dense(index(columns.size()) + 1, 1));
+        std::vector<size_t> lengths(blocks, 0);
+        const auto columnSlot = [&](index iCell, index other)
+        {
+            const auto &row = columns[iCell];
+            const auto found = std::lower_bound(row.begin(), row.end(), other);
+            DNDS_check_throw_info(found != row.end() && *found == other,
+                                  "Jacobian symbolic incidence has no sparse column");
+            return index(found - row.begin());
+        };
         {
             auto columnWrite = _columns.Write(), offsetWrite = _blockOffsets.Write();
             const auto c = columnWrite.View<Runtime::CSRRows>();
@@ -50,42 +61,48 @@ namespace DNDS::Cauchy
                 offsets(iCell, 0) = first;
                 for (index j = 0; j < index(columns[iCell].size()); ++j)
                     c(iCell, j) = columns[iCell][j];
-                for (index entry = stencil.jacobianOffsets(iCell, 0); entry < stencil.jacobianOffsets(iCell + 1, 0); ++entry)
+                const auto faces = topology.CellFaces(iCell);
+                for (rowsize slot = 0; slot < faces.size(); ++slot)
                 {
-                    const auto &sample = stencil.jacobianSamples(entry, 0);
-                    if (sample.other == UnInitIndex || sample.other == iCell)
-                        continue;
-                    DNDS_check_throw_info(sample.jacobianColumn >= 0 && sample.jacobianColumn < c.RowSize(iCell) &&
-                                              c(iCell, sample.jacobianColumn) == sample.other,
-                                          "evaluated Jacobian stencil has an invalid prepared column");
-                    ++pointLengths[first + sample.jacobianColumn];
-                    sameComponentFrames = sameComponentFrames && !sample.changesFrame;
+                    const index other = topology.CellFaceOther(iCell, faces[slot], slot);
+                    if (other != UnInitIndex && other != iCell)
+                        ++lengths[first + columnSlot(iCell, other)];
                 }
                 first += c.RowSize(iCell);
             }
             offsets(index(columns.size()), 0) = first;
         }
-        _points = Runtime::Array<JacobianPointRecord>(Runtime::RowLayout::Ragged(pointLengths));
-        _points.SetName("Cauchy/linear/jacobianGeometry/points", DNDS_ALLOCATION_SITE());
-        const auto offsetsRead = _blockOffsets.Read();
-        const auto offsets = offsetsRead.View<Runtime::FixedRows<1>>();
-        auto write = _points.Write();
-        const auto points = write.View<Runtime::CSRRows>();
-        std::vector<index> next(blocks, 0);
-        for (index iCell = 0; iCell < index(columns.size()); ++iCell)
-            for (index entry = stencil.jacobianOffsets(iCell, 0); entry < stencil.jacobianOffsets(iCell + 1, 0); ++entry)
+        _incidences = Runtime::Array<index>(Runtime::RowLayout::Ragged(lengths));
+        {
+            const auto offsetsRead = _blockOffsets.Read();
+            const auto offsets = offsetsRead.View<Runtime::FixedRows<1>>();
+            auto write = _incidences.Write();
+            const auto incidences = write.View<Runtime::CSRRows>();
+            std::vector<index> next(blocks, 0);
+            index firstIncidence = 0;
+            for (index iCell = 0; iCell < index(columns.size()); ++iCell)
             {
-                const auto &sample = stencil.jacobianSamples(entry, 0);
-                if (sample.other == UnInitIndex || sample.other == iCell)
-                    continue;
-                const index iBlock = offsets(iCell, 0) + sample.jacobianColumn;
-                DNDS_check_throw_info(auxiliaryAreas ? sample.auxiliaryFace >= 0 && sample.auxiliaryFace < stencil.auxiliaryFaceArea.RowCount()
-                                                     : sample.face >= 0 && sample.face < metric.faceMean.RowCount(),
-                                      "Jacobian geometry face area row is missing");
-                points(iBlock, next[iBlock]++) = {sample.other, sample.auxiliaryFace, entry,
-                                                  sample.normal, sample.ownPoint, sample.rotation,
-                                                  auxiliaryAreas ? stencil.auxiliaryFaceArea(sample.auxiliaryFace, 0) : metric.GetFaceArea(sample.face), sample.changesFrame};
+                const auto faces = topology.CellFaces(iCell);
+                for (rowsize slot = 0; slot < faces.size(); ++slot)
+                {
+                    const index other = topology.CellFaceOther(iCell, faces[slot], slot);
+                    if (other == UnInitIndex || other == iCell)
+                        continue;
+                    const index iBlock = offsets(iCell, 0) + columnSlot(iCell, other);
+                    incidences(iBlock, next[iBlock]++) = firstIncidence + slot;
+                }
+                firstIncidence += faces.size();
             }
+        }
+        if (context.device != Runtime::Device::Host())
+        {
+            _columns = _columns.To(context.device, context);
+            _blockOffsets = _blockOffsets.To(context.device, context);
+            _incidences = _incidences.To(context.device, context);
+        }
+        _columns.SetName("Cauchy/linear/jacobianGeometry/columns", DNDS_ALLOCATION_SITE());
+        _blockOffsets.SetName("Cauchy/linear/jacobianGeometry/blockOffsets", DNDS_ALLOCATION_SITE());
+        _incidences.SetName("Cauchy/linear/jacobianGeometry/incidences", DNDS_ALLOCATION_SITE());
     }
     std::vector<std::vector<index>> JacobianGeometryStorage::CopyColumns() const
     {

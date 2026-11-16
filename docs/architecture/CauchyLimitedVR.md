@@ -8,12 +8,12 @@ Unsupported equation/device selections must fail at capability resolution.
 
 ```text
 FiniteVolume immutable data                 Per-evaluation workspace
-  GradientPlan (Green-Gauss)                   target gradient + O2 coefficients
+  Selected GradientPlan (GG/LS/GGMP)                   target gradient + O2 coefficients
   LimitedVRPlan (face-neighbor stencils)       mean pressure/density + scalar gates
-  cached face-center polynomial sampling      base / seeds / layer scratch
-  cached positivity-point sampling            retained shock/contact history
+  shared CFV face-center geometry             base / seeds / layer scratch
+  shared canonical cell-face incidence         retained shock/contact history
                      |                                   |
-mean + boundary quadrature values -> GG -> order1 WBAP -> Euler O2 PP
+mean + independent center traces -> selected gradient -> order1 WBAP -> center PP
                                                         |
           mean and finalized-O2 face sensors -> extremum correction / expansion
                                                         |
@@ -43,7 +43,7 @@ reconstruction terms. Inputs and outputs must not alias. Validation precedes
 writer acquisition, and input/target values must be finite. The generic CFV
 operation does not interpret density, pressure, sound speed or equation width.
 
-Cauchy's private `Discretization/LimitedVRInternal.hpp` and `LimitedVR.cpp`
+Cauchy's private `Discretization/LimitedVRInternal.hpp` and `FiniteVolume_LimitedVR*`
 provide the physical adapter and persistent scratch. They prepare mean-based
 characteristic transformations and Euler's common-beta O2 positivity bound,
 then evaluate density, pressure, normal velocity and sound speed. There is no

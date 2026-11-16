@@ -30,6 +30,7 @@ Connectivity/AdjacencyRegistry.cpp
 Connectivity/MeshConnectivity_Ghost.cpp
 Unstructured/UnstructuredMesh.cpp
 Access/MeshAccess.cpp
+Access/CellFaceIncidence.cpp
 Access/UnstructuredMesh_Access.cpp
 Geometry/UnstructuredMesh_Geometry.cpp
 Geometry/MeshEdit.cpp

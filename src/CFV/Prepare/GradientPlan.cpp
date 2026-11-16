@@ -36,20 +36,18 @@ namespace DNDS::CFV
             for (index slot = 0; slot < view.CellFaces(iCell).size(); ++slot)
             {
                 const index face = view.CellFaces(iCell)[slot];
-                const index count = geometry.FaceQuadratureEnd(face) - geometry.FaceQuadratureBegin(face);
-                entries += count;
+                ++entries;
                 if (view.CellFaceOther(iCell, face, rowsize(slot)) == UnInitIndex)
-                    boundaryCount += count;
+                    ++boundaryCount;
             }
         }
         offsets(metrics.NumCell(), 0) = entries;
         boundaryStarts(metrics.NumCell(), 0) = boundaryCount;
-        data->neighbors = R::Array<index>(R::RowLayout::Dense(entries, 1));
-        data->faces = R::Array<index>(R::RowLayout::Dense(entries, 1));
         data->boundaryIds = R::Array<index>(R::RowLayout::Dense(entries, 1));
-        data->rotationActive = R::Array<uint8_t>(R::RowLayout::Dense(entries, 1));
         data->weights = R::Array<real>(R::RowLayout::Dense(entries, 3));
-        data->rotations = R::Array<real>(R::RowLayout::Dense(entries, 9));
+        data->offsets.SetName("CFV/gradient/offsets", DNDS_ALLOCATION_SITE());
+        data->boundaryIds.SetName("CFV/gradient/boundaryIds", DNDS_ALLOCATION_SITE());
+        data->weights.SetName("CFV/gradient/weights", DNDS_ALLOCATION_SITE());
         data->boundary.resize(size_t(boundaryCount));
         data->boundaryCount = boundaryCount;
         const auto storeRows = [](const std::vector<index> &rows)
@@ -63,13 +61,9 @@ namespace DNDS::CFV
         };
         data->core = storeRows(data->partition.Core());
         data->dependent = storeRows(data->partition.HaloDependent());
-        auto neighborWrite = data->neighbors.Write(), faceWrite = data->faces.Write(), boundaryWrite = data->boundaryIds.Write();
+        auto boundaryWrite = data->boundaryIds.Write();
         auto weightWrite = data->weights.Write();
-        auto rotationActiveWrite = data->rotationActive.Write();
-        auto rotationWrite = data->rotations.Write();
-        const auto rotations = rotationWrite.View<R::FixedRows<9>>();
-        const auto rotationActive = rotationActiveWrite.View<R::FixedRows<1>>();
-        const auto neighbors = neighborWrite.View<R::FixedRows<1>>(), faces = faceWrite.View<R::FixedRows<1>>(), boundaries = boundaryWrite.View<R::FixedRows<1>>();
+        const auto boundaries = boundaryWrite.View<R::FixedRows<1>>();
         const auto weights = weightWrite.View<R::FixedRows<3>>();
         OMP::ForSetupRows(0, metrics.NumCell(), [&](index iCell)
                           {
@@ -91,33 +85,27 @@ namespace DNDS::CFV
                                       "gradient stencil requires a complete face-neighbor ghost mapping");
                 const bool back = view.CellIsFaceBack(iCell, face, rowsize(slot));
                 const int side = back ? 0 : 1;
-                const tGPoint rotation = Detail::OtherFrameInCell(view, face, side);
-                for (index q = geometry.FaceQuadratureBegin(face); q < geometry.FaceQuadratureEnd(face); ++q, ++next, ++local)
                 {
-                    const tPoint point = Detail::FacePointInCell(view, face, side, geometry.GetFacePoint(q));
-                    const tPoint normal = Detail::OtherFrameInCell(view, face, 1) * geometry.GetFaceNorm(q);
-                    // Face quadrature normals are in parent's0 frame.
-                    const tPoint ownNormal = (side == 0 ? geometry.GetFaceNorm(q) : normal) * (back ? 1 : -1);
-                    const tPoint areaNormal = ownNormal * (geometry.GetFaceWeight(q) / geometry.GetCellVol(iCell));
-                    const tPoint otherCenter = other == UnInitIndex ? point : Detail::OtherPointInCell(view, face, side, geometry.GetCellBary(other));
+                    const tPoint point = geometry.periodic.FacePoint(face, side, geometry.GetFaceCent(face));
+                    const tPoint ownNormal = (side == 0 ? geometry.GetFaceMeanNorm(face)
+                        : tPoint(geometry.periodic.Rotation(face, 0, 1) * geometry.GetFaceMeanNorm(face))) * (back ? 1 : -1);
+                    // Euler's mapped reference center, normalized integrated
+                    // normal and separately integrated area. An axis face has
+                    // zero weighted area but retains its geometric direction.
+                    const real area = geometry.GetFaceArea(face);
+                    const tPoint areaNormal = ownNormal * (area / geometry.GetCellVol(iCell));
+                    const tPoint otherCenter = other == UnInitIndex ? point : geometry.periodic.OtherPoint(face, side, geometry.GetCellBary(other));
                     const tPoint displacement = otherCenter - center;
                     const real length = displacement.head(dim).norm();
                     DNDS_check_throw_info(length > 0 && std::isfinite(length), "degenerate FV gradient sample displacement");
-                    // Boundary quadrature is multiple physical samples. For
-                    // neighbor means repeat the same equation with quadrature
-                    // weights so face rule refinement cannot reweight a face.
-                    const real quadratureScale = std::sqrt(geometry.GetFaceWeight(q));
+                    const real quadratureScale = std::sqrt(area);
                     design.row(local) = displacement.head(dim).transpose() / length * quadratureScale;
                     lengths[local] = quadratureScale / length;
-                    neighbors(next, 0) = other;
-                    faces(next, 0) = face;
-                    Eigen::Map<tGPoint>(rotations[next].data()) = rotation;
-                    rotationActive(next, 0) = !rotation.isApprox(tGPoint::Identity(), 1e-14);
                     boundaries(next, 0) = UnInitIndex;
                     if (other == UnInitIndex)
                     {
                         boundaries(next, 0) = nextBoundary;
-                        data->boundary[nextBoundary++] = {iCell, face, int(q - geometry.FaceQuadratureBegin(face)), point, ownNormal};
+                        data->boundary[nextBoundary++] = {iCell, face, -1, point, ownNormal};
                     }
                     real fraction = 1;
                     if (other != UnInitIndex)
@@ -129,6 +117,8 @@ namespace DNDS::CFV
                             correction.noalias() -= areaNormal.head(dim) * (point - (center + otherCenter) * 0.5).head(dim).transpose();
                     }
                     initial.col(local) = areaNormal.head(dim) * fraction;
+                    ++next;
+                    ++local;
                 }
             }
             Eigen::MatrixXd inverse;
@@ -147,13 +137,12 @@ namespace DNDS::CFV
                 for (int d = 0; d < 3; ++d)
                     weights(next - count + i, d) = d < dim ? initial(d, i) : 0;
             DNDS_assert(next == offsets(iCell + 1, 0) && nextBoundary == boundaryStarts(iCell + 1, 0)); });
-        for (index entry = 0; entry < entries; ++entry)
-            data->hasRotatedFrames |= bool(rotationActive(entry, 0));
         // Prove owned-only access once, using the actual prepared entries.
         // The hot core kernel needs neither ghost views nor row-mask checks.
         for (auto iCell : data->partition.Core())
-            for (index entry = offsets(iCell, 0); entry < offsets(iCell + 1, 0); ++entry)
-                DNDS_check_throw_info(neighbors(entry, 0) == UnInitIndex || neighbors(entry, 0) < metrics.NumCell(),
+            for (rowsize slot = 0; slot < rowsize(view.CellFaces(iCell).size()); ++slot)
+                DNDS_check_throw_info(view.CellFaceOther(iCell, view.CellFaces(iCell)[slot], slot) == UnInitIndex ||
+                                          view.CellFaceOther(iCell, view.CellFaces(iCell)[slot], slot) < metrics.NumCell(),
                                       "gradient core stencil references a ghost input");
         return GradientPlan(std::move(data));
     }

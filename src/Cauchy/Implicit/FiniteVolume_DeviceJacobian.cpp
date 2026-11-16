@@ -147,11 +147,11 @@ namespace DNDS::Cauchy
             freezeSignal(*auxiliary.cellPressureMinimum, scratch->pressureMinimum, "Cauchy/Jacobian/pressureMinimum");
         R::SubmitArrays(engine, stream, [scratch, parameters, physics, controls, full, time, rowMajorBlocks = output.RowMajorBlocks()](R::ExecutionContext context, auto means, auto p, auto dp, auto radius, auto incoming, auto wave, auto minimum, auto cells, auto diagonal, auto magnitudes, auto status)
                         {
-            const auto stencil = scratch->stencil.View();
             const auto conditions = scratch->conditions.View<PerfectGasBoundaryParameters>();
             CUDA::JacobianFaceInput request;
-            request.samples = stencil.jacobianSamples; request.offsets = stencil.jacobianOffsets;
-            request.faces = scratch->metric.View().faceMean;
+            request.stencil = scratch->stencil.KernelDescriptor();
+            request.ownedCells = scratch->owner->metrics.NumCell();
+            request.incidences = scratch->owner->stencil.IncidenceNumber();
             request.conditions = {conditions.data, nullptr, index(conditions.size), 1, 1, nullptr, R::RowLayoutKind::Table, context.device};
             request.means = means; request.pressure = p; request.pressureDerivative = dp; request.radius = radius;
             request.incoming = incoming; request.waveJump = wave; request.pressureMinimum = minimum;

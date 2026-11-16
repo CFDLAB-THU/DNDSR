@@ -4,34 +4,27 @@
 // stencils/penalties; this private module supplies physical sampling and O2 PP.
 #include "Cauchy/Discretization/FiniteVolumeInternal.hpp"
 #include "CFV/Plans/LimitedVRPlan.hpp"
-#include "Cauchy/Discretization/LimitedVRFace.hpp"
+#include "Cauchy/Discretization/LimitedVREvaluation.hpp"
 
 namespace DNDS::Cauchy
 {
     struct FiniteVolume::LimitedVRGeometry
     {
-        CFV::GradientPlan gradient;
         CFV::LimitedVRPlan gates;
-        Runtime::Array<LimitedVRFace> faces;
-        /// Owned-cell incidence CSR for deterministic CUDA gather of face
-        /// sensors. Incidences preserve both slots of a self-periodic face.
-        Runtime::Array<index> cellFaceOffsets, cellFaces;
-        std::optional<CFV::PolynomialSamplingPlan> sampling;
         explicit LimitedVRGeometry(const Data &data);
     };
     struct FiniteVolume::LimitedVRWorkspace
     {
         CFV::ReconstructionWorkspace target;
         CFV::FVField targetCoefficients;
-        CFV::FVField gradients, scalars, branches, seeds, temporary;
-        CFV::GradientWorkspace gradientExecution;
-        Runtime::Array<real> base, alpha, sampledFaces, sampledPP;
+        CFV::FVField scalars, branches, seeds, temporary;
+        Runtime::Array<real> base, alpha;
         /// CUDA face sensors are gathered into owned cells without atomic
         /// scatter. Status reductions retain the first failure across leaves.
         struct DeviceStorage
         {
             Runtime::Array<real> sensors;
-            Runtime::Array<NumericalStatus> ownedStatus, ghostStatus, faceStatus, partialStatus, resultStatus;
+            Runtime::Array<NumericalStatus> ownedStatus, ghostStatus, faceStatus, partialStatus, resultStatus, targetStatus;
         };
         std::optional<DeviceStorage> device;
         std::optional<Runtime::Array<real>> cpuSensors;
@@ -43,7 +36,7 @@ namespace DNDS::Cauchy
         /// mutation is explicit here and must be backed up by the domain driver.
         /// One schedule serves CPU inline/workers and CUDA; backend dispatch
         /// occurs at individual retained-operand wrappers. Return is completed.
-        void Build(const Data &data, const CFV::FVField &mean,
+        void Build(const Data &data, const CFV::FVField &mean, const CFV::FVField &selectedGradients,
                    Runtime::Array<real> &previous,
                    CFV::FaceCharacteristicTransformRef transform,
                    Runtime::EagerEngine &engine,

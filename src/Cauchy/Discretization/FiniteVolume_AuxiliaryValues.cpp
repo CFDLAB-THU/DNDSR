@@ -43,7 +43,7 @@ namespace DNDS::Cauchy
             if (Device().space == R::MemorySpace::CUDA)
             {
 #ifdef DNDS_USE_CUDA
-                const index rows = _data->gradientBoundaryRows.RowCount();
+                const index rows = _data->boundaryFaces.RowCount();
                 work.deviceBoundaryStatus.emplace(MeanGradients::Data::DeviceBoundaryStatus{
                     R::Array<NumericalStatus>(R::RowLayout::Dense(rows, 1), Device()),
                     R::Array<NumericalStatus>(R::RowLayout::Dense(CUDA::StateReductionScratchRows(rows), 1), Device()),
@@ -128,7 +128,7 @@ namespace DNDS::Cauchy
                 boundary = *inputs.boundary;
                 if (inputs.deferBoundary) ValidateBoundaryLayout(*boundary);
                 else ValidateBoundaryInputs(*boundary, time);
-                incoming.Emplace(boundary->QuadratureValues().CoupledField().Owned());
+                incoming.Emplace(boundary->FaceCenterValues().CoupledField().Owned());
                 inputs.boundary.Emplace(*boundary);
             } });
         auto &work = *gradients._data;

@@ -22,19 +22,15 @@ namespace DNDS::Cauchy::CUDA
         void Validate(R::ExecutionContext context, const BoundaryTraceRequest &request, bool primitive)
         {
             DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA, "CUDA boundary requires a CUDA stream");
-            R::ValidateViewDevices(context.device, request.parameters, request.conditions, request.points, request.means, request.output, request.status);
+            R::ValidateViewDevices(context.device, request.parameters, request.conditions, request.stencil, request.faces, request.means, request.output, request.status);
             DNDS_check_throw_info(std::isfinite(request.time) && request.components >= 5 && request.components <= 7 && request.parameters.RowCount() == 1 &&
                                       request.means.Width() == request.components && request.output.Width() == (primitive ? 5 : request.components) &&
                                       request.status.RowCount() == request.output.RowCount() && request.means.kind == R::RowLayoutKind::Table &&
                                       request.output.kind == R::RowLayoutKind::Table,
                                   "CUDA boundary array/profile mismatch");
-            if (request.useSourceRows)
-            {
-                request.sourceRows.ValidateDevice(context.device);
-                DNDS_check_throw_info(request.sourceRows.RowCount() == request.output.RowCount(), "CUDA boundary row-map mismatch");
-            }
-            else
-                DNDS_check_throw_info(request.points.RowCount() == request.output.RowCount(), "CUDA boundary point/output rows differ");
+            DNDS_check_throw_info(request.stencil.RowCount() == 1 &&
+                                      (!request.centers || request.faces.RowCount() == request.output.RowCount()),
+                                  "CUDA boundary compact face/output rows differ");
             if (request.polynomial && !primitive)
             {
                 R::ValidateViewDevices(context.device, request.basis, request.coefficients);
@@ -42,6 +38,11 @@ namespace DNDS::Cauchy::CUDA
                                           request.basis.availableDerivatives > 0 && request.coefficients.RowCount() == request.means.RowCount() &&
                                           request.coefficients.Width() == request.components * request.modes && request.coefficients.kind == R::RowLayoutKind::Table,
                                       "CUDA boundary polynomial shape mismatch");
+                if (request.centers)
+                    DNDS_check_throw_info(request.basis.cells.RowCount() >= request.means.RowCount() &&
+                                              request.basis.moments.RowCount() >= request.means.RowCount() &&
+                                              request.basis.moments.Width() == request.modes + 1,
+                                          "center polynomial boundary evaluation requires resident point geometry and moments");
             }
             if (request.components == 7 && !primitive)
             {
@@ -61,64 +62,75 @@ namespace DNDS::Cauchy::CUDA
         __global__ void TraceRows(BoundaryTraceRequest request)
         {
             const auto &parameters = request.parameters(0, 0);
-            for (index iPoint = index(blockIdx.x) * blockDim.x + threadIdx.x; iPoint < request.output.RowCount(); iPoint += index(gridDim.x) * blockDim.x)
+            const auto &stencil = request.stencil(0, 0);
+            for (index iFace = index(blockIdx.x) * blockDim.x + threadIdx.x; iFace < request.faces.RowCount(); iFace += index(gridDim.x) * blockDim.x)
             {
-                const auto &sample = request.points(request.useSourceRows ? request.sourceRows(iPoint, 0) : iPoint, 0);
-                const auto &condition = request.conditions(sample.condition, 0);
-                auto &status = request.status(iPoint, 0);
-                status = {};
-                if (condition.kind == BoundaryKind::Interface)
+                const auto range = request.faces(iFace, 0);
+                const index count = request.centers ? 1 : range.quadratureCount;
+                for (index iLocal = 0; iLocal < count; ++iLocal)
                 {
-                    if (!request.hasIncoming || sample.interfaceRow < 0 || sample.interfaceRow >= request.incoming.RowCount())
+                    const index iPoint = request.centers ? iFace : range.quadratureBegin + iLocal;
+                    const auto sample = BoundaryTracePoint(stencil, range, iFace, iLocal, request.centers);
+                    const auto &condition = request.conditions(sample.condition, 0);
+                    auto &status = request.status(iPoint, 0);
+                    status = {};
+                    if (condition.kind == BoundaryKind::Interface)
                     {
-                        status = NumericalStatus{NumericalError::InvalidInput, 2}.At(sample.cell, iPoint);
+                        if (!request.hasIncoming || sample.interfaceRow < 0 || sample.interfaceRow >= request.incoming.RowCount())
+                        {
+                            status = NumericalStatus{NumericalError::InvalidInput, 2}.At(sample.cell, iPoint);
+                            continue;
+                        }
+                        for (int j = 0; j < Components; ++j)
+                            request.output(iPoint, j) = request.incoming(sample.interfaceRow, j);
                         continue;
                     }
+                    std::array<real, Components> mean{}, point{};
                     for (int j = 0; j < Components; ++j)
-                        request.output(iPoint, j) = request.incoming(sample.interfaceRow, j);
-                    continue;
-                }
-                std::array<real, Components> mean{}, point{};
-                for (int j = 0; j < Components; ++j)
-                    point[j] = mean[j] = request.means(sample.cell, j);
-                if (request.polynomial)
-                {
-                    real basis[19];
-                    for (int mode = 0; mode < request.modes; ++mode)
-                        basis[mode] = request.basis.Evaluate(sample.cell, sample.point, sample.side, sample.location, 0, mode);
-                    for (int j = 0; j < Components; ++j)
+                        point[j] = mean[j] = request.means(sample.cell, j);
+                    if (request.polynomial)
+                    {
+                        real basis[19];
+                        const bool cached = !request.centers && request.basis.cachedDerivatives > 0;
+                        const auto pointContext = cached ? CFV::Math::TaylorPointEvaluation{} : request.basis.PreparePoint(sample.cell, sample.location);
                         for (int mode = 0; mode < request.modes; ++mode)
-                            point[j] += request.coefficients(sample.cell, j * request.modes + mode) * basis[mode];
-                }
-                // PP POLICY: repair this temporary unlimited VR boundary input,
-                // never its coefficients. The independent flux beta follows.
-                if (request.polynomial && (parameters.allowPointFallback || request.forcePointFallback) && !parameters.thermal.ClippedReferenceAdmissible(point))
-                    point = mean;
-                if constexpr (Components > 5)
-                    if (request.repairRANS)
-                        RANSReconstructionView{parameters.rans, Components - 5}.RepairPoint(
-                            SpanView<const real>{mean.data() + 5, Components - 5}, SpanView<real>{point.data() + 5, Components - 5});
-                const real wallDistance = Components == 7 ? request.wallMean(sample.cell, 0) : 0;
-                status = TryPerfectGasBoundaryState<Components>(condition, parameters.gas, parameters.rans, point, mean, wallDistance,
-                                                                sample.normal, sample.location, request.time, request.frame, request.exterior);
-                if (!status && request.polynomial && (parameters.allowPointFallback || request.forcePointFallback) && Physics::AllowsMeanFallback(status))
-                {
-                    point = mean;
+                            basis[mode] = request.centers
+                                              ? request.basis.EvaluateAtPoint(sample.cell, pointContext, 0, mode)
+                                              : request.basis.Evaluate(sample.cell, sample.point, sample.side, pointContext, 0, mode);
+                        for (int j = 0; j < Components; ++j)
+                            for (int mode = 0; mode < request.modes; ++mode)
+                                point[j] += request.coefficients(sample.cell, j * request.modes + mode) * basis[mode];
+                    }
+                    // PP POLICY: repair this temporary unlimited VR boundary input,
+                    // never its coefficients. The independent flux beta follows.
+                    if (request.polynomial && (parameters.allowPointFallback || request.forcePointFallback) && !parameters.thermal.ClippedReferenceAdmissible(point))
+                        point = mean;
+                    if constexpr (Components > 5)
+                        if (request.repairRANS)
+                            RANSReconstructionView{parameters.rans, Components - 5}.RepairPoint(
+                                SpanView<const real>{mean.data() + 5, Components - 5}, SpanView<real>{point.data() + 5, Components - 5});
+                    const real wallDistance = Components == 7 ? request.wallMean(sample.cell, 0) : 0;
                     status = TryPerfectGasBoundaryState<Components>(condition, parameters.gas, parameters.rans, point, mean, wallDistance,
                                                                     sample.normal, sample.location, request.time, request.frame, request.exterior);
-                }
-                if (!status)
-                {
-                    status = status.At(sample.cell, iPoint);
-                    continue;
-                }
+                    if (!status && request.polynomial && (parameters.allowPointFallback || request.forcePointFallback) && Physics::AllowsMeanFallback(status))
+                    {
+                        point = mean;
+                        status = TryPerfectGasBoundaryState<Components>(condition, parameters.gas, parameters.rans, point, mean, wallDistance,
+                                                                        sample.normal, sample.location, request.time, request.frame, request.exterior);
+                    }
+                    if (!status)
+                    {
+                        status = status.At(sample.cell, iPoint);
+                        continue;
+                    }
 #ifdef USE_FIX_ZERO_SA_NUT_AT_WALL
-                if constexpr (Components == 6)
-                    if (condition.kind == BoundaryKind::NoSlipWall)
-                        point[5] = 0;
+                    if constexpr (Components == 6)
+                        if (condition.kind == BoundaryKind::NoSlipWall)
+                            point[5] = 0;
 #endif
-                for (int j = 0; j < Components; ++j)
-                    request.output(iPoint, j) = point[j];
+                    for (int j = 0; j < Components; ++j)
+                        request.output(iPoint, j) = point[j];
+                }
             }
         }
         __global__ void PrimitiveRows(BoundaryTraceRequest request)
@@ -126,7 +138,7 @@ namespace DNDS::Cauchy::CUDA
             const auto &parameters = request.parameters(0, 0);
             for (index iPoint = index(blockIdx.x) * blockDim.x + threadIdx.x; iPoint < request.output.RowCount(); iPoint += index(gridDim.x) * blockDim.x)
             {
-                const auto &sample = request.points(request.useSourceRows ? request.sourceRows(iPoint, 0) : iPoint, 0);
+                const auto sample = BoundaryTracePoint(request.stencil(0, 0), request.faces(iPoint, 0), iPoint, 0, true);
                 const auto &condition = request.conditions(sample.condition, 0);
                 auto &status = request.status(iPoint, 0);
                 status = {};
@@ -152,14 +164,14 @@ namespace DNDS::Cauchy::CUDA
                         continue;
                     }
                     const auto exterior = TryPerfectGasBoundaryValue(condition, parameters.gas, inside, sample.normal, sample.location,
-                                                                     request.time, request.frame, true);
+                                                                     request.time, request.frame, false);
                     if (!exterior)
                     {
                         status = exterior.status.At(sample.cell, iPoint);
                         continue;
                     }
                     for (int j = 0; j < 5; ++j)
-                        state[j] = .5 * (inside[j] + exterior.value[j]);
+                        state[j] = exterior.value[j];
                 }
                 const auto properties = TryPerfectGasPoint(parameters.gas, state, false);
                 if (!properties)
@@ -186,7 +198,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<BoundaryTraceRequest>();
         if (!request.output.RowCount())
             return;
-        const unsigned blocks = unsigned(std::min<index>((request.output.RowCount() + 127) / 128, 1024));
+        const unsigned blocks = unsigned(std::min<index>((request.faces.RowCount() + 127) / 128, 1024));
         const auto stream = static_cast<cudaStream_t>(context.stream);
         switch (request.components)
         {
@@ -208,7 +220,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<BoundaryTraceRequest>();
         if (!request.output.RowCount())
             return;
-        const unsigned blocks = unsigned(std::min<index>((request.output.RowCount() + 127) / 128, 1024));
+        const unsigned blocks = unsigned(std::min<index>((request.faces.RowCount() + 127) / 128, 1024));
         PrimitiveRows<<<blocks, 128, 0, static_cast<cudaStream_t>(context.stream)>>>(request);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA primitive boundary launch failed");
     }

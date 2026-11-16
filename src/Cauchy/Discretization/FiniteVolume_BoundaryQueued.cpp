@@ -44,19 +44,25 @@ namespace DNDS::Cauchy
         state.RequireSchema(_data->equation.Schema());
         DNDS_check_throw_info(state.PhysicalFieldNumber() == 1 && state.Space().Same(Metrics().Space()) && std::isfinite(options.time),
                               "queued boundary needs combined state in its prepared row space");
-        const bool mapped = options.target != BoundaryTarget::Quadrature;
+        const bool mapped = options.target != BoundaryTarget::Quadrature || !_data->stencil.quadratureBoundaryValues;
         const bool primitive = options.target == BoundaryTarget::PrimitiveGradient;
-        const index rows = mapped ? _data->gradientBoundaryRows.RowCount() : _data->boundaryTraceGeometry.RowCount();
+        const index rows = mapped ? _data->boundaryFaces.RowCount() : _data->BoundaryValueRows();
         DNDS_check_throw_info(output.RowCount() == rows && output.Layout().Kind() == R::RowLayoutKind::Table &&
                                   output.Layout().Width() == (primitive ? 5 : state.ComponentNumber()) && status.RowCount() == rows &&
                                   status.Layout().Kind() == R::RowLayoutKind::Table && status.Layout().Width() == 1 &&
                                   output.GetDevice() == Device() && status.GetDevice() == Device(),
                               "queued boundary output/status shape or placement differs");
-        DNDS_check_throw_info(!coefficients || (!mapped && _data->reconstruction),
-                              "polynomial boundary values require the quadrature reconstruction target");
+        DNDS_check_throw_info(!coefficients || (!primitive && _data->reconstruction),
+                              "polynomial boundary values require a reconstruction plan");
         const auto &mean = state.CoupledField().Owned();
         const auto &rec = coefficients ? coefficients->CoupledField().Owned() : _data->deviceEmpty;
         const auto &packet = incoming ? *incoming : _data->deviceEmpty;
+        DNDS_check_throw_info(!(_data->hasLocalInterfaceRows && !incoming),
+                              "boundary producer requires its selected center/quadrature interface section");
+        if (incoming)
+            DNDS_check_throw_info(packet.RowCount() == rows && packet.Layout().Width() == state.ComponentNumber() &&
+                                      packet.GetDevice() == Device() && !packet.Layout().IsVariable(),
+                                  "boundary interface section shape or placement differs from selected location");
         if (coefficients)
             DNDS_check_throw_info(coefficients->PhysicalFieldNumber() == 1 && coefficients->Space().Same(state.Space()) &&
                                       rec.RowCount() == mean.RowCount() && rec.GetDevice() == Device() &&
@@ -72,11 +78,11 @@ namespace DNDS::Cauchy
         struct Inputs
         {
             std::shared_ptr<const Data> owner;
-            Geom::MeshReadAccess mesh;
+            FiniteVolumeStencilStorage::ReadAccess stencil;
             std::optional<CFV::ReconstructionResidentRead> basis;
             bool hasWall;
             Inputs(std::shared_ptr<const Data> data, bool polynomial, bool primitive)
-                : owner(std::move(data)), mesh(owner->metrics.AcquireMeshRead(bool(owner->wallDistance))),
+                : owner(std::move(data)), stencil(owner->stencil.Read({owner->metrics.Device(), nullptr})),
                   hasWall(!primitive && owner->equation.HasRANS() && owner->equation.RANS().ComponentNumber() == 2)
             {
                 if (polynomial)
@@ -89,17 +95,17 @@ namespace DNDS::Cauchy
         const auto frame = _data->motion.At(options.time).KernelParameters();
         const int components = int(state.ComponentNumber());
         const bool hasIncoming = bool(incoming);
-        R::SubmitArrays(engine, stream, [pin, options, frame, components, mapped, primitive, hasIncoming](R::ExecutionContext context, auto mean, auto rec, auto incoming, auto target, auto status, auto points, auto rows, auto wall)
+        R::SubmitArrays(engine, stream, [pin, options, frame, components, mapped, primitive, hasIncoming](R::ExecutionContext context, auto mean, auto rec, auto incoming, auto target, auto status, auto faces, auto wall)
                         {
                 CUDA::BoundaryTraceRequest request;
                 request.parameters = R::MetadataArrayView(pin->owner->deviceBoundaryPolicy, context.device);
                 request.conditions = R::MetadataArrayView(pin->owner->deviceBoundaryConditions, context.device);
-                request.points = points;
-                request.sourceRows = rows;
+                request.stencil = pin->stencil.KernelDescriptor();
+                request.faces = faces;
                 request.means = mean; request.coefficients = rec; request.incoming = incoming;
                 request.output = target; request.status = status;
                 request.time = options.time; request.frame = frame;
-                request.components = components; request.useSourceRows = mapped;
+                request.components = components; request.centers = mapped;
                 request.exterior = options.exterior; request.repairRANS = options.repairRANS;
                 request.forcePointFallback = options.forcePointFallback;
                 request.hasIncoming = hasIncoming; request.polynomial = bool(pin->basis);
@@ -113,7 +119,7 @@ namespace DNDS::Cauchy
                     request.wallMean = {wall.data, wall.offsets, wall.rows, wall.width, wall.stride, wall.sizes, wall.kind, wall.device};
                 }
                 if (primitive) CUDA::FillPrimitiveBoundary(context, request);
-                else CUDA::FillBoundaryTraces(context, request); }, R::ReadAs<R::TableRows>(mean), R::ReadAs<R::TableRows>(rec), R::ReadAs<R::TableRows>(packet), R::WriteAs<R::TableRows>(output), R::WriteAs<R::FixedRows<1>>(status), R::ReadAs<R::FixedRows<1>>(_data->boundaryTraceGeometry), R::ReadAs<R::FixedRows<1>>(_data->gradientBoundaryRows), R::ReadAs<R::TableRows>(pin->hasWall ? _data->wallDistance->CellMeans() : _data->deviceEmpty));
+                else CUDA::FillBoundaryTraces(context, request); }, R::ReadAs<R::TableRows>(mean), R::ReadAs<R::TableRows>(rec), R::ReadAs<R::TableRows>(packet), R::WriteAs<R::TableRows>(output), R::WriteAs<R::FixedRows<1>>(status), R::ReadAs<R::FixedRows<1>>(_data->boundaryFaces), R::ReadAs<R::TableRows>(pin->hasWall ? _data->wallDistance->CellMeans() : _data->deviceEmpty));
 #else
         DNDS_check_throw_info(false, "CUDA boundary execution is not built");
 #endif
@@ -124,10 +130,12 @@ namespace DNDS::Cauchy
             return;
 #ifdef DNDS_USE_CUDA
         const auto device = owner->metrics.Device();
-        const index quadrature = owner->boundaryTraceGeometry.RowCount();
-        const index primitive = primitiveBoundary ? primitiveBoundary->RowCount() : 0;
+        const index quadrature = owner->BoundaryValueRows();
+        const bool centered = primitiveBoundary || std::any_of(fields.begin(), fields.end(), [](const auto &field)
+                                                               { return field.gradientBoundary && field.gradientBoundary->SharedStorage() != field.boundaryValues.SharedStorage(); });
+        const index primitive = centered ? owner->boundaryFaces.RowCount() : 0;
         const bool gradientPP = nativeDirectGradient && owner->settings.numerics.positivity;
-        const index owned = primitiveGradient || gradientPP || owner->equation.HasRANS() ? owner->metrics.NumCell() : 0;
+        const index owned = primitiveGradient || owner->equation.HasRANS() ? owner->metrics.NumCell() : 0;
         const index ghost = primitiveGradient ? owner->metrics.NumCellProc() - owner->metrics.NumCell() : 0;
         preparationStatus.emplace(PreparationStatusStorage{
             R::Array<NumericalStatus>(R::RowLayout::Dense(quadrature, 1), device),
@@ -135,15 +143,13 @@ namespace DNDS::Cauchy
             R::Array<NumericalStatus>(R::RowLayout::Dense(owned, 1), device),
             R::Array<NumericalStatus>(R::RowLayout::Dense(ghost, 1), device),
             R::Array<NumericalStatus>(R::RowLayout::Dense(CUDA::StateReductionScratchRows(std::max({quadrature, primitive, owned, ghost}) + 1), 1), device),
-            R::Array<NumericalStatus>(R::RowLayout::Dense(1, 1), device),
-            R::Array<real>(R::RowLayout::Dense(gradientPP ? owned : 0, 1), device)});
+            R::Array<NumericalStatus>(R::RowLayout::Dense(1, 1), device)});
         preparationStatus->quadrature.SetName("Cauchy/preparationStatus", DNDS_ALLOCATION_SITE());
-        preparationStatus->primitive.SetName("Cauchy/primitiveBoundaryStatus", DNDS_ALLOCATION_SITE());
+        preparationStatus->primitive.SetName("Cauchy/centerBoundaryStatus", DNDS_ALLOCATION_SITE());
         preparationStatus->partial.SetName("Cauchy/preparationStatusPartials", DNDS_ALLOCATION_SITE());
         preparationStatus->result.SetName("Cauchy/preparationStatusResult", DNDS_ALLOCATION_SITE());
         preparationStatus->meanOwned.SetName("Cauchy/preparationOwnedStatus", DNDS_ALLOCATION_SITE());
         preparationStatus->meanGhost.SetName("Cauchy/preparationGhostStatus", DNDS_ALLOCATION_SITE());
-        preparationStatus->gradientBeta.SetName("Cauchy/gradientBeta", DNDS_ALLOCATION_SITE());
 #else
         DNDS_check_throw_info(false, "CUDA boundary execution is not built");
 #endif
@@ -180,7 +186,8 @@ namespace DNDS::Cauchy
     void FiniteVolume::Workspace::SubmitDeviceBoundary(
         R::EagerEngine &engine, const R::ExecutionStream &stream,
         const EquationDofs &state, bool polynomial, real time,
-        OptionalRef<const R::Array<real>> incoming)
+        OptionalRef<const R::Array<real>> incoming,
+        OptionalRef<const R::Array<real>> incomingCenters)
     {
 #ifdef DNDS_USE_CUDA
         DNDS_check_throw_info(preparationStatus && preparationStatus->pending && fields.size() == 1,
@@ -189,25 +196,22 @@ namespace DNDS::Cauchy
         const bool mirrored = owner->settings.numerics.reconstruction == "variational" &&
                               owner->settings.numerics.vrBoundaryValue == "physicalMirrored";
         auto &field = fields.front();
-        const bool gradientBoundary = bool(field.gradientBoundary);
-        const auto fill = [&](bool exterior)
+        const auto coefficients = polynomial ? OptionalRef<const EquationDofs>(Coefficients()) : OptionalRef<const EquationDofs>{};
+        plan.SubmitBoundaryValues(engine, stream, state, coefficients,
+                                  field.boundaryValues, preparationStatus->quadrature,
+                                  {BoundaryTarget::Quadrature, mirrored, true, time}, incoming);
+        AppendPreparationStatus(engine, stream, preparationStatus->quadrature);
+        if (field.gradientBoundary && field.gradientBoundary->SharedStorage() != field.boundaryValues.SharedStorage())
         {
-            plan.SubmitBoundaryValues(engine, stream, state,
-                                      polynomial ? OptionalRef<const EquationDofs>(Coefficients()) : OptionalRef<const EquationDofs>{},
-                                      field.boundaryValues, preparationStatus->quadrature,
-                                      {BoundaryTarget::Quadrature, exterior, true, time}, incoming);
-            AppendPreparationStatus(engine, stream, preparationStatus->quadrature);
-        };
-        fill(mirrored && !gradientBoundary);
-        if (gradientBoundary)
-            R::SubmitArrays(engine, stream, [](R::ExecutionContext context, auto source, auto output, auto rows)
-                            { CUDA::CopyBoundaryRows(context, source, output, rows); }, R::ReadAs<R::TableRows>(field.boundaryValues), R::WriteAs<R::TableRows>(*field.gradientBoundary), R::ReadAs<R::FixedRows<1>>(owner->gradientBoundaryRows));
-        if (mirrored && gradientBoundary)
-            fill(true);
+            plan.SubmitBoundaryValues(engine, stream, state, coefficients,
+                                      *field.gradientBoundary, preparationStatus->primitive,
+                                      {BoundaryTarget::Gradient, false, true, time}, incomingCenters);
+            AppendPreparationStatus(engine, stream, preparationStatus->primitive);
+        }
         if (primitiveBoundary)
         {
             plan.SubmitBoundaryValues(engine, stream, state, {}, *primitiveBoundary, preparationStatus->primitive,
-                                      {BoundaryTarget::PrimitiveGradient, false, false, time}, incoming);
+                                      {BoundaryTarget::PrimitiveGradient, false, false, time}, incomingCenters);
             AppendPreparationStatus(engine, stream, preparationStatus->primitive);
         }
 #else

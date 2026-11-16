@@ -13,6 +13,7 @@
 #include "DNDS/Math/HardEigen.hpp"
 #include "CFV/Math/ReconstructionFunctional.hpp"
 #include "CFV/Math/TaylorBasis.hpp"
+#include "CFV/Math/FaceGeometry.hpp"
 #include "CFV/Plans/ReconstructionCapabilities.hpp"
 #include "CFV/Plans/ReconstructionStorage.hpp"
 #include <functional>
@@ -22,6 +23,7 @@
 namespace DNDS::Geom
 {
     class MeshReadAccess;
+    class CellFaceIncidenceRead;
     class UnstructuredMeshSnapshot;
 }
 namespace DNDS::Algebra
@@ -119,10 +121,15 @@ namespace DNDS::CFV
         Runtime::ArrayView<const real, false, Runtime::FixedRows<7>> quadrature;
         Runtime::ArrayView<const real, false, Runtime::FixedRows<3>> radialMoment;
         Runtime::ArrayView<const real, false, Runtime::FixedRows<7>> faceMean;
+        FacePeriodicView periodic{};
+        /// Neighbor reference centers represented in parent zero/one frames.
+        Runtime::ArrayView<const real, false, Runtime::FixedRows<6>> neighborCenters{};
         /// Host launcher validation, once before the numerical loop/launch.
         void ValidateDevice(Runtime::Device device) const
         {
             Runtime::ValidateViewDevices(device, cells, faceOffsets, quadrature, radialMoment, faceMean);
+            if (periodic.parameters.RowCount())
+                Runtime::ValidateViewDevices(device, periodic, neighborCenters);
         }
         DNDS_DEVICE_CALLABLE real GetCellVol(index iCell) const { return cells(iCell, 0); }
         DNDS_DEVICE_CALLABLE Geom::tPoint GetCellCent(index iCell) const
@@ -150,6 +157,25 @@ namespace DNDS::CFV
         DNDS_DEVICE_CALLABLE Geom::tPoint GetFaceCent(index iFace) const { return {faceMean(iFace, 0), faceMean(iFace, 1), faceMean(iFace, 2)}; }
         DNDS_DEVICE_CALLABLE Geom::tPoint GetFaceMeanNorm(index iFace) const { return {faceMean(iFace, 3), faceMean(iFace, 4), faceMean(iFace, 5)}; }
         DNDS_DEVICE_CALLABLE real GetFaceArea(index iFace) const { return faceMean(iFace, 6); }
+        DNDS_DEVICE_CALLABLE Geom::tPoint GetNeighborCent(index iFace, int side) const
+        {
+            return {neighborCenters(iFace, 3 * side), neighborCenters(iFace, 3 * side + 1), neighborCenters(iFace, 3 * side + 2)};
+        }
+    };
+    /** @brief Retain canonical topology without acquiring unrelated metric data.
+     * @details Device topology is prepared once during placement. Acquisition
+     * never uploads mesh arrays or waits for a solution producer. The borrowed
+     * incidence view is valid only while this scope or its queued owner lives.
+     */
+    class FiniteVolumeTopologyRead
+    {
+        std::shared_ptr<const Detail::FiniteVolumeData> _data;
+        std::shared_ptr<Geom::CellFaceIncidenceRead> _source;
+        explicit FiniteVolumeTopologyRead(std::shared_ptr<const Detail::FiniteVolumeData> data);
+        friend class FiniteVolumePlan;
+
+    public:
+        Geom::CellFaceIncidenceView View() const;
     };
     /// Read scope pins metadata, values and the mesh generation. Construction
     /// validates once; HostView() copies only borrowed pointers/scalars.
@@ -158,6 +184,9 @@ namespace DNDS::CFV
         std::shared_ptr<const Detail::FiniteVolumeData> _data;
         std::shared_ptr<Geom::MeshReadAccess> _meshRead;
         Runtime::Array<real>::ReadLease _cells, _quadrature, _radialMoment, _faceMean;
+        Runtime::Array<real>::ReadLease _neighborCenters;
+        Runtime::Array<uint8_t>::ReadLease _periodicCodes;
+        Runtime::Array<FacePeriodicParameters>::ReadLease _periodicParameters;
         Runtime::Array<index>::ReadLease _offsets;
         explicit FiniteVolumeRead(std::shared_ptr<const Detail::FiniteVolumeData> data, Runtime::ExecutionContext context);
         friend class FiniteVolumePlan;
@@ -209,6 +238,7 @@ namespace DNDS::CFV
         }
         void Validate() const;
         FiniteVolumeRead AcquireRead(Runtime::ExecutionContext context = Runtime::ExecutionContext::Host()) const;
+        FiniteVolumeTopologyRead AcquireTopologyRead() const;
         /// Generation-only guard for queued operators whose metric arrays are
         /// declared as scheduled operands. Does not acquire metric payloads.
         Geom::MeshReadAccess AcquireMeshRead(bool wallDistance = false) const;
@@ -220,6 +250,9 @@ namespace DNDS::CFV
         const Runtime::Array<real> &FaceMetrics() const;
         const Runtime::Array<real> &RadialMoments() const;
         const Runtime::Array<index> &FaceOffsets() const;
+        const Runtime::Array<uint8_t> &FacePeriodicCodes() const;
+        const Runtime::Array<FacePeriodicParameters> &PeriodicParameters() const;
+        const Runtime::Array<real> &NeighborCenters() const;
         /// Explicit setup copy of immutable metrics, independent of VR buffers.
         /// Row-space/halo/mesh identities are shared, but payload arrays belong
         /// only to the returned placement. Release the original host plan when
@@ -482,6 +515,16 @@ namespace DNDS::CFV
             if (derivative < cachedDerivatives)
                 return cached(2 * iPoint + side, mode * cachedDerivatives + derivative);
             return Evaluate(iCell, iPoint, side, PreparePoint(iCell, point), derivative, mode);
+        }
+        /// An arbitrary point (including the independently requested center)
+        /// cannot index a face-quadrature cache. Reuse one prepared Taylor
+        /// context across all modes/components and retain its central moments.
+        template <class Scalar>
+        DNDS_DEVICE_CALLABLE Scalar EvaluateAtPoint(index iCell, const Math::TaylorPointEvaluationT<Scalar> &point,
+                                                    int derivative, int mode) const noexcept
+        {
+            const Scalar value = polynomial.Derivative(derivative, mode + 1, point);
+            return derivative == 0 ? value - DNDS::Math::ScalarCast<Scalar>(moments(iCell, mode + 1)) : value;
         }
     };
     /// Pins the geometry generation and Runtime cache allocations once outside

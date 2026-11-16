@@ -28,7 +28,7 @@ namespace DNDS::Cauchy::CUDA
     /** @brief Read-only linearization snapshot, independent of live means.
      * @details means, pressure and pressureDerivative cover owned+ghost cells
      * in one canonical numbering. radius stores convection/diffusion per
-     * auxiliary face; Roe magnitudes are contact/plus/minus per sample and may
+     * auxiliary face; Roe magnitudes are contact/plus/minus per incidence and may
      * be absent for scalar dissipation. Geometry preserves separate periodic
      * images that happen to address the same sparse block. All values are
      * retained by the calling operation; this POD acquires no leases.

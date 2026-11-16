@@ -1,5 +1,6 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
+#include "CompactStencilFixture.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeAuxiliaryKernels.hpp"
 #include "Cauchy/Discretization/CPU/FiniteVolumePointKernels.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeBoundaryKernels.hpp"
@@ -82,24 +83,37 @@ TEST_CASE("CUDA boundary producers match generic CPU face exterior and interface
             points.push_back({i, i, i, i, 0, 0, {-1, 0, 0}, {.2 * i, .1, 0}});
         }
         auto conditionRows = DeviceRows(physical);
-        auto pointRows = DeviceRows(points);
-        auto sourceRows = DeviceRows<I>({2, 0, 1});
+        CauchyTest::CompactStencilFixture::Input geometry;
+        geometry.cellFaces = {{0}, {1}, {2}};
+        geometry.faceCells = {{{0, DNDS::UnInitIndex}}, {{1, DNDS::UnInitIndex}}, {{2, DNDS::UnInitIndex}}};
+        geometry.faceOffsets = {0, 1, 2, 3};
+        geometry.routing = {{0, 0, 1, 1, DNDS::UnInitIndex}, {1, 1, 2, 2, DNDS::UnInitIndex}, {2, 2, 0, 0, DNDS::UnInitIndex}};
+        for (I iCell = 0; iCell < 3; ++iCell)
+        {
+            geometry.cells.insert(geometry.cells.end(), {1, 0, 0, 0, 0, 0, 0, 1});
+            const std::initializer_list<real> metric{.2 * iCell, .1, 0, -1, 0, 0, 1};
+            geometry.faceMetrics.insert(geometry.faceMetrics.end(), metric);
+            geometry.quadrature.insert(geometry.quadrature.end(), metric);
+        }
+        const auto stencil = std::make_shared<CauchyTest::CompactStencilFixture>(std::move(geometry), context);
+        auto faceRanges = DeviceRows<C::BoundaryFaceRange>({{2, 0, 1, true}, {0, 1, 1, false}, {1, 2, 1, false}});
         auto walls = DeviceRows<real>({.03, .04, .05});
         R::Array<real> means(R::RowLayout::Dense(3, components)), coefficients(R::RowLayout::Dense(3, 2 * components));
-        R::Array<real> incoming(R::RowLayout::Dense(1, components)), basis(R::RowLayout::Dense(6, 2));
+        R::Array<real> incoming(R::RowLayout::Dense(3, components)), basis(R::RowLayout::Dense(6, 2));
         {
             auto u = means.Write(), rec = coefficients.Write(), packet = incoming.Write(), b = basis.Write();
             for (I i = 0; i < 3; ++i)
             {
                 const auto flow = equation.Gas().Conservative({1.2 + .02 * i, .2, .05, -.03, 1.1});
+                const auto incomingFlow = equation.Gas().Conservative({1.2, .2, .05, -.03, 1.1});
                 for (int j = 0; j < components; ++j)
                 {
                     u.View()(i, j) = j < 5 ? flow[j] : j == 5 ? .02
                                                               : .3;
                     rec.View()(i, 2 * j) = .001 * (j + 1);
                     rec.View()(i, 2 * j + 1) = -.002 * (j + 1);
-                    if (i == 0)
-                        packet.View()(0, j) = u.View()(i, j);
+                    packet.View()(i, j) = j < 5 ? incomingFlow[j] : j == 5 ? .02
+                                                                           : .3;
                 }
                 for (int side = 0; side < 2; ++side)
                 {
@@ -117,23 +131,23 @@ TEST_CASE("CUDA boundary producers match generic CPU face exterior and interface
         R::Array<DNDS::NumericalStatus> errors(R::RowLayout::Dense(3, 1), device);
         for (const int operation : {0, 1, 2})
         {
-            const bool exterior = operation != 0, primitive = operation == 2;
+            const bool exterior = operation == 1, primitive = operation == 2;
             auto &target = primitive ? primitiveOutput : output;
             R::EagerEngine engine;
             const auto stream = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
             const auto polynomial = DNDS::CFV::Math::TaylorBasis(2, 1).KernelParameters();
-            R::SubmitArrays(engine, stream, [components, exterior, primitive, polynomial, frame](auto execution, auto p, auto bc, auto geo, auto rows, auto wall, auto mean, auto coefs, auto incoming, auto basis, auto out, auto status)
+            R::SubmitArrays(engine, stream, [components, exterior, primitive, polynomial, frame, stencil](auto execution, auto p, auto bc, auto ranges, auto wall, auto mean, auto coefs, auto incoming, auto basis, auto out, auto status)
                             {
                 K::BoundaryTraceRequest request;
                 request.frame = frame.KernelParameters(); request.time = .2;
-                request.parameters = p; request.conditions = bc; request.points = geo; request.sourceRows = rows;
+                request.parameters = p; request.conditions = bc; request.stencil = stencil->Descriptor(); request.faces = ranges;
                 request.wallMean = wall; request.means = mean; request.coefficients = coefs; request.incoming = incoming;
                 request.basis.cached = basis; request.basis.polynomial = polynomial;
                 request.basis.availableDerivatives = request.basis.cachedDerivatives = 1;
                 request.output = out; request.status = status; request.components = components; request.modes = 2;
-                request.polynomial = request.useSourceRows = request.hasIncoming = true; request.exterior = exterior;
+                request.polynomial = !primitive; request.centers = primitive; request.hasIncoming = true; request.exterior = exterior;
                 if (primitive) K::FillPrimitiveBoundary(execution, request);
-                else K::FillBoundaryTraces(execution, request); }, R::ReadAs<R::FixedRows<1>>(params), R::ReadAs<R::FixedRows<1>>(conditionRows), R::ReadAs<R::FixedRows<1>>(pointRows), R::ReadAs<R::FixedRows<1>>(sourceRows), R::ReadAs<R::FixedRows<1>>(walls), R::ReadAs<R::TableRows>(u), R::ReadAs<R::TableRows>(rec), R::ReadAs<R::TableRows>(packet), R::ReadAs<R::TableRows>(cache), R::WriteAs<R::TableRows>(target), R::WriteAs<R::FixedRows<1>>(errors));
+                else K::FillBoundaryTraces(execution, request); }, R::ReadAs<R::FixedRows<1>>(params), R::ReadAs<R::FixedRows<1>>(conditionRows), R::ReadAs<R::FixedRows<1>>(faceRanges), R::ReadAs<R::FixedRows<1>>(walls), R::ReadAs<R::TableRows>(u), R::ReadAs<R::TableRows>(rec), R::ReadAs<R::TableRows>(packet), R::ReadAs<R::TableRows>(cache), R::WriteAs<R::TableRows>(target), R::WriteAs<R::FixedRows<1>>(errors));
             engine.Close();
             const auto downloaded = target.To(host);
             const auto downloadedErrors = errors.To(host);
@@ -162,7 +176,7 @@ TEST_CASE("CUDA boundary producers match generic CPU face exterior and interface
                 {
                     C::FlowState flow;
                     for (int j = 0; j < 5; ++j)
-                        flow[j] = iCell == 2 ? point[j] : .5 * (point[j] + mean[j]);
+                        flow[j] = point[j]; // Primitive gradients consume the physical center FaceTrace.
                     const auto value = equation.Gas().Primitive(flow);
                     point = {value.density, value.velocity[0], value.velocity[1], value.velocity[2], value.temperature};
                 }
@@ -280,33 +294,28 @@ TEST_CASE("CUDA face auxiliaries distinguish rotated neighbor physical boundary 
     const auto neighbor = gas.Conservative({.8, .2, .4, -.03, .7});
     const auto incoming = gas.Conservative({1.2, -.15, .21, 0., 1.3});
     auto params = DeviceRows<C::PerfectGasSpatialParameters>({parameters});
-    auto own = DeviceStates({left}), ghost = DeviceStates({neighbor}), packet = DeviceStates({incoming});
-    auto entries = DeviceRows<I>({0, 1, 2}), faceIds = DeviceRows<I>({0, 1, 2}), quadratureOffsets = DeviceRows<I>({0, 1, 2, 3});
-    auto selected = DeviceRows<I>({2, 0, 1}), cellOffsets = DeviceRows<I>({0, 3}), cellFaces = DeviceRows<I>({0, 1, 2}), selectedCells = DeviceRows<I>({0});
-    auto area = DeviceRows<real>({1., .8, 1.2});
+    auto own = DeviceStates({left}), ghost = DeviceStates({neighbor}), packet = DeviceStates({incoming, incoming});
+    auto selected = DeviceRows<I>({2, 0, 1}), selectedCells = DeviceRows<I>({0});
     auto kinds = DeviceRows<C::BoundaryKind>({C::BoundaryKind::Interior, C::BoundaryKind::Farfield, C::BoundaryKind::Interface});
-    R::Array<real> hostGeometry(R::RowLayout::Dense(2, 8));
-    {
-        auto write = hostGeometry.Write();
-        for (I iCell = 0; iCell < 2; ++iCell)
-            for (int j = 0; j < 8; ++j)
-                write.View()(iCell, j) = j == 0 ? iCell + 1 : 0;
-    }
-    auto geometry = hostGeometry.To(device, context);
-    std::vector<C::FiniteVolumeDetail::SampleRecord> records(3);
+    CauchyTest::CompactStencilFixture::Input input;
+    input.cellFaces = {{0, 1, 2}};
+    input.faceCells = {{{0, 1}}, {{0, DNDS::UnInitIndex}}, {{0, DNDS::UnInitIndex}}};
+    input.faceOffsets = {0, 1, 2, 3};
+    input.cells = {1, 0, 0, 0, 0, 0, 0, 1, 2, 1, 0, 0, 1, 0, 0, 1};
+    input.codes = {4, 0, 0};
+    input.parameters.rotatedGenerators = 1;
+    input.parameters.generators.rotation[1].map() << 0, -1, 0, 1, 0, 0, 0, 0, 1;
+    input.parameters.generators.translation[1].map().setZero();
+    input.routing = {{0, 0, DNDS::UnInitIndex, DNDS::UnInitIndex, DNDS::UnInitIndex},
+                     {1, 1, 0, 0, DNDS::UnInitIndex},
+                     {2, 2, 1, 1, DNDS::UnInitIndex}};
     for (I iFace = 0; iFace < 3; ++iFace)
     {
-        auto &sample = records[iFace];
-        sample.cell = 0;
-        sample.other = iFace == 0 ? 1 : DNDS::UnInitIndex;
-        sample.point = sample.face = sample.condition = iFace;
-        sample.normal = {1, 0, 0};
-        sample.ownPoint = {.2, .1 * iFace, 0};
-        sample.rotation = {0, 1, 0, -1, 0, 0, 0, 0, 1};
-        sample.changesFrame = iFace == 0;
-        sample.boundaryPoint = 0;
+        const std::initializer_list<real> metric{.2, .1 * iFace, 0, 1, 0, 0, std::array<real, 3>{1., .8, 1.2}[iFace]};
+        input.faceMetrics.insert(input.faceMetrics.end(), metric);
+        input.quadrature.insert(input.quadrature.end(), metric);
     }
-    auto samples = DeviceRows<C::FiniteVolumeDetail::SampleRecord>(records);
+    CauchyTest::CompactStencilFixture geometry(std::move(input), context);
     R::Array<real> spectral(R::RowLayout::Dense(3, 2), device), wave(R::RowLayout::Dense(3, 1), device), pressure(R::RowLayout::Dense(3, 1), device);
     R::Array<DNDS::NumericalStatus> status(R::RowLayout::Dense(3, 1), device);
     C::RigidFrameParameters frame;
@@ -315,22 +324,18 @@ TEST_CASE("CUDA face auxiliaries distinguish rotated neighbor physical boundary 
     frame.centerVelocity = {.03, -.04, 0};
     {
         auto p = params.Read(context);
-        auto u = own.Read(context), ug = ghost.Read(context), in = packet.Read(context), geo = geometry.Read(context), areas = area.Read(context);
-        auto s = samples.Read(context);
+        auto u = own.Read(context), ug = ghost.Read(context), in = packet.Read(context);
         auto conditions = kinds.Read(context);
-        auto e = entries.Read(context), f = faceIds.Read(context), q = quadratureOffsets.Read(context), selection = selected.Read(context);
+        auto selection = selected.Read(context);
         auto lambda = spectral.Write(context), jump = wave.Write(context), minimum = pressure.Write(context);
         auto errors = status.Write(context);
         K::AuxiliaryFaceRequest request;
         request.state.parameters = p.View<R::FixedRows<1>>();
         request.state.mean = {u.View<R::TableRows>(), ug.View<R::TableRows>()};
         request.state.dimension = 2;
-        request.samples = s.View<R::FixedRows<1>>();
-        request.entries = e.View<R::FixedRows<1>>();
-        request.stencilFaces = f.View<R::FixedRows<1>>();
-        request.quadratureOffsets = q.View<R::FixedRows<1>>();
-        request.geometry = geo.View<R::FixedRows<8>>();
-        request.area = areas.View<R::FixedRows<1>>();
+        request.stencil = geometry.Descriptor();
+        request.faceNumber = 3;
+        request.allCells = 2;
         request.conditions = conditions.View<R::FixedRows<1>>();
         request.incoming = in.View<R::TableRows>();
         request.spectral = lambda.View<R::TableRows>();
@@ -380,10 +385,10 @@ TEST_CASE("CUDA face auxiliaries distinguish rotated neighbor physical boundary 
     }
     R::Array<real> cellLambda(R::RowLayout::Dense(1, 1), device), cellJump(R::RowLayout::Dense(1, 1), device), cellPressure(R::RowLayout::Dense(1, 1), device);
     {
-        auto off = cellOffsets.Read(context), faces = cellFaces.Read(context), selection = selectedCells.Read(context);
-        auto ar = area.Read(context), geo = geometry.Read(context), lambda = spectral.Read(context), jump = wave.Read(context), minimum = pressure.Read(context);
+        auto selection = selectedCells.Read(context);
+        auto lambda = spectral.Read(context), jump = wave.Read(context), minimum = pressure.Read(context);
         auto ls = cellLambda.Write(context), jm = cellJump.Write(context), pm = cellPressure.Write(context);
-        K::AuxiliaryCellRequest request{off.View<R::FixedRows<1>>(), faces.View<R::FixedRows<1>>(), ar.View<R::FixedRows<1>>(), geo.View<R::FixedRows<8>>(), lambda.View<R::TableRows>(), jump.View<R::TableRows>(), minimum.View<R::TableRows>(), {}, ls.View<R::TableRows>(), jm.View<R::TableRows>(), pm.View<R::TableRows>(), .2};
+        K::AuxiliaryCellRequest request{geometry.Descriptor(), 1, 3, lambda.View<R::TableRows>(), jump.View<R::TableRows>(), minimum.View<R::TableRows>(), {}, ls.View<R::TableRows>(), jm.View<R::TableRows>(), pm.View<R::TableRows>(), .2};
         K::ReduceAuxiliaryCells(context, request, selection.View<R::FixedRows<1>>());
         auto done = R::Completion::Record(context);
         ls.Complete(done);

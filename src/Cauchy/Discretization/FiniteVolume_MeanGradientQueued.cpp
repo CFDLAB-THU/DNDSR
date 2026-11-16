@@ -17,6 +17,15 @@ namespace DNDS::Cauchy
                               "mean-gradient boundary workspace/stream differs");
         auto &work = *gradients._data;
         work.binding.Check(state);
+        DNDS_check_throw_info(!_data->hasLocalInterfaceRows || incoming,
+                              "mean gradient requires its face-center interface section");
+        if (incoming)
+            DNDS_check_throw_info(incoming->RowCount() == _data->boundaryFaces.RowCount() &&
+                                      incoming->Layout().Width() == state.ComponentNumber() &&
+                                      incoming->GetDevice() == Device() && !incoming->Layout().IsVariable(),
+                                  "mean-gradient interface center section shape or placement differs");
+        if (!_data->boundaryFaces.RowCount())
+            return;
         if (Device().space == R::MemorySpace::CUDA)
         {
 #ifdef DNDS_USE_CUDA
@@ -35,7 +44,8 @@ namespace DNDS::Cauchy
         struct Inputs
         {
             std::shared_ptr<const Data> owner;
-            Geom::MeshReadAccess geometry;
+            FiniteVolumeStencilStorage::ReadAccess stencil;
+            R::Array<BoundaryFaceRange>::ReadLease faces;
             bool walls = false;
             std::optional<Physics::Chemistry::ChemicalWorkerPool> workers;
             std::vector<EquationBlockLocation> locations;
@@ -43,7 +53,7 @@ namespace DNDS::Cauchy
             index components = 0, ransFirst = -1, incoming = -1;
             Inputs(std::shared_ptr<const Data> data, std::optional<Physics::Chemistry::ChemicalWorkerPool> pool)
                 : owner(std::move(data)),
-                  geometry(owner->metrics.AcquireMeshRead(owner->equation.HasRANS() && owner->equation.RANS().ComponentNumber() == 2)),
+                  stencil(owner->stencil.Read()), faces(owner->boundaryFaces.Read()),
                   workers(std::move(pool))
             {
                 if (owner->equation.HasRANS() && owner->equation.RANS().ComponentNumber() == 2)
@@ -74,7 +84,7 @@ namespace DNDS::Cauchy
         for (const auto &output : outputs)
             for (const auto &input : inputs)
                 DNDS_check_throw_info(!output.storage->Values().Overlaps(input.storage->Values()), "mean-gradient boundary output aliases input");
-        R::SubmitArrayBatch(engine, stream, [pin, time](R::ExecutionContext, auto inputs, auto outputs, auto points, auto rows, auto wallMean)
+        R::SubmitArrayBatch(engine, stream, [pin, time](R::ExecutionContext, auto inputs, auto outputs, auto wallMean)
                             {
             // Acquire worker state at execution, never while earlier commands
             // may need the same pool. It is released before the next launcher.
@@ -88,9 +98,9 @@ namespace DNDS::Cauchy
                 targets.push_back({outputs[location.physicalField], location.firstComponent, location.componentNumber});
             }
             CPU::BoundaryTraceRequest request;
-            request.points = points;
-            request.pointRows = rows;
-            request.usePointRows = true;
+            request.stencil = pin->stencil.View();
+            request.faces = pin->faces.View<R::FixedRows<1>>();
+            request.centers = true;
             request.repairRANS = false;
             request.means = {means.data(), index(means.size())};
             request.output = {targets.data(), index(targets.size())};
@@ -108,6 +118,6 @@ namespace DNDS::Cauchy
             RequireNumericalSuccess(CPU::FillBoundaryTraces(request,
                 {pin->owner->boundaryConditions.data(), index(pin->owner->boundaryConditions.size())},
                 pin->owner->boundaryPoint, SpanView<CPU::BoundaryTraceWorkerScratch>{workers.data(), index(workers.size())}),
-                "queued mean-gradient boundary"); }, std::move(inputs), std::move(outputs), std::make_tuple(R::ReadAs<R::FixedRows<1>>(_data->boundaryTraceGeometry), R::ReadAs<R::FixedRows<1>>(_data->gradientBoundaryRows), R::ReadAs<R::RowLayout>(pin->walls ? _data->wallDistance->CellMeans() : _data->deviceEmpty)));
+                "queued mean-gradient boundary"); }, std::move(inputs), std::move(outputs), std::make_tuple(R::ReadAs<R::RowLayout>(pin->walls ? _data->wallDistance->CellMeans() : _data->deviceEmpty)));
     }
 }

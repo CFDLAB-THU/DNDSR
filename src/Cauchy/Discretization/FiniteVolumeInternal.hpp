@@ -47,51 +47,6 @@ namespace DNDS::Cauchy::FiniteVolumeDetail
             return Runtime::RowLayout::TiledColMajor(rows, width, prototype.Stride());
         return Runtime::RowLayout::Dense(rows, width);
     }
-    struct Sample
-    {
-        index cell, other, point;
-        int side;
-        int zone;
-        Geom::tPoint normal, ownPoint, otherPoint;
-        Geom::tGPoint rotation;
-        BoundaryCondition boundary;
-        index auxiliaryFace = UnInitIndex;
-        real viscousDistance = 0;
-        index face = UnInitIndex;
-        /// Dense column slot in this cell's canonical Jacobian row. Filled
-        /// once after JacobianColumns() is constructed; UnInitIndex for
-        /// diagonal/boundary samples and non-Jacobian quadrature samples.
-        index jacobianColumn = UnInitIndex;
-        /// Row in the incoming packet used by this sample: RHS flow for
-        /// quadrature samples, faceFlow for centered Jacobian samples.
-        index boundaryPoint = UnInitIndex;
-        /// Dense RHSLocalDiagnostics force slot, resolved once during setup.
-        /// Non-wall and interior samples keep UnInitIndex.
-        index forceSlot = UnInitIndex;
-        /// Exact setup-time frame test. Ordinary and translated-periodic faces
-        /// keep components unchanged; even a small nonidentity rotation remains
-        /// active. Default true keeps hand-built samples conservative.
-        bool changesFrame = true;
-    };
-    /// Canonical rank-owned cell-face-cell columns, retaining remote columns
-    /// and folding self-periodic incidences into the eventual diagonal.
-    inline std::vector<std::vector<index>> JacobianColumns(const std::vector<index> &offsets, const std::vector<Sample> &samples)
-    {
-        std::vector<std::vector<index>> columns(offsets.size() - 1);
-        for (index iCell = 0; iCell < index(columns.size()); ++iCell)
-        {
-            auto &row = columns[iCell];
-            for (index entry = offsets[iCell]; entry < offsets[iCell + 1]; ++entry)
-            {
-                const auto other = samples[entry].other;
-                if (other != UnInitIndex && other != iCell)
-                    row.push_back(other);
-            }
-            std::sort(row.begin(), row.end());
-            row.erase(std::unique(row.begin(), row.end()), row.end());
-        }
-        return columns;
-    }
 
 }
 
@@ -103,8 +58,11 @@ namespace DNDS::Cauchy
         {
             std::weak_ptr<Geom::UnstructuredMesh> mesh;
             Runtime::VersionStamp stamp;
-            Runtime::Array<BoundaryPoint> points{Runtime::RowLayout::Dense(0, 1)};
-            Runtime::Array<BoundaryPoint> faces{Runtime::RowLayout::Dense(0, 1)};
+            Runtime::Array<BoundaryFaceRange> faces{Runtime::RowLayout::Dense(0, 1)};
+            index quadratureRows = 0;
+            int integrationOrder = 1;
+            int meanIntegrationOrder = 5;
+            bool axisymmetric = false;
         };
     }
     struct FiniteVolume::Data
@@ -141,8 +99,16 @@ namespace DNDS::Cauchy
         std::shared_ptr<Detail::BoundaryPointLayout> boundaryLayout;
         /// Mesh-sized inputs declared by the boundary operator; independent of
         /// the host setup vectors used by the still-pending RHS extraction.
-        Runtime::Array<BoundaryTraceGeometry> boundaryTraceGeometry;
-        Runtime::Array<index> gradientBoundaryRows;
+        Runtime::Array<BoundaryFaceRange> boundaryFaces;
+        /// Required RHS/VR packet section. Direct midpoint consumers share
+        /// center values; no unused quadrature payload is allocated for them.
+        index BoundaryValueRows() const
+        {
+            return stencil.quadratureBoundaryValues ? boundaryLayout->quadratureRows : boundaryFaces.RowCount();
+        }
+        /// Caller-owned boundary-only output snapshot. Rebuilds requested
+        /// boundary geometry on the CPU; never downloads the complete mesh.
+        Runtime::Array<BoundaryTraceGeometry> BoundaryTraceSnapshot() const;
         std::vector<BoundaryCondition> boundaryConditions;
         /// Small immutable backend metadata. Numeric boundary kernels consume
         /// these resolved records, never the host condition owners/callbacks.
@@ -169,9 +135,8 @@ namespace DNDS::Cauchy
         /// Setup extent for CPU row-local PP scratch; no device readback is
         /// needed when constructing a placed workspace.
         index maximumPositivityPoints = 0;
+        index maximumGradientPoints = 0;
         std::shared_ptr<const LimitedVRGeometry> limitedVRGeometry;
-        /// Cell-center displacements for direct-P1 trace/volume PP checks.
-        /// Shares positivityOffsets with polynomial sampling but owns no basis.
         /// Small fixed-flow leaves retain their five-component affine bounds;
         /// orchestration and complete equation checks use defaultAdmissibility.
         std::optional<ThermalBounds> fixedFlowThermalBounds;
@@ -180,6 +145,9 @@ namespace DNDS::Cauchy
         Runtime::Array<real> ransCellLength;
         /// CPU-only immutable preparation; called before a spatial placement.
         void BuildSourceQuadrature();
+        /// Build compact canonical face routing and incidence matrix slots.
+        /// No expanded sample/rotation/BC geometry is retained or published.
+        void BuildStencil();
         /// Allocate/fill PP query maps, borrowing face/source caches without
         /// changing the canonical per-cell point order or sampling rules.
         void BuildPositivityQuadrature(bool limitedVR);
@@ -260,12 +228,12 @@ namespace DNDS::Cauchy
         struct State;
         std::shared_ptr<State> state;
         PositivityWorkspace(std::shared_ptr<const Data> owner, const EquationDofs &prototype,
-                            const EquationDofs &coefficients, std::optional<Physics::Chemistry::ChemicalWorkerPool> workers);
+                            std::optional<Physics::Chemistry::ChemicalWorkerPool> workers);
         void Apply(const EquationDofs &input, const EquationDofs &unlimited, EquationDofs &flux, bool refresh);
-        /// Common queued CPU/CUDA composition with explicit controller drains
-        /// only for all-good/recovery decisions and final numerical reporting.
-        /// Every leaf declares its operands before execution. Dynamic stopping
-        /// is intentionally host-observed; no fixed 1000-sweep queue is issued.
+        /// Common queued CPU/CUDA producer. Sampling, degree selection and
+        /// bounded recovery stay cell-local. No controller drain or global
+        /// retry decision occurs here; LocalStatistics observes the compact
+        /// status/count/minimum only after the enclosing reporting drain.
         void Apply(Runtime::EagerEngine &, const Runtime::ExecutionStream &,
                    const EquationDofs &input, const EquationDofs &unlimited, EquationDofs &flux, bool refresh);
         std::pair<index, real> LocalStatistics() const;

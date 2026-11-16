@@ -122,7 +122,7 @@ namespace DNDS::Cauchy
             if (boundaryInput)
             {
                 ValidateBoundaryInputs(*boundaryInput, time);
-                incomingRead.emplace(boundaryInput->QuadratureValues()
+                incomingRead.emplace((_data->stencil.quadratureBoundaryValues ? boundaryInput->QuadratureValues() : boundaryInput->FaceCenterValues())
                                          .CoupledField()
                                          .Owned()
                                          .Read());
@@ -130,10 +130,17 @@ namespace DNDS::Cauchy
             }
             const auto stencilRead = _data->stencil.Read();
             const auto stencil = stencilRead.View();
-            for (index entry = 0; entry < stencil.samples.RowCount(); ++entry)
+            const auto boundaryRead = _data->boundaryFaces.Read();
+            const auto ranges = boundaryRead.View<R::FixedRows<1>>();
+            for (index iBoundary = 0; iBoundary < ranges.RowCount(); ++iBoundary)
             {
-                const auto sample = FiniteVolumeDetail::ExpandSample(stencil.samples(entry, 0), {_data->boundaryConditions.data(), index(_data->boundaryConditions.size())});
-                if (sample.other != UnInitIndex) continue;
+                const auto range = ranges(iBoundary, 0);
+                const index count = stencil.quadratureBoundaryValues ? range.quadratureCount : 1;
+                for (index iLocal = 0; iLocal < count; ++iLocal)
+                {
+                const index iPoint = metric.FaceQuadratureBegin(range.face) + iLocal;
+                const auto sample = FiniteVolumeDetail::ExpandSample(stencil.RHSFaceSample(range.face, 0, iPoint),
+                    {_data->boundaryConditions.data(), index(_data->boundaryConditions.size())});
                 Gather(blocks, sample.cell, point);
                 if (basis)
                 {
@@ -167,6 +174,7 @@ namespace DNDS::Cauchy
                 surface << ',' << properties.thermo.temperature;
                 for (int k = 0; k < species; ++k) surface << ',' << properties.fractions[k];
                 surface << '\n';
+                }
             }
             DNDS_check_throw_info(bool(surface), "equation surface output preparation failed"); });
         return PreparedVisualization(_data->mesh, std::move(outputFields), std::move(names), surface.str(), time, hdfDeflateLevel);

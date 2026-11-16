@@ -6,6 +6,17 @@ RANS positivity does not determine the thermal factor, but Euler applies that
 factor to the entire nonlinear increment/RHS. Reconstruction has a different
 scope. Do not replace these policies with a common generic limiter.
 
+CUDA modal PP samples each lane's current point into registers and checks it
+before a warp/block acceptance reduction. The common unchanged case needs no
+shared sampled-state table or lane-zero point scan. Refresh first stores and
+reloads the candidate under the operator's exclusive output access; therefore
+that sampling pass verifies actual stored coefficients. Only cells requiring
+limiting materialize cell-local shared samples for the existing base/beta
+algorithm. Modified coefficients are stored, reloaded and checked cooperatively
+after every recovery attempt. No candidate becomes visible to another operator
+until successful completion; a failure leaves output unspecified. Species/RANS
+scope, thermal bounds and the lower-base sequence remain unchanged.
+
 ## State and energy constraints
 
 Write the conservative state as `U=(rho,m,rhoE,z,r)`, where `z_k=rho*Y_k`
@@ -321,3 +332,18 @@ The homogeneous mixture fixture demonstrates convergence of a short discrete
 reacting step, with selected H2/H2O residuals and actual species evolution. It
 does not establish equilibrium, flame accuracy, or robustness for arbitrary
 chemistry steps. See the matched physical studies in the active phase plan.
+
+## Point-local execution and geometry
+
+Modal PP is fused per cell on CPU and CUDA. It keeps bounded per-worker/shared
+samples, not full-domain sampled/base fields. Face and volume points retain the
+RHS/source rule. Physical-gradient PP and LVR's linear target instead check
+incident face centers only, validating the mean separately. This declared
+gradient point-set change does not lower modal PP or RHS quadrature.
+
+Reference selection, independent RANS scaling, local recovery and the actual
+post-storage thermal predicate retain the policies above. CUDA producers emit
+compact status/count/minimum block summaries, finalized without a cell-sized
+rescan. No host-observed global retry occurs between local recovery trials.
+See [compact geometry and ownership](CauchyCompactGeometry.md) for boundary
+center packets, shared volume basis and queued lifetimes.

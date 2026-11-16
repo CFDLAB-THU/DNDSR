@@ -1,6 +1,5 @@
 #include "Cauchy/Discretization/CPU/FiniteVolumeReconstructionKernels.hpp"
 #include "Cauchy/Discretization/CPU/FiniteVolumeSampleKernels.hpp"
-#include "CFV/Math/PeriodicFrame.hpp"
 #include "DNDS/Core/OMP.hpp"
 namespace DNDS::Cauchy::CPU
 {
@@ -17,13 +16,13 @@ namespace DNDS::Cauchy::CPU
                 return NumericalStatus{NumericalError::InvalidState}.At(-1, iFace);
             return {}; });
     }
-    NumericalResult<index> PrepareFaceCharacteristicMatrices(FiniteVolumeStencilView stencil, Geom::UnstructuredMeshView mesh,
-                                                             CFV::FiniteVolumeHostView metric, RHSFieldView u, index firstComponent,
+    NumericalResult<index> PrepareFaceCharacteristicMatrices(FiniteVolumeStencilView stencil, RHSFieldView u, index firstComponent,
                                                              Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::TableRows> l,
                                                              Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::TableRows> r,
                                                              std::optional<PerfectGas> gas,
                                                              std::optional<MeanThermodynamicView> thermodynamics) noexcept
     {
+        const auto &metric = stencil.metric;
         // The wrapper selects one provider, once. No EOS/worker call occurs
         // inside the face loop; mixtures consume the cached mean properties.
         if (bool(gas) == bool(thermodynamics) ||
@@ -40,14 +39,16 @@ namespace DNDS::Cauchy::CPU
         const auto compute = [&](index iAux) -> NumericalResult<index>
         {
             const auto iFace = stencil.stencilFaces(iAux, 0);
-            const auto cells = mesh.FaceCells(iFace);
+            const auto cells = stencil.topology.FaceCells(iFace);
             if (cells[0] < 0 || cells[0] >= metric.cells.RowCount())
                 return index(0);
             const auto left = loadFlow(cells[0]);
             auto right = left;
             if (cells[1] >= 0 && cells[1] < metric.cells.RowCount())
-                right = FiniteVolumeDetail::RotateState(loadFlow(cells[1]), CFV::Detail::OtherFrameInCell(mesh, iFace, 0));
-            const auto normal = metric.GetFaceNorm(metric.FaceQuadratureBegin(iFace));
+                right = stencil.metric.periodic.Rotates(iFace)
+                            ? FiniteVolumeDetail::RotateState(loadFlow(cells[1]), stencil.metric.periodic.OtherRotation(iFace, 0))
+                            : loadFlow(cells[1]);
+            const auto normal = metric.GetFaceMeanNorm(iFace);
             const index rightCell = cells[1] >= 0 && cells[1] < metric.cells.RowCount() ? cells[1] : cells[0];
             const auto result = thermodynamics
                                     ? TryCachedMeanCharacteristics(left, right, thermodynamics->Characteristics(cells[0]),

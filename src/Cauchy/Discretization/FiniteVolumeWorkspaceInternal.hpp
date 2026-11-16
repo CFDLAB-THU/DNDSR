@@ -150,7 +150,6 @@ namespace DNDS::Cauchy
         struct PreparationStatusStorage
         {
             R::Array<NumericalStatus> quadrature, primitive, meanOwned, meanGhost, partial, result;
-            R::Array<real> gradientBeta;
             bool pending = false;
         };
         std::optional<PreparationStatusStorage> preparationStatus;
@@ -489,8 +488,6 @@ namespace DNDS::Cauchy
         void PrepareDirectGradientLimiter(const EquationDofs &state, bool barth);
         void ApplyDirectGradientPositivity(const EquationDofs &state);
         void PreparePrimitiveGradient(const EquationDofs &state, CFV::ReconstructionRegion region);
-        void FillBoundary(const EquationDofs &state, bool polynomial, real time,
-                          PointEvaluator &evaluator, RHSScalarView incoming = {});
         /// Common queued boundary producer. Mutable fields are reserved at
         /// submission, including split CPU equation layouts. The CPU evaluator
         /// is retained until completion; if absent, the CPU launcher acquires
@@ -500,7 +497,8 @@ namespace DNDS::Cauchy
         void SubmitBoundary(R::EagerEngine &, const R::ExecutionStream &,
                             const EquationDofs &, bool polynomial, real time,
                             std::shared_ptr<PointEvaluator> evaluator = {},
-                            OptionalRef<const R::Array<real>> incoming = {});
+                            OptionalRef<const R::Array<real>> incoming = {},
+                            OptionalRef<const R::Array<real>> incomingCenters = {});
         void BuildPreparationStatus();
         /// One backend-neutral numerical status segment per spatial call.
         /// CPU leaves report during execution; CUDA summaries are inspected
@@ -547,6 +545,7 @@ namespace DNDS::Cauchy
         };
         struct LimiterStatisticsStorage
         {
+            R::Array<NumericalStatus> partialStatus, status;
             R::Array<index> partialCount, count;
             R::Array<real> partialMinimum, minimum;
         };
@@ -561,7 +560,8 @@ namespace DNDS::Cauchy
         /// spatial schedule, never from a numerical leaf. No host wait.
         void SubmitDeviceBoundary(R::EagerEngine &, const R::ExecutionStream &,
                                   const EquationDofs &, bool polynomial, real time,
-                                  OptionalRef<const R::Array<real>> incoming = {});
+                                  OptionalRef<const R::Array<real>> incoming = {},
+                                  OptionalRef<const R::Array<real>> incomingCenters = {});
         /// Device flux preparation owns only immutable descriptor scopes and
         /// reusable scratch. Durable means/coefficients are explicit operands.
         void BuildDeviceFlux();

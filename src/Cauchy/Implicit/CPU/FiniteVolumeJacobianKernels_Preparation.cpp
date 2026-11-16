@@ -137,10 +137,11 @@ namespace DNDS::Cauchy::CPU
         auto &point = workers[part].point;
         auto &cellMean = workers[part].cellMean;
         auto &evaluator = workers[part].evaluator;
-        const auto [begin, end] = rowRange(part, 0, request.linearizeBoundary ? request.stencil.jacobianSamples.RowCount() : 0);
-        for (index entry = begin; entry < end; ++entry)
+        const auto [begin, end] = rowRange(part, 0, request.linearizeBoundary ? owned : 0);
+        for (index iCell = begin; iCell < end; ++iCell)
+        for (index entry = request.stencil.jacobianOffsets(iCell, 0); entry < request.stencil.jacobianOffsets(iCell + 1, 0); ++entry)
         {
-            const auto sample = FiniteVolumeDetail::ExpandSample(request.stencil.jacobianSamples(entry, 0), request.conditions);
+            const auto sample = FiniteVolumeDetail::ExpandSample(request.stencil.JacobianSample(iCell, entry), request.conditions);
             if (sample.other != UnInitIndex)
                 continue;
             EquationFVDetail::Gather(blocks, sample.cell, point, false);
@@ -230,7 +231,7 @@ namespace DNDS::Cauchy::CPU
             // face curvature. Accurate geometry was integrated at setup.
             for (index entry = request.stencil.jacobianOffsets(iCell, 0); entry < request.stencil.jacobianOffsets(iCell + 1, 0); ++entry)
             {
-                const auto sample = FiniteVolumeDetail::ExpandSample(request.stencil.jacobianSamples(entry, 0), request.conditions);
+                const auto sample = FiniteVolumeDetail::ExpandSample(request.stencil.JacobianSample(iCell, entry), request.conditions);
                 const real weight = metric.GetFaceArea(sample.face), lambda = radius(sample.auxiliaryFace, 0) + radius(sample.auxiliaryFace, 1);
                 own.diagonal().array() += .5 * request.scale * weight * lambda;
                 if (sample.other == UnInitIndex)

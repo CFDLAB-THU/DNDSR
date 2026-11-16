@@ -10,12 +10,12 @@ namespace DNDS::CFV::CPU
     {
         const Math::TaylorBasis polynomial(input.dimension, input.degree);
         const int rows = polynomial.DerivativeNumber(derivativeOrder);
-        if (input.cached.data && rows <= input.cachedDerivatives)
+        if (point >= 0 && input.cached.data && rows <= input.cachedDerivatives)
             return {input.cached[2 * point + side].data(), rows,
                     input.modes, input.cachedDerivatives};
         const index cell = input.mesh.FaceCells(face)[side];
         const auto position = Detail::FacePointInCell(
-            input.mesh, face, side, input.geometry.GetFacePoint(point));
+            input.mesh, face, side, point < 0 ? input.geometry.GetFaceCent(face) : input.geometry.GetFacePoint(point));
         const auto center = input.geometry.GetCellCent(cell);
         const auto prepared = Math::TaylorPointEvaluation::FromPoint(
             {position[0], position[1], position[2]}, {center[0], center[1], center[2]},
@@ -25,7 +25,7 @@ namespace DNDS::CFV::CPU
         for (int mode = 0; mode < input.modes; ++mode)
             for (int derivative = 0; derivative < rows; ++derivative)
             {
-                if (input.cached.data && derivative < input.cachedDerivatives)
+                if (point >= 0 && input.cached.data && derivative < input.cachedDerivatives)
                     scratch(derivative, mode) = input.cached(2 * point + side, mode * input.cachedDerivatives + derivative);
                 else
                 {

@@ -2,6 +2,7 @@
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Inputs.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Compute.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Staging.hpp"
+#include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Segments.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include <cuda_runtime.h>
 
@@ -23,9 +24,10 @@ namespace DNDS::Cauchy::CUDA
                 const index iCell = selected(iRow, 0);
                 std::array<real, Components> sum{}, lowSum{};
                 NumericalStatus cellStatus;
-                for (index entry = geometry.offsets(iCell, 0); entry < geometry.offsets(iCell + 1, 0);)
+                const auto cellFaces = geometry.stencil.topology.CellFaces(iCell);
+                for (rowsize slot = 0; slot < cellFaces.size(); ++slot)
                 {
-                    const auto &sample = geometry.samples(entry, 0);
+                    const auto sample = geometry.stencil.GradientSample(iCell, slot);
                     const index iFace = sample.auxiliaryFace;
                     const auto failure = faceStatus(iFace, 0);
                     if (!failure)
@@ -33,8 +35,7 @@ namespace DNDS::Cauchy::CUDA
                         cellStatus = failure.At(iCell, failure.point);
                         break;
                     }
-                    const auto &anchor = geometry.samples(geometry.faceEntries(iFace, 0), 0);
-                    const bool opposite = sample.side != anchor.side;
+                    const bool opposite = sample.side != 0;
                     std::array<real, Components> value{}, low{};
                     for (int j = 0; j < Components; ++j)
                     {
@@ -64,7 +65,6 @@ namespace DNDS::Cauchy::CUDA
                         if (produceLow)
                             lowSum[j] += low[j];
                     }
-                    entry += geometry.faceOffsets(sample.face + 1, 0) - geometry.faceOffsets(sample.face, 0);
                 }
                 status(iCell, 0) = cellStatus;
                 if (cellStatus)
@@ -88,7 +88,8 @@ namespace DNDS::Cauchy::CUDA
         }
     }
     void EvaluateFluxFaces(R::ExecutionContext context, const RHSGeometryPublication &geometry, ParametersView parameters,
-                           RHSKernelControls controls, RHSFields fields, RHSFaceOutputs output, RHSIndices faces, bool requireGhost)
+                           RHSKernelControls controls, RHSFields fields, RHSFaceOutputs output, RHSIndices faces, bool requireGhost,
+                           RHSFacePackageView packages)
     {
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && geometry.Device() == context.device, "CUDA RHS geometry/stream mismatch");
         controls.Validate();
@@ -99,7 +100,7 @@ namespace DNDS::Cauchy::CUDA
             output.low.ValidateDevice(context.device);
         if (output.wallForce.RowCount())
             output.wallForce.ValidateDevice(context.device);
-        const index owned = g.offsets.RowCount() - 1, ghost = g.cells.RowCount() - owned, nFaces = g.faceEntries.RowCount();
+        const index owned = g.stencil.jacobianOffsets.RowCount() - 1, ghost = g.cells.RowCount() - owned, nFaces = g.stencil.stencilFaces.RowCount();
         DNDS_check_throw_info(parameters.RowCount() == 1 && output.high.RowCount() == nFaces && output.high.Width() == controls.components &&
                                   output.high.kind == R::RowLayoutKind::Table && output.status.RowCount() == nFaces && output.fallbackCounts.RowCount() == nFaces,
                               "CUDA RHS face output/profile mismatch");
@@ -141,6 +142,12 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<GeometryView, ParametersView, RHSKernelControls, RHSFields, RHSFaceOutputs, RHSIndices>();
         if (!faces.RowCount())
             return;
+        if (controls.mapping == RHSFaceMapping::WarpSegments || controls.mapping == RHSFaceMapping::CTASegments)
+        {
+            Detail::LaunchSegmentedFluxFaces(context, geometry, parameters, controls, fields, output, faces, packages);
+            DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "segmented CUDA RHS face launch failed");
+            return;
+        }
         if (controls.doubleBuffer)
         {
             Detail::LaunchBufferedFluxFaces(context, geometry, parameters, controls, fields, output, faces);
@@ -191,8 +198,8 @@ namespace DNDS::Cauchy::CUDA
         R::ValidateViewDevices(context.device, highFaces, faceStatus, high, status, cells);
         if (produceLow)
             R::ValidateViewDevices(context.device, lowFaces, low);
-        DNDS_check_throw_info(high.Width() >= 5 && high.Width() <= 7 && high.RowCount() + 1 == g.offsets.RowCount() &&
-                                  highFaces.Width() == high.Width() && highFaces.RowCount() == g.faceEntries.RowCount() &&
+        DNDS_check_throw_info(high.Width() >= 5 && high.Width() <= 7 && high.RowCount() + 1 == g.stencil.jacobianOffsets.RowCount() &&
+                                  highFaces.Width() == high.Width() && highFaces.RowCount() == g.stencil.stencilFaces.RowCount() &&
                                   faceStatus.RowCount() == highFaces.RowCount() && status.RowCount() == high.RowCount() &&
                                   high.kind == R::RowLayoutKind::Table && highFaces.kind == R::RowLayoutKind::Table,
                               "CUDA RHS gather shape/layout mismatch");

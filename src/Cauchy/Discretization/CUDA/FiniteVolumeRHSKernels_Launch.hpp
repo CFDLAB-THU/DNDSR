@@ -47,11 +47,11 @@ namespace DNDS::Cauchy::CUDA::Detail
                          RHSFaceOutputs output, RHSIndices selected)
     {
         Runtime::CheckKernelArgumentBudget<RHSGeometryView, RHSParametersView, RHSKernelControls, Fields, RHSFaceOutputs, RHSIndices>();
-        const int facesPerBlock = controls.warpQuadrature ? controls.blockSize / 32 : controls.blockSize;
+        const int facesPerBlock = (controls.mapping == RHSFaceMapping::WarpQuadrature) ? controls.blockSize / 32 : controls.blockSize;
         const unsigned blocks = unsigned(std::min<index>((selected.RowCount() + facesPerBlock - 1) / facesPerBlock,
-                                                         1024));
+                                                         controls.gridBlocks ? index(controls.gridBlocks) : index(1024)));
         if constexpr (Components == 5 && std::is_same_v<PolynomialScalar, real> && std::is_same_v<FluxScalar, real> && std::is_same_v<DissipationScalar, real>)
-            if (controls.warpQuadrature)
+            if ((controls.mapping == RHSFaceMapping::WarpQuadrature))
             {
                 FluxFaces<Components, PolynomialScalar, FluxScalar, DissipationScalar, true><<<blocks, controls.blockSize, 0, static_cast<cudaStream_t>(context.stream)>>>(
                     geometry.View(), parameters, controls, fields, output, selected);

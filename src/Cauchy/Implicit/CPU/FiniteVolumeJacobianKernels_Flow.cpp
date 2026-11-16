@@ -1,28 +1,52 @@
 #include "Cauchy/Implicit/CPU/FiniteVolumeJacobianKernels.hpp"
 #include "DNDS/Core/OMP.hpp"
+#include "Cauchy/Physics/PerfectGasCharacteristics.hpp"
+#include "Cauchy/Physics/RiemannPreparation.hpp"
 namespace DNDS::Cauchy::CPU
 {
     using Matrix = Eigen::Matrix<real, 5, 5>;
     using FiniteVolumeDetail::Load;
     using FiniteVolumeDetail::RotateState;
-    void EvaluateFlowJacobianBlock(const FlowJacobianView &snapshot, const EquationSystem &equation, index iRow, index iBlock, Eigen::Ref<Eigen::MatrixXd> output)
+    namespace
+    {
+        // Same perfect-gas ALE derivative as the model facade, with setup's
+        // validated POD passed directly into the numerical leaf. No capability
+        // check or throwing model convenience occurs inside a cell scan.
+        std::array<real, 25> FlowFluxJacobian(const PerfectGas &gas, const FlowState &state,
+                                              const Vector3 &normal, const Vector3 &gridVelocity) noexcept
+        {
+            auto result = gas.FluxJacobian(state, normal);
+            real speed = 0;
+            for (int d = 0; d < 3; ++d)
+                speed += gridVelocity[d] * normal[d];
+            for (int j = 0; j < 5; ++j)
+                result[j + 5 * j] -= speed;
+            return result;
+        }
+    }
+    void EvaluateFlowJacobianBlock(const FlowJacobianView &snapshot, const PerfectGas &gas, index iRow, index iBlock, Eigen::Ref<Eigen::MatrixXd> output)
     {
         output.setZero();
         for (const auto &record : snapshot.geometry.Points(iRow, iBlock))
         {
-            const auto point = ExpandJacobianPoint(record);
+            const auto point = ExpandJacobianPoint(snapshot.geometry.Point(iRow, record));
             const auto right = point.changesFrame ? FiniteVolumeDetail::RotateState(FiniteVolumeDetail::Load(snapshot.means, point.other), point.rotation) : FiniteVolumeDetail::Load(snapshot.means, point.other);
             Matrix dissipation = Matrix::Identity() * (snapshot.radius(point.auxiliary, 0) + snapshot.radius(point.auxiliary, 1));
             if (snapshot.roe)
             {
-                const auto basis = equation.PrepareCharacteristics(FiniteVolumeDetail::Load(snapshot.means, iRow), right, point.normal);
+                const auto checked = TryPerfectGasCharacteristics(gas, FiniteVolumeDetail::Load(snapshot.means, iRow), right, point.normal);
+                // The producer validated this immutable linearization. A broken
+                // snapshot is fatal here; block actions cannot recover by
+                // throwing or silently substituting a new eigensystem.
+                DNDS_assert(bool(checked));
+                const auto &basis = checked.value;
                 Eigen::Matrix<real, 5, 1> lambda;
                 const auto signal = snapshot.magnitudes[point.sample];
                 lambda << signal[0], signal[0], signal[0], signal[1], signal[2];
                 dissipation = Eigen::Map<const Matrix>(basis.inverse.data()) * lambda.asDiagonal() * Eigen::Map<const Matrix>(basis.forward.data());
                 dissipation.diagonal().array() += snapshot.radius(point.auxiliary, 1);
             }
-            const auto derivative = equation.PrepareFluxJacobian(right, point.normal, snapshot.frame.GridVelocity(point.location));
+            const auto derivative = FlowFluxJacobian(gas, right, point.normal, snapshot.frame.GridVelocity(point.location));
             const Matrix other = (.5 * snapshot.scale * point.weight) * (Eigen::Map<const Matrix>(derivative.data()) - dissipation);
             if (!point.changesFrame)
                 output += other;
@@ -41,19 +65,18 @@ namespace DNDS::Cauchy::CPU
                     if (!snapshot.active[j] || !snapshot.active[k])
                         output(j, k) = 0;
     }
-    void ApplyFlowJacobianBlock(const FlowJacobianView &snapshot, const EquationSystem &equation, index iRow, index iBlock, JacobianInput input, Eigen::Ref<Eigen::VectorXd> output)
+    void ApplyFlowJacobianBlock(const FlowJacobianView &snapshot, const PerfectGas &gas, index iRow, index iBlock, JacobianInput input, Eigen::Ref<Eigen::VectorXd> output)
     {
         output.setZero();
         for (const auto &record : snapshot.geometry.Points(iRow, iBlock))
         {
-            const auto point = ExpandJacobianPoint(record);
+            const auto point = ExpandJacobianPoint(snapshot.geometry.Point(iRow, record));
             const auto right = point.changesFrame ? FiniteVolumeDetail::RotateState(FiniteVolumeDetail::Load(snapshot.means, point.other), point.rotation) : FiniteVolumeDetail::Load(snapshot.means, point.other);
             FlowState direction{};
             for (int j = 0; j < 5; ++j)
                 direction[j] = snapshot.active[j] ? input[j] : 0;
             if (point.changesFrame)
                 direction = FiniteVolumeDetail::RotateState(direction, point.rotation);
-            const auto &gas = equation.Gas();
             real dp = direction[4];
             real speedSquared = 0;
             for (int d = 0; d < 3; ++d)
@@ -69,7 +92,12 @@ namespace DNDS::Cauchy::CPU
             Eigen::Matrix<real, 5, 1> dissipation = (snapshot.radius(point.auxiliary, 0) + snapshot.radius(point.auxiliary, 1)) * delta;
             if (snapshot.roe)
             {
-                const auto basis = equation.PrepareCharacteristics(FiniteVolumeDetail::Load(snapshot.means, iRow), right, point.normal);
+                const auto checked = TryPerfectGasCharacteristics(gas, FiniteVolumeDetail::Load(snapshot.means, iRow), right, point.normal);
+                // The producer validated this immutable linearization. A broken
+                // snapshot is fatal here; block actions cannot recover by
+                // throwing or silently substituting a new eigensystem.
+                DNDS_assert(bool(checked));
+                const auto &basis = checked.value;
                 auto characteristic = (Eigen::Map<const Matrix>(basis.forward.data()) * delta).eval();
                 const auto signal = snapshot.magnitudes[point.sample];
                 for (int j = 0; j < 5; ++j)
@@ -96,7 +124,7 @@ namespace DNDS::Cauchy::CPU
             for (int j = 0; j < 2; ++j)
                 frozenRadius(iFace, j) = radius(iFace, j); });
     }
-    NumericalStatus PrepareFlowJacobian(const FlowJacobianPreparation &request, const EquationSystem &equation, const Riemann::RiemannFlux &flux) noexcept
+    NumericalStatus PrepareFlowJacobian(const FlowJacobianPreparation &request, const PerfectGas &gas, const Riemann::RiemannFlux &flux) noexcept
     {
         const auto &packet = request.packet;
         const auto &mean = request.mean;
@@ -109,11 +137,15 @@ namespace DNDS::Cauchy::CPU
         const real time = request.time;
         const auto sourceDerivative = frame.NegativeSourceJacobian();
         const real rotationBound = Geom::tPoint{frame.angularVelocity[0], frame.angularVelocity[1], frame.angularVelocity[2]}.norm();
-        const auto prepared = [&](index iCell, const FlowState &u)
+        const auto prepared = [&](index iCell, const FlowState &u) -> NumericalResult<Riemann::AcousticState>
         {
-            if (packet.meanThermodynamics)
-                return Riemann::AcousticState{{u, (*packet.meanThermodynamics)(iCell, 0)}, (*packet.meanThermodynamics)(iCell, 1)};
-            return equation.PrepareFluxState(u);
+            if (!gas.Admissible(u))
+                return NumericalStatus{NumericalError::InvalidState, 5, iCell};
+            const real pressure = packet.meanThermodynamics ? (*packet.meanThermodynamics)(iCell, 0) : gas.Pressure(u);
+            const real sound = packet.meanThermodynamics ? (*packet.meanThermodynamics)(iCell, 1) : std::sqrt(gas.gamma * pressure / u[0]);
+            if (!(std::isfinite(pressure) && pressure > 0 && std::isfinite(sound) && sound > 0))
+                return NumericalStatus{NumericalError::InvalidState, 5, iCell};
+            return Riemann::AcousticState{{u, pressure}, sound};
         };
         return OMP::ForRowsStatus(0, request.diagonal.RowCount(), [&](index iCell) -> NumericalStatus
                                   {
@@ -136,7 +168,7 @@ namespace DNDS::Cauchy::CPU
             const auto left = Load(mean, iCell);
             for (index entry = request.stencil.jacobianOffsets(iCell, 0); entry < request.stencil.jacobianOffsets(iCell + 1, 0); ++entry)
             {
-                const auto sample = FiniteVolumeDetail::ExpandSample(request.stencil.jacobianSamples(entry, 0), request.conditions);
+                const auto sample = FiniteVolumeDetail::ExpandSample(request.stencil.JacobianSample(iCell, entry), request.conditions);
                 const auto iAux = sample.auxiliaryFace;
                 const Vector3 normal{sample.normal[0], sample.normal[1], sample.normal[2]}, point{sample.ownPoint[0], sample.ownPoint[1], sample.ownPoint[2]};
                 const auto gridVelocity = frame.GridVelocity(point);
@@ -149,7 +181,7 @@ namespace DNDS::Cauchy::CPU
                     own.diagonal().array() += factor * (convection + diffusion);
                     continue; // Euler's scalar diagonal does not linearize BCs.
                 }
-                const auto rightResult = sample.other == UnInitIndex ? FiniteVolumeDetail::BoundaryExterior(sample, equation.Gas(), left, time, frame, incoming)
+                const auto rightResult = sample.other == UnInitIndex ? FiniteVolumeDetail::BoundaryExterior(sample, gas, left, time, frame, incoming)
                                                                      : NumericalResult<FlowState>{!sample.changesFrame ? Load(mean, sample.other) : RotateState(Load(mean, sample.other), sample.rotation)};
                 if (!rightResult)
                     return rightResult.status.At(iCell, sample.point);
@@ -157,16 +189,24 @@ namespace DNDS::Cauchy::CPU
                 Matrix dissipation = Matrix::Identity() * (convection + diffusion);
                 if (request.roe)
                 {
-                    const auto characteristic = equation.PrepareCharacteristics(left, right, normal);
+                    const auto checked = TryPerfectGasCharacteristics(gas, left, right, normal);
+                    if (!checked)
+                        return checked.status.At(iCell, sample.point);
+                    const auto &characteristic = checked.value;
                     // A componentwise limiter fallback is not a Roe matrix.
                     // Retain the physical failure and identify the mean states
                     // before the application aborts the distributed solve.
                     if (characteristic.componentwiseFallback)
-                        if (!(false))
-                            return NumericalStatus{NumericalError::InvalidState, 3, iCell};
-                    const auto leftData = prepared(iCell, left);
-                    const auto rightData = sample.other == UnInitIndex ? equation.PrepareFluxState(right) : prepared(sample.other, right);
-                    const auto model = equation.PrepareRiemann(flux, leftData, rightData, leftData, rightData, normal, gridVelocity);
+                        return NumericalStatus{NumericalError::InvalidState, 3, iCell};
+                    const auto leftPrepared = prepared(iCell, left);
+                    const real rightPressure = sample.other == UnInitIndex ? gas.Pressure(right) : 0;
+                    const auto rightPrepared = sample.other == UnInitIndex
+                        ? NumericalResult<Riemann::AcousticState>{Riemann::AcousticState{{right, rightPressure}, std::sqrt(gas.gamma * rightPressure / right[0])}}
+                        : prepared(sample.other, right);
+                    if (!leftPrepared) return leftPrepared.status.At(iCell, sample.point);
+                    if (!rightPrepared) return rightPrepared.status.At(iCell, sample.point);
+                    const auto &leftData = leftPrepared.value, &rightData = rightPrepared.value;
+                    const auto model = PreparePerfectGasRiemann(gas, flux.Kind(), leftData, rightData, leftData, rightData, normal, gridVelocity);
                     auto settings = request.fluxSettings;
                     if (packet.cellWaveJump)
                     {
@@ -197,14 +237,14 @@ namespace DNDS::Cauchy::CPU
                 own += factor * dissipation;
                 if (request.evaluated && sample.other != UnInitIndex && sample.other != iCell)
                     continue; // Physical derivative is regenerated by the evaluator.
-                const auto derivative = equation.PrepareFluxJacobian(right, normal, gridVelocity);
+                const auto derivative = FlowFluxJacobian(gas, right, normal, gridVelocity);
                 Matrix other = factor * (Eigen::Map<const Matrix>(derivative.data()) - dissipation);
                 if (sample.other == UnInitIndex)
                 {
                     if (request.roe)
                     {
                         const auto boundary = sample.boundary.ApproximateExteriorJacobian(
-                            equation.Gas(), left, normal, point, time,
+                            gas, left, normal, point, time,
                             OptionalRef<const RigidFrame>(frame));
                         own.noalias() += other * Eigen::Map<const Matrix>(boundary.data());
                     }

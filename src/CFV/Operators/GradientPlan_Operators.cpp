@@ -121,20 +121,19 @@ namespace DNDS::CFV
             u.ghost = ghost->View<R::UniformTableRows>();
         }
         auto outWrite = gradient.Owned().Write();
-        auto offsets = _data->offsets.Read(), neighbors = _data->neighbors.Read(), boundaryIds = _data->boundaryIds.Read();
+        auto offsets = _data->offsets.Read(), boundaryIds = _data->boundaryIds.Read();
         auto weights = _data->weights.Read();
-        auto rotationActiveRead = _data->rotationActive.Read();
-        auto rotationRead = _data->rotations.Read();
-        const auto rotations = rotationRead.View<R::FixedRows<9>>();
-        const auto rotationActive = rotationActiveRead.View<R::FixedRows<1>>();
-        const auto offset = offsets.View<R::FixedRows<1>>(), neighbor = neighbors.View<R::FixedRows<1>>(), bnd = boundaryIds.View<R::FixedRows<1>>();
+        auto codes = _data->metrics.FacePeriodicCodes().Read();
+        auto parameters = _data->metrics.PeriodicParameters().Read();
+        const auto topology = _data->metrics.AcquireTopologyRead();
+        const auto offset = offsets.View<R::FixedRows<1>>(), bnd = boundaryIds.View<R::FixedRows<1>>();
         const auto w = weights.View<R::FixedRows<3>>();
         const auto output = outWrite.View<R::UniformTableRows>();
         auto selectionRead = (region == ReconstructionRegion::HaloDependent ? _data->dependent : _data->core).Read();
         const auto selectionRows = selectionRead.View<R::FixedRows<1>>();
         const Detail::DeviceWorkSelection selection{selectionRows.DynamicView(),
                                                     region == ReconstructionRegion::All ? _data->metrics.NumCell() : selectionRows.RowCount(), region != ReconstructionRegion::All};
-        const Detail::GradientKernelView plan{offset, neighbor, bnd, w, rotations, rotationActive, _data->metrics.Dimension(), _data->hasRotatedFrames};
+        const Detail::GradientKernelView plan{offset, bnd, w, topology.View(), {codes.View<R::FixedRows<1>, false>(), parameters.View<R::FixedRows<1>, false>()}, _data->metrics.Dimension()};
         Detail::EvaluateGradient(plan, selection, {{periodicVectorStarts.data(), index(periodicVectorStarts.size())}}, u, boundary.View<R::UniformTableRows>(), output);
     }
 
