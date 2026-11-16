@@ -60,11 +60,11 @@ def main():
         "        ::DiagnosticTiming::AuxiliaryTrace correctionTrace(!work.meanGradients, 1, ::DiagnosticTiming::currentLevel);\n")
     text = insert_before_once(
         text, "        for (auto &halo : reconstruction.meanHalo)\n"
-              "            transfers.push_back(halo.BeginReady(reconstruction.meanEpoch, engine, communication,\n"
+              "            transfers.push_back(halo.BeginAfter(reconstruction.meanEpoch, engine, communication, stream.Record(),\n"
               "                                                _data->settings.CheckHaloFreshness()));",
         "        correctionTrace.Mark(::DiagnosticTiming::AuxiliaryTrace::LaunchBegin);\n")
     text = insert_after_once(
-        text, "            transfers.push_back(halo.BeginReady(reconstruction.meanEpoch, engine, communication,\n"
+        text, "            transfers.push_back(halo.BeginAfter(reconstruction.meanEpoch, engine, communication, stream.Record(),\n"
               "                                                _data->settings.CheckHaloFreshness()));",
         "        correctionTrace.Mark(::DiagnosticTiming::AuxiliaryTrace::LaunchEnd);\n"
         "        correctionTrace.Mark(::DiagnosticTiming::AuxiliaryTrace::BoundaryEnd);\n"
@@ -97,14 +97,14 @@ def main():
         "                      auxiliaryPreparation.emplace(BeginAuxValues(state, *auxiliary, time, work.workers, inputs)); });")
     text = insert_before_once(
         text, "        for (auto &halo : reconstruction.meanHalo)\n"
-              "            meanOperations.push_back(halo.BeginReady(\n"
-              "                reconstruction.meanEpoch, engine, communication,\n"
+              "            meanOperations.push_back(halo.BeginAfter(\n"
+              "                reconstruction.meanEpoch, engine, communication, stream.Record(),\n"
               "                _data->settings.CheckHaloFreshness()));",
         "        evaluationTrace.Mark(::DiagnosticTiming::AuxiliaryTrace::LaunchBegin);\n"
         "        ::DiagnosticTiming::Scope auxiliaryExchange(::DiagnosticTiming::Block::AuxiliaryExchange);\n")
     text = insert_after_once(
-        text, "            meanOperations.push_back(halo.BeginReady(\n"
-              "                reconstruction.meanEpoch, engine, communication,\n"
+        text, "            meanOperations.push_back(halo.BeginAfter(\n"
+              "                reconstruction.meanEpoch, engine, communication, stream.Record(),\n"
               "                _data->settings.CheckHaloFreshness()));",
         "        evaluationTrace.Mark(::DiagnosticTiming::AuxiliaryTrace::LaunchEnd);\n"
         "        evaluationTrace.Mark(::DiagnosticTiming::AuxiliaryTrace::BoundaryEnd);\n"
