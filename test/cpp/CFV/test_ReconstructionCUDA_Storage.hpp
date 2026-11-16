@@ -2,24 +2,23 @@
 #include "CFV/Math/ReconstructionMatrixAccess.hpp"
 #include "CFV/Detail/ReconstructionDeviceView.hpp"
 
-TEST_CASE("Independent VR matrix layouts and raw face storage preserve oriented distributed sweeps")
+TEST_CASE("Contiguous VR payloads and raw face storage preserve oriented distributed sweeps")
 {
     struct Profile
     {
-        const char *representation, *matrix, *inverse, *vector, *boundary;
+        const char *representation;
         bool triangle, face;
         I pitch = 1, alignment = 0;
     };
     const Profile profiles[]{
-        {"precomputed", "soa", "aos", "aosoa32", "soa", false, false},
-        {"precomputed", "aosoa32", "aos", "soa", "aosoa32", false, false},
-        {"raw", "aos", "aos", "aos", "aos", false, false},
-        {"raw", "aosoa32", "soa", "aos", "soa", true, false},
-        {"raw", "soa", "aos", "aosoa32", "aos", false, true},
-        {"raw", "aosoa32", "aosoa32", "soa", "aosoa32", true, true},
-        {"precomputed", "aos", "aos", "aos", "aos", false, false, 16, 256},
-        {"raw", "aos", "aos", "aos", "aos", false, true, 16, 256},
-        {"raw", "aos", "aos", "aos", "aos", true, true, 32, 512}};
+        {"precomputed", false, false},
+        {"raw", false, false},
+        {"raw", true, false},
+        {"raw", false, true},
+        {"raw", true, true},
+        {"precomputed", false, false, 16, 256},
+        {"raw", false, true, 16, 256},
+        {"raw", true, true, 32, 512}};
     for (int fixture = 0; fixture < 3; ++fixture)
     {
         CAPTURE(fixture);
@@ -57,13 +56,10 @@ TEST_CASE("Independent VR matrix layouts and raw face storage preserve oriented 
         for (const auto &profile : profiles)
         {
             CAPTURE(profile.representation);
-            CAPTURE(profile.matrix);
             CAPTURE(profile.triangle);
             CAPTURE(profile.face);
             auto &storage = settings.storage;
             storage.representation = profile.representation;
-            storage.matrixLayout = profile.matrix, storage.inverseLayout = profile.inverse;
-            storage.vectorLayout = profile.vector, storage.boundaryLayout = profile.boundary;
             storage.inverseTriangle = profile.triangle, storage.faceCoupling = profile.face;
             storage.aosRowPadding = profile.pitch, storage.allocationAlignmentBytes = profile.alignment;
             auto plan = C::VariationalReconstructionPlan::ConstructRecCoeff(metrics, settings, capabilities);
@@ -90,11 +86,7 @@ TEST_CASE("Independent VR matrix layouts and raw face storage preserve oriented 
                         CHECK(table.payloadBytes == uint64_t(mesh->NumFaceProc() * plan.NRecDOF() * plan.NRecDOF()) * sizeof(double));
                 }
             auto resident = plan.Place(R::Device::CUDA(0), R::ExecutionContext::CUDA(0));
-            if (storage.Raw())
-            {
-                CHECK_FALSE(resident.SupportsKernel(C::ReconstructionDeviceKernel::FP64TensorCoreShared));
-                CHECK_FALSE(resident.SupportsKernel(C::ReconstructionDeviceKernel::FP64TensorCoreAsync));
-            }
+            CHECK(resident.SupportsKernel(C::ReconstructionDeviceKernel::FP64Pipelined));
             if (profile.alignment)
             {
                 const auto read = resident.AcquireResidentRead();
@@ -110,7 +102,7 @@ TEST_CASE("Independent VR matrix layouts and raw face storage preserve oriented 
             }
             CompareSharedSweep(metrics, plan, resident, components);
             // A mixed LVR target tests inverse placement before relaxation and
-            // alpha=1 exclusion, in the same raw/physical-layout combinations.
+            // alpha=1 exclusion, in the same raw/padded-payload combinations.
             auto target = plan.BuildCoefficients(components);
             Fill(target, .005);
             R::Array<double> alpha(R::RowLayout::Dense(metrics.NumCell(), 1));

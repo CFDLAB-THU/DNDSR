@@ -21,8 +21,11 @@ See [the AmgX guide](../guides/amgx.md) for provider-specific restrictions.
 
 ## Variational reconstruction
 
-`numerics.cfv.storage` selects the sweep representation and independent matrix,
-inverse, vector and boundary payload layouts. In `precomputed` mode, a sweep
+`numerics.cfv.storage` selects the sweep representation. VR matrix, inverse,
+mean and boundary maps use contiguous AoS rows; losing experimental VR-map
+SoA/AoSoA choices were retired in the stage-once follow-up, with their evidence
+retained in plan history. Runtime/DOF and FV matrix layout options are unchanged.
+In `precomputed` mode, a sweep
 uses the previously assembled A-inverse-times-B maps. In `raw` mode, it first
 accumulates the B products and mean/boundary terms, then applies the local
 inverse. Both use the same functional and SVD cutoff, but reassociation can
@@ -33,15 +36,30 @@ For raw sweeps, `inverseTriangle` packs the validated symmetric local inverse.
 opposite incidence. A B block is not assumed symmetric. Periodic vector
 transformations still apply in the corresponding incidence frame, including
 self-periodic faces. `aosRowPadding` controls AoS pitch in scalar elements;
-`allocationAlignmentBytes` independently requests base alignment. SoA uses
-`rowPadding`; AoSoA uses a fixed tile width of 32.
+`allocationAlignmentBytes` independently requests base alignment.
 
-The CUDA `fp64Tensor` and `fp64TensorWide` choices can evaluate raw sweeps on
-devices with FP64 tensor cores: one matrix multiplication gathers B products,
-and another applies the local inverse. The former limits the grid to the
-historical mapping; the latter permits a wider grid. Kernel selection remains
-explicit and unsupported combinations fail instead of silently switching.
-The scalar/SIMT and tensor paths need not produce bitwise identical results.
+The CUDA `fp64Pipelined` and `fp64TensorAsync` policies use a common stage-once
+scan. `numerics.cfv.cudaSweep` controls `mapping` (`block` or `warp`),
+`buffering` (`neighbor` or `cellRow`), `threads`, `gridBlocks` (zero is a wide
+grid), and `asynchronous` (cp.async). Tensor arithmetic requires warp mapping
+and FP64-MMA hardware. Each team consumes a complete modal matrix and all
+component coefficient rows before advancing; no output-mode tile causes a
+global matrix reload. The two slots prefetch either one next neighbor or all
+incidences of the next grid-stride cell. Whole-row shared capacity is checked
+against a setup-derived maximum row count before launch; infeasible policies
+fail explicitly. These specialized paths support at most seven components;
+the ordinary FP64/FP32 paths retain general component support.
+
+The previous tensor selection names use this same stage-once implementation;
+`fp64Tensor` retains its 256-block default, `fp64TensorWide` uses a wider grid,
+and `fp64TensorShared` selects synchronous staging. `fp64TensorAsync` honors
+the configured buffering policy. Raw sweeps gather B products then apply the
+local inverse, staged once per cell and reused across variables. Historical
+repeated-stage tensor implementations were removed. Unsupported combinations
+fail instead of silently switching. Scalar/SIMT and tensor paths need not
+produce bitwise identical results. Async records retain arrays and immutable
+metadata until the enclosing stream completes; numerical kernels do not
+allocate, acquire leases, communicate, or synchronize the host.
 
 ## Interpreting measurements
 

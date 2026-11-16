@@ -14,7 +14,7 @@ namespace DNDS::CFV::Detail
         Runtime::ArrayView<const real> matrixAInvB, vectorAInvB, secondary, boundaryInjection, rotation, localInverse;
         Runtime::ArrayView<const float> matrixAInvB32, vectorAInvB32, boundaryInjection32;
         Runtime::ArrayView<const index> core, dependent;
-        index owned = 0, n = 0;
+        index owned = 0, n = 0, maxRowEntries = 0;
         real relax = 1, wbapCenterWeight = 10;
         bool rotated = false;
         bool quantized = false;

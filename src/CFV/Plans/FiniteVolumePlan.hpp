@@ -1,4 +1,5 @@
 #pragma once
+#include "CFV/Plans/ReconstructionSweepLaunch.hpp"
 
 #include "DNDS/Algebra/DofField.hpp"
 #include "DNDS/Config/ConfigParam.hpp"
@@ -50,6 +51,7 @@ namespace DNDS::CFV
         int cacheDiffBaseOrder = 1;
         ReconstructionFunctionalSettings functional;
         ReconstructionStorageSettings storage;
+        ReconstructionSweepLaunch cudaSweep;
         real bcWeight = 1., svdTolerance = 1e-13, svdAbsoluteTolerance = 0;
         std::array<real, 4> boundaryDerivativeWeights{1, 1, 1, 1};
         /// Optional zone-specific replacement for the unsquared per-order
@@ -65,6 +67,7 @@ namespace DNDS::CFV
             DNDS_FIELD(HQMWeights, "Legacy HQM_OPT derivative and HQM_SD geometry weights");
             config.field_section(&T::functional, "functional", "Independent isotropic functional weights and length policy");
             config.field_section(&T::storage, "storage", "Independent sweep representation and matrix payload layouts");
+            config.field_section(&T::cudaSweep, "cudaSweep", "Stage-once CUDA VR scan launch policy");
             DNDS_FIELD(cacheDiffBase, "Retain basis values and derivatives on face quadrature points");
             DNDS_FIELD(cacheDiffBaseOrder, "Highest cached derivative order, 0..3; default value and first derivatives; capped by polynomial degree");
             DNDS_FIELD(bcWeight, "Dirichlet boundary value weight");
@@ -376,7 +379,9 @@ namespace DNDS::CFV
         /// not restore precision lost in the maps. Requires CCCL compute.
         FP32FloatFloatAccumulation,
         /// Identical FP64 MMA arithmetic with a wider warp-per-cell grid.
-        FP64TensorCoreWide
+        FP64TensorCoreWide,
+        /// Stage-once SIMT, configurable warp/block and neighbor/cell-row pipeline.
+        FP64Pipelined
     };
     struct ResidentBufferInfo
     {

@@ -158,9 +158,9 @@ namespace DNDS::CFV
             // full tables and discard them after setup: that retains peak cost.
             if (capabilities.sweeps && !rawSweep)
             {
-                data->matrixAInvB.emplace(storage.Layout(incidences, n * n, storage.matrixLayout), R::Device::Host(), storage.Allocation());
-                data->vectorAInvB.emplace(storage.Layout(incidences, n, storage.vectorLayout), R::Device::Host(), storage.Allocation());
-                data->boundaryInjection.emplace(storage.Layout(boundaryCount, n, storage.boundaryLayout), R::Device::Host(), storage.Allocation());
+                data->matrixAInvB.emplace(storage.Layout(incidences, n * n), R::Device::Host(), storage.Allocation());
+                data->vectorAInvB.emplace(storage.Layout(incidences, n), R::Device::Host(), storage.Allocation());
+                data->boundaryInjection.emplace(storage.Layout(boundaryCount, n), R::Device::Host(), storage.Allocation());
             }
             if (capabilities.wbap)
                 data->secondary.emplace(R::RowLayout::Dense(incidences, n * n));
@@ -173,15 +173,15 @@ namespace DNDS::CFV
             }
             if (rawSweep)
             {
-                data->rawMatrixB.emplace(storage.Layout(storage.faceCoupling ? nFace : incidences, n * n, storage.matrixLayout), R::Device::Host(), storage.Allocation());
-                data->rawVectorB.emplace(storage.Layout(incidences, n, storage.vectorLayout), R::Device::Host(), storage.Allocation());
-                data->rawBoundaryInjection.emplace(storage.Layout(boundaryCount, n, storage.boundaryLayout), R::Device::Host(), storage.Allocation());
+                data->rawMatrixB.emplace(storage.Layout(storage.faceCoupling ? nFace : incidences, n * n), R::Device::Host(), storage.Allocation());
+                data->rawVectorB.emplace(storage.Layout(incidences, n), R::Device::Host(), storage.Allocation());
+                data->rawBoundaryInjection.emplace(storage.Layout(boundaryCount, n), R::Device::Host(), storage.Allocation());
                 if (storage.faceCoupling)
                     data->rawFaceSide.emplace(R::RowLayout::Dense(incidences, 1));
             }
             if (capabilities.localPreconditioner || rawSweep)
                 data->localInverse.emplace(rawSweep
-                                              ? storage.Layout(nCell, storage.inverseTriangle ? n * (n + 1) / 2 : n * n, storage.inverseLayout)
+                                              ? storage.Layout(nCell, storage.inverseTriangle ? n * (n + 1) / 2 : n * n)
                                               : R::RowLayout::Dense(nCell, n * n), R::Device::Host(), storage.Allocation());
             if (capabilities.inverseDiagnostics)
                 data->inverseConditions.emplace(R::RowLayout::Dense(nCell, 4));

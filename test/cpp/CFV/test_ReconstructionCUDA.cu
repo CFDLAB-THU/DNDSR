@@ -80,7 +80,8 @@ static void CompareSharedSweep(const C::FiniteVolumePlan &metrics, const C::Vari
     const auto originalGhost = coefficients.Ghost().Clone();
     plan.DoReconstructionIter(mean, coefficients, cpu, boundary);
     std::vector<C::ReconstructionDeviceKernel> kernels{C::ReconstructionDeviceKernel::FP64Shared, C::ReconstructionDeviceKernel::FP64Wide,
-                                                       C::ReconstructionDeviceKernel::FP64Static, C::ReconstructionDeviceKernel::FP64MatrixShared};
+                                                       C::ReconstructionDeviceKernel::FP64Static, C::ReconstructionDeviceKernel::FP64MatrixShared,
+                                                       C::ReconstructionDeviceKernel::FP64Pipelined};
     for (auto tensor : {C::ReconstructionDeviceKernel::FP64TensorCore, C::ReconstructionDeviceKernel::FP64TensorCoreWide,
                         C::ReconstructionDeviceKernel::FP64TensorCoreShared, C::ReconstructionDeviceKernel::FP64TensorCoreAsync})
         if (resident.SupportsKernel(tensor))
@@ -1199,6 +1200,7 @@ TEST_CASE("Device errors reject unsupported SOR stale publications and invalid i
 }
 // Storage variants share the exact distributed fixtures and CPU oracle above.
 #include "test_ReconstructionCUDA_Storage.hpp"
+#include "test_ReconstructionCUDA_Staged.hpp"
 
 int main(int argc, char **argv)
 {

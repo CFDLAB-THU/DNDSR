@@ -286,6 +286,11 @@ namespace DNDS::CFV
         auto &view = result->view;
         view.owned = Metrics().NumCell();
         view.n = NRecDOF();
+        {
+            const auto offsets = host.offsets.Read();
+            for (index iCell = 0; iCell < view.owned; ++iCell)
+                view.maxRowEntries = std::max(view.maxRowEntries, offsets.View()(iCell + 1, 0) - offsets.View()(iCell, 0));
+        }
         view.relax = Settings().jacobiRelax;
         view.wbapCenterWeight = Settings().WBAP_nStd;
         view.rotated = host.hasRotatedPeriodicity;
@@ -674,12 +679,19 @@ namespace DNDS::CFV
                                                                                                                                                     : 2);
             else if (kernel == ReconstructionDeviceKernel::TF32TensorCore)
                 Detail::LaunchJacobiTF32(context, pin->view, selection, {blocks}, {mo, mg}, {ro, rg}, bc, output, status);
-            else if (kernel == ReconstructionDeviceKernel::FP64TensorCoreShared || kernel == ReconstructionDeviceKernel::FP64TensorCoreAsync)
-                Detail::LaunchJacobiTensorCoreShared(context, pin->view, selection, {blocks}, {mo, mg}, {ro, rg}, bc, output, status,
-                                                     kernel == ReconstructionDeviceKernel::FP64TensorCoreAsync);
-            else if (kernel == ReconstructionDeviceKernel::FP64TensorCore || kernel == ReconstructionDeviceKernel::FP64TensorCoreWide)
-                Detail::LaunchJacobiTensorCore(context, pin->view, selection, {blocks}, {mo, mg}, {ro, rg}, bc, output, status,
-                                               kernel == ReconstructionDeviceKernel::FP64TensorCoreWide);
+            else if (kernel == ReconstructionDeviceKernel::FP64Pipelined)
+                Detail::LaunchStagedJacobi(context, pin->view, selection, {blocks}, {mo, mg}, {ro, rg}, bc, output, status, pin->settings.cudaSweep, false);
+            else if (kernel == ReconstructionDeviceKernel::FP64TensorCore || kernel == ReconstructionDeviceKernel::FP64TensorCoreWide ||
+                     kernel == ReconstructionDeviceKernel::FP64TensorCoreShared || kernel == ReconstructionDeviceKernel::FP64TensorCoreAsync)
+            {
+                auto launch = pin->settings.cudaSweep;
+                launch.mapping = "warp";
+                if (kernel != ReconstructionDeviceKernel::FP64TensorCoreAsync)
+                    launch.asynchronous = false;
+                if (kernel == ReconstructionDeviceKernel::FP64TensorCore && !launch.gridBlocks)
+                    launch.gridBlocks = 256;
+                Detail::LaunchStagedJacobi(context, pin->view, selection, {blocks}, {mo, mg}, {ro, rg}, bc, output, status, launch, true);
+            }
             else
                 Detail::LaunchJacobi(context, pin->view, selection, {blocks}, {mo, mg}, {ro, rg}, bc, output, status);
         };
@@ -823,8 +835,10 @@ namespace DNDS::CFV
         if (_device->view.raw)
             return kernel == ReconstructionDeviceKernel::FP64 || kernel == ReconstructionDeviceKernel::FP64Wide ||
                    kernel == ReconstructionDeviceKernel::FP64Static || kernel == ReconstructionDeviceKernel::FP64MatrixShared ||
-                   kernel == ReconstructionDeviceKernel::FP64Shared ||
-                   ((kernel == ReconstructionDeviceKernel::FP64TensorCore || kernel == ReconstructionDeviceKernel::FP64TensorCoreWide) && _device->fp64TensorCore);
+                   kernel == ReconstructionDeviceKernel::FP64Shared || kernel == ReconstructionDeviceKernel::FP64Pipelined ||
+                   ((kernel == ReconstructionDeviceKernel::FP64TensorCore || kernel == ReconstructionDeviceKernel::FP64TensorCoreWide ||
+                     kernel == ReconstructionDeviceKernel::FP64TensorCoreShared || kernel == ReconstructionDeviceKernel::FP64TensorCoreAsync) &&
+                    _device->fp64TensorCore);
         if (_device->view.quantized)
             return kernel == ReconstructionDeviceKernel::FP32 ||
                    kernel == ReconstructionDeviceKernel::FP32FullAccumulation ||
@@ -833,7 +847,7 @@ namespace DNDS::CFV
 #endif
                    (kernel == ReconstructionDeviceKernel::TF32TensorCore && _device->tf32TensorCore);
         if (kernel == ReconstructionDeviceKernel::FP64Shared || kernel == ReconstructionDeviceKernel::FP64Static ||
-            kernel == ReconstructionDeviceKernel::FP64MatrixShared)
+            kernel == ReconstructionDeviceKernel::FP64MatrixShared || kernel == ReconstructionDeviceKernel::FP64Pipelined)
             return _device->view.n == 2 || _device->view.n == 3 || _device->view.n == 5 ||
                    _device->view.n == 9 || _device->view.n == 19;
         return kernel == ReconstructionDeviceKernel::FP64 || kernel == ReconstructionDeviceKernel::FP64Wide ||
@@ -844,6 +858,12 @@ namespace DNDS::CFV
 #ifndef DNDS_USE_CUDA
     namespace Detail
     {
+        void LaunchStagedJacobi(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
+                                R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>,
+                                R::ArrayView<const int>, const ReconstructionSweepLaunch &, bool)
+        {
+            DNDS_check_throw_info(false, "stage-once CUDA VR unavailable in this build");
+        }
         void LaunchValidateCharacteristics(R::ExecutionContext, DeviceCharacteristicView, R::ArrayView<int>)
         {
             DNDS_check_throw_info(false, "queued CUDA characteristic validation unavailable");
@@ -854,10 +874,6 @@ namespace DNDS::CFV
                               R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>, R::ArrayView<const int>)
         {
             DNDS_check_throw_info(false, "CUDA TF32 reconstruction unavailable");
-        }
-        void LaunchJacobiTensorCoreShared(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks, R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>, R::ArrayView<const int>, bool)
-        {
-            DNDS_check_throw_info(false, "CUDA shared tensor-core Jacobi unavailable");
         }
         void LaunchJacobiTensorCore(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks, R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>, R::ArrayView<const int>, bool)
         {

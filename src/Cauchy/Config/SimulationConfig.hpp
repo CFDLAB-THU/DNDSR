@@ -101,6 +101,8 @@ namespace DNDS::Cauchy
         /// coefficients in FP64; only already-inverted sweep maps/products
         /// change precision. CPU and existing solver defaults remain FP64.
         std::string reconstructionKernel = "fp64";
+        // Stage-once scan launch settings belong to numerics.cfv.cudaSweep;
+        // Cauchy selects the operator policy and never launches a CFV kernel.
         KernelExecutionSettings kernels;
         CFV::ReconstructionDeviceKernel ReconstructionKernel() const;
         int hostThreads = 0;
@@ -122,7 +124,7 @@ namespace DNDS::Cauchy
             DNDS_FIELD(transferPreflight, "MPI launch validation: collective (default) or abortOnFailure (local checks, fatal MPI abort, no per-launch global agreement); setup remains collective");
             DNDS_FIELD(hostThreads, "CPU worker count; zero means inline execution");
             DNDS_FIELD(communicationExecution, "MPI payload execution: caller (default) or worker (CPU Direct/HostPacked, requires MPI_THREAD_MULTIPLE)");
-            DNDS_FIELD(reconstructionKernel, "CUDA VR sweep: fp64 (default), fp64Shared, fp64Wide (wide reference grid), fp64Static (static modes), fp64MatrixShared (shared matrix/neighbor reuse), fp64Tensor, fp64TensorWide, fp64TensorShared, fp64TensorAsync, fp32, fp32Accum, fp32FloatFloatAccum, or tf32. SIMT shared variants support 5/6/7-component P1..P3. The fp32 family and tf32 quantize inverted sweep maps. fp32 keeps FP64 outer accumulation; fp32Accum/fp32FloatFloatAccum compute the entire regular Jacobi update in FP32/float-float, then store FP64. Float-float requires DNDS_USE_CCCL_COMPUTE and does not recover map precision. Coefficient storage and WBAP remain FP64. Nondefault modes require CUDA and are unavailable with LVR; gradient-only levels have no VR sweep. Device support is checked at placement.");
+            DNDS_FIELD(reconstructionKernel, "CUDA VR sweep: fp64 (default), fp64Shared, fp64Wide (wide reference grid), fp64Static (static modes), fp64MatrixShared (shared matrix/neighbor reuse), fp64Pipelined (stage-once scan configured by numerics.cfv.cudaSweep), fp64Tensor, fp64TensorWide, fp64TensorShared, fp64TensorAsync, fp32, fp32Accum, fp32FloatFloatAccum, or tf32. SIMT shared variants support 5/6/7-component P1..P3. The fp32 family and tf32 quantize inverted sweep maps. fp32 keeps FP64 outer accumulation; fp32Accum/fp32FloatFloatAccum compute the entire regular Jacobi update in FP32/float-float, then store FP64. Float-float requires DNDS_USE_CCCL_COMPUTE and does not recover map precision. Coefficient storage and WBAP remain FP64. Nondefault modes require CUDA and are unavailable with LVR; gradient-only levels have no VR sweep. Device support is checked at placement.");
             config.field_section(&T::kernels, "kernels", "Operator-local CUDA input layout and compute arithmetic policies");
             DNDS_FIELD(checkAccess, "Validate declared scheduled accesses at submission");
             DNDS_FIELD(overlap, "Overlap input halo exchanges with owned-only core work; false waits then runs unsplit kernels");

@@ -17,6 +17,7 @@ namespace DNDS::CFV
     {
         functional.Validate();
         storage.Validate();
+        cudaSweep.Validate();
         // Quadrature and polynomial degrees are independent numerical choices.
         // No degree+1 rule guarantees exact integration of the full functional.
         // Keep the supported-rule range; SVD handles the chosen discrete system.

@@ -278,6 +278,8 @@ namespace DNDS::Cauchy
             return Kernel::FP64Static;
         if (reconstructionKernel == "fp64MatrixShared")
             return Kernel::FP64MatrixShared;
+        if (reconstructionKernel == "fp64Pipelined")
+            return Kernel::FP64Pipelined;
         if (reconstructionKernel == "fp64Tensor")
             return Kernel::FP64TensorCore;
         if (reconstructionKernel == "fp64TensorWide")
