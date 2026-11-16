@@ -1,4 +1,5 @@
 #include "Cauchy/Interface/CPU/InterfaceSamplingKernels.hpp"
+#include "DNDS/Core/OMP.hpp"
 
 namespace DNDS::Cauchy::CPU
 {
@@ -6,8 +7,8 @@ namespace DNDS::Cauchy::CPU
     {
         DNDS_assert(request.referencePoints.RowCount() == request.worldPoints.RowCount() &&
                     request.referencePoints.RowCount() == request.ids.RowCount());
-        for (index iPoint = 0; iPoint < request.referencePoints.RowCount(); ++iPoint)
-        {
+        OMP::ForRows(0, request.referencePoints.RowCount(), [&](index iPoint)
+                     {
             for (int d = 0; d < 3; ++d)
             {
                 real value = request.referencePoints(iPoint, d);
@@ -21,7 +22,6 @@ namespace DNDS::Cauchy::CPU
                 }
                 request.worldPoints(iPoint, d) = value;
             }
-            request.ids(iPoint, 0) = iPoint;
-        }
+            request.ids(iPoint, 0) = iPoint; });
     }
 }

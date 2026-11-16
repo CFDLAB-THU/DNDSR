@@ -1,6 +1,7 @@
 #include "Cauchy/State/DerivedFields.hpp"
 #include "Cauchy/Core/NumericalFailure.hpp"
 #include "Cauchy/State/CPU/StatePropertiesKernels.hpp"
+#include "Cauchy/Physics/PointWorkerContexts.hpp"
 #include "Cauchy/Physics/EquationSystem.hpp"
 #include "Cauchy/Physics/PointProperties.hpp"
 #include "DNDS/Runtime/Execution/EagerArrayBatch.hpp"
@@ -219,8 +220,7 @@ namespace DNDS::Cauchy
                     const bool diffusion = data->request.Has(DerivedQuantity::DiffusionBound);
                     const bool transport = diffusion || data->request.Has(DerivedQuantity::MolecularViscosity) ||
                                            data->request.Has(DerivedQuantity::ThermalConductivity);
-                    auto evaluator = equation.MakePointEvaluator(workers ? workers->Acquire() : Physics::Chemistry::ChemicalWorkerPool::Lease{},
-                                                                  {transport, diffusion, false});
+                    auto contexts = MakeCPUPointWorkers<CPU::StatePropertiesWorker>(equation, workers, {transport, diffusion, false});
                     const bool guess = data->request.Has(DerivedQuantity::Temperature) && data->CompatibleTemperature(equation);
                     {
                         std::lock_guard<std::mutex> lock(data->mutex);
@@ -229,7 +229,8 @@ namespace DNDS::Cauchy
                     const EquationBlockArrayView<const real> flowView{inputs[flow.physicalField], flow.firstComponent, flow.componentNumber};
                     EquationBlockArrayView<const real> speciesView;
                     if (species) speciesView = {inputs[species->physicalField], species->firstComponent, species->componentNumber};
-                    RequireNumericalSuccess(CPU::RefreshDerivedRows(flowView, speciesView, outputs[0], data->columns, guess, evaluator),
+                    RequireNumericalSuccess(CPU::RefreshDerivedRows(flowView, speciesView, outputs[0], data->columns, guess,
+                                                                    {contexts.data(), index(contexts.size())}),
                                             "queued RefreshDerivedRows");
                 }
                 DerivedFields::Data::Origin origin{{}, equation.PropertyKey(), 0, data->values.ShapeVersion()};

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DNDS/Core/Defines.hpp"
+#include "DNDS/Core/OMP.hpp"
 #include <algorithm>
 #include <functional>
 #include <unordered_map>
@@ -13,12 +14,17 @@ namespace DNDS::Geom::ConnectivityRows
     /// receive each deterministic sorted row exactly once.
     /// Predicate callbacks must be deterministic; candidate visitation order
     /// is not part of the interface.
+    /// parallelRows additionally requires all callbacks to support concurrent
+    /// calls on different output rows; the default preserves serial callbacks.
     template <class ReadAB, class ReadBC, class ResolveB, class GlobalA, class Predicate, class Write>
     void Compose(index nA, ReadAB &&readAB, ReadBC &&readBC, ResolveB &&resolveB,
                  GlobalA &&globalA, Predicate &&pred, Write &&write,
-                 const std::function<bool(index, index, const std::vector<index> &)> &matchExtra = {})
+                 const std::function<bool(index, index, const std::vector<index> &)> &matchExtra = {},
+                 bool parallelRows = false)
     {
-        for (index a = 0; a < nA; ++a)
+        // Custom callback APIs keep their historical serial invocation unless
+        // the owning adapter proves concurrent, independent row operations.
+        const auto composeRow = [&](index a)
         {
             const auto aGlobal = globalA(a);
             std::vector<index> occurrences;
@@ -51,7 +57,12 @@ namespace DNDS::Geom::ConnectivityRows
                 first = next;
             }
             write(a, accepted);
-        }
+        };
+        if (parallelRows)
+            OMP::ForSetupRows(0, nA, composeRow);
+        else
+            for (index iRow = 0; iRow < nA; ++iRow)
+                composeRow(iRow);
     }
 
 }

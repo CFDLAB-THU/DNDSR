@@ -363,13 +363,15 @@ TEST_CASE("Coupling participants without a donor mesh sample a reversed donor su
 }
 int main(int argc, char **argv)
 {
-    MPI_Init(&argc, &argv);
+    // Native row kernels may create OMP/CPU workers even with controller MPI.
+    if (DNDS::MPI::Init_thread(&argc, &argv) != MPI_SUCCESS)
+        return 1;
     mpi.setWorld();
     int result;
     {
         doctest::Context context(argc, argv);
         result = context.run();
     }
-    MPI_Finalize();
+    DNDS::MPI::Finalize();
     return result;
 }

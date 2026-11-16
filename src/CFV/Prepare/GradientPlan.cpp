@@ -55,8 +55,8 @@ namespace DNDS::CFV
             R::Array<index> result(R::RowLayout::Dense(index(rows.size()), 1));
             auto write = result.Write();
             const auto view = write.View<R::FixedRows<1>>();
-            for (index iRow = 0; iRow < index(rows.size()); ++iRow)
-                view(iRow, 0) = rows[iRow];
+            OMP::ForRows(0, index(rows.size()), [&](index iRow)
+                         { view(iRow, 0) = rows[iRow]; });
             return result;
         };
         data->core = storeRows(data->partition.Core());
@@ -73,9 +73,6 @@ namespace DNDS::CFV
             Eigen::MatrixXd design(count, dim), initial(dim, count);
             Eigen::VectorXd lengths(count);
             Eigen::MatrixXd correction = Eigen::MatrixXd::Identity(dim, dim);
-            if (metrics.Axisymmetric())
-                for (int d = 0; d < dim; ++d)
-                    correction(1, d) += geometry.radialMoment(iCell, d);
             index local = 0;
             for (index slot = 0; slot < view.CellFaces(iCell).size(); ++slot)
             {
@@ -99,7 +96,10 @@ namespace DNDS::CFV
                     const real length = displacement.head(dim).norm();
                     DNDS_check_throw_info(length > 0 && std::isfinite(length), "degenerate FV gradient sample displacement");
                     const real quadratureScale = std::sqrt(area);
-                    design.row(local) = displacement.head(dim).transpose() / length * quadratureScale;
+                    if (method == GradientMethod::LeastSquares)
+                        design.row(local) = displacement.head(dim).transpose() / length * quadratureScale;
+                    else
+                        design.row(local) = displacement.head(dim).transpose();
                     lengths[local] = quadratureScale / length;
                     boundaries(next, 0) = UnInitIndex;
                     if (other == UnInitIndex)
@@ -113,13 +113,31 @@ namespace DNDS::CFV
                         const real ownDistance = std::abs((point - center).dot(ownNormal)), otherDistance = std::abs((otherCenter - point).dot(ownNormal));
                         DNDS_check_throw_info(ownDistance + otherDistance > 0, "gradient face centers have zero normal separation");
                         fraction = method == GradientMethod::GGMP ? 0.5 : ownDistance / (ownDistance + otherDistance);
-                        if (method == GradientMethod::GGMP)
+                        if (method == GradientMethod::GGMP && !metrics.Axisymmetric())
                             correction.noalias() -= areaNormal.head(dim) * (point - (center + otherCenter) * 0.5).head(dim).transpose();
                     }
                     initial.col(local) = areaNormal.head(dim) * fraction;
                     ++next;
                     ++local;
                 }
+            }
+            if (metrics.Axisymmetric() && method != GradientMethod::LeastSquares)
+            {
+                // IMPORTANT: boundary samples are reference-face-center values,
+                // whereas axisymmetric cell means use radius-weighted barycenters.
+                // A vertical face over r in [0,h] has weighted center 2h/3,
+                // not its reference center h/2. The continuum radial correction
+                // alone therefore leaves a tangential gradient contamination
+                // of +/-0.7/6 for f=3*x-0.7*r in the first boundary cell row.
+                // Use the exact first moment of THIS discrete center stencil:
+                // M = sum_f w_f * (x_sample-x_cell)^T, then grad=M^+*g_raw.
+                // initial already includes each GG/GGMP interpolation fraction;
+                // replacing correction here applies that moment exactly once.
+                // Zero-area axis faces contribute zero, and the existing full
+                // SVD policy handles any unconstrained direction unchanged.
+                correction.setZero();
+                for (index i = 0; i < count; ++i)
+                    correction.noalias() += initial.col(i) * design.row(i);
             }
             Eigen::MatrixXd inverse;
             if (method == GradientMethod::LeastSquares)
@@ -139,11 +157,14 @@ namespace DNDS::CFV
             DNDS_assert(next == offsets(iCell + 1, 0) && nextBoundary == boundaryStarts(iCell + 1, 0)); });
         // Prove owned-only access once, using the actual prepared entries.
         // The hot core kernel needs neither ghost views nor row-mask checks.
-        for (auto iCell : data->partition.Core())
+        const auto &core = data->partition.Core();
+        OMP::ForSetupRows(0, index(core.size()), [&](index iRow)
+                          {
+            const index iCell = core[iRow];
             for (rowsize slot = 0; slot < rowsize(view.CellFaces(iCell).size()); ++slot)
                 DNDS_check_throw_info(view.CellFaceOther(iCell, view.CellFaces(iCell)[slot], slot) == UnInitIndex ||
                                           view.CellFaceOther(iCell, view.CellFaces(iCell)[slot], slot) < metrics.NumCell(),
-                                      "gradient core stencil references a ghost input");
+                                      "gradient core stencil references a ghost input"); });
         return GradientPlan(std::move(data));
     }
 }

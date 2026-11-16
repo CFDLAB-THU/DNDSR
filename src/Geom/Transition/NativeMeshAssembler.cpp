@@ -4,6 +4,7 @@
 #include "Geom/Transition/FieldTransfer.hpp"
 #include "Geom/Transition/NativeMeshPartitionGraph.hpp"
 #include "Geom/Transition/MeshAdjacencyBindings.hpp"
+#include "DNDS/Core/OMP.hpp"
 #include <iomanip>
 #include <sstream>
 
@@ -245,8 +246,8 @@ namespace DNDS::Geom
                 CheckRows(owned.ids.at(kind), space);
                 {
                     auto ids = owned.ids.at(kind).Read();
-                    for (size_t row = 0; row < ids.View().RowCount(); ++row)
-                        DNDS_check_throw_info(ids.View().RowSize(row) == 1, "native assembly IDs must have exactly one column");
+                    OMP::ForSetupRows(0, ids.View().RowCount(), [&](index iRow)
+                                      { DNDS_check_throw_info(ids.View().RowSize(iRow) == 1, "native assembly IDs must have exactly one column"); });
                 }
                 schedule += "k" + std::to_string(int(kind)) + ":";
                 for (auto count : space._global->RLengths()) schedule += std::to_string(count) + ",";
@@ -502,7 +503,13 @@ namespace DNDS::Geom
                              {
                 auto read = pair.ReadCombined();
                 RArray combined(Runtime::RowLayout::Dense(read.View().RowCount(), 1));
-                { auto write = combined.Write(); for (size_t row = 0; row < read.View().RowCount(); ++row) write.View()(row, 0) = read.View()(row, 0); }
+                {
+                    auto write = combined.Write();
+                    const auto input = read.View();
+                    const auto output = write.View();
+                    OMP::ForSetupRows(0, input.RowCount(), [&](index iRow)
+                                      { output(iRow, 0) = input(iRow, 0); });
+                }
                 ids.emplace(kind, std::move(combined));
                 spaces.emplace(kind, publication.spaces.at(kind)); });
         }

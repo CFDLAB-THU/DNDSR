@@ -4,6 +4,16 @@
 #include "DNDS/Algebra/AmgXPreconditioner.hpp"
 
 namespace C = DNDS::Cauchy;
+TEST_CASE("Mesh preprocessing is explicit and validates a positive uniform scale")
+{
+    const auto defaults = C::SimulationConfig::Resolve(C::Json::object(), 1);
+    CHECK(defaults.Domains().front().settings.mesh.scale == 1);
+    CHECK(defaults.Domains().front().settings.mesh.rotationZDegrees == 0);
+    const auto scaled = C::SimulationConfig::Resolve({{"defaults", {{"mesh", {{"scale", 6.283185307179586}, {"rotationZDegrees", 30}}}}}}, 1);
+    CHECK(scaled.Domains().front().settings.mesh.scale == doctest::Approx(2 * std::acos(-1.)));
+    CHECK(scaled.Domains().front().settings.mesh.rotationZDegrees == 30);
+    CHECK_THROWS(C::SimulationConfig::Resolve({{"defaults", {{"mesh", {{"scale", 0}}}}}}, 1));
+}
 TEST_CASE("Diagonal inverse refinement is opt-in and rejects unrelated inverse providers")
 {
     C::DomainSettings settings;

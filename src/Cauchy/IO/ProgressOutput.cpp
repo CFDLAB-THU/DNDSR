@@ -2,6 +2,7 @@
 
 #include "DNDS/IO/OutputDir.hpp"
 #include "DNDS/Errors.hpp"
+#include <fmt/format.h>
 
 #include <spdlog/logger.h>
 #include <spdlog/sinks/rotating_file_sink.h>
@@ -200,25 +201,22 @@ namespace DNDS::Cauchy
     void ProgressOutputController::ConsoleNonlinear(const ProgressLocation &location,
                                                     const NonlinearProgress &progress, bool stageEnd) const
     {
-        std::ostringstream message;
-        message << std::setprecision(6) << std::scientific << "Cauchy " << _domain << " step " << location.step
-                << " stage " << location.stage << " coupled " << location.coupledStage;
-        if (stageEnd)
-            message << " end";
-        else
-            message << " iteration " << location.iteration;
-        message << " residual " << Json(progress.residual).dump()
-                << " target " << progress.residualTargetRatio << " CFL " << progress.pseudoCFL
-                << " wall " << location.wall << " VR " << progress.reconstructionIterations << ':';
+        std::string residual;
+        for (const real value : progress.residual)
+            residual += fmt::format(" {:10.3e}", value);
+        std::string message = fmt::format(
+            "Cauchy {:>10} step {:7} stage {:2} coupled {:2} {} residual [{} ] target {:9.2e} CFL {:9.2e} wall {:10.3f}s VR {:3}:",
+            _domain, location.step, location.stage, location.coupledStage,
+            stageEnd ? std::string("end          ") : fmt::format("iteration {:4}", location.iteration),
+            residual, progress.residualTargetRatio, progress.pseudoCFL, location.wall, progress.reconstructionIterations);
         if (progress.reconstructionUpdateMeasured)
-            message << progress.reconstructionRelativeUpdate;
+            message += fmt::format("{:9.2e}", progress.reconstructionRelativeUpdate);
         else
-            message << "unmeasured";
-        message
-            << " linear " << progress.linearIterations;
+            message += "unmeasured";
+        message += fmt::format(" linear {:4}", progress.linearIterations);
         if (progress.terminal)
-            message << (progress.converged ? " converged" : " capped");
-        _logger->Info(message.str());
+            message += progress.converged ? " converged" : " capped";
+        _logger->Info(message);
     }
     void ProgressOutputController::CaptureIteration(const NonlinearProgress &progress, real wall)
     {
@@ -324,13 +322,11 @@ namespace DNDS::Cauchy
         }
         if (printConsole)
         {
-            std::ostringstream message;
             const auto &v = progress.diagnostics;
-            message << std::setprecision(12) << "Cauchy " << _domain << " step " << location.step << " time " << location.time << " dt " << location.dt
-                    << " residual " << v[4] << " rho_min " << v[2] << " p_min " << v[3] << " VR " << v[8] << ':' << v[9]
-                    << " rho L1 " << v[10] << " face fallbacks " << progress.faceFallbacks << " implicit "
-                    << progress.nonlinearIterations << '/' << progress.linearIterations << " wall " << location.wall;
-            _logger->Info(message.str());
+            _logger->Info(fmt::format(
+                "Cauchy {:>10} step {:7} time {:11.4e} dt {:9.2e} residual {:10.3e} rho_min {:9.2e} p_min {:9.2e} VR {:3.0f}:{:9.2e} rho L1 {:9.2e} face fallbacks {:5} implicit {:5}/{:5} wall {:10.3f}s",
+                _domain, location.step, location.time, location.dt, v[4], v[2], v[3], v[8], v[9], v[10],
+                progress.faceFallbacks, progress.nonlinearIterations, progress.linearIterations, location.wall));
         }
     }
     void ProgressOutputController::Flush()

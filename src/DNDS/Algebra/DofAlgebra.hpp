@@ -98,24 +98,55 @@ namespace DNDS::Algebra
                 ReduceCUDA(context, operation, x, y, result);
                 return;
             }
+            const double identity = operation == Reduction::Min ? std::numeric_limits<double>::infinity() : operation == Reduction::Max ? -std::numeric_limits<double>::infinity()
+                                                                                                                                        : 0;
+            const auto accumulate = [&](index begin, index end, auto sums)
+            {
+                for (index iCol = 0; iCol < result.width; ++iCol)
+                    sums[iCol] = identity;
+                for (index iRow = begin; iRow < end; ++iRow)
+                    for (index iCol = 0; iCol < x.width; ++iCol)
+                    {
+                        const double value = x(iRow, iCol);
+                        if (operation == Reduction::Dot)
+                            sums[0] += value * double(y(iRow, iCol));
+                        else if (operation == Reduction::Sum)
+                            sums[iCol] += value;
+                        else if (operation == Reduction::Squares)
+                            sums[iCol] += value * value;
+                        else if (operation == Reduction::Min)
+                            sums[iCol] = std::fmin(sums[iCol], value);
+                        else
+                            sums[iCol] = std::fmax(sums[iCol], value);
+                    }
+            };
+            const index partitions = std::min<index>(OMP::DistributedThreads(), std::max<index>(1, x.RowCount()));
+            if (partitions == 1)
+            {
+                accumulate(0, x.RowCount(), result[0]);
+                return;
+            }
+            // Result/scratch are local to this submitted operation. Contiguous
+            // partitions and their ordered final merge avoid floating atomics;
+            // OMP=1 follows the original row/component addition order exactly.
+            std::vector<double> partials(size_t(partitions * result.width));
+            OMP::ForRows(0, partitions, [&](index part)
+                         {
+                const index begin = part * (x.RowCount() / partitions) + std::min(part, x.RowCount() % partitions);
+                const index end = begin + x.RowCount() / partitions + (part < x.RowCount() % partitions);
+                accumulate(begin, end, SpanView<double>{partials.data() + part * result.width, result.width}); });
             for (index iCol = 0; iCol < result.width; ++iCol)
-                result(0, iCol) = operation == Reduction::Min ? std::numeric_limits<double>::infinity() : operation == Reduction::Max ? -std::numeric_limits<double>::infinity()
-                                                                                                                                      : 0;
-            for (index iRow = 0; iRow < x.RowCount(); ++iRow)
-                for (index iCol = 0; iCol < x.width; ++iCol)
-                {
-                    const double value = x(iRow, iCol);
-                    if (operation == Reduction::Dot)
-                        result(0, 0) += value * double(y(iRow, iCol));
-                    else if (operation == Reduction::Sum)
-                        result(0, iCol) += value;
-                    else if (operation == Reduction::Squares)
-                        result(0, iCol) += value * value;
-                    else if (operation == Reduction::Min)
-                        result(0, iCol) = std::fmin(result(0, iCol), value);
+            {
+                double sum = partials[size_t(iCol)];
+                for (index part = 1; part < partitions; ++part)
+                    if (operation == Reduction::Min)
+                        sum = std::fmin(sum, partials[size_t(part * result.width + iCol)]);
+                    else if (operation == Reduction::Max)
+                        sum = std::fmax(sum, partials[size_t(part * result.width + iCol)]);
                     else
-                        result(0, iCol) = std::fmax(result(0, iCol), value);
-                }
+                        sum += partials[size_t(part * result.width + iCol)];
+                result(0, iCol) = sum;
+            }
         }
         template <class Field>
         void Check(const Field &field, const Runtime::ExecutionStream &stream)

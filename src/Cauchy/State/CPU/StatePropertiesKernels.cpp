@@ -15,10 +15,13 @@ namespace DNDS::Cauchy::CPU
     }
     NumericalStatus RefreshDerivedRows(EquationBlockArrayView<const real> rows, EquationBlockArrayView<const real> species,
                                        Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows> values,
-                                       std::array<int, DerivedQuantityNumber> columns, bool useTemperatureGuess, PointEvaluator &evaluator) noexcept
+                                       std::array<int, DerivedQuantityNumber> columns, bool useTemperatureGuess, PointEvaluator &evaluator,
+                                       index begin, index end) noexcept
     {
         auto rhoY = evaluator.SpeciesInput();
-        for (index iRow = 0; iRow < values.RowCount(); ++iRow)
+        if (end < 0)
+            end = values.RowCount();
+        for (index iRow = begin; iRow < end; ++iRow)
         {
             FlowState point;
             for (int component = 0; component < 5; ++component)
@@ -35,14 +38,28 @@ namespace DNDS::Cauchy::CPU
         }
         return {};
     }
+    NumericalStatus RefreshDerivedRows(EquationBlockArrayView<const real> flow, EquationBlockArrayView<const real> species,
+                                       Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows> output,
+                                       std::array<int, DerivedQuantityNumber> columns, bool guess, SpanView<StatePropertiesWorker> workers) noexcept
+    {
+        if (workers.empty())
+            return {NumericalError::InvalidInput, 1, -1};
+        return OMP::ForRowsStatus(0, workers.size(), [&](index part) -> NumericalStatus
+                                  {
+            const index begin = part * (output.RowCount() / workers.size()) + std::min(part, output.RowCount() % workers.size());
+            const index end = begin + output.RowCount() / workers.size() + (part < output.RowCount() % workers.size());
+            return RefreshDerivedRows(flow, species, output, columns, guess, workers[part].evaluator, begin, end); });
+    }
     NumericalStatus AccumulateStateDiagnostics(EquationBlockReadView flow, std::optional<EquationBlockReadView> species,
                                                Algebra::DofComponentView<const real> rhs, CFV::FiniteVolumeHostView metric,
-                                               PointEvaluator &evaluator, SpanView<real> result) noexcept
+                                               PointEvaluator &evaluator, SpanView<real> result, index begin, index end) noexcept
     {
         const index width = rhs.ComponentNumber();
         const int independent = species ? int(species->ComponentNumber()) : 0;
         auto rhoY = evaluator.SpeciesInput();
-        for (index iCell = 0; iCell < rhs.RowCount(); ++iCell)
+        if (end < 0)
+            end = rhs.RowCount();
+        for (index iCell = begin; iCell < end; ++iCell)
         {
             FlowState value;
             for (int j = 0; j < 5; ++j)
@@ -64,6 +81,33 @@ namespace DNDS::Cauchy::CPU
             for (index j = 0; j < width; ++j)
                 result[4] += rhs(iCell, j) * rhs(iCell, j) / volume;
         }
+        return {};
+    }
+    NumericalStatus AccumulateStateDiagnostics(EquationBlockReadView flow, std::optional<EquationBlockReadView> species,
+                                               Algebra::DofComponentView<const real> rhs, CFV::FiniteVolumeHostView metric,
+                                               SpanView<StatePropertiesWorker> workers, SpanView<real> result) noexcept
+    {
+        if (workers.empty())
+            return {NumericalError::InvalidInput, 1, -1};
+        if (workers.size() == 1)
+            return AccumulateStateDiagnostics(flow, species, rhs, metric, workers[0].evaluator, result);
+        const auto status = OMP::ForRowsStatus(0, workers.size(), [&](index part) -> NumericalStatus
+                                               {
+            auto &values = workers[part].diagnostics;
+            values.fill(0);
+            values[2] = values[3] = values[13] = std::numeric_limits<real>::max();
+            const index begin = part * (rhs.RowCount() / workers.size()) + std::min(part, rhs.RowCount() % workers.size());
+            const index end = begin + rhs.RowCount() / workers.size() + (part < rhs.RowCount() % workers.size());
+            return AccumulateStateDiagnostics(flow, species, rhs, metric, workers[part].evaluator,
+                                              {values.data(), index(values.size())}, begin, end); });
+        if (!status)
+            return status;
+        for (index part = 0; part < workers.size(); ++part)
+            for (index j = 0; j < result.size(); ++j)
+                if (j == 2 || j == 3 || j == 13)
+                    result[j] = std::min(result[j], workers[part].diagnostics[j]);
+                else
+                    result[j] += workers[part].diagnostics[j];
         return {};
     }
 }

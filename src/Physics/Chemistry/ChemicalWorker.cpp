@@ -1,4 +1,5 @@
 #include "Physics/Chemistry/ChemicalWorker.hpp"
+#include <algorithm>
 #include <mutex>
 #include <utility>
 
@@ -39,6 +40,22 @@ namespace DNDS::Physics::Chemistry
         const auto slot = _state->available.back();
         _state->available.pop_back();
         return Lease(_state, slot);
+    }
+    std::vector<ChemicalWorkerPool::Lease> ChemicalWorkerPool::AcquireUpTo(index maximum) const
+    {
+        DNDS_check_throw_info(maximum > 0, "chemical worker team bound must be positive");
+        std::vector<Lease> leases;
+        leases.reserve(size_t(std::min(maximum, WorkerNumber())));
+        std::lock_guard<std::mutex> guard(_state->mutex);
+        DNDS_check_throw_info(!_state->available.empty(), "all chemical worker contexts are in use");
+        const index count = std::min(maximum, index(_state->available.size()));
+        for (index iWorker = 0; iWorker < count; ++iWorker)
+        {
+            const auto slot = _state->available.back();
+            _state->available.pop_back();
+            leases.push_back(Lease(_state, slot));
+        }
+        return leases;
     }
     void ChemicalWorkerPool::Lease::Release() noexcept
     {

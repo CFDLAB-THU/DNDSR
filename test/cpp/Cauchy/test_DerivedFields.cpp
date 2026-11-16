@@ -4,6 +4,7 @@
 #include "Cauchy/Config/SimulationConfig.hpp"
 #include "Cauchy/Physics/EquationSystem.hpp"
 #include "Cauchy/Physics/PointProperties.hpp"
+#include "DNDS/Runtime/Execution/EagerEngine.hpp"
 #include <cstdlib>
 
 namespace C = DNDS::Cauchy;
@@ -102,7 +103,7 @@ TEST_CASE("Mixture derived refresh consumes compatible stale temperatures across
     const P::ReferenceScales scales{1.225, 340, 2, 288.15};
     P::Thermodynamics::IdealGasMixture material(prototype, scales);
     const auto equation = C::EquationSystem::FromIdealGasMixture(material, true);
-    P::Chemistry::ChemicalWorkerPool workers(prototype, 1);
+    P::Chemistry::ChemicalWorkerPool workers(prototype, 2);
     const int speciesNumber = material.SpeciesNumber();
     REQUIRE(speciesNumber == 10);
     A::DofSpace space(35, 2, "mixture means and separate ghost publication");
@@ -182,6 +183,17 @@ TEST_CASE("Mixture derived refresh consumes compatible stale temperatures across
             activeGhost.CancelUnmodified();
         }
         check(fields);
+        // Queued refresh reserves a bounded context team; both CPU launcher
+        // modes must reproduce the same independently evaluated properties.
+        for (const size_t engineWorkers : {size_t(0), size_t(1)})
+        {
+            R::EagerEngine engine(engineWorkers);
+            const auto stream = engine.CreateCPUStream();
+            C::DerivedFields parallelFields(space, request);
+            C::RefreshDerivedFields(engine, stream, state, equation, parallelFields, workers, false);
+            engine.Synchronize();
+            check(parallelFields);
+        }
         for (DNDS::index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
             CHECK(state.PhysicalField(iField).Owned().Version() == versions[iField]);
         CHECK_FALSE(C::RefreshDerivedFields(state, equation, fields, workers.Acquire(), true));

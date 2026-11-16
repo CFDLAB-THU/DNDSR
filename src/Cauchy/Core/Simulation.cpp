@@ -9,7 +9,7 @@ namespace DNDS::Cauchy
     {
         ssp<Geom::UnstructuredMesh> ReadMesh(
             const DomainConfig &domain, const MPIInfo &mpi,
-            const std::shared_ptr<Runtime::CommunicationContext> &domainCommunication)
+            const std::shared_ptr<Runtime::CommunicationContext> &domainCommunication, DomainSetupTimings &timings)
         {
             DNDS_check_throw_info(!domain.settings.mesh.file.empty(),
                                   "Cauchy mesh path is empty");
@@ -37,18 +37,35 @@ namespace DNDS::Cauchy
             }
             auto communication = domainCommunication->WithPreflight(
                 domain.settings.implicit.collectiveChecks);
+            const real ingressStarted = MPI_Wtime();
             auto owned = Geom::ReadAndDeriveNativeMeshFromCGNSOwned(
                 mpi, domain.settings.mesh.dimension, domain.settings.mesh.file,
                 partition, mapper, periodic, domain.settings.mesh.elevation,
                 domain.settings.mesh.bisect, 0, Geom::MeshAuditOptions{},
                 communication);
+            timings.meshIngress = MPI_Wtime() - ingressStarted;
+            const real prepareStarted = MPI_Wtime();
             Geom::PrepareMeshOptions prepare;
             prepare.buildSerialOut = false;
             prepare.reorderCells = 1;
             prepare.reorderParts = OMP::DistributedThreads();
-            return Geom::UnstructuredMesh::FromNative(
+            auto mesh = Geom::UnstructuredMesh::FromNative(
                 mpi, Geom::PrepareNativeMeshForSolverOwned(
                          std::move(owned), mpi, prepare));
+            const auto &settings = domain.settings.mesh;
+            if (settings.scale != 1 || settings.rotationZDegrees != 0)
+            {
+                // Import/matching uses the file frame. The ordinary Geom
+                // publication transforms coordinates AND periodic frames
+                // together, exactly once before metrics/initial-state sampling.
+                const real angle = settings.rotationZDegrees * std::acos(real(-1)) / 180;
+                const real c = std::cos(angle), s = std::sin(angle);
+                Eigen::Matrix3d rotation;
+                rotation << c, -s, 0, s, c, 0, 0, 0, 1;
+                mesh->ApplyGeometryTransform(rotation, settings.scale);
+            }
+            timings.meshPreparation = MPI_Wtime() - prepareStarted;
+            return mesh;
         }
     }
 
@@ -56,7 +73,7 @@ namespace DNDS::Cauchy
                            const MeshFactory &factory)
         : _config(std::move(config)),
           _placement(comm, _config.RankGroups()),
-          _domains(size_t(_placement.DomainNumber()))
+          _domains(size_t(_placement.DomainNumber())), _setupTimings(_domains.size())
     {
         // Opt-in before mesh/field setup. Do not disable diagnostics belonging
         // to another live simulation in this process.
@@ -92,12 +109,21 @@ namespace DNDS::Cauchy
         {
             const auto &domain = _config.Domains()[iDomain];
             const MPIInfo mpi(_placement.Context(iDomain)->Communicator());
+            // An injected/archived mesh already owns its geometry. Reject a
+            // second preprocessing request rather than scaling it twice.
+            DNDS_check_throw_info(!factory || (domain.settings.mesh.scale == 1 && domain.settings.mesh.rotationZDegrees == 0),
+                                  "factory-injected meshes require identity mesh preprocessing");
+            const real started = MPI_Wtime();
             auto mesh = factory ? factory(iDomain, domain, mpi)
                                 : ReadMesh(domain, mpi,
-                                           _placement.Context(iDomain));
+                                           _placement.Context(iDomain), _setupTimings[iDomain]);
+            if (factory)
+                _setupTimings[iDomain].meshIngress = MPI_Wtime() - started;
+            const real domainStarted = MPI_Wtime();
             _domains[iDomain] = std::make_unique<Domain>(
                 domain.placement.name, std::move(mesh), domain.settings,
                 _config.Time());
+            _setupTimings[iDomain].domainSetup = MPI_Wtime() - domainStarted;
         }
         if (!_config.Interfaces().empty())
         {

@@ -3,6 +3,8 @@
 #include "Geom/Connectivity/AdjacencyRegistry.hpp"
 #include "Geom/Transition/FieldTransfer.hpp"
 #include "DNDS/Runtime/Array/RowBuilder.hpp"
+#include "DNDS/Core/OMP.hpp"
+#include "DNDS/Core/CheckedSize.hpp"
 
 namespace DNDS::Geom
 {
@@ -10,6 +12,8 @@ namespace DNDS::Geom
     {
         Runtime::Array<index> IndexRows(const std::vector<std::vector<index>> &rows)
         {
+            // Exclusive CSR shape mutation/commit remains a controller phase;
+            // the parent-child numerical fill above has already joined.
             Runtime::RowBuilder builder(rows.size(), sizeof(index));
             for (size_t row = 0; row < rows.size(); ++row)
             {
@@ -25,8 +29,8 @@ namespace DNDS::Geom
         {
             Runtime::Array<T> result(Runtime::RowLayout::Dense(values.size(), 1));
             auto write = result.Write();
-            for (size_t row = 0; row < values.size(); ++row)
-                write.View()(row, 0) = values[row];
+            OMP::ForSetupRows(0, index(values.size()), [&](index iRow)
+                              { write.View()(iRow, 0) = values[size_t(iRow)]; });
             return result;
         }
     }
@@ -74,8 +78,9 @@ namespace DNDS::Geom
                          {
             result.provenance.sourceNamespace = source.identity.meshNamespace;
             auto nodeIds = owned.ids.at(EntityKind::Node).Read();
-            for (index row = 0; row < source.spaces.at(EntityKind::Node).NumOwned(); ++row)
-                nodeParents.push_back(nodeIds.View()(size_t(row), 0));
+            nodeParents.resize(size_t(source.spaces.at(EntityKind::Node).NumOwned()));
+            OMP::ForSetupRows(0, index(nodeParents.size()), [&](index iRow)
+                              { nodeParents[size_t(iRow)] = nodeIds.View()(iRow, 0); });
             auto split = [&](EntityKind kind, const Runtime::Array<index> &cones,
                              const Runtime::Array<ElemInfo> &metadata, auto &children, auto &childInfo, auto &parents, auto &childBits)
             {
@@ -84,8 +89,27 @@ namespace DNDS::Geom
                 auto ids = owned.ids.at(kind).Read();
                 std::optional<Runtime::Array<NodePeriodicBits>::ReadLease> images;
                 if (owned.periodic) images.emplace((kind == EntityKind::Cell ? *owned.cellNodesPbi : *owned.bndNodesPbi).Read());
-                for (size_t row = 0; row < cones.RowCount(); ++row)
+                // Stable parent-prefix numbering lets every parent populate its
+                // own children, metadata and ancestry without shared appends.
+                std::vector<index> childStarts(size_t(cones.RowCount()) + 1, 0);
+                OMP::ForSetupRows(0, cones.RowCount(), [&](index iRow)
                 {
+                    const Elem::Element element{info.View()(iRow, 0).getElemType()};
+                    DNDS_check_throw_info(element.GetOrder() == 2 && element.GetO2NumBisect() > 0 &&
+                                              cone.View().RowSize(iRow) == size_t(element.GetNumNodes()),
+                                          "native O2 bisection requires supported complete quadratic elements");
+                    childStarts[size_t(iRow) + 1] = element.GetO2NumBisect();
+                });
+                for (index iRow = 0; iRow < cones.RowCount(); ++iRow)
+                    childStarts[size_t(iRow) + 1] = CheckedSize::Add(childStarts[size_t(iRow)], childStarts[size_t(iRow) + 1]);
+                children.resize(size_t(childStarts.back()));
+                childInfo.resize(size_t(childStarts.back()));
+                parents.resize(size_t(childStarts.back()));
+                if (owned.periodic)
+                    childBits.resize(size_t(childStarts.back()));
+                OMP::ForSetupRows(0, cones.RowCount(), [&](index iRow)
+                {
+                    const auto row = size_t(iRow);
                     auto parentInfo = info.View()(row, 0);
                     const Elem::Element element{parentInfo.getElemType()};
                     DNDS_check_throw_info(element.GetOrder() == 2 && element.GetO2NumBisect() > 0 &&
@@ -110,24 +134,25 @@ namespace DNDS::Geom
                     const auto variant = Elem::GetO2ElemBisectVariant(element, coordinates);
                     for (int child = 0; child < element.GetO2NumBisect(); ++child)
                     {
+                        const auto output = size_t(childStarts[row] + child);
                         const auto childElement = element.ObtainO2BisectElem(child);
                         DNDS_check_throw_info(childElement.GetOrder() == 1, "native bisection child is not first order");
                         std::vector<index> nodes(size_t(childElement.GetNumNodes()));
                         auto mutableElement = element;
                         mutableElement.ExtractO2BisectElemNodes(child, variant, globals, nodes);
-                        children.push_back(std::move(nodes));
+                        children[output] = std::move(nodes);
                         if (owned.periodic)
                         {
                             std::vector<NodePeriodicBits> labels(size_t(childElement.GetNumNodes()));
                             mutableElement.ExtractO2BisectElemNodes(child, variant, bits, labels);
-                            childBits.push_back(std::move(labels));
+                            childBits[output] = std::move(labels);
                         }
                         auto value = parentInfo;
                         value.setElemType(childElement.type);
-                        childInfo.push_back(value);
-                        parents.push_back(ids.View()(row, 0));
+                        childInfo[output] = value;
+                        parents[output] = ids.View()(row, 0);
                     }
-                }
+                });
             };
             split(EntityKind::Cell, *owned.relations[size_t(MeshRelation::CellNodes)], *owned.cellInfo, cellNodes, cellInfo, cellParents, cellBits);
             split(EntityKind::Bnd, *owned.relations[size_t(MeshRelation::BoundaryNodes)], *owned.bndInfo, boundaryNodes, boundaryInfo, boundaryParents, boundaryBits); });
@@ -171,6 +196,8 @@ namespace DNDS::Geom
     NativeMeshDerivedResult NativeMeshRefinement::Bisect(const UnstructuredMeshState &source, const MPIInfo &mpi,
                                                          NativeMeshBuildOptions options)
     {
+        // This entry orchestrates capture, owned refinement and one final ghost
+        // assembly. Teams are inside independent fill leaves, never around MPI.
         auto result = BisectOwned(NativeMeshAssembler::CaptureOwned(source, mpi), mpi, options);
         GhostSpec recipe;
         result.owned.LocalStage(mpi, [&]

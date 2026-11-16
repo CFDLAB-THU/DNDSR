@@ -1,6 +1,7 @@
 #include "Geom/Spatial/SurfacePointMap.hpp"
 #include "DNDS/MPI/CollectiveStage.hpp"
 #include "DNDS/Runtime/Communication/SparseBatchExchange.hpp"
+#include "DNDS/Core/OMP.hpp"
 
 namespace DNDS::Geom
 {
@@ -25,11 +26,10 @@ namespace DNDS::Geom
             {
                 std::vector<SpatialBox> boxes(elements.size());
                 diameter = 0;
-                for (index iElement = 0; iElement < index(elements.size()); ++iElement)
-                {
-                    boxes[size_t(iElement)] = Geometry(iElement).Bounds();
-                    diameter = std::max(diameter, (boxes[size_t(iElement)].upper - boxes[size_t(iElement)].lower).norm());
-                }
+                OMP::ForSetupRows(0, index(elements.size()), [&](index iElement)
+                                  { boxes[size_t(iElement)] = Geometry(iElement).Bounds(); });
+                for (const auto &box : boxes)
+                    diameter = std::max(diameter, (box.upper - box.lower).norm());
                 tree = std::make_shared<BoundingBoxTree>(boxes, backend);
             }
         };
@@ -61,11 +61,10 @@ namespace DNDS::Geom
             const auto coordinates = p.View<R::FixedRows<3>>();
             const auto queryKeys = k.View<R::FixedRows<1>>();
             std::vector<index> keys(size_t(ids.RowCount()));
-            for (index iQuery = 0; iQuery < points.RowCount(); ++iQuery)
-            {
+            OMP::ForSetupRows(0, points.RowCount(), [&](index iQuery)
+                              {
                 DNDS_check_throw_info(tPoint(coordinates(iQuery, 0), coordinates(iQuery, 1), coordinates(iQuery, 2)).allFinite(), "nonfinite surface query");
-                keys[size_t(iQuery)] = queryKeys(iQuery, 0);
-            }
+                keys[size_t(iQuery)] = queryKeys(iQuery, 0); });
             std::sort(keys.begin(), keys.end());
             DNDS_check_throw_info(std::adjacent_find(keys.begin(), keys.end()) == keys.end(), "duplicate local surface query ID");
         }
@@ -85,13 +84,12 @@ namespace DNDS::Geom
         data->pose = pose;
         data->read = std::make_shared<const R::Array<real>::ReadLease>(data->coordinates.Read());
         std::vector<index> keys(data->elements.size());
-        for (index iElement = 0; iElement < index(data->elements.size()); ++iElement)
-        {
+        OMP::ForSetupRows(0, index(data->elements.size()), [&](index iElement)
+                          {
             const auto row = data->read->View()[iElement];
             DNDS_check_throw_info(row.size() % 3 == 0, "surface coordinate row is not a node triple sequence");
             data->Geometry(iElement).Validate();
-            keys[size_t(iElement)] = data->elements[size_t(iElement)].id;
-        }
+            keys[size_t(iElement)] = data->elements[size_t(iElement)].id; });
         std::sort(keys.begin(), keys.end());
         DNDS_check_throw_info(std::adjacent_find(keys.begin(), keys.end()) == keys.end(), "duplicate local surface element ID");
         data->BuildIndex(backend);
@@ -153,9 +151,11 @@ namespace DNDS::Geom
         const auto p = pointRead.View<R::FixedRows<3>>();
         const auto ids = idRead.View<R::FixedRows<1>>();
         auto data = std::make_shared<Detail::SurfacePointMapData>(surface);
-        data->matches.reserve(size_t(points.RowCount()));
-        for (index iQuery = 0; iQuery < points.RowCount(); ++iQuery)
-        {
+        data->matches.resize(size_t(points.RowCount()));
+        // The spatial index is eagerly built; each query owns its proposal
+        // scratch and output row. No lazy BVH mutation or shared append occurs.
+        OMP::ForSetupRows(0, points.RowCount(), [&](index iQuery)
+                          {
             const tPoint world{p(iQuery, 0), p(iQuery, 1), p(iQuery, 2)};
             const tPoint referenceQuery = surface.Pose().Inverse(world);
             std::vector<SurfaceMatchProposal> proposals;
@@ -170,8 +170,7 @@ namespace DNDS::Geom
                                      geometry.ContainsReference(projection.reference,-std::max(settings.referenceTolerance,32*std::numeric_limits<real>::epsilon()))}); });
             const auto match = ResolveSurfaceMatches(proposals, settings.projectionTolerance);
             DNDS_check_throw_info(match, "uncovered surface query " + std::to_string(ids(iQuery, 0)));
-            data->matches.push_back(*match);
-        }
+            data->matches[size_t(iQuery)] = *match; });
         return SurfacePointMap(std::move(data));
     }
     index SurfacePointMap::Size() const { return index(_data->matches.size()); }
@@ -463,13 +462,13 @@ namespace DNDS::Geom
                 byQuery[size_t(iQuery)].push_back({{ids(iQuery,0),k(i,2),k(i,3),int(k(i,4)),{v(i,0),v(i,1),v(i,2)},
                     {v(i,3),v(i,4),v(i,5)},{v(i,6),v(i,7),v(i,8)},{v(i,10),v(i,11),v(i,12)},v(i,9)},k(i,5) != 0});
             }
-            data->matches.reserve(size_t(points.RowCount()));
-            for (index iQuery = 0; iQuery < points.RowCount(); ++iQuery)
+            data->matches.resize(size_t(points.RowCount()));
+            OMP::ForSetupRows(0, points.RowCount(), [&](index iQuery)
             {
                 const auto match = ResolveSurfaceMatches(byQuery[size_t(iQuery)],settings.projectionTolerance);
                 DNDS_check_throw_info(match,"uncovered distributed surface query " + std::to_string(ids(iQuery,0)));
-                data->matches.push_back(*match);
-            } });
+                data->matches[size_t(iQuery)] = *match;
+            }); });
         return DistributedSurfacePointMap(std::move(data));
     }
     index DistributedSurfacePointMap::Size() const { return index(_data->matches.size()); }

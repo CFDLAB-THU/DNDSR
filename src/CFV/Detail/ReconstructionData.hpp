@@ -137,8 +137,8 @@ namespace DNDS::CFV::Detail
         {
             auto write = array->Write();
             const auto view = write.View<Runtime::UniformTableRows>();
-            for (index iRow = 0; iRow < view.RowCount(); ++iRow)
-                std::fill(view[iRow].begin(), view[iRow].end(), 0.);
+            OMP::ForRows(0, view.RowCount(), [&](index iRow)
+                         { std::fill(view[iRow].begin(), view[iRow].end(), 0.); });
         }
     }
 }

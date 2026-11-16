@@ -11,20 +11,24 @@ namespace DNDS::Cauchy
     /// Build private CPU point-evaluator/scratch slots at operator execution,
     /// before entering an OMP region. Kernels receive only the resulting span.
     /// Perfect-gas/RANS slots follow DNDS distributed OMP controls. Mixtures
-    /// retain one leased worker until team reservation is supported by the
-    /// bounded chemistry pool; never acquire a team that can starve itself.
+    /// atomically reserve up to that many available chemistry workers; the
+    /// returned span size is the actual parallelism. No worker waits while
+    /// holding a partial team or acquires another context inside its loop.
     /// Each Worker owns the evaluator and any mutable point-sized scratch.
     template <class Worker, class... Args>
     std::vector<Worker> MakeCPUPointWorkers(
         const EquationSystem &equation, const std::optional<Physics::Chemistry::ChemicalWorkerPool> &pool,
         Physics::Thermodynamics::MixturePropertyRequest properties, const Args &...args)
     {
-        const index count = equation.HasMixture() ? 1 : OMP::DistributedThreads();
+        auto leases = equation.HasMixture() && pool ? pool->AcquireUpTo(OMP::DistributedThreads())
+                                                    : std::vector<Physics::Chemistry::ChemicalWorkerPool::Lease>{};
+        const index count = equation.HasMixture() ? index(leases.size()) : OMP::DistributedThreads();
+        DNDS_check_throw_info(count > 0, "mixture point workers require their chemistry pool");
         std::vector<Worker> workers;
         workers.reserve(size_t(count));
         for (index iWorker = 0; iWorker < count; ++iWorker)
             workers.emplace_back(equation.MakePointEvaluator(
-                                     pool ? pool->Acquire() : Physics::Chemistry::ChemicalWorkerPool::Lease{}, properties),
+                                     equation.HasMixture() ? std::move(leases[iWorker]) : Physics::Chemistry::ChemicalWorkerPool::Lease{}, properties),
                                  args...);
         return workers;
     }

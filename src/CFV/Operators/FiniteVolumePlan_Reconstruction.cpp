@@ -520,8 +520,8 @@ namespace DNDS::CFV
         {
             auto write = array->Write();
             auto view = write.View<R::TableRows>();
-            for (index iFace = 0; iFace < view.RowCount(); ++iFace)
-                Map(view[iFace].data(), count, count).setIdentity();
+            OMP::ForRows(0, view.RowCount(), [&](index iFace)
+                         { Map(view[iFace].data(), count, count).setIdentity(); });
         }
         FinalizeFaceTransform(result);
         return result;
@@ -548,14 +548,13 @@ namespace DNDS::CFV
         {
             auto forward = transform.forward.Read(), inverse = transform.inverse.Read();
             const auto left = forward.View<R::TableRows>(), right = inverse.View<R::TableRows>();
-            Matrix product(count, count);
-            for (index iFace = 0; iFace < Metrics().NumFaceProc(); ++iFace)
-            {
+            OMP::ForSetupRows(0, Metrics().NumFaceProc(), [&](index iFace)
+                              {
+                Matrix product(count, count);
                 const ConstMap L(left[iFace].data(), count, count), R(right[iFace].data(), count, count);
                 product.noalias() = L * R;
                 DNDS_check_throw_info(L.allFinite() && R.allFinite() && product.isApprox(Matrix::Identity(count, count), 1e-10),
-                                      "face characteristic matrices must be finite mutual inverses");
-            }
+                                      "face characteristic matrices must be finite mutual inverses"); });
         }
         transform.forwardVersion = transform.forward.Version();
         transform.inverseVersion = transform.inverse.Version();
@@ -878,8 +877,8 @@ namespace DNDS::CFV
         DNDS_check_throw_info(cells.GetDevice() == R::Device::Host() && !cells.Layout().IsVariable() && cells.Layout().Width() == 1, "sampling cell index shape");
         auto cellRead = cells.Read();
         const auto ids = cellRead.View<R::FixedRows<1>>();
-        for (index i = 0; i < cells.RowCount(); ++i)
-            DNDS_check_throw_info(ids(i, 0) >= 0 && ids(i, 0) < Metrics().NumCellProc(), "sampling cell outside prepared closure");
+        OMP::ForSetupRows(0, cells.RowCount(), [&](index iPoint)
+                          { DNDS_check_throw_info(ids(iPoint, 0) >= 0 && ids(iPoint, 0) < Metrics().NumCellProc(), "sampling cell outside prepared closure"); });
         auto mo = mean.Owned().Read(), mg = mean.Ghost().Read(), co = coefficients.Owned().Read(), cg = coefficients.Ghost().Read();
         R::PairReadView<real, R::AccessBoundsChecks, R::UniformTableRows> u{mo.View<R::UniformTableRows>(), mg.View<R::UniformTableRows>()}, rec{co.View<R::UniformTableRows>(), cg.View<R::UniformTableRows>()};
         auto pRead = points.Read(), geomRead = Metrics()._data->cell.Read(), momentRead = _data->moments.Read();
@@ -888,20 +887,19 @@ namespace DNDS::CFV
         const auto geom = geomRead.View<R::FixedRows<8>>();
         const auto moment = momentRead.View<R::TableRows>();
         const auto out = output.View<R::UniformTableRows>();
-        Math::SmallMatrix basis;
-        for (index i = 0; i < cells.RowCount(); ++i)
-        {
-            const auto cell = ids(i, 0);
-            Math::PolynomialDerivatives(basis, Metrics().Dimension(), Settings().maxOrder, {p(i, 0), p(i, 1), p(i, 2)},
+        OMP::ForRows(0, cells.RowCount(), [&](index iPoint)
+                     {
+            Math::SmallMatrix basis;
+            const auto cell = ids(iPoint, 0);
+            Math::PolynomialDerivatives(basis, Metrics().Dimension(), Settings().maxOrder, {p(iPoint, 0), p(iPoint, 1), p(iPoint, 2)},
                                         {geom(cell, 1), geom(cell, 2), geom(cell, 3)}, geom(cell, 7));
             for (index v = 0; v < nv; ++v)
             {
                 real value = derivative == 0 ? u(cell, v) : 0;
                 for (index mode = 0; mode < n; ++mode)
                     value += (basis(derivative, mode + 1) - (derivative == 0 ? moment(cell, mode + 1) : 0)) * rec(cell, v * n + mode);
-                out(i, v) = value;
-            }
-        }
+                out(iPoint, v) = value;
+            } });
     }
     Eigen::MatrixXd VariationalReconstructionPlan::GetCachedFaceBasis(index iFace, int side, int iQuadrature) const
     {

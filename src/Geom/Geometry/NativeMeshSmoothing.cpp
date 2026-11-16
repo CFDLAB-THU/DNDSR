@@ -6,6 +6,7 @@
 #include "Geom/Quadratures/Quadrature.hpp"
 #include "Geom/Spatial/PointCloud.hpp"
 #include "DNDS/Runtime/Array/RowBuilder.hpp"
+#include "DNDS/Core/OMP.hpp"
 #include <nanoflann.hpp>
 #include <set>
 #include <sstream>
@@ -165,9 +166,10 @@ namespace DNDS::Geom
             void SetConstant(real value)
             {
                 auto write = values.Write();
-                for (size_t row = 0; row < values.RowCount(); ++row)
+                OMP::ForRows(0, values.RowCount(), [&](index row)
+                             {
                     for (size_t component = 0; component < 3; ++component)
-                        write.View()(row, component) = value;
+                        write.View()(row, component) = value; });
             }
             void operator=(SmoothingField &other)
             {
@@ -175,24 +177,27 @@ namespace DNDS::Geom
                     return;
                 auto read = other.values.Read();
                 auto write = values.Write();
-                for (size_t row = 0; row < values.RowCount(); ++row)
+                OMP::ForRows(0, values.RowCount(), [&](index row)
+                             {
                     for (size_t component = 0; component < 3; ++component)
-                        write.View()(row, component) = read.View()(row, component);
+                        write.View()(row, component) = read.View()(row, component); });
             }
             void addTo(SmoothingField &other, real factor)
             {
                 auto read = other.values.Read();
                 auto write = values.Write();
-                for (size_t row = 0; row < values.RowCount(); ++row)
+                OMP::ForRows(0, values.RowCount(), [&](index row)
+                             {
                     for (size_t component = 0; component < 3; ++component)
-                        write.View()(row, component) += factor * read.View()(row, component);
+                        write.View()(row, component) += factor * read.View()(row, component); });
             }
             void operator*=(real factor)
             {
                 auto write = values.Write();
-                for (size_t row = 0; row < values.RowCount(); ++row)
+                OMP::ForRows(0, values.RowCount(), [&](index row)
+                             {
                     for (size_t component = 0; component < 3; ++component)
-                        write.View()(row, component) *= factor;
+                        write.View()(row, component) *= factor; });
             }
             real dot(SmoothingField &other)
             {
@@ -202,9 +207,14 @@ namespace DNDS::Geom
                 auto a = values.Read();
                 auto b = other.values.Read();
                 real result = 0;
-                for (size_t row = 0; row < values.RowCount(); ++row)
+                const index workers = OMP::DistributedThreads();
+                std::vector<real> partials(size_t(workers > 1 ? workers : 0));
+                OMP::SumRows(values.RowCount(), {&result, 1}, {partials.data(), index(partials.size())}, [&](index row, auto sum) noexcept -> NumericalStatus
+                             {
                     for (size_t component = 0; component < 3; ++component)
-                        result += a.View()(row, component) * b.View()(row, component);
+                        sum[0] += a.View()(row, component) * b.View()(row, component);
+                    return {}; });
+                // The team is joined before the controller's distributed dot.
                 MPI_Allreduce(MPI_IN_PLACE, &result, 1, DNDS_MPI_REAL, MPI_SUM, mpi.comm);
                 return result;
             }
@@ -216,6 +226,9 @@ namespace DNDS::Geom
         std::shared_ptr<const UnstructuredMeshState> source, const MPIInfo &mpi, NativeSmoothingOptions options,
         const std::function<bool(t_index)> &selected)
     {
+        // Selection invokes a user callback and several faces contribute to one
+        // nodal normal cluster/displacement. Preserve ordered merge semantics;
+        // independent RBF/query rows are parallelized in the solve entries.
         const auto communication = source ? source->PreparationCommunication() : nullptr;
         Options(mpi, options, communication);
         FieldTransferDetail::LocalStage(mpi, communication, [&]
@@ -420,14 +433,17 @@ namespace DNDS::Geom
         FieldTransferDetail::LocalStage(mpi, communication, [&]
                                         {
             cloud.pts.resize(points.RowCount());
-            for (size_t row = 0; row < points.RowCount(); ++row) cloud.pts[row] = tPoint{data.View()(row,0),data.View()(row,1),data.View()(row,2)}; });
+            OMP::ForSetupRows(0, points.RowCount(), [&](index row)
+                              { cloud.pts[size_t(row)] = tPoint{data.View()(row,0),data.View()(row,1),data.View()(row,2)}; }); });
         using Tree = nanoflann::KDTreeSingleIndexAdaptor<nanoflann::L2_Simple_Adaptor<real, PointCloudKDTree>, PointCloudKDTree, 3, index>;
         Tree tree(3, cloud);
         Runtime::Array<real> coordinates(Runtime::RowLayout::Dense(size_t(nodes.NumOwned()), 3));
         FieldTransferDetail::LocalStage(mpi, communication, [&]
                                         {
             auto write = coordinates.Write();
-            for (index node = 0; node < nodes.NumOwned(); ++node)
+            // nanoflann eagerly builds its index in the constructor; knnSearch
+            // is const and each row owns all query/RBF/Eigen scratch.
+            OMP::ForSetupRows(0, nodes.NumOwned(), [&](index node)
             {
                 const tPoint point = view.Coord(node);
                 tPoint increment = tPoint::Zero();
@@ -461,7 +477,7 @@ namespace DNDS::Geom
                 }
                 DNDS_check_throw_info(increment.allFinite(),"native RBF smoothing produced nonfinite displacement");
                 for (size_t component = 0; component < 3; ++component) write.View()(size_t(node),component) = point[Eigen::Index(component)]+increment[Eigen::Index(component)];
-            } });
+            }); });
         auto prepared = Halo(nodes, coordinates, Runtime::ElementSchema::Arithmetic<real>());
         std::shared_ptr<const UnstructuredMeshState> result;
         FieldTransferDetail::LocalStage(mpi, communication, [&]
@@ -495,8 +511,9 @@ namespace DNDS::Geom
         PointCloudKDTree cloud;
         FieldTransferDetail::LocalStage(mpi, communication, [&]
                                         {
-            for (size_t row = 0; row < problem.values.RowCount(); ++row)
-                cloud.pts.push_back(tPoint{data.View()(row,0),data.View()(row,1),data.View()(row,2)}); });
+            cloud.pts.resize(problem.values.RowCount());
+            OMP::ForSetupRows(0, problem.values.RowCount(), [&](index row)
+                              { cloud.pts[size_t(row)] = tPoint{data.View()(row,0),data.View()(row,1),data.View()(row,2)}; }); });
         using Tree = nanoflann::KDTreeSingleIndexAdaptor<nanoflann::L2_Simple_Adaptor<real, PointCloudKDTree>, PointCloudKDTree, 3, index>;
         Tree tree(3, cloud);
         std::vector<std::vector<std::pair<index, real>>> matrix(problem.nodes.size());
@@ -507,8 +524,9 @@ namespace DNDS::Geom
         FieldTransferDetail::LocalStage(mpi, communication, [&]
                                         {
             auto radius = radii.Write(); auto b = rhs.values.Write();
-            for (size_t row = 0; row < problem.nodes.size(); ++row)
+            OMP::ForSetupRows(0, index(problem.nodes.size()), [&](index iRow)
             {
+                const auto row = size_t(iRow);
                 const tPoint point = view.Coord(problem.nodes[row]);
                 const auto count = std::min(size_t(options.nSearch),cloud.pts.size());
                 std::vector<index> nearest(count); Eigen::VectorXd distances{Eigen::Index(count)};
@@ -524,7 +542,7 @@ namespace DNDS::Geom
                 const auto basis = RBF::FRBFBasis(normalized,options.kernel);
                 for (size_t slot = 0; slot < found; ++slot) matrix[row].push_back({nearest[slot],basis(Eigen::Index(slot))});
                 for (size_t component = 0; component < 3; ++component) b.View()(row,component) = data.View()(size_t(problem.offsets[size_t(mpi.rank)])+row,component+3);
-            } });
+            }); });
         std::vector<Runtime::RowRequest> coefficientRequests;
         std::map<index, size_t> compactColumns;
         FieldTransferDetail::LocalStage(mpi, communication, [&]
@@ -554,14 +572,16 @@ namespace DNDS::Geom
                 coefficientPayload.Bind(x.values, global, Runtime::TransferTransport::Direct, transfer).Begin().Wait();
                 auto values = global.Read();
                 auto output = result.values.Write();
-                for (size_t row = 0; row < matrix.size(); ++row)
+                OMP::ForRows(0, index(matrix.size()), [&](index iRow)
+                             {
+                    const auto row = size_t(iRow);
                     for (size_t component = 0; component < 3; ++component)
                     {
                         real sum = 0;
                         for (auto [column, value] : matrix[row])
                             sum += value * values.View()(size_t(column), component);
                         output.View()(row, component) = sum;
-                    }
+                    } });
             },
             // The legacy path overwrites its LU-preconditioned value with x;
             // preserve that effective identity preconditioner deliberately.
@@ -595,6 +615,9 @@ namespace DNDS::Geom
         FieldTransferDetail::LocalStage(mpi, communication, [&]
                                         {
             auto write = increments.Write();
+            // Different constraint supports overlap in the destination nodes.
+            // Keep this accumulation in its prescribed constraint order; a
+            // parallel boundary loop would race and reorder FP summation.
             for (size_t boundary = 0; boundary < cloud.pts.size(); ++boundary)
             {
                 const real support = radiusRead.View()(boundary,0);
@@ -618,13 +641,15 @@ namespace DNDS::Geom
         FieldTransferDetail::LocalStage(mpi, communication, [&]
                                         {
             auto read = increments.Read(); auto write = coordinates.Write();
-            for (index node = 0; node < nodes.NumOwned(); ++node)
+            OMP::ForSetupRows(0, nodes.NumOwned(), [&](index node)
+            {
                 for (size_t component = 0; component < 3; ++component)
                 {
                     const real value = view.Coord(node)[Eigen::Index(component)]+read.View()(size_t(node),component);
                     DNDS_check_throw_info(std::isfinite(value),"native global RBF produced nonfinite coordinates");
                     write.View()(size_t(node),component) = value;
-                } });
+                }
+            }); });
         auto prepared = Halo(nodes, coordinates, Runtime::ElementSchema::Arithmetic<real>());
         std::shared_ptr<const UnstructuredMeshState> result;
         FieldTransferDetail::LocalStage(mpi, communication, [&]
@@ -673,6 +698,9 @@ namespace DNDS::Geom
         FieldTransferDetail::LocalStage(mpi, communication, [&]
                                         {
             auto b = rhs.values.Write();
+            // Elements share nodal matrix/RHS destinations. Preserve ordered
+            // assembly, including the accumulated periodic block transforms.
+            // Per-row actions after assembly are independent below.
             for (index cell = 0; cell < cellSpace.NumLocal(); ++cell)
             {
                 const auto globals = cones.GlobalRow(cell);
@@ -755,25 +783,25 @@ namespace DNDS::Geom
                 Runtime::ArrayPair<real> values{x.values, nodeRoute.TransferRows(nodes, x.values, Runtime::ElementSchema::Arithmetic<real>())};
                 auto read = values.ReadCombined();
                 auto output = result.values.Write();
-                for (size_t row = 0; row < matrix.size(); ++row)
-                {
+                OMP::ForRows(0, index(matrix.size()), [&](index iRow)
+                             {
+                    const auto row = size_t(iRow);
                     tPoint sum = tPoint::Zero();
                     for (const auto &[column, block] : matrix[row])
                         sum += block * tPoint{read.View()(size_t(column), 0), read.View()(size_t(column), 1), read.View()(size_t(column), 2)};
                     for (size_t component = 0; component < 3; ++component)
-                        output.View()(row, component) = sum[Eigen::Index(component)];
-                }
+                        output.View()(row, component) = sum[Eigen::Index(component)]; });
             },
             [&](SmoothingField &x, SmoothingField &result)
             {
                 auto input = x.values.Read();
                 auto output = result.values.Write();
-                for (size_t row = 0; row < matrix.size(); ++row)
-                {
+                OMP::ForSetupRows(0, index(matrix.size()), [&](index iRow)
+                                  {
+                    const auto row = size_t(iRow);
                     const tPoint value = matrix[row].at(index(row)).fullPivLu().solve(tPoint{input.View()(row, 0), input.View()(row, 1), input.View()(row, 2)});
                     for (size_t component = 0; component < 3; ++component)
-                        output.View()(row, component) = value[Eigen::Index(component)];
-                }
+                        output.View()(row, component) = value[Eigen::Index(component)]; });
             },
             [&](SmoothingField &x, SmoothingField &y)
             { return x.dot(y); }, rhs, solution, uint32_t(options.nIter),
@@ -783,14 +811,16 @@ namespace DNDS::Geom
         FieldTransferDetail::LocalStage(mpi, communication, [&]
                                         {
             auto read = solution.values.Read(); auto write = coordinates.Write();
-            for (index node = 0; node < sourceNodes.NumOwned(); ++node)
+            OMP::ForSetupRows(0, sourceNodes.NumOwned(), [&](index node)
+            {
                 for (size_t component = 0; component < 3; ++component)
                 {
                     const real displacement = owned.dimension == 2 && component == 2 ? 0 : read.View()(size_t(node),component);
                     const real value = source->BorrowHostView().Coord(node)[Eigen::Index(component)]+displacement;
                     DNDS_check_throw_info(std::isfinite(value),"native elasticity smoothing produced nonfinite coordinates");
                     write.View()(size_t(node),component) = value;
-                } });
+                }
+            }); });
         auto prepared = Halo(sourceNodes, coordinates, Runtime::ElementSchema::Arithmetic<real>());
         std::shared_ptr<const UnstructuredMeshState> result;
         FieldTransferDetail::LocalStage(mpi, communication, [&]

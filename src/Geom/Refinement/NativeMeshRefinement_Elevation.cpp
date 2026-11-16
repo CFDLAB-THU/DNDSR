@@ -4,6 +4,7 @@
 #include "Geom/Connectivity/AdjacencyRegistry.hpp"
 #include "Geom/Connectivity/NativePeriodicMatch.hpp"
 #include "Geom/Transition/FieldTransfer.hpp"
+#include "DNDS/Core/OMP.hpp"
 
 namespace DNDS::Geom
 {
@@ -42,6 +43,8 @@ namespace DNDS::Geom
     NativeOwnedMeshDerivedResult NativeMeshRefinement::ElevateOwned(const NativeOwnedMeshData &source, const MPIInfo &mpi,
                                                                     NativeMeshBuildOptions options, bool preserveCellIds)
     {
+        // Span discovery/ownership and new-ID prefixes stay on the controller.
+        // Once maps are frozen, node/cell/boundary output rows are independent.
         auto owned = source;
         if (!options.audit)
             options.audit = owned.audit;
@@ -154,15 +157,15 @@ namespace DNDS::Geom
         owned.LocalStage(mpi, [&]
                          {
             auto output = newCoordinates.Write();
-            for (index node = 0; node < nOld; ++node)
+            OMP::ForSetupRows(0, nOld, [&](index node)
             {
                 for (size_t component = 0; component < 3; ++component) output.View()(size_t(node), component) = coordRead.View()(size_t(node), component);
                 nodeParents[size_t(node)] = {idRead.View()(size_t(node), 0)};
-            }
+            });
             auto spanNodes = spans.entity2node.Read();
             std::optional<Runtime::Array<NodePeriodicBits>::ReadLease> spanBits;
             if (spans.entity2nodePbi) spanBits.emplace(spans.entity2nodePbi->Read());
-            for (index span = 0; span < spans.entities.NumOwned(); ++span)
+            OMP::ForSetupRows(0, spans.entities.NumOwned(), [&](index span)
             {
                 const auto globals = spanNodes.GlobalRow(span);
                 tPoint coordinate = tPoint::Zero();
@@ -183,7 +186,7 @@ namespace DNDS::Geom
                 if (owned.periodic) coordinate = owned.periodicInfo.GetCoordBackByBits(coordinate, NodePeriodicBits{common});
                 DNDS_check_throw_info(coordinate.allFinite(), "native elevated coordinate is not finite");
                 for (size_t component = 0; component < 3; ++component) output.View()(size_t(nOld + span), component) = coordinate[component];
-            } });
+            }); });
         std::vector<std::vector<index>> cellNodes(size_t(cells.NumOwned())), boundaryNodes(size_t(boundaries.NumOwned()));
         std::vector<std::vector<NodePeriodicBits>> cellBits(cellNodes.size()), boundaryBits(boundaryNodes.size());
         Runtime::Array<ElemInfo> newCellInfo(Runtime::RowLayout::Dense(size_t(cells.NumOwned()), 1));
@@ -194,7 +197,7 @@ namespace DNDS::Geom
             auto additions = spans.parent2entity.Read();
             auto output = newCellInfo.Write();
             auto typeWrite = types.Write();
-            for (index cell = 0; cell < cells.NumOwned(); ++cell)
+            OMP::ForSetupRows(0, cells.NumOwned(), [&](index cell)
             {
                 auto &row = cellNodes[size_t(cell)];
                 for (auto global : cone.GlobalRow(cell)) row.push_back(oldNode(global));
@@ -220,19 +223,20 @@ namespace DNDS::Geom
                 info.setElemType(element.ObtainElevatedElem().type);
                 DNDS_check_throw_info(row.size() == size_t(element.ObtainElevatedElem().GetNumNodes()), "native elevated cell slot count mismatch");
                 output.View()(size_t(cell), 0) = info;
-            } });
+            }); });
         std::vector<Runtime::RowRequest> requests;
         owned.LocalStage(mpi, [&]
                          {
             auto parents = owned.relations[size_t(MeshRelation::BoundaryCells)]->Read();
             const auto sourceCells = source.spaces.at(EntityKind::Cell);
-            for (index boundary = 0; boundary < boundaries.NumOwned(); ++boundary)
+            requests.resize(size_t(boundaries.NumOwned()));
+            OMP::ForSetupRows(0, boundaries.NumOwned(), [&](index boundary)
             {
                 DNDS_check_throw_info(parents.View().RowSize(size_t(boundary)) == 2,
                                       "native elevation requires two boundary physical slots");
                 const auto parent = parents.View()(size_t(boundary), 0);
-                requests.push_back({sourceCells.Owner(parent), sourceCells.OwnerLocalRow(parent), size_t(boundary)});
-            } });
+                requests[size_t(boundary)] = {sourceCells.Owner(parent), sourceCells.OwnerLocalRow(parent), size_t(boundary)};
+            }); });
         auto context = owned.communication ? owned.communication : std::make_shared<Runtime::CommunicationContext>(mpi.comm);
         Runtime::RowTransferPlan boundaryRoute(context, size_t(cells.NumOwned()), size_t(boundaries.NumOwned()), requests);
         auto candidateNodes = ElevationFetch(boundaryRoute, closure.cellNodes.Owned(), mpi, context);
@@ -263,7 +267,7 @@ namespace DNDS::Geom
                 parentImages.emplace(candidateFrames->Read());
             }
             auto output = newBoundaryInfo.Write();
-            for (index boundary = 0; boundary < boundaries.NumOwned(); ++boundary)
+            OMP::ForSetupRows(0, boundaries.NumOwned(), [&](index boundary)
             {
                 const auto row = size_t(boundary);
                 auto info = boundaryInfo.View()(row, 0);
@@ -323,7 +327,7 @@ namespace DNDS::Geom
                 }
                 info.setElemType(element.ObtainElevatedElem().type);
                 output.View()(row, 0) = info;
-            } });
+            }); });
         NativeOwnedMeshDerivedResult result;
         std::optional<NativeMeshInput> input;
         owned.LocalStage(mpi, [&]

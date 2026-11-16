@@ -131,8 +131,8 @@ namespace DNDS::Cauchy
                                       "boundary output aliases a mutable input");
         R::SubmitArrayBatch(engine, stream, [pin, time](R::ExecutionContext, auto inputs, auto outputs, auto wallMean)
                             {
-            // Mutable chemistry state is acquired at execution and belongs to
-            // one worker. The controller only retains immutable geometry.
+            // Mutable chemistry contexts are reserved at execution, one per
+            // active row worker. The controller retains immutable geometry.
             auto evaluator = pin->evaluator;
             std::vector<CPU::BoundaryTraceWorkerScratch> workers;
             if (!evaluator)

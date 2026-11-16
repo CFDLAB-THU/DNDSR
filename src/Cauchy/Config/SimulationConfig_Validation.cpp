@@ -36,6 +36,8 @@ namespace DNDS::Cauchy
         if (equation.eos == "perfectGas")
             EquationSystem::Resolve(equation);
         DNDS_check_throw_info(settings.mesh.dimension == 2 || settings.mesh.dimension == 3, "Cauchy geometric dimension must be 2 or 3");
+        DNDS_check_throw_info(std::isfinite(settings.mesh.scale) && settings.mesh.scale > 0 && std::isfinite(settings.mesh.rotationZDegrees),
+                              "mesh scale must be positive and mesh rotation must be finite");
         DNDS_check_throw_info(settings.execution.hostThreads >= 0 && settings.execution.hostThreads <= 1024, "invalid CPU worker count");
         DNDS_check_throw_info(settings.execution.device != "cuda" || settings.execution.deviceOrdinal >= 0,
                               "invalid CUDA device ordinal");

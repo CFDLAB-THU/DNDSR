@@ -1,5 +1,6 @@
 #include "Geom/Interface/BoundaryInterface.hpp"
 #include "DNDS/MPI/CollectiveStage.hpp"
+#include "DNDS/Core/OMP.hpp"
 
 namespace DNDS::Geom
 {
@@ -140,13 +141,12 @@ namespace DNDS::Geom
         donor.Validate();
         const auto map = SurfacePointMap::Match(donor.SurfaceGeometry(), points, queryIds, settings);
         auto data = std::make_shared<Detail::InterfacePointMapData>(donor);
-        data->matches.reserve(size_t(map.Size()));
-        for (index iQuery = 0; iQuery < map.Size(); ++iQuery)
-        {
+        data->matches.resize(size_t(map.Size()));
+        OMP::ForSetupRows(0, map.Size(), [&](index iQuery)
+                          {
             const auto match = map.Get(iQuery);
             const auto record = donor.Element(match.element);
-            data->matches.push_back({match.queryId, match.element, record.boundary, record.cell, match.elementId, match.reference, match.projectedPoint, match.surfacePoint, match.distance});
-        }
+            data->matches[size_t(iQuery)] = {match.queryId, match.element, record.boundary, record.cell, match.elementId, match.reference, match.projectedPoint, match.surfacePoint, match.distance}; });
         return InterfacePointMap(std::move(data));
     }
     void InterfacePointMap::Validate() const
@@ -229,16 +229,16 @@ namespace DNDS::Geom
         coupling->LocalStage([&]
                              {
             data = std::make_shared<Detail::DistributedInterfaceMapData>(coupling,donor);
-            data->matches.reserve(size_t(map.Size()));
+            data->matches.resize(size_t(map.Size()));
             auto read = received.Read();
             const auto rows = read.View<R::FixedRows<5>>();
-            for (index iQuery = 0; iQuery < map.Size(); ++iQuery)
+            OMP::ForSetupRows(0, map.Size(), [&](index iQuery)
             {
                 const auto match = map.Get(iQuery);
                 DNDS_check_throw_info(rows(iQuery,2) == match.elementId,"selected surface metadata ID mismatch");
-                data->matches.push_back({{match.queryId,match.element,rows(iQuery,0),rows(iQuery,1),match.elementId,
-                    match.reference,match.projectedPoint,match.surfacePoint,match.distance},match.geometryRank,int(rows(iQuery,3)),rows(iQuery,4)});
-            } });
+                data->matches[size_t(iQuery)] = {{match.queryId,match.element,rows(iQuery,0),rows(iQuery,1),match.elementId,
+                    match.reference,match.projectedPoint,match.surfacePoint,match.distance},match.geometryRank,int(rows(iQuery,3)),rows(iQuery,4)};
+            }); });
         return DistributedInterfacePointMap(std::move(data));
     }
     void DistributedInterfacePointMap::Validate() const

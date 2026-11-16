@@ -6,6 +6,11 @@
 namespace DNDS::Cauchy
 {
     class InterfaceCoupling;
+    /// Controller-local elapsed times, measured without added rank/device sync.
+    struct DomainSetupTimings
+    {
+        real meshIngress = 0, meshPreparation = 0, domainSetup = 0;
+    };
     /// Coordinated CPU frontend. Only local domains have runtime objects.
     /// Local domain phases run serially on shared ranks and concurrently on
     /// disjoint communicators. Physical stages share one clock and consume a
@@ -18,6 +23,7 @@ namespace DNDS::Cauchy
         SimulationConfig _config;
         DomainPlacement _placement;
         std::vector<std::unique_ptr<Domain>> _domains;
+        std::vector<DomainSetupTimings> _setupTimings;
         std::unique_ptr<InterfaceCoupling> _interfaces;
         std::shared_ptr<const UpdatePolicy> _updatePolicy;
         bool _nonlinearCollectiveChecks = false;
@@ -26,6 +32,7 @@ namespace DNDS::Cauchy
         std::optional<Json> _restoredOutputController;
 
     public:
+        const DomainSetupTimings &SetupTimings(index iDomain) const { return _setupTimings.at(size_t(iDomain)); }
         using MeshFactory = std::function<ssp<Geom::UnstructuredMesh>(index, const DomainConfig &, const MPIInfo &)>;
         Simulation(SimulationConfig config, MPI_Comm comm, const MeshFactory &factory = {});
         ~Simulation();

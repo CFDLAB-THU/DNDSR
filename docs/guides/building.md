@@ -250,6 +250,7 @@ Key options (set via `-D<OPTION>=<VALUE>` or in a preset):
 | `DNDS_USE_CUDA`             | OFF     | Enable CUDA GPU support                |
 | `DNDS_USE_NCCL`             | CUDA setting | Enable NCCL payload provider; explicit OFF supported |
 | `DNDS_USE_OMP`              | ON      | Enable OpenMP                          |
+| `DNDS_DIST_MT_USE_OMP`      | OFF     | Enable native distributed row teams; see [CPU threading](../architecture/CPUThreading.md) |
 | `DNDS_FAST_BUILD_FAST`      | ON      | Use -O3 -g0 on core library modules   |
 | `DNDS_LTO`                  | OFF     | Link-time optimization                 |
 | `DNDS_LTO_THIN`             | OFF     | Use -flto=thin (Clang)                 |

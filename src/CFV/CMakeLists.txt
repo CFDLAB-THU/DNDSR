@@ -49,6 +49,7 @@ Plans/DistributedInterfaceSamplingPlan.cpp
 CPU/DistributedInterfaceSamplingKernels.cpp
 CPU/ReconstructionBasisKernels.cpp
 CPU/ReconstructionKernels.cpp
+CPU/ReconstructionKernels_Linear.cpp
 Operators/FiniteVolumePlan_Reconstruction.cpp
 Operators/FiniteVolumePlan_Linear.cpp
 )

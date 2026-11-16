@@ -15,9 +15,15 @@ namespace DNDS::CFV::CPU
                                             MatrixRows matrices, VectorRows vectors, InjectionRows injection)
     {
         if (view.limited)
-            for (index iCell = 0; iCell < work.owned; ++iCell)
+        {
+            const auto status = OMP::ForRowsStatus(0, work.owned, [&](index iCell) -> NumericalStatus
+                                                   {
                 if (!std::isfinite(view.penalty(iCell, 0)) || view.penalty(iCell, 0) < 0 || view.penalty(iCell, 0) > 1)
                     return NumericalStatus{NumericalError::InvalidInput}.At(iCell);
+                return {}; });
+            if (!status)
+                return status;
+        }
         const index n = view.modes, nv = view.components;
         const real relax = view.relaxation;
         const auto next = view.output;
@@ -207,9 +213,15 @@ namespace DNDS::CFV::CPU
     NumericalStatus ReconstructionLimiterWBAP(const ReconstructionLimiterView &view, const ReconstructionWorkSelection &work)
     {
         if (view.hasIndicator)
-            for (index iCell = 0; iCell < work.owned; ++iCell)
+        {
+            const auto status = OMP::ForRowsStatus(0, work.owned, [&](index iCell) -> NumericalStatus
+                                                   {
                 if (!std::isfinite(view.indicator(iCell, 0)))
                     return NumericalStatus{NumericalError::InvalidInput}.At(iCell);
+                return {}; });
+            if (!status)
+                return status;
+        }
         const index n = view.modes, nv = view.components, begin = view.begin, modes = view.orderModes;
         const real threshold = view.threshold;
         const auto scratch = view.scratch;

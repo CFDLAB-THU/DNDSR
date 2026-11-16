@@ -183,13 +183,16 @@ TEST_CASE("Constant-volume source preserves frozen blocks and matches the SI rea
             write.Block("rans")(iCell, 0) = .013 + .001 * iCell;
     }
     auto result = state.Clone();
+    auto parallelResult = state.Clone();
     constexpr double dt = .0003;
     const P::Chemistry::ReactorStepSettings controls;
     auto ghostWrite = state.PhysicalField(0).Ghost().Write();
     C::AdvanceChemicalSource(equation, state, result, fixture.workers.Acquire(), dt, controls, .7);
+    P::Chemistry::ChemicalWorkerPool parallelWorkers(fixture.prototype, 2);
+    C::AdvanceChemicalSource(equation, state, parallelResult, parallelWorkers, dt, controls, .7);
     ghostWrite.CancelUnmodified();
     {
-        const auto read = state.ReadOwned(), output = result.ReadOwned();
+        const auto read = state.ReadOwned(), output = result.ReadOwned(), parallel = parallelResult.ReadOwned();
         for (I iCell = 0; iCell < rows; ++iCell)
         {
             const auto point = fixture.Point(int(iCell) + mpi.rank, 1300 + iCell * 2);
@@ -205,6 +208,7 @@ TEST_CASE("Constant-volume source preserves frozen blocks and matches the SI rea
             for (int k = 0; k < fixture.species - 1; ++k)
             {
                 CHECK(output.Block("species")(iCell, k) == doctest::Approx(point[0] * fractions[k]).epsilon(2e-9).scale(1e-13));
+                CHECK(parallel.Block("species")(iCell, k) == doctest::Approx(output.Block("species")(iCell, k)).epsilon(2e-11).scale(1e-13));
                 change += std::abs(output.Block("species")(iCell, k) - read.Block("species")(iCell, k));
             }
             CHECK(change > 1e-8);

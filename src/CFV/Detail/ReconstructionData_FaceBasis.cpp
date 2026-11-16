@@ -22,10 +22,6 @@ namespace DNDS::CFV::Detail
         // Only owned-cell incidences are consumers. The allocated quadrature
         // numbering also contains ghost-only faces; retain their zero rows so
         // cache indexing stays identical across all sampling consumers.
-        std::vector<uint8_t> active(size_t(mesh.NumFaceProc()), 0);
-        for (index iCell = 0; iCell < mesh.NumCell(); ++iCell)
-            for (index iFace : mesh.CellFaces(iCell))
-                active[size_t(iFace)] = 1;
         data.faceBasis = R::Array<real>(R::RowLayout::Dense(2 * points.RowCount(), data.cachedDerivatives * data.n));
         data.faceBasis.SetName("CFV/quadrature/face/basis", DNDS_ALLOCATION_SITE());
         auto cacheWrite = data.faceBasis.Write();
@@ -34,9 +30,11 @@ namespace DNDS::CFV::Detail
                           { std::fill(cache[iRow].begin(), cache[iRow].end(), 0.); });
         OMP::ForSetupRows(0, mesh.NumFaceProc(), [&](index iFace)
                           {
-            if (!active[size_t(iFace)])
-                return;
             const auto parents = mesh.FaceCells(iFace);
+            // A face is active exactly when one canonical parent is owned.
+            // This avoids concurrent scatter marks from neighboring cells.
+            if (parents[0] >= mesh.NumCell() && (parents[1] == UnInitIndex || parents[1] >= mesh.NumCell()))
+                return;
             DNDS_check_throw_info(parents[0] >= 0 && parents[0] < mesh.NumCellProc() &&
                                       (parents[1] == UnInitIndex || (parents[1] >= 0 && parents[1] < mesh.NumCellProc())),
                                   "face sampling basis lacks parent closure");

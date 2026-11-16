@@ -51,10 +51,10 @@ namespace DNDS::Geom
         // retained row once instead of allocating/sorting it at every hop.
         // These caches scale with local owned/appended rows, never global size.
         std::vector<std::vector<index>> sourceRows(size_t(AB.NumOwned())), intermediateRows(size_t(BC.RowCount()));
-        for (index row = 0; row < AB.NumOwned(); ++row)
-            sourceRows[size_t(row)] = unique(AB.GlobalRow(row));
-        for (index row = 0; row < BC.RowCount(); ++row)
-            intermediateRows[size_t(row)] = unique(BC.GlobalRow(row));
+        OMP::ForSetupRows(0, AB.NumOwned(), [&](index iRow)
+                          { sourceRows[size_t(iRow)] = unique(AB.GlobalRow(iRow)); });
+        OMP::ForSetupRows(0, BC.RowCount(), [&](index iRow)
+                          { intermediateRows[size_t(iRow)] = unique(BC.GlobalRow(iRow)); });
         auto selected = [&](index a, index c, int count)
         {
             if (resultKind.removeSelf && a == c)
@@ -78,7 +78,7 @@ namespace DNDS::Geom
                 DNDS_check_throw_info(row && *row < BC.RowCount(), "composition intermediate row is unavailable; transfer it explicitly");
                 return *row; }, [&](index row)
                                   { return AB.Source().LocalToGlobalPinned(row); }, selected, [&](index row, const std::vector<index> &entries)
-                                  { rows[size_t(row)] = entries; }, matchExtra);
+                                  { rows[size_t(row)] = entries; }, matchExtra, !matchExtra && (resultKind.selection == RelationSelection::Any || resultKind.selection == RelationSelection::All));
         return MeshAdjacency(resultKind, AB.Source(), BC.Target(),
                              BuildNativeRows(rows));
     }
@@ -131,11 +131,11 @@ namespace DNDS::Geom
                         support[size_t(*targetRow)].push_back(sourceGlobal);
                     }
                 }
-                for (auto &entries : support)
-                {
+                OMP::ForSetupRows(0, index(support.size()), [&](index iRow)
+                                  {
+                    auto &entries = support[size_t(iRow)];
                     std::sort(entries.begin(), entries.end());
-                    entries.erase(std::unique(entries.begin(), entries.end()), entries.end());
-                }
+                    entries.erase(std::unique(entries.begin(), entries.end()), entries.end()); });
             }
             catch (...)
             {
@@ -234,12 +234,11 @@ namespace DNDS::Geom
         }
         cone.Source().Preflight(valid, "inverse relation/communicator validation failed on a rank");
         DNDS_check_throw_info(valid, "inverse contribution payload contains an invalid row or source entity");
-        for (size_t row = 0; row < support.size(); ++row)
-        {
-            auto &entries = support[row];
+        OMP::ForSetupRows(0, index(support.size()), [&](index iRow)
+                          {
+            auto &entries = support[size_t(iRow)];
             std::sort(entries.begin(), entries.end());
-            entries.erase(std::unique(entries.begin(), entries.end()), entries.end());
-        }
+            entries.erase(std::unique(entries.begin(), entries.end()), entries.end()); });
         return MeshAdjacency(cone.Kind().Inverted(), cone.Target(), cone.Source(),
                              BuildNativeRows(support));
     }

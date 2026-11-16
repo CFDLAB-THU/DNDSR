@@ -139,6 +139,7 @@ namespace DNDS::Cauchy
         std::string file;
         int dimension = 2;
         int elevation = 0, bisect = 0;
+        real scale = 1, rotationZDegrees = 0;
         std::array<real, 3> periodicLengths{0, 0, 0};
         std::map<std::string, int> boundaryIds;
         DNDS_DECLARE_CONFIG(MeshSettings)
@@ -147,7 +148,9 @@ namespace DNDS::Cauchy
             DNDS_FIELD(dimension, "Geometric dimension, independent of flow component count");
             DNDS_FIELD(elevation, "Native geometry order elevation: 0 keeps input order, 1 elevates to O2", DNDS::Config::range(0, 1));
             DNDS_FIELD(bisect, "Native uniform bisection passes after partition and optional elevation", DNDS::Config::range(0, 4));
-            DNDS_FIELD(periodicLengths, "Translation from PERIODIC_n to its donor; zero disables that direction");
+            DNDS_FIELD(scale, "Positive uniform input-mesh coordinate scale, applied once after native preparation and before FV geometry");
+            DNDS_FIELD(rotationZDegrees, "Input-mesh rotation around Z in degrees, applied before scale; injected meshes must already be transformed");
+            DNDS_FIELD(periodicLengths, "Input-file-frame translation from PERIODIC_n to its donor; zero disables that direction; mesh scale/rotation transform the frames too");
             config.field_schema(&T::boundaryIds, "boundaryIds", "Explicit CGNS boundary name to integer zone",
                                 []() -> Json
                                 { return {{"type", "object"}, {"additionalProperties", {{"type", "integer"}}}}; });

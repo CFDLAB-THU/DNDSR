@@ -207,9 +207,8 @@ namespace DNDS::Cauchy
         }
         std::vector<CPU::AuxiliaryWorkerScratch> MakeKernelWorkers() const
         {
-            // This phase enables perfect-gas OMP, including RANS. Keep the
-            // existing single leased Cantera worker for the mixture path;
-            // reserving a team could otherwise exhaust a bounded shared pool.
+            // Reserve private point contexts before numerical work. Mixture
+            // team size is bounded atomically by the available pool capacity.
             return MakeCPUPointWorkers<CPU::AuxiliaryWorkerScratch>(data->equation, workers,
                                                                     {true, true, false}, source.ComponentNumber());
         }

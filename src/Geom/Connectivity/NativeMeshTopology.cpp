@@ -7,6 +7,7 @@
 #include "DNDS/MPI/CollectiveStage.hpp"
 #include "Geom/Interface/BoundaryCondition.hpp"
 #include "DNDS/Runtime/Array/RowBuilder.hpp"
+#include "DNDS/Core/OMP.hpp"
 #include <set>
 
 namespace DNDS::Geom
@@ -40,9 +41,12 @@ namespace DNDS::Geom
         {
             auto read = values.Read();
             std::vector<std::vector<index>> rows(values.RowCount());
-            for (size_t row = 0; row < rows.size(); ++row)
-                for (auto bits : read.View()[row])
-                    rows[row].push_back(uint8_t(bits));
+            OMP::ForSetupRows(0, index(rows.size()), [&](index iRow)
+                              {
+                auto &output = rows[size_t(iRow)];
+                output.reserve(read.View().RowSize(iRow));
+                for (auto bits : read.View()[iRow])
+                    output.push_back(uint8_t(bits)); });
             return BuildIndexRows(rows);
         }
 
@@ -78,8 +82,9 @@ namespace DNDS::Geom
             Array ids(R::RowLayout::Dense(size_t(space.NumOwned()), 1));
             {
                 auto write = ids.Write();
-                for (index row = 0; row < space.NumOwned(); ++row)
-                    write.View()(size_t(row), 0) = first + space.LocalToGlobal(row);
+                const auto output = write.View();
+                OMP::ForSetupRows(0, space.NumOwned(), [&](index iRow)
+                                  { output(iRow, 0) = first + space.LocalToGlobal(iRow); });
             }
             data.spaces.emplace(space.Kind(), space);
             data.ids.emplace(space.Kind(), std::move(ids));
@@ -309,8 +314,9 @@ namespace DNDS::Geom
                 auto read = fetched.Read();
                 auto original = values.Read();
                 rows.resize(values.RowCount());
-                for (size_t row = 0; row < rows.size(); ++row)
+                OMP::ForSetupRows(0, index(rows.size()), [&](index iRow)
                 {
+                    const auto row = size_t(iRow);
                     for (auto global : original.View()[row])
                     {
                         if (global == UnInitIndex)
@@ -330,7 +336,7 @@ namespace DNDS::Geom
                         std::sort(rows[row].begin(), rows[row].end());
                         rows[row].erase(std::unique(rows[row].begin(), rows[row].end()), rows[row].end());
                     }
-                } });
+                }); });
             return BuildIndexRows(rows);
         }
 
@@ -341,11 +347,10 @@ namespace DNDS::Geom
             auto write = result.Write();
             const auto input = read.View();
             const auto output = write.View();
-            for (index iRow = 0; iRow < input.RowCount(); ++iRow)
-            {
+            OMP::ForSetupRows(0, input.RowCount(), [&](index iRow)
+                              {
                 output(iRow, 0) = input(iRow, 0);
-                output(iRow, 0).zone = zones[iRow];
-            }
+                output(iRow, 0).zone = zones[iRow]; });
             return result;
         }
     }
@@ -445,7 +450,7 @@ namespace DNDS::Geom
                 auto write = physicalStorage->Write();
                 const auto output = write.View<R::FixedRows<2, 2>>();
                 const auto occurrenceRows = occurrences.View(), supportRows = support.View();
-                for (index face = 0; face < faces.entities.NumOwned(); ++face)
+                OMP::ForSetupRows(0, faces.entities.NumOwned(), [&](index face)
                 {
                     const auto parents = occurrenceRows[face], complete = supportRows[face];
                     DNDS_check_throw_info(parents.size() >= 1 && parents.size() <= 2,
@@ -459,7 +464,7 @@ namespace DNDS::Geom
                     zones[size_t(face)] = parents.size() == 1 ? BC_ID_NULL : BC_ID_INTERNAL;
                     output(face, 0) = first;
                     output(face, 1) = parents.size() == 1 ? UnInitIndex : second;
-                } });
+                }); });
             auto physical = std::move(*physicalStorage);
             auto physicalRowsRead = physical.Read();
             const auto faceCells = physicalRowsRead.View<R::FixedRows<2, 2>>();

@@ -716,9 +716,11 @@ TEST_CASE("Near-plane native snapping edits canonical periodic owners and preser
 
 int main(int argc, char **argv)
 {
-    MPI_Init(&argc, &argv);
+    // Native row kernels may create OMP/CPU workers even with controller MPI.
+    if (DNDS::MPI::Init_thread(&argc, &argv) != MPI_SUCCESS)
+        return 1;
     const auto result = doctest::Context(argc, argv).run();
-    MPI_Finalize();
+    DNDS::MPI::Finalize();
     return result;
 }
 

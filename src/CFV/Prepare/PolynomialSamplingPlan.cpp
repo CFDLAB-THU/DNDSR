@@ -61,18 +61,17 @@ namespace DNDS::CFV
                 _basis = source;
                 const auto read = rows.Read();
                 const auto map = read.View<R::FixedRows<1>>();
-                for (index iPoint = 0; iPoint < cells.RowCount(); ++iPoint)
-                {
+                OMP::ForSetupRows(0, cells.RowCount(), [&](index iPoint)
+                                  {
                     const index row = rows.RowCount() ? map(iPoint, 0) : iPoint;
-                    DNDS_check_throw_info(row >= 0 && row < source.RowCount(), "shared sampling basis row outside cache");
-                }
+                    DNDS_check_throw_info(row >= 0 && row < source.RowCount(), "shared sampling basis row outside cache"); });
                 if (rows.RowCount())
                 {
                     _basisRows = R::Array<index>(R::RowLayout::Dense(rows.RowCount(), 1));
                     auto write = _basisRows.Write();
                     const auto snapshot = write.View<R::FixedRows<1>>();
-                    for (index iPoint = 0; iPoint < rows.RowCount(); ++iPoint)
-                        snapshot(iPoint, 0) = map(iPoint, 0);
+                    OMP::ForRows(0, rows.RowCount(), [&](index iPoint)
+                                 { snapshot(iPoint, 0) = map(iPoint, 0); });
                 }
             }
         }
@@ -88,14 +87,10 @@ namespace DNDS::CFV
         const auto pointRead = points.Read();
         const auto ids = cellRead.View<R::FixedRows<1>>();
         const auto inputPoints = pointRead.View<R::FixedRows<3>>();
-        for (index iPoint = 0; iPoint < ids.RowCount(); ++iPoint)
-        {
-            const index iCell = ids(iPoint, 0);
-            DNDS_check_throw_info(iCell >= 0 && iCell < _cellSpace.NumLocal() &&
-                                      std::isfinite(inputPoints(iPoint, 0)) && std::isfinite(inputPoints(iPoint, 1)) && std::isfinite(inputPoints(iPoint, 2)),
-                                  "invalid sampling cell or point");
-            _needsGhost |= iCell >= _cellSpace.NumOwned();
-        }
+        // The boolean publication is controller work; all validation and
+        // polynomial fill runs in independent rows below. No shared OR race.
+        for (index iPoint = 0; iPoint < ids.RowCount() && !_needsGhost; ++iPoint)
+            _needsGhost = ids(iPoint, 0) >= _cellSpace.NumOwned();
         {
             auto cellWrite = _cells.Write();
             auto pointWrite = _points.Write();
@@ -113,6 +108,9 @@ namespace DNDS::CFV
             OMP::ForSetupRows(0, ids.RowCount(), [&](index iPoint)
                               {
             const index iCell = ids(iPoint, 0);
+            DNDS_check_throw_info(iCell >= 0 && iCell < _cellSpace.NumLocal() &&
+                                      std::isfinite(inputPoints(iPoint, 0)) && std::isfinite(inputPoints(iPoint, 1)) && std::isfinite(inputPoints(iPoint, 2)),
+                                  "invalid sampling cell or point");
             snapshot(iPoint, 0) = iCell;
             const Geom::tPoint point{inputPoints(iPoint, 0), inputPoints(iPoint, 1), inputPoints(iPoint, 2)};
             if (direct)

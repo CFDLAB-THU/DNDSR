@@ -1,12 +1,9 @@
 #include "CFV/Detail/ReconstructionData.hpp"
-#include "DNDS/Algebra/EigenView.hpp"
+#include "CFV/CPU/ReconstructionKernels.hpp"
 
 namespace DNDS::CFV
 {
     namespace R = Runtime;
-    using Matrix = Eigen::MatrixXd;
-    using ConstMap = Eigen::Map<const Matrix>;
-    using Map = Eigen::Map<Matrix>;
 
     void VariationalReconstructionPlan::ApplyLinearOperator(const FVField &coefficients, FVField &output,
                                                             const std::vector<index> &periodicVectorStarts) const
@@ -31,28 +28,20 @@ namespace DNDS::CFV
         auto matrixRead = _data->rawMatrixB->Read(), diagonalRead = _data->localMatrix->Read();
         const auto offsets = offsetRead.View<R::FixedRows<1>>(), neighbors = neighborRead.View<R::FixedRows<1>>();
         const auto matrices = matrixRead.View<R::TableRows>(), diagonals = diagonalRead.View<R::TableRows>();
-        const auto xMatrices = Algebra::MakeEigenRowMatrices(x, n, components);
-        const auto yMatrices = Algebra::MakeEigenRowMatrices(y, n, components);
-        Matrix local(n, components), other(n, components);
-        for (index iCell = 0; iCell < Metrics().NumCell(); ++iCell)
-        {
-            local.noalias() = ConstMap(diagonals[iCell].data(), n, n) * xMatrices[iCell];
-            for (index iEntry = offsets(iCell, 0); iEntry < offsets(iCell + 1, 0); ++iEntry)
-            {
-                const index neighbor = neighbors(iEntry, 0);
-                if (neighbor == UnInitIndex)
-                    continue;
-                other = xMatrices[neighbor];
-                if (_data->hasRotatedPeriodicity && rotationActive(iEntry, 0))
-                    for (auto first : periodicVectorStarts)
-                    {
-                        const Eigen::Map<const Geom::tGPoint> rotation(rotations[iEntry].data());
-                        other.middleCols(first, 3) = (other.middleCols(first, 3) * rotation.transpose()).eval();
-                    }
-                local.noalias() -= ConstMap(matrices[iEntry].data(), n, n) * other;
-            }
-            yMatrices[iCell] = local;
-        }
+        const index workers = std::min<index>(OMP::DistributedThreads(), std::max<index>(1, Metrics().NumCell()));
+        R::Array<real> scratch(R::RowLayout::Dense(2 * workers, n * components));
+        scratch.SetName("CFV/reconstruction/linearActionScratch", DNDS_ALLOCATION_SITE());
+        auto scratchWrite = scratch.Write();
+        CPU::ReconstructionLinearView request;
+        request.offsets = offsets, request.neighbors = neighbors;
+        request.matrices = matrices, request.diagonal = diagonals;
+        request.rotations = rotations, request.rotationActive = rotationActive;
+        request.input = x, request.output = y;
+        request.scratch = scratchWrite.View<R::TableRows>();
+        request.vectorStarts = {periodicVectorStarts.data(), index(periodicVectorStarts.size())};
+        request.modes = n, request.components = components;
+        request.rotated = _data->hasRotatedPeriodicity;
+        CPU::ApplyReconstructionLinearOperator(request);
     }
     void VariationalReconstructionPlan::BuildRightHandSide(const FVField &mean, const ReconstructionBoundaryValues &boundary,
                                                            FVField &output, const std::vector<index> &periodicVectorStarts) const
@@ -80,37 +69,20 @@ namespace DNDS::CFV
         auto vectorRead = _data->rawVectorB->Read(), injectionRead = _data->rawBoundaryInjection->Read();
         const auto offsets = offsetRead.View<R::FixedRows<1>>(), neighbors = neighborRead.View<R::FixedRows<1>>(), boundaryOffsets = boundaryOffsetRead.View<R::FixedRows<1>>();
         const auto vectors = vectorRead.View<R::TableRows>(), injections = injectionRead.View<R::TableRows>();
-        const auto yMatrices = Algebra::MakeEigenRowMatrices(y, n, components);
-        Matrix local(n, components);
-        for (index iCell = 0; iCell < Metrics().NumCell(); ++iCell)
-        {
-            local.setZero();
-            for (index iEntry = offsets(iCell, 0); iEntry < offsets(iCell + 1, 0); ++iEntry)
-            {
-                const index neighbor = neighbors(iEntry, 0);
-                const bool rotatedEntry = neighbor != UnInitIndex && _data->hasRotatedPeriodicity &&
-                                          rotationActive(iEntry, 0);
-                for (index component = 0; component < components; ++component)
-                    if (neighbor != UnInitIndex)
-                    {
-                        real value = u(neighbor, component);
-                        if (rotatedEntry)
-                            for (auto first : periodicVectorStarts)
-                                if (component >= first && component < first + 3)
-                                {
-                                    const Eigen::Map<const Geom::tGPoint> rotation(rotations[iEntry].data());
-                                    value = 0;
-                                    for (int d = 0; d < 3; ++d)
-                                        value += rotation(component - first, d) * u(neighbor, first + d);
-                                }
-                        local.col(component).noalias() += Eigen::Map<const Eigen::VectorXd>(vectors[iEntry].data(), n) * (value - u(iCell, component));
-                    }
-                    else
-                        for (index iPoint = boundaryOffsets(iEntry, 0); iPoint < boundaryOffsets(iEntry + 1, 0); ++iPoint)
-                            local.col(component).noalias() += Eigen::Map<const Eigen::VectorXd>(injections[iPoint].data(), n) * (bc(iPoint, component) - u(iCell, component));
-            }
-            yMatrices[iCell] = local;
-        }
+        const index workers = std::min<index>(OMP::DistributedThreads(), std::max<index>(1, Metrics().NumCell()));
+        R::Array<real> scratch(R::RowLayout::Dense(2 * workers, n * components));
+        scratch.SetName("CFV/reconstruction/linearRHSScratch", DNDS_ALLOCATION_SITE());
+        auto scratchWrite = scratch.Write();
+        CPU::ReconstructionLinearView request;
+        request.offsets = offsets, request.neighbors = neighbors, request.boundaryOffsets = boundaryOffsets;
+        request.vectors = vectors, request.injection = injections, request.boundary = bc;
+        request.rotations = rotations, request.rotationActive = rotationActive;
+        request.input = u, request.output = y;
+        request.scratch = scratchWrite.View<R::TableRows>();
+        request.vectorStarts = {periodicVectorStarts.data(), index(periodicVectorStarts.size())};
+        request.modes = n, request.components = components;
+        request.rotated = _data->hasRotatedPeriodicity;
+        CPU::BuildReconstructionRightHandSide(request);
     }
     void VariationalReconstructionPlan::ComputeResidual(const FVField &rhs, const FVField &coefficients, FVField &output,
                                                         const std::vector<index> &periodicVectorStarts) const
@@ -123,9 +95,7 @@ namespace DNDS::CFV
         auto write = output.Owned().Write();
         const auto b = read.View<R::UniformTableRows>();
         const auto y = write.View<R::UniformTableRows>();
-        for (index iCell = 0; iCell < Metrics().NumCell(); ++iCell)
-            for (index mode = 0; mode < rhs.Width(); ++mode)
-                y(iCell, mode) = b(iCell, mode) - y(iCell, mode);
+        CPU::FormReconstructionResidual(b, y);
     }
     void VariationalReconstructionPlan::ApplyLocalPreconditioner(const FVField &input, FVField &output) const
     {
@@ -140,9 +110,6 @@ namespace DNDS::CFV
         const auto x = read.View<R::UniformTableRows>();
         const auto matrix = matrixRead.View<R::TableRows>();
         const auto y = write.View<R::UniformTableRows>();
-        const auto xMatrices = Algebra::MakeEigenRowMatrices(x, n, input.Width() / n);
-        const auto yMatrices = Algebra::MakeEigenRowMatrices(y, n, input.Width() / n);
-        for (index iCell = 0; iCell < Metrics().NumCell(); ++iCell)
-            yMatrices[iCell].noalias() = ConstMap(matrix[iCell].data(), n, n) * xMatrices[iCell];
+        CPU::ApplyReconstructionLocalInverse(matrix, x, y, n);
     }
 }

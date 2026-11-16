@@ -102,13 +102,18 @@ namespace DNDS::CFV
                 {
                     const auto read = input.Read();
                     auto write = converted.Write();
-                    for (index iRow = 0; iRow < input.RowCount(); ++iRow)
-                        for (index j = 0; j < read.View().RowSize(iRow); ++j)
+                    const auto source = read.View();
+                    const auto target = write.View();
+                    // CPU setup rows are disjoint; invalid casts are reported
+                    // on the controller only after every worker has joined.
+                    OMP::ForSetupRows(0, input.RowCount(), [&](index iRow)
+                                      {
+                        for (index j = 0; j < source.RowSize(iRow); ++j)
                         {
-                            const float value = float(read.View()(iRow, j));
+                            const float value = float(source(iRow, j));
                             DNDS_check_throw_info(std::isfinite(value), "reconstruction matrix cannot be represented in FP32");
-                            write.View()(iRow, j) = value;
-                        }
+                            target(iRow, j) = value;
+                        } });
                 }
                 return Add(name, converted, context, allocation);
             }
@@ -337,8 +342,9 @@ namespace DNDS::CFV
             R::Array<index> rows(R::RowLayout::Dense(list.size(), 1));
             {
                 auto write = rows.Write();
-                for (index i = 0; i < index(list.size()); ++i)
-                    write.View()(i, 0) = list[size_t(i)];
+                const auto output = write.View();
+                OMP::ForRows(0, index(list.size()), [&](index iRow)
+                             { output(iRow, 0) = list[size_t(iRow)]; });
             }
             const auto selected = result->Add(core ? "core" : "dependent", rows, context);
             if (core)

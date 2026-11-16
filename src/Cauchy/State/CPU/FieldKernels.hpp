@@ -61,11 +61,12 @@ namespace DNDS::Cauchy::CPU
     template <class Rows>
     bool FiniteRows(Rows values, index components)
     {
-        bool valid = true;
-        for (index iRow = 0; iRow < values.RowCount(); ++iRow)
+        return bool(OMP::ForRowsStatus(0, values.RowCount(), [&](index iRow) -> NumericalStatus
+                                       {
             for (index j = 0; j < components; ++j)
-                valid &= std::isfinite(values(iRow, j));
-        return valid;
+                if (!std::isfinite(values(iRow, j)))
+                    return {NumericalError::InvalidState, 1, iRow};
+            return {}; }));
     }
     template <class Input, class Output, class Metric>
     void DivideRowsByVolume(Input input, Output output, const Metric &metric, index components)

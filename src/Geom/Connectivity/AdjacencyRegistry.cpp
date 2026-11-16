@@ -2,6 +2,7 @@
 #include "Geom/Connectivity/AdjacencyRegistry.hpp"
 #include "Geom/Connectivity/NativePeriodicMatch.hpp"
 #include "Geom/Connectivity/ConnectivityInterpolateRows.hpp"
+#include "Geom/Connectivity/ConnectivitySetupRows.hpp"
 #include "DNDS/MPI/CollectiveStage.hpp"
 #include "Geom/Unstructured/UnstructuredMesh.hpp"
 #include <set>
@@ -62,8 +63,8 @@ namespace DNDS::Geom
         DNDS_check_throw_info(_view.owned.RowCount() == size_t(relation.NumOwned()) &&
                                   _view.owned.RowCount() + _view.ghost.RowCount() == size_t(relation.RowCount()),
                               "periodic companion row extent differs from relation");
-        for (index row = 0; row < relation.RowCount(); ++row)
-            DNDS_check_throw_info(_view.RowSize(size_t(row)) == relation.RowSize(row), "periodic companion slots differ from relation");
+        OMP::ForSetupRows(0, relation.RowCount(), [&](index row)
+                          { DNDS_check_throw_info(_view.RowSize(size_t(row)) == relation.RowSize(row), "periodic companion slots differ from relation"); });
     }
 
     void AdjacencyRegistry::ValidateCollectively(const std::function<void()> &validate) const
@@ -197,9 +198,8 @@ namespace DNDS::Geom
             auto &output = sets[size_t(root.nodeId)];
             output.resize(size_t(space.NumOwned()));
             const auto first = (*space._global)(_mpi.rank, 0);
-#pragma omp parallel for schedule(static)
-            for (std::ptrdiff_t row = 0; row < static_cast<std::ptrdiff_t>(output.size()); ++row)
-                output[size_t(row)] = first + index(row);
+            OMP::ForSetupRows(0, index(output.size()), [&](index iRow)
+                              { output[size_t(iRow)] = first + iRow; });
         }
         GhostResult result;
         for (int level = 0; level <= tree.MaxLevel(); ++level)
@@ -251,54 +251,52 @@ namespace DNDS::Geom
                         relations.push_back(&relation);
                     hopRelation[hopEntry] = relationSlot;
                 }
-                int invalid = 0;
-#pragma omp parallel for if (hops.size() >= 2) schedule(static) reduction(| : invalid)
-                for (long long hopEntry = 0; hopEntry < static_cast<long long>(hops.size()); ++hopEntry)
+                // Expand rows within each exact branch. Parallelizing only the
+                // small number of branches left a large single-hop recipe serial.
+                // No worker mutates a registry, route or another branch frontier.
+                for (size_t hopEntry = 0; hopEntry < hops.size(); ++hopEntry)
                 {
-                    try
-                    {
-                        const auto &entry = hops[size_t(hopEntry)];
-                        const auto &relation = *relations[hopRelation[size_t(hopEntry)]];
-                        relation.CheckActive();
-                        auto &candidate = pending[size_t(hopEntry)];
-                        candidate.entry = size_t(hopEntry);
-                        candidate.relation = hopRelation[size_t(hopEntry)];
-                        const auto &targetSpace = relation.Target();
-                        candidate.targetBegin = targetSpace._global->ROffsets()[size_t(_mpi.rank)];
-                        candidate.targetEnd = candidate.targetBegin + targetSpace.NumOwned();
-                        candidate.retainOwnedTargets = entry.hasChildren;
-                        auto &output = sets[size_t(entry.nodeId)];
-                        const auto appendTarget = [&](index value)
-                        {
-                            // A terminal node only contributes remote entities
-                            // to the final ghost set. Intermediate frontiers
-                            // retain all targets, even when also collected, so
-                            // descendants still evaluate the exact branch.
-                            if (value != UnInitIndex && (candidate.retainOwnedTargets ||
-                                                         value < candidate.targetBegin || value >= candidate.targetEnd))
-                                output.push_back(value);
-                        };
-                        const auto &parentValues = sets[size_t(entry.parentId)];
-                        const auto &sourceView = relation._view.owned;
-                        const size_t sourceElements = sourceView.offsets ? sourceView.offsets[sourceView.RowCount()]
-                                                                         : sourceView.RowCount() * sourceView.stride;
-                        const size_t averageRow = sourceView.RowCount()
-                                                      ? std::max<size_t>(1, (sourceElements + sourceView.RowCount() - 1) /
-                                                                                sourceView.RowCount())
-                                                      : 1;
-                        // Each branch starts empty. Reserve for local and remote
-                        // expansions once; SortUnique later owns the exact shape.
-                        const size_t reserveRows = CheckedSize::Multiply(parentValues.size(),
-                                                                         CheckedSize::Multiply(averageRow, size_t(2)));
-                        output.reserve(CheckedSize::Add(output.size(), reserveRows));
-                        const auto &source = relation.Source();
-                        const auto first = (*source._global)(_mpi.rank, 0);
-                        const bool globalState = relation._state == Adj_PointToGlobal;
-                        // Local incidence is already retained and validated. A DSL
-                        // traversal needs its union, not another transferred copy
-                        // of every local row. Only remote parents need a route.
-                        for (auto global : parentValues)
-                        {
+                    const auto &entry = hops[hopEntry];
+                    const auto &relation = *relations[hopRelation[hopEntry]];
+                    relation.CheckActive();
+                    auto &candidate = pending[hopEntry];
+                    candidate.entry = hopEntry;
+                    candidate.relation = hopRelation[hopEntry];
+                    const auto &targetSpace = relation.Target();
+                    candidate.targetBegin = targetSpace._global->ROffsets()[size_t(_mpi.rank)];
+                    candidate.targetEnd = candidate.targetBegin + targetSpace.NumOwned();
+                    candidate.retainOwnedTargets = entry.hasChildren;
+                    auto &output = sets[size_t(entry.nodeId)];
+                    const auto &parentValues = sets[size_t(entry.parentId)];
+                    const auto &sourceView = relation._view.owned;
+                    const size_t sourceElements = sourceView.offsets ? sourceView.offsets[sourceView.RowCount()]
+                                                                     : sourceView.RowCount() * sourceView.stride;
+                    const size_t averageRow = sourceView.RowCount()
+                                                  ? std::max<size_t>(1, (sourceElements + sourceView.RowCount() - 1) /
+                                                                            sourceView.RowCount())
+                                                  : 1;
+                    // Each branch starts empty. Reserve for local and remote
+                    // expansions once; SortUnique later owns the exact shape.
+                    const size_t reserveRows = CheckedSize::Multiply(parentValues.size(),
+                                                                     CheckedSize::Multiply(averageRow, size_t(2)));
+                    output.reserve(CheckedSize::Add(output.size(), reserveRows));
+                    const auto &source = relation.Source();
+                    const auto first = (*source._global)(_mpi.rank, 0);
+                    const bool globalState = relation._state == Adj_PointToGlobal;
+                    // Local incidence is already retained and validated. A DSL
+                    // traversal needs its union, not another transferred copy
+                    // of every local row. Only remote parents need a route.
+                    ConnectivityRows::AppendSetupRows(index(parentValues.size()), output, [&](index iRow, const auto &emit)
+                                                      {
+                            const index global = parentValues[size_t(iRow)];
+                            const auto appendTarget = [&](index value)
+                            {
+                                // Terminal nodes collect only remote targets;
+                                // intermediates retain owned values for descendants.
+                                if (value != UnInitIndex && (candidate.retainOwnedTargets ||
+                                                            value < candidate.targetBegin || value >= candidate.targetEnd))
+                                    emit(value);
+                            };
                             if (global >= first && global - first < source.NumOwned())
                             {
                                 const auto row = global - first;
@@ -318,18 +316,13 @@ namespace DNDS::Geom
                                         appendTarget(value);
                                     }
                                 }
-                            }
-                            else
-                                candidate.remote.push_back(global);
-                        }
-                    }
-                    catch (...)
-                    {
-                        MPI::AbortIfSolverFailure("mesh adjacency preparation failed");
-                        invalid = 1;
-                    }
+                            } });
+                    ConnectivityRows::AppendSetupRows(index(parentValues.size()), candidate.remote, [&](index iRow, const auto &emit)
+                                                      {
+                            const index global = parentValues[size_t(iRow)];
+                            if (global < first || global - first >= source.NumOwned())
+                                emit(global); });
                 }
-                valid = !invalid;
             }
             catch (...)
             {
@@ -414,8 +407,9 @@ namespace DNDS::Geom
                                                         &*group.route, group.context));
                     fetchViews[relationSlot].emplace(fetched[relationSlot]->Read());
                 }
-#pragma omp parallel for if (pending.size() >= 2) schedule(static)
-            for (std::ptrdiff_t hopIndex = 0; hopIndex < static_cast<std::ptrdiff_t>(pending.size()); ++hopIndex)
+            ValidateCollectively([&]
+                                 {
+            for (size_t hopIndex = 0; hopIndex < pending.size(); ++hopIndex)
             {
                 const auto &hop = pending[size_t(hopIndex)];
                 const auto &entry = hops[hop.entry];
@@ -423,8 +417,9 @@ namespace DNDS::Geom
                 if (!hop.remote.empty())
                 {
                     const auto &fetchView = fetchViews[hop.relation]->View();
-                    for (auto global : hop.remote)
+                    ConnectivityRows::AppendSetupRows(index(hop.remote.size()), output, [&](index iRow, const auto &emit)
                     {
+                        const index global = hop.remote[size_t(iRow)];
                         const auto found = std::lower_bound(requested[hop.relation].begin(),
                                                             requested[hop.relation].end(), global);
                         DNDS_check_throw_info(found != requested[hop.relation].end() && *found == global,
@@ -435,12 +430,12 @@ namespace DNDS::Geom
                             const auto value = fetchView(row, slot);
                             if (value != UnInitIndex && (hop.retainOwnedTargets ||
                                                          value < hop.targetBegin || value >= hop.targetEnd))
-                                output.push_back(value);
+                                emit(value);
                         }
-                    }
+                    });
                 }
                 SortUnique(output);
-            }
+            } });
         }
         int mask = 0;
         for (auto it = result.ghostIndices.begin(); it != result.ghostIndices.end();)
@@ -513,7 +508,7 @@ namespace DNDS::Geom
             // node. This is the same predicate as ReadEntry().unavailable.
             const auto requireLocalTarget = [&](const Runtime::ArrayView<const index> &view)
             {
-                for (size_t row = 0; row < view.RowCount(); ++row)
+                OMP::ForSetupRows(0, view.RowCount(), [&](index row)
                 {
                     const auto count = view.RowSize(row);
                     const auto *values = count ? view.Row(row) : nullptr;
@@ -528,7 +523,7 @@ namespace DNDS::Geom
                         DNDS_check_throw_info(cone._target.GlobalToLocalPinned(global),
                                               "interpolation requires local node closure");
                     }
-                }
+                });
             };
             requireLocalTarget(cone._view.owned);
             requireLocalTarget(cone._view.ghost);
@@ -564,9 +559,11 @@ namespace DNDS::Geom
             for (index iRow = 0; iRow < cone.RowCount(); ++iRow)
                 localStarts[size_t(iRow) + 1] = CheckedSize::Add(localStarts[size_t(iRow)], size_t(cone._view.RowSize(iRow)));
             localNodes.resize(localStarts.back());
-            for (index iRow = 0; iRow < cone.RowCount(); ++iRow)
+            OMP::ForSetupRows(0, cone.RowCount(), [&](index iRow)
+            {
                 for (index iSlot = 0; iSlot < cone._view.RowSize(iRow); ++iSlot)
                     localNodes[localStarts[size_t(iRow)] + size_t(iSlot)] = localIndex(iRow, size_t(iSlot));
+            });
             SubEntityQueryPbi enumeration = query;
             if (periodic)
                 enumeration.matchExtra = [&](index parent, int sub, index entity, index originalParent, int originalSub)
@@ -670,19 +667,32 @@ namespace DNDS::Geom
         std::vector<std::vector<ElemInfo>> info(static_cast<size_t>(nOwned));
         std::vector<std::vector<index>> messages(size_t(mpi.size));
         std::vector<index> nodeGlobal(size_t(cone.Target().NumLocal()));
-        for (index node = 0; node < cone.Target().NumLocal(); ++node)
-            nodeGlobal[size_t(node)] = cone.Target().LocalToGlobal(node);
-        for (index entity = 0; entity < rows->nEntities; ++entity)
+        setup.ValidateCollectively([&]
+                                   {
+        OMP::ForSetupRows(0, cone.Target().NumLocal(), [&](index iNode)
+                          { nodeGlobal[size_t(iNode)] = cone.Target().LocalToGlobalPinned(iNode); });
+        OMP::ForSetupRows(0, rows->nEntities, [&](index entity)
         {
             auto output = oldToOwned[size_t(entity)];
             if (output == UnInitIndex)
-                continue;
-            const auto global = entities.LocalToGlobal(output);
+                return;
             for (auto node : rows->entity2node[size_t(entity)])
                 e2n[size_t(output)].push_back(nodeGlobal[size_t(node)]);
             for (auto parent : rows->entity2parent[size_t(entity)])
-            {
                 e2p[size_t(output)].push_back(parentGlobal[size_t(parent)]);
+            e2nBits[size_t(output)] = nodeBits[size_t(entity)];
+            info[size_t(output)].push_back(rows->entityElemInfo[size_t(entity)]);
+        }); });
+        // Peer batches preserve entity/parent/slot order. The shared per-peer
+        // append and ownership numbering stay on the controller.
+        for (index entity = 0; entity < rows->nEntities; ++entity)
+        {
+            const auto output = oldToOwned[size_t(entity)];
+            if (output == UnInitIndex)
+                continue;
+            const auto global = entities.LocalToGlobal(output);
+            for (auto parent : rows->entity2parent[size_t(entity)])
+            {
                 if (parent >= cone.NumOwned())
                 {
                     const auto &slots = rows->parent2entity[size_t(parent)];
@@ -694,8 +704,6 @@ namespace DNDS::Geom
                         }
                 }
             }
-            e2nBits[size_t(output)] = nodeBits[size_t(entity)];
-            info[size_t(output)].push_back(rows->entityElemInfo[size_t(entity)]);
         }
         // One ragged batch per peer, owner-directed and direct typed MPI.
         std::vector<int> sendCounts(size_t(mpi.size)), receiveCounts(size_t(mpi.size));

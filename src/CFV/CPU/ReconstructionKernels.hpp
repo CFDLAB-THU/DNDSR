@@ -68,4 +68,31 @@ namespace DNDS::CFV::CPU
 
     /// Row-wise copy preserving arbitrary uniform physical field layouts.
     void CommitReconstruction(ReconstructionReadRows source, ReconstructionWriteRows destination);
+
+    /// Frozen linear-reconstruction rows. Operators own all leases and the
+    /// two dense scratch rows per logical worker. Kernels neither create
+    /// buffers nor enter MPI; Eigen may use its internal product workspace.
+    /// Matrix rows store column-major blocks as in setup.
+    struct ReconstructionLinearView
+    {
+        ReconstructionIndexRows offsets, neighbors, boundaryOffsets;
+        ReconstructionTable matrices, diagonal, vectors, injection, boundary;
+        R::ArrayView<const real, R::AccessBoundsChecks, R::FixedRows<9>> rotations;
+        R::ArrayView<const uint8_t, R::AccessBoundsChecks, R::FixedRows<1>> rotationActive;
+        ReconstructionField input;
+        ReconstructionWriteRows output;
+        R::ArrayView<real, R::AccessBoundsChecks, R::TableRows> scratch;
+        SpanView<const index> vectorStarts;
+        index modes = 0, components = 0;
+        bool rotated = false;
+    };
+    /// Independent destination rows; input and output must be disjoint.
+    void ApplyReconstructionLinearOperator(const ReconstructionLinearView &);
+    /// Assemble the fixed mean/BC term of the reconstruction equations.
+    void BuildReconstructionRightHandSide(const ReconstructionLinearView &);
+    /// Apply each cell's diagonal inverse to its independent input row.
+    void ApplyReconstructionLocalInverse(ReconstructionTable inverse, ReconstructionReadRows input,
+                                         ReconstructionWriteRows output, index modes);
+    /// Replace a computed matrix action by rhs-action on independent rows.
+    void FormReconstructionResidual(ReconstructionReadRows rhs, ReconstructionWriteRows output);
 }

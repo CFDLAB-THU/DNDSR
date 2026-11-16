@@ -3,6 +3,7 @@
 #include "Cauchy/IO/ProgressOutput.hpp"
 #include "Cauchy/IO/AsyncOutput.hpp"
 #include "DNDS/MPI/CollectiveStage.hpp"
+#include <fmt/format.h>
 
 #include <algorithm>
 #include <climits>
@@ -94,6 +95,14 @@ namespace DNDS::Cauchy
                 domainProgressWriter |= simulation.Local(iDomain) &&
                                         simulation.Placement().DomainRank(iDomain) == 0;
             logger = std::make_shared<OperationalLogger>(output, mpi.rank, domainProgressWriter);
+            for (index iDomain = 0; iDomain < domains; ++iDomain)
+                if (simulation.Local(iDomain) && simulation.Placement().DomainRank(iDomain) == 0)
+                {
+                    const auto &timing = simulation.SetupTimings(iDomain);
+                    logger->Info(fmt::format(
+                        "Cauchy {:>10} setup timers (domain-root elapsed): read/partition {:9.3f}s  prepare {:9.3f}s  FV/VR/state {:9.3f}s",
+                        config.Domains()[iDomain].placement.name, timing.meshIngress, timing.meshPreparation, timing.domainSetup));
+                }
             const auto &restored = simulation.RestoredOutputController();
             continueOutput = restored && restored->is_object() &&
                              restored->value("prefix", std::string{}) ==

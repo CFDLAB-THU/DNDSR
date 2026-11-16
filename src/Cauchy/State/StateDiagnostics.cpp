@@ -2,6 +2,7 @@
 #include "Cauchy/State/EquationArrayOperands.hpp"
 #include "Cauchy/State/CPU/StatePropertiesKernels.hpp"
 #include "Cauchy/Core/NumericalFailure.hpp"
+#include "Cauchy/Physics/PointWorkerContexts.hpp"
 #ifdef DNDS_USE_CUDA
 #    include "Cauchy/State/CUDA/StateDiagnosticsKernels.hpp"
 #endif
@@ -73,13 +74,14 @@ namespace DNDS::Cauchy
             result->values[2] = result->values[3] = result->values[13] = std::numeric_limits<real>::max();
             R::SubmitArrayBatch(engine, stream, [retained, geometry, result, means, rhs, flowBlock](auto, auto input, auto)
                                 {
-                auto evaluator = retained->equation.MakePointEvaluator(retained->workers ? retained->workers->Acquire() : Physics::Chemistry::ChemicalWorkerPool::Lease{}, {});
+                auto workers = MakeCPUPointWorkers<CPU::StatePropertiesWorker>(retained->equation, retained->workers, {});
                 const Binding::ReadBlocks blocks{means, input};
                 std::optional<EquationBlockReadView> species;
                 for (index iBlock = 0; iBlock < means.state.BlockNumber(); ++iBlock)
                     if (means.state.Schema().blocks[iBlock].name == "species") species = blocks.Block(iBlock);
                 const auto components = rhs.Components(input);
-                result->status = CPU::AccumulateStateDiagnostics(blocks.Block(flowBlock), species, components.View(), geometry->HostView(), evaluator,
+                result->status = CPU::AccumulateStateDiagnostics(blocks.Block(flowBlock), species, components.View(), geometry->HostView(),
+                    {workers.data(), index(workers.size())},
                     {result->values.data(), index(result->values.size())}); }, std::move(inputs), Outputs{});
             engine.Synchronize();
             RequireNumericalSuccess(result->status, "AccumulateStateDiagnostics");

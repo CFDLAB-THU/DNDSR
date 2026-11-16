@@ -2,6 +2,7 @@
 #include "doctest.h"
 #include "Geom/Unstructured/UnstructuredMesh.hpp"
 #include "Geom/Connectivity/AdjacencyRegistry.hpp"
+#include "Geom/Connectivity/ConnectivitySetupRows.hpp"
 #include "NativeMeshOverlapFixture.hpp"
 #include "Geom/IO/NativeMeshCGNS.hpp"
 #include "Geom/Connectivity/NativeMeshTopology.hpp"
@@ -1189,10 +1190,31 @@ TEST_CASE("Native interpolation matches repeated canonical IDs after XOR permute
     }
 }
 
+TEST_CASE("Independent setup expansions preserve row order and join failures")
+{
+    std::vector<I> output{71}, expected = output;
+    for (I iRow = 0; iRow < 64; ++iRow)
+        for (I slot = 0; slot < iRow % 4; ++slot)
+            expected.push_back(10 * iRow + slot);
+    G::ConnectivityRows::AppendSetupRows(64, output, [](I iRow, const auto &emit)
+                                         {
+        for (I slot = 0; slot < iRow % 4; ++slot)
+            emit(10 * iRow + slot); });
+    CHECK(output == expected);
+    CHECK_THROWS_AS(G::ConnectivityRows::AppendSetupRows(64, output, [](I iRow, const auto &emit)
+                                                         {
+        if (iRow == 17)
+            throw std::runtime_error("expected local setup failure");
+        emit(iRow); }),
+                    std::runtime_error);
+}
+
 int main(int argc, char **argv)
 {
-    MPI_Init(&argc, &argv);
+    // Native row kernels may create OMP/CPU workers even with controller MPI.
+    if (DNDS::MPI::Init_thread(&argc, &argv) != MPI_SUCCESS)
+        return 1;
     const auto result = doctest::Context(argc, argv).run();
-    MPI_Finalize();
+    DNDS::MPI::Finalize();
     return result;
 }

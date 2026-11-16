@@ -4,6 +4,7 @@
 #include "DNDS/Runtime/Execution/EagerArray.hpp"
 #include "DNDS/Runtime/Execution/CUDAExecution.hpp"
 #include "Geom/Access/MeshAccess.hpp"
+#include "DNDS/Core/OMP.hpp"
 
 namespace DNDS::CFV
 {
@@ -166,8 +167,8 @@ namespace DNDS::CFV
         {
             const auto read = indicator->get().Read();
             const auto values = read.View<R::FixedRows<1>>();
-            for (index iCell = 0; iCell < values.RowCount(); ++iCell)
-                DNDS_check_throw_info(std::isfinite(values(iCell, 0)), "gradient limiter indicator must be finite");
+            OMP::ForSetupRows(0, values.RowCount(), [&](index iCell)
+                              { DNDS_check_throw_info(std::isfinite(values(iCell, 0)), "gradient limiter indicator must be finite"); });
         }
         auto workspace = BuildWorkspace(input.Width() / _data->metrics.Dimension(), periodicVectorStarts, true);
         R::EagerEngine engine;

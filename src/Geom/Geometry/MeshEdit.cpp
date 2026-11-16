@@ -50,6 +50,8 @@ namespace DNDS::Geom
 
     MeshEdit MeshEdit::Begin(std::shared_ptr<UnstructuredMesh> source, int ghostLayers)
     {
+        // Transaction ownership, clone submission and baseline list appends are
+        // serialized by the edit controller; setters are single-row operations.
         DNDS_check_throw_info(source, "mesh edit requires a source owner");
         MeshEdit result;
         result._source = std::move(source);
@@ -155,6 +157,9 @@ namespace DNDS::Geom
 
     void MeshEdit::Commit()
     {
+        // This validates/refreshes one transaction and publishes it atomically.
+        // Access getters and CSR RowBuilder mutation deliberately stay outside
+        // worker teams; distributed refresh is a controller-only sequence.
         // A moved-from scope has no communicator and is a caller error. A
         // closed/aborted scope still retains its source: agree that failure
         // before any peer enters validation or publication collectives.

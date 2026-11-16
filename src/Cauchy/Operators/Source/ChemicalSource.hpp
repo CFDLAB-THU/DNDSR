@@ -41,4 +41,9 @@ namespace DNDS::Cauchy
     void AdvanceChemicalSource(const EquationSystem &equation, const EquationDofs &state, EquationDofs &values,
                                Physics::Chemistry::ChemicalWorkerPool::Lease worker, real dt,
                                const Physics::Chemistry::ReactorStepSettings &controls = {}, real sourceScale = 1);
+    /// Pool-backed form reserves a bounded private team before numerical work.
+    /// Identical point mathematics and output contract to the single-lease form.
+    void AdvanceChemicalSource(const EquationSystem &, const EquationDofs &, EquationDofs &,
+                               const Physics::Chemistry::ChemicalWorkerPool &, real dt,
+                               const Physics::Chemistry::ReactorStepSettings &controls = {}, real sourceScale = 1);
 }

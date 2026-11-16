@@ -1,6 +1,7 @@
 #include "Geom/Unstructured/UnstructuredMesh.hpp"
 #include "Geom/Transition/FieldTransfer.hpp"
 #include "Geom/Connectivity/AdjacencyRegistry.hpp"
+#include "DNDS/Core/OMP.hpp"
 
 namespace DNDS::Geom
 {
@@ -24,13 +25,14 @@ namespace DNDS::Geom
                 Runtime::Array<real>(Runtime::RowLayout::Dense(size_t(view.NumNode()), 3)),
                 Runtime::Array<real>(Runtime::RowLayout::Dense(size_t(view.NumNodeGhost()), 3))};
             auto owned = result.owned.Write(), ghost = result.ghost.Write();
-            for (index node = 0; node < view.NumNodeProc(); ++node)
-            {
+            // Internal callers supply immutable affine/mask operations. The
+            // arbitrary user callback entry below deliberately stays serial.
+            OMP::ForSetupRows(0, view.NumNodeProc(), [&](index node)
+                              {
                 const tPoint point = value(node);
                 auto output = node < view.NumNode() ? owned.View()[size_t(node)] : ghost.View()[size_t(node - view.NumNode())];
                 for (size_t component = 0; component < 3; ++component)
-                    output[component] = point[component];
-            }
+                    output[component] = point[component]; });
             return result;
         }
     }
@@ -59,6 +61,8 @@ namespace DNDS::Geom
 
     void UnstructuredMesh::TransformNativeCoords(const std::function<tPoint(const tPoint &)> &transform)
     {
+        // Arbitrary callbacks may carry mutable user state and are invoked in
+        // owned-node order. Built-in affine transforms use GeometryRows teams.
         const auto communication = CheckGeometryEdit(*this);
         const auto stamp = versions.Stamp();
         std::shared_ptr<const UnstructuredMeshState> prepared;
@@ -194,6 +198,8 @@ namespace DNDS::Geom
 
     void UnstructuredMesh::RectifyNearPlaneCoordinates(int components, real threshold)
     {
+        // The exact changed flag controls collective publication. Its ordered
+        // detection/fill stays serial; there are no expensive point operations.
         const auto communication = CheckGeometryEdit(*this);
         FieldTransferDetail::LocalStage(mpi, communication, [&]
                                         {
@@ -249,6 +255,8 @@ namespace DNDS::Geom
     void UnstructuredMesh::RectifyBoundaryCoordinates(std::function<int(t_index)> componentForZone,
                                                       bool volumeBoundary)
     {
+        // Zone callbacks plus repeated-node bit-mask scatter are controller
+        // work. Masks are exchanged before the independent GeometryRows fill.
         const auto communication = CheckGeometryEdit(*this);
         FieldTransferDetail::LocalStage(mpi, communication, [&]
                                         { DNDS_check_throw_info(HasNativeState(), "boundary rectification requires native mesh authority"); });

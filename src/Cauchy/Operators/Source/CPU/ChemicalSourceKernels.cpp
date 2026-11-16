@@ -1,33 +1,62 @@
 #include "Cauchy/Operators/Source/CPU/ChemicalSourceKernels.hpp"
+#include "DNDS/Core/OMP.hpp"
 namespace DNDS::Cauchy::CPU
 {
+    namespace
+    {
+        NumericalStatus AdvanceChemicalRange(SpanView<const EquationBlockArrayView<const real>> from,
+                                             SpanView<const EquationBlockArrayView<real>> to, EquationBlockArrayView<const real> flow,
+                                             EquationBlockArrayView<const real> species, EquationBlockArrayView<real> target,
+                                             Physics::Thermodynamics::IdealGasMixture::PointEvaluator &evaluator, int independent,
+                                             real dt, const Physics::Chemistry::ReactorStepSettings &controls, real sourceScale,
+                                             index begin, index end) noexcept
+        {
+            auto rhoY = evaluator.SpeciesInput();
+            for (index iCell = begin; iCell < end; ++iCell)
+            {
+                for (index iBlock = 0; iBlock < index(from.size()); ++iBlock)
+                    for (index j = 0; j < from[iBlock].ComponentNumber(); ++j)
+                        to[iBlock](iCell, j) = from[iBlock](iCell, j);
+                if (dt == 0 || sourceScale == 0)
+                    continue;
+                FlowState stateFlow;
+                for (int j = 0; j < 5; ++j)
+                    stateFlow[j] = flow(iCell, j);
+                for (int k = 0; k < independent; ++k)
+                    rhoY[k] = species(iCell, k);
+                const auto updated = evaluator.TryAdvanceConstVolume(stateFlow[0], Physics::Thermodynamics::ConservativeSpecificInternalEnergy<3>(stateFlow),
+                                                                     {rhoY.data, independent}, dt, controls, sourceScale);
+                if (!updated)
+                    return updated.status.At(iCell);
+                for (int k = 0; k < independent; ++k)
+                    target(iCell, k) = updated.value.rhoY[k];
+            }
+            return {};
+        }
+    }
     NumericalStatus AdvanceChemicalRows(SpanView<const EquationBlockArrayView<const real>> from,
                                         SpanView<const EquationBlockArrayView<real>> to, EquationBlockArrayView<const real> flow,
                                         EquationBlockArrayView<const real> species, EquationBlockArrayView<real> target,
                                         Physics::Thermodynamics::IdealGasMixture::PointEvaluator &evaluator, int independent,
                                         real dt, const Physics::Chemistry::ReactorStepSettings &controls, real sourceScale) noexcept
     {
-        auto rhoY = evaluator.SpeciesInput();
-        for (index iCell = 0; iCell < flow.RowCount(); ++iCell)
-        {
-            for (index iBlock = 0; iBlock < index(from.size()); ++iBlock)
-                for (index j = 0; j < from[iBlock].ComponentNumber(); ++j)
-                    to[iBlock](iCell, j) = from[iBlock](iCell, j);
-            if (dt == 0 || sourceScale == 0)
-                continue;
-            FlowState stateFlow;
-            for (int j = 0; j < 5; ++j)
-                stateFlow[j] = flow(iCell, j);
-            for (int k = 0; k < independent; ++k)
-                rhoY[k] = species(iCell, k);
-            const auto updated = evaluator.TryAdvanceConstVolume(stateFlow[0], Physics::Thermodynamics::ConservativeSpecificInternalEnergy<3>(stateFlow),
-                                                                 {rhoY.data, independent}, dt, controls, sourceScale);
-            if (!updated)
-                return updated.status.At(iCell);
-            for (int k = 0; k < independent; ++k)
-                target(iCell, k) = updated.value.rhoY[k];
-        }
-        return {};
+        // A caller explicitly lending one mutable reactor context requests one
+        // serial range. The pool overload supplies actual private OMP workers.
+        return AdvanceChemicalRange(from, to, flow, species, target, evaluator, independent, dt, controls, sourceScale, 0, flow.RowCount());
+    }
+    NumericalStatus AdvanceChemicalRows(SpanView<const EquationBlockArrayView<const real>> from,
+                                        SpanView<const EquationBlockArrayView<real>> to, EquationBlockArrayView<const real> flow,
+                                        EquationBlockArrayView<const real> species, EquationBlockArrayView<real> target,
+                                        SpanView<Physics::Thermodynamics::IdealGasMixture::PointEvaluator> workers, int independent,
+                                        real dt, const Physics::Chemistry::ReactorStepSettings &controls, real sourceScale) noexcept
+    {
+        if (workers.empty())
+            return {NumericalError::InvalidInput, 1, -1};
+        return OMP::ForRowsStatus(0, workers.size(), [&](index part) -> NumericalStatus
+                                  {
+            const index begin = part * (flow.RowCount() / workers.size()) + std::min(part, flow.RowCount() % workers.size());
+            const index end = begin + flow.RowCount() / workers.size() + (part < flow.RowCount() % workers.size());
+            return AdvanceChemicalRange(from, to, flow, species, target, workers[part], independent, dt, controls, sourceScale, begin, end); });
     }
     NumericalStatus EvaluateChemicalRows(EquationBlockArrayView<const real> flow, EquationBlockArrayView<const real> rhoY,
                                          EquationBlockArrayView<real> sourceSpecies, SpanView<const EquationBlockArrayView<real>> nonchemical,

@@ -1,4 +1,5 @@
 #include "CFV/Plans/PolynomialSamplingPlan.hpp"
+#include "DNDS/Core/OMP.hpp"
 #include <algorithm>
 
 namespace DNDS::CFV
@@ -29,15 +30,13 @@ namespace DNDS::CFV
         const auto input = read.View<R::FixedRows<1>>();
         auto write = result._outputRows.Write();
         const auto output = write.View<R::FixedRows<1>>();
-        std::vector<index> sorted;
-        sorted.reserve(QueryNumber());
-        for (index iPoint = 0; iPoint < QueryNumber(); ++iPoint)
-        {
+        std::vector<index> sorted(static_cast<size_t>(QueryNumber()));
+        OMP::ForSetupRows(0, QueryNumber(), [&](index iPoint)
+                          {
             const index row = input(iPoint, 0);
             DNDS_check_throw_info(row >= 0 && row < totalRows, "sampling output scatter row outside output extent");
             output(iPoint, 0) = row;
-            sorted.push_back(row);
-        }
+            sorted[iPoint] = row; });
         // Canonical quadrature segments already follow increasing output rows.
         // Avoid sorting millions of ordinals for that normal setup path.
         if (!std::is_sorted(sorted.begin(), sorted.end()))

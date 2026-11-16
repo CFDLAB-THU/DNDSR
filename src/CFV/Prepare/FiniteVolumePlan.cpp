@@ -366,9 +366,9 @@ namespace DNDS::CFV
         Runtime::Array<real> result(Runtime::RowLayout::Dense(NumCellProc(), 1));
         auto write = result.Write();
         const auto length = write.View<Runtime::FixedRows<1>>();
-        tSmallCoords coordinates;
-        for (index iCell = 0; iCell < NumCellProc(); ++iCell)
-        {
+        OMP::ForSetupRows(0, NumCellProc(), [&](index iCell)
+                          {
+            tSmallCoords coordinates;
             mesh.GetCoordsOnCell(iCell, coordinates);
             const auto element = mesh.GetCellElement(iCell);
             const Quadrature quadrature(element, INT_ORDER_MAX);
@@ -392,8 +392,7 @@ namespace DNDS::CFV
             const tPoint halfBox = centered.array().abs().rowwise().maxCoeff();
             const real value = 2 * halfBox.head(Dimension()).maxCoeff();
             DNDS_check_throw_info(std::isfinite(value) && value > 0, "invalid principal-axis cell length");
-            length(iCell, 0) = value;
-        }
+            length(iCell, 0) = value; });
         return result;
     }
     tPoint FiniteVolumePlan::GetCellCent(index iCell) const

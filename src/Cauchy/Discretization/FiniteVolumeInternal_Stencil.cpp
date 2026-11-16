@@ -1,4 +1,5 @@
 #include "Cauchy/Discretization/FiniteVolumeInternal.hpp"
+#include "DNDS/Core/OMP.hpp"
 
 namespace DNDS::Cauchy
 {
@@ -37,8 +38,16 @@ namespace DNDS::Cauchy
                 const auto row = topology.CellFaces(iCell);
                 maximumGradientPoints = std::max(maximumGradientPoints, index(row.size()));
                 offsets[iCell + 1] = offsets[iCell] + index(row.size());
-                activeFaces.insert(activeFaces.end(), row.begin(), row.end());
             }
+            // Prefixes and boundary numbering stay in canonical cell order.
+            // Every worker owns one preallocated incidence range; no concurrent
+            // append, Array lease acquisition or MPI occurs in the fill.
+            activeFaces.resize(size_t(offsets.back()));
+            OMP::ForRows(0, owned, [&](index iCell)
+            {
+                const auto row = topology.CellFaces(iCell);
+                std::copy(row.begin(), row.end(), activeFaces.begin() + offsets[iCell]);
+            });
             std::sort(activeFaces.begin(), activeFaces.end());
             activeFaces.erase(std::unique(activeFaces.begin(), activeFaces.end()), activeFaces.end());
             stencil.routing = R::Array<FaceRouting>(R::RowLayout::Dense(faces, 1));
@@ -54,14 +63,14 @@ namespace DNDS::Cauchy
             const auto routing = routingWrite.View<R::FixedRows<1>>();
             const auto slots = columnWrite.View<R::FixedRows<2>>();
             const auto distance = distanceWrite.View<R::FixedRows<1>>();
-            for (index iFace = 0; iFace < faces; ++iFace)
+            OMP::ForRows(0, faces, [&](index iFace)
             {
                 routing(iFace, 0) = FaceRouting{};
                 routing(iFace, 0).condition = interiorCondition;
                 slots(iFace, 0) = slots(iFace, 1) = UnInitIndex;
-            }
-            for (index iPoint = 0; iPoint < distance.RowCount(); ++iPoint)
-                distance(iPoint, 0) = 0;
+            });
+            OMP::ForRows(0, distance.RowCount(), [&](index iPoint)
+            { distance(iPoint, 0) = 0; });
             for (index iAux = 0; iAux < index(activeFaces.size()); ++iAux)
             {
                 const index iFace = activeFaces[iAux];
@@ -83,7 +92,11 @@ namespace DNDS::Cauchy
                         route.forceSlot = forceSlots.at(zone);
                 }
                 hasRotatedFrames = hasRotatedFrames || metric.periodic.Rotates(iFace);
-
+            }
+            OMP::ForSetupRows(0, index(activeFaces.size()), [&](index iAux)
+            {
+                const index iFace = activeFaces[iAux];
+                const auto parents = topology.FaceCells(iFace);
                 real area = 0;
                 Geom::tPoint center = Geom::tPoint::Zero();
                 for (index q = metric.FaceQuadratureBegin(iFace); q < metric.FaceQuadratureEnd(iFace); ++q)
@@ -107,9 +120,9 @@ namespace DNDS::Cauchy
                     distance(q, 0) = std::max(.25 * scale, std::min(2 * scale, std::abs(delta.dot(metric.GetFaceNorm(q)))));
                     DNDS_check_throw_info(std::isfinite(distance(q, 0)) && distance(q, 0) > 0, "invalid viscous distance");
                 }
-            }
+            });
             std::vector<std::vector<index>> columns(static_cast<size_t>(owned));
-            for (index iCell = 0; iCell < owned; ++iCell)
+            OMP::ForSetupRows(0, owned, [&](index iCell)
             {
                 auto &row = columns[iCell];
                 const auto cellFaces = topology.CellFaces(iCell);
@@ -129,7 +142,7 @@ namespace DNDS::Cauchy
                     if (other != UnInitIndex && other != iCell)
                         slots(iFace, side) = index(std::lower_bound(row.begin(), row.end(), other) - row.begin());
                 }
-            }
+            });
             jacobianColumns = std::make_shared<LinearPatternStorage>(columns,
                 std::vector<index>{}, std::vector<index>{}, std::vector<index>{}, std::vector<index>{});
             boundaryLayout = std::make_shared<Detail::BoundaryPointLayout>();
@@ -138,16 +151,24 @@ namespace DNDS::Cauchy
             boundaryLayout->integrationOrder = settings.numerics.RHSIntegrationOrder();
             boundaryLayout->meanIntegrationOrder = settings.numerics.cfv.intOrder;
             boundaryLayout->axisymmetric = metrics.Axisymmetric();
+            cellAuxiliary.resize(size_t(offsets.back()));
+            OMP::ForSetupRows(0, owned, [&](index iCell)
+            {
+                const auto cellFaces = topology.CellFaces(iCell);
+                auto begin = cellAuxiliary.begin() + offsets[iCell];
+                for (rowsize slot = 0; slot < rowsize(cellFaces.size()); ++slot)
+                    begin[slot] = routing(cellFaces[slot], 0).auxiliaryFace;
+                std::sort(begin, cellAuxiliary.begin() + offsets[iCell + 1]);
+            });
+            // Stable boundary IDs are a controller publication, independent
+            // of worker completion order and identical at OMP=1.
             for (index iCell = 0; iCell < owned; ++iCell)
             {
                 const auto cellFaces = topology.CellFaces(iCell);
-                std::vector<index> auxiliary;
-                auxiliary.reserve(cellFaces.size());
                 for (rowsize slot = 0; slot < rowsize(cellFaces.size()); ++slot)
                 {
                     const auto iFace = cellFaces[slot];
                     auto &route = routing(iFace, 0);
-                    auxiliary.push_back(route.auxiliaryFace);
                     if (topology.CellFaceOther(iCell, iFace, slot) != UnInitIndex)
                         continue;
                     const auto &condition = boundaryConditions[route.condition];
@@ -159,8 +180,6 @@ namespace DNDS::Cauchy
                     boundaryLayout->quadratureRows += count;
                     hasLocalInterfaceRows = hasLocalInterfaceRows || interface;
                 }
-                std::sort(auxiliary.begin(), auxiliary.end());
-                cellAuxiliary.insert(cellAuxiliary.end(), auxiliary.begin(), auxiliary.end());
             }
             DNDS_check_throw_info(index(boundaryRanges.size()) == gradient.NumBoundaryQuadrature(),
                                   "gradient boundary-center row count differs from canonical boundary faces");
@@ -171,8 +190,8 @@ namespace DNDS::Cauchy
             {
                 auto write = boundaryFaces.Write();
                 const auto values = write.View<R::FixedRows<1>>();
-                for (index i = 0; i < index(boundaryRanges.size()); ++i)
-                    values(i, 0) = boundaryRanges[i];
+                OMP::ForRows(0, index(boundaryRanges.size()), [&](index iBoundary)
+                { values(iBoundary, 0) = boundaryRanges[iBoundary]; });
             }
             boundaryFaces.SetName("Cauchy/boundary/faceRanges", DNDS_ALLOCATION_SITE());
             boundaryLayout->faces = boundaryFaces;
@@ -209,8 +228,9 @@ namespace DNDS::Cauchy
             {
                 array = R::Array<index>(R::RowLayout::Dense(index(values.size()), 1));
                 auto write = array.Write();
-                for (index i = 0; i < index(values.size()); ++i)
-                    write.View()(i, 0) = values[i];
+                const auto output = write.View();
+                OMP::ForRows(0, index(values.size()), [&](index iRow)
+                { output(iRow, 0) = values[iRow]; });
                 array.SetName(std::string("Cauchy/stencil/") + name, DNDS_ALLOCATION_SITE());
             };
             publish(offsets, stencil.jacobianOffsets, "incidenceOffsets");

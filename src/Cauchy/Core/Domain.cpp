@@ -30,10 +30,10 @@ namespace DNDS::Cauchy
             MPI::LocalStage(mpi, [&]
                             {
                 ResolvedExecutionPlan::Resolve({{name, {0}}, settings});
-                // Current EOS phases share one ordered CPU lane, even when
-                // its launcher runs on worker threads. Reserve actual required
-                // capacity rather than cloning once per engine worker.
-                setup.emplace(PhysicsResources::Resolve(settings.equation, 1));
+                // Each numerical OMP worker needs an exclusive thermochemical
+                // context. Ordered engine lanes reuse this bounded team rather
+                // than cloning again for every engine thread or point.
+                setup.emplace(PhysicsResources::Resolve(settings.equation, OMP::DistributedThreads()));
                 index width = 0;
                 for (const auto &block : setup->equation.Schema().blocks) width += index(block.components.size());
                 settings.implicit.ValidateComponents(width);
@@ -208,7 +208,7 @@ namespace DNDS::Cauchy
             _execution.Synchronize();
             const auto &workers = _execution.ChemicalWorkers();
             DNDS_check_throw_info(_problem.equation.HasMixture() && workers, "chemical source step requires its explicit mixture worker");
-            AdvanceChemicalSource(_problem.equation, input, output, workers->Acquire(), dt, _reactorControls); });
+            AdvanceChemicalSource(_problem.equation, input, output, *workers, dt, _reactorControls); });
     }
     void Domain::FinishChemicalStep()
     {

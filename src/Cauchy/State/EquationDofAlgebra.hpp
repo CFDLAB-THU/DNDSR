@@ -212,14 +212,16 @@ namespace DNDS::Cauchy
             readers.reserve(probes.size());
             for (const auto *probe : probes)
                 readers.push_back(probe->ReadOwned());
-            std::vector<real> result(probes.size(), 0);
+            std::vector<EquationViewLayout<const real>> inputs;
+            inputs.reserve(probes.size());
             for (index k = 0; k < index(probes.size()); ++k)
-            {
-                const EquationViewLayout<const real> input(*probes[k], readers[k]);
+                inputs.emplace_back(*probes[k], readers[k]);
+            std::vector<real> result(probes.size(), 0);
+            OMP::ForRows(0, index(probes.size()), [&](index k)
+                         {
                 const auto kernel = [&](auto u, auto v)
                 { result[k] = Algebra::Detail::AccumulateLocalProduct(u, v, u.RowCount(), u.ComponentNumber(), inverseScales); };
-                DispatchCPUEquationLayouts(kernel, values, input);
-            }
+                DispatchCPUEquationLayouts(kernel, values, inputs[k]); });
             return result;
         }
     };

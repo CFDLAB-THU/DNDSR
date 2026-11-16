@@ -157,6 +157,16 @@ TEST_CASE("shared mixture workers: independent concurrent contexts and retained 
     C::ChemicalSource prototype(Mechanism(), "", 340, 1.225);
     Mixture material(prototype, {1.225, 340, 2, 288.15});
     C::ChemicalWorkerPool pool(prototype, 2);
+    {
+        auto team = pool.AcquireUpTo(16);
+        REQUIRE(team.size() == 2);
+        CHECK(team[0].Slot() != team[1].Slot());
+        CHECK_THROWS(pool.AcquireUpTo(1));
+        team.pop_back();
+        auto remaining = pool.AcquireUpTo(16);
+        REQUIRE(remaining.size() == 1);
+        CHECK(remaining.front().Slot() != team.front().Slot());
+    }
     auto first = pool.Acquire(), second = pool.Acquire();
     CHECK(first.Slot() != second.Slot());
     CHECK_THROWS(pool.Acquire());

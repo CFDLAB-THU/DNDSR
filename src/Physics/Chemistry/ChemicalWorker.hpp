@@ -54,5 +54,14 @@ namespace DNDS::Physics::Chemistry
         /// scratch reference escape its lifetime. Move the lease into async CPU
         /// work if that work outlives submission; no global synchronization.
         Lease Acquire() const;
+        /** @brief Reserve an available team atomically before a CPU row loop.
+         * @param maximum Positive upper bound on the number of private contexts.
+         * @return Between one and maximum exclusive leases, bounded by the
+         * currently available capacity. Exhaustion fails immediately.
+         * Allocation precedes locking; no partial team can hold workers while
+         * waiting for another context. Kernels consume the returned team size,
+         * never acquire contexts or clone Cantera states in their point loop.
+         */
+        std::vector<Lease> AcquireUpTo(index maximum) const;
     };
 }

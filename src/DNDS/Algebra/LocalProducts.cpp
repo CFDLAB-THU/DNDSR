@@ -1,5 +1,6 @@
 #include "DNDS/Algebra/LocalProducts.hpp"
 #include "DNDS/Runtime/Execution/EagerArray.hpp"
+#include "DNDS/Core/OMP.hpp"
 #include <cmath>
 
 namespace DNDS::Algebra
@@ -8,10 +9,15 @@ namespace DNDS::Algebra
     namespace
     {
         void ReduceHost(Detail::ProductInput x, Detail::ProductInput y, Detail::ProductInput scales,
-                        Detail::ProductOutput result, index slot, bool finite)
+                        Detail::ProductOutput partial, Detail::ProductOutput result, index slot, bool finite)
         {
+            const index partitions = std::min<index>(partial.RowCount(), std::min<index>(OMP::DistributedThreads(), std::max<index>(1, x.RowCount())));
+            OMP::ForRows(0, partitions, [&](index part)
+                         {
             real value = finite ? 1 : 0;
-            for (index iRow = 0; iRow < x.RowCount(); ++iRow)
+            const index begin = part * (x.RowCount() / partitions) + std::min(part, x.RowCount() % partitions);
+            const index end = begin + x.RowCount() / partitions + (part < x.RowCount() % partitions);
+            for (index iRow = begin; iRow < end; ++iRow)
                 for (index j = 0; j < x.Width(); ++j)
                     if (finite)
                         value = std::isfinite(x(iRow, j)) ? value : 0;
@@ -20,6 +26,10 @@ namespace DNDS::Algebra
                         const real scale = scales.RowCount() ? scales(j, 0) : 1;
                         value += (x(iRow, j) * scale) * (y(iRow, j) * scale);
                     }
+            partial(part, 0) = value; });
+            real value = partial(0, 0);
+            for (index part = 1; part < partitions; ++part)
+                value = finite ? std::min(value, partial(part, 0)) : value + partial(part, 0);
             result(slot, 0) = value;
         }
     }
@@ -30,7 +40,7 @@ namespace DNDS::Algebra
                               "invalid local reduction shape");
         _scales = R::Array<real>(R::RowLayout::Dense(0, 1), device);
         const index count = rows * components;
-        _partial = R::Array<real>(R::RowLayout::Dense(std::max<index>(1, std::min<index>(256, count / 256 + (count % 256 != 0))), 1), device);
+        _partial = R::Array<real>(R::RowLayout::Dense(device == R::Device::Host() ? OMP::DistributedThreads() : std::max<index>(1, std::min<index>(256, count / 256 + (count % 256 != 0))), 1), device);
         _result = R::Array<real>(R::RowLayout::Dense(capacity, 1), device);
         _completed = R::Array<unsigned int>(R::RowLayout::Dense(device == R::Device::Host() ? 0 : 1, 1), device);
         _scales.SetName("DNDS/localProducts/inverseScales", DNDS_ALLOCATION_SITE());
@@ -71,7 +81,7 @@ namespace DNDS::Algebra
         R::SubmitArrays(engine, stream, [slot, finite](R::ExecutionContext context, auto x, auto y, auto scales, auto partial, auto result, auto completed)
                         {
             if (context.device == R::Device::Host())
-                ReduceHost(x.DynamicView(), y.DynamicView(), scales.DynamicView(), result.DynamicView(), slot, finite);
+                ReduceHost(x.DynamicView(), y.DynamicView(), scales.DynamicView(), partial.DynamicView(), result.DynamicView(), slot, finite);
             else
                 Detail::ReduceLocalProductCUDA(context, x.DynamicView(), y.DynamicView(), scales.DynamicView(),
                                                partial.DynamicView(), result.DynamicView(), completed, slot, finite); }, R::ReadAs<R::UniformTableRows>(x), R::ReadAs<R::UniformTableRows>(y), R::ReadAs<R::FixedRows<1>>(_scales), R::WriteAs<R::FixedRows<1>>(_partial), R::WriteAs<R::FixedRows<1>>(_result), R::WriteAs<R::FixedRows<1>>(_completed));

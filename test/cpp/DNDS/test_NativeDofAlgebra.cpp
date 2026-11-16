@@ -487,11 +487,13 @@ TEST_CASE("Native DOF operators support a manufactured diagonal Krylov solve")
 
 int main(int argc, char **argv)
 {
-    MPI_Init(&argc, &argv);
+    // Native row kernels may create OMP/CPU workers even with controller MPI.
+    if (DNDS::MPI::Init_thread(&argc, &argv) != MPI_SUCCESS)
+        return 1;
     doctest::Context context;
     context.applyCommandLine(argc, argv);
     const auto result = context.run();
-    MPI_Finalize();
+    DNDS::MPI::Finalize();
     return result;
 }
 

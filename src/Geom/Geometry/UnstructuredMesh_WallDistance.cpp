@@ -2,6 +2,7 @@
 #include "Geom/Quadratures/Quadrature.hpp"
 #include "Geom/Transition/FieldTransfer.hpp"
 #include "Geom/Connectivity/AdjacencyRegistry.hpp"
+#include "DNDS/Core/OMP.hpp"
 
 #define CGAL_DISABLE_ROUNDING_MATH_CHECK // for valgrind
 #include <CGAL/Simple_cartesian.h>
@@ -59,10 +60,13 @@ namespace DNDS::Geom
             wallWrite.emplace(wallOwned.Write()); });
         auto wall = [&](index row)
         { return Eigen::Map<tPoint>(wallWrite->View().Row(size_t(row))); };
-        for (index node = 0; node < NumNode(); ++node)
-            wall(node) = tPoint{std::pow(veryLargeReal, 0.25), 0, 0};
+        OMP::ForSetupRows(0, NumNode(), [&](index iNode)
+                          { wall(iNode) = tPoint{std::pow(veryLargeReal, 0.25), 0, 0}; });
         FieldTransferDetail::LocalStage(mpi, communication, [&]
                                         {
+            // The user zone predicate has no concurrent-callback contract.
+            // Keep its invocation and shared triangle/node appends ordered;
+            // only immutable search queries below run on worker teams.
             for (index iBnd = 0; iBnd < NumBnd(); iBnd++)
             {
                 // skip if not wall
@@ -154,9 +158,11 @@ namespace DNDS::Geom
                     }
                 }
             }
-            for (const auto &triangle : Triangles)
+            OMP::ForSetupRows(0, index(Triangles.size()), [&](index iTriangle)
+            {
+                const auto &triangle = Triangles[size_t(iTriangle)];
                 DNDS_check_throw_info(triangle.allFinite() && (triangle.col(1) - triangle.col(0)).cross(triangle.col(2) - triangle.col(0)).squaredNorm() > 0,
-                                      "wall search patch is nonfinite or degenerate"); });
+                                      "wall search patch is nonfinite or degenerate"); }); });
         // Exact replicated surface search: scratch on each rank scales with
         // ALL selected wall patches, independently of sparse mesh ghost storage.
         auto gather = [&](const auto &local, MPI_Datatype datatype, int components)
@@ -186,10 +192,12 @@ namespace DNDS::Geom
             selectedOwned = Runtime::Array<uint8_t>(Runtime::RowLayout::Dense(size_t(NumNode()), 1));
             selectedGhost = Runtime::Array<uint8_t>(Runtime::RowLayout::Dense(size_t(NumNodeGhost()), 1));
             auto local = selectedOwned.Write(), remote = selectedGhost.Write();
-            for (size_t row = 0; row < selectedOwned.RowCount(); ++row)
-                local.View()(row, 0) = 0;
-            for (size_t row = 0; row < selectedGhost.RowCount(); ++row)
-                remote.View()(row, 0) = 0;
+            OMP::ForSetupRows(0, selectedOwned.RowCount(), [&](index iRow)
+                              { local.View()(iRow, 0) = 0; });
+            OMP::ForSetupRows(0, selectedGhost.RowCount(), [&](index iRow)
+                              { remote.View()(iRow, 0) = 0; });
+            // Several selected boundaries can name the same node. This small
+            // scatter is ordered; parallel byte stores would still race.
             for (auto node : wallNodes)
                 (node < NumNode() ? local.View()(size_t(node), 0) : remote.View()(size_t(node - NumNode()), 0)) = 1; });
         const auto route = nodeSpace.BuildRowTransferPlan();
@@ -200,9 +208,10 @@ namespace DNDS::Geom
             .Wait();
         {
             auto selected = selectedOwned.Read();
-            for (index node = 0; node < NumNode(); ++node)
-                if (selected.View()(size_t(node), 0))
-                    wall(node).setZero();
+            OMP::ForSetupRows(0, NumNode(), [&](index iNode)
+                              {
+                if (selected.View()(iNode, 0))
+                    wall(iNode).setZero(); });
         }
         if (options.verbose >= 1 && mpi.rank == 0)
             log() << fmt::format("=== UnstructuredMesh::BuildNodeWallDist() with minWallDist = {:.4e}, To search in {}", options.minWallDist, trianglesFull.size()) << std::endl;
@@ -239,10 +248,23 @@ namespace DNDS::Geom
             {
                 // std::cout << "tree building" << std::endl;
                 Tree tree(triangles.begin(), triangles.end());
+                // CGAL otherwise lazily builds both structures in const
+                // distance queries. Finish them on the controller so all
+                // concurrent queries read immutable tree/hint state.
+                tree.build();
+                tree.accelerate_distance_queries();
+                const auto &search = tree;
                 // std::cout << "tree built" << std::endl;
                 // search
-                for (index iNode = 0; iNode < NumNode(); iNode++)
-                {
+                const index parts = std::min<index>(OMP::DistributedThreads(), std::max<index>(NumNode(), 1));
+                std::vector<real> minima(size_t(parts), veryLargeReal);
+                OMP::ForSetupRows(0, parts, [&](index part)
+                                  {
+                    const index begin = part * (NumNode() / parts) + std::min(part, NumNode() % parts);
+                    const index end = begin + NumNode() / parts + (part < NumNode() % parts);
+                    real localMinimum = veryLargeReal;
+                    for (index iNode = begin; iNode < end; ++iNode)
+                    {
                     // skip already on-wall data
                     if (wall(iNode).squaredNorm() == 0.0)
                         continue;
@@ -253,23 +275,24 @@ namespace DNDS::Geom
                     // std::cout << "pQ " << pQ << std::endl;
                     // Point closest_point = tree.closest_point(pQ);
                     // FT sqd = tree.squared_distance(pQ);
-                    auto closest_point = tree.closest_point_and_primitive(pQ);
+                    auto closest_point = search.closest_point_and_primitive(pQ);
                     // std::cout << "sqd" << sqd << std::endl;
                     auto cp = tPoint{closest_point.first.x(), closest_point.first.y(), closest_point.first.z()};
 
                     real dist = (p - cp).norm();
-                    minDist = std::min(dist, minDist);
+                    localMinimum = std::min(dist, localMinimum);
                     dist = std::max(options.minWallDist, dist);
 
                     wall(iNode) = dist * (p - cp).stableNormalized();
-                }
+                    }
+                    minima[size_t(part)] = localMinimum; });
+                for (const auto value : minima)
+                    minDist = std::min(minDist, value);
             }
             else
             {
-                for (index iNode = 0; iNode < NumNode(); iNode++)
-                {
-                    wall(iNode) = tPoint{std::pow(veryLargeReal, 1. / 4.), 0, 0};
-                }
+                OMP::ForSetupRows(0, NumNode(), [&](index iNode)
+                                  { wall(iNode) = tPoint{std::pow(veryLargeReal, 1. / 4.), 0, 0}; });
             }
             if (options.verbose >= 2)
                 log() << fmt::format("[{}] MinDist: ", getMPI().rank) << minDist << std::endl;

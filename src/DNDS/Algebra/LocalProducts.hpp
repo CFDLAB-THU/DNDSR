@@ -3,6 +3,7 @@
 #include "DNDS/Core/Defines.hpp"
 #include "DNDS/Runtime/Array/Array.hpp"
 #include "DNDS/Runtime/Execution/EagerEngine.hpp"
+#include "DNDS/Core/OMP.hpp"
 #include <vector>
 
 namespace DNDS::Algebra::Detail
@@ -30,12 +31,15 @@ namespace DNDS::Algebra::Detail
                                  index rows, index components, std::vector<real> &products,
                                  const std::vector<real> &inverseScales = {})
     {
+        // Distinct probes are independent outputs; preserving each probe's
+        // row/component order gives identical sums at every CPU team size.
+        OMP::ForRows(0, index(probes.size()), [&](index iProbe)
+                     {
         for (index iRow = 0; iRow < rows; ++iRow)
             for (index component = 0; component < components; ++component)
-                for (index iProbe = 0; iProbe < index(probes.size()); ++iProbe)
                     products[iProbe] += inverseScales.empty() ? source(iRow, component) * probes[iProbe](iRow, component)
                                                               : (source(iRow, component) * inverseScales[component]) *
-                                                                    (probes[iProbe](iRow, component) * inverseScales[component]);
+                                                                    (probes[iProbe](iRow, component) * inverseScales[component]); });
     }
 }
 
@@ -48,7 +52,8 @@ namespace DNDS::Algebra
      * performed. Scales are setup-sized metadata; values remain resident.
      * Products compute sum((x/s)*(y/s)) with the supplied inverse scales.
      * Finite checks return one for all-finite, including an empty rank.
-     * CPU uses canonical row/component order; CUDA uses a fixed two-level
+     * CPU partitions contiguous rows and merges in partition order (OMP=1
+     * retains canonical row/component order); CUDA uses a fixed two-level
      * reduction tree, with no floating-point atomic adds. A per-workspace
      * completion counter elects the last block to perform the tail in the same
      * kernel; the numerical order is independent of block arrival order.

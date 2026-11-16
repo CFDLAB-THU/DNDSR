@@ -261,6 +261,29 @@ not otherwise change the resulting tree.
 
 ## Composition versus distributed traversal
 
+### CPU setup work sharing
+
+With both OpenMP build switches enabled, native setup uses independent row
+teams under the same explicit `DNDS_DIST_OMP_NUM_THREADS` policy as numerical
+operators. Leases, registry changes, route construction, MPI and publication
+remain on the controller. Workers use retained immutable views and disjoint
+unpublished outputs; allocating/validating setup work joins before a captured
+exception reaches the collective failure boundary.
+
+Ghost evaluation expands the rows of each exact branch, rather than relying
+only on concurrency between branches. Its count/prefix/fill scratch is bounded
+by that branch's local requested source rows. Output keeps source-row order,
+then applies the existing sorted-set union. Siblings retain separate frontiers;
+there is no global-entity-sized scratch or worker MPI. A fetched-row validation
+failure cannot escape an OpenMP worker or let another rank continue publication.
+
+Ordinary Any/All composition can process output rows independently. Custom
+predicates and frame matchers keep serial callback invocation because the public
+callback contract does not require thread safety. Likewise, first-occurrence
+subentity numbering, periodic frame selection, ownership resolution and per-peer
+message appends retain their prescribed order. Their independent input/output
+fills may use teams without changing entity IDs or physical incidence slots.
+
 `Compose(AB, BC)` returns one adjacency row per owned A. Its current local
 interface requires the necessary BC rows to be available and throws if a row is
 missing; it does not fetch them automatically. `ComposeAll` selects candidates

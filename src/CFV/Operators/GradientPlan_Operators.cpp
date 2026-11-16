@@ -2,6 +2,7 @@
 #include "CFV/Math/PolynomialReconstruction.hpp"
 #include "CFV/Math/PeriodicFrame.hpp"
 #include "CFV/Detail/GradientKernels.hpp"
+#include "DNDS/Core/OMP.hpp"
 #include "DNDS/Runtime/Execution/CUDAExecution.hpp"
 
 namespace DNDS::CFV
@@ -44,8 +45,8 @@ namespace DNDS::CFV
         {
             auto write = array->Write();
             const auto view = write.View<R::TableRows>();
-            for (index iFace = 0; iFace < view.RowCount(); ++iFace)
-                Eigen::Map<Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic>>(view[iFace].data(), count, count).setIdentity();
+            OMP::ForRows(0, view.RowCount(), [&](index iFace)
+                         { Eigen::Map<Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic>>(view[iFace].data(), count, count).setIdentity(); });
         }
         FinalizeFaceTransform(result);
         return result;
@@ -75,16 +76,15 @@ namespace DNDS::CFV
         {
             const auto forward = transform.forward.Read(), inverse = transform.inverse.Read();
             const auto left = forward.View<R::TableRows>(), right = inverse.View<R::TableRows>();
-            Eigen::MatrixXd product(count, count);
-            for (index iFace = 0; iFace < _data->metrics.NumFaceProc(); ++iFace)
-            {
+            OMP::ForSetupRows(0, _data->metrics.NumFaceProc(), [&](index iFace)
+                              {
+                Eigen::MatrixXd product(count, count);
                 const Eigen::Map<const Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic>> L(left[iFace].data(), count, count);
                 const Eigen::Map<const Eigen::Matrix<real, Eigen::Dynamic, Eigen::Dynamic>> Rm(right[iFace].data(), count, count);
                 product.noalias() = L * Rm;
                 DNDS_check_throw_info(L.allFinite() && Rm.allFinite() &&
                                           product.isApprox(Eigen::MatrixXd::Identity(count, count), 1e-10),
-                                      "gradient characteristic matrices must be finite mutual inverses");
-            }
+                                      "gradient characteristic matrices must be finite mutual inverses"); });
         }
         transform.forwardVersion = transform.forward.Version();
         transform.inverseVersion = transform.inverse.Version();

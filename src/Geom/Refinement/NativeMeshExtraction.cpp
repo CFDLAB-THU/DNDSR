@@ -2,6 +2,7 @@
 #include "Geom/Transition/FieldTransfer.hpp"
 #include "Geom/Connectivity/NativePeriodicMatch.hpp"
 #include "DNDS/Runtime/Array/RowBuilder.hpp"
+#include "DNDS/Core/OMP.hpp"
 #include <algorithm>
 #include <optional>
 
@@ -165,21 +166,22 @@ namespace DNDS::Geom
             const auto originalIds = source.ReadOriginalEntityIds(EntityKind::Node);
             Runtime::Array<index> parentNodes(Runtime::RowLayout::Dense(selected.size(), 1));
             auto writeParentNodes = parentNodes.Write();
-            for (size_t row = 0; row < selected.size(); ++row)
+            OMP::ForSetupRows(0, index(selected.size()), [&](index iRow)
             {
+                const auto row = size_t(iRow);
                 writeLabels.View()(row, 0) = nodes.LocalToGlobal(index(row));
                 for (size_t component = 0; component < 3; ++component)
                     writeCoords.View()(row, component) = sourceView.Coord(index(selected[row]))[component];
                 writeParentNodes.View()(row, 0) = originalIds->View()(selected[row], 0);
-            }
+            });
             result.provenance.sourceNamespace = source.MeshNamespace();
             result.provenance.sourceKinds = {{EntityKind::Node, EntityKind::Node}, {EntityKind::Cell, EntityKind::Bnd}};
             result.provenance.sourceIds.emplace(EntityKind::Node, std::move(parentNodes));
             const auto boundaryIds = source.ReadOriginalEntityIds(EntityKind::Bnd);
             Runtime::Array<index> parentBoundaries(Runtime::RowLayout::Dense(selectedBoundaries.size(), 1));
             auto writeParentBoundaries = parentBoundaries.Write();
-            for (size_t row = 0; row < selectedBoundaries.size(); ++row)
-                writeParentBoundaries.View()(row, 0) = boundaryIds->View()(selectedBoundaries[row], 0);
+            OMP::ForSetupRows(0, index(selectedBoundaries.size()), [&](index iRow)
+                              { writeParentBoundaries.View()(iRow, 0) = boundaryIds->View()(selectedBoundaries[size_t(iRow)], 0); });
             result.provenance.sourceIds.emplace(EntityKind::Cell, std::move(parentBoundaries)); });
         // Discovery names original owner rows. Remap only its send rows into
         // compact owned order; the per-peer correspondence remains exact.

@@ -5,6 +5,9 @@
 #include "DNDS/Runtime/Execution/EagerArray.hpp"
 #include "DNDS/Algebra/EigenView.hpp"
 #include "DNDS/Runtime/Array/ArrayCopy.hpp"
+#include "DNDS/Core/OMP.hpp"
+#include <future>
+#include <set>
 #ifdef DNDS_UNIX_LIKE
 #    include <sys/wait.h>
 #    include <sys/resource.h>
@@ -14,6 +17,65 @@
 #include <stdexcept>
 
 namespace R = DNDS::Runtime;
+
+TEST_CASE("Native row teams use the same explicit policy on controller and CPU worker")
+{
+    const int requested = DNDS::OMP::DistributedThreads();
+#if defined(DNDS_USE_OMP) && defined(DNDS_DIST_MT_USE_OMP)
+    const int dynamic = omp_get_dynamic();
+    omp_set_dynamic(0);
+#endif
+    auto probe = [requested]
+    {
+        std::vector<int> seen(size_t(std::max(32, requested * 4)), -1);
+        DNDS::OMP::ForRows(0, DNDS::index(seen.size()), [&](DNDS::index iRow)
+                           {
+#if defined(DNDS_USE_OMP) && defined(DNDS_DIST_MT_USE_OMP)
+            seen[size_t(iRow)] = omp_get_thread_num();
+#else
+            seen[size_t(iRow)] = 0;
+#endif
+            // Nested helpers stay within this worker; no nested team.
+            DNDS::OMP::ForRows(0, 2, [&](DNDS::index)
+            { DNDS_assert(DNDS::OMP::DistributedThreads() == 1); }); });
+        return std::set<int>(seen.begin(), seen.end());
+    };
+    const auto controller = probe();
+    auto worker = std::async(std::launch::async, [probe]
+                             {
+#if defined(DNDS_USE_OMP) && defined(DNDS_DIST_MT_USE_OMP)
+        omp_set_dynamic(0);
+#endif
+        return probe(); });
+    CHECK(controller.size() == size_t(requested));
+    CHECK(worker.get() == controller);
+#if defined(DNDS_USE_OMP) && defined(DNDS_DIST_MT_USE_OMP)
+    omp_set_dynamic(dynamic);
+#endif
+}
+
+TEST_CASE("Native setup failures are emitted after all row workers join")
+{
+    std::vector<int> visited(32);
+    try
+    {
+        DNDS::OMP::ForSetupRows(0, 32, [&](DNDS::index iRow)
+                                {
+            visited[size_t(iRow)] = 1;
+            if (iRow == 3 || iRow == 19)
+                throw std::runtime_error(std::to_string(iRow)); });
+        FAIL("setup failure was lost");
+    }
+    catch (const std::runtime_error &error)
+    {
+        CHECK(std::string(error.what()) == "3");
+    }
+    if (DNDS::OMP::DistributedThreads() > 1)
+        CHECK(std::all_of(visited.begin(), visited.end(), [](int count)
+                          { return count == 1; }));
+    else
+        CHECK(visited[4] == 0); // Canonical serial exception short-circuits.
+}
 
 TEST_CASE("Array mutation epochs cover aliases and canceled reservations without claiming completion")
 {

@@ -4,50 +4,71 @@
 #include "Cauchy/Operators/Source/CPU/ChemicalSourceKernels.hpp"
 #include "Cauchy/Physics/PointProperties.hpp"
 #include "Cauchy/State/EquationDofAlgebra.hpp"
+#include "DNDS/Core/OMP.hpp"
 #include <limits>
 
 namespace DNDS::Cauchy
 {
+    namespace
+    {
+        void AdvanceChemicalTeam(const EquationSystem &equation, const EquationDofs &state, EquationDofs &values,
+                                 std::vector<Physics::Chemistry::ChemicalWorkerPool::Lease> team, real dt,
+                                 const Physics::Chemistry::ReactorStepSettings &controls, real sourceScale)
+        {
+            state.RequireSchema(equation.Schema());
+            state.RequireCompatible(values);
+            EquationDofOperations::RequireDistinct(state, values);
+            controls.Validate();
+            DNDS_check_throw_info(equation.HasMixture() && state.Device() == Runtime::Device::Host() &&
+                                      std::isfinite(dt) && dt >= 0 && std::isfinite(sourceScale) && sourceScale >= 0,
+                                  "unavailable or invalid constant-volume chemical step");
+            std::vector<Physics::Thermodynamics::IdealGasMixture::PointEvaluator> evaluators;
+            evaluators.reserve(team.size());
+            for (auto &worker : team)
+                evaluators.push_back(equation.Mixture().Borrow(std::move(worker)));
+            const auto input = state.ReadOwned();
+            std::vector<EquationBlockArrayView<const real>> from;
+            std::vector<EquationBlockArrayView<real>> to;
+            for (index iBlock = 0; iBlock < state.BlockNumber(); ++iBlock)
+                from.push_back(input.Block(iBlock).owned);
+            std::optional<EquationDofs::WriteScope> output;
+            try
+            {
+                output.emplace(values.WriteOwned());
+                for (index iBlock = 0; iBlock < values.BlockNumber(); ++iBlock)
+                    to.push_back(output->Block(iBlock));
+            }
+            catch (...)
+            {
+                MPI::AbortIfSolverFailure("Cauchy chemical source operation failed");
+                if (output)
+                    output->CancelUnmodified();
+                throw;
+            }
+            const auto flow = input.Block("flow").owned;
+            const int independent = equation.Mixture().SpeciesNumber() - 1;
+            const auto species = independent ? input.Block("species").owned : EquationBlockArrayView<const real>{};
+            const auto target = independent ? output->Block("species") : EquationBlockArrayView<real>{};
+            const Runtime::MetadataBuffer<EquationBlockArrayView<const real>> sourceMetadata(from);
+            const Runtime::MetadataBuffer<EquationBlockArrayView<real>> targetMetadata(to);
+            RequireNumericalSuccess(CPU::AdvanceChemicalRows(sourceMetadata.HostView(), targetMetadata.HostView(), flow, species, target,
+                                                             {evaluators.data(), index(evaluators.size())}, independent, dt, controls, sourceScale),
+                                    "AdvanceChemicalRows");
+        }
+    }
     void AdvanceChemicalSource(const EquationSystem &equation, const EquationDofs &state, EquationDofs &values,
                                Physics::Chemistry::ChemicalWorkerPool::Lease worker, real dt,
                                const Physics::Chemistry::ReactorStepSettings &controls, real sourceScale)
     {
-        state.RequireSchema(equation.Schema());
-        state.RequireCompatible(values);
-        EquationDofOperations::RequireDistinct(state, values);
-        controls.Validate();
-        DNDS_check_throw_info(equation.HasMixture() && state.Device() == Runtime::Device::Host() &&
-                                  std::isfinite(dt) && dt >= 0 && std::isfinite(sourceScale) && sourceScale >= 0,
-                              "unavailable or invalid constant-volume chemical step");
-        auto evaluator = equation.Mixture().Borrow(std::move(worker));
-        const auto input = state.ReadOwned();
-        std::vector<EquationBlockArrayView<const real>> from;
-        std::vector<EquationBlockArrayView<real>> to;
-        for (index iBlock = 0; iBlock < state.BlockNumber(); ++iBlock)
-            from.push_back(input.Block(iBlock).owned);
-        std::optional<EquationDofs::WriteScope> output;
-        try
-        {
-            output.emplace(values.WriteOwned());
-            for (index iBlock = 0; iBlock < values.BlockNumber(); ++iBlock)
-                to.push_back(output->Block(iBlock));
-        }
-        catch (...)
-        {
-            MPI::AbortIfSolverFailure("Cauchy chemical source operation failed");
-            if (output)
-                output->CancelUnmodified();
-            throw;
-        }
-        const auto flow = input.Block("flow").owned;
-        const int independent = equation.Mixture().SpeciesNumber() - 1;
-        const auto species = independent ? input.Block("species").owned : EquationBlockArrayView<const real>{};
-        const auto target = independent ? output->Block("species") : EquationBlockArrayView<real>{};
-        const Runtime::MetadataBuffer<EquationBlockArrayView<const real>> sourceMetadata(from);
-        const Runtime::MetadataBuffer<EquationBlockArrayView<real>> targetMetadata(to);
-        RequireNumericalSuccess(CPU::AdvanceChemicalRows(sourceMetadata.HostView(), targetMetadata.HostView(), flow, species, target,
-                                                         evaluator, independent, dt, controls, sourceScale),
-                                "AdvanceChemicalRows");
+        std::vector<Physics::Chemistry::ChemicalWorkerPool::Lease> team;
+        team.push_back(std::move(worker));
+        AdvanceChemicalTeam(equation, state, values, std::move(team), dt, controls, sourceScale);
+    }
+    void AdvanceChemicalSource(const EquationSystem &equation, const EquationDofs &state, EquationDofs &values,
+                               const Physics::Chemistry::ChemicalWorkerPool &pool, real dt,
+                               const Physics::Chemistry::ReactorStepSettings &controls, real sourceScale)
+    {
+        AdvanceChemicalTeam(equation, state, values, pool.AcquireUpTo(OMP::DistributedThreads()), dt, controls, sourceScale);
     }
     void EvaluateChemicalSource(const EquationSystem &equation, const EquationDofs &state,
                                 EquationDofs &values, Physics::Chemistry::ChemicalWorkerPool::Lease worker,
