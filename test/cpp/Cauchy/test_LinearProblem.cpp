@@ -121,6 +121,8 @@ TEST_CASE("Native linear action overlaps direct MPI with core and preserves froz
         for (int layout = 0; layout < 3; ++layout)
         {
             C::LinearProblemContext problem(space, 5, columns, {1, 0}, mode);
+            CHECK(problem.OffDiagonal().Values().Name() == "Cauchy/linear/offDiagonal/values");
+            CHECK(problem.OffDiagonal().OffsetArray().Name() == "Cauchy/linear/offDiagonal/blockOffsets");
             const auto format = layout == 0 ? R::RowLayout::Dense(0, 5, 8) : layout == 1 ? R::RowLayout::ColMajor(0, 5, {8, 1})
                                                                                          : R::RowLayout::TiledColMajor(0, 5, 32);
             Field input(space, format), full(space, format), split(space, format), b(space, format), forward(space, format), result(space, format);

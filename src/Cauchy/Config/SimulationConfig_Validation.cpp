@@ -154,7 +154,9 @@ namespace DNDS::Cauchy
         DNDS_check_throw_info(components > 0 && components < INT_MAX, "invalid implicit equation dimension");
         const auto validMatrixTable = [](const ImplicitMatrixTableSettings &table)
         {
-            return (table.layout == "aos" || table.layout == "soa" || table.layout == "aosoa32") && table.rowPaddingMultiple > 0;
+            const size_t alignment = table.allocationAlignmentBytes;
+            return (table.layout == "aos" || table.layout == "soa" || table.layout == "aosoa32") && table.rowPaddingMultiple > 0 &&
+                   table.rowStridePaddingMultiple > 0 && (!alignment || !(alignment & (alignment - 1)));
         };
         const bool usesAMG = linear.method == "amgx" || (linear.method == "gmres" && linear.preconditioner == "amgx");
         DNDS_check_throw_info(validMatrixTable(linear.matrixStorage.diagonal) && validMatrixTable(linear.matrixStorage.inverse) &&
@@ -162,7 +164,9 @@ namespace DNDS::Cauchy
                                   (linear.matrixStorage.indices == "auto" || linear.matrixStorage.indices == "int32" || linear.matrixStorage.indices == "int64"),
                               "invalid independent linear matrix storage settings");
         DNDS_check_throw_info(!usesAMG || (linear.matrixStorage.indices != "int64" && linear.matrixStorage.diagonal.layout == "aos" &&
-                                           linear.matrixStorage.offDiagonal.layout == "aos"),
+                                           linear.matrixStorage.offDiagonal.layout == "aos" &&
+                                           (components * components) % linear.matrixStorage.diagonal.rowStridePaddingMultiple == 0 &&
+                                           (components * components) % linear.matrixStorage.offDiagonal.rowStridePaddingMultiple == 0),
                               "copy-free AmgX requires primary int32 sparse indices and aos diagonal/off-diagonal blocks");
         DNDS_check_throw_info((normOrder == 1 || normOrder == 2) &&
                                   (residualReference == "initial" || residualReference == "runningMaximum"),
@@ -276,6 +280,8 @@ namespace DNDS::Cauchy
             return Kernel::FP64MatrixShared;
         if (reconstructionKernel == "fp64Tensor")
             return Kernel::FP64TensorCore;
+        if (reconstructionKernel == "fp64TensorWide")
+            return Kernel::FP64TensorCoreWide;
         if (reconstructionKernel == "fp64TensorShared")
             return Kernel::FP64TensorCoreShared;
         if (reconstructionKernel == "fp64TensorAsync")

@@ -64,8 +64,12 @@ namespace DNDS::Cauchy
             if (!owner->settings.numerics.positivityCompressToMean)
             {
                 reference.emplace(EquationDofOperations::NewVector(coefficients));
+                reference->Fields().SetName("Cauchy/positivity/referenceCoefficients", DNDS_ALLOCATION_SITE());
                 for (const auto &array : higherValues)
+                {
                     baseValues.emplace_back(array.Layout(), owner->metrics.Device());
+                    baseValues.back().SetName("Cauchy/positivity/baseValues/" + std::to_string(baseValues.size() - 1), DNDS_ALLOCATION_SITE());
+                }
             }
         }
         void Sample(const EquationDofs &input, const EquationDofs &coefficients, std::vector<R::Array<real>> &values) const

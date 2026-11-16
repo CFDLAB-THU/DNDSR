@@ -11,7 +11,7 @@ namespace DNDS::CFV::Detail
     void LaunchJacobiTensorCoreShared(Runtime::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
                                       Runtime::PairReadView<real>, Runtime::PairReadView<real>, Runtime::ArrayView<const real>, Runtime::ArrayView<real>, Runtime::ArrayView<const int>, bool async);
     void LaunchJacobiTensorCore(Runtime::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
-                                Runtime::PairReadView<real>, Runtime::PairReadView<real>, Runtime::ArrayView<const real>, Runtime::ArrayView<real>, Runtime::ArrayView<const int>);
+                                Runtime::PairReadView<real>, Runtime::PairReadView<real>, Runtime::ArrayView<const real>, Runtime::ArrayView<real>, Runtime::ArrayView<const int>, bool wide = false);
     void LaunchJacobi(Runtime::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
                       Runtime::PairReadView<real>, Runtime::PairReadView<real>, Runtime::ArrayView<const real>, Runtime::ArrayView<real>, Runtime::ArrayView<const int>);
     /// FP32 maps with a complete FP32 or float-float local update, FP64 store.
@@ -35,6 +35,10 @@ namespace DNDS::CFV::Detail
                          Runtime::PairReadView<real>, Runtime::PairReadView<real>, Runtime::ArrayView<const real>,
                          Runtime::ArrayView<real>, Runtime::ArrayView<const int>, Runtime::ArrayView<const real>,
                          Runtime::ArrayView<const real>, bool limited, int mapping);
+    /// Two-product FP64 MMA raw sweep, historical or wide warp-per-cell grid.
+    void LaunchRawJacobiTensorCore(Runtime::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
+                                   Runtime::PairReadView<real>, Runtime::PairReadView<real>, Runtime::ArrayView<const real>,
+                                   Runtime::ArrayView<real>, Runtime::ArrayView<const int>, bool wide);
     void LaunchWBAP(Runtime::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
                     Runtime::PairReadView<real>, Runtime::ArrayView<real>, Runtime::ArrayView<real>, DeviceCharacteristicView,
                     Runtime::ArrayView<const real>, Runtime::ArrayView<int>, index, index, real, index);

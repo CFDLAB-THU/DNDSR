@@ -60,9 +60,12 @@ namespace DNDS::CFV
                 capabilities.linearSystem = capabilities.localPreconditioner = false;
             }
             template <class T>
-            R::ArrayView<const T> Add(const char *name, const R::Array<T> &input, R::ExecutionContext context)
+            R::ArrayView<const T> Add(const char *name, const R::Array<T> &input, R::ExecutionContext context, R::AllocationOptions allocation = {})
             {
-                auto array = input.To(device, context);
+                // Explicit placement preserves requested base alignment; To()
+                // retains shape/pitch but intentionally uses provider defaults.
+                R::Array<T> array(input.Layout(), device, allocation);
+                array.CopyFrom(input, context).Wait();
                 array.SetName(std::string("CFV/") + name, DNDS_ALLOCATION_SITE());
                 buffers.push_back({name, array.Storage().Bytes(), device});
                 if constexpr (std::is_same_v<T, real>)
@@ -91,11 +94,11 @@ namespace DNDS::CFV
                     return byteReads.back().View();
                 }
             }
-            R::ArrayView<const float> AddQuantized(const char *name, const R::Array<real> &input, R::ExecutionContext context)
+            R::ArrayView<const float> AddQuantized(const char *name, const R::Array<real> &input, R::ExecutionContext context, R::AllocationOptions allocation = {})
             {
                 // Setup-only conversion after FP64 assembly/SVD/inversion. A
                 // quantized placement does not keep a second device FP64 copy.
-                R::Array<float> converted(input.Layout());
+                R::Array<float> converted(input.Layout(), R::Device::Host(), allocation);
                 {
                     const auto read = input.Read();
                     auto write = converted.Write();
@@ -107,7 +110,7 @@ namespace DNDS::CFV
                             write.View()(iRow, j) = value;
                         }
                 }
-                return Add(name, converted, context);
+                return Add(name, converted, context, allocation);
             }
         };
     }
@@ -286,6 +289,7 @@ namespace DNDS::CFV
         view.relax = Settings().jacobiRelax;
         view.wbapCenterWeight = Settings().WBAP_nStd;
         view.rotated = host.hasRotatedPeriodicity;
+        const auto allocation = host.settings.storage.Allocation();
         view.quantized = options.matrixPrecision == ReconstructionMatrixPrecision::FP32;
         view.raw = host.settings.storage.Raw();
         view.inverseTriangle = host.settings.storage.inverseTriangle;
@@ -298,25 +302,27 @@ namespace DNDS::CFV
         DNDS_REC_ADD(boundaryOffsets);
         if (view.quantized)
         {
-            view.matrixAInvB32 = result->AddQuantized("matrixAInvB32", *host.matrixAInvB, context);
-            view.vectorAInvB32 = result->AddQuantized("vectorAInvB32", *host.vectorAInvB, context);
-            view.boundaryInjection32 = result->AddQuantized("boundaryInjection32", *host.boundaryInjection, context);
+            view.matrixAInvB32 = result->AddQuantized("matrixAInvB32", *host.matrixAInvB, context, allocation);
+            view.vectorAInvB32 = result->AddQuantized("vectorAInvB32", *host.vectorAInvB, context, allocation);
+            view.boundaryInjection32 = result->AddQuantized("boundaryInjection32", *host.boundaryInjection, context, allocation);
         }
         else
         {
-            view.matrixAInvB = result->Add(view.raw ? "rawMatrixB" : "matrixAInvB", host.SweepMatrices(), context);
-            view.vectorAInvB = result->Add(view.raw ? "rawVectorB" : "vectorAInvB", host.SweepVectors(), context);
-            view.boundaryInjection = result->Add(view.raw ? "rawBoundaryInjection" : "boundaryInjection", host.SweepInjection(), context);
+            view.matrixAInvB = result->Add(view.raw ? "rawMatrixB" : "matrixAInvB", host.SweepMatrices(), context, allocation);
+            view.vectorAInvB = result->Add(view.raw ? "rawVectorB" : "vectorAInvB", host.SweepVectors(), context, allocation);
+            view.boundaryInjection = result->Add(view.raw ? "rawBoundaryInjection" : "boundaryInjection", host.SweepInjection(), context, allocation);
         }
         if (view.raw)
         {
-            view.localInverse = result->Add("localInverse", *host.localInverse, context);
+            view.localInverse = result->Add("localInverse", *host.localInverse, context, allocation);
             if (view.faceCoupling)
                 view.faceSide = result->Add("rawFaceSide", *host.rawFaceSide, context);
         }
         if (host.capabilities.wbap)
             view.secondary = result->Add("secondary", *host.secondary, context);
 #undef DNDS_REC_ADD
+        // Allocation accounting follows the actual selected payload, including
+        // physical pitch. No alternate full maps/inverse are retained here.
         // Every sweep/limiter kernel checks the publication-wide rotated flag
         // before reading either table. Translational/nonperiodic meshes need
         // neither identity matrices nor per-entry activity flags on device.
@@ -671,8 +677,9 @@ namespace DNDS::CFV
             else if (kernel == ReconstructionDeviceKernel::FP64TensorCoreShared || kernel == ReconstructionDeviceKernel::FP64TensorCoreAsync)
                 Detail::LaunchJacobiTensorCoreShared(context, pin->view, selection, {blocks}, {mo, mg}, {ro, rg}, bc, output, status,
                                                      kernel == ReconstructionDeviceKernel::FP64TensorCoreAsync);
-            else if (kernel == ReconstructionDeviceKernel::FP64TensorCore)
-                Detail::LaunchJacobiTensorCore(context, pin->view, selection, {blocks}, {mo, mg}, {ro, rg}, bc, output, status);
+            else if (kernel == ReconstructionDeviceKernel::FP64TensorCore || kernel == ReconstructionDeviceKernel::FP64TensorCoreWide)
+                Detail::LaunchJacobiTensorCore(context, pin->view, selection, {blocks}, {mo, mg}, {ro, rg}, bc, output, status,
+                                               kernel == ReconstructionDeviceKernel::FP64TensorCoreWide);
             else
                 Detail::LaunchJacobi(context, pin->view, selection, {blocks}, {mo, mg}, {ro, rg}, bc, output, status);
         };
@@ -816,7 +823,8 @@ namespace DNDS::CFV
         if (_device->view.raw)
             return kernel == ReconstructionDeviceKernel::FP64 || kernel == ReconstructionDeviceKernel::FP64Wide ||
                    kernel == ReconstructionDeviceKernel::FP64Static || kernel == ReconstructionDeviceKernel::FP64MatrixShared ||
-                   kernel == ReconstructionDeviceKernel::FP64Shared;
+                   kernel == ReconstructionDeviceKernel::FP64Shared ||
+                   ((kernel == ReconstructionDeviceKernel::FP64TensorCore || kernel == ReconstructionDeviceKernel::FP64TensorCoreWide) && _device->fp64TensorCore);
         if (_device->view.quantized)
             return kernel == ReconstructionDeviceKernel::FP32 ||
                    kernel == ReconstructionDeviceKernel::FP32FullAccumulation ||
@@ -829,7 +837,7 @@ namespace DNDS::CFV
             return _device->view.n == 2 || _device->view.n == 3 || _device->view.n == 5 ||
                    _device->view.n == 9 || _device->view.n == 19;
         return kernel == ReconstructionDeviceKernel::FP64 || kernel == ReconstructionDeviceKernel::FP64Wide ||
-               ((kernel == ReconstructionDeviceKernel::FP64TensorCore || kernel == ReconstructionDeviceKernel::FP64TensorCoreShared ||
+               ((kernel == ReconstructionDeviceKernel::FP64TensorCore || kernel == ReconstructionDeviceKernel::FP64TensorCoreWide || kernel == ReconstructionDeviceKernel::FP64TensorCoreShared ||
                  kernel == ReconstructionDeviceKernel::FP64TensorCoreAsync) &&
                 _device->fp64TensorCore);
     }
@@ -851,7 +859,7 @@ namespace DNDS::CFV
         {
             DNDS_check_throw_info(false, "CUDA shared tensor-core Jacobi unavailable");
         }
-        void LaunchJacobiTensorCore(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks, R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>, R::ArrayView<const int>)
+        void LaunchJacobiTensorCore(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks, R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>, R::ArrayView<const int>, bool)
         {
             DNDS_check_throw_info(false, "CUDA FP64 tensor-core Jacobi unavailable");
         }

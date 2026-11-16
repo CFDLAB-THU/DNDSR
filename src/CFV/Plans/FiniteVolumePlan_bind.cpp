@@ -78,6 +78,8 @@ namespace DNDS::CFV
             .def_readwrite("inverseTriangle", &ReconstructionStorageSettings::inverseTriangle)
             .def_readwrite("faceCoupling", &ReconstructionStorageSettings::faceCoupling)
             .def_readwrite("rowPadding", &ReconstructionStorageSettings::rowPadding)
+            .def_readwrite("aosRowPadding", &ReconstructionStorageSettings::aosRowPadding)
+            .def_readwrite("allocationAlignmentBytes", &ReconstructionStorageSettings::allocationAlignmentBytes)
             .def("Validate", &ReconstructionStorageSettings::Validate);
         py::class_<ReconstructionSettings>(m, "ReconstructionSettings")
             .def(py::init<>())
@@ -171,6 +173,7 @@ namespace DNDS::CFV
             .value("FP64Static", ReconstructionDeviceKernel::FP64Static)
             .value("FP64MatrixShared", ReconstructionDeviceKernel::FP64MatrixShared)
             .value("FP64TensorCore", ReconstructionDeviceKernel::FP64TensorCore)
+            .value("FP64TensorCoreWide", ReconstructionDeviceKernel::FP64TensorCoreWide)
             .value("FP64TensorCoreShared", ReconstructionDeviceKernel::FP64TensorCoreShared)
             .value("FP64TensorCoreAsync", ReconstructionDeviceKernel::FP64TensorCoreAsync)
             .value("FP32", ReconstructionDeviceKernel::FP32)

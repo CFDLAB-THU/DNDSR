@@ -27,6 +27,9 @@ opt-in CUDA timeline ranges and the fixed uncached TGV optimization baseline.
 The [Plan 61 CUDA inventory](dev/plan61_cuda_inventory.md) tracks the specialized
 perfect-gas device path and its grouped implementation/validation status.
 
+The [experimental FV and VR matrix storage guide](dev/plan613_matrix_storage.md)
+describes independent layouts, raw VR sweeps, and allocation controls.
+
 Cauchy development starts at the [solver contracts and ledger](architecture/Cauchy.md).
 The [November 5 pMG and distributed-failure audit](dev/cauchy_pmg_distributed_errors_2026-11-05.md)
 records the coarse-gradient correction, fail-fast boundary and publication checks.

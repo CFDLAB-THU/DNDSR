@@ -23,7 +23,7 @@ TEST_CASE("Reconstruction kernel selection is explicit and retains the FP64 defa
     C::ExecutionSettings execution;
     CHECK(execution.ReconstructionKernel() == Kernel::FP64);
     for (const auto &[name, kernel] : std::vector<std::pair<std::string, Kernel>>{
-             {"fp64Wide", Kernel::FP64Wide}, {"fp64Static", Kernel::FP64Static}, {"fp64MatrixShared", Kernel::FP64MatrixShared}, {"fp64Tensor", Kernel::FP64TensorCore}, {"fp64TensorShared", Kernel::FP64TensorCoreShared}, {"fp64TensorAsync", Kernel::FP64TensorCoreAsync}, {"fp32", Kernel::FP32}, {"fp32Accum", Kernel::FP32FullAccumulation}, {"fp32FloatFloatAccum", Kernel::FP32FloatFloatAccumulation}, {"tf32", Kernel::TF32TensorCore}})
+             {"fp64Wide", Kernel::FP64Wide}, {"fp64Static", Kernel::FP64Static}, {"fp64MatrixShared", Kernel::FP64MatrixShared}, {"fp64Tensor", Kernel::FP64TensorCore}, {"fp64TensorWide", Kernel::FP64TensorCoreWide}, {"fp64TensorShared", Kernel::FP64TensorCoreShared}, {"fp64TensorAsync", Kernel::FP64TensorCoreAsync}, {"fp32", Kernel::FP32}, {"fp32Accum", Kernel::FP32FullAccumulation}, {"fp32FloatFloatAccum", Kernel::FP32FloatFloatAccumulation}, {"tf32", Kernel::TF32TensorCore}})
     {
         execution.reconstructionKernel = name;
         CHECK(execution.ReconstructionKernel() == kernel);
@@ -43,10 +43,14 @@ TEST_CASE("Linear matrix storage round-trips independently and rejects hidden Am
     linear.method = "jacobi";
     linear.matrixStorage.diagonal.layout = "soa";
     linear.matrixStorage.diagonal.rowPaddingMultiple = 64;
+    linear.matrixStorage.diagonal.allocationAlignmentBytes = 256;
+    linear.matrixStorage.inverse.rowStridePaddingMultiple = 16;
     linear.matrixStorage.inverse.layout = "aosoa32";
     const auto restored = C::Json(settings).get<C::DomainSettings>();
     CHECK(restored.implicit.linear.matrixStorage.diagonal.layout == "soa");
     CHECK(restored.implicit.linear.matrixStorage.diagonal.rowPaddingMultiple == 64);
+    CHECK(restored.implicit.linear.matrixStorage.diagonal.allocationAlignmentBytes == 256);
+    CHECK(restored.implicit.linear.matrixStorage.inverse.rowStridePaddingMultiple == 16);
     CHECK(restored.implicit.linear.matrixStorage.inverse.layout == "aosoa32");
     CHECK(restored.implicit.linear.matrixStorage.offDiagonal.layout == "aos");
     CHECK_NOTHROW(settings.implicit.Validate());

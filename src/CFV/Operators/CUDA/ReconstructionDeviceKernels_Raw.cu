@@ -5,21 +5,7 @@
 namespace DNDS::CFV::Detail
 {
     namespace R = Runtime;
-    /// Sweep-only projection, excluding WBAP/sampling data from kernel arguments.
-    struct RawJacobiView
-    {
-        R::ArrayView<const index> offsets, neighbors, faces, boundaryOffsets;
-        R::ArrayView<const uint8_t> rotationActive, faceSide;
-        R::ArrayView<const real> matrices, vectors, injection, inverse, rotation;
-        index n;
-        real relax;
-        bool rotated, triangle, faceCoupling;
-        explicit RawJacobiView(const ReconstructionDeviceView &p)
-            : offsets(p.offsets), neighbors(p.neighbors), faces(p.faces), boundaryOffsets(p.boundaryOffsets),
-              rotationActive(p.rotationActive), faceSide(p.faceSide), matrices(p.matrixAInvB), vectors(p.vectorAInvB),
-              injection(p.boundaryInjection), inverse(p.localInverse), rotation(p.rotation), n(p.n), relax(p.relax),
-              rotated(p.rotated), triangle(p.inverseTriangle), faceCoupling(p.faceCoupling) {}
-    };
+    using RawJacobiView = RawReconstructionSweepView;
     /** @brief Gather original B contributions then apply the local pseudoinverse.
      * @details One block owns one cell. Its shared right-hand side is a bounded
      * 19-by-7 scratch. Sharing a face B uses its canonical parent orientation,
@@ -52,14 +38,18 @@ namespace DNDS::CFV::Detail
                 {
                     const index other = plan.neighbors(entry, 0);
                     const bool rotated = plan.rotated && plan.rotationActive(entry, 0);
+                    // Resolve routing and physical stride once per incidence,
+                    // then stage/dot only a const row span in the inner loops.
+                    const index matrixRow = plan.faceCoupling ? plan.faces(entry, 0) : entry;
+                    const bool transpose = plan.faceCoupling && plan.faceSide(entry, 0);
+                    const auto block = plan.matrices[matrixRow];
                     if (other != UnInitIndex)
                     {
                         for (index i = threadIdx.x; i < output.width; i += blockDim.x)
                             coefficients[i] = input(other, i);
                         if constexpr (SharedMatrix)
                             for (index k = threadIdx.x; k < n * n; k += blockDim.x)
-                                matrix[k] = Math::ReconstructionCouplingEntry(plan.matrices, plan.faces, plan.faceSide,
-                                                                              entry, k % n, k / n, n, plan.faceCoupling);
+                                matrix[k] = block[transpose ? k / n + n * (k % n) : k];
                     }
                     __syncthreads();
                     for (index i = threadIdx.x; i < output.width; i += blockDim.x)
@@ -73,7 +63,7 @@ namespace DNDS::CFV::Detail
                                 real product = 0;
                                 for (index j = 0; j < n; ++j)
                                 {
-                                    const real b = SharedMatrix ? matrix[j * n + mode] : Math::ReconstructionCouplingEntry(plan.matrices, plan.faces, plan.faceSide, entry, mode, j, n, plan.faceCoupling);
+                                    const real b = SharedMatrix ? matrix[j * n + mode] : block[transpose ? j + n * mode : mode + n * j];
                                     product += b * coefficients[component * n + j];
                                 }
                                 right[i] += product;
@@ -86,7 +76,7 @@ namespace DNDS::CFV::Detail
                                         for (index d = 0; d < 3; ++d)
                                             value += coefficients[(first + d) * n + j] *
                                                      (plan.rotation(entry, d * 3 + component - first) - (component - first == d ? 1 : 0));
-                                        const real b = SharedMatrix ? matrix[j * n + mode] : Math::ReconstructionCouplingEntry(plan.matrices, plan.faces, plan.faceSide, entry, mode, j, n, plan.faceCoupling);
+                                        const real b = SharedMatrix ? matrix[j * n + mode] : block[transpose ? j + n * mode : mode + n * j];
                                         correction += b * value;
                                     }
                                     right[i] += correction;
@@ -109,6 +99,7 @@ namespace DNDS::CFV::Detail
                 }
             }
             __syncthreads();
+            const auto inverse = plan.inverse[iCell];
             for (index i = threadIdx.x; i < output.width; i += blockDim.x)
             {
                 real value = input(iCell, i) * (1 - plan.relax);
@@ -119,7 +110,7 @@ namespace DNDS::CFV::Detail
                 {
                     real update = 0;
                     for (index j = 0; j < n; ++j)
-                        update += Math::ReconstructionInverseEntry(plan.inverse, iCell, i % n, j, n, plan.triangle) * right[(i / n) * n + j];
+                        update += inverse[plan.triangle ? Math::SymmetricTriangleEntry(i % n, j) : i % n + n * j] * right[(i / n) * n + j];
                     value += scale * update;
                 }
                 output(iCell, i) = value;

@@ -270,6 +270,10 @@ TEST_CASE("Queued inverses preserve independent diagonal and inverse matrix layo
                 storage.inverse.layout = diagonalLayout == A::MatrixTableLayout::AoS ? A::MatrixTableLayout::SoA : diagonalLayout == A::MatrixTableLayout::SoA ? A::MatrixTableLayout::AoSoA32
                                                                                                                                                                : A::MatrixTableLayout::AoS;
                 storage.inverse.rowPaddingMultiple = 32;
+                storage.diagonal.rowStridePaddingMultiple = 16;
+                storage.diagonal.allocationAlignmentBytes = 512;
+                storage.inverse.rowStridePaddingMultiple = 32;
+                storage.inverse.allocationAlignmentBytes = 512;
                 storage.rowMajorBlocks = diagonalLayout == A::MatrixTableLayout::SoA;
                 const A::DofSpace space(5);
                 const std::vector<std::vector<I>> columns(5);
@@ -278,6 +282,7 @@ TEST_CASE("Queued inverses preserve independent diagonal and inverse matrix layo
                                             C::OffDiagonalStorage::Assembled, R::Device::Host(), {}, storage);
                 C::LinearProblemContext gpu(space, width, columns, order, C::DiagonalStorage::Block,
                                             C::OffDiagonalStorage::Assembled, context.device, {}, storage);
+                CHECK(gpu.Diagonal().Storage().IsAligned(512));
                 {
                     auto write = cpu.Diagonal().Write();
                     const auto view = write.View<R::UniformTableRows>();

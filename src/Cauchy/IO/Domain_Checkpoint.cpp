@@ -70,13 +70,19 @@ namespace DNDS::Cauchy
         {
             const auto &acceptedGuess = _problem.finiteVolume.ReconstructionGuess(*_state.reconstruction);
             if (!_state.reconstructionBackup)
+            {
                 _state.reconstructionBackup.emplace(EquationDofOperations::NewVector(acceptedGuess));
+                _state.reconstructionBackup->Fields().SetName(_problem.name + "/reconstructionBackup", DNDS_ALLOCATION_SITE());
+            }
             EquationDofOperations::Copy(_execution.Engine(), _execution.ComputeStream(), *_state.reconstructionBackup, acceptedGuess);
             _execution.Synchronize();
             if (const auto history = _problem.finiteVolume.LimitedVRHistory(*_state.reconstruction))
             {
                 if (!_state.limitedVRBackup)
+                {
                     _state.limitedVRBackup.emplace(history->Layout(), history->GetDevice());
+                    _state.limitedVRBackup->SetName(_problem.name + "/limitedVRBackup", DNDS_ALLOCATION_SITE());
+                }
                 _state.limitedVRBackup->CopyFrom(*history, _execution.ComputeStream().Context()).Wait();
             }
             else

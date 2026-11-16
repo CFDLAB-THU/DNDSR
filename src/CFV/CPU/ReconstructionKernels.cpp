@@ -62,6 +62,9 @@ namespace DNDS::CFV::CPU
                 if (other != UnInitIndex)
                 {
                     const bool rotatedEntry = view.rotated && rotationActive(iEntry, 0);
+                    const index matrixRow = view.faceCoupling ? view.faces(iEntry, 0) : iEntry;
+                    const bool transpose = view.faceCoupling && view.faceSides(iEntry, 0);
+                    const auto block = matrices[matrixRow];
                     // SOR reads completed predecessors from a separate output,
                     // leaving the whole input immutable for direct MPI sends.
                     const auto otherCoefficients = other < work.owned
@@ -80,7 +83,7 @@ namespace DNDS::CFV::CPU
                                 {
                                     real product = 0;
                                     for (index j = 0; j < n; ++j)
-                                        product += Math::ReconstructionCouplingEntry(matrices, view.faces, view.faceSides, iEntry, i, j, n, view.faceCoupling) * otherCoefficients(j, variable);
+                                        product += block[transpose ? j + n * i : i + n * j] * otherCoefficients(j, variable);
                                     rawRight(i, variable) += product;
                                 }
                     }
@@ -97,7 +100,7 @@ namespace DNDS::CFV::CPU
                                     {
                                         real product = 0;
                                         for (index j = 0; j < n; ++j)
-                                            product += Math::ReconstructionCouplingEntry(matrices, view.faces, view.faceSides, iEntry, i, j, n, view.faceCoupling) * rotatedRec(j, variable);
+                                            product += block[transpose ? j + n * i : i + n * j] * rotatedRec(j, variable);
                                         rawRight(i, first + variable) += product;
                                     }
                             else
@@ -130,14 +133,17 @@ namespace DNDS::CFV::CPU
                                 output.col(variable).noalias() += injectionRows[iQ] * (scale * (bValues(iQ, variable) - u(iCell, variable)));
             }
             if (view.raw)
+            {
+                const auto inverse = view.inverse[iCell];
                 for (index variable = 0; variable < nv; ++variable)
                     for (index i = 0; i < n; ++i)
                     {
                         real value = 0;
                         for (index j = 0; j < n; ++j)
-                            value += Math::ReconstructionInverseEntry(view.inverse, iCell, i, j, n, view.inverseTriangle) * rawRight(j, variable);
+                            value += inverse[view.inverseTriangle ? Math::SymmetricTriangleEntry(i, j) : i + n * j] * rawRight(j, variable);
                         output(i, variable) += scale * value;
                     }
+            }
         };
         const index owned = work.owned;
         if (!view.sor)

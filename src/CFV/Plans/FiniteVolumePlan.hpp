@@ -374,7 +374,9 @@ namespace DNDS::CFV
         /// Same FP32 maps, with the entire local update in float-float.
         /// FP64 inputs are converted directly to the high/low pair; this does
         /// not restore precision lost in the maps. Requires CCCL compute.
-        FP32FloatFloatAccumulation
+        FP32FloatFloatAccumulation,
+        /// Identical FP64 MMA arithmetic with a wider warp-per-cell grid.
+        FP64TensorCoreWide
     };
     struct ResidentBufferInfo
     {

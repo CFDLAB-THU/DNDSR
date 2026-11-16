@@ -113,12 +113,20 @@ TEST_CASE("CUDA assembled actions and Jacobi preserve sparse block order and cor
                 const auto layout = [](A::MatrixTableLayout kind)
                 { return A::MatrixTableOptions{kind, 32}; };
                 const auto aos = layout(A::MatrixTableLayout::AoS), soa = layout(A::MatrixTableLayout::SoA), tiled32 = layout(A::MatrixTableLayout::AoSoA32);
-                const auto blockOptions = !tiled || components == 5 ? aos : components == 6 ? soa
-                                                                                            : tiled32;
+                auto blockOptions = !tiled || components == 5 ? aos : components == 6 ? soa
+                                                                                      : tiled32;
+                // One pitched AoS case and one stronger base-alignment case,
+                // folded into the existing discriminating fixtures.
+                if (tiled && components == 5)
+                    blockOptions.rowStridePaddingMultiple = 16;
+                if (tiled && components == 7)
+                    blockOptions.allocationAlignmentBytes = 256;
                 const auto diagonalOptions = !tiled || components == 7 ? aos : components == 5 ? soa
                                                                                                : tiled32;
-                const auto inverseOptions = !tiled || components == 6 ? aos : components == 5 ? tiled32
-                                                                                              : soa;
+                auto inverseOptions = !tiled || components == 6 ? aos : components == 5 ? tiled32
+                                                                                        : soa;
+                if (tiled && components == 6)
+                    inverseOptions.rowStridePaddingMultiple = 32;
                 const bool rowMajorBlocks = tiled && components == 5;
                 A::BlockMatrixStorage alternative(counts, components, R::Device::Host(), blockOptions, rowMajorBlocks);
                 {
@@ -131,9 +139,20 @@ TEST_CASE("CUDA assembled actions and Jacobi preserve sparse block order and cor
                                     write.ArrayView().Element(iCell, k, i, j) = read.ArrayView().Element(iCell, k, i, j);
                 }
                 const auto placedMatrix = alternative.Placed(context.device, context);
+                CHECK(placedMatrix.Values().Layout() == alternative.Values().Layout());
+                if (blockOptions.allocationAlignmentBytes)
+                {
+                    CHECK(alternative.Values().Storage().IsAligned(blockOptions.allocationAlignmentBytes));
+                    CHECK(placedMatrix.Values().Storage().IsAligned(blockOptions.allocationAlignmentBytes));
+                }
+                if (tiled && components == 5)
+                {
+                    CHECK(placedMatrix.Values().Layout().Width() == I(components * components));
+                    CHECK(placedMatrix.Values().Layout().Stride() == 32);
+                }
                 const auto matrixPlacement = [&](const auto &array, A::MatrixTableOptions options)
                 {
-                    R::Array<real> result(options.MakeLayout(array.RowCount(), array.Layout().Width()));
+                    R::Array<real> result(options.MakeLayout(array.RowCount(), array.Layout().Width()), R::Device::Host(), options.Allocation());
                     {
                         const auto read = array.Read();
                         auto write = result.Write();
@@ -141,7 +160,9 @@ TEST_CASE("CUDA assembled actions and Jacobi preserve sparse block order and cor
                             for (I j = 0; j < array.Layout().Width(); ++j)
                                 write.View<R::UniformTableRows>()(iCell, fullDiagonal && rowMajorBlocks ? (j % components) * components + j / components : j) = read.View()(iCell, j);
                     }
-                    return result.To(context.device);
+                    R::Array<real> placed(result.Layout(), context.device, options.Allocation());
+                    placed.CopyFrom(result, context).Wait();
+                    return placed;
                 };
                 const auto dd = matrixPlacement(diagonal, diagonalOptions), di = matrixPlacement(inverse, inverseOptions);
                 const C::LinearPatternStorage selectedPattern(columns, order, position, core, dependent,

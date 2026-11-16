@@ -6,8 +6,10 @@ namespace DNDS::Cauchy::CPU
                           LinearColumnsView sourceBlocks,
                           index components, bool fullDiagonal, bool rowMajorBlocks)
     {
-        const auto d = Algebra::MakeEigenRowMatrices(diagonal, components, fullDiagonal ? components : 1, Runtime::Device::Host(), rowMajorBlocks);
-        blocks.WithBlocks([&](const auto &values)
-                          { FillILUBlocks(d, values, factor, sourceBlocks, fullDiagonal); });
+        WithLinearMatrixRows(diagonal, rowMajorBlocks, [&](auto rows)
+                             {
+            const auto d = Algebra::MakeEigenRowMatrices(rows, components, fullDiagonal ? components : 1, Runtime::Device::Host(), rowMajorBlocks);
+            blocks.WithBlocks([&](const auto &values)
+                              { FillILUBlocks(d, values, factor, sourceBlocks, fullDiagonal); }); });
     }
 }

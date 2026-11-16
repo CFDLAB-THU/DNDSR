@@ -79,8 +79,13 @@ static void CompareSharedSweep(const C::FiniteVolumePlan &metrics, const C::Vari
     const auto originalOwned = coefficients.Owned().Clone();
     const auto originalGhost = coefficients.Ghost().Clone();
     plan.DoReconstructionIter(mean, coefficients, cpu, boundary);
-    for (auto kernel : {C::ReconstructionDeviceKernel::FP64Shared, C::ReconstructionDeviceKernel::FP64Wide,
-                        C::ReconstructionDeviceKernel::FP64Static, C::ReconstructionDeviceKernel::FP64MatrixShared})
+    std::vector<C::ReconstructionDeviceKernel> kernels{C::ReconstructionDeviceKernel::FP64Shared, C::ReconstructionDeviceKernel::FP64Wide,
+                                                       C::ReconstructionDeviceKernel::FP64Static, C::ReconstructionDeviceKernel::FP64MatrixShared};
+    for (auto tensor : {C::ReconstructionDeviceKernel::FP64TensorCore, C::ReconstructionDeviceKernel::FP64TensorCoreWide,
+                        C::ReconstructionDeviceKernel::FP64TensorCoreShared, C::ReconstructionDeviceKernel::FP64TensorCoreAsync})
+        if (resident.SupportsKernel(tensor))
+            kernels.push_back(tensor);
+    for (auto kernel : kernels)
         for (bool split : {false, true})
         {
             CAPTURE(int(kernel));
@@ -1201,9 +1206,10 @@ int main(int argc, char **argv)
     mpi = DNDS::MPIInfo(MPI_COMM_WORLD);
     if (const auto *value = std::getenv("DNDS_TEST_RECONSTRUCTION_KERNEL"))
     {
-        DNDS_check_throw_info(std::string(value) == "tensor" || std::string(value) == "shared" || std::string(value) == "async", "unknown test reconstruction kernel");
-        jacobiKernel = std::string(value) == "shared" ? C::ReconstructionDeviceKernel::FP64TensorCoreShared : std::string(value) == "async" ? C::ReconstructionDeviceKernel::FP64TensorCoreAsync
-                                                                                                                                            : C::ReconstructionDeviceKernel::FP64TensorCore;
+        DNDS_check_throw_info(std::string(value) == "tensor" || std::string(value) == "tensorWide" || std::string(value) == "shared" || std::string(value) == "async", "unknown test reconstruction kernel");
+        jacobiKernel = std::string(value) == "tensorWide" ? C::ReconstructionDeviceKernel::FP64TensorCoreWide : std::string(value) == "shared" ? C::ReconstructionDeviceKernel::FP64TensorCoreShared
+                                                                                                            : std::string(value) == "async"    ? C::ReconstructionDeviceKernel::FP64TensorCoreAsync
+                                                                                                                                               : C::ReconstructionDeviceKernel::FP64TensorCore;
     }
     if (const auto *value = std::getenv("DNDS_TEST_TRANSFER_PROVIDER"))
     {

@@ -1,7 +1,9 @@
 # Single-device AmgX dependency
 
-Plan61 uses one single-device AmgX instance per rank/device. DNDS retains the
-global operator and halo exchanges; AmgX approximates the owned-owned block.
+The current direct adapter uses one rank and one device, with the native
+int32 pattern and row-major compact blocks supplied directly to AmgX. The
+longer-term rank-local preconditioner vision requires native principal-matrix
+partitions; it does not authorize hidden off-rank filtering or repacking.
 There is no delegated multi-rank provider communication. This document records
 the build recipe; an enabled dependency is not evidence of a completed solver
 adapter or numerical validation.

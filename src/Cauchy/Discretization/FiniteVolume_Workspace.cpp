@@ -37,9 +37,14 @@ namespace DNDS::Cauchy
                         physical.Owned().Layout(), data.metrics.NumCell(),
                         index(physical.Width()) * data.reconstruction->NRecDOF()),
                     vectors));
+                const auto name = "Cauchy/reconstruction/workspace/" + state.Fields().Name(iField);
+                field.reconstruction->temporary.Owned().SetName(name + "/temporary/owned", DNDS_ALLOCATION_SITE());
+                field.reconstruction->temporary.Ghost().SetName(name + "/temporary/ghost", DNDS_ALLOCATION_SITE());
+                field.reconstruction->scratch.SetName(name + "/scratch", DNDS_ALLOCATION_SITE());
                 field.reconstructionBoundary.emplace(
                     data.reconstruction->BuildBoundaryValues(index(physical.Width())));
                 field.boundaryValues = field.reconstructionBoundary->values;
+                field.boundaryValues.SetName(name + "/boundaryValues", DNDS_ALLOCATION_SITE());
                 Algebra::Fill(field.reconstruction->temporary, 0.);
             }
             // A mean-only forecast suppresses face reconstruction, not the

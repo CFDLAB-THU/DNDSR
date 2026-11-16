@@ -7,6 +7,21 @@
 
 namespace DNDS::Cauchy::CPU
 {
+    /// Select the compile-time unit component stride once per operator, before
+    /// any cell scan. Pitched AoS is still contiguous inside a logical row.
+    /// Row-major, SoA and tiled rows keep their dynamic-stride descriptor.
+    template <class Callback>
+    void WithLinearMatrixRows(LinearDiagonalRows values, bool rowMajor, Callback &&callback)
+    {
+        if (values.kind == Runtime::RowLayoutKind::Table && !rowMajor)
+        {
+            const Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::TableRows> contiguous{
+                values.data, nullptr, values.rows, values.width, values.stride, nullptr, values.kind, values.device};
+            callback(contiguous);
+        }
+        else
+            callback(values);
+    }
     /// Stateless Jacobi row update. Scratch is allocated once per call, never
     /// per row. Static zero-start removes all off-diagonal/input accesses.
     template <bool Zero, class RHS, class Owned, class Ghost, class Output, class Inverse, class Blocks>

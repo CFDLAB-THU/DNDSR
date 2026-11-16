@@ -75,13 +75,19 @@ namespace DNDS::Cauchy
                                                std::vector<std::vector<index>> columns,
                                                std::vector<index> core, DiagonalStorage diagonal, OffDiagonalStorage offDiagonal, R::Device device, LinearSweepPartitions partitions, LinearMatrixOptions matrixOptions)
         : _space(std::move(space)), _pattern(BuildPattern(_space, std::move(columns), std::move(core), std::move(partitions), matrixOptions.indices)), _components(components), _diagonalStorage(diagonal), _rowMajorBlocks(matrixOptions.rowMajorBlocks),
-          _diagonal(matrixOptions.diagonal.MakeLayout(_pattern->partition->owned, DiagonalWidth(components, diagonal)), device),
-          _inverse(matrixOptions.inverse.MakeLayout(_pattern->partition->owned, DiagonalWidth(components, diagonal)), device), _offDiagonalStorage(offDiagonal)
+          _diagonal(matrixOptions.diagonal.MakeLayout(_pattern->partition->owned, DiagonalWidth(components, diagonal)), device, matrixOptions.diagonal.Allocation()),
+          _inverse(matrixOptions.inverse.MakeLayout(_pattern->partition->owned, DiagonalWidth(components, diagonal)), device, matrixOptions.inverse.Allocation()), _offDiagonalStorage(offDiagonal)
     {
+        _diagonal.SetName("Cauchy/linear/diagonal", DNDS_ALLOCATION_SITE());
+        _inverse.SetName("Cauchy/linear/inverse", DNDS_ALLOCATION_SITE());
         DNDS_check_throw_info(offDiagonal == OffDiagonalStorage::Assembled || offDiagonal == OffDiagonalStorage::DirectEvaluated,
                               "invalid off-diagonal storage mode");
         if (offDiagonal == OffDiagonalStorage::Assembled)
+        {
             _offDiagonal.emplace(Counts(Columns()), components, device, matrixOptions.offDiagonal, matrixOptions.rowMajorBlocks);
+            _offDiagonal->Values().SetName("Cauchy/linear/offDiagonal/values", DNDS_ALLOCATION_SITE());
+            _offDiagonal->OffsetArray().SetName("Cauchy/linear/offDiagonal/blockOffsets", DNDS_ALLOCATION_SITE());
+        }
         if (device != R::Device::Host())
         {
             auto placed = std::make_shared<Pattern>(_pattern->partition);

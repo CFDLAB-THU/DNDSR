@@ -35,7 +35,7 @@ namespace DNDS::Cauchy::NonlinearDetail
             DNDS_check_throw_info(input.layout == "aos" || input.layout == "soa" || input.layout == "aosoa32", "invalid matrix table layout");
             return Algebra::MatrixTableOptions{input.layout == "aos" ? Algebra::MatrixTableLayout::AoS : input.layout == "soa" ? Algebra::MatrixTableLayout::SoA
                                                                                                                                : Algebra::MatrixTableLayout::AoSoA32,
-                                               input.rowPaddingMultiple};
+                                               input.rowPaddingMultiple, input.rowStridePaddingMultiple, input.allocationAlignmentBytes};
         };
         DNDS_check_throw_info(settings.matrixStorage.indices == "auto" || settings.matrixStorage.indices == "int32" ||
                                   settings.matrixStorage.indices == "int64",

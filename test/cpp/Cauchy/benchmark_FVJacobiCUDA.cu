@@ -73,6 +73,8 @@ int main(int argc, char **argv)
     int components = 5, repeats = 16, device = 0, selectedMapping = -1;
     bool irregular = false;
     std::string matrixLayout = "aos", inverseLayout = "aos", indices = "int64", blockOrder = "columnMajor";
+    I matrixPitchBytes = 0, inversePitchBytes = 0;
+    size_t matrixAlignmentBytes = 0, inverseAlignmentBytes = 0;
     const auto options = [](const std::string &name)
     {
         DNDS_check_throw_info(name == "aos" || name == "soa" || name == "aosoa32", "invalid matrix layout");
@@ -106,6 +108,14 @@ int main(int argc, char **argv)
             indices = value;
         else if (key == "--block-order")
             blockOrder = value;
+        else if (key == "--matrix-pitch-bytes")
+            matrixPitchBytes = std::stoll(value);
+        else if (key == "--inverse-pitch-bytes")
+            inversePitchBytes = std::stoll(value);
+        else if (key == "--matrix-alignment-bytes")
+            matrixAlignmentBytes = std::stoull(value);
+        else if (key == "--inverse-alignment-bytes")
+            inverseAlignmentBytes = std::stoull(value);
         else
             DNDS_check_throw_info(false, "unknown benchmark option: " + key);
     }
@@ -139,7 +149,15 @@ int main(int argc, char **argv)
         const auto blocks = std::accumulate(counts.begin(), counts.end(), I(0));
         const C::LinearPatternStorage hostPattern(columns, order, position, order, empty, indices == "int32" ? C::LinearIndexStorage::Int32 : C::LinearIndexStorage::Int64);
         const auto pattern = hostPattern.Placed(context.device, context);
-        A::BlockMatrixStorage matrix(counts, components, R::Device::Host(), options(matrixLayout), rowMajorBlocks);
+        DNDS_check_throw_info(matrixPitchBytes >= 0 && inversePitchBytes >= 0 &&
+                                  matrixPitchBytes % sizeof(real) == 0 && inversePitchBytes % sizeof(real) == 0,
+                              "matrix pitches must be nonnegative multiples of sizeof(real)");
+        auto matrixOptions = options(matrixLayout), inverseOptions = options(inverseLayout);
+        matrixOptions.rowStridePaddingMultiple = matrixPitchBytes ? matrixPitchBytes / sizeof(real) : 1;
+        inverseOptions.rowStridePaddingMultiple = inversePitchBytes ? inversePitchBytes / sizeof(real) : 1;
+        matrixOptions.allocationAlignmentBytes = matrixAlignmentBytes;
+        inverseOptions.allocationAlignmentBytes = inverseAlignmentBytes;
+        A::BlockMatrixStorage matrix(counts, components, R::Device::Host(), matrixOptions, rowMajorBlocks);
         {
             auto write = matrix.Write();
             const auto view = write.ArrayView();
@@ -152,8 +170,26 @@ int main(int argc, char **argv)
         const auto placed = matrix.Placed(context.device, context);
         const auto hostInverse = Table<real>(rows, components * components, [&](I row, I j)
                                              { return Inverse(row, int(rowMajorBlocks ? j / components : j % components), int(rowMajorBlocks ? j % components : j / components)); });
-        const auto shapedInverse = R::ConvertLayout(hostInverse, options(inverseLayout).MakeLayout(rows, components * components));
-        const auto inverse = shapedInverse.To(context.device, context);
+        const auto shapedInverse = R::ConvertLayout(hostInverse, inverseOptions.MakeLayout(rows, components * components));
+        R::Array<real> inverse(shapedInverse.Layout(), context.device, inverseOptions.Allocation());
+        inverse.CopyFrom(shapedInverse, context).Wait();
+        const auto pitchCandidates = [&](const A::MatrixTableOptions &base, I logicalRows)
+        {
+            nlohmann::ordered_json candidates = nlohmann::ordered_json::array();
+            std::vector<I> seen;
+            for (const I bytes : {I(0), I(128), I(256)})
+            {
+                auto choice = base;
+                choice.rowStridePaddingMultiple = bytes ? bytes / sizeof(real) : 1;
+                const I stride = choice.MakeLayout(logicalRows, components * components).Stride();
+                if (std::find(seen.begin(), seen.end(), stride) == seen.end())
+                {
+                    seen.push_back(stride);
+                    candidates.push_back({{"representative_pitch_bytes", bytes}, {"physical_stride_elements", stride}});
+                }
+            }
+            return candidates;
+        };
         const auto input = Table<real>(rows, components, [](I row, I j)
                                        { return Value(row, int(j)); })
                                .To(context.device, context);
@@ -217,7 +253,16 @@ int main(int argc, char **argv)
                 const I indexBytes = rows * sizeof(I) + (zero ? 0 : (blocks + rows + 1) * indexWidth);
                 records.push_back({{"mapping", groups ? "componentGroup" : "thread"}, {"zero_start", zero}, {"median_ms", timings[1]}, {"minimum_ms", timings[0]}, {"maximum_ms", timings[2]}, {"model_unique_matrix_bytes", matrixBytes}, {"model_unique_vector_bytes", vectorBytes}, {"model_unique_index_bytes", indexBytes}, {"model_effective_GBs", (matrixBytes + vectorBytes + indexBytes) / (timings[1] * 1e6)}, {"cpu_sample_max_abs_error", error}});
             }
-        std::cout << nlohmann::ordered_json{{"gpu", properties.name}, {"device", device}, {"side", side}, {"rows", rows}, {"blocks", blocks}, {"components", components}, {"irregular", irregular}, {"block_order", blockOrder}, {"matrix_layout", matrixLayout}, {"inverse_layout", inverseLayout}, {"indices", indices}, {"matrix_allocated_bytes", placed.Values().Layout().Elements() * sizeof(real)}, {"inverse_allocated_bytes", inverse.Layout().Elements() * sizeof(real)}, {"numeric_block_offsets_bytes", (rows + 1) * sizeof(I)}, {"useful_byte_model", "unique logical matrix/vector/index payload; excludes duplicate numeric offsets and physical padding"}, {"repeats", repeats}, {"cache", "warmed fixed-input replay; payload exceeds L2 at default shape"}, {"timings", records}}.dump(2) << '\n';
+        const auto baseAlignment = [](const R::Array<real> &array)
+        {
+            for (size_t bytes = 4096; bytes >= sizeof(real); bytes /= 2)
+                if (array.Storage().IsAligned(bytes))
+                    return bytes;
+            return size_t(1);
+        };
+        nlohmann::ordered_json storage{
+            {"matrix_stride_elements", placed.Values().Layout().Stride()}, {"inverse_stride_elements", inverse.Layout().Stride()}, {"matrix_pitch_request_bytes", matrixPitchBytes}, {"inverse_pitch_request_bytes", inversePitchBytes}, {"matrix_alignment_request_bytes", matrixAlignmentBytes}, {"inverse_alignment_request_bytes", inverseAlignmentBytes}, {"matrix_base_alignment_bytes_at_least", baseAlignment(placed.Values())}, {"inverse_base_alignment_bytes_at_least", baseAlignment(inverse)}, {"matrix_padding_bytes", (placed.Values().Layout().Elements() - blocks * components * components) * sizeof(real)}, {"inverse_padding_bytes", (inverse.Layout().Elements() - rows * components * components) * sizeof(real)}, {"distinct_matrix_pitch_candidates", pitchCandidates(matrixOptions, blocks)}, {"distinct_inverse_pitch_candidates", pitchCandidates(inverseOptions, rows)}};
+        std::cout << nlohmann::ordered_json{{"storage", storage}, {"gpu", properties.name}, {"device", device}, {"side", side}, {"rows", rows}, {"blocks", blocks}, {"components", components}, {"irregular", irregular}, {"block_order", blockOrder}, {"matrix_layout", matrixLayout}, {"inverse_layout", inverseLayout}, {"indices", indices}, {"matrix_allocated_bytes", placed.Values().Layout().Elements() * sizeof(real)}, {"inverse_allocated_bytes", inverse.Layout().Elements() * sizeof(real)}, {"numeric_block_offsets_bytes", (rows + 1) * sizeof(I)}, {"useful_byte_model", "unique logical matrix/vector/index payload; excludes duplicate numeric offsets and physical padding"}, {"repeats", repeats}, {"cache", "warmed fixed-input replay; payload exceeds L2 at default shape"}, {"timings", records}}.dump(2) << '\n';
     }
     CUDA(cudaStreamDestroy(native));
 }

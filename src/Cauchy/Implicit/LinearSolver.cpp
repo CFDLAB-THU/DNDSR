@@ -291,6 +291,22 @@ namespace DNDS::Cauchy
                 : problem(std::move(matrix)), mpi(problem->Space().Communicator()), settings(std::move(controls)), execution(policy),
                   old(Ops::NewVector(prototype)), next(Ops::NewVector(prototype)), forward(Ops::NewVector(prototype)), action(Ops::NewVector(prototype)), residual(Ops::NewVector(prototype))
             {
+                // These are distinct solver-owned work vectors, even when the
+                // equation is represented by several physical field arrays.
+                const auto label = [](Field &value, const std::string &role)
+                {
+                    index iField = 0;
+                    Ops::VisitFields(value, [&](auto &part)
+                                     {
+                        const auto name = "Cauchy/linear/scratch/" + role + "/field" + std::to_string(iField++);
+                        part.Owned().SetName(name + "/owned", DNDS_ALLOCATION_SITE());
+                        part.Ghost().SetName(name + "/ghost", DNDS_ALLOCATION_SITE()); });
+                };
+                label(old, "old");
+                label(next, "next");
+                label(forward, "forward");
+                label(action, "action");
+                label(residual, "residual");
                 if (execution.streams)
                 {
                     compute = execution.streams->compute;
@@ -315,7 +331,10 @@ namespace DNDS::Cauchy
                 if (settings.method == "gmres")
                     gmres = std::make_unique<GMRES>(prototype, settings.subspace, algebra);
                 else
+                {
                     solution.emplace(Ops::NewVector(prototype));
+                    label(*solution, "solution");
+                }
                 if (UsesAMG(settings))
                     localAMG = std::make_unique<LocalAMGPreconditioner>(*problem);
                 else if (!UsesILU(settings))

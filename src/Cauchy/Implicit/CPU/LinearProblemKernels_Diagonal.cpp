@@ -26,13 +26,13 @@ namespace DNDS::Cauchy::CPU
                 return status;
             return fallbacks;
         }
-        const auto invert = [&](auto width) -> NumericalStatus
+        const auto invert = [&](auto width, auto diagonalRows, auto inverseRows) -> NumericalStatus
         {
             constexpr int Size = decltype(width)::value;
             const auto input = Algebra::MakeEigenRowMatrices<Size, Size>(
-                request.diagonal, request.components, request.components, Runtime::Device::Host(), request.rowMajor);
+                diagonalRows, request.components, request.components, Runtime::Device::Host(), request.rowMajor);
             const auto output = Algebra::MakeEigenRowMatrices<Size, Size>(
-                request.inverse, request.components, request.components, Runtime::Device::Host(), request.rowMajor);
+                inverseRows, request.components, request.components, Runtime::Device::Host(), request.rowMajor);
             const index cells = request.diagonal.RowCount();
             const index parts = std::min<index>(OMP::DistributedThreads(), std::max<index>(1, cells));
             std::vector<index> counts(parts, 0);
@@ -58,15 +58,33 @@ namespace DNDS::Cauchy::CPU
                 fallbacks += count;
             return status;
         };
+        // Preserve static unit-inner-stride Eigen arithmetic for the canonical
+        // CPU format. The once-per-call projection changes neither ownership
+        // nor physical pitch; strided and row-major cases keep honest strides.
+        const auto dispatch = [&](auto width)
+        {
+            if (!request.rowMajor && request.diagonal.kind == Runtime::RowLayoutKind::Table &&
+                request.inverse.kind == Runtime::RowLayoutKind::Table)
+            {
+                const auto table = [](auto view)
+                {
+                    using T = typename decltype(view)::value_type;
+                    return Runtime::ArrayView<T, Runtime::AccessBoundsChecks, Runtime::TableRows>{
+                        view.data, view.offsets, view.rows, view.width, view.stride, view.sizes, view.kind, view.device};
+                };
+                return invert(width, table(request.diagonal), table(request.inverse));
+            }
+            return invert(width, request.diagonal, request.inverse);
+        };
         NumericalStatus status;
         if (request.components == 5)
-            status = invert(std::integral_constant<int, 5>{});
+            status = dispatch(std::integral_constant<int, 5>{});
         else if (request.components == 6)
-            status = invert(std::integral_constant<int, 6>{});
+            status = dispatch(std::integral_constant<int, 6>{});
         else if (request.components == 7)
-            status = invert(std::integral_constant<int, 7>{});
+            status = dispatch(std::integral_constant<int, 7>{});
         else
-            status = invert(std::integral_constant<int, Eigen::Dynamic>{});
+            status = dispatch(std::integral_constant<int, Eigen::Dynamic>{});
         if (!status)
             return status;
         return fallbacks;

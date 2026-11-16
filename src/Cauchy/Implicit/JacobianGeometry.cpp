@@ -37,6 +37,8 @@ namespace DNDS::Cauchy
         }
         _columns = Runtime::Array<index>(Runtime::RowLayout::Ragged(columnLengths));
         _blockOffsets = Runtime::Array<index>(Runtime::RowLayout::Dense(columns.size() + 1, 1));
+        _columns.SetName("Cauchy/linear/jacobianGeometry/columns", DNDS_ALLOCATION_SITE());
+        _blockOffsets.SetName("Cauchy/linear/jacobianGeometry/blockOffsets", DNDS_ALLOCATION_SITE());
         std::vector<size_t> pointLengths(blocks, 0);
         {
             auto columnWrite = _columns.Write(), offsetWrite = _blockOffsets.Write();
@@ -64,6 +66,7 @@ namespace DNDS::Cauchy
             offsets(index(columns.size()), 0) = first;
         }
         _points = Runtime::Array<JacobianPointRecord>(Runtime::RowLayout::Ragged(pointLengths));
+        _points.SetName("Cauchy/linear/jacobianGeometry/points", DNDS_ALLOCATION_SITE());
         const auto offsetsRead = _blockOffsets.Read();
         const auto offsets = offsetsRead.View<Runtime::FixedRows<1>>();
         auto write = _points.Write();

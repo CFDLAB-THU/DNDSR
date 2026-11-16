@@ -105,6 +105,9 @@ namespace DNDS::Cauchy
                                             NonlinearDetail::ResolveMatrixStorage(settings.linear))),
               positivity(controls.numerics.positivity), reconstructionTolerance(settings.requireConvergedReconstruction && controls.numerics.reconstruction == "variational" ? controls.numerics.reconstructionTolerance : 0)
         {
+            spatial.Fields().SetName("Cauchy/nonlinear/spatial", DNDS_ALLOCATION_SITE());
+            defect.Fields().SetName("Cauchy/nonlinear/defect", DNDS_ALLOCATION_SITE());
+            candidate.Fields().SetName("Cauchy/nonlinear/candidate", DNDS_ALLOCATION_SITE());
             setup = std::make_unique<NonlinearSolveSetup>(
                 settings, state.Schema(), mpi.rank, "singleStageImplicit",
                 UpdatePolicyRequirements{

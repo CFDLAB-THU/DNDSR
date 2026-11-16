@@ -5,20 +5,24 @@ namespace DNDS::Cauchy::CPU
 {
     void ApplyLinearRows(const LinearBlockInput &request, LinearReadRows owned, LinearReadRows ghost, LinearWriteRows output)
     {
-        const auto diagonal = Algebra::MakeEigenRowMatrices(request.diagonal, request.components, request.fullDiagonal ? request.components : 1, Runtime::Device::Host(), request.rowMajorBlocks);
+        WithLinearMatrixRows(request.diagonal, request.rowMajorBlocks, [&](auto diagonalRows)
+                             {
+        const auto diagonal = Algebra::MakeEigenRowMatrices(diagonalRows, request.components, request.fullDiagonal ? request.components : 1, Runtime::Device::Host(), request.rowMajorBlocks);
         request.blocks.WithActions([&](const auto &blocks)
                                    {
             if (request.components == 5 && request.fullDiagonal)
                 ApplyBlockRows<5>(Algebra::MakeEigenRowMatrices<5, 1>(owned, 5, 1),
                     Algebra::MakeEigenRowMatrices<5, 1>(ghost, 5, 1), Algebra::MakeEigenRowMatrices<5, 1>(output, 5, 1),
-                    Algebra::MakeEigenRowMatrices<5, 5>(request.diagonal, 5, 5, Runtime::Device::Host(), request.rowMajorBlocks), blocks, request.pattern, request.rows, 5, true);
+                    Algebra::MakeEigenRowMatrices<5, 5>(diagonalRows, 5, 5, Runtime::Device::Host(), request.rowMajorBlocks), blocks, request.pattern, request.rows, 5, true);
             else
                 ApplyBlockRows(Algebra::MakeEigenRowMatrices(owned, request.components, 1), Algebra::MakeEigenRowMatrices(ghost, request.components, 1), Algebra::MakeEigenRowMatrices(output, request.components, 1), diagonal,
-                blocks, request.pattern, request.rows, request.components, request.fullDiagonal); });
+                blocks, request.pattern, request.rows, request.components, request.fullDiagonal); }); });
     }
     void JacobiLinearRows(const LinearBlockInput &request, LinearReadRows rhs, LinearReadRows owned, LinearReadRows ghost, LinearWriteRows output, bool zeroStart)
     {
-        const auto inverse = Algebra::MakeEigenRowMatrices(request.diagonal, request.components, request.fullDiagonal ? request.components : 1, Runtime::Device::Host(), request.rowMajorBlocks);
+        WithLinearMatrixRows(request.diagonal, request.rowMajorBlocks, [&](auto diagonalRows)
+                             {
+        const auto inverse = Algebra::MakeEigenRowMatrices(diagonalRows, request.components, request.fullDiagonal ? request.components : 1, Runtime::Device::Host(), request.rowMajorBlocks);
         if (zeroStart)
         {
             JacobiRows<true>(Algebra::MakeEigenRowMatrices(rhs, request.components, 1),
@@ -34,11 +38,13 @@ namespace DNDS::Cauchy::CPU
                 JacobiRows<decltype(zero)::value>(Algebra::MakeEigenRowMatrices(rhs, request.components, 1), Algebra::MakeEigenRowMatrices(owned, request.components, 1), Algebra::MakeEigenRowMatrices(ghost, request.components, 1), Algebra::MakeEigenRowMatrices(output, request.components, 1),
                     inverse, blocks, request.pattern, request.rows, request.components, request.fullDiagonal);
             };
-            if (zeroStart) invoke(std::true_type{}); else invoke(std::false_type{}); });
+            if (zeroStart) invoke(std::true_type{}); else invoke(std::false_type{}); }); });
     }
     void LowerSGSRows(const LinearBlockInput &request, LinearReadRows rhs, LinearReadRows old, LinearReadRows ghost, LinearWriteRows output, bool zeroStart)
     {
-        const auto inverse = Algebra::MakeEigenRowMatrices(request.diagonal, request.components, request.fullDiagonal ? request.components : 1, Runtime::Device::Host(), request.rowMajorBlocks);
+        WithLinearMatrixRows(request.diagonal, request.rowMajorBlocks, [&](auto diagonalRows)
+                             {
+        const auto inverse = Algebra::MakeEigenRowMatrices(diagonalRows, request.components, request.fullDiagonal ? request.components : 1, Runtime::Device::Host(), request.rowMajorBlocks);
         request.blocks.WithActions([&](const auto &blocks)
                                    {
             const auto invoke = [&](auto zero)
@@ -51,11 +57,13 @@ namespace DNDS::Cauchy::CPU
                     ScanSGSRows<false, Eigen::Dynamic, Zero>(Algebra::MakeEigenRowMatrices(rhs, request.components, 1), Algebra::MakeEigenRowMatrices(old, request.components, 1), Algebra::MakeEigenRowMatrices(output, request.components, 1), Algebra::MakeEigenRowMatrices(output, request.components, 1), Algebra::MakeEigenRowMatrices(ghost, request.components, 1), inverse,
                         blocks, request.pattern, request.rows, request.components, request.fullDiagonal, request.sweepPartitions);
             };
-            if (zeroStart) invoke(std::true_type{}); else invoke(std::false_type{}); });
+            if (zeroStart) invoke(std::true_type{}); else invoke(std::false_type{}); }); });
     }
     void UpperSGSRows(const LinearBlockInput &request, LinearReadRows rhs, LinearReadRows old, LinearReadRows forward, LinearReadRows ghost, LinearWriteRows output, bool zeroStart)
     {
-        const auto inverse = Algebra::MakeEigenRowMatrices(request.diagonal, request.components, request.fullDiagonal ? request.components : 1, Runtime::Device::Host(), request.rowMajorBlocks);
+        WithLinearMatrixRows(request.diagonal, request.rowMajorBlocks, [&](auto diagonalRows)
+                             {
+        const auto inverse = Algebra::MakeEigenRowMatrices(diagonalRows, request.components, request.fullDiagonal ? request.components : 1, Runtime::Device::Host(), request.rowMajorBlocks);
         request.blocks.WithActions([&](const auto &blocks)
                                    {
             const auto invoke = [&](auto zero)
@@ -68,6 +76,6 @@ namespace DNDS::Cauchy::CPU
                     ScanSGSRows<true, Eigen::Dynamic, Zero>(Algebra::MakeEigenRowMatrices(rhs, request.components, 1), Algebra::MakeEigenRowMatrices(old, request.components, 1), Algebra::MakeEigenRowMatrices(forward, request.components, 1), Algebra::MakeEigenRowMatrices(output, request.components, 1), Algebra::MakeEigenRowMatrices(ghost, request.components, 1), inverse,
                         blocks, request.pattern, request.rows, request.components, request.fullDiagonal, request.sweepPartitions);
             };
-            if (zeroStart) invoke(std::true_type{}); else invoke(std::false_type{}); });
+            if (zeroStart) invoke(std::true_type{}); else invoke(std::false_type{}); }); });
     }
 }

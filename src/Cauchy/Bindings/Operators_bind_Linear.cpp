@@ -15,7 +15,9 @@ namespace DNDS::Cauchy::Bindings
         py::class_<Algebra::MatrixTableOptions>(m, "MatrixTableOptions")
             .def(py::init<>())
             .def_readwrite("layout", &Algebra::MatrixTableOptions::layout)
-            .def_readwrite("row_padding_multiple", &Algebra::MatrixTableOptions::rowPaddingMultiple);
+            .def_readwrite("row_padding_multiple", &Algebra::MatrixTableOptions::rowPaddingMultiple)
+            .def_readwrite("row_stride_padding_multiple", &Algebra::MatrixTableOptions::rowStridePaddingMultiple)
+            .def_readwrite("allocation_alignment_bytes", &Algebra::MatrixTableOptions::allocationAlignmentBytes);
         py::enum_<LinearIndexStorage>(m, "LinearIndexStorage")
             .value("Int64", LinearIndexStorage::Int64)
             .value("Int32", LinearIndexStorage::Int32);
@@ -66,6 +68,7 @@ namespace DNDS::Cauchy::Bindings
             return R::PythonArray::Share(p.Diagonal());
         })
             .def_property_readonly("core", &LinearProblemContext::Core)
+            .def_property_readonly("row_major_blocks", &LinearProblemContext::RowMajorBlocks)
             .def_property_readonly("halo_dependent", &LinearProblemContext::HaloDependent)
             .def("invert_diagonal", &LinearProblemContext::InvertDiagonal, py::arg("refinement_steps") = 0,
                  py::call_guard<py::gil_scoped_release>(), Local)

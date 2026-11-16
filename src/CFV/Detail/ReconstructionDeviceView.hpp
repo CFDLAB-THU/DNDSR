@@ -28,6 +28,21 @@ namespace DNDS::CFV::Detail
                                          matrixAInvB32, vectorAInvB32, boundaryInjection32, localInverse, faceSide);
         }
     };
+    /// Sweep-only projection, excluding WBAP/sampling data from kernel arguments.
+    struct RawReconstructionSweepView
+    {
+        Runtime::ArrayView<const index> offsets, neighbors, faces, boundaryOffsets;
+        Runtime::ArrayView<const uint8_t> rotationActive, faceSide;
+        Runtime::ArrayView<const real> matrices, vectors, injection, inverse, rotation;
+        index n;
+        real relax;
+        bool rotated, triangle, faceCoupling;
+        explicit RawReconstructionSweepView(const ReconstructionDeviceView &p)
+            : offsets(p.offsets), neighbors(p.neighbors), faces(p.faces), boundaryOffsets(p.boundaryOffsets),
+              rotationActive(p.rotationActive), faceSide(p.faceSide), matrices(p.matrixAInvB), vectors(p.vectorAInvB),
+              injection(p.boundaryInjection), inverse(p.localInverse), rotation(p.rotation), n(p.n), relax(p.relax),
+              rotated(p.rotated), triangle(p.inverseTriangle), faceCoupling(p.faceCoupling) {}
+    };
     struct DeviceWorkSelection
     {
         Runtime::ArrayView<const index> rows;

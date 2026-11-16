@@ -79,6 +79,9 @@ namespace DNDS::Algebra
                                                                                 _rowMajor ? _matrixColumns * inner : inner));
         }
         index RowNumber() const { return _view.RowCount(); }
+        /// Borrow the retained scalar descriptor for an outer-loop policy
+        /// projection. This accessor neither acquires access nor owns storage.
+        ArrayView ValuesView() const { return _view; }
     };
 
     /// Optional static matrix dimensions specialize arithmetic, never Array

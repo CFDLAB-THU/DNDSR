@@ -141,8 +141,8 @@ namespace DNDS::Cauchy
             DNDS_check_throw_info(assembled || evaluator, "off-diagonal read scope is moved");
             if (assembled)
             {
-                const auto blocks = *assembled;
-                callback(AssembledActions<decltype(blocks)>{blocks});
+                assembled->WithLayout([&](const auto &blocks)
+                                      { callback(AssembledActions<std::decay_t<decltype(blocks)>>{blocks}); });
             }
             else
                 callback(EvaluatedActions{evaluator});
@@ -157,7 +157,7 @@ namespace DNDS::Cauchy
         {
             DNDS_check_throw_info(assembled || evaluator, "off-diagonal read scope is moved");
             if (assembled)
-                callback(*assembled);
+                assembled->WithLayout(std::forward<Callback>(callback));
             else if (components == 5)
                 callback(EvaluatedBlocks<5>{evaluator, components});
             else

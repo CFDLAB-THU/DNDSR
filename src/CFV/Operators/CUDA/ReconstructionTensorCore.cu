@@ -109,8 +109,13 @@ namespace DNDS::CFV::Detail
     }
     void LaunchJacobiTensorCore(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection, DevicePeriodicBlocks vectors,
                                 R::PairReadView<real> mean, R::PairReadView<real> input, R::ArrayView<const real> boundary,
-                                R::ArrayView<real> output, R::ArrayView<const int> status)
+                                R::ArrayView<real> output, R::ArrayView<const int> status, bool wide)
     {
+        if (plan.raw)
+        {
+            LaunchRawJacobiTensorCore(context, plan, selection, vectors, mean, input, boundary, output, status, wide);
+            return;
+        }
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA, "CUDA tensor Jacobi requires a CUDA context");
         DNDS_check_throw_info(!plan.quantized && !plan.raw, "FP64 tensor Jacobi requires FP64 sweep maps");
         R::ValidateViewDevices(context.device, plan, selection, vectors, mean, input, boundary, output, status);
@@ -118,7 +123,7 @@ namespace DNDS::CFV::Detail
                                      decltype(input), decltype(boundary), decltype(output), decltype(status)>();
         if (!selection.count)
             return;
-        JacobiTensorCore<<<unsigned(std::min<index>(256, (selection.count + 3) / 4)), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(plan, selection, vectors, mean, input, boundary, output, status);
+        JacobiTensorCore<<<unsigned(std::min<index>(wide ? 65535 : 256, (selection.count + 3) / 4)), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(plan, selection, vectors, mean, input, boundary, output, status);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA FP64 tensor-core Jacobi launch failed");
     }
 }

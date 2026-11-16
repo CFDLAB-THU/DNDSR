@@ -5,7 +5,7 @@ namespace DNDS::Cauchy
 {
     namespace
     {
-        Runtime::Array<index> Publish(const std::vector<index> &values)
+        Runtime::Array<index> Publish(const std::vector<index> &values, const char *name)
         {
             Runtime::Array<index> result(Runtime::RowLayout::Dense(values.size(), 1));
             {
@@ -14,6 +14,7 @@ namespace DNDS::Cauchy
                 for (index iRow = 0; iRow < index(values.size()); ++iRow)
                     view(iRow, 0) = values[iRow];
             }
+            result.SetName(name, DNDS_ALLOCATION_SITE());
             return result;
         }
         std::vector<index> Copy(const Runtime::Array<index> &values)
@@ -31,8 +32,8 @@ namespace DNDS::Cauchy
         const std::vector<std::vector<index>> &columns,
         const std::vector<index> &order, const std::vector<index> &position,
         const std::vector<index> &core, const std::vector<index> &dependent, LinearIndexStorage indices)
-        : _order(Publish(order)), _position(Publish(position)),
-          _core(Publish(core)), _dependent(Publish(dependent))
+        : _order(Publish(order, "Cauchy/linear/pattern/order")), _position(Publish(position, "Cauchy/linear/pattern/position")),
+          _core(Publish(core, "Cauchy/linear/pattern/core")), _dependent(Publish(dependent, "Cauchy/linear/pattern/dependent"))
     {
         DNDS_check_throw_info(indices == LinearIndexStorage::Int64 || indices == LinearIndexStorage::Int32,
                               "invalid linear native index storage");
@@ -49,6 +50,8 @@ namespace DNDS::Cauchy
             }
             _offsets32.emplace(Runtime::RowLayout::Dense(columns.size() + 1, 1));
             _columns32.emplace(Runtime::RowLayout::Dense(entries, 1));
+            _offsets32->SetName("Cauchy/linear/pattern/rowOffsets32", DNDS_ALLOCATION_SITE());
+            _columns32->SetName("Cauchy/linear/pattern/columns32", DNDS_ALLOCATION_SITE());
             auto offsets = _offsets32->Write(), values = _columns32->Write();
             const auto o = offsets.View<Runtime::FixedRows<1>>(), c = values.View<Runtime::FixedRows<1>>();
             index next = 0;
@@ -66,6 +69,7 @@ namespace DNDS::Cauchy
         for (const auto &row : columns)
             lengths.push_back(row.size());
         _columns = Runtime::Array<index>(Runtime::RowLayout::Ragged(lengths));
+        _columns.SetName("Cauchy/linear/pattern/columns64", DNDS_ALLOCATION_SITE());
         auto write = _columns.Write();
         const auto view = write.View<Runtime::CSRRows>();
         for (index iRow = 0; iRow < index(columns.size()); ++iRow)

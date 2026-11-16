@@ -104,9 +104,15 @@ namespace DNDS::Cauchy
                                                       bool(owner->limitedVRGeometry) || owner->settings.numerics.positivity))
     {
         if (owner->reconstruction)
+        {
             coefficients.emplace(BuildCoefficients(*owner, state));
+            coefficients->Fields().SetName("Cauchy/reconstruction/warm", DNDS_ALLOCATION_SITE());
+        }
         if (distinctFinalized)
+        {
             fluxCoefficients.emplace(BuildCoefficients(*owner, state));
+            fluxCoefficients->Fields().SetName("Cauchy/reconstruction/finalized", DNDS_ALLOCATION_SITE());
+        }
         for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
         {
             meanHalo.push_back(owner->BindTrackedHalo(state.PhysicalField(iField)));
@@ -124,6 +130,7 @@ namespace DNDS::Cauchy
         if (owner->limitedVRGeometry)
         {
             limitedVRHistory.emplace(R::RowLayout::Dense(owner->metrics.NumCell(), 2), owner->metrics.Device());
+            limitedVRHistory->SetName("Cauchy/reconstruction/limitedVRHistory", DNDS_ALLOCATION_SITE());
             // Construction-time initialization is synchronous and follows
             // the known allocation backend; history must start at zero on
             // CUDA too, before any LVR recurrence reads it.
