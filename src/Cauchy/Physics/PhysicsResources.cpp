@@ -9,7 +9,7 @@ namespace DNDS::Cauchy
     PhysicsResources PhysicsResources::Resolve(const EquationSettings &settings, index workerNumber)
     {
         const auto scales = ResolveReferenceScales(settings);
-        if (settings.eos == "perfectGas")
+        if (settings.system == "incompressibleACM" || settings.eos == "perfectGas")
         {
             DNDS_check_throw_info(settings.mixture.mechanismFile.empty() && settings.mixture.phaseName.empty(), "perfect gas has unused mixture input");
             return {EquationSystem::Resolve(settings), {}};

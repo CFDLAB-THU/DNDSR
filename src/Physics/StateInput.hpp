@@ -19,7 +19,9 @@ namespace DNDS::Physics
             RhoT,
             TP,
             /// Boundary-only [p0,T0,dirX,dirY,dirZ, primitive RANS, Y...].
-            TotalPT
+            TotalPT,
+            /// Constant-density [u,v,w,relative pressure,primitive RANS...].
+            VelocityPressure
         };
         Form form;
         bool physical;

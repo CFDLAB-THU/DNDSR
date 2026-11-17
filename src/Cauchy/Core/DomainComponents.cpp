@@ -57,7 +57,7 @@ namespace DNDS::Cauchy
             const std::vector<real> &initialConservative)
         {
             const auto &fv = discrete.Metrics();
-            if (equation.HasMixture() || equation.HasRANS())
+            if (equation.IsACM() || equation.HasMixture() || equation.HasRANS())
             {
                 const auto allocate = [&]
                 {

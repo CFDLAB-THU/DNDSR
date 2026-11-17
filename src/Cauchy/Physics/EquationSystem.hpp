@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Cauchy/Physics/PerfectGas.hpp"
+#include "Cauchy/Physics/ACMFlux.hpp"
 #include "Cauchy/Physics/FlowCharacteristics.hpp"
 #include "Cauchy/Physics/Positivity.hpp"
 #include "Cauchy/Physics/RiemannPreparation.hpp"
@@ -26,7 +27,8 @@ namespace DNDS::Cauchy
     enum class EquationKernelProfile
     {
         CompressiblePerfectGasCPU,
-        CompressibleIdealMixtureCPU
+        CompressibleIdealMixtureCPU,
+        ConstantDensityACMCPU
     };
     /// Exact local property provenance. Perfect-gas parameters compare by value;
     /// a loaded mixture also carries its immutable in-process material identity.
@@ -47,10 +49,12 @@ namespace DNDS::Cauchy
     {
         EquationSchema _schema;
         PerfectGas _gas;
+        std::optional<ACM::Parameters> _acm;
         std::optional<Physics::Thermodynamics::IdealGasMixture> _mixture;
         std::shared_ptr<const Physics::RANS::Model> _rans;
         bool _viscous;
         explicit EquationSystem(PerfectGas gas, bool viscous);
+        explicit EquationSystem(ACM::Parameters parameters, bool viscous);
 
     public:
         static EquationSystem Resolve(const EquationSettings &settings);
@@ -64,11 +68,13 @@ namespace DNDS::Cauchy
         /// explicitly; attaching metadata does not enable an absent FV kernel.
         EquationSystem WithRANS(const Physics::RANS::ModelSettings &settings) const;
         bool HasRANS() const { return bool(_rans); }
+        bool IsACM() const { return _acm.has_value(); }
+        const ACM::Parameters &ACMParameters() const { return _acm.value(); }
         const Physics::RANS::Model &RANS() const;
         const EquationSchema &Schema() const { return _schema; }
         const PerfectGas &Gas() const
         {
-            DNDS_check_throw_info(!_mixture, "perfect-gas-only operation needs the mixture property/profile adapter");
+            DNDS_check_throw_info(!_mixture && !_acm, "operation requires the perfect-gas equation profile");
             return _gas;
         }
         bool HasMixture() const { return _mixture.has_value(); }

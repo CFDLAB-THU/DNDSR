@@ -12,6 +12,23 @@ namespace C = DNDS::Cauchy;
 namespace P = DNDS::Physics;
 namespace E = DNDS::Euler;
 
+TEST_CASE("ACM velocity and relative pressure use independent physical scales")
+{
+    C::EquationSettings settings;
+    settings.system = "incompressibleACM";
+    settings.eos = "none";
+    CHECK_THROWS(C::ResolveReferenceScales(settings));
+    settings.referenceScales = {{"rho0", 2}, {"U0", 3}, {"L0", 4}, {"T0", 300}};
+    const auto equation = C::EquationSystem::Resolve(settings);
+    const auto scales = C::ResolveReferenceScales(settings);
+    C::PhysicalStateConverter converter(equation, scales);
+    const auto tagged = P::StateInput::Parse({{"type", "primUP_phy"}, {"state", {3, -6, 0, -36}}});
+    const auto q = converter.Conservative(tagged);
+    CHECK(q == std::vector<double>{1, -2, 0, -2});
+    CHECK(converter.Represent(q, P::StateInput::Form::VelocityPressure, true).values == tagged.values);
+    CHECK_THROWS(converter.Conservative(P::StateInput::Parse({1, 0, 0, 0, 1})));
+}
+
 TEST_CASE("Perfect gas molecular laws preserve Euler scaling and all property consumers")
 {
     const P::ReferenceScales scales{1.7, 230, 3.2, 310};

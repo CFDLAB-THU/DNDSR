@@ -34,7 +34,7 @@ namespace DNDS::Cauchy
                                   std::isfinite(equation.viscosity) && equation.viscosity >= 0 && std::isfinite(equation.prandtl) && equation.prandtl > 0,
                               "invalid Cauchy constitutive constants");
         DNDS_check_throw_info(equation.transport != "inviscid" || equation.viscosity == 0, "inviscid configuration has unused nonzero viscosity");
-        if (equation.eos == "perfectGas")
+        if (equation.eos == "perfectGas" || equation.system == "incompressibleACM")
             EquationSystem::Resolve(equation);
         DNDS_check_throw_info(settings.mesh.dimension == 2 || settings.mesh.dimension == 3, "Cauchy geometric dimension must be 2 or 3");
         DNDS_check_throw_info(settings.initialField.integrationOrder >= 0 &&
@@ -389,7 +389,20 @@ namespace DNDS::Cauchy
         }
         require(s.execution.transferPreflight == "collective" || s.execution.transferPreflight == "abortOnFailure", "transfer preflight " + s.execution.transferPreflight);
         require(s.execution.fieldGrouping == "equationBlocks" || s.execution.fieldGrouping == "coupled", "field grouping " + s.execution.fieldGrouping);
-        require(s.equation.system == "compressible", "equation " + s.equation.system);
+        const bool acm = s.equation.system == "incompressibleACM";
+        require(s.equation.system == "compressible" || acm, "equation " + s.equation.system);
+        if (acm)
+        {
+            require(s.numerics.limiter == "none", "ACM requires unlimited reconstruction");
+            require(s.numerics.flux == "Roe" || s.numerics.flux == "Rusanov", "ACM Roe or Rusanov flux");
+            require(s.motion.angularVelocity == Vector3{} && s.motion.translationVelocity == Vector3{}, "ACM on a fixed mesh");
+            require(s.equation.rans.model != "RealizableKE", "ACM RANS requires SA, Wilcox or SST");
+            const auto full = [&](const ImplicitSettings &level)
+            { require(level.diagonal == "block" && level.jacobianAction == "assembled", "ACM requires full assembled diagonal blocks at every level"); };
+            full(s.implicit);
+            for (index l = 1; l <= s.implicit.multigrid.levels; ++l)
+                full(s.implicit.ResolveCoarseLevel(l));
+        }
         const bool mixture = s.equation.eos == "idealGasMixture";
         const bool rans = s.equation.rans.model != "none", extended = mixture || rans;
         const bool comparisonSweep = reconstructionKernel != CFV::ReconstructionDeviceKernel::FP64 &&
@@ -452,13 +465,13 @@ namespace DNDS::Cauchy
             require((s.equation.rans.model == "SA" || s.equation.rans.model == "KOmegaWilcox" ||
                      s.equation.rans.model == "KOmegaSST" || s.equation.rans.model == "RealizableKE"),
                     "RANS spatial profile " + s.equation.rans.model);
-            require(s.equation.transport == "NewtonianFourier", "RANS requires viscous transport");
+            require(s.equation.transport == (acm ? "Newtonian" : "NewtonianFourier"), "RANS requires viscous transport");
         }
-        require(s.equation.eos == "perfectGas" || mixture, "EOS " + s.equation.eos);
+        require(acm ? s.equation.eos == "none" : s.equation.eos == "perfectGas" || mixture, "EOS " + s.equation.eos);
 #ifndef DNDS_USE_CANTERA
         require(!mixture, "idealGasMixture requires Cantera in this build");
 #endif
-        require(s.equation.transport == "inviscid" || s.equation.transport == "NewtonianFourier", "constitutive law " + s.equation.transport);
+        require(s.equation.transport == "inviscid" || s.equation.transport == (acm ? "Newtonian" : "NewtonianFourier"), "constitutive law " + s.equation.transport);
         require(s.equation.source == "none" || (mixture && s.equation.source == "chemical"), "volume source " + s.equation.source);
         if (mixture)
         {
@@ -471,7 +484,7 @@ namespace DNDS::Cauchy
                         s.equation.viscosityReferenceTemperature == 1 && s.equation.sutherlandConstant == 0,
                     "mixture transport uses its material, not a perfect-gas viscosity law");
         }
-        if (extended)
+        if (extended && !acm)
         {
             require(s.initialProfile.kind == "constant", "nonconstant extended equation initialization");
             const auto flux = Riemann::RiemannFlux::Resolve(s.numerics.flux);
@@ -503,7 +516,11 @@ namespace DNDS::Cauchy
         require(!s.implicit.multigrid.levels || (s.numerics.reconstruction == "variational" && s.numerics.cfv.maxOrder >= 2), "polynomial FAS requires high-order variational reconstruction");
         for (const auto &[zone, condition] : s.boundaries)
         {
-            require(condition.kind == "extrapolate" || condition.kind == "farfield" || condition.kind == "totalConditionInlet" || condition.kind == "slipWall" || condition.kind == "noSlipWall" || condition.kind == "analytic" || condition.kind == "doubleMachBottom" || condition.kind == "interface", "BC zone " + zone + ": " + condition.kind);
+            const bool common = condition.kind == "extrapolate" || condition.kind == "farfield" ||
+                                condition.kind == "slipWall" || condition.kind == "noSlipWall";
+            const bool familyBC = acm ? condition.kind == "velocityInlet" || condition.kind == "pressureOutlet" : condition.kind == "totalConditionInlet" || condition.kind == "analytic" || condition.kind == "doubleMachBottom" || condition.kind == "interface";
+            require(common || familyBC, "BC zone " + zone + ": " + condition.kind);
+            require(!acm || condition.thermal == "adiabatic", "ACM has no thermal wall equation");
             require(condition.kind != "doubleMachBottom" || condition.profile.kind == "doubleMachReflection", "DMR bottom requires its analytic shock profile");
             require(condition.thermal == "adiabatic" || condition.thermal == "isothermal", "thermal BC " + condition.thermal);
             require(condition.wallVelocityFrame == "mesh" || condition.wallVelocityFrame == "ground", "wall velocity frame " + condition.wallVelocityFrame);
@@ -511,7 +528,7 @@ namespace DNDS::Cauchy
                                   (condition.kind != "analytic" ||
                                    condition.profile.kind == "constant")),
                     "extended equation boundary profile " + condition.kind);
-            require(condition.kind != "noSlipWall" || s.equation.transport == "NewtonianFourier", "no-slip wall needs viscous transport");
+            require(condition.kind != "noSlipWall" || s.equation.transport == (acm ? "Newtonian" : "NewtonianFourier"), "no-slip wall needs viscous transport");
         }
         if (!missing.empty())
         {
@@ -521,7 +538,10 @@ namespace DNDS::Cauchy
             DNDS_check_throw_info(false, message);
         }
         const std::string backend = cuda ? "cuda/" : "cpu/";
-        return {{backend + (mixture ? "idealGasMixture/flow5+species" : "perfectGas/flow5") + (rans ? "+" + s.equation.rans.model : ""), backend + s.numerics.flux, backend + s.equation.transport,
+        return {{backend + (acm ? "incompressibleACM/flow4" : mixture ? "idealGasMixture/flow5+species"
+                                                                      : "perfectGas/flow5") +
+                     (rans ? "+" + s.equation.rans.model : ""),
+                 backend + s.numerics.flux, backend + s.equation.transport,
                  "cfv/" + s.numerics.reconstruction, "cfv/" + s.numerics.limiter, "runtime/mpi-direct"}};
     }
 }

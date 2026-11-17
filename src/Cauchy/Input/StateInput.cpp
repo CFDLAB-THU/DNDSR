@@ -8,23 +8,26 @@ namespace DNDS::Cauchy
     {
         EquationSystem equation;
         Physics::ReferenceScales scales;
-        PointEvaluator evaluator;
+        std::optional<PointEvaluator> evaluator;
         std::vector<real> scalarScales;
         int rans, species;
 
         Data(const EquationSystem &equationIn, const Physics::ReferenceScales &scalesIn,
              Physics::Chemistry::ChemicalWorkerPool::Lease worker)
             : equation(equationIn), scales(scalesIn),
-              evaluator(equation.MakePointEvaluator(std::move(worker), {})),
               rans(equation.HasRANS() ? equation.RANS().ComponentNumber() : 0),
               species(equation.HasMixture() ? equation.Mixture().SpeciesNumber() : 0)
         {
+            if (!equation.IsACM())
+                evaluator.emplace(equation.MakePointEvaluator(std::move(worker), {}));
         }
     };
 
     Physics::ReferenceScales ResolveReferenceScales(const EquationSettings &settings)
     {
         const auto &old = settings.mixture;
+        DNDS_check_throw_info(settings.system != "incompressibleACM" || !settings.referenceScales.is_null(),
+                              "constant-density ACM requires explicit referenceScales");
         Physics::ReferenceScales result{old.rho0, old.U0, old.L0, old.T0};
         if (!settings.referenceScales.is_null())
         {
@@ -93,7 +96,8 @@ namespace DNDS::Cauchy
         const auto &equation = _data->equation;
         const auto &scales = _data->scales;
         const auto &scalarScales = _data->scalarScales;
-        auto &evaluator = _data->evaluator;
+        DNDS_check_throw_info((parsed.form == Form::VelocityPressure) == equation.IsACM(),
+                              "primUP is the required input representation for constant-density ACM only");
         DNDS_check_throw_info(parsed.form != Form::TotalPT, "totalPT is only valid for a totalConditionInlet boundary");
         const int nr = _data->rans, ns = _data->species, ni = ns ? ns - 1 : 0;
         parsed.ToCodeUnits(scales, scalarScales);
@@ -102,6 +106,9 @@ namespace DNDS::Cauchy
                                           { return std::isfinite(v); }),
                               "physical state input is not finite");
         const bool conservative = parsed.form == Form::Conservative || parsed.form == Form::Sensible;
+        if (equation.IsACM())
+            return std::move(u);
+        auto &evaluator = _data->evaluator.value();
         DNDS_check_throw_info(u[0] > 0, "physical state requires positive rho (or T for primTP)");
         std::vector<real> fractions(ns), rhoY(ni);
         if (ns)
@@ -154,7 +161,19 @@ namespace DNDS::Cauchy
         const auto &equation = _data->equation;
         const auto &scales = _data->scales;
         const auto &scalarScales = _data->scalarScales;
-        auto &evaluator = _data->evaluator;
+        DNDS_check_throw_info((form == Form::VelocityPressure) == equation.IsACM(), "state representation differs from equation family");
+        if (equation.IsACM())
+        {
+            DNDS_check_throw_info(conservative.size() == 4 + scalarScales.size() &&
+                                      std::all_of(conservative.begin(), conservative.end(), [](real v)
+                                                  { return std::isfinite(v); }),
+                                  "invalid constant-density state");
+            Physics::StateInput result{form, false, conservative};
+            if (physical)
+                result.ToPhysicalUnits(scales, scalarScales);
+            return result;
+        }
+        auto &evaluator = _data->evaluator.value();
         const int rans = _data->rans, species = _data->species;
         DNDS_check_throw_info(form != Form::TotalPT, "totalPT is a boundary input, not a conservative-state representation");
         DNDS_check_throw_info(conservative.size() == 5 + scalarScales.size() && conservative[0] > 0 &&
@@ -212,6 +231,33 @@ namespace DNDS::Cauchy
         ResolvedPhysicalInputs prepared{settings, {}, {}};
         auto &result = prepared.settings;
         const auto scales = ResolveReferenceScales(settings.equation);
+        if (equation.IsACM())
+        {
+            PhysicalStateConverter converter(equation, scales);
+            auto convert = [&](const Json &input)
+            { return converter.Conservative(Physics::StateInput::Parse(input)); };
+            prepared.initialConservative = convert(settings.initialState);
+            if (!settings.referenceState.is_null())
+            {
+                prepared.referenceConservative = convert(settings.referenceState);
+                if (equation.HasRANS())
+                {
+                    auto &reference = result.numerics.ransState.referenceConservative;
+                    DNDS_check_throw_info(reference.empty(), "referenceState conflicts with partial RANS reference");
+                    reference["rho"] = 1; // Exact normalized material density.
+                    const auto names = equation.RANS().ComponentNames();
+                    for (index j = 0; j < equation.RANS().ComponentNumber(); ++j)
+                        reference[names[j]] = prepared.referenceConservative[4 + j];
+                }
+            }
+            for (auto &[zone, boundary] : result.boundaries)
+                if (!boundary.state.is_null())
+                {
+                    boundary.resolvedACMState = convert(boundary.state);
+                    boundary.state = {{"type", "primUP"}, {"state", boundary.resolvedACMState}};
+                }
+            return prepared;
+        }
         const auto resolve = [&](const Json &value)
         {
             return ResolvePhysicalState(value, equation, scales, workers ? workers->Acquire() : Physics::Chemistry::ChemicalWorkerPool::Lease{});

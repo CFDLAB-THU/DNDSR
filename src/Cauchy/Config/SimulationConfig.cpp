@@ -304,6 +304,8 @@ namespace DNDS::Cauchy
         for (const auto &domain : data->domains)
         {
             DNDS_check_throw_info(data->time.method != "ssprk3" || !domain.settings.implicit.multigrid.levels, "polynomial FAS requires an implicit time method");
+            DNDS_check_throw_info(domain.settings.equation.system != "incompressibleACM" || data->time.method != "ssprk3",
+                                  "SSPRK3 cannot advance the algebraic ACM continuity equation");
             if (data->time.method == "ditr")
                 data->time.ditr.ResolveControls(domain.settings.implicit);
         }

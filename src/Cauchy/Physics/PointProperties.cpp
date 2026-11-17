@@ -11,10 +11,10 @@ namespace DNDS::Cauchy
     {
         if (_mixture)
             return _mixture->TryTotalToStatic(pressure, temperature, speedSquared, independentFractions);
-        if (independentFractions.nSpecies)
+        if (!_gas || independentFractions.nSpecies)
             return NumericalStatus{NumericalError::InvalidState, 1, -1};
         return Physics::Thermodynamics::TotalToStaticPerfectGas(
-            pressure, temperature, speedSquared, _gas.gasConstant, _gas.gamma);
+            pressure, temperature, speedSquared, _gas->gasConstant, _gas->gamma);
     }
     PointEvaluator::PointEvaluator(const EquationSystem &equation,
                                    Physics::Chemistry::ChemicalWorkerPool::Lease worker, Physics::Thermodynamics::MixturePropertyRequest request)
@@ -31,7 +31,8 @@ namespace DNDS::Cauchy
         {
             DNDS_check_throw_info(!worker, "perfect gas requires no chemistry worker");
             DNDS_check_throw_info(!request.chemicalSource && !request.sourceJacobian, "perfect gas has no chemical source profile");
-            _gas = equation.Gas();
+            if (!equation.IsACM())
+                _gas = equation.Gas();
         }
     }
     Physics::Chemistry::SpeciesBufferView PointEvaluator::SpeciesInput() const
@@ -59,12 +60,12 @@ namespace DNDS::Cauchy
                 return NumericalStatus{NumericalError::InvalidState, 1, -1};
             if (!_mixture)
             {
-                if (!(!rhoY.nSpecies))
+                if (!_gas || rhoY.nSpecies)
                     return NumericalStatus{NumericalError::InvalidState, 2, -1};
                 auto value = primitive;
                 if (temperature > 0)
-                    value[4] = value[0] * _gas.gasConstant * temperature;
-                return _gas.Conservative(value);
+                    value[4] = value[0] * _gas->gasConstant * temperature;
+                return _gas->Conservative(value);
             }
             const auto point = temperature > 0 ? _mixture->FromRhoT(primitive[0], temperature, rhoY)
                                                : _mixture->FromRhoP(primitive[0], primitive[4], rhoY);
@@ -120,9 +121,9 @@ namespace DNDS::Cauchy
             PointProperties result;
             if (!_mixture)
             {
-                if (rhoY.nSpecies)
+                if (!_gas || rhoY.nSpecies)
                     return EvaluationError(NumericalError::InvalidInput, EvaluationFailure::Composition);
-                const auto point = TryPerfectGasPoint(_gas, flow, request.transport);
+                const auto point = TryPerfectGasPoint(*_gas, flow, request.transport);
                 if (!point)
                     return point.status;
                 result.thermo = point.value.thermo;

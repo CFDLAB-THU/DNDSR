@@ -70,7 +70,7 @@ namespace DNDS::Cauchy
     class PointEvaluator
     {
         friend class EquationSystem;
-        PerfectGas _gas;
+        std::optional<PerfectGas> _gas;
         bool _viscous;
         std::optional<Physics::Thermodynamics::IdealGasMixture::PointEvaluator> _mixture;
         Physics::Thermodynamics::MixturePropertyRequest _request;
@@ -87,8 +87,8 @@ namespace DNDS::Cauchy
         /// producers. Mixtures must use an equation-specific profile adapter.
         const PerfectGas &PerfectGasModel() const
         {
-            DNDS_assert_info(!_mixture, "perfect-gas profile requested from a mixture evaluator");
-            return _gas;
+            DNDS_assert_info(_gas, "point evaluator has no perfect-gas material");
+            return *_gas;
         }
         /// Construct flow5 from [rho,u,v,w,p] and Ns-1 conservative species.
         /// A positive temperature overrides p; zero selects the pressure input.

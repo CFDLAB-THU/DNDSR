@@ -10,8 +10,30 @@ namespace DNDS::Cauchy
         _gas.Validate();
         _schema = {"compressible", "sensible-total-energy", "conservative-volume", {{"flow", {{"rho", "mass/volume", "mass"}, {"rhou", "mass/(area*time)", "momentum"}, {"rhov", "mass/(area*time)", "momentum"}, {"rhow", "mass/(area*time)", "momentum"}, {"rhoE", "energy/volume", "total-energy"}}, {1}}}};
     }
+    EquationSystem::EquationSystem(ACM::Parameters parameters, bool viscous) : _acm(parameters), _viscous(viscous)
+    {
+        _schema = {"incompressibleACM", "none", "constant-density-velocity-pressure", {{"flow", {{"u", "length/time", "velocity"}, {"v", "length/time", "velocity"}, {"w", "length/time", "velocity"}, {"p", "pressure", "continuity"}}, {0}}}};
+    }
     EquationSystem EquationSystem::Resolve(const EquationSettings &settings)
     {
+        if (settings.system == "incompressibleACM")
+        {
+            const bool viscous = settings.transport == "Newtonian";
+            DNDS_check_throw_info(settings.eos == "none" && settings.source == "none" &&
+                                      (viscous || settings.transport == "inviscid"),
+                                  "constant-density ACM requires eos=none and inviscid or Newtonian transport");
+            DNDS_check_throw_info(std::isfinite(settings.acmBeta2) && settings.acmBeta2 > 0 && std::isfinite(settings.acmAlpha),
+                                  "invalid artificial-compressibility parameters");
+            DNDS_check_throw_info(std::isfinite(settings.viscosity) && settings.viscosity >= 0 &&
+                                      (viscous || settings.viscosity == 0) &&
+                                      (settings.viscosityModel == "constant" || settings.viscosityModel == "constantKinematic"),
+                                  "invalid incompressible viscosity");
+            ACM::Parameters acm{};
+            acm.beta2 = settings.acmBeta2;
+            acm.alpha = settings.acmAlpha;
+            acm.kinematicViscosity = settings.viscosity;
+            return EquationSystem(acm, viscous).WithRANS(settings.rans);
+        }
         DNDS_check_throw_info(settings.system == "compressible" && settings.eos == "perfectGas" && settings.source == "none" &&
                                   (settings.transport == "inviscid" || settings.transport == "NewtonianFourier"),
                               "unavailable Cauchy equation profile");
@@ -29,7 +51,7 @@ namespace DNDS::Cauchy
     }
     EquationSystem EquationSystem::FromIdealGasMixture(Physics::Thermodynamics::IdealGasMixture material, bool viscous)
     {
-        EquationSystem equation({}, viscous);
+        EquationSystem equation(PerfectGas{}, viscous);
         equation._mixture = std::move(material);
         equation._schema.energyConvention = "thermochemical-total-energy";
         const auto &species = equation.Mixture().SpeciesNames();
@@ -55,7 +77,8 @@ namespace DNDS::Cauchy
         if (!model->ComponentNumber())
             return result;
         DNDS_check_throw_info(_viscous, "RANS requires molecular viscous transport");
-        DNDS_check_throw_info(_mixture || _gas.viscosity > 0, "perfect-gas RANS requires positive molecular viscosity");
+        DNDS_check_throw_info(_mixture || (_acm ? _acm->kinematicViscosity : _gas.viscosity) > 0,
+                              "RANS requires positive molecular viscosity");
         EquationBlockSchema block{"rans", {}, {}};
         const auto names = model->ComponentNames();
         if (model->ComponentNumber() == 1)
@@ -104,6 +127,8 @@ namespace DNDS::Cauchy
     }
     EquationPropertyKey EquationSystem::PropertyKey() const
     {
+        if (_acm)
+            return {{}, {-1., _acm->alpha, _acm->beta2, _acm->kinematicViscosity, _viscous ? 1. : 0.}};
         if (_mixture)
         {
             const auto &scales = _mixture->Scales();
@@ -114,6 +139,8 @@ namespace DNDS::Cauchy
     EquationKernelProfile EquationSystem::ResolveKernelProfile(Runtime::Device device) const
     {
         DNDS_check_throw_info(device == Runtime::Device::Host(), "Cauchy equation kernels are unavailable on the requested device; no implicit host fallback");
+        if (_acm)
+            return EquationKernelProfile::ConstantDensityACMCPU;
         return _mixture ? EquationKernelProfile::CompressibleIdealMixtureCPU : EquationKernelProfile::CompressiblePerfectGasCPU;
     }
     FlowCharacteristics EquationSystem::PrepareCharacteristics(const FlowState &left, const FlowState &right, const Vector3 &faceNormal) const

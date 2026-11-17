@@ -37,6 +37,7 @@ namespace DNDS::Cauchy
     {
         std::string system = "compressible", eos = "perfectGas", transport = "inviscid", source = "none";
         real gamma = 1.4, gasConstant = 1., viscosity = 0., prandtl = 0.72;
+        real acmAlpha = 0, acmBeta2 = 1;
         std::string viscosityModel = "constant";
         real viscosityReferenceTemperature = 1., sutherlandConstant = 0.;
         MixtureSettings mixture;
@@ -47,6 +48,8 @@ namespace DNDS::Cauchy
         DNDS_DECLARE_CONFIG(EquationSettings)
         {
             DNDS_FIELD(system, "Coupled equation family");
+            DNDS_FIELD(acmAlpha, "Scheme-A artificial-compressibility parameter");
+            DNDS_FIELD(acmBeta2, "Positive artificial wave speed squared in code velocity units");
             DNDS_FIELD(eos, "Thermodynamic closure");
             DNDS_FIELD(transport, "inviscid or NewtonianFourier");
             DNDS_FIELD(source, "none or chemical reactive volume source; attached RANS sources are independent");
@@ -300,6 +303,8 @@ namespace DNDS::Cauchy
         /// Original tagged state is serialized; this prepared vector is not a
         /// second user configuration and is populated by physical input setup.
         std::vector<real> resolvedTotalState;
+        /// Setup-resolved velocity, relative pressure and turbulence scalars.
+        std::vector<real> resolvedACMState;
         std::array<real, 3> velocity{0, 0, 0};
         std::map<std::string, real> massFractions;
         std::map<std::string, real> ransConservative;
