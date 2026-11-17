@@ -346,11 +346,17 @@ def test_device_reconstruction_publication_layouts_and_python_shared_buffers(bac
     components = 5
     width = components * plan.NRecDOF()
     cpu = plan.BuildWorkspace(components)
-    gpu = resident.BuildWorkspaceWithLayout(components, R.RowLayout.tiled_col_major(0, width, 8))
+    # The general FP64 kernel exercises flexible physical layouts. Optimized
+    # sweep kernels deliberately accept compact AoS fields only.
+    coefficient_layout = (R.RowLayout.tiled_col_major(0, width, 8) if kernel_name == "FP64"
+                          else R.RowLayout.dense(0, width))
+    mean_layout = (R.RowLayout.col_major(0, components, 32, 1) if kernel_name == "FP64"
+                   else R.RowLayout.dense(0, components))
+    gpu = resident.BuildWorkspaceWithLayout(components, coefficient_layout)
     cpu_coefficients = plan.BuildCoefficients(components)
-    gpu_coefficients = resident.BuildCoefficientsWithLayout(components, R.RowLayout.tiled_col_major(0, width, 8))
+    gpu_coefficients = resident.BuildCoefficientsWithLayout(components, coefficient_layout)
     mean = metrics.BuildField(components)
-    gpu_mean = metrics.BuildFieldWithLayout(R.RowLayout.col_major(0, components, 32, 1), device)
+    gpu_mean = metrics.BuildFieldWithLayout(mean_layout, device)
     values = 1 + .01 * np.arange(metrics.NumCell() * components).reshape(-1, components)
     mean.owned.assign(values)
     gpu_mean.owned.assign(values)

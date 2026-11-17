@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #define DOCTEST_CONFIG_IMPLEMENT
 #include "doctest.h"
 #include "CFV/Plans/GradientPlan.hpp"
@@ -31,7 +32,7 @@ static void Produce(R::EagerEngine &engine, const R::ExecutionStream &stream, Tr
         R::ValidateViewDevices(c.device, left, right);
         R::CheckKernelArgumentBudget<decltype(left), decltype(right), double, bool>();
         if (!left.RowCount()) return;
-        ProduceMatrices<<<4, 128, 0, static_cast<cudaStream_t>(c.stream)>>>(left, right, shear, invalid);
+        ProduceMatrices<<<4, 128, 0, ::DNDS::Runtime::CUDAStream(c)>>>(left, right, shear, invalid);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "test characteristic producer launch failed"); }, R::Write(transform.forward), R::Write(transform.inverse));
 }
 template <class Transform, class Plan>

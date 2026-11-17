@@ -137,6 +137,9 @@ namespace DNDS::Runtime
         virtual void Submit(Work work, CommandKind kind, Retirement retire = {}) = 0;
         virtual void WaitFor(StreamEvent event) = 0;
         virtual StreamEvent Record() = 0;
+        /// Retire all accepted work before returning or reporting a terminal
+        /// error. A backend which cannot safely retire work must abort rather
+        /// than throw a recoverable, still-active shutdown to its caller.
         virtual void Drain() = 0;
         virtual Buffer Allocate(size_t)
         {

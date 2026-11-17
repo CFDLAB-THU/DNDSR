@@ -25,6 +25,28 @@ namespace DNDS::Runtime
     }
     namespace
     {
+        std::shared_ptr<StreamResource> ResolvePythonStream(py::handle stream, Device expected)
+        {
+            if (stream.is_none() || (py::isinstance<py::int_>(stream) && py::cast<int64_t>(stream) == 0))
+                return {};
+            if (py::isinstance<ExecutionStream>(stream))
+            {
+                const auto context = py::cast<ExecutionStream>(stream).Context();
+                DNDS_check_throw_info(context.device == expected, "stream placement mismatch");
+                return context.stream;
+            }
+            if (py::isinstance<ExecutionContext>(stream))
+            {
+                const auto context = py::cast<ExecutionContext>(stream);
+                context.Validate();
+                DNDS_check_throw_info(context.device == expected, "stream context placement mismatch");
+                return context.stream;
+            }
+            DNDS_check_throw_info(py::isinstance<StreamResource>(stream), "stream must be a managed execution stream/context (or None for immediate/default work)");
+            auto resource = py::cast<std::shared_ptr<StreamResource>>(stream);
+            DNDS_check_throw_info(resource->GetDevice() == expected, "stream resource placement mismatch");
+            return resource;
+        }
         // pybind11::error_already_set::restore is deliberately single-use.
         // Async completion can report one callback failure more than once.
         // Retain type/arguments, not live traceback frames: those can own the
@@ -130,8 +152,8 @@ namespace DNDS::Runtime
             std::optional<ReadAccess> read;
             std::optional<WriteAccess> write;
             ExecutionContext context;
-            PythonAccess(PythonArray &a, bool writable, uintptr_t stream) : storage(a.SharedStorage()), layout(storage->Layout()), dtype(a.Dtype()),
-                                                                            element(a.Element()), elementType(a.ElementType()), context(a.Context(stream))
+            PythonAccess(PythonArray &a, bool writable, std::shared_ptr<StreamResource> stream) : storage(a.SharedStorage()), layout(storage->Layout()), dtype(a.Dtype()),
+                                                                                                  element(a.Element()), elementType(a.ElementType()), context(a.Context(stream))
             {
                 if (writable)
                     write.emplace(a.Write(a.Context(stream)));
@@ -215,17 +237,18 @@ namespace DNDS::Runtime
             }
         };
 
-        PythonArray To(const PythonArray &a, Device device, uintptr_t stream)
+        PythonArray To(const PythonArray &a, Device device, py::object stream)
         {
             auto result = a.New(a.Layout(), device);
-            auto context = device == Device::Host() ? a.Context(stream) : ExecutionContext{device, reinterpret_cast<void *>(stream)};
+            auto resource = ResolvePythonStream(stream, device == Device::Host() ? a.Storage().GetDevice() : device);
+            auto context = device == Device::Host() ? a.Context(resource) : ExecutionContext{device, std::move(resource)};
             result.CopyFrom(a, context).Wait();
             return result;
         }
         py::array Numpy(const PythonArray &a)
         {
             DNDS_check_throw_info(!a.Layout().IsVariable(), "variable-row Array uses access.row() snapshots");
-            auto host = To(a, Device::Host(), 0);
+            auto host = To(a, Device::Host(), py::none());
             auto read = host.Read(ExecutionContext::Host());
             py::array result(a.Dtype(), {py::ssize_t(a.Layout().RowCount()), py::ssize_t(a.Layout().Width())});
             const auto shape = a.Layout();
@@ -368,10 +391,16 @@ namespace DNDS::Runtime
               "Opt-in creation provenance for subsequent tracked allocations; diagnostic setup overhead, not numerical timing.");
         m.def("allocation_snapshot", &AllocationDiagnostics::Snapshot,
               "Process-local allocation capacities/activity; does not synchronize devices or enter MPI.");
+        py::class_<StreamResource, std::shared_ptr<StreamResource>>(m, "StreamResource")
+            .def_property_readonly("device", &StreamResource::GetDevice)
+            .def_property_readonly("retired", &StreamResource::IsRetired)
+            .def("synchronize", &StreamResource::Synchronize, py::call_guard<py::gil_scoped_release>());
         py::class_<ExecutionContext>(m, "ExecutionContext")
-            .def(py::init([](Device d, uintptr_t stream)
-                          { return ExecutionContext{d, reinterpret_cast<void *>(stream)}; }),
-                 py::arg("device") = Device::Host(), py::arg("stream") = 0);
+            .def(py::init([](Device d, py::object stream)
+                          { return ExecutionContext{d, ResolvePythonStream(stream, d)}; }),
+                 py::arg("device") = Device::Host(), py::arg("stream") = py::none())
+            .def_readonly("stream", &ExecutionContext::stream)
+            .def("synchronize", &ExecutionContext::Synchronize, py::call_guard<py::gil_scoped_release>());
         py::class_<Completion>(m, "Completion")
             .def_static("record", &Completion::Record)
             .def("wait", &Completion::Wait, py::call_guard<py::gil_scoped_release>())
@@ -467,13 +496,13 @@ namespace DNDS::Runtime
             .def_property_readonly("shape_version", &PythonArray::ShapeVersion)
             .def("edit_rows", [](PythonArray &a, bool exclusive)
                  { return PythonRowBuilder(a, exclusive); }, py::arg("exclusive") = false, "Create detached draft, or require unique idle storage for exclusive editing. Commit explicitly; abandoned exclusive edits invalidate values.")
-            .def("read", [](PythonArray &a, uintptr_t stream)
-                 { return PythonAccess(a, false, stream); }, py::arg("stream") = 0, "Immediate read lease; pending writes conflict. Retain it through native uses and complete the supplied CUDA stream before release.")
-            .def("write", [](PythonArray &a, uintptr_t stream)
-                 { return PythonAccess(a, true, stream); }, py::arg("stream") = 0, "Exclusive immediate write lease. Complete native work on the supplied stream; exceptions invalidate values. Writes do not zero untouched elements.")
+            .def("read", [](PythonArray &a, py::object stream)
+                 { return PythonAccess(a, false, ResolvePythonStream(stream, a.Storage().GetDevice())); }, py::arg("stream") = 0, "Immediate read lease; pending writes conflict. Retain it through native uses and complete the supplied CUDA stream before release.")
+            .def("write", [](PythonArray &a, py::object stream)
+                 { return PythonAccess(a, true, ResolvePythonStream(stream, a.Storage().GetDevice())); }, py::arg("stream") = 0, "Exclusive immediate write lease. Complete native work on the supplied stream; exceptions invalidate values. Writes do not zero untouched elements.")
             .def("alias", [](const PythonArray &a)
                  { return a; })
-            .def("clone", [](const PythonArray &a, uintptr_t stream)
+            .def("clone", [](const PythonArray &a, py::object stream)
                  { return To(a, a.Storage().GetDevice(), stream); }, py::arg("stream") = 0)
             .def("to", &To, py::arg("device"), py::arg("stream") = 0)
             .def("reset", [](PythonArray &a, RowLayout layout, Device device)
@@ -513,9 +542,9 @@ namespace DNDS::Runtime
                      Detail::CopyBytes(bytes.data(), Device::Host(), access.write->View<uint8_t>().data + access.layout.ElementOffset(row, column) * bytes.size(),
                                        access.Placement(), bytes.size(), access.context).Wait();
                      return result; })
-            .def("copy_from", [](PythonArray &a, const PythonArray &source, uintptr_t stream)
+            .def("copy_from", [](PythonArray &a, const PythonArray &source, py::object stream)
                  { DNDS_check_throw_info(a.Dtype().equal(source.Dtype()) && a.Layout() == source.Layout(), "copy dtype/layout mismatch");
-                   return a.CopyFrom(source, a.Storage().GetDevice() == Device::Host() ? source.Context(stream) : a.Context(stream)); }, py::arg("source"), py::arg("stream") = 0)
+                   return a.CopyFrom(source, a.Storage().GetDevice() == Device::Host() ? source.Context(ResolvePythonStream(stream, source.Storage().GetDevice())) : a.Context(ResolvePythonStream(stream, a.Storage().GetDevice()))); }, py::arg("source"), py::arg("stream") = 0)
             .def("element_schema", &Schema)
             .def("write_serializer", [](const PythonArray &a, Serializer::SerializerBaseSSP s, const std::string &name, const MPIInfo &mpi, const std::string &schema)
                  { DNDS_check_throw_info(s, "null Array serializer");

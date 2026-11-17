@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/State/CUDA/StateDiagnosticsKernels.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include "DNDS/Device/ReductionCompletion.hpp"
@@ -95,7 +96,7 @@ namespace DNDS::Cauchy::CUDA
                 DNDS_check_throw_info(!input || outputs[i] != input, "CUDA diagnostic output aliases input");
         }
         R::CheckKernelArgumentBudget<DiagnosticInput, DiagnosticInput, Cells, PerfectGas, DiagnosticOutput, DiagnosticOutput, DiagnosticCounter>();
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         DNDS_check_throw_info(cudaMemsetAsync(completed.data, 0, sizeof(unsigned int), stream) == cudaSuccess, "CUDA diagnostic counter reset failed");
         Rows<<<unsigned(partial.RowCount()), Threads, 0, stream>>>(mean, residual, cells, gas, partial, result, completed);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA diagnostic reduction launch failed");

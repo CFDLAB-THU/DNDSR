@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
 #include "Physics/RANS/Model.hpp"
@@ -146,7 +147,7 @@ TEST_CASE("Shared perfect-gas Riemann arithmetic agrees on CUDA for all schemes 
                         {
                             R::ValidateViewDevices(context.device, x, y);
                             R::CheckKernelArgumentBudget<decltype(gas), decltype(solver), decltype(x), decltype(y)>();
-                            RiemannPoints<<<2, 128, 0, static_cast<cudaStream_t>(context.stream)>>>(gas, solver, x, y);
+                            RiemannPoints<<<2, 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(gas, solver, x, y);
                             DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "Riemann point launch failed"); }, R::Read(input), R::Write(output));
         engine.Close();
         const auto downloaded = output.To(R::Device::Host());
@@ -228,7 +229,7 @@ TEST_CASE("SA and k-omega CUDA point closures agree with canonical CPU source tr
                             {
                                 R::ValidateViewDevices(context.device, x, y, s);
                                 R::CheckKernelArgumentBudget<decltype(parameters), decltype(x), decltype(y), decltype(s)>();
-                                RANSPoints<<<2, 128, 0, static_cast<cudaStream_t>(context.stream)>>>(parameters, x, y, s);
+                                RANSPoints<<<2, 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(parameters, x, y, s);
                                 DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "RANS point launch failed"); }, R::Read(input), R::Write(output), R::Write(status));
             engine.Close();
             const auto downloaded = output.To(R::Device::Host());
@@ -321,7 +322,7 @@ TEST_CASE("Perfect-gas CUDA boundaries preserve physical and exterior targets in
                         {
                             R::ValidateViewDevices(context.device, x, y, s);
                             R::CheckKernelArgumentBudget<decltype(gas), decltype(parameters), decltype(kinematics), decltype(x), decltype(y), decltype(s)>();
-                            BoundaryPoints<<<1, 128, 0, static_cast<cudaStream_t>(context.stream)>>>(gas, parameters, kinematics, x, y, s);
+                            BoundaryPoints<<<1, 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(gas, parameters, kinematics, x, y, s);
                             DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "boundary point launch failed"); }, R::Read(input), R::Write(output), R::Write(status));
         engine.Close();
         const auto downloaded = output.To(R::Device::Host());

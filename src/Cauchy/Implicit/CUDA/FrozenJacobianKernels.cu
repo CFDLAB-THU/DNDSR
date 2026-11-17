@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "DNDS/Algebra/BlockIndex.hpp"
 #include "Cauchy/Implicit/CUDA/FrozenJacobianKernels.hpp"
 #include "Cauchy/Implicit/CUDA/FrozenJacobianKernels_Point.hpp"
@@ -188,7 +189,7 @@ namespace DNDS::Cauchy::CUDA
         if (!selected.RowCount())
             return;
         const unsigned blocks = unsigned(std::min<index>(65535, (selected.RowCount() + 127) / 128));
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         if (s.parameters.components == 5)
             Assemble<5><<<blocks, 128, 0, stream>>>(s, selected, output, status);
         else if (s.parameters.components == 6)
@@ -227,7 +228,7 @@ namespace DNDS::Cauchy::CUDA
         if (!selected.RowCount())
             return;
         const unsigned blocks = unsigned(std::min<index>(65535, (selected.RowCount() + 127) / 128));
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         if (jacobi)
         {
             if (n == 5)

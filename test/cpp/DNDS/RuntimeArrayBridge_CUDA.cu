@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "DNDS/Runtime/Array/Array.hpp"
 #include "DNDS/Runtime/Execution/EagerArray.hpp"
 #include <cuda_runtime.h>
@@ -29,7 +30,7 @@ void BridgeScaleCUDAAsync(R::EagerEngine &engine, const R::ExecutionStream &stre
 {
     R::SubmitArrays(engine, stream, [factor](R::ExecutionContext context, R::ArrayView<double> values)
                     {
-        ScaleSharedState<<<7, 32, 0, static_cast<cudaStream_t>(context.stream)>>>(values, factor);
+        ScaleSharedState<<<7, 32, 0, ::DNDS::Runtime::CUDAStream(context)>>>(values, factor);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "bridge async scale failed"); }, R::ReadWrite(array));
 }
 
@@ -39,7 +40,7 @@ void BridgeHoldCUDA(R::EagerEngine &engine, const R::ExecutionStream &stream, st
     DNDS_check_throw_info(cudaFuncGetAttributes(&attributes, ScaleSharedState) == cudaSuccess, "bridge preload failed");
     engine.Submit(stream, [flag = std::move(flag)](R::ExecutionContext context)
                   {
-        auto status = cudaLaunchHostFunc(static_cast<cudaStream_t>(context.stream), [](void *pointer)
+        auto status = cudaLaunchHostFunc(::DNDS::Runtime::CUDAStream(context), [](void *pointer)
         {
             auto *open = static_cast<std::atomic<bool> *>(pointer);
             while (!open->load()) std::this_thread::sleep_for(std::chrono::microseconds(50));

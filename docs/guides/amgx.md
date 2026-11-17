@@ -8,8 +8,32 @@ There is no delegated multi-rank provider communication. This document records
 the build recipe; an enabled dependency is not evidence of a completed solver
 adapter or numerical validation.
 
-AmgX is not in the current cfd_externals package. Build its pinned v2.5.0 source
-(`cc1cebdbb32b14d33762d4ddabcb2e23c1669f47`) with the independent recipe:
+The canonical `cfd_externals` package now builds the modified AmgX fork, pinned
+by `dependency_versions.json` (currently `cf13c94`, native storage API 1).
+CCCL 3.7 headers are supplied by `cfd_externals_headeronlys` v0.3.0, and
+Caliper is built by the binary dependency helper. For a CUDA-enabled local
+package, reuse existing MPI/HDF5/CGNS/Cantera and build only the added libraries:
+
+```sh
+python3 external/cfd_externals/cfd_externals_build.py --libs caliper \
+    --caliper-cuda --amgx --cuda-architectures '80;86' --jobs 32 \
+    --cuda-compiler /usr/local/cuda-13.2/bin/nvcc \
+    --cuda-host-compiler /usr/bin/g++-12
+cmake -S . -B build-cuda -DDNDS_USE_CUDA=ON -DDNDS_USE_AMGX=ON \
+    -DDNDS_CFD_EXTERNALS_INSTALL="$PWD/external/cfd_externals/install"
+```
+
+Caliper's CPU instrumentation is always present in that package; CUDA
+NVTX/CUPTI services remain opt-in. AmgX is single-device, built without MPI.
+CMake verifies its pinned fork revision, required APIs and the selected
+library's SHA256 against `share/cfd_externals/amgx-build.json` before linking.
+Explicit `DNDS_AMGX_ROOT` and `caliper_DIR` overrides remain available. When
+moving an existing build to a new prefix, also clear or update cached
+`DNDS_AMGX_INCLUDE_DIR` / `DNDS_AMGX_LIBRARY` entries.
+
+The following independent recipe is retained only to reproduce the historical
+pre-package evidence. It patches upstream v2.5.0
+(`cc1cebdbb32b14d33762d4ddabcb2e23c1669f47`):
 
 ```sh
 python3 scripts/build_amgx.py --root workspace/dependencies/amgx \

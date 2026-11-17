@@ -134,6 +134,11 @@ namespace DNDS::CFV
             view.rows = entries * n * n; // The public API owns its own sentinel.
             data.provider->UpdateValuesBorrowed(context, view);
         }
+        // These immutable read scopes pin storage and its abstract stream
+        // resource. Queued consumers retain Data through completion; after a
+        // healthy engine.Close(), late scope fences observe retired completion
+        // without another native call. Do not mark a scope complete before its
+        // view is formed: Complete intentionally revokes further view access.
         for (const auto *array : {&data.deviceOffsets, &data.deviceColumns})
             data.intReads.push_back(array->Read(context));
         for (const auto *array : {&data.incidenceOffsets, &data.neighbors, &data.boundaryOffsets})

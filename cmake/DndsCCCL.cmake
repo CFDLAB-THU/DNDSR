@@ -1,8 +1,8 @@
 # Optional header-only compute arithmetic. Numerical targets opt in explicitly;
 # an enabled build must use one coherent CCCL header family in every consumer.
 option(DNDS_USE_CCCL_COMPUTE "Enable experimental CCCL float-float kernel arithmetic" OFF)
-set(DNDS_CCCL_SOURCE_ROOT "${PROJECT_SOURCE_DIR}/external/cccl-source" CACHE PATH
-    "Pinned CCCL source checkout for experimental compute arithmetic")
+set(DNDS_CCCL_SOURCE_ROOT "${PROJECT_SOURCE_DIR}/external/cccl" CACHE PATH
+    "Coherent CCCL headers supplied by cfd_externals_headeronlys v0.3.0")
 add_library(dnds_compute_scalar INTERFACE)
 add_library(DNDS::ComputeScalar ALIAS dnds_compute_scalar)
 if(DNDS_USE_CCCL_COMPUTE)

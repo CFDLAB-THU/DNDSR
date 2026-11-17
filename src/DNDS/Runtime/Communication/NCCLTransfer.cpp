@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "DNDS/Runtime/Communication/NCCLTransfer.hpp"
 #include "DNDS/Runtime/Communication/DevicePacking.hpp"
 #include "DNDS/Runtime/Communication/TransferAccess.hpp"
@@ -175,9 +176,9 @@ namespace DNDS::Runtime
                 {
                     const auto &p = peers[peer];
                     if (p.receiveBytes)
-                        remember(ncclRecv(dst + p.receiveOffset, p.receiveBytes, ncclUint8, int(peer), owner->comm, static_cast<cudaStream_t>(context.stream)));
+                        remember(ncclRecv(dst + p.receiveOffset, p.receiveBytes, ncclUint8, int(peer), owner->comm, ::DNDS::Runtime::CUDAStream(context)));
                     if (p.sendBytes)
-                        remember(ncclSend(src + p.sendOffset, p.sendBytes, ncclUint8, int(peer), owner->comm, static_cast<cudaStream_t>(context.stream)));
+                        remember(ncclSend(src + p.sendOffset, p.sendBytes, ncclUint8, int(peer), owner->comm, ::DNDS::Runtime::CUDAStream(context)));
                 }
                 remember(ncclGroupEnd());
                 CheckNCCL(error);

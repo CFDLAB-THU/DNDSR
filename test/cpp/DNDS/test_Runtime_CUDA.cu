@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
 #include "DNDS/Runtime/Storage/Buffer.hpp"
@@ -220,13 +221,13 @@ static void CheckEagerTypedCUDA(RowLayout shape)
     SubmitArrays(engine, stream, [](ExecutionContext context, auto output)
                  {
         static_assert(std::is_same_v<decltype(output), ArrayView<double, AccessBoundsChecks, Policy>>);
-        FillStaticRows<Policy><<<3, 32, 0, static_cast<cudaStream_t>(context.stream)>>>(output);
+        FillStaticRows<Policy><<<3, 32, 0, ::DNDS::Runtime::CUDAStream(context)>>>(output);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "typed eager fill launch failed"); }, WriteAs<Policy>(values));
     SubmitArrays(engine, stream, [](ExecutionContext context, auto input, auto output)
                  {
         static_assert(std::is_same_v<decltype(input), ArrayView<const double, AccessBoundsChecks, Policy>>);
         static_assert(decltype(output)::row_width == 1);
-        ReadStaticRows<Policy><<<3, 32, 0, static_cast<cudaStream_t>(context.stream)>>>(input, output);
+        ReadStaticRows<Policy><<<3, 32, 0, ::DNDS::Runtime::CUDAStream(context)>>>(input, output);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "typed eager read launch failed"); }, ReadAs<Policy>(values), WriteAs<FixedRows<1>>(sums));
     values.Reset(Policy::Default());
     stream.Record().WaitHost();
@@ -317,9 +318,9 @@ TEST_CASE("Native ragged Array CUDA views retain metadata through replacement")
 
 TEST_CASE("Padded CUDA views use logical row sizes and preserve capacity padding")
 {
-    cudaStream_t stream;
-    REQUIRE(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking) == cudaSuccess);
-    const auto context = ExecutionContext::CUDA(0, stream);
+    const auto streamOwner = CreateCUDAStream(0);
+    const auto context = ExecutionContext::CUDA(0, streamOwner);
+    const auto stream = CUDAStream(context);
     {
         Array<double> values(RowLayout::Padded({0, 5, 7, 33, 0, 19}, 40), Device::CUDA(0));
         auto retained = values;
@@ -339,7 +340,6 @@ TEST_CASE("Padded CUDA views use logical row sizes and preserve capacity padding
             for (size_t j = host.RowSize(i); j < 40; ++j)
                 CHECK(flat[i * 40 + j] == 0);
     }
-    REQUIRE(cudaStreamDestroy(stream) == cudaSuccess);
 }
 
 struct RowEntry
@@ -412,9 +412,9 @@ __global__ void Scale(Span<const double> input, Span<double> output)
 TEST_CASE("External CUDA allocation and shared CSR metadata survive pending kernels")
 {
     REQUIRE(cudaSetDevice(0) == cudaSuccess);
-    cudaStream_t stream;
-    REQUIRE(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking) == cudaSuccess);
-    const auto context = ExecutionContext::CUDA(0, stream);
+    const auto streamOwner = CreateCUDAStream(0);
+    const auto context = ExecutionContext::CUDA(0, streamOwner);
+    const auto stream = CUDAStream(context);
     int releases = 0;
     bool releaseOK = true;
     {
@@ -453,15 +453,14 @@ TEST_CASE("External CUDA allocation and shared CSR metadata survive pending kern
     }
     CHECK(releaseOK);
     CHECK(releases == 1);
-    REQUIRE(cudaStreamDestroy(stream) == cudaSuccess);
 }
 
 TEST_CASE("Runtime CUDA residency, cross-stream transfer and retained leases")
 {
     REQUIRE(cudaSetDevice(0) == cudaSuccess);
-    cudaStream_t stream1, stream2;
-    REQUIRE(cudaStreamCreateWithFlags(&stream1, cudaStreamNonBlocking) == cudaSuccess);
-    REQUIRE(cudaStreamCreateWithFlags(&stream2, cudaStreamNonBlocking) == cudaSuccess);
+    const auto stream1Owner = CreateCUDAStream(0), stream2Owner = CreateCUDAStream(0);
+    const auto stream1 = CUDAStream(ExecutionContext::CUDA(0, stream1Owner));
+    const auto stream2 = CUDAStream(ExecutionContext::CUDA(0, stream2Owner));
     {
         constexpr size_t count = 513;
         auto h = Buffer::Allocate(count * sizeof(double));
@@ -472,15 +471,15 @@ TEST_CASE("Runtime CUDA residency, cross-stream transfer and retained leases")
         }
         auto d = Buffer::Allocate(h.Bytes(), Device::CUDA(0));
         auto out = Buffer::Allocate(h.Bytes(), Device::CUDA(0));
-        auto c1 = ExecutionContext::CUDA(0, stream1);
-        auto c2 = ExecutionContext::CUDA(0, stream2);
+        auto c1 = ExecutionContext::CUDA(0, stream1Owner);
+        auto c2 = ExecutionContext::CUDA(0, stream2Owner);
 #if CUDART_VERSION >= 13000
         int deviceCount = 0;
         REQUIRE(cudaGetDeviceCount(&deviceCount) == cudaSuccess);
         if (deviceCount > 1)
         {
             auto second = Buffer::Allocate(8, Device::CUDA(1));
-            CHECK_THROWS(second.Read(ExecutionContext::CUDA(1, stream1)));
+            CHECK_THROWS(second.Read(ExecutionContext::CUDA(1, stream1Owner)));
         }
 #endif
         {
@@ -513,16 +512,14 @@ TEST_CASE("Runtime CUDA residency, cross-stream transfer and retained leases")
         for (size_t i = 0; i < count; ++i)
             CHECK(read.View<double>()[i] == 3 * double(i));
     }
-    REQUIRE(cudaStreamDestroy(stream1) == cudaSuccess);
-    REQUIRE(cudaStreamDestroy(stream2) == cudaSuccess);
 }
 
 TEST_CASE("Copied CUDA completions share terminal observation without releasing attached leases")
 {
     REQUIRE(cudaSetDevice(0) == cudaSuccess);
-    cudaStream_t stream = nullptr;
-    REQUIRE(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking) == cudaSuccess);
-    const auto context = ExecutionContext::CUDA(0, stream);
+    const auto streamOwner = CreateCUDAStream(0);
+    const auto context = ExecutionContext::CUDA(0, streamOwner);
+    const auto stream = CUDAStream(context);
     std::atomic<int> released{0};
     std::weak_ptr<void> lifetime;
     {
@@ -576,7 +573,6 @@ TEST_CASE("Copied CUDA completions share terminal observation without releasing 
         CHECK_NOTHROW(done.Wait());
     }
     CHECK(released.load() == 1);
-    REQUIRE(cudaStreamDestroy(stream) == cudaSuccess);
 }
 
 TEST_CASE("Legacy device mirror cannot supply stale native host access")

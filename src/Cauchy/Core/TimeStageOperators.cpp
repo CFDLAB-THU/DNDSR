@@ -40,7 +40,7 @@ namespace DNDS::Cauchy
         {
             state.Validate();
             DNDS_check_throw_info(engine.Owns(stream) && stream.Context().device == context.device &&
-                                      stream.Context().stream == context.stream && state.Device() == context.device && state.Space().Same(geometry.Space()),
+                                      (context.device == R::Device::Host() || stream.Context().stream == context.stream) && state.Device() == context.device && state.Space().Same(geometry.Space()),
                                   "time-stage stream, state space or device differs");
             DNDS_check_throw_info(std::isfinite(c.dt) && c.dt > 0 && std::isfinite(c.historyWeight) && c.historyWeight >= 0 &&
                                       std::isfinite(c.stageWeight) && c.stageWeight >= 0,
@@ -105,7 +105,7 @@ namespace DNDS::Cauchy
     {
         const auto retained = _data;
         DNDS_check_throw_info(engine.Owns(stream) && stream.Context().device == retained->context.device &&
-                                  stream.Context().stream == retained->context.stream && spectral.GetDevice() == retained->context.device &&
+                                  (retained->context.device == R::Device::Host() || stream.Context().stream == retained->context.stream) && spectral.GetDevice() == retained->context.device &&
                                   spectral.RowCount() == retained->geometry.NumCell() && !spectral.Layout().IsVariable() && spectral.Layout().Width() == 1 &&
                                   std::isfinite(cfl) && cfl > 0,
                               "invalid CFL operator stream, spectral field or control");

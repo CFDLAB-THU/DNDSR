@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeCharacteristicKernels.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include "DNDS/Algebra/CUDA/CountRows.cuh"
@@ -71,7 +72,7 @@ namespace DNDS::Cauchy::CUDA
         const index blocks = std::max<index>(1, std::min<index>(256, (flags.RowCount() + 127) / 128));
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && partial.RowCount() == blocks && result.RowCount() == 1,
                               "characteristic fallback reduction scratch differs");
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         Algebra::CUDA::CountRows<128, false><<<unsigned(blocks), 128, 0, stream>>>(flags, partial);
         Algebra::CUDA::CountRows<128, false><<<1, 128, 0, stream>>>(partial.ConstView(), result);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "characteristic fallback reduction launch failed");
@@ -91,7 +92,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<CharacteristicGeometry, Means, PerfectGas, CharacteristicOutput, CharacteristicOutput, Status, Flags>();
         if (!forward.RowCount())
             return;
-        Characteristics<<<unsigned(std::min<index>(256, (forward.RowCount() + 127) / 128)), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(
+        Characteristics<<<unsigned(std::min<index>(256, (forward.RowCount() + 127) / 128)), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(
             geometry, mean, gas, forward, inverse, status, fallback);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA characteristic producer launch failed");
     }

@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "DNDS/Algebra/LocalProducts.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include "DNDS/Device/ReductionCompletion.hpp"
@@ -87,7 +88,7 @@ namespace DNDS::Algebra::Detail
         for (const auto buffer : {x.data, y.data, scales.data, static_cast<const real *>(partial.data), static_cast<const real *>(result.data)})
             DNDS_check_throw_info(static_cast<const void *>(buffer) != completed.data, "CUDA local reduction counter aliases payload");
         R::CheckKernelArgumentBudget<ProductInput, ProductInput, ProductInput, ProductOutput, ProductOutput, ProductCompletion, index>();
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         DNDS_check_throw_info(cudaMemsetAsync(completed.data, 0, sizeof(unsigned int), stream) == cudaSuccess,
                               "CUDA local reduction counter reset failed");
         if (finite)

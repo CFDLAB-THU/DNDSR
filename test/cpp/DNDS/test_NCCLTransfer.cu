@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #define DOCTEST_CONFIG_IMPLEMENT
 #include "doctest.h"
 #include "DNDS/Runtime/Communication/NCCLTransfer.hpp"
@@ -88,7 +89,7 @@ struct TestGate
                       {
             // The callback owns its flag even on an exceptional test exit.
             auto retained = std::make_unique<std::shared_ptr<std::atomic<bool>>>(flag);
-            const auto status = cudaLaunchHostFunc(static_cast<cudaStream_t>(c.stream), [](void *p)
+            const auto status = cudaLaunchHostFunc(::DNDS::Runtime::CUDAStream(c), [](void *p)
             {
                 std::unique_ptr<std::shared_ptr<std::atomic<bool>>> owner(static_cast<std::shared_ptr<std::atomic<bool>> *>(p));
                 while (!(*owner)->load()) std::this_thread::sleep_for(std::chrono::microseconds(50));
@@ -128,12 +129,12 @@ TEST_CASE("NCCL packed rows match exact values across layouts and queued produce
                 for (int pass = 1; pass <= 3; ++pass)
                 {
                     R::SubmitArrays(engine, producer, [pass](auto c, auto output)
-                                    { Produce<<<1,128,0,static_cast<cudaStream_t>(c.stream)>>>(output, mpi.rank, pass); LaunchOK(); }, R::Write(source));
+                                    { Produce<<<1,128,0,::DNDS::Runtime::CUDAStream(c)>>>(output, mpi.rank, pass); LaunchOK(); }, R::Write(source));
                     auto transfer = binding.SubmitAfter(engine, comm, producer.Record());
                     CHECK_FALSE(transfer.RequiresHostProgress());
                     transfer.EnqueueWait(consumer);
                     R::SubmitArrays(engine, consumer, [previous, pass](auto c, auto input, auto errors)
-                                    { CheckRows<<<1,128,0,static_cast<cudaStream_t>(c.stream)>>>(input, errors, previous, pass); LaunchOK(); }, R::Read(destination), R::ReadWrite(errors));
+                                    { CheckRows<<<1,128,0,::DNDS::Runtime::CUDAStream(c)>>>(input, errors, previous, pass); LaunchOK(); }, R::Read(destination), R::ReadWrite(errors));
                     producer.WaitFor(consumer.Record());
                 }
                 engine.Synchronize();
@@ -277,7 +278,7 @@ TEST_CASE("NCCL enqueue overlaps core work with gated transfer and retains lease
     ownedProvider.reset();
     control.reset();
     const auto core = [](auto c, auto input, auto result)
-    { Core<<<1,128,0,static_cast<cudaStream_t>(c.stream)>>>(input, result); LaunchOK(); };
+    { Core<<<1,128,0,::DNDS::Runtime::CUDAStream(c)>>>(input, result); LaunchOK(); };
     R::SubmitArrays(engine, compute, core, R::Read(source), R::Write(output));
     binding->Enqueue(engine, comm);
     engine.Synchronize();
@@ -343,7 +344,7 @@ TEST_CASE("CUDA producer chains device-packed MPI and NCCL across streams throug
             .Bind(mpiRows, ncclRows, R::TransferTransport::DevicePacked, ncclOptions));
 
     R::SubmitArrays(engine, producer, [](auto c, auto output)
-                    { Produce<<<1,128,0,static_cast<cudaStream_t>(c.stream)>>>(output, mpi.rank, 7); LaunchOK(); }, R::Write(source));
+                    { Produce<<<1,128,0,::DNDS::Runtime::CUDAStream(c)>>>(output, mpi.rank, 7); LaunchOK(); }, R::Write(source));
     // CUDA-aware MPI is not stream ordered: the controller must observe the
     // producer before MPI may reserve/read its device buffer. The subsequent
     // MPI completion is exported as an event for the stream-ordered NCCL leg.
@@ -404,7 +405,7 @@ TEST_CASE("NCCL DOF halo publishes the retired producer version without a submis
     TestGate gate;
     gate.Enqueue(engine, producer);
     R::SubmitArrays(engine, producer, [](auto context, auto output)
-                    { Produce<<<1,128,0,static_cast<cudaStream_t>(context.stream)>>>(output, mpi.rank, 9); LaunchOK(); }, R::Write(field.Owned()));
+                    { Produce<<<1,128,0,::DNDS::Runtime::CUDAStream(context)>>>(output, mpi.rank, 9); LaunchOK(); }, R::Write(field.Owned()));
     auto publication = std::make_shared<A::DofHalo<>::Operation>(halo.Begin(9, engine, producer));
     publication->EnqueuePublication(engine, consumer, publication);
     publication.reset();
@@ -432,7 +433,7 @@ TEST_CASE("Unchecked NCCL missing producer edge demonstrably transfers a stale e
     auto producer = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
     auto comm = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
     const auto produce = [](auto c, auto output)
-    { Produce<<<1,128,0,static_cast<cudaStream_t>(c.stream)>>>(output, mpi.rank, 1); LaunchOK(); };
+    { Produce<<<1,128,0,::DNDS::Runtime::CUDAStream(c)>>>(output, mpi.rank, 1); LaunchOK(); };
     R::SubmitArrays(engine, producer, produce, R::Write(warm));
     engine.Synchronize();
     TestGate gate;

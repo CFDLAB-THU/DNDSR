@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeStateKernels.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include <cuda_runtime.h>
@@ -119,7 +120,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<StatusOutput>();
         if (!output.RowCount())
             return;
-        ClearStatusRows<<<unsigned(StateReductionScratchRows(output.RowCount())), Threads, 0, static_cast<cudaStream_t>(context.stream)>>>(output);
+        ClearStatusRows<<<unsigned(StateReductionScratchRows(output.RowCount())), Threads, 0, ::DNDS::Runtime::CUDAStream(context)>>>(output);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA status clear launch failed");
     }
     void ReduceNumericalStatus(R::ExecutionContext context, StatusInput first, StatusInput second,
@@ -133,7 +134,7 @@ namespace DNDS::Cauchy::CUDA
                                   scratch.data != first.data && scratch.data != second.data,
                               "CUDA status reduction workspace shape or alias differs");
         R::CheckKernelArgumentBudget<StatusInput, StatusInput, StatusOutput>();
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         StatusRows<<<unsigned(scratch.RowCount()), Threads, 0, stream>>>(first, second, scratch);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA status partial reduction launch failed");
         StatusRows<<<1, Threads, 0, stream>>>(scratch.ConstView(), {}, result);
@@ -157,7 +158,7 @@ namespace DNDS::Cauchy::CUDA
                                   bounds.rans.components == means.Width() - 5 && (!bounds.rans.components || bounds.ransFirst == 5),
                               "CUDA admissibility supports combined perfect-gas flow5/SA/2EQ only");
         R::CheckKernelArgumentBudget<StateInput, AdmissibilityView, StateReductionOutput, ActiveRows>();
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         // The temporary all-ones value bits are an unsigned atomic identity,
         // never read as a floating value. Every block publishes exact 0 or 1;
         // one empty block also publishes 1. Invalid-row -1 is the same unsigned
@@ -178,7 +179,7 @@ namespace DNDS::Cauchy::CUDA
                                   identity.RowCount() == 1 && result.RowCount() == 1 && identity.data != result.data &&
                                   static_cast<const void *>(result.data) != sums.data && static_cast<const void *>(result.data) != cells.data,
                               "CUDA stable-step shape/control differs");
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         DNDS_check_throw_info(cudaMemcpyAsync(result.data, identity.data, sizeof(StateReductionValue), cudaMemcpyDeviceToDevice, stream) == cudaSuccess,
                               "CUDA stable-step reset failed");
         if (!sums.RowCount())

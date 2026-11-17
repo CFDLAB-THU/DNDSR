@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 // Host-only test driver: device work is launched through the public C++
 // wrappers. Compile the independent Eigen inverse oracle with the host
@@ -238,7 +239,7 @@ TEST_CASE("CUDA assembled actions and Jacobi preserve sparse block order and cor
                             launch(splitOutput.View<R::TableRows>(), C::CUDA::VectorReadRows{});
                             request.rows = p.View().dependent;
                             launch(splitOutput.View<R::TableRows>(), g.View<R::UniformTableRows>());
-                            REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
+                            REQUIRE(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)) == cudaSuccess);
                         }
                         Compare(actual, expected);
                         Compare(split, expected);

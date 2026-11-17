@@ -33,7 +33,7 @@ namespace DNDS::Cauchy
     void NonlinearOperators::Data::Check(R::EagerEngine &engine, const R::ExecutionStream &stream, const EquationDofs &state) const
     {
         state.Validate();
-        DNDS_check_throw_info(engine.Owns(stream) && stream.Context().device == context.device && stream.Context().stream == context.stream &&
+        DNDS_check_throw_info(engine.Owns(stream) && stream.Context().device == context.device && (context.device == R::Device::Host() || stream.Context().stream == context.stream) &&
                                   state.Device() == context.device && state.Space().Same(geometry.Space()) && state.ComponentNumber() == policy.View().thermal.components,
                               "nonlinear operator stream, shape, space or placement differs");
         if (context.device != R::Device::Host())

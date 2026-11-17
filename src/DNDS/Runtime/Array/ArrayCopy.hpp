@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DNDS/Runtime/Array/Array.hpp"
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 
 namespace DNDS::Runtime
 {

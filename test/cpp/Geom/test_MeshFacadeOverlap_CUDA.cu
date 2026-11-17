@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #define DOCTEST_CONFIG_IMPLEMENT
 #include "doctest.h"
 #include "MeshFacadeOverlapFixture.hpp"
@@ -52,7 +53,7 @@ static void CheckGPUOverlap(T::Fixture &fixture, int ordinal)
     auto operation = binding.BeginScheduled(comm.Context());
     CHECK_THROWS(ghost.Read(comm.Context()));
     R::SubmitArrays(engine, core, [view](R::ExecutionContext context, auto rows, auto u, auto output)
-                    { DNDS_check_throw_info(T::LaunchCore(view, rows, u, output, static_cast<cudaStream_t>(context.stream)) == cudaSuccess,
+                    { DNDS_check_throw_info(T::LaunchCore(view, rows, u, output, ::DNDS::Runtime::CUDAStream(context)) == cudaSuccess,
                                             "real mesh owned-only CUDA core kernel failed"); }, R::Read(coreRows), R::Read(owned), R::Write(coreResult));
     const auto coreDone = core.Record();
     // Deterministic completion-observation gate: do not acknowledge the actual
@@ -70,7 +71,7 @@ static void CheckGPUOverlap(T::Fixture &fixture, int ordinal)
     ring.WaitFor(received); // Portable MPI must be observed before a CUDA wait.
     ring.WaitFor(coreDone);
     R::SubmitArrays(engine, ring, [view](R::ExecutionContext context, auto rows, auto u, auto halo, auto output)
-                    { DNDS_check_throw_info(T::LaunchRing(view, rows, u, halo, output, static_cast<cudaStream_t>(context.stream)) == cudaSuccess,
+                    { DNDS_check_throw_info(T::LaunchRing(view, rows, u, halo, output, ::DNDS::Runtime::CUDAStream(context)) == cudaSuccess,
                                             "real mesh CUDA ring kernel failed"); }, R::Read(ringRows), R::Read(owned), R::Read(ghost), R::Write(ringResult));
     const auto ringDone = ring.Record();
     core.WaitFor(ringDone);

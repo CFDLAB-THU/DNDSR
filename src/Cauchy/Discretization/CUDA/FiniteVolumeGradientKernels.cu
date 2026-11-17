@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeGradientKernels.hpp"
 #include "Cauchy/Physics/PerfectGasPoint.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
@@ -232,7 +233,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<GradientLimiterGeometry, GradientMeans, GradientInput, GradientOutput, GradientIndices, int, bool>();
         if (!selected.RowCount())
             return;
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         switch (components)
         {
         case 5:
@@ -267,7 +268,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<GradientLimiterGeometry, GradientInput, GradientOutput, GradientIndices, GradientPositivityParameters, ModalPositivitySummary>();
         if (!selected.RowCount())
             return;
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         switch (components)
         {
         case 5:
@@ -298,7 +299,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<GradientInput, GradientOutput, PerfectGas, GradientStatus>();
         if (!output.RowCount())
             return;
-        Primitive<<<Blocks(output.RowCount()), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(input, output, gas, status);
+        Primitive<<<Blocks(output.RowCount()), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(input, output, gas, status);
         CheckLaunch();
     }
 }

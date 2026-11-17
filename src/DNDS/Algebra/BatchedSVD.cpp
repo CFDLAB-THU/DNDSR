@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "DNDS/Algebra/BatchedSVD.hpp"
 #include <climits>
 #include <cstdlib>
@@ -97,7 +98,7 @@ namespace DNDS::Algebra
             return;
         DeviceScope device(context.device.ordinal);
         Check(cusolverDnCreate(&_data->handle));
-        Check(cusolverDnSetStream(_data->handle, static_cast<cudaStream_t>(context.stream)));
+        Check(cusolverDnSetStream(_data->handle, ::DNDS::Runtime::CUDAStream(context)));
         Check(cusolverDnCreateGesvdjInfo(&_data->policy));
         Check(cusolverDnXgesvdjSetTolerance(_data->policy, std::numeric_limits<real>::epsilon()));
         Check(cusolverDnXgesvdjSetMaxSweeps(_data->policy, 100));

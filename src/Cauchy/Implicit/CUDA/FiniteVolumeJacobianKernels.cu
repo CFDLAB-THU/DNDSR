@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/Implicit/CUDA/FiniteVolumeJacobianKernels.hpp"
 #include "Cauchy/Physics/PerfectGasPoint.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
@@ -135,7 +136,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<PerfectGas, VectorReadRows, VectorReadRows, decltype(means), LinearWriteRows, LinearWriteRows, JacobianStatus>();
         if (!rows)
             return;
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         if (n == 5)
             Freeze<5><<<Blocks(rows), 128, 0, stream>>>(gas, owned, ghost, means, pressure, derivative, status);
         else if (n == 6)
@@ -156,7 +157,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<LinearReadRows, LinearReadRows, LinearWriteRows>();
         if (!output.RowCount())
             return;
-        FreezeSignal<<<Blocks(output.RowCount()), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(owned, ghost, output);
+        FreezeSignal<<<Blocks(output.RowCount()), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(owned, ghost, output);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA Jacobian signal copy launch failed");
     }
     void InitializeJacobianDiagonal(R::ExecutionContext context, JacobianCellMetrics cells,
@@ -177,7 +178,7 @@ namespace DNDS::Cauchy::CUDA
                                      RigidFrameParameters, real, real, int, bool, bool>();
         if (!selected.RowCount())
             return;
-        Initialize<<<Blocks(selected.RowCount()), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(
+        Initialize<<<Blocks(selected.RowCount()), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(
             cells, inverseTau, diagonal, status, selected, frame, physicalMass, scale, components, fullBlock, rowMajorBlocks);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA Jacobian diagonal initialization launch failed");
     }

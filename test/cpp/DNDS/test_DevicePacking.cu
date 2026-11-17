@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #define DOCTEST_CONFIG_IMPLEMENT
 #include "doctest.h"
 #include "DNDS/Runtime/Communication/RowTransfer.hpp"
@@ -194,11 +195,11 @@ TEST_CASE("Device packing begins eagerly and overlaps owned compute with a gated
     // Load the real compute kernel before blocking a native CUDA stream;
     // lazy module loading itself may synchronize the context.
     R::SubmitArrays(engine, compute, [](R::ExecutionContext c, auto input, auto result)
-                    {Core<<<17,32,0,static_cast<cudaStream_t>(c.stream)>>>(input,result);DNDS_check_throw_info(cudaGetLastError()==cudaSuccess,"core preload failed"); }, R::Read(source), R::Write(output));
+                    {Core<<<17,32,0,::DNDS::Runtime::CUDAStream(c)>>>(input,result);DNDS_check_throw_info(cudaGetLastError()==cudaSuccess,"core preload failed"); }, R::Read(source), R::Write(output));
     engine.Synchronize();
     binding->Begin(comm.Context()).Wait(); // warm MPI and packing modules too
     engine.Submit(comm, [open](R::ExecutionContext c)
-                  { DNDS_check_throw_info(cudaLaunchHostFunc(static_cast<cudaStream_t>(c.stream), [](void *p)
+                  { DNDS_check_throw_info(cudaLaunchHostFunc(::DNDS::Runtime::CUDAStream(c), [](void *p)
                                                              {while(!static_cast<std::atomic<bool> *>(p)->load())std::this_thread::sleep_for(std::chrono::microseconds(50)); }, open.get()) == cudaSuccess,
                                           "gate launch failed"); });
     std::atomic<bool> returned{false}, timedOut{false};
@@ -208,7 +209,7 @@ TEST_CASE("Device packing begins eagerly and overlaps owned compute with a gated
     CHECK_FALSE(timedOut.load());
     CHECK_FALSE(operation.Test());
     R::SubmitArrays(engine, compute, [](R::ExecutionContext c, auto input, auto result)
-                    {Core<<<17,32,0,static_cast<cudaStream_t>(c.stream)>>>(input,result);DNDS_check_throw_info(cudaGetLastError()==cudaSuccess,"core launch failed"); }, R::Read(source), R::Write(output));
+                    {Core<<<17,32,0,::DNDS::Runtime::CUDAStream(c)>>>(input,result);DNDS_check_throw_info(cudaGetLastError()==cudaSuccess,"core launch failed"); }, R::Read(source), R::Write(output));
     compute.Record().WaitHost();
     returned = true;
     watchdog.join();

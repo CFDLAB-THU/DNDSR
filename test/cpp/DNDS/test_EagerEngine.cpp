@@ -13,6 +13,49 @@
 
 namespace R = DNDS::Runtime;
 
+TEST_CASE("CPU stream resources survive close and immediate fences respect worker execution")
+{
+    for (const size_t workers : {size_t(0), size_t(2)})
+    {
+        R::EagerEngine engine(workers);
+        auto stream = engine.CreateCPUStream();
+        auto context = stream.Context();
+        std::weak_ptr<R::StreamResource> lifetime = context.stream;
+        R::Array<double> value(R::RowLayout::Dense(1, 1));
+        engine.Submit(stream, [value](R::ExecutionContext executing) mutable
+                      {
+                          auto write = value.Write(executing);
+                          write.View()(0, 0) = 7;
+                          // CPU scope release on its own worker must not wait for itself.
+                      });
+        R::Completion::Record(context).Wait();
+        CHECK(value.Read().View()(0, 0) == 7);
+        auto retained = value.Read(context);
+        engine.Close();
+        CHECK(context.stream->IsRetired());
+        context.Synchronize();
+        retained.Wait();
+        CHECK_FALSE(lifetime.expired());
+        context = {};
+        CHECK(lifetime.expired());
+    }
+}
+
+TEST_CASE("Failed CPU retirement cannot publish a successful late write lease")
+{
+    R::EagerEngine engine(2);
+    auto stream = engine.CreateCPUStream();
+    auto context = stream.Context();
+    R::Array<double> value(R::RowLayout::Dense(1, 1));
+    auto write = value.Write(context);
+    engine.Submit(stream, [](R::ExecutionContext)
+                  { throw std::runtime_error("terminal CPU work failure"); });
+    CHECK_THROWS(engine.Close());
+    CHECK(context.stream->IsRetired());
+    CHECK_THROWS(write.Wait());
+    CHECK_THROWS(value.Read());
+}
+
 TEST_CASE("Array submission captures survive launch callback disposal until retirement")
 {
     // Simulate a provider that submits immediately but destroys its Work

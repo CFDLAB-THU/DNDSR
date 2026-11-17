@@ -92,7 +92,12 @@ TEST_CASE("Single-device VR AMG preserves the projected modal matrix and fixed c
             CAPTURE(native);
             DNDS::Algebra::AmgXSettings amgSettings;
             amgSettings.cycles = 2;
-            auto amg = C::ReconstructionAMGPlan::Prepare(plan, context, storage, amgSettings);
+            R::EagerEngine engine;
+            const auto stream = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
+            // Prepare on a non-default borrowed stream, then close that engine
+            // before the immutable plan dies. Static pins must not fence the
+            // already destroyed stream during plan retirement.
+            auto amg = C::ReconstructionAMGPlan::Prepare(plan, stream.Context(), storage, amgSettings);
             const auto matrix = amg.MatrixValues().To(R::Device::Host());
             const auto values = matrix.Read();
             const auto offsets = amg.RowOffsets().Read(), columns = amg.Columns().Read();
@@ -131,8 +136,6 @@ TEST_CASE("Single-device VR AMG preserves the projected modal matrix and fixed c
             auto output = metrics.BuildField(R::RowLayout::Dense(0, width), context.device);
             auto work = amg.BuildWorkspace(components);
             const auto deviceBoundary = amg.PlaceBoundaryValues(boundary);
-            R::EagerEngine engine;
-            const auto stream = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
             amg.SubmitDefectCorrection(engine, stream, deviceMean, deviceInput, deviceBoundary, output, work);
             engine.Close();
             const auto actual = output.Owned().To(R::Device::Host());

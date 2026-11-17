@@ -123,7 +123,10 @@ Only typed access leases may authorize reading or writing the values.
 4. Launch device work on the supplied `ExecutionContext` stream and check launch
    errors. Work submitted to another native stream must be joined before the
    enclosing operation publishes completion or relinquishes ownership. Keep
-   borrowed native streams alive through all uses and ordered frees.
+   explicitly borrowed foreign-ABI streams alive through all uses and ordered
+   frees. Native execution contexts retain a shared abstract stream resource;
+   see [stream ownership](StreamResourceOwnership.md). Healthy engine closure
+   retires that resource, so a late lease release performs no native fence.
 5. Join **all** independent uses before final release. `ReleaseOn(std::move(a), s)`
    consumes one shared handle; it is not a request to free an allocation with
    other live owners. The final decrement determines the actual release. Releasing
@@ -208,9 +211,10 @@ MPI work before preparing/posting, in checked and unchecked execution alike.
 Their operation handles share the registered state; dropping one does not wait
 or lose the requests. `MPIProgress.Import` exposes that state's completion event
 directly, so worker consumers can observe engine-driven completion; its explicit
-`Poll`/`Drain` calls still work. The raw `ExecutionContext` overload and raw
-requests/streams remain caller-managed interop and must finish before their
-borrowed stream/context is destroyed.
+`Poll`/`Drain` calls still work. The explicit `ExecutionContext` overload retains
+its shared abstract resource but does not register request progress with an
+engine. Its caller must finish requests and supply dependency ordering. Only
+explicit foreign-ABI stream loans retain the separate external-lifetime duty.
 Registration itself does not permit buffer access or supply dependency ordering.
 
 Queued CPU waits are notification-driven: a blocked stream consumes no worker,

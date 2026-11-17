@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeSourceKernels.hpp"
@@ -177,7 +178,7 @@ TEST_CASE("CUDA RANS quadrature sources and destruction diagonals match generic 
                 request.evaluation = mean ? K::SourceEvaluation::MeanDestruction : jacobian ? K::SourceEvaluation::QuadratureDestruction
                                                                                             : K::SourceEvaluation::QuadratureResidual;
                 K::AddRANSSources(context, request, rows.View<R::FixedRows<1>>());
-                REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
+                REQUIRE(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)) == cudaSuccess);
             }
             const auto downloaded = actual.To(R::Device::Host());
             const auto errors = status.To(R::Device::Host());
@@ -223,7 +224,7 @@ TEST_CASE("CUDA source replication and moving-axis source preserve scalar compon
         auto q = replicated.Write(context), result = output.Write(context);
         K::ReplicateSourceValues(context, off.View<R::FixedRows<1>>(), i.View<R::TableRows>(), q.View<R::TableRows>(), 2, 1);
         K::AddRotationSource(context, g.View<R::FixedRows<8>, false>(), frame.KernelParameters(), m.View<R::TableRows>(), result.View<R::TableRows>(), {}, false, rows.View<R::FixedRows<1>>());
-        REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
+        REQUIRE(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)) == cudaSuccess);
     }
     const auto result = output.To(host), points = replicated.To(host);
     const auto r = result.Read(), p = points.Read(), m = mean.Read(), i = input.Read(), g = geometry.Read();

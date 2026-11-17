@@ -893,6 +893,11 @@ if(DNDS_USE_CUDA)
     target_include_directories(cfv_benchmark_reconstruction_cuda PRIVATE ${DNDS_EXTERNAL_INCLUDES} ${DNDS_INCLUDES})
     target_link_libraries(cfv_benchmark_reconstruction_cuda PRIVATE cfv geom dnds ${DNDS_EXTERNAL_LIBS})
     cfv_add_cuda_mpi_test(reconstruction_cuda "CFV/test_ReconstructionCUDA.cu" "cfv;geom;dnds")
+    if(DNDS_USE_AMGX)
+        # The provider is an implementation-private DNDS dependency. Its macro
+        # is not transitive; explicitly enable the downstream VR AMG test body.
+        target_compile_definitions(cfv_test_reconstruction_cuda PRIVATE DNDS_USE_AMGX)
+    endif()
     cfv_add_cuda_mpi_test(limited_vr_cuda "CFV/test_LimitedVRCUDA.cu" "cfv;geom;dnds")
     cfv_add_cuda_mpi_test(characteristic_cuda "CFV/test_CharacteristicCUDA.cu" "cfv;geom;dnds")
     add_test(NAME cfv_limited_vr_cuda_np2

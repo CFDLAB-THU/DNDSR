@@ -159,10 +159,10 @@ namespace DNDS::Geom
         entry.preflight = [slot, schema, context](const PermutationTransfer &transfer)
         {
             const auto &array = *slot;
+            context.Validate();
             DNDS_check_throw_info(array.RowCount() == size_t(transfer.size()) && array.Storage().IsIdle() && array.IsValid() &&
                                       schema.Extent() == sizeof(T) && schema.Compatible(Runtime::ElementSchema::TypeIdentity<T>()) &&
-                                      context.device == array.GetDevice() &&
-                                      (context.device != Runtime::Device::Host() || !context.stream),
+                                      context.device == array.GetDevice(),
                                   "native Array migration requires idle valid compatible owned rows/context");
         };
         entry.attachment = [slot, schema]()

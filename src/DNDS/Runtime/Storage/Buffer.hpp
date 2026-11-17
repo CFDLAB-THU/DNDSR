@@ -4,6 +4,7 @@
 #include "DNDS/Core/Defines.hpp"
 #include "DNDS/Core/CheckedSize.hpp"
 #include "DNDS/Runtime/Execution/Device.hpp"
+#include "DNDS/Runtime/Execution/StreamResource.hpp"
 #include "DNDS/Runtime/Storage/AllocationDiagnostics.hpp"
 #include <cstddef>
 #include <cstdint>
@@ -13,17 +14,21 @@
 
 namespace DNDS::Runtime
 {
-    /// Borrowed execution stream. The caller keeps the stream alive until all
-    /// leases using it have completed. No implicit host/device movement.
-    /// Caller keeps the native stream alive through completion/free and reports
-    /// the actual device ordinal. External kernels must use this stream or join
-    /// their other streams before publishing completion or releasing storage.
+    /// Placement and shared abstract stream resource, without submission rights.
+    /// A null resource denotes immediate host work or the CUDA default stream.
+    /// External kernels use this lane or join their other lanes before completion.
     struct ExecutionContext
     {
         Device device;
-        void *stream = nullptr;
+        std::shared_ptr<StreamResource> stream;
         static ExecutionContext Host() { return {}; }
-        static ExecutionContext CUDA(int ordinal, void *stream = nullptr) { return {Device::CUDA(ordinal), stream}; }
+        static ExecutionContext CUDA(int ordinal, std::shared_ptr<StreamResource> stream = {}) { return {Device::CUDA(ordinal), std::move(stream)}; }
+        void Validate() const
+        {
+            DNDS_check_throw_info(device.IsValid() && (!stream || stream->GetDevice() == device), "execution context stream/placement mismatch");
+        }
+        /// Observe this lane, or do nothing after a completed engine close.
+        void Synchronize() const;
     };
 
     /// Base-address alignment is independent of table pitch. Zero requests the

@@ -211,6 +211,12 @@ if(DNDS_USE_CUDA)
     list(APPEND CPPS Discretization/CUDA/FiniteVolumeStateKernels.cu)
     list(APPEND CPPS Discretization/CUDA/FiniteVolumeStateKernels_Statistics.cu)
     list(APPEND CPPS Discretization/CUDA/FiniteVolumeStateKernels_Profile.cu)
+    # CPPS is the explicit production source catalog, including generated RHS
+    # wrappers. Source properties apply to both static/shared objects, without
+    # propagating to host code, headers' consumers or standalone CUDA tests.
+    set(_cauchy_checked_kernel_sources ${CPPS})
+    list(FILTER _cauchy_checked_kernel_sources INCLUDE REGEX "\\.cu$")
+    dnds_cuda_kernel_assertions(${_cauchy_checked_kernel_sources})
 endif()
 dnds_add_lib(cauchy "${CPPS}" "physics;cfv;geom;dnds;${DNDS_EXTERNAL_LIBS}" "${DNDS_PCH_TARGETS_FAST}" OFF ON ON)
 dnds_add_lib(cauchy_shared "${CPPS}" "physics_shared;cfv_shared;geom_shared;dnds_shared;${DNDS_EXTERNAL_LIBS}" "${DNDS_PCH_TARGETS_FAST}" ON ON ON)

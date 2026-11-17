@@ -98,7 +98,7 @@ namespace DNDS::Cauchy
                                                              {
         state.RequireSchema(retained->plan.Equation().Schema());
         DNDS_check_throw_info(engine.Owns(stream) && stream.Context().device == retained->context.device &&
-            stream.Context().stream == retained->context.stream && state.Device() == retained->context.device &&
+            (retained->context.device == R::Device::Host() || stream.Context().stream == retained->context.stream) && state.Device() == retained->context.device &&
             state.Space().Same(retained->plan.Metrics().Space()) && std::isfinite(time), "flow error stream or state differs");
         const auto geometry = std::make_shared<CFV::FiniteVolumeRead>(retained->plan.Metrics().AcquireRead(stream.Context()));
         const auto gas = retained->plan.Equation().Gas();

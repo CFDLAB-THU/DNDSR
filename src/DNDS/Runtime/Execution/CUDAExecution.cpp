@@ -1,4 +1,5 @@
 #include "DNDS/Runtime/Execution/CUDAExecution.hpp"
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "DNDS/Diagnostics/Timeline.hpp"
 #include <atomic>
 #include <condition_variable>
@@ -31,23 +32,7 @@ namespace DNDS::Runtime
                     std::terminate();
             }
         };
-        struct NativeStream
-        {
-            int ordinal;
-            cudaStream_t stream = nullptr;
-            explicit NativeStream(int device) : ordinal(device)
-            {
-                DeviceScope scope(ordinal);
-                Check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
-            }
-            ~NativeStream()
-            {
-                DeviceScope scope(ordinal);
-                if (cudaStreamDestroy(stream) != cudaSuccess)
-                    std::terminate();
-            }
-            ExecutionContext Context() const { return ExecutionContext::CUDA(ordinal, stream); }
-        };
+        using NativeStream = StreamResource;
         struct RetainedCommand
         {
             StreamLauncher::Work work;
@@ -108,7 +93,7 @@ namespace DNDS::Runtime
                                        if (command.cleanup)
                                            try
                                            {
-                                               command.work(_stream->Context());
+                                               command.work(ExecutionContext{_stream->GetDevice(), _stream});
                                            }
                                            catch (...)
                                            {
@@ -129,7 +114,7 @@ namespace DNDS::Runtime
 
         public:
             explicit CUDAPrefix(std::shared_ptr<NativeStream> stream)
-                : _stream(std::move(stream)), _origin(_stream), _ordinal(_stream->ordinal)
+                : _stream(std::move(stream)), _origin(_stream), _ordinal(_stream->GetDevice().ordinal)
             {
                 DeviceScope scope(_ordinal);
                 // Host waits occur only at explicit observation/drain points.
@@ -151,7 +136,7 @@ namespace DNDS::Runtime
                         std::exception_ptr error)
             {
                 DeviceScope scope(_ordinal);
-                Check(cudaEventRecord(_event, _stream->stream));
+                Check(cudaEventRecord(_event, CUDAStream(*_stream)));
                 _commands.swap(commands);
                 _dependencies.swap(dependencies);
                 _error = error;
@@ -203,9 +188,9 @@ namespace DNDS::Runtime
             }
             void WaitOn(const NativeStream &consumer) const
             {
-                DNDS_check_throw_info(_recorded && consumer.ordinal == _ordinal,
+                DNDS_check_throw_info(_recorded && consumer.GetDevice().ordinal == _ordinal,
                                       "CUDA wait requires a recorded prefix on the same device");
-                Check(cudaStreamWaitEvent(consumer.stream, _event, 0));
+                Check(cudaStreamWaitEvent(CUDAStream(consumer), _event, 0));
             }
         };
     }
@@ -222,7 +207,7 @@ namespace DNDS::Runtime
         std::mutex mutex;
         std::condition_variable changed;
         std::thread::id issuer;
-        explicit State(int device) : native(std::make_shared<NativeStream>(device)) {}
+        explicit State(int device) : native(CreateCUDAStream(device)) {}
 
         /// Serialize native issue and Record across submitting threads, but
         /// invoke kernels/providers with no queue mutex held. Recursive issue
@@ -294,13 +279,14 @@ namespace DNDS::Runtime
     {
         try
         {
-            Drain();
+            if (!_state->native->IsRetired())
+                Drain();
         }
         catch (...)
         {
         } // Explicit Drain/Synchronize reports accepted-work errors.
     }
-    ExecutionContext CUDALauncher::Context() const { return _state->native->Context(); }
+    ExecutionContext CUDALauncher::Context() const { return ExecutionContext{_state->native->GetDevice(), _state->native}; }
     uint64_t CUDALauncher::NativeEventsRecorded() const { return _state->events; }
     Buffer CUDALauncher::Allocate(size_t bytes) { return Allocate(bytes, {}); }
     Buffer CUDALauncher::Allocate(size_t bytes, AllocationOptions options)
@@ -351,7 +337,7 @@ namespace DNDS::Runtime
     {
         DNDS_check_throw_info(work, "empty CUDA command");
         State::Issue issue(*_state);
-        DeviceScope device(_state->native->ordinal);
+        DeviceScope device(_state->native->GetDevice().ordinal);
         _state->Poll();
         _state->pending.push_back({std::move(work), std::move(retire), kind == CommandKind::Cleanup, _state->error});
         auto &command = _state->pending.back(); // Accepted from this point on.
@@ -369,7 +355,7 @@ namespace DNDS::Runtime
     void CUDALauncher::WaitFor(StreamEvent event)
     {
         State::Issue issue(*_state);
-        DeviceScope device(_state->native->ordinal);
+        DeviceScope device(_state->native->GetDevice().ordinal);
         auto native = std::dynamic_pointer_cast<const CUDAPrefix>(event.Provider());
         if (!native)
         {
@@ -420,10 +406,10 @@ namespace DNDS::Runtime
             // retirement; no new work is accepted while this Issue is held.
             if (!_state->error)
                 _state->error = std::current_exception();
-            DeviceScope device(_state->native->ordinal);
+            DeviceScope device(_state->native->GetDevice().ordinal);
             try
             {
-                Check(cudaStreamSynchronize(_state->native->stream));
+                _state->native->Synchronize();
             }
             catch (...)
             {

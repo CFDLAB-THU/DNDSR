@@ -84,6 +84,7 @@ namespace DNDS::Runtime
             bool wait = false, cleanup = false;
             StreamLauncher::Retirement retire;
             std::shared_ptr<std::atomic<bool>> dependencyCompleted;
+            ExecutionContext context;
         };
         struct CPULane
         {
@@ -93,6 +94,7 @@ namespace DNDS::Runtime
             bool running = false;
             std::vector<std::pair<uint64_t, std::weak_ptr<const StreamEvent::State>>> events;
         };
+        thread_local const CPULane *executingCPULane = nullptr;
 
         class CPUExecutor : public std::enable_shared_from_this<CPUExecutor>
         {
@@ -134,6 +136,12 @@ namespace DNDS::Runtime
                 }
                 if (!lane)
                     return false;
+                struct ActiveLane
+                {
+                    const CPULane *previous = executingCPULane;
+                    explicit ActiveLane(const CPULane *lane) { executingCPULane = lane; }
+                    ~ActiveLane() { executingCPULane = previous; }
+                } active(lane.get());
                 std::exception_ptr error;
                 try
                 {
@@ -144,7 +152,7 @@ namespace DNDS::Runtime
                         DNDS_check_throw_info(command.dependency.Ready(),
                                               "event notified before completion");
                     if (!command.wait && (!priorError || command.cleanup))
-                        command.work(ExecutionContext::Host());
+                        command.work(command.context);
                 }
                 catch (...)
                 {
@@ -400,19 +408,42 @@ namespace DNDS::Runtime
             unsigned AutonomousWaitPriority() const noexcept override { return 1; }
         };
 
+        class CPUStreamResource final : public StreamResource
+        {
+            std::shared_ptr<CPUExecutor> _executor;
+            std::shared_ptr<CPULane> _lane;
+            void SynchronizeBackend() const override
+            {
+                // A synchronous CPU operator already executes after its lane's
+                // predecessors. Waiting for its own unfinished command would
+                // deadlock; retaining its scope until return is the completion.
+                if (executingCPULane != _lane.get())
+                    _executor->Wait(_lane, _executor->Tail(_lane));
+            }
+
+        public:
+            CPUStreamResource(std::shared_ptr<CPUExecutor> executor, std::shared_ptr<CPULane> lane)
+                : _executor(std::move(executor)), _lane(std::move(lane)) {}
+            Device GetDevice() const noexcept override { return Device::Host(); }
+        };
+
         class CPULauncher : public StreamLauncher
         {
             std::shared_ptr<CPUExecutor> _executor;
             std::shared_ptr<CPULane> _lane;
+            std::shared_ptr<StreamResource> _resource;
 
         public:
             explicit CPULauncher(std::shared_ptr<CPUExecutor> executor)
-                : _executor(std::move(executor)), _lane(_executor->NewLane()) {}
-            ExecutionContext Context() const override { return ExecutionContext::Host(); }
+                : _executor(std::move(executor)), _lane(_executor->NewLane()),
+                  _resource(std::make_shared<CPUStreamResource>(_executor, _lane)) {}
+            ExecutionContext Context() const override { return {Device::Host(), _resource}; }
             void Submit(Work work, CommandKind kind, Retirement retire) override
             {
                 DNDS_check_throw_info(work, "empty CPU command");
-                _executor->Submit(_lane, {std::move(work), {}, false, kind != CommandKind::Compute, std::move(retire)});
+                CPUCommand command{std::move(work), {}, false, kind != CommandKind::Compute, std::move(retire)};
+                command.context = Context();
+                _executor->Submit(_lane, std::move(command));
             }
             void WaitFor(StreamEvent event) override { _executor->Submit(_lane, {{}, std::move(event), true, false}); }
             StreamEvent Record() override
@@ -781,6 +812,10 @@ namespace DNDS::Runtime
         // backend allocations. Every stream tail is retired at this point,
         // including failure paths. Destruction runs only on the controller.
         _state->retainedUntilDrain.clear();
+        if (closing)
+            for (const auto &stream : streams)
+                if (auto resource = stream->Context().stream)
+                    resource->RetireAfterDrain(first);
         {
             std::lock_guard<std::mutex> lock(_state->mutex);
             if (closing)

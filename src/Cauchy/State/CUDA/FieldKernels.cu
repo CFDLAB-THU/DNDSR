@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/State/CUDA/FieldKernels.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include <cuda_runtime.h>
@@ -63,7 +64,7 @@ namespace DNDS::Cauchy::CUDA
             for (real cap : caps)
                 DNDS_check_throw_info(std::isfinite(cap) && cap >= 0, "invalid field-check cap");
         R::CheckKernelArgumentBudget<EquationBlockArrayView<const real>, bool, std::array<real, 2>, FieldCheckOutput, FieldCheckOutput>();
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         Check<true><<<unsigned(partial.RowCount()), Threads, 0, stream>>>(values, capped, caps, partial, result);
         Check<false><<<1, Threads, 0, stream>>>(values, capped, caps, partial, result);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA field-check launch failed");

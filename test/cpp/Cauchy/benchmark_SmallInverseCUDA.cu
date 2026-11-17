@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/Implicit/CUDA/LinearDiagonalKernels.hpp"
 #include "DNDS/Algebra/BatchedSVD.hpp"
 #include "DNDS/Runtime/Array/Array.hpp"
@@ -49,7 +50,7 @@ int main(int argc, char **argv)
         R::EagerEngine engine;
         const auto lane = engine.CreateStream(std::make_shared<R::CUDALauncher>(ordinal));
         const auto context = lane.Context();
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         R::Array<real> host(R::RowLayout::Dense(rows, n * n));
         {
             auto write = host.Write();

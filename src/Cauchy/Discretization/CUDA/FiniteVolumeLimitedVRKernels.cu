@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeLimitedVRKernels.hpp"
 #include "Cauchy/Physics/PerfectGasPoint.hpp"
 #include "Cauchy/Discretization/CUDA/PositivityReduction.cuh"
@@ -177,7 +178,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<LVRStencil, LVRInput, LVROutput, int, ThermalBounds, int, real, LVRStatus>();
         if (!means.RowCount())
             return;
-        Target<<<Blocks(means.RowCount()), 128, 0, static_cast<cudaStream_t>(c.stream)>>>(stencil, means, coefficients, dimension, bounds, power, cutoff, status);
+        Target<<<Blocks(means.RowCount()), 128, 0, ::DNDS::Runtime::CUDAStream(c)>>>(stencil, means, coefficients, dimension, bounds, power, cutoff, status);
         CheckLaunch();
     }
     void FillLVRScalars(R::ExecutionContext c, LVRInput means, LVROutput scalars, PerfectGas gas, LVRStatus status)
@@ -190,7 +191,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<LVRInput, LVROutput, PerfectGas, LVRStatus>();
         if (!means.RowCount())
             return;
-        Scalars<<<Blocks(means.RowCount()), 128, 0, static_cast<cudaStream_t>(c.stream)>>>(means, scalars, gas, status);
+        Scalars<<<Blocks(means.RowCount()), 128, 0, ::DNDS::Runtime::CUDAStream(c)>>>(means, scalars, gas, status);
         CheckLaunch();
     }
     void BuildLVRFaceSensors(R::ExecutionContext c, LVRStencil stencil, LVRMeans means, LVRMeans target, int dimension,
@@ -214,7 +215,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<LVRStencil, LVRMeans, LVRMeans, int, PerfectGas, ThermalBounds, CFV::LimitedVRKernelParameters, LVROutput, LVRStatus>();
         if (!sensors.RowCount())
             return;
-        Sensors<<<Blocks(sensors.RowCount()), 128, 0, static_cast<cudaStream_t>(c.stream)>>>(stencil, means, target, dimension, gas, bounds, settings, sensors, status);
+        Sensors<<<Blocks(sensors.RowCount()), 128, 0, ::DNDS::Runtime::CUDAStream(c)>>>(stencil, means, target, dimension, gas, bounds, settings, sensors, status);
         CheckLaunch();
     }
     void GatherLVRBranches(R::ExecutionContext c, LVRStencil stencil, LVRInput sensors, StatusInput faceStatus,
@@ -229,7 +230,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<LVRStencil, LVRInput, StatusInput, LVROutput, BaseOutput, LVRStatus>();
         if (!branches.RowCount())
             return;
-        Gather<<<Blocks(branches.RowCount()), 128, 0, static_cast<cudaStream_t>(c.stream)>>>(stencil, sensors, faceStatus, branches, base, status);
+        Gather<<<Blocks(branches.RowCount()), 128, 0, ::DNDS::Runtime::CUDAStream(c)>>>(stencil, sensors, faceStatus, branches, base, status);
         CheckLaunch();
     }
     void MergeLVRBase(R::ExecutionContext c, BaseInput base, LVROutput seeds, int column)
@@ -240,7 +241,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<BaseInput, LVROutput, int>();
         if (!seeds.RowCount())
             return;
-        Merge<<<Blocks(seeds.RowCount()), 128, 0, static_cast<cudaStream_t>(c.stream)>>>(base, seeds, column);
+        Merge<<<Blocks(seeds.RowCount()), 128, 0, ::DNDS::Runtime::CUDAStream(c)>>>(base, seeds, column);
         CheckLaunch();
     }
     void PublishLVRPenalty(R::ExecutionContext c, LVRInput branches, BaseOutput history, ScalarOutput penalty)
@@ -251,7 +252,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<LVRInput, BaseOutput, ScalarOutput>();
         if (!branches.RowCount())
             return;
-        Publish<<<Blocks(branches.RowCount()), 128, 0, static_cast<cudaStream_t>(c.stream)>>>(branches, history, penalty);
+        Publish<<<Blocks(branches.RowCount()), 128, 0, ::DNDS::Runtime::CUDAStream(c)>>>(branches, history, penalty);
         CheckLaunch();
     }
 }

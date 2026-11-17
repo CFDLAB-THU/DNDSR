@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeStateKernels.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include "DNDS/Algebra/CUDA/CountRows.cuh"
@@ -68,7 +69,7 @@ namespace DNDS::Cauchy::CUDA
                                   beta.data != partialMinimum.data && beta.data != minimum.data,
                               "limiter reduction shape or alias differs");
         R::CheckKernelArgumentBudget<StateInput, LimiterCountOutput, LimiterMinimumOutput, LimiterCountOutput, LimiterMinimumOutput>();
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         LimiterStatistics<true><<<unsigned(partialCount.RowCount()), Threads, 0, stream>>>(beta, partialCount, partialMinimum, count, minimum);
         LimiterStatistics<false><<<1, Threads, 0, stream>>>(beta, partialCount, partialMinimum, count, minimum);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "limiter statistics launch failed");
@@ -83,7 +84,7 @@ namespace DNDS::Cauchy::CUDA
                                   count.RowCount() == 1 && partialCount.data != count.data,
                               "flag reduction shape or alias differs");
         R::CheckKernelArgumentBudget<decltype(flags), LimiterCountOutput, LimiterCountOutput>();
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         Algebra::CUDA::CountRows<Threads, true><<<unsigned(partialCount.RowCount()), Threads, 0, stream>>>(flags, partialCount);
         Algebra::CUDA::CountRows<Threads, false><<<1, Threads, 0, stream>>>(partialCount.ConstView(), count);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "flag reduction launch failed");

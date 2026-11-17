@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeStateKernels.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include "DNDS/Device/ReductionCompletion.hpp"
@@ -130,7 +131,7 @@ namespace DNDS::Cauchy::CUDA
                               "flow error reduction shape/placement differs");
         R::CheckKernelArgumentBudget<FlowProfileQuadrature, StateInput, FlowProfileParameters, FlowState,
                                      PerfectGas, RigidFrameParameters, real, FlowErrorOutput, FlowErrorOutput, FlowErrorCounter>();
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         DNDS_check_throw_info(cudaMemsetAsync(completed.data, 0, sizeof(unsigned int), stream) == cudaSuccess, "CUDA flow error counter reset failed");
         ErrorRows<<<unsigned(scratch.RowCount()), Threads, 0, stream>>>(
             geometry, means, profile, primitive, gas, frame, time, scratch, result, completed);

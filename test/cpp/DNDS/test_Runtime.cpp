@@ -82,7 +82,12 @@ TEST_CASE("Final allocation ownership passes only the actual final release conte
     auto b = a;
     CHECK(a.CanReleaseOrdered(ExecutionContext::Host()));
     CHECK_FALSE(a.CanReleaseOrdered(ExecutionContext::CUDA(0)));
-    CHECK_THROWS(a.ReleaseOn({Device::Host(), reinterpret_cast<void *>(1)}));
+    struct WrongReleaseStream final : StreamResource
+    {
+        void SynchronizeBackend() const override {}
+        Device GetDevice() const noexcept override { return Device::CUDA(0); }
+    };
+    CHECK_THROWS(a.ReleaseOn({Device::Host(), std::make_shared<WrongReleaseStream>()}));
     CHECK(a.Identity() != 0);
     a.ReleaseOn(ExecutionContext::Host());
     CHECK(a.Identity() == 0);
@@ -260,7 +265,12 @@ TEST_CASE("Runtime aliases share access state and versions, copies do not")
     CHECK(b.Identity() != a.Identity());
     CHECK(b.Read().View<double>()[2] == 7);
     CHECK_THROWS(Copy(a, alias));
-    CHECK_THROWS(Copy(a, b, ExecutionContext{Device::Host(), reinterpret_cast<void *>(1)}));
+    struct WrongDeviceStream final : StreamResource
+    {
+        Device GetDevice() const noexcept override { return Device::CUDA(0); }
+        void SynchronizeBackend() const override {}
+    };
+    CHECK_THROWS(Copy(a, b, ExecutionContext{Device::Host(), std::make_shared<WrongDeviceStream>()}));
 }
 
 TEST_CASE("Runtime access owns allocation after handle replacement")

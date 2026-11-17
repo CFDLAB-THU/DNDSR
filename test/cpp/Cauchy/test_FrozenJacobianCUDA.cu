@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #define DOCTEST_CONFIG_IMPLEMENT
 #include "doctest.h"
 #include "CompactStencilFixture.hpp"
@@ -203,7 +204,7 @@ TEST_CASE("CUDA frozen Jacobians match CPU blocks and actions including ALE peri
                 auto statusWrite = meanStatus.Write(context);
                 C::CUDA::FreezeJacobianMeans(context, gas, own.View<R::UniformTableRows>(), ghost.View<R::UniformTableRows>(),
                                              meanWrite.View<R::UniformTableRows>(), pressureWrite.View<R::TableRows>(), derivativeWrite.View<R::TableRows>(), statusWrite.View<R::FixedRows<1>>());
-                REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
+                REQUIRE(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)) == cudaSuccess);
             }
             {
                 const auto checked = meanStatus.To(R::Device::Host());
@@ -221,7 +222,7 @@ TEST_CASE("CUDA frozen Jacobians match CPU blocks and actions including ALE peri
                 auto write = actual.Write(context);
                 auto st = status.Write(context);
                 C::CUDA::AssembleFrozenJacobian(context, snapshot, allRead.View<R::FixedRows<1>>(), write.ArrayView(), st.View<R::FixedRows<1>>());
-                REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
+                REQUIRE(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)) == cudaSuccess);
             }
             const auto actualHost = actual.Placed(R::Device::Host(), context);
             {
@@ -260,7 +261,7 @@ TEST_CASE("CUDA frozen Jacobians match CPU blocks and actions including ALE peri
                                                  br.View<R::UniformTableRows>(), xr.View<R::UniformTableRows>(), {}, out.View<R::TableRows>(), st.View<R::FixedRows<1>>(), jacobi);
                     C::CUDA::ApplyFrozenJacobian(context, snapshot, depRead.View<R::FixedRows<1>>(), dir.View<R::UniformTableRows>(), true,
                                                  br.View<R::UniformTableRows>(), xr.View<R::UniformTableRows>(), gr.View<R::UniformTableRows>(), out.View<R::TableRows>(), st.View<R::FixedRows<1>>(), jacobi);
-                    REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
+                    REQUIRE(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)) == cudaSuccess);
                 }
                 const auto result = output.To(R::Device::Host());
                 const auto checked = status.To(R::Device::Host());
@@ -326,7 +327,7 @@ TEST_CASE("CUDA diagonal initialization preserves CPU mass and moving-frame bloc
                 const C::CUDA::JacobianCellMetrics metric{source.data, nullptr, source.rows, source.width, source.stride, nullptr, source.kind, source.device};
                 C::CUDA::InitializeJacobianDiagonal(context, metric, tr.View<R::TableRows>(), write.View<R::UniformTableRows>(),
                                                     st.View<R::FixedRows<1>>(), rr.View<R::FixedRows<1>>(), frame.KernelParameters(), .2, .73, n, full);
-                REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
+                REQUIRE(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)) == cudaSuccess);
             }
             const auto result = diagonal.To(R::Device::Host());
             const auto checked = status.To(R::Device::Host());
@@ -467,7 +468,7 @@ TEST_CASE("CUDA centered face diagonal matches CPU wall chains Roe matrices and 
                 auto out = diagonal.Write(context), waves = magnitudes.Write(context);
                 auto st = status.Write(context);
                 C::CUDA::AddJacobianFaces(context, request, selr.View<R::FixedRows<1>>(), out.View<R::UniformTableRows>(), full, waves.View<R::TableRows>(), st.View<R::FixedRows<1>>());
-                REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
+                REQUIRE(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)) == cudaSuccess);
             }
             const auto actual = diagonal.To(R::Device::Host());
             const auto checked = status.To(R::Device::Host());

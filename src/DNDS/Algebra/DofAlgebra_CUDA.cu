@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "DNDS/Algebra/DofAlgebra.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include <cuda_runtime.h>
@@ -76,7 +77,7 @@ namespace DNDS::Algebra::Detail
         if (!count)
             return;
         const unsigned blocks = unsigned(std::min<size_t>(256, (count + 255) / 256));
-        PointwiseKernel<<<blocks, 256, 0, static_cast<cudaStream_t>(context.stream)>>>(operation, output, x, y, T(a), T(b));
+        PointwiseKernel<<<blocks, 256, 0, ::DNDS::Runtime::CUDAStream(context)>>>(operation, output, x, y, T(a), T(b));
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "DOF algebra pointwise CUDA launch failed");
     }
     template <class T>
@@ -87,7 +88,7 @@ namespace DNDS::Algebra::Detail
         Runtime::ValidateViewDevices(context.device, x, y, result);
         Runtime::CheckKernelArgumentBudget<decltype(operation), decltype(x), decltype(y), decltype(result)>();
         const unsigned blocks = unsigned(std::min<size_t>(256, (result.width + 127) / 128));
-        ReductionKernel<<<blocks, 128, 0, static_cast<cudaStream_t>(context.stream)>>>(operation, x, y, result);
+        ReductionKernel<<<blocks, 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(operation, x, y, result);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "DOF algebra reduction CUDA launch failed");
     }
     void ApplyCUDA(Runtime::ExecutionContext c, Pointwise op, Runtime::ArrayView<float> out, Runtime::ArrayView<const float> x, Runtime::ArrayView<const float> y, double a, double b) { Launch(c, op, out, x, y, a, b); }

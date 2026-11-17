@@ -21,6 +21,12 @@ distributed gates and the measured gains and regressions by shape.
 
 ## Architecture entry points
 
+The [source-scoped CUDA assertion control](dev/cuda_assertions.md) describes
+device bounds checks and the optional per-source production-kernel opt-out.
+
+The [stream resource ownership contract](architecture/StreamResourceOwnership.md)
+describes shared CPU/CUDA contexts and safe lease retirement after engine close.
+
 The [Plan 61-2 profiling guide](dev/plan612_cuda_optimization.md) describes
 opt-in CUDA timeline ranges and the fixed uncached TGV optimization baseline.
 

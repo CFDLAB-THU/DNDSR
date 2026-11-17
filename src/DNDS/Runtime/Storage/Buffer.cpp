@@ -1,4 +1,5 @@
 #include "DNDS/Runtime/Storage/Buffer.hpp"
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "DNDS/Runtime/Storage/AllocationResource.hpp"
 #include <atomic>
 #include <algorithm>
@@ -54,13 +55,13 @@ namespace DNDS::Runtime
             DeviceScope scope(context.device.ordinal);
 #    if CUDART_VERSION >= 13000
             int ordinal = -1;
-            CheckCUDA(cudaStreamGetDevice(static_cast<cudaStream_t>(context.stream), &ordinal));
+            CheckCUDA(cudaStreamGetDevice(CUDAStream(context), &ordinal));
             DNDS_check_throw_info(ordinal == context.device.ordinal, "runtime: stream belongs to another CUDA device");
 #    else
             // Older CUDA runtimes lack this query. The caller must supply a
             // stream from the declared device; event recording validates usage.
             unsigned flags = 0;
-            CheckCUDA(cudaStreamGetFlags(static_cast<cudaStream_t>(context.stream), &flags));
+            CheckCUDA(cudaStreamGetFlags(CUDAStream(context), &flags));
 #    endif
         }
 #endif
@@ -101,16 +102,7 @@ namespace DNDS::Runtime
 
         void Fence(ExecutionContext context)
         {
-            ValidateDevice(context.device);
-            if (context.device.space == MemorySpace::Host)
-                DNDS_check_throw_info(!context.stream, "host context cannot contain a CUDA stream");
-#ifdef DNDS_USE_CUDA
-            else
-            {
-                DeviceScope device(context.device.ordinal);
-                CheckCUDA(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)));
-            }
-#endif
+            context.Synchronize();
         }
 
         class SharedResource final : public AllocationResource
@@ -188,7 +180,7 @@ namespace DNDS::Runtime
                         {
 #    if CUDART_VERSION >= 11020
                             DNDS_check_throw_info(_orderedCUDA, "device does not support stream ordered allocation");
-                            auto stream = static_cast<cudaStream_t>(async->stream);
+                            auto stream = CUDAStream(*async);
                             CheckCUDA(cudaMallocAsync(&_allocation, allocatedBytes, stream));
                             exposeAligned();
                             CheckCUDA(cudaMemsetAsync(_pointer, 0, bytes, stream));
@@ -221,7 +213,7 @@ namespace DNDS::Runtime
             Device GetDevice() const noexcept override { return _device; }
             bool CanReleaseOrdered(ExecutionContext context) const noexcept override
             {
-                return context.device == _device && (_device != Device::Host() || !context.stream) &&
+                return context.device == _device && (!context.stream || (context.stream->GetDevice() == _device && !context.stream->IsRetired())) &&
                        (_device == Device::Host() || _orderedCUDA || !_bytes);
             }
             void Release(const ExecutionContext *context) noexcept override
@@ -238,8 +230,8 @@ namespace DNDS::Runtime
                     DeviceScope device(_device.ordinal);
                     cudaError_t status;
 #    if CUDART_VERSION >= 11020
-                    if (context)
-                        status = cudaFreeAsync(pointer, static_cast<cudaStream_t>(context->stream));
+                    if (context && (!context->stream || !context->stream->IsRetired()))
+                        status = cudaFreeAsync(pointer, CUDAStream(*context));
                     else
 #    endif
                     {
@@ -260,7 +252,7 @@ namespace DNDS::Runtime
     struct Completion::State
     {
         Device device;
-        void *stream = nullptr;
+        std::shared_ptr<StreamResource> stream;
 #ifdef DNDS_USE_CUDA
         cudaEvent_t event = nullptr;
         mutable std::mutex observation;
@@ -327,25 +319,49 @@ namespace DNDS::Runtime
 #endif
     };
 
+    void ExecutionContext::Synchronize() const
+    {
+        ValidateDevice(device);
+        Validate();
+        if (stream)
+        {
+            stream->Synchronize();
+            return;
+        }
+#ifdef DNDS_USE_CUDA
+        if (device.space == MemorySpace::CUDA)
+        {
+            DeviceScope scope(device.ordinal);
+            CheckCUDA(cudaStreamSynchronize(nullptr));
+        }
+#endif
+    }
+
     Completion Completion::Record(ExecutionContext context)
     {
         ValidateDevice(context.device);
-        if (context.device.space == MemorySpace::Host)
-        {
-            DNDS_check_throw_info(!context.stream, "host context cannot contain a CUDA stream");
+        context.Validate();
+        if (context.device.space == MemorySpace::Host && !context.stream)
             return {};
-        }
         auto state = std::make_shared<State>();
         state->device = context.device;
         state->stream = context.stream;
+        // This is the immediate-access completion API. CPU work has no native
+        // asynchronous event here: observe the lane before claiming readiness.
+        // Queued/nonblocking CPU prefixes use ExecutionStream::Record instead.
+        if (context.device == Device::Host())
+            context.Synchronize();
 #ifdef DNDS_USE_CUDA
-        ValidateStream(context);
-        DeviceScope device(context.device.ordinal);
-        // Immediate completions are observed at host-access boundaries, just
-        // like queued prefixes. Sleeping there avoids driver-side busy waiting;
-        // device stream ordering and nonblocking Ready semantics are unchanged.
-        CheckCUDA(cudaEventCreateWithFlags(&state->event, cudaEventDisableTiming | cudaEventBlockingSync));
-        CheckCUDA(cudaEventRecord(state->event, static_cast<cudaStream_t>(context.stream)));
+        if (context.device.space == MemorySpace::CUDA)
+        {
+            ValidateStream(context);
+            DeviceScope device(context.device.ordinal);
+            // Immediate completions are observed at host-access boundaries, just
+            // like queued prefixes. Sleeping there avoids driver-side busy waiting;
+            // device stream ordering and nonblocking Ready semantics are unchanged.
+            CheckCUDA(cudaEventCreateWithFlags(&state->event, cudaEventDisableTiming | cudaEventBlockingSync));
+            CheckCUDA(cudaEventRecord(state->event, CUDAStream(context)));
+        }
 #endif
         return Completion(std::move(state));
     }
@@ -353,11 +369,9 @@ namespace DNDS::Runtime
     Completion Completion::FromExternalCompletion(ExecutionContext context)
     {
         ValidateDevice(context.device);
-        if (context.device == Device::Host())
-        {
-            DNDS_check_throw_info(!context.stream, "host completion cannot contain a native stream");
+        context.Validate();
+        if (context.device == Device::Host() && !context.stream)
             return {};
-        }
         auto state = std::make_shared<State>();
         state->device = context.device;
         state->stream = context.stream;
@@ -606,7 +620,7 @@ namespace DNDS::Runtime
         if (!_state)
             return;
         ValidateDevice(context.device);
-        DNDS_check_throw_info(context.device != Device::Host() || !context.stream, "invalid host release context");
+        context.Validate();
 #ifdef DNDS_USE_CUDA
         if (context.device.space == MemorySpace::CUDA)
             ValidateStream(context);
@@ -726,8 +740,8 @@ namespace DNDS::Runtime
         : _state(std::move(state)), _context(context), _write(write), _offset(offset), _bytes(bytes), _uncaughtOnAcquire(std::uncaught_exceptions())
     {
         ValidateDevice(context.device);
-        DNDS_check_throw_info(context.device.space != MemorySpace::Host || !context.stream,
-                              "host context cannot contain a CUDA stream");
+        context.Validate();
+        DNDS_check_throw_info(!context.stream || !context.stream->IsRetired(), "runtime: execution stream has retired");
         DNDS_check_throw_info(_state, "runtime: access to an unallocated buffer");
         DNDS_check_throw_info(_state->device == context.device,
                               "runtime: placement mismatch; copy explicitly before accessing");
@@ -752,7 +766,7 @@ namespace DNDS::Runtime
     }
 
     Access::Access(Access &&other) noexcept
-        : _state(std::move(other._state)), _context(other._context), _completion(std::move(other._completion)),
+        : _state(std::move(other._state)), _context(std::move(other._context)), _completion(std::move(other._completion)),
           _hasCompletion(other._hasCompletion), _write(other._write), _offset(other._offset), _bytes(other._bytes), _uncaughtOnAcquire(other._uncaughtOnAcquire) {}
 
     Access &Access::operator=(Access &&other) noexcept
@@ -768,7 +782,7 @@ namespace DNDS::Runtime
                 std::terminate();
             }
             _state = std::move(other._state);
-            _context = other._context;
+            _context = std::move(other._context);
             _completion = std::move(other._completion);
             _hasCompletion = other._hasCompletion;
             _write = other._write;
@@ -830,6 +844,9 @@ namespace DNDS::Runtime
                 --_state->readers;
         }
         _state.reset();
+        _context = {};
+        _completion = {};
+        _hasCompletion = false;
         if (error)
             std::rethrow_exception(error);
     }
@@ -840,6 +857,9 @@ namespace DNDS::Runtime
             return;
         DNDS_check_throw_info(!_hasCompletion, "cannot cancel submitted access");
         auto state = std::move(_state);
+        _context = {};
+        _completion = {};
+        _hasCompletion = false;
         std::lock_guard<std::mutex> lock(state->mutex);
         if (_write)
             state->writer = false;
@@ -890,7 +910,7 @@ namespace DNDS::Runtime
                               "copy device ordinal mismatch");
         if (!gpu)
         {
-            DNDS_check_throw_info(!context.stream, "host copy cannot use a device stream");
+            context.Validate();
             if (bytes)
                 std::memcpy(destination, source, bytes);
         }
@@ -900,7 +920,7 @@ namespace DNDS::Runtime
             DeviceScope device(context.device.ordinal);
             ValidateStream(context);
             if (bytes)
-                CheckCUDA(cudaMemcpyAsync(destination, source, bytes, cudaMemcpyDefault, static_cast<cudaStream_t>(context.stream)));
+                CheckCUDA(cudaMemcpyAsync(destination, source, bytes, cudaMemcpyDefault, CUDAStream(context)));
         }
 #endif
     }
@@ -919,8 +939,7 @@ namespace DNDS::Runtime
         DNDS_check_throw_info(source.Bytes() == destination.Bytes(), "runtime: copy size mismatch");
         ValidateDevice(context.device);
         auto sourceContext = source.GetDevice().space == MemorySpace::Host ? ExecutionContext::Host() : context;
-        DNDS_check_throw_info(context.device.space != MemorySpace::Host || !context.stream,
-                              "host context cannot contain a CUDA stream");
+        context.Validate();
         auto destinationContext = destination.GetDevice().space == MemorySpace::Host ? ExecutionContext::Host() : context;
         const bool onDevice = source.GetDevice().space == MemorySpace::CUDA || destination.GetDevice().space == MemorySpace::CUDA;
         DNDS_check_throw_info(onDevice == (context.device.space == MemorySpace::CUDA), "runtime: copy execution device mismatch");
@@ -943,7 +962,7 @@ namespace DNDS::Runtime
             operation._destination._context = context;
             if (source.Bytes())
                 CheckCUDA(cudaMemcpyAsync(dst.data, src.data, source.Bytes(), cudaMemcpyDefault,
-                                          static_cast<cudaStream_t>(context.stream)));
+                                          CUDAStream(context)));
             // Host staging leases also have to wait on the CUDA copy. Attach
             // the copy context before recording its event (no host-side access).
             auto done = Completion::Record(context);

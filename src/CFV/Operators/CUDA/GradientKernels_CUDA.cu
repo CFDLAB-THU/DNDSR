@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "CFV/Detail/GradientKernels.hpp"
 #include "CFV/Math/GradientEvaluation.hpp"
 #include "CFV/Math/GradientLimiting.hpp"
@@ -35,7 +36,7 @@ namespace DNDS::CFV::Detail
         if (!selection.count)
             return;
         const unsigned blocks = unsigned(std::min<index>((selection.count + 127) / 128, 1024));
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         switch (components)
         {
         case 5:
@@ -66,7 +67,7 @@ namespace DNDS::CFV::Detail
         if (!output.RowCount())
             return;
         const unsigned blocks = unsigned(std::min<index>((output.RowCount() + 127) / 128, 1024));
-        ConvertRows<<<blocks, 128, 0, static_cast<cudaStream_t>(context.stream)>>>(cells, input, output, firstCell, dimension, modes, toCoefficients);
+        ConvertRows<<<blocks, 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(cells, input, output, firstCell, dimension, modes, toCoefficients);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA gradient conversion launch failed");
     }
     template <int Components>
@@ -112,7 +113,7 @@ namespace DNDS::CFV::Detail
         if (!selection.count)
             return;
         const unsigned blocks = unsigned(std::min<index>((selection.count + 127) / 128, 1024));
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         if (values.activated && values.indicator.RowCount())
             ValidateGradientIndicator<<<unsigned(std::min<index>(256, (values.indicator.RowCount() + 127) / 128)), 128, 0, stream>>>(values.indicator, status);
         switch (components)

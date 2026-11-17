@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeGradientKernels.hpp"
@@ -150,7 +151,7 @@ TEST_CASE("CUDA Cauchy centered Barth PP and primitive means match generic CPU")
         K::LimitPositivePhysicalGradients(context, geometry, u.View<R::TableRows>(), positive.View<R::TableRows>(), selection.View<R::FixedRows<1>>(), policy, partials);
         K::FinalizeModalPositivity(context, partials,
                                    {resultStatus.View<R::FixedRows<1>>(), resultCount.View<R::FixedRows<1>>(), resultMinimum.View<R::FixedRows<1>>()});
-        REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
+        REQUIRE(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)) == cudaSuccess);
     }
     {
         const auto checked = status.To(host);
@@ -166,7 +167,7 @@ TEST_CASE("CUDA Cauchy centered Barth PP and primitive means match generic CPU")
         auto primitive = gpuPrimitive.Write(context);
         auto errors = status.Write(context);
         K::FillPrimitiveMeans(context, u.View<R::TableRows>(), primitive.View<R::TableRows>(), equation.Gas(), errors.View<R::FixedRows<1>>());
-        REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
+        REQUIRE(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)) == cudaSuccess);
     }
     Compare(gpuBarth, cpuBarth);
     Compare(gpuPositive, cpuPositive);

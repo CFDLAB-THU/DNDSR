@@ -35,8 +35,8 @@ on:
     types: [created]
 
 env:
-  HEADERONLYS_URL: https://github.com/harryzhou2000/cfd_externals_headeronlys/releases/download/v0.2.0/external_headeronlys.tar.gz
-  HEADERONLYS_SHA256: f756b3331d852836434b56a25e7f913ab58d1a80f13d001832e0504266aa6af2
+  HEADERONLYS_URL: https://github.com/harryzhou2000/cfd_externals_headeronlys/releases/download/v0.3.0/external_headeronlys.tar.gz
+  HEADERONLYS_SHA256: 00692e1581f900d76c43432f4712b8dc2a53408d968fbf656bd3dd3561e2514e
   OMPI_MCA_rmaps_base_oversubscribe: "1"
 
 jobs:
@@ -209,6 +209,7 @@ jobs:
             external/argparse
             external/boost
             external/CGAL
+            external/cccl
             external/cppcodec
             external/cpptrace
             external/doctest
@@ -220,7 +221,7 @@ jobs:
             external/pybind11
             external/pybind11_json
             external/spdlog
-          key: headeronlys-v0.2.0
+          key: headeronlys-v0.3.0
 
       - name: Download and extract header-only externals
         if: steps.cache-headeronlys.outputs.cache-hit != 'true'
@@ -237,6 +238,7 @@ jobs:
             external/argparse
             external/boost
             external/CGAL
+            external/cccl
             external/cppcodec
             external/cpptrace
             external/doctest
@@ -248,7 +250,7 @@ jobs:
             external/pybind11
             external/pybind11_json
             external/spdlog
-          key: headeronlys-v0.2.0
+          key: headeronlys-v0.3.0
 
       # ------------------------------------------------------------------
       # 6. cfd_externals (zlib, hdf5, cgns, parmetis)

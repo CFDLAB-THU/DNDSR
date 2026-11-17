@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "CFV/Operators/CUDA/DistributedInterfaceSamplingKernels.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include <cuda_runtime.h>
@@ -44,7 +45,7 @@ namespace DNDS::CFV::CUDA
         if (!request.output.RowCount())
             return;
         const unsigned blocks = unsigned(std::min<index>(INT_MAX, request.output.RowCount() / Threads + (request.output.RowCount() % Threads != 0)));
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         if (request.gradient)
             SampleRows<true><<<blocks, Threads, 0, stream>>>(request);
         else

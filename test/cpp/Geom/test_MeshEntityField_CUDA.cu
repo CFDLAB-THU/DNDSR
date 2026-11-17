@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #define DOCTEST_CONFIG_IMPLEMENT
 #include "doctest.h"
 #include "MeshFacadeOverlapFixture.hpp"
@@ -40,15 +41,11 @@ namespace
 
     struct Stream
     {
-        cudaStream_t value = nullptr;
-        ~Stream()
-        {
-            if (value)
-            {
-                cudaStreamSynchronize(value);
-                cudaStreamDestroy(value);
-            }
-        }
+        std::shared_ptr<R::StreamResource> owner;
+        cudaStream_t value;
+        explicit Stream(int ordinal) : owner(R::CreateCUDAStream(ordinal)),
+                                       value(R::CUDAStream(R::ExecutionContext::CUDA(ordinal, owner))) {}
+        ~Stream() { owner->Synchronize(); }
     };
 
     struct Gate
@@ -140,7 +137,7 @@ namespace
             auto ids = original.Read(context);
             auto output = difference.Write(context);
             R::Completion done; // Destroy after Gate releases any queued callback.
-            Gate gate(static_cast<cudaStream_t>(context.stream));
+            Gate gate(::DNDS::Runtime::CUDAStream(context));
             CHECK_FALSE(mesh.versions.CanMutate());
             CHECK_THROWS(field.Write(space, context));
             CHECK_THROWS(mesh.versions.BeginMutation(R::Change::Geometry));
@@ -191,11 +188,9 @@ TEST_CASE("Native EntityField CUDA scopes and direct multi-GPU halo retain check
     const int ordinal = SelectGPU(mpi);
     R::EagerEngine engine;
     auto migration = engine.CreateStream(std::make_shared<R::CUDALauncher>(ordinal));
-    Stream compute, communication;
-    REQUIRE(cudaStreamCreateWithFlags(&compute.value, cudaStreamNonBlocking) == cudaSuccess);
-    REQUIRE(cudaStreamCreateWithFlags(&communication.value, cudaStreamNonBlocking) == cudaSuccess);
-    const auto context = R::ExecutionContext::CUDA(ordinal, compute.value);
-    const auto haloContext = R::ExecutionContext::CUDA(ordinal, communication.value);
+    Stream compute(ordinal), communication(ordinal);
+    const auto context = R::ExecutionContext::CUDA(ordinal, compute.owner);
+    const auto haloContext = R::ExecutionContext::CUDA(ordinal, communication.owner);
     // Resolve lazy module loading before callbacks intentionally hold a stream.
     cudaFuncAttributes attributes{};
     REQUIRE(cudaFuncGetAttributes(&attributes, CheckState) == cudaSuccess);

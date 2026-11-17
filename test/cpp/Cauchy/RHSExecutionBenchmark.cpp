@@ -309,7 +309,7 @@ namespace Plan53
                 : _inner(std::move(inner)), _owner(std::move(owner)), _receiveBytes(bytes) {}
             std::unique_ptr<R::Detail::TransferProviderOperation> Begin(R::ExecutionContext context, bool scheduled) const override
             {
-                DNDS_check_throw_info(context.device == R::Device::Host() && !context.stream, "assessment provider is host-only");
+                DNDS_check_throw_info(context.device == R::Device::Host() && (!context.stream || context.stream->GetDevice() == R::Device::Host()), "assessment provider is host-only");
                 std::shared_ptr<Event> observation;
                 if (auto *sample = trace.load())
                 {

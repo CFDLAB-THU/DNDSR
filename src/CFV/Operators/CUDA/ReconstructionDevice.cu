@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "CFV/Detail/ReconstructionDeviceKernels.hpp"
 #include "CFV/Detail/ReconstructionSweepArguments.hpp"
 #include <cuda_runtime.h>
@@ -208,7 +209,7 @@ namespace DNDS::CFV::Detail
     {
         R::ValidateViewDevices(context.device, selection, output, status);
         if (selection.count)
-            ValidateJacobiResult<<<unsigned(std::min<index>(selection.count, 256)), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(selection, output, status);
+            ValidateJacobiResult<<<unsigned(std::min<index>(selection.count, 256)), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(selection, output, status);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA Jacobi finite-result check failed");
     }
     void LaunchJacobiFullAccumulation(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection,
@@ -252,7 +253,7 @@ namespace DNDS::CFV::Detail
             return;
         // A separate stream-ordered validation pass avoids a status read/write
         // race between cell blocks and prevents partial publication on error.
-        ValidatePenalty<<<unsigned(std::min<index>(256, (alpha.rows + 127) / 128)), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(alpha, status);
+        ValidatePenalty<<<unsigned(std::min<index>(256, (alpha.rows + 127) / 128)), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(alpha, status);
         if (pipeline)
             LaunchLimitedStagedJacobi(context, plan, selection, blocks, mean, input, boundary, output, status.ConstView(), target, alpha, options);
         else
@@ -268,7 +269,7 @@ namespace DNDS::CFV::Detail
         R::CheckKernelArgumentBudget<WBAPView, decltype(selection), decltype(blocks), decltype(input),
                                      decltype(output), decltype(scratch), decltype(transform), decltype(indicator),
                                      decltype(status), index, index, real, real>();
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         // Status persists through a queued segment; caller explicitly clears it
         // when recovering after an observed error. No host read per submission.
         if (indicator.rows)
@@ -286,7 +287,7 @@ namespace DNDS::CFV::Detail
         // copy backend. No universal kernel-versus-memcpy speedup is assumed.
         if (!output.rows || !output.width)
             return;
-        Commit<<<unsigned(std::min<index>(256, (output.rows * output.width + 255) / 256)), 256, 0, static_cast<cudaStream_t>(context.stream)>>>(input, output, status);
+        Commit<<<unsigned(std::min<index>(256, (output.rows * output.width + 255) / 256)), 256, 0, ::DNDS::Runtime::CUDAStream(context)>>>(input, output, status);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA reconstruction commit launch failed");
     }
 }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
+
 namespace CFVTest
 {
     /// One quad adjoining two triangles gives three- and four-incidence rows.
@@ -152,7 +154,7 @@ TEST_CASE("Stage-once VR pipelines preserve complete modal batches and queued de
                                 const auto bytes = size_t(source.RowCount() * source.stride) * sizeof(double);
                                 if (bytes)
                                     DNDS_check_throw_info(cudaMemcpyAsync(target.data, source.data, bytes, cudaMemcpyDeviceToDevice,
-                                                                          static_cast<cudaStream_t>(launchContext.stream)) == cudaSuccess,
+                                                                          ::DNDS::Runtime::CUDAStream(launchContext)) == cudaSuccess,
                                                           "test VR producer copy failed"); }, R::Read(producerInput), R::Write(deviceCoefficients.Owned()));
             compute.WaitFor(producer.Record());
             // Frozen input, repeated writes: no host completion observation is
@@ -242,7 +244,7 @@ TEST_CASE("Float-float VR preserves low limbs through a cancelling modal product
         D::LaunchStagedJacobi(context, plan, {{}, 1, false}, {}, {meanRead.View(), {}}, {coefficientsRead.View(), {}}, {},
                               result.View(), statusWrite.View().ConstView(), {}, D::ReconstructionSweepArithmetic::FloatFloat);
         D::LaunchValidateJacobiResult(context, {{}, 1, false}, result.View().ConstView(), statusWrite.View());
-        REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
+        REQUIRE(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)) == cudaSuccess);
     }
     const auto host = output.To(R::Device::Host());
     const auto read = host.Read();

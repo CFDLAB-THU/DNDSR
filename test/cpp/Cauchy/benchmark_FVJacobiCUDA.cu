@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 // Standalone diagnostic: fixed input block-CSR actions, CUDA-event timing.
 // Link against the active checkout's cauchy/cfv/geom/dnds targets. No MPI or
 // numerical solver policy is exercised; this isolates the public row launcher.
@@ -124,9 +125,9 @@ int main(int argc, char **argv)
     CUDA(cudaSetDevice(device));
     cudaDeviceProp properties;
     CUDA(cudaGetDeviceProperties(&properties, device));
-    cudaStream_t native;
-    CUDA(cudaStreamCreateWithFlags(&native, cudaStreamNonBlocking));
-    const auto context = R::ExecutionContext::CUDA(device, native);
+    const auto streamOwner = R::CreateCUDAStream(device);
+    const auto context = R::ExecutionContext::CUDA(device, streamOwner);
+    const auto native = R::CUDAStream(context);
     {
         DNDS_check_throw_info(indices == "int64" || indices == "int32", "invalid symbolic index width");
         DNDS_check_throw_info(blockOrder == "columnMajor" || blockOrder == "rowMajor", "invalid dense block order");
@@ -264,5 +265,4 @@ int main(int argc, char **argv)
             {"matrix_stride_elements", placed.Values().Layout().Stride()}, {"inverse_stride_elements", inverse.Layout().Stride()}, {"matrix_pitch_request_bytes", matrixPitchBytes}, {"inverse_pitch_request_bytes", inversePitchBytes}, {"matrix_alignment_request_bytes", matrixAlignmentBytes}, {"inverse_alignment_request_bytes", inverseAlignmentBytes}, {"matrix_base_alignment_bytes_at_least", baseAlignment(placed.Values())}, {"inverse_base_alignment_bytes_at_least", baseAlignment(inverse)}, {"matrix_padding_bytes", (placed.Values().Layout().Elements() - blocks * components * components) * sizeof(real)}, {"inverse_padding_bytes", (inverse.Layout().Elements() - rows * components * components) * sizeof(real)}, {"distinct_matrix_pitch_candidates", pitchCandidates(matrixOptions, blocks)}, {"distinct_inverse_pitch_candidates", pitchCandidates(inverseOptions, rows)}};
         std::cout << nlohmann::ordered_json{{"storage", storage}, {"gpu", properties.name}, {"device", device}, {"side", side}, {"rows", rows}, {"blocks", blocks}, {"components", components}, {"irregular", irregular}, {"block_order", blockOrder}, {"matrix_layout", matrixLayout}, {"inverse_layout", inverseLayout}, {"indices", indices}, {"matrix_allocated_bytes", placed.Values().Layout().Elements() * sizeof(real)}, {"inverse_allocated_bytes", inverse.Layout().Elements() * sizeof(real)}, {"numeric_block_offsets_bytes", (rows + 1) * sizeof(I)}, {"useful_byte_model", "unique logical matrix/vector/index payload; excludes duplicate numeric offsets and physical padding"}, {"repeats", repeats}, {"cache", "warmed fixed-input replay; payload exceeds L2 at default shape"}, {"timings", records}}.dump(2) << '\n';
     }
-    CUDA(cudaStreamDestroy(native));
 }

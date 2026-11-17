@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/Core/CUDA/TimeStageKernels.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include <cuda_runtime.h>
@@ -197,7 +198,7 @@ namespace DNDS::Cauchy::CUDA
                                   std::isfinite(scale) && scale > 0 && power > 0 && power <= INT_MAX / 2,
                               "CUDA physical-step forecast needs matching perfect-gas policy and valid controls");
         R::CheckKernelArgumentBudget<TimeStageCells, TimeStageInput, TimeStageInput, ThermalView, real, real, real, int, TimeStageSummaryOutput>();
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         PhysicalStep<<<unsigned(partial.RowCount()), Threads, 0, stream>>>(cells, mean, rhs, thermal, dt, relax, scale, power, partial);
         Finish<<<1, Threads, 0, stream>>>(partial, result);
         CheckLaunch();
@@ -213,7 +214,7 @@ namespace DNDS::Cauchy::CUDA
         CheckSummary(context, initial.RowCount(), partial, result);
         R::CheckKernelArgumentBudget<TimeStageCells, TimeStageInput, TimeStageInput, TimeStageInput, TimeStageInput,
                                      ThermalBounds, ExplicitStageCoefficients, TimeStageSummaryOutput>();
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         Blend<<<unsigned(partial.RowCount()), Threads, 0, stream>>>(cells, initial, stage, high, low, bounds, c, partial);
         Finish<<<1, Threads, 0, stream>>>(partial, result);
         CheckLaunch();
@@ -233,7 +234,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<TimeStageCells, TimeStageInput, TimeStageInput, TimeStageInput, TimeStageOutput, real, ExplicitStageCoefficients>();
         if (stage.RowCount())
             Flow<<<unsigned((stage.RowCount() + Threads - 1) / Threads), Threads, 0,
-                   static_cast<cudaStream_t>(context.stream)>>>(cells, initial, rhs, low, stage, alpha, c);
+                   ::DNDS::Runtime::CUDAStream(context)>>>(cells, initial, rhs, low, stage, alpha, c);
         CheckLaunch();
     }
     void UpdateExplicitExtended(R::ExecutionContext context, TimeStageCells cells, TimeStageInput initial,
@@ -247,7 +248,7 @@ namespace DNDS::Cauchy::CUDA
                                   stage.data != initial.data && stage.data != rhs.data,
                               "explicit extended CUDA profile or alias differs");
         R::CheckKernelArgumentBudget<TimeStageCells, TimeStageInput, TimeStageInput, TimeStageOutput, RANSStateView, ExplicitStageCoefficients, TimeStageSummaryOutput>();
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         if (initial.Width() == 6)
             Extended<6><<<unsigned(partial.RowCount()), Threads, 0, stream>>>(cells, initial, rhs, stage, rans, c, partial);
         else

@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/Implicit/CUDA/NonlinearKernels_Detail.hpp"
 #include <limits>
 
@@ -101,7 +102,7 @@ namespace DNDS::Cauchy::CUDA
     void D::Finish(R::ExecutionContext context, NonlinearSummaryOutput scratch, NonlinearSummaryOutput result)
     {
         CheckLaunch();
-        ReduceSummary<<<1, Threads, 0, static_cast<cudaStream_t>(context.stream)>>>(scratch.ConstView(), result);
+        ReduceSummary<<<1, Threads, 0, ::DNDS::Runtime::CUDAStream(context)>>>(scratch.ConstView(), result);
         CheckLaunch();
     }
     void AssembleDefect(R::ExecutionContext context, NonlinearCells cells, LinearReadRows mean, LinearReadRows residual,
@@ -119,8 +120,8 @@ namespace DNDS::Cauchy::CUDA
                               "invalid CUDA defect coefficients or alias");
         R::CheckKernelArgumentBudget<NonlinearCells, LinearReadRows, LinearReadRows, LinearReadRows, LinearWriteRows,
                                      NonlinearSelection, real, real, int, bool, NonlinearSummaryOutput>();
-        Defect<<<unsigned(scratch.RowCount()), D::Threads, 0, static_cast<cudaStream_t>(context.stream)>>>(cells, mean, residual, constant,
-                                                                                                           output, selection, mass, rhsScale, normOrder, measureNorm, scratch);
+        Defect<<<unsigned(scratch.RowCount()), D::Threads, 0, ::DNDS::Runtime::CUDAStream(context)>>>(cells, mean, residual, constant,
+                                                                                                      output, selection, mass, rhsScale, normOrder, measureNorm, scratch);
         D::Finish(context, scratch, result);
     }
     void MeasureMeanState(R::ExecutionContext context, NonlinearCells cells, LinearReadRows mean,
@@ -130,7 +131,7 @@ namespace DNDS::Cauchy::CUDA
         D::CheckCells(context, cells, mean.RowCount());
         D::CheckSummary(context, mean.RowCount(), scratch, result);
         R::CheckKernelArgumentBudget<NonlinearCells, LinearReadRows, NonlinearSummaryOutput>();
-        MeanScale<<<unsigned(scratch.RowCount()), D::Threads, 0, static_cast<cudaStream_t>(context.stream)>>>(cells, mean, scratch);
+        MeanScale<<<unsigned(scratch.RowCount()), D::Threads, 0, ::DNDS::Runtime::CUDAStream(context)>>>(cells, mean, scratch);
         D::Finish(context, scratch, result);
     }
     void ScaleRateByVolume(R::ExecutionContext context, NonlinearCells cells, LinearReadRows input, LinearWriteRows output, bool multiply)
@@ -142,7 +143,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<NonlinearCells, LinearReadRows, LinearWriteRows, bool>();
         if (!input.RowCount())
             return;
-        Rate<<<unsigned(NonlinearScratchRows(input.RowCount())), D::Threads, 0, static_cast<cudaStream_t>(context.stream)>>>(cells, input, output, multiply);
+        Rate<<<unsigned(NonlinearScratchRows(input.RowCount())), D::Threads, 0, ::DNDS::Runtime::CUDAStream(context)>>>(cells, input, output, multiply);
         D::CheckLaunch();
     }
     void MeasureRateNorm(R::ExecutionContext context, NonlinearCells cells, LinearReadRows rate,
@@ -155,7 +156,7 @@ namespace DNDS::Cauchy::CUDA
             D::CheckRows(context, reference, rate.RowCount(), rate.Width());
         DNDS_check_throw_info(normOrder == 1 || normOrder == 2, "invalid CUDA rate norm order");
         R::CheckKernelArgumentBudget<NonlinearCells, LinearReadRows, LinearReadRows, int, NonlinearSummaryOutput>();
-        RateNorm<<<unsigned(scratch.RowCount()), D::Threads, 0, static_cast<cudaStream_t>(context.stream)>>>(cells, rate, reference, normOrder, scratch);
+        RateNorm<<<unsigned(scratch.RowCount()), D::Threads, 0, ::DNDS::Runtime::CUDAStream(context)>>>(cells, rate, reference, normOrder, scratch);
         D::Finish(context, scratch, result);
     }
     void AssembleEquation(R::ExecutionContext context, NonlinearCells cells, LinearReadRows mean, LinearReadRows residual,
@@ -175,7 +176,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<NonlinearCells, LinearReadRows, LinearReadRows, LinearWriteRows, LinearWriteRows, real, real>();
         if (!mean.RowCount())
             return;
-        Equation<<<unsigned(NonlinearScratchRows(mean.RowCount())), D::Threads, 0, static_cast<cudaStream_t>(context.stream)>>>(
+        Equation<<<unsigned(NonlinearScratchRows(mean.RowCount())), D::Threads, 0, ::DNDS::Runtime::CUDAStream(context)>>>(
             cells, mean, residual, output, rate, mass, rhsScale);
         D::CheckLaunch();
     }

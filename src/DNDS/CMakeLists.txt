@@ -22,7 +22,7 @@ dnds_variable_to_parent_scope(DNDS_PCH_TARGETS_FAST)
 set(LIBNAME dnds)
 find_package(Threads REQUIRED)
 if(DNDS_USE_CALIPER)
-    find_package(caliper CONFIG REQUIRED)
+    find_package(caliper CONFIG REQUIRED HINTS "${DNDS_CFD_EXTERNALS_INSTALL}/share/cmake/caliper")
 endif()
 
 set(LINKS
@@ -50,6 +50,7 @@ Runtime/Storage/AllocationDiagnostics.cpp
 Runtime/Execution/EagerEngine.cpp
 Runtime/Execution/AccessTracking.cpp
 Runtime/Execution/CUDAExecution.cpp
+Runtime/Execution/CUDAStream.cpp
 Runtime/Communication/Exchange.cpp
 Runtime/Storage/ElementSchema.cpp
 Runtime/Communication/RowTransfer.cpp

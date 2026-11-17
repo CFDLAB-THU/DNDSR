@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 // Independent small dense-product oracle and timing for the shared FP64 adapter.
 #include "DNDS/Algebra/CUDA/FP64Matrix.cuh"
 #include "DNDS/Runtime/Execution/CUDAExecution.hpp"
@@ -93,9 +94,9 @@ int main(int argc, char **argv)
                     R::SubmitArrays(engine, stream, [=](auto context, auto a, auto b, auto c)
                                     {
                         if (useTensor)
-                            TensorProduct<<<256,128,0,static_cast<cudaStream_t>(context.stream)>>>(a, b, c, n, components);
+                            TensorProduct<<<256,128,0,::DNDS::Runtime::CUDAStream(context)>>>(a, b, c, n, components);
                         else
-                            ScalarProduct<<<256,128,0,static_cast<cudaStream_t>(context.stream)>>>(a, b, c, n, components);
+                            ScalarProduct<<<256,128,0,::DNDS::Runtime::CUDAStream(context)>>>(a, b, c, n, components);
                         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "FP64 product launch failed"); }, R::Read(a), R::Read(b), R::Write(useTensor ? tensor : scalar));
                 };
                 for (int warm = 0; warm < 3; ++warm)
@@ -128,7 +129,7 @@ int main(int argc, char **argv)
                     {
                         cudaEvent_t begin, end;
                         DNDS_check_throw_info(cudaEventCreate(&begin) == cudaSuccess && cudaEventCreate(&end) == cudaSuccess, "timing event creation failed");
-                        auto native = static_cast<cudaStream_t>(stream.Context().stream);
+                        auto native = ::DNDS::Runtime::CUDAStream(stream.Context());
                         DNDS_check_throw_info(cudaEventRecord(begin, native) == cudaSuccess, "timing begin failed");
                         for (int repeat = 0; repeat < 20; ++repeat)
                             submit(useTensor);

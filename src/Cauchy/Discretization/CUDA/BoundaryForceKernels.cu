@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/Discretization/CUDA/BoundaryForceKernels.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include "DNDS/Device/ReductionCompletion.hpp"
@@ -83,7 +84,7 @@ namespace DNDS::Cauchy::CUDA
                 DNDS_check_throw_info(!input || outputs[i] != input, "CUDA boundary force output aliases input");
         }
         R::CheckKernelArgumentBudget<ForceGeometry, ForceInput, SpanView<const int>, ForceOutput, ForceOutput, ForceCounter>();
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         DNDS_check_throw_info(cudaMemsetAsync(completed.data, 0, sizeof(unsigned int), stream) == cudaSuccess, "CUDA boundary force counter reset failed");
         Rows<<<unsigned(partial.RowCount()), Threads, 0, stream>>>(geometry, values, zones, partial, result, completed);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA boundary force reduction launch failed");

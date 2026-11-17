@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Shapes.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Compute.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Segments.hpp"
@@ -182,7 +183,7 @@ namespace DNDS::Cauchy::CUDA
         if (!cells.RowCount())
             return;
         const unsigned blocks = unsigned(std::min<index>((cells.RowCount() + 127) / 128, 1024));
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         switch (high.Width())
         {
         case 5:

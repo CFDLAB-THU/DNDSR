@@ -26,8 +26,8 @@ pip install -r external/cfd_externals/requirements.txt
 
 # Header-only libs first
 curl -L -o external/external_headeronlys.tar.gz \
-  https://github.com/harryzhou2000/cfd_externals_headeronlys/releases/download/v0.2.0/external_headeronlys.tar.gz
-echo "f756b3331d852836434b56a25e7f913ab58d1a80f13d001832e0504266aa6af2  external/external_headeronlys.tar.gz" | sha256sum -c -
+  https://github.com/harryzhou2000/cfd_externals_headeronlys/releases/download/v0.3.0/external_headeronlys.tar.gz
+echo "00692e1581f900d76c43432f4712b8dc2a53408d968fbf656bd3dd3561e2514e  external/external_headeronlys.tar.gz" | sha256sum -c -
 cd external && tar -xzf external_headeronlys.tar.gz && cd ..
 
 # Then binary libs (needs header-onlys already extracted)
@@ -105,13 +105,13 @@ submodule.
 
 ### Header-only libraries (Eigen, Boost, CGAL, fmt, spdlog, pybind11, ...)
 
-Download the pinned v0.2.0 release tarball from GitHub and extract it into
+Download the pinned v0.3.0 release tarball from GitHub and extract it into
 the `external/` directory:
 
 ```bash
 curl -L -o external/external_headeronlys.tar.gz \
-  https://github.com/harryzhou2000/cfd_externals_headeronlys/releases/download/v0.2.0/external_headeronlys.tar.gz
-echo "f756b3331d852836434b56a25e7f913ab58d1a80f13d001832e0504266aa6af2  external/external_headeronlys.tar.gz" | sha256sum -c -
+  https://github.com/harryzhou2000/cfd_externals_headeronlys/releases/download/v0.3.0/external_headeronlys.tar.gz
+echo "00692e1581f900d76c43432f4712b8dc2a53408d968fbf656bd3dd3561e2514e  external/external_headeronlys.tar.gz" | sha256sum -c -
 cd external
 tar -xzf external_headeronlys.tar.gz
 cd ..
@@ -120,7 +120,7 @@ cd ..
 After extraction, directories such as `external/eigen/`,
 `external/boost/`, `external/CGAL/`, etc. should exist.
 
-### Binary libraries (HDF5, CGNS, Metis, ParMetis, ZLIB)
+### Binary libraries (HDF5, CGNS, Metis, ParMetis, ZLIB, Caliper)
 
 ```bash
 git submodule update --init --recursive --depth=1
@@ -128,6 +128,11 @@ cd external/cfd_externals
 CC=mpicc CXX=mpicxx python cfd_externals_build.py
 cd ../..
 ```
+
+The binary helper always includes CPU Caliper. CUDA profiling services and the
+modified single-device AMGX fork are explicit options; see the
+[AMGX dependency guide](amgx.md). The v0.3.0 header bundle also provides the
+coherent `external/cccl` headers used by experimental compute arithmetic.
 
 This installs all binary libraries into `external/cfd_externals/install/`.
 

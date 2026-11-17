@@ -359,8 +359,8 @@ namespace DNDS::Geom
         DNDS_check_throw_info(device == Runtime::Device::Host() ||
                                   (device.space == Runtime::MemorySpace::CUDA && device.ordinal >= 0),
                               "invalid native mesh placement device");
-        DNDS_check_throw_info(context.device == device &&
-                                  (device.space != Runtime::MemorySpace::Host || !context.stream),
+        context.Validate();
+        DNDS_check_throw_info(context.device == device,
                               "native mesh placement context mismatch");
         auto result = std::shared_ptr<UnstructuredMeshState>(new UnstructuredMeshState(*this));
         if (!result->_placements.count(PlacementKey(device)))

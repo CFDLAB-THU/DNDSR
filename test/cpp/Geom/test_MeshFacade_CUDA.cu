@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #define DOCTEST_CONFIG_IMPLEMENT
 #define DNDS_MESH_FACADE_TEST_EMBEDDED
 #include "test_MeshFacade.cpp"
@@ -212,12 +213,12 @@ struct FacadeStreamGate
 TEST_CASE("Mesh facade CUDA kernels traverse retained snapshots with host parity")
 {
     const int ordinal = FacadeGPUOrdinal();
-    cudaStream_t stream = nullptr;
-    REQUIRE(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking) == cudaSuccess);
-    cudaStream_t secondStream = nullptr;
-    REQUIRE(cudaStreamCreateWithFlags(&secondStream, cudaStreamNonBlocking) == cudaSuccess);
-    const auto context = R::ExecutionContext::CUDA(ordinal, stream);
-    const auto secondContext = R::ExecutionContext::CUDA(ordinal, secondStream);
+    const auto streamOwner = R::CreateCUDAStream(ordinal);
+    const auto stream = R::CUDAStream(R::ExecutionContext::CUDA(ordinal, streamOwner));
+    const auto secondStreamOwner = R::CreateCUDAStream(ordinal);
+    const auto secondStream = R::CUDAStream(R::ExecutionContext::CUDA(ordinal, secondStreamOwner));
+    const auto context = R::ExecutionContext::CUDA(ordinal, streamOwner);
+    const auto secondContext = R::ExecutionContext::CUDA(ordinal, secondStreamOwner);
     cudaEvent_t gatePassed = nullptr, secondDone = nullptr;
     REQUIRE(cudaEventCreateWithFlags(&gatePassed, cudaEventDisableTiming) == cudaSuccess);
     REQUIRE(cudaEventCreateWithFlags(&secondDone, cudaEventDisableTiming) == cudaSuccess);
@@ -321,29 +322,26 @@ TEST_CASE("Mesh facade CUDA kernels traverse retained snapshots with host parity
     REQUIRE(cudaFree(output) == cudaSuccess);
     REQUIRE(cudaEventDestroy(secondDone) == cudaSuccess);
     REQUIRE(cudaEventDestroy(gatePassed) == cudaSuccess);
-    REQUIRE(cudaStreamDestroy(secondStream) == cudaSuccess);
-    REQUIRE(cudaStreamDestroy(stream) == cudaSuccess);
 }
 
 TEST_CASE("Moved mesh CUDA access can outlive its destroyed acquisition stream")
 {
     const int ordinal = FacadeGPUOrdinal();
-    cudaStream_t stream = nullptr;
-    REQUIRE(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking) == cudaSuccess);
+    const auto streamOwner = R::CreateCUDAStream(ordinal);
+    const auto stream = R::CUDAStream(R::ExecutionContext::CUDA(ordinal, streamOwner));
     auto mesh = FacadeFixture();
-    mesh->PlaceNative(R::Device::CUDA(ordinal), R::ExecutionContext::CUDA(ordinal, stream));
+    mesh->PlaceNative(R::Device::CUDA(ordinal), R::ExecutionContext::CUDA(ordinal, streamOwner));
     std::optional<G::MeshReadAccess> movedFrom;
-    movedFrom.emplace(mesh->AcquireRead(G::MeshReadRequirements::CellFlux(), R::ExecutionContext::CUDA(ordinal, stream)));
+    movedFrom.emplace(mesh->AcquireRead(G::MeshReadRequirements::CellFlux(), R::ExecutionContext::CUDA(ordinal, streamOwner)));
     {
         G::MeshReadAccess destination(std::move(*movedFrom));
         CHECK_THROWS(movedFrom->DeviceView());
-        destination.Complete(R::Completion::Record(R::ExecutionContext::CUDA(ordinal, stream)));
+        destination.Complete(R::Completion::Record(R::ExecutionContext::CUDA(ordinal, streamOwner)));
         CHECK_THROWS(destination.DeviceView());
         destination.Wait();
         CHECK_THROWS(destination.DeviceView());
     }
     CHECK(mesh->versions.CanMutate());
-    REQUIRE(cudaStreamDestroy(stream) == cudaSuccess);
     movedFrom.reset(); // Must not record an event on the destroyed stream.
     CHECK(cudaGetLastError() == cudaSuccess);
 }
@@ -351,25 +349,24 @@ TEST_CASE("Moved mesh CUDA access can outlive its destroyed acquisition stream")
 TEST_CASE("Mesh facade CUDA completion validates the acquisition stream")
 {
     const int ordinal = FacadeGPUOrdinal();
-    cudaStream_t stream = nullptr;
-    REQUIRE(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking) == cudaSuccess);
+    const auto streamOwner = R::CreateCUDAStream(ordinal);
+    const auto stream = R::CUDAStream(R::ExecutionContext::CUDA(ordinal, streamOwner));
     auto mesh = FacadeFixture(true);
-    mesh->PlaceNative(R::Device::CUDA(ordinal), R::ExecutionContext::CUDA(ordinal, stream));
+    mesh->PlaceNative(R::Device::CUDA(ordinal), R::ExecutionContext::CUDA(ordinal, streamOwner));
     {
-        auto access = mesh->AcquireRead(AllFacadeRequirements(), R::ExecutionContext::CUDA(ordinal, stream));
+        auto access = mesh->AcquireRead(AllFacadeRequirements(), R::ExecutionContext::CUDA(ordinal, streamOwner));
         CHECK_THROWS(access.Complete(R::Completion::Record(R::ExecutionContext::CUDA(ordinal))));
-        access.Complete(R::Completion::Record(R::ExecutionContext::CUDA(ordinal, stream)));
+        access.Complete(R::Completion::Record(R::ExecutionContext::CUDA(ordinal, streamOwner)));
         access.Wait();
     }
     CHECK(mesh->versions.CanMutate());
-    REQUIRE(cudaStreamDestroy(stream) == cudaSuccess);
 }
 
 TEST_CASE("Native mesh CUDA queries match existing const legacy pair views")
 {
     const int ordinal = FacadeGPUOrdinal();
-    cudaStream_t stream = nullptr;
-    REQUIRE(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking) == cudaSuccess);
+    const auto streamOwner = R::CreateCUDAStream(ordinal);
+    const auto stream = R::CUDAStream(R::ExecutionContext::CUDA(ordinal, streamOwner));
     int *deviceErrors = nullptr;
     REQUIRE(cudaMalloc(reinterpret_cast<void **>(&deviceErrors), sizeof(int)) == cudaSuccess);
     G::UnstructuredMeshLegacyView *deviceDescriptor = nullptr;
@@ -378,7 +375,7 @@ TEST_CASE("Native mesh CUDA queries match existing const legacy pair views")
     {
         auto native = FacadeFixture(periodic);
         auto legacy = LegacyConstReferenceFixture(periodic);
-        native->PlaceNative(R::Device::CUDA(ordinal), R::ExecutionContext::CUDA(ordinal, stream));
+        native->PlaceNative(R::Device::CUDA(ordinal), R::ExecutionContext::CUDA(ordinal, streamOwner));
         // Independent legacy allocations use their established device copies.
         // Reference acquisition is const; no legacy implementation is altered.
         legacy->coords.to_device(DNDS::DeviceBackend::CUDA);
@@ -414,7 +411,7 @@ TEST_CASE("Native mesh CUDA queries match existing const legacy pair views")
             reference.face2nodePbi.template deviceView<DNDS::DeviceBackend::CUDA>(),
             reference.cell2facePbi.template deviceView<DNDS::DeviceBackend::CUDA>(),
             reference.periodicInfo, periodic};
-        auto access = native->AcquireLegacyRead(G::MeshReadRequirements::CellFlux(), R::ExecutionContext::CUDA(ordinal, stream));
+        auto access = native->AcquireLegacyRead(G::MeshReadRequirements::CellFlux(), R::ExecutionContext::CUDA(ordinal, streamOwner));
         CHECK_THROWS(access.HostView());
         CHECK_THROWS(access.operator->());
         const auto &descriptor = access.DeviceView();
@@ -422,7 +419,7 @@ TEST_CASE("Native mesh CUDA queries match existing const legacy pair views")
         REQUIRE(G::Test::LaunchLegacyMeshParity(access.DeviceView(), old, deviceErrors, stream) == cudaSuccess);
         LegacyFacadeParityKernel<<<1, 1, 0, stream>>>(deviceDescriptor, old, deviceErrors);
         REQUIRE(cudaGetLastError() == cudaSuccess);
-        access.Complete(R::Completion::Record(R::ExecutionContext::CUDA(ordinal, stream)));
+        access.Complete(R::Completion::Record(R::ExecutionContext::CUDA(ordinal, streamOwner)));
         CHECK_THROWS(access.DeviceView());
         access.Wait();
         int errors = -1;
@@ -431,15 +428,14 @@ TEST_CASE("Native mesh CUDA queries match existing const legacy pair views")
     }
     REQUIRE(cudaFree(deviceDescriptor) == cudaSuccess);
     REQUIRE(cudaFree(deviceErrors) == cudaSuccess);
-    REQUIRE(cudaStreamDestroy(stream) == cudaSuccess);
 }
 
 TEST_CASE("Detached native CUDA mesh backing is placed once and reused by reads")
 {
     const int ordinal = FacadeGPUOrdinal();
-    cudaStream_t stream = nullptr;
-    REQUIRE(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking) == cudaSuccess);
-    const auto context = R::ExecutionContext::CUDA(ordinal, stream);
+    const auto streamOwner = R::CreateCUDAStream(ordinal);
+    const auto stream = R::CUDAStream(R::ExecutionContext::CUDA(ordinal, streamOwner));
+    const auto context = R::ExecutionContext::CUDA(ordinal, streamOwner);
     G::Test::MeshViewProbeResult *output = nullptr;
     REQUIRE(cudaMalloc(reinterpret_cast<void **>(&output), sizeof(*output)) == cudaSuccess);
     auto mesh = FacadeFixture(true);
@@ -469,7 +465,6 @@ TEST_CASE("Detached native CUDA mesh backing is placed once and reused by reads"
         CheckProbeEqual(actual, expected);
     }
     REQUIRE(cudaFree(output) == cudaSuccess);
-    REQUIRE(cudaStreamDestroy(stream) == cudaSuccess);
 }
 
 namespace
@@ -538,10 +533,10 @@ TEST_CASE("Native builder CUDA stencil retains independent arrays through pendin
     const auto mpi = FacadeMPI();
     REQUIRE(mpi.size <= 2);
     const int ordinal = FacadeGPUOrdinal();
-    cudaStream_t stream = nullptr;
-    REQUIRE(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking) == cudaSuccess);
+    const auto streamOwner = R::CreateCUDAStream(ordinal);
+    const auto stream = R::CUDAStream(R::ExecutionContext::CUDA(ordinal, streamOwner));
     const auto device = R::Device::CUDA(ordinal);
-    const auto context = R::ExecutionContext::CUDA(ordinal, stream);
+    const auto context = R::ExecutionContext::CUDA(ordinal, streamOwner);
     std::optional<G::NativeMeshInput> input;
     input.emplace(NativeBuilderCUDAInput(mpi));
     G::NativeMeshBuildOptions options;
@@ -626,7 +621,6 @@ TEST_CASE("Native builder CUDA stencil retains independent arrays through pendin
     auto actual = host.Read();
     for (size_t row = 0; row < expected.size(); ++row)
         CHECK(actual.View()(row, 0) == expected[row]);
-    REQUIRE(cudaStreamDestroy(stream) == cudaSuccess);
 }
 
 int main(int argc, char **argv)

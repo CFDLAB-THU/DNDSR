@@ -1,4 +1,5 @@
 #include "DNDS/Runtime/Interop/Array_bind.hpp"
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "DNDS/Runtime/Interop/third_party/dlpack/dlpack.h"
 #include <pybind11/stl.h>
 #include <array>
@@ -82,7 +83,11 @@ namespace DNDS::Runtime
                 const auto native = py::cast<int64_t>(stream);
                 if (native <= 0)
                     throw py::value_error("CUDA DLPack stream must be a positive handle (1 legacy, 2 per-thread)");
-                context.stream = reinterpret_cast<void *>(uintptr_t(native));
+#ifdef DNDS_USE_CUDA
+                context.stream = BorrowExternalCUDAStream(device.ordinal, reinterpret_cast<cudaStream_t>(uintptr_t(native)));
+#else
+                DNDS_check_throw_info(false, "CUDA DLPack stream is unavailable in this build");
+#endif
             }
             auto owner = std::make_unique<Export>(array, context, dtype);
             py::capsule capsule(&owner->tensor, "dltensor", [](PyObject *value)

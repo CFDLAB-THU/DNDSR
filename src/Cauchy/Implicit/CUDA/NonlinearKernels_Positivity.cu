@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/Implicit/CUDA/NonlinearKernels_Detail.hpp"
 #include <limits>
 
@@ -203,7 +204,7 @@ namespace DNDS::Cauchy::CUDA
                               "CUDA pseudo-time outputs alias");
         R::CheckKernelArgumentBudget<NonlinearCells, LinearReadRows, LinearWriteRows, LinearReadRows,
                                      LinearWriteRows, LinearWriteRows, PseudoTimeParameters, NonlinearSummaryOutput>();
-        PseudoTime<<<unsigned(scratch.RowCount()), D::Threads, 0, static_cast<cudaStream_t>(context.stream)>>>(
+        PseudoTime<<<unsigned(scratch.RowCount()), D::Threads, 0, ::DNDS::Runtime::CUDAStream(context)>>>(
             cells, mean, defect, spectral, inverseTau, alpha, parameters, scratch);
         D::Finish(context, scratch, result);
     }
@@ -220,7 +221,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<LinearReadRows, LinearWriteRows, LinearWriteRows, real, AlphaReduction, bool>();
         if (!defect.RowCount())
             return;
-        AgreedAlpha<<<unsigned(NonlinearScratchRows(defect.RowCount())), D::Threads, 0, static_cast<cudaStream_t>(context.stream)>>>(
+        AgreedAlpha<<<unsigned(NonlinearScratchRows(defect.RowCount())), D::Threads, 0, ::DNDS::Runtime::CUDAStream(context)>>>(
             alpha, inverseTau, defect, minimum, reduction, compressRHS);
         D::CheckLaunch();
     }
@@ -244,7 +245,7 @@ namespace DNDS::Cauchy::CUDA
         DNDS_check_throw_info(!candidate.data || (candidate.data != mean.data && candidate.data != increment.data),
                               "CUDA correction candidate aliases input");
         R::CheckKernelArgumentBudget<LinearReadRows, LinearReadRows, LinearWriteRows, CorrectionParameters, NonlinearSummaryOutput>();
-        Correction<<<unsigned(scratch.RowCount()), D::Threads, 0, static_cast<cudaStream_t>(context.stream)>>>(
+        Correction<<<unsigned(scratch.RowCount()), D::Threads, 0, ::DNDS::Runtime::CUDAStream(context)>>>(
             mean, increment, candidate, parameters, scratch);
         D::Finish(context, scratch, result);
     }

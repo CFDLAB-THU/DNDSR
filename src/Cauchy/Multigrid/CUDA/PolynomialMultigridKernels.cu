@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/Multigrid/CUDA/PolynomialMultigridKernels.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include <cuda_runtime.h>
@@ -69,7 +70,7 @@ namespace DNDS::Cauchy::CUDA
                                   partial.RowCount() == FrozenCheckScratchRows(values.RowCount()) && result.RowCount() == 1 && partial.data != result.data,
                               "CUDA FAS frozen-check shape differs");
         R::CheckKernelArgumentBudget<FASRead, FASRead, FASSelection, decltype(partial.ConstView()), FASIndexWrite>();
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         Frozen<false><<<unsigned(partial.RowCount()), Threads, 0, stream>>>(values, saved, selection, {}, partial);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA FAS frozen-check launch failed");
         Frozen<true><<<1, Threads, 0, stream>>>({}, {}, {}, partial.ConstView(), result);
@@ -88,7 +89,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<FASWrite, FASRead, FASSelection, bool>();
         if (!values.RowCount())
             return;
-        Selected<<<unsigned(FrozenCheckScratchRows(values.RowCount())), Threads, 0, static_cast<cudaStream_t>(context.stream)>>>(values, delta, selection, add);
+        Selected<<<unsigned(FrozenCheckScratchRows(values.RowCount())), Threads, 0, ::DNDS::Runtime::CUDAStream(context)>>>(values, delta, selection, add);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA FAS selected update failed");
     }
 }

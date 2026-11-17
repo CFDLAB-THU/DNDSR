@@ -69,6 +69,11 @@ list(APPEND CPPS Operators/CUDA/ReconstructionDeviceKernels_Staged.cu
     Operators/CUDA/ReconstructionDevice_General_FP64.cu)
 list(APPEND CPPS Operators/CUDA/DistributedInterfaceSamplingKernels.cu)
 list(APPEND CPPS Operators/CUDA/ReconstructionAMGKernels_CUDA.cu)
+# Register only this explicitly enumerated numerical CUDA catalog. Legacy CUDA
+# and standalone test/benchmark sources retain their device checks.
+set(_cfv_checked_kernel_sources ${CPPS})
+list(FILTER _cfv_checked_kernel_sources INCLUDE REGEX "^Operators/CUDA/.*\\.cu$")
+dnds_cuda_kernel_assertions(${_cfv_checked_kernel_sources})
 endif()
 
 file(GLOB EXPLICIT_INST_CPP_FILES CONFIGURE_DEPENDS "Legacy/ExplicitInstantiations/*.cpp")

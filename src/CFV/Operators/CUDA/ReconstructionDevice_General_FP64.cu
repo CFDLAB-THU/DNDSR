@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "CFV/Operators/CUDA/ReconstructionDevice_General.cuh"
 
 namespace DNDS::CFV::Detail
@@ -24,7 +25,7 @@ namespace DNDS::CFV::Detail
             DNDS_check_throw_info(bytes <= index(sharedLimit), "general FP64 reconstruction scratch exceeds shared memory");
             if (!a.selection.count)
                 return;
-            GeneralJacobi<<<unsigned(std::min<index>(a.selection.count, 256)), 128, size_t(bytes), static_cast<cudaStream_t>(a.context.stream)>>>(
+            GeneralJacobi<<<unsigned(std::min<index>(a.selection.count, 256)), 128, size_t(bytes), ::DNDS::Runtime::CUDAStream(a.context)>>>(
                 RawReconstructionSweepView(a.plan), a.selection, a.vectors, a.mean, a.input, a.boundary,
                 a.output, a.status, a.target, a.alpha, a.plan.raw, limited);
         }

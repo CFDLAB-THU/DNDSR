@@ -52,7 +52,7 @@ namespace DNDS::Cauchy
         const auto retained = _data;
         mean.RequireSchema(retained->equation.Schema());
         DNDS_check_throw_info(engine.Owns(stream) && stream.Context().device == retained->context.device &&
-                                  stream.Context().stream == retained->context.stream && mean.Device() == retained->context.device &&
+                                  (retained->context.device == R::Device::Host() || stream.Context().stream == retained->context.stream) && mean.Device() == retained->context.device &&
                                   mean.Space().Same(retained->metrics.Space()),
                               "diagnostic stream, space or residency differs");
         const auto geometry = std::make_shared<CFV::FiniteVolumeRead>(retained->metrics.AcquireRead(stream.Context()));

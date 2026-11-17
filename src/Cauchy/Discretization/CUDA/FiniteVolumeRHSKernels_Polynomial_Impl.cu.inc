@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 // Private CUDA implementation: included only by generated one-shape TUs.
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Shapes.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Staging.hpp"
@@ -191,7 +192,7 @@ namespace DNDS::Cauchy::CUDA::Detail
         Runtime::CheckKernelArgumentBudget<RHSGeometryView, RHSParametersView, RHSKernelControls,
                                            decltype(fields), decltype(output), RHSFacePackageView>();
         PolynomialFaces<Components, Modes, Dimension><<<a.segmentBlocks, a.controls.blockSize, a.packages.sharedBytes,
-                                                         static_cast<cudaStream_t>(a.context.stream)>>>(
+                                                         ::DNDS::Runtime::CUDAStream(a.context)>>>(
             a.geometry.View(), a.parameters, a.controls, fields, output, a.packages);
     }
 }

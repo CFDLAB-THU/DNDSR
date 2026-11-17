@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeBoundaryKernels.hpp"
 #include "Cauchy/Discretization/RANSReconstruction.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
@@ -199,7 +200,7 @@ namespace DNDS::Cauchy::CUDA
         if (!request.output.RowCount())
             return;
         const unsigned blocks = unsigned(std::min<index>((request.faces.RowCount() + 127) / 128, 1024));
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         switch (request.components)
         {
         case 5:
@@ -221,7 +222,7 @@ namespace DNDS::Cauchy::CUDA
         if (!request.output.RowCount())
             return;
         const unsigned blocks = unsigned(std::min<index>((request.faces.RowCount() + 127) / 128, 1024));
-        PrimitiveRows<<<blocks, 128, 0, static_cast<cudaStream_t>(context.stream)>>>(request);
+        PrimitiveRows<<<blocks, 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(request);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA primitive boundary launch failed");
     }
     void CopyBoundaryRows(R::ExecutionContext context, BoundaryInput source, BoundaryOutput output, BoundaryRows rows)
@@ -233,7 +234,7 @@ namespace DNDS::Cauchy::CUDA
         if (!output.RowCount())
             return;
         const unsigned blocks = unsigned(std::min<index>((output.RowCount() + 127) / 128, 1024));
-        CopyRows<<<blocks, 128, 0, static_cast<cudaStream_t>(context.stream)>>>(source, output, rows);
+        CopyRows<<<blocks, 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(source, output, rows);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA boundary copy launch failed");
     }
 }

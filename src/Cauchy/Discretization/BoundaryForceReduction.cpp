@@ -27,7 +27,7 @@ namespace DNDS::Cauchy
     {
         const auto retained = _data;
         DNDS_check_throw_info(engine.Owns(stream) && stream.Context().device == retained->context.device &&
-                                  stream.Context().stream == retained->context.stream && momentum.GetDevice() == retained->context.device &&
+                                  (retained->context.device == R::Device::Host() || stream.Context().stream == retained->context.stream) && momentum.GetDevice() == retained->context.device &&
                                   faces.GetDevice() == retained->context.device && momentum.Layout().Width() == 3,
                               "boundary force reduction context or shape differs");
         const auto publication = std::make_shared<FiniteVolumeStencilStorage::ReadAccess>(stencil.Read(retained->context));

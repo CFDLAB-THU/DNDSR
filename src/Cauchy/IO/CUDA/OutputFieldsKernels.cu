@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/IO/CUDA/OutputFieldsKernels.hpp"
 #include "Cauchy/Physics/PerfectGasPoint.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
@@ -56,7 +57,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<PerfectGas, Input, Output, Status>();
         const auto blocks = unsigned(std::min<index>((state.RowCount() - 1) / 128 + 1, INT_MAX));
         DNDS_check_throw_info(cudaSetDevice(context.device.ordinal) == cudaSuccess, "CUDA output device selection failed");
-        OutputRows<<<blocks, 128, 0, static_cast<cudaStream_t>(context.stream)>>>(gas, state, output, status);
+        OutputRows<<<blocks, 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(gas, state, output, status);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA output field launch failed");
     }
 }

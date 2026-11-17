@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/Implicit/CUDA/LinearBlockKernels.hpp"
 #include "DNDS/Algebra/BlockIndex.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
@@ -187,7 +188,7 @@ namespace DNDS::Cauchy::CUDA
                 return;
             const index rowsPerBlock = Jacobi && componentGroups ? 16 : 128;
             const unsigned blocks = unsigned(std::min<index>(65535, (request.rows.RowCount() + rowsPerBlock - 1) / rowsPerBlock));
-            const auto stream = static_cast<cudaStream_t>(context.stream);
+            const auto stream = ::DNDS::Runtime::CUDAStream(context);
             const auto issue = [&](auto projected, auto right, auto own, auto remote)
             {
                 if constexpr (Jacobi)

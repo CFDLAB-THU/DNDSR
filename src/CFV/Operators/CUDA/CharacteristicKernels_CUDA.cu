@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "CFV/Detail/CharacteristicKernels.hpp"
 #include <cuda_runtime.h>
 #include <cmath>
@@ -55,7 +56,7 @@ namespace DNDS::CFV::Detail
         if (!transform.forward.rows)
             return;
         ValidateCharacteristics<<<unsigned(std::min<index>(256, (transform.forward.rows + 127) / 128)), 128, 0,
-                                  static_cast<cudaStream_t>(context.stream)>>>(transform, status);
+                                  ::DNDS::Runtime::CUDAStream(context)>>>(transform, status);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "queued characteristic validation launch failed");
     }
 }

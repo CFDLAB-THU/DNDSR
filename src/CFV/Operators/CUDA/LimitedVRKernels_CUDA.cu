@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "CFV/Detail/LimitedVRKernels.hpp"
 #include "CFV/Math/LimitedVRStencil.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
@@ -44,7 +45,7 @@ namespace DNDS::CFV::Detail
         R::CheckKernelArgumentBudget<LimitedVRStencilView, DeviceWorkSelection, LVRField, LVRField, LVRInput, LVROutput, LimitedVRKernelParameters>();
         if (!selection.count)
             return;
-        Seeds<<<Blocks(selection.count), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(stencil, selection, scalars, gates, previous, output, settings);
+        Seeds<<<Blocks(selection.count), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(stencil, selection, scalars, gates, previous, output, settings);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA LVR seed launch failed");
     }
     void LaunchLimitedVRMaximum(R::ExecutionContext context, LimitedVRStencilView stencil, DeviceWorkSelection selection,
@@ -58,7 +59,7 @@ namespace DNDS::CFV::Detail
         R::CheckKernelArgumentBudget<LimitedVRStencilView, DeviceWorkSelection, LVRField, LVROutput, std::array<bool, 3>, bool, bool, std::array<real, 3>>();
         if (!selection.count)
             return;
-        Maximum<<<Blocks(selection.count), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(stencil, selection, input, output, active, excludeBoundary, saturatedOnly, caps);
+        Maximum<<<Blocks(selection.count), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(stencil, selection, input, output, active, excludeBoundary, saturatedOnly, caps);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA LVR maximum launch failed");
     }
 }

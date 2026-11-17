@@ -344,7 +344,7 @@ namespace DNDS::Runtime
             return result;
         }
         Buffer Storage() const { return _storage->Values(); }
-        ExecutionContext Context(uintptr_t stream = 0) const { return {Storage().GetDevice(), reinterpret_cast<void *>(stream)}; }
+        ExecutionContext Context(std::shared_ptr<StreamResource> stream = {}) const { return {Storage().GetDevice(), std::move(stream)}; }
         ReadAccess Read(ExecutionContext context) const { return _storage->Read(context); }
         WriteAccess Write(ExecutionContext context) { return _storage->Write(context); }
         CopyOperation CopyFrom(const PythonArray &source, ExecutionContext context)

@@ -67,6 +67,7 @@ include(cmake/DndsStdlibSetup.cmake)
 
 # 2. User-facing cache options, commit recording, verbose/tidy toggles
 include(cmake/DndsOptions.cmake)
+include(cmake/DndsCudaAssertions.cmake)
 
 # 3. CUDA language enable + toolkit discovery (reads DNDS_USE_CUDA)
 include(cmake/DndsCudaSetup.cmake)

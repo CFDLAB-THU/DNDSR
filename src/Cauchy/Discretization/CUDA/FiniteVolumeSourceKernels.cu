@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeSourceKernels.hpp"
 #include "Cauchy/Discretization/RANSReconstruction.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
@@ -141,7 +142,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<SourceRequest, SourceIndices>();
         if (!selected.RowCount())
             return;
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         if (request.components == 6)
             Sources<6><<<Blocks(selected.RowCount()), 128, 0, stream>>>(request, selected);
         else
@@ -159,7 +160,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<SourceIndices, SourceInput, SourceOutput, int, int>();
         if (!input.RowCount())
             return;
-        Replicate<<<Blocks(input.RowCount()), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(offsets, input, output, stride, direction);
+        Replicate<<<Blocks(input.RowCount()), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(offsets, input, output, stride, direction);
         CheckLaunch();
     }
     void AddRotationSource(R::ExecutionContext context, R::ArrayView<const real, false, R::FixedRows<8>> cells,
@@ -180,7 +181,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<decltype(cells), RigidFrameParameters, SourceInput, SourceOutput, SourceOutput, bool, SourceIndices>();
         if (!selected.RowCount() || !frame.moving)
             return;
-        Rotation<<<Blocks(selected.RowCount()), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(cells, frame, means, output, low, produceLow, selected);
+        Rotation<<<Blocks(selected.RowCount()), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(cells, frame, means, output, low, produceLow, selected);
         CheckLaunch();
     }
 }

@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "DNDS/Runtime/Communication/RowTransfer.hpp"
 #include "DNDS/Runtime/Communication/DevicePacking.hpp"
 #include <cuda_runtime.h>
@@ -83,7 +84,7 @@ namespace DNDS::Runtime
                 int previous = 0;
                 DNDS_check_throw_info(cudaGetDevice(&previous) == cudaSuccess, "CUDA current device query failed");
                 DNDS_check_throw_info(cudaSetDevice(context.device.ordinal) == cudaSuccess, "CUDA reduction device selection failed");
-                Reduce<<<unsigned(std::min(count, size_t(65535))), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(
+                Reduce<<<unsigned(std::min(count, size_t(65535))), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(
                     static_cast<const T *>(src), static_cast<T *>(dst), groups, count, op, init);
                 auto status = cudaGetLastError();
                 auto restored = cudaSetDevice(previous);
@@ -151,7 +152,7 @@ namespace DNDS::Runtime::Detail
         int previous = 0;
         DNDS_check_throw_info(context.device.space == MemorySpace::CUDA && cudaGetDevice(&previous) == cudaSuccess, "CUDA packing context unavailable");
         DNDS_check_throw_info(cudaSetDevice(context.device.ordinal) == cudaSuccess, "CUDA packing device selection failed");
-        PackRows<<<unsigned(std::min<index>(rowCount, 65535)), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(
+        PackRows<<<unsigned(std::min<index>(rowCount, 65535)), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(
             static_cast<const uint8_t *>(source), static_cast<uint8_t *>(destination), rows, rowCount, fields, fieldCount, extent, unpack);
         const auto launched = cudaGetLastError(), restored = cudaSetDevice(previous);
         DNDS_check_throw_info(launched == cudaSuccess && restored == cudaSuccess, "CUDA packing launch failed");

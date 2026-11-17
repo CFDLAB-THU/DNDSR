@@ -16,6 +16,14 @@ namespace R = DNDS::Runtime;
 namespace G = DNDS::Geom;
 using I = DNDS::index;
 
+class WrongDeviceStream final : public R::StreamResource
+{
+    void SynchronizeBackend() const override {}
+
+public:
+    R::Device GetDevice() const noexcept override { return R::Device::CUDA(0); }
+};
+
 static DNDS::MPIInfo FacadeMPI()
 {
     DNDS::MPIInfo mpi;
@@ -387,7 +395,7 @@ TEST_CASE("Mesh facade scopes retain storage after source deletion and reject in
     CHECK(access.HostView().NumNodeProc() == 0);
     CHECK(access.HostView().NumCellProc() == 0);
     CHECK(G::Test::MeshViewProbe(access.HostView()).relationChecksum == 0);
-    CHECK_THROWS(empty->AcquireRead(G::MeshReadRequirements::Primary(), {R::Device::Host(), reinterpret_cast<void *>(1)}));
+    CHECK_THROWS(empty->AcquireRead(G::MeshReadRequirements::Primary(), {R::Device::Host(), std::make_shared<WrongDeviceStream>()}));
     G::UnstructuredMesh unpublished(FacadeMPI(), 2);
     CHECK_THROWS(unpublished.AcquireRead());
     CHECK_THROWS(unpublished.Entities(G::EntityKind::Cell));

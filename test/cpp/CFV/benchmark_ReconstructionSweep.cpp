@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 // Fixed-input scans of actual prepared CFV publications. Timing excludes
 // construction and placement; the locality leg uses the normal Geom transition.
 #include "CFV/Plans/FiniteVolumePlan.hpp"
@@ -220,7 +221,7 @@ static void Run(int argc, char **argv)
             record["resources"] = {{"shared_bytes", resource.sharedBytes}, {"registers_per_thread", resource.registersPerThread}, {"resident_blocks_per_sm", resource.activeBlocksPerSM}, {"grid_blocks", resource.gridBlocks}, {"threads_per_block", resource.threads}};
         }
         launch(row);
-        Check(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)));
+        Check(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)));
         std::vector<double> actual(size_t(metrics.NumCell() * components * plan.NRecDOF()));
         Check(cudaMemcpy(actual.data(), output.View().data, actual.size() * sizeof(double), cudaMemcpyDeviceToHost));
         const auto expected = reference.Read();
@@ -238,10 +239,10 @@ static void Run(int argc, char **argv)
         std::vector<double> times;
         for (int trial = 0; trial < 3; ++trial)
         {
-            Check(cudaEventRecord(start, static_cast<cudaStream_t>(context.stream)));
+            Check(cudaEventRecord(start, ::DNDS::Runtime::CUDAStream(context)));
             for (int repeat = 0; repeat < repetitions; ++repeat)
                 launch(row);
-            Check(cudaEventRecord(end, static_cast<cudaStream_t>(context.stream)));
+            Check(cudaEventRecord(end, ::DNDS::Runtime::CUDAStream(context)));
             Check(cudaEventSynchronize(end));
             float milliseconds = 0;
             Check(cudaEventElapsedTime(&milliseconds, start, end));

@@ -2,6 +2,7 @@
 #include "DNDS/Device/DeviceStorage.hpp"
 #include "DNDS/Device/DeviceTransferable.hpp"
 #include "DNDS/Core/Errors.hpp"
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "CFV/Legacy/FiniteVolumeSettings.hpp"
 #include "Geom/Unstructured/UnstructuredMesh.hpp"
 #include "CFV/Legacy/VRDefines.hpp"
@@ -630,7 +631,7 @@ namespace DNDS::CFV
 #ifdef DNDS_USE_CUDA
                 int ordinal = -1;
                 DNDS_check_throw_info(cudaGetDevice(&ordinal) == cudaSuccess, "cannot query CUDA device for finite-volume view");
-                context = Runtime::ExecutionContext::CUDA(ordinal, stream);
+                context = Runtime::ExecutionContext::CUDA(ordinal, Runtime::BorrowExternalCUDAStream(ordinal, static_cast<cudaStream_t>(stream)));
 #else
                 DNDS_check_throw_info(false, "CUDA finite-volume view requires a CUDA build");
 #endif

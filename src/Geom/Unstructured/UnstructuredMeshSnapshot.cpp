@@ -308,7 +308,7 @@ namespace DNDS::Geom
         : _meshRead(snapshot.Live().versions.Read()), _stamp(snapshot.Live().versions.Stamp()), _context(context)
     {
         DNDS_check_throw_info(context.device == snapshot.GetDevice() &&
-                                  (context.device != Runtime::Device::Host() || !context.stream),
+                                  (!context.stream || context.stream->GetDevice() == context.device),
                               "native snapshot acquisition placement mismatch");
         const auto &s = *snapshot._state;
         _storage = s.semantics;

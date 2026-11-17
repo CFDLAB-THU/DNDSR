@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "DNDS/Algebra/AmgXPreconditioner.hpp"
 #include "DNDS/Runtime/Array/Array.hpp"
 #include <cmath>
@@ -309,7 +310,7 @@ namespace DNDS::Algebra
 #ifdef DNDS_USE_AMGX
         std::lock_guard<std::mutex> lock(Provider().mutex);
         DeviceScope scope(context.device.ordinal);
-        CheckCUDA(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)));
+        CheckCUDA(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)));
         if (_state->rows)
         {
             if (_state->uploaded)
@@ -349,7 +350,7 @@ namespace DNDS::Algebra
 #ifdef DNDS_USE_AMGX
         std::lock_guard<std::mutex> lock(Provider().mutex);
         DeviceScope scope(context.device.ordinal);
-        CheckCUDA(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)));
+        CheckCUDA(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)));
         if (_state->rows)
         {
             // Matrix owns only a non-owning numeric view; this retained Array
@@ -436,7 +437,7 @@ namespace DNDS::Algebra
 #ifdef DNDS_USE_AMGX
         std::lock_guard<std::mutex> lock(Provider().mutex);
         DeviceScope scope(context.device.ordinal);
-        CheckCUDA(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)));
+        CheckCUDA(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)));
         if (!_state->rows)
             return;
         Check(AMGX_vector_upload(_state->rhs, int(_state->rows), _state->blockSize, residual.data));

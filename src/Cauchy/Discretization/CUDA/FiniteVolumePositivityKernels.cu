@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumePositivityKernels.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include <cuda_runtime.h>
@@ -223,7 +224,7 @@ namespace DNDS::Cauchy::CUDA
             if (!r.means.RowCount())
                 return;
             const auto blocks = unsigned(std::min<index>((r.means.RowCount() + 127) / 128, 1024));
-            Cells<Op><<<blocks, 128, 0, static_cast<cudaStream_t>(context.stream)>>>(r, f);
+            Cells<Op><<<blocks, 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(r, f);
             DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA polynomial PP launch failed");
         }
     }
@@ -362,7 +363,7 @@ namespace DNDS::Cauchy::CUDA
         if (!means.RowCount())
             return;
         const auto blocks = unsigned(std::min<index>((means.RowCount() + 127) / 128, 1024));
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         switch (means.Width())
         {
         case 5:

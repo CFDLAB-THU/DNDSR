@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
 #include "Cauchy/Discretization/CUDA/FiniteVolumePositivityKernels.hpp"
@@ -173,7 +174,7 @@ namespace
                                                                b.View<R::FixedRows<1>>(), d.View<R::FixedRows<1>>(), refresh},
                                                               partials, launch);
                             K::FinalizeModalPositivity(context, partials, final);
-                            REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
+                            REQUIRE(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)) == cudaSuccess);
                         }
                         Compare(output, cpuOutput);
                         Compare(beta, cpuBeta);
@@ -228,7 +229,7 @@ TEST_CASE("CUDA physical-dt forecast ignores RANS bounds and reports invalid mea
         auto a = alpha.Write(context);
         auto s = status.Write(context);
         K::LimitPhysicalStepRows(context, u.View<R::TableRows>(), r.View<R::TableRows>(), g.View<R::FixedRows<8>, false>(), thermal.View(), .1, .5, 1, 1, a.View<R::FixedRows<1>>(), s.View<R::FixedRows<1>>());
-        REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
+        REQUIRE(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)) == cudaSuccess);
     };
     launch();
     {
@@ -335,7 +336,7 @@ TEST_CASE("CUDA polynomial positivity matches CPU flow compression and independe
             gpu.policy.clippedPolicy = policy;
             const auto checkStatus = [&]
             {
-                REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
+                REQUIRE(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)) == cudaSuccess);
                 status.reset();
                 {
                     const auto downloaded = dstatus.To(host);

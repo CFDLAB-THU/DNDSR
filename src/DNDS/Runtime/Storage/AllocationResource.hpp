@@ -28,7 +28,8 @@ namespace DNDS::Runtime
         virtual bool PinnedHostMemory() const noexcept { return false; }
         virtual bool CanReleaseOrdered(ExecutionContext context) const noexcept
         {
-            return GetDevice() == Device::Host() && context.device == Device::Host() && !context.stream;
+            return GetDevice() == Device::Host() && context.device == Device::Host() &&
+                   (!context.stream || (context.stream->GetDevice() == Device::Host() && !context.stream->IsRetired()));
         }
         /// Null context is conservative ordinary RAII. A provider with native
         /// pending uses must make that fallback safe; no last-stream guessing.

@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/Discretization/CUDA/ModalPositivityKernels.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include "Cauchy/Discretization/CUDA/PositivityReduction.cuh"
@@ -279,7 +280,7 @@ namespace DNDS::Cauchy::CUDA
                     ModalPositivitySummary partials, ModalPositivityLaunch launch)
         {
             LimitCells<Block, Threads><<<unsigned(partials.status.RowCount()), unsigned(Threads), launch.sharedBytes,
-                                         static_cast<cudaStream_t>(context.stream)>>>(request, partials);
+                                         ::DNDS::Runtime::CUDAStream(context)>>>(request, partials);
         }
     }
     index ModalPositivitySummaryRows(index cells, ModalPositivityLaunch launch)
@@ -395,7 +396,7 @@ namespace DNDS::Cauchy::CUDA
     {
         CheckSummary(partials, context.device, partials.status.RowCount());
         CheckSummary(result, context.device, 1);
-        Finalize<<<1, 128, 0, static_cast<cudaStream_t>(context.stream)>>>(partials, result);
+        Finalize<<<1, 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(partials, result);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "modal PP summary finalization failed");
     }
 }

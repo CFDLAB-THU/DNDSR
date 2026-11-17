@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 // Private CUDA comparison implementation, included only by its scalar TUs.
 #include <cuda_runtime.h>
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Faces.hpp"
@@ -44,7 +45,7 @@ namespace DNDS::Cauchy::CUDA::Detail
         Runtime::CheckKernelArgumentBudget<RHSGeometryView, RHSParametersView, RHSKernelControls, Fields, Outputs, RHSIndices>();
         const unsigned blocks = unsigned(std::min<index>((selected.RowCount() + controls.blockSize - 1) / controls.blockSize,
                                                          controls.gridBlocks ? index(controls.gridBlocks) : index(1024)));
-        FluxFaces<Components, PolynomialScalar, FluxScalar, DissipationScalar><<<blocks, controls.blockSize, 0, static_cast<cudaStream_t>(context.stream)>>>(
+        FluxFaces<Components, PolynomialScalar, FluxScalar, DissipationScalar><<<blocks, controls.blockSize, 0, ::DNDS::Runtime::CUDAStream(context)>>>(
             geometry.View(), parameters, controls, fields, output, selected);
     }
 }

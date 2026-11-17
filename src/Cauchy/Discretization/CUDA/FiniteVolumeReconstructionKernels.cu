@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeReconstructionKernels.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include <cuda_runtime.h>
@@ -56,7 +57,7 @@ namespace DNDS::Cauchy::CUDA
                                   current.Width() == next.Width() && partial.RowCount() == blocks && result.RowCount() == 1,
                               "reconstruction norm shape or backend differs");
         R::CheckKernelArgumentBudget<NormInput, NormInput, NormOutput, NormOutput>();
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         UpdateNorm<true><<<unsigned(blocks), 128, 0, stream>>>(current, next, partial, result);
         UpdateNorm<false><<<1, 128, 0, stream>>>(current, next, partial, result);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "reconstruction norm reduction launch failed");

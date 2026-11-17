@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "CFV/Detail/PolynomialSamplingKernels.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include <cuda_runtime.h>
@@ -56,7 +57,7 @@ namespace DNDS::CFV::Detail
         if (!plan.cells.RowCount())
             return;
         const auto blocks = unsigned(std::min<index>((plan.cells.RowCount() + 127) / 128, 1024));
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         if (derivative < plan.cachedDerivatives)
             SamplePolynomial<true><<<blocks, 128, 0, stream>>>(plan, mean, coefficients, output, derivative);
         else

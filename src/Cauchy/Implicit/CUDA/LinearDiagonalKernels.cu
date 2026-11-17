@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/Implicit/CUDA/LinearDiagonalKernels.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include "Solver/InverseRefinement.hpp"
@@ -249,7 +250,7 @@ namespace DNDS::Cauchy::CUDA
         Table(count, context.device, 1, 1);
         DNDS_check_throw_info(!rows || diagonal.data != inverse.data, "small-block inverse aliases diagonal");
         R::CheckKernelArgumentBudget<DiagonalRead, DiagonalWrite, DiagonalStatus, DiagonalModes, DiagonalCount, int, bool>();
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         ResetCount<<<1, 1, 0, stream>>>(count);
         if (rows)
         {
@@ -290,7 +291,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<DiagonalRead, DiagonalWrite, DiagonalWrite, DiagonalStatus, int, bool>();
         if (!rows)
             return;
-        Prepare<<<Blocks(rows), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(diagonal, normalized, scales, status, n, rowMajor);
+        Prepare<<<Blocks(rows), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(diagonal, normalized, scales, status, n, rowMajor);
         CheckLaunch();
     }
     void CompleteDiagonalSVD(R::ExecutionContext context, DiagonalRead diagonal, DiagonalRead singular, DiagonalRead left, DiagonalRead right,
@@ -315,9 +316,9 @@ namespace DNDS::Cauchy::CUDA
         if (!rows)
             return;
         if (refinementSteps)
-            Complete<true><<<Blocks(rows), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(diagonal, singular, left, right, scales, info, inverse, status, truncated, n, refinementSteps, rowMajor);
+            Complete<true><<<Blocks(rows), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(diagonal, singular, left, right, scales, info, inverse, status, truncated, n, refinementSteps, rowMajor);
         else
-            Complete<false><<<Blocks(rows), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(diagonal, singular, left, right, scales, info, inverse, status, truncated, n, 0, rowMajor);
+            Complete<false><<<Blocks(rows), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(diagonal, singular, left, right, scales, info, inverse, status, truncated, n, 0, rowMajor);
         CheckLaunch();
     }
     void InvertDiagonalEntries(R::ExecutionContext context, DiagonalRead diagonal, DiagonalWrite inverse, DiagonalStatus status, int n)
@@ -331,7 +332,7 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<DiagonalRead, DiagonalWrite, DiagonalStatus, int>();
         if (!rows)
             return;
-        Entries<<<Blocks(rows), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(diagonal, inverse, status, n);
+        Entries<<<Blocks(rows), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(diagonal, inverse, status, n);
         CheckLaunch();
     }
 }

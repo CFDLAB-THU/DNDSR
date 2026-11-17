@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeAuxiliaryKernels.hpp"
 #include "Cauchy/Riemann/RiemannFlux.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
@@ -197,7 +198,7 @@ namespace DNDS::Cauchy::CUDA
                               "CUDA auxiliary mean range/shape mismatch");
         if (first == end)
             return;
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         const unsigned blocks = Blocks(end - first);
         switch (state.components)
         {
@@ -237,7 +238,7 @@ namespace DNDS::Cauchy::CUDA
                               "CUDA auxiliary output requested without its computation");
         if (!faces.RowCount() || (!request.needSpectral && !request.needWave && !request.needPressure))
             return;
-        const auto stream = static_cast<cudaStream_t>(context.stream);
+        const auto stream = ::DNDS::Runtime::CUDAStream(context);
         const unsigned blocks = Blocks(faces.RowCount());
         switch (request.state.components)
         {
@@ -270,7 +271,7 @@ namespace DNDS::Cauchy::CUDA
         CheckRows(request.scratch, faceRows, 3, false);
         if (!cells.RowCount())
             return;
-        Cells<<<Blocks(cells.RowCount()), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(request, cells);
+        Cells<<<Blocks(cells.RowCount()), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(request, cells);
         CheckLaunch();
     }
 }

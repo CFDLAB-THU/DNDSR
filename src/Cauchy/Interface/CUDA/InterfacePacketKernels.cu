@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/Interface/CUDA/InterfacePacketKernels.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include <cuda_runtime.h>
@@ -44,7 +45,7 @@ namespace DNDS::Cauchy::CUDA
         if (!request.rows.RowCount())
             return;
         const unsigned blocks = unsigned(std::min<index>(INT_MAX, request.rows.RowCount() / Threads + (request.rows.RowCount() % Threads != 0)));
-        PacketRows<<<blocks, Threads, 0, static_cast<cudaStream_t>(context.stream)>>>(request);
+        PacketRows<<<blocks, Threads, 0, ::DNDS::Runtime::CUDAStream(context)>>>(request);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA interface packet launch failed");
     }
 }

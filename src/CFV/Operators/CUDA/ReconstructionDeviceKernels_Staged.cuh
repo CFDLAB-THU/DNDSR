@@ -1,5 +1,7 @@
 #pragma once
 
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
+
 #include "CFV/Detail/ReconstructionSweepArguments.hpp"
 #include "CFV/Math/ReconstructionMatrixAccess.hpp"
 #include "DNDS/Algebra/CUDA/FP64Matrix.cuh"
@@ -448,7 +450,7 @@ namespace DNDS::CFV::Detail
                 resource.registersPerThread = attributes.numRegs;
                 return resource;
             }
-            StagedJacobi<N, Components, Raw, Triangle, LVR, Storage, Scalar, Tensor, TF32, Pipeline, Product><<<grid, threads, size_t(bytes), static_cast<cudaStream_t>(context.stream)>>>(
+            StagedJacobi<N, Components, Raw, Triangle, LVR, Storage, Scalar, Tensor, TF32, Pipeline, Product><<<grid, threads, size_t(bytes), ::DNDS::Runtime::CUDAStream(context)>>>(
                 Sweep<N, Storage, Triangle>(plan), selection, vectors,
                 Fields<Components, N>{R::ProjectKernelPair<FieldPolicy<Components>>(mean),
                                       R::ProjectKernelPair<FieldPolicy<Components * N>>(input),

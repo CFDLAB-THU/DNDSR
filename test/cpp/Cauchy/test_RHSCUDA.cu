@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
 #include "CompactStencilFixture.hpp"
@@ -528,7 +529,7 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
                                                  corePackages ? corePackages->View() : K::RHSFacePackageView{});
                             K::EvaluateFluxFaces(context, published, parametersRead.View<R::FixedRows<1>>(), controls, fields, outputs, dependent.View<R::FixedRows<1>>(), true,
                                                  dependentPackages ? dependentPackages->View() : K::RHSFacePackageView{});
-                            REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
+                            REQUIRE(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)) == cudaSuccess);
                         }
                         const auto face = faces.Read(context), lowFace = lowFaces.Read(context);
                         const auto errors = faceStatus.Read(context);
@@ -538,7 +539,7 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
                             K::GatherFluxCells(context, published, face.View<R::TableRows>(), lowFace.View<R::TableRows>(), errors.View<R::FixedRows<1>>(), result.View<R::TableRows>(), lowResult.View<R::TableRows>(), resultStatus.View<R::FixedRows<1>>(), rows, controls.produceLow);
                         // Borrowed-view launchers do not own these read/write scopes.
                         // Keep them through completion; production uses queued access.
-                        REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
+                        REQUIRE(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)) == cudaSuccess);
                     }
                     const auto check = [tolerance](const R::Array<real> &actual, const R::Array<real> &expected)
                     {
@@ -688,7 +689,7 @@ TEST_CASE("CUDA canonical ghost-left and self-periodic faces preserve owned sign
             if (!self)
                 K::EvaluateFluxFaces(context, publication, policyRead.View<R::FixedRows<1>>(), controls, fields, outputs,
                                      selectedRead.View<R::FixedRows<1>>(), true, packages.View());
-            REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
+            REQUIRE(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)) == cudaSuccess);
         }
         {
             const auto face = faces.Read(context);
@@ -697,7 +698,7 @@ TEST_CASE("CUDA canonical ghost-left and self-periodic faces preserve owned sign
             auto error = cellStatus.Write(context);
             K::GatherFluxCells(context, publication, face.View<R::TableRows>(), {}, status.View<R::FixedRows<1>>(),
                                out.View<R::TableRows>(), {}, error.View<R::FixedRows<1>>(), selectedRead.View<R::FixedRows<1>>(), false);
-            REQUIRE(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)) == cudaSuccess);
+            REQUIRE(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)) == cudaSuccess);
         }
         const auto downloaded = result.To(R::Device::Host());
         const auto checked = cellStatus.To(R::Device::Host());

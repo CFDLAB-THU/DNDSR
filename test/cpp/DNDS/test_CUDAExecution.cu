@@ -1,3 +1,4 @@
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
 #include "DNDS/Runtime/Execution/CUDAExecution.hpp"
@@ -47,7 +48,7 @@ struct Gate
     {
         engine.Submit(stream, [owner = open](R::ExecutionContext context)
                       {
-            auto status = cudaLaunchHostFunc(static_cast<cudaStream_t>(context.stream), [](void *p)
+            auto status = cudaLaunchHostFunc(::DNDS::Runtime::CUDAStream(context), [](void *p)
             {
                 auto &value = *static_cast<std::atomic<bool> *>(p);
                 while (!value.load()) std::this_thread::sleep_for(std::chrono::microseconds(50));
@@ -125,7 +126,7 @@ __global__ void ConcurrentMock(R::ArrayView<const double> owned, R::ArrayView<do
 }
 static void LaunchAdd(R::ExecutionContext context, R::ArrayView<double> u)
 {
-    Add<<<7, 32, 0, static_cast<cudaStream_t>(context.stream)>>>(u, 1);
+    Add<<<7, 32, 0, ::DNDS::Runtime::CUDAStream(context)>>>(u, 1);
     DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "test Add launch failed");
 }
 
@@ -159,6 +160,37 @@ static void PreloadKernels()
     DNDS_check_throw_info(cudaFuncGetAttributes(&attributes, ConcurrentMock) == cudaSuccess, "test concurrent preload failed");
     DNDS_check_throw_info(cudaFuncGetAttributes(&attributes, RestrictLevel) == cudaSuccess, "test restriction preload failed");
     DNDS_check_throw_info(cudaFuncGetAttributes(&attributes, ProlongLevel) == cudaSuccess, "test prolongation preload failed");
+}
+
+TEST_CASE("Retained CUDA contexts and immediate leases survive a drained engine close")
+{
+    PreloadKernels();
+    R::Array<double> values(R::RowLayout::Dense(17, 5), R::Device::CUDA(0));
+    R::ExecutionContext retained;
+    std::weak_ptr<R::StreamResource> lifetime;
+    std::optional<R::Array<double>::ReadLease> read;
+    {
+        R::EagerEngine engine;
+        const auto stream = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
+        retained = stream.Context();
+        lifetime = retained.stream;
+        R::SubmitArrays(engine, stream, LaunchAdd, R::ReadWrite(values));
+        engine.Synchronize();
+        read.emplace(values.Read(retained));
+        engine.Close();
+        REQUIRE(retained.stream->IsRetired());
+        CHECK_FALSE(lifetime.expired());
+        CHECK_THROWS(R::CUDAStream(retained));
+        // No further native fence is needed after Close. A late immediate
+        // scope release retains the resource and observes completed retirement.
+        read.reset();
+        retained.stream->Synchronize();
+    }
+    CHECK_FALSE(lifetime.expired());
+    retained = {};
+    CHECK(lifetime.expired());
+    const auto host = values.To(R::Device::Host());
+    CHECK(host.Read().View()(16, 4) == 1);
 }
 
 TEST_CASE("CUDA mutation epochs precede completion and survive stream retirement")
@@ -214,7 +246,7 @@ TEST_CASE("CUDA self waits reuse the queued prefix and retain operands until com
     CHECK_THROWS(alias.Write(stream.Context()));
     R::SubmitArrays(engine, stream, [](R::ExecutionContext context, auto input, auto result)
                     {
-                        Scale<<<7, 32, 0, static_cast<cudaStream_t>(context.stream)>>>(input, result, 3);
+                        Scale<<<7, 32, 0, ::DNDS::Runtime::CUDAStream(context)>>>(input, result, 3);
                         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "self-wait scale launch failed"); }, R::Read(temporary), R::Write(output));
     alias = {};
     temporary = {};
@@ -268,7 +300,7 @@ TEST_CASE("Closing mixed CPU CUDA execution retains temporary operands and obser
     copyInput = {}; // The DMA operation owns its source until completion.
     R::SubmitArrays(engine, gpu, LaunchAdd, R::ReadWrite(temporary));
     R::SubmitArrays(engine, gpu, [](R::ExecutionContext context, auto input, auto out)
-                    { Scale<<<7, 32, 0, static_cast<cudaStream_t>(context.stream)>>>(input, out, 2); }, R::Read(temporary), R::Write(output));
+                    { Scale<<<7, 32, 0, ::DNDS::Runtime::CUDAStream(context)>>>(input, out, 2); }, R::Read(temporary), R::Write(output));
     const auto event = gpu.Record();
     temporary = {};
     CHECK_FALSE(retained.expired());
@@ -328,7 +360,7 @@ TEST_CASE("CUDA dynamic multilevel temporaries join independent readers before f
             levels.push_back(R::AllocateArrayAsync<double>(engine, first, seed.Layout()));
             R::SubmitArrays(engine, first, [cycle](R::ExecutionContext c, auto in, auto out)
                             {
-                Scale<<<7, 32, 0, static_cast<cudaStream_t>(c.stream)>>>(in, out, cycle + 1);
+                Scale<<<7, 32, 0, ::DNDS::Runtime::CUDAStream(c)>>>(in, out, cycle + 1);
                 DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "cycle seed launch failed"); }, R::Read(seed), R::Write(levels[0]));
             for (size_t level = 1; level < depth; ++level)
             {
@@ -339,14 +371,14 @@ TEST_CASE("CUDA dynamic multilevel temporaries join independent readers before f
                                                                R::RowLayout::Dense((levels.back().RowCount() + 1) / 2, 7, 9)));
                 R::SubmitArrays(engine, consumer, [](R::ExecutionContext c, auto fine, auto coarse)
                                 {
-                    RestrictLevel<<<7, 32, 0, static_cast<cudaStream_t>(c.stream)>>>(fine, coarse);
+                    RestrictLevel<<<7, 32, 0, ::DNDS::Runtime::CUDAStream(c)>>>(fine, coarse);
                     DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "restriction launch failed"); }, R::Read(levels[level - 1]), R::Write(levels[level]));
             }
             auto coarsest = (depth - 1) % 2 ? second : first;
             comm.WaitFor(coarsest.Record());
             R::SubmitArrays(engine, comm, [](R::ExecutionContext c, auto in, auto out)
                             {
-                Scale<<<3, 32, 0, static_cast<cudaStream_t>(c.stream)>>>(in, out, 2);
+                Scale<<<3, 32, 0, ::DNDS::Runtime::CUDAStream(c)>>>(in, out, 2);
                 DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "diagnostic launch failed"); }, R::Read(levels.back()), R::Write(diagnostics[cycle]));
             for (size_t level = depth - 1; level > 0; --level)
             {
@@ -355,7 +387,7 @@ TEST_CASE("CUDA dynamic multilevel temporaries join independent readers before f
                 consumer.WaitFor(producer.Record());
                 R::SubmitArrays(engine, consumer, [](R::ExecutionContext c, auto coarse, auto fine)
                                 {
-                    ProlongLevel<<<7, 32, 0, static_cast<cudaStream_t>(c.stream)>>>(coarse, fine);
+                    ProlongLevel<<<7, 32, 0, ::DNDS::Runtime::CUDAStream(c)>>>(coarse, fine);
                     DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "prolongation launch failed"); }, R::Read(levels[level]), R::ReadWrite(levels[level - 1]));
                 auto alias = levels[level];
                 // Non-final decrement on producer; final decrement on consumer.
@@ -416,7 +448,7 @@ TEST_CASE("CUDA mock communication and core kernels are simultaneously resident"
         {
             return [communication](R::ExecutionContext context, auto u, auto out, auto f)
             {
-                ConcurrentMock<<<1, 128, 0, static_cast<cudaStream_t>(context.stream)>>>(u, out, f, communication);
+                ConcurrentMock<<<1, 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(u, out, f, communication);
                 DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "concurrent mock launch failed");
             };
         };
@@ -424,7 +456,7 @@ TEST_CASE("CUDA mock communication and core kernels are simultaneously resident"
         R::SubmitArrays(engine, compute, launch(false), R::Read(owned), R::Write(output), R::ReadWrite(flags));
         compute.WaitFor(comm.Record());
         R::SubmitArrays(engine, compute, [](R::ExecutionContext context, auto g, auto out)
-                        { RingUpdate<<<3, 32, 0, static_cast<cudaStream_t>(context.stream)>>>(g, out); }, R::Read(ghost), R::ReadWrite(output));
+                        { RingUpdate<<<3, 32, 0, ::DNDS::Runtime::CUDAStream(context)>>>(g, out); }, R::Read(ghost), R::ReadWrite(output));
         engine.Synchronize();
         auto status = flags.To(R::Device::Host());
         CHECK(status.Read().At(0, 3) == 0); // Serialization would time out a rendezvous.
@@ -449,7 +481,7 @@ TEST_CASE("CUDA missing eager join returns stale values while ordered consumptio
     gate.Enqueue(engine, comm);
     R::SubmitArrays(engine, comm, LaunchAdd, R::Write(ghost));
     auto consume = [](R::ExecutionContext context, auto g, auto out)
-    { Scale<<<3, 32, 0, static_cast<cudaStream_t>(context.stream)>>>(g, out, 2); };
+    { Scale<<<3, 32, 0, ::DNDS::Runtime::CUDAStream(context)>>>(g, out, 2); };
     R::SubmitArrays(engine, compute, consume, R::Read(ghost), R::Write(stale));
     auto copied = compute.Record();
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
@@ -488,7 +520,7 @@ TEST_CASE("Checked CUDA eagerly queues dependent kernels and rejects missing pre
     consumer.WaitFor(stale);
     const auto consume = [](R::ExecutionContext context, auto input, auto result)
     {
-        Scale<<<3, 32, 0, static_cast<cudaStream_t>(context.stream)>>>(input, result, 3);
+        Scale<<<3, 32, 0, ::DNDS::Runtime::CUDAStream(context)>>>(input, result, 3);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "checked test Scale launch failed");
     };
     // Initialization itself is a pending writer, not ready merely because its
@@ -574,11 +606,11 @@ TEST_CASE("Eager CUDA uses explicit prefix events with retained DMA owners and a
     right.WaitFor(ready);
     R::SubmitArrays(engine, left, [](R::ExecutionContext context, R::ArrayView<const double> in, R::ArrayView<double> out)
                     {
-        Scale<<<9, 32, 0, static_cast<cudaStream_t>(context.stream)>>>(in, out, 2);
+        Scale<<<9, 32, 0, ::DNDS::Runtime::CUDAStream(context)>>>(in, out, 2);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "test Scale launch failed"); }, R::WithOrderedHandoff(R::Read(state)), R::Write(first));
     R::SubmitArrays(engine, right, [](R::ExecutionContext context, R::ArrayView<const double> in, R::ArrayView<double> out)
                     {
-        Scale<<<9, 32, 0, static_cast<cudaStream_t>(context.stream)>>>(in, out, 3);
+        Scale<<<9, 32, 0, ::DNDS::Runtime::CUDAStream(context)>>>(in, out, 3);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "test Scale launch failed"); }, R::WithOrderedHandoff(R::Read(state)), R::Write(second));
     left.WaitFor(right.Record()); // All independent readers precede release here.
     std::weak_ptr<const R::ArrayStorage> original = state.SharedStorage();
@@ -646,7 +678,7 @@ TEST_CASE("CUDA owned CSR stencil finishes while ghost writes are pending then j
     auto ghostReady = comm.Record();
     R::SubmitArrays(engine, compute, [](R::ExecutionContext context, auto c2c, auto u, auto rhs)
                     {
-        CoreStencil<<<11, 32, 0, static_cast<cudaStream_t>(context.stream)>>>(c2c, u, rhs);
+        CoreStencil<<<11, 32, 0, ::DNDS::Runtime::CUDAStream(context)>>>(c2c, u, rhs);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "test stencil launch failed"); }, R::Read(neighbors), R::Read(owned), R::Write(output));
     engine.ReleaseOn(std::move(neighbors), compute); // Device metadata follows the last stencil use.
     R::CopyAsync(engine, compute, output.Storage(), downloaded);
@@ -675,7 +707,7 @@ TEST_CASE("CUDA owned CSR stencil finishes while ghost writes are pending then j
     compute.WaitFor(ghostReady);
     R::SubmitArrays(engine, compute, [](R::ExecutionContext context, auto g, auto rhs)
                     {
-        RingUpdate<<<3, 32, 0, static_cast<cudaStream_t>(context.stream)>>>(g, rhs);
+        RingUpdate<<<3, 32, 0, ::DNDS::Runtime::CUDAStream(context)>>>(g, rhs);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "test ring launch failed"); }, R::Read(ghost), R::ReadWrite(output));
     *gate.open = true;
     engine.Synchronize();
@@ -866,7 +898,7 @@ TEST_CASE("CUDA async allocation supports dynamic tables and prepared padded CSR
     last.WaitFor(first.Record());
     R::SubmitArrays(engine, last, [](R::ExecutionContext context, R::ArrayView<const double> in, R::ArrayView<double> out)
                     {
-        Scale<<<9, 32, 0, static_cast<cudaStream_t>(context.stream)>>>(in, out, 3);
+        Scale<<<9, 32, 0, ::DNDS::Runtime::CUDAStream(context)>>>(in, out, 3);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "test scale failed"); }, R::WithOrderedHandoff(R::Read(alias)), R::Write(result));
     auto values = std::weak_ptr<const R::ArrayStorage>(alias.SharedStorage());
     engine.ReleaseOn(std::move(alias), last); // Caller alias released; initialization may still retain the allocation.
@@ -898,7 +930,7 @@ TEST_CASE("Backend allocation resources receive the final selected free stream a
     struct Observation
     {
         int releases = 0;
-        void *stream = nullptr;
+        std::shared_ptr<R::StreamResource> stream;
     } observed;
     struct Resource : R::AllocationResource
     {
@@ -918,7 +950,7 @@ TEST_CASE("Backend allocation resources receive the final selected free stream a
             if (!pointer)
                 return;
             observed.stream = c ? c->stream : nullptr;
-            auto status = c ? cudaFreeAsync(pointer, static_cast<cudaStream_t>(c->stream)) : cudaFree(pointer);
+            auto status = c ? cudaFreeAsync(pointer, R::CUDAStream(*c)) : cudaFree(pointer);
             if (status != cudaSuccess)
                 std::terminate();
             pointer = nullptr;
@@ -936,7 +968,7 @@ TEST_CASE("Backend allocation resources receive the final selected free stream a
     gate.Enqueue(engine, a);
     R::SubmitArrays(engine, a, [](R::ExecutionContext c, R::ArrayView<double> u)
                     {
-        DNDS_check_throw_info(cudaMemsetAsync(u.data, 0, u.RowCount() * u.stride * sizeof(double), static_cast<cudaStream_t>(c.stream)) == cudaSuccess,
+        DNDS_check_throw_info(cudaMemsetAsync(u.data, 0, u.RowCount() * u.stride * sizeof(double), ::DNDS::Runtime::CUDAStream(c)) == cudaSuccess,
                               "test initialization failed");
         LaunchAdd(c, u); }, R::WithOrderedHandoff(R::Write(array)));
     engine.ReleaseOn(std::move(array), a);
@@ -968,7 +1000,7 @@ TEST_CASE("CUDA aligned physical tables cross streams and release after the fina
         last.WaitFor(first.Record());
         R::SubmitArrays(engine, last, [](R::ExecutionContext context, auto input, auto output)
                         {
-            Scale<<<7, 32, 0, static_cast<cudaStream_t>(context.stream)>>>(input, output, 7);
+            Scale<<<7, 32, 0, ::DNDS::Runtime::CUDAStream(context)>>>(input, output, 7);
             DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "aligned table scale failed"); }, R::Read(alias), R::Write(result));
         engine.ReleaseOn(std::move(alias), last);
         engine.Synchronize();
