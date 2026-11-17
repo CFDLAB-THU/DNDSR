@@ -12,6 +12,12 @@ Every MPI-aware test is registered with CTest at four process counts
 (np = 1, 2, 4, 8) so that correctness under parallel execution is
 verified automatically.
 
+Mixed executables can mark checks that only use rank-local inputs as the
+doctest `rank-local` suite. Opted-in registrations run those checks at np1
+or the first configured process count if np1 is absent. The remaining
+checks, including communication and rank-dependent failure paths, keep
+the full rank matrix.
+
 @subsection test_build Building and Running
 
 ```sh

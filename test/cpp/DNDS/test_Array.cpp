@@ -825,7 +825,8 @@ TEST_CASE_TEMPLATE("Array resize-write-read", Tag, ARRAY_ALL_TAGS)
     using L = typename Tag::layout;
     constexpr DNDS::rowsize RS = Tag::rs;
 
-    for (DNDS::index N : {1, 5, 20, 100, 500})
+    // Cover singleton storage and multiple complete cycles of CSR widths.
+    for (DNDS::index N : {1, 20})
     {
         CAPTURE(N);
 

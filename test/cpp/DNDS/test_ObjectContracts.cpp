@@ -16,7 +16,7 @@ int main(int argc, char **argv)
     return result;
 }
 
-TEST_CASE("Audit batch 2: moved vectors remain reusable")
+TEST_CASE("Audit batch 2: moved vectors remain reusable" * doctest::test_suite("rank-local"))
 {
     host_device_vector<int> source(2, 42);
     source.to_device(DeviceBackend::Host);
@@ -67,7 +67,7 @@ static void CheckArrayMove()
     CHECK(moved(0, 0) == 7);
 }
 
-TEST_CASE("Audit batch 2: moved arrays reset structural state")
+TEST_CASE("Audit batch 2: moved arrays reset structural state" * doctest::test_suite("rank-local"))
 {
     CheckArrayMove<3, 3>();
     CheckArrayMove<DynamicSize, DynamicSize>();
@@ -76,7 +76,7 @@ TEST_CASE("Audit batch 2: moved arrays reset structural state")
     CheckArrayMove<NonUniformSize, NonUniformSize>();
 }
 
-TEST_CASE("Audit batch 2: swaps reject unequal row and matrix shapes")
+TEST_CASE("Audit batch 2: swaps reject unequal row and matrix shapes" * doctest::test_suite("rank-local"))
 {
     Array<int, NonUniformSize, 3> a, b;
     a.Resize(2);
@@ -159,7 +159,7 @@ TEST_CASE("Audit batch 2: swaps reject unequal row and matrix shapes")
     CHECK(variedB(0, 0)(0, 0) == 7);
 }
 
-TEST_CASE("Audit batch 2: pair swaps validate both arrays before mutation")
+TEST_CASE("Audit batch 2: pair swaps validate both arrays before mutation" * doctest::test_suite("rank-local"))
 {
     MPIInfo mpi(MPI_COMM_WORLD);
     using Pair = ArrayPair<ParArray<int, NonUniformSize, 3>>;

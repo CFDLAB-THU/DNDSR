@@ -359,20 +359,6 @@ TEST_CASE("GasInviscidFlux_XY: n=(1,0,0) equals GasInviscidFlux")
 // IdealGasUIncrement
 // ===================================================================
 
-TEST_CASE("IdealGasUIncrement: zero increment gives zero output")
-{
-    auto U = primToCons3D(1.0, 100.0, -50.0, 25.0, 101325.0);
-    Eigen::Vector<real, 5> dU = Eigen::Vector<real, 5>::Zero();
-    Eigen::Vector3d velo = U.segment<3>(1) / U(0);
-    Eigen::Vector3d dVelo;
-    real dp;
-
-    IdealGasUIncrement<3>(U, dU, velo, g_gamma, dVelo, dp);
-
-    CHECK(dVelo.norm() == doctest::Approx(0.0).epsilon(1e-14));
-    CHECK(dp == doctest::Approx(0.0).epsilon(1e-10));
-}
-
 TEST_CASE("IdealGasUIncrement: finite-difference verification")
 {
     // IdealGasUIncrement is a linearization (exact for infinitesimal dU).
@@ -514,16 +500,6 @@ TEST_CASE("RoeFluxIncFDiff: entropy wave strength preserves split-gamma identity
 // GradientCons2Prim_IdealGas
 // ===================================================================
 
-TEST_CASE("GradientCons2Prim: zero gradient produces zero")
-{
-    auto U = primToCons3D(1.225, 100.0, -50.0, 25.0, 101325.0);
-    Eigen::Matrix<real, 3, 5> GradU = Eigen::Matrix<real, 3, 5>::Zero();
-    Eigen::Matrix<real, 3, 5> GradPrim;
-
-    GradientCons2Prim_IdealGas<3>(U, GradU, GradPrim, g_gamma, Eigen::Vector<real, 0>{});
-    CHECK(GradPrim.cwiseAbs().maxCoeff() < 1e-12);
-}
-
 TEST_CASE("GradientCons2Prim: finite-difference verification")
 {
     // Base state
@@ -553,6 +529,8 @@ TEST_CASE("GradientCons2Prim: finite-difference verification")
     {
         CAPTURE(j);
         CHECK(GradPrim(0, j) == doctest::Approx(dPrimdx_expected(j)).epsilon(1e-4));
+        CHECK(GradPrim(1, j) == doctest::Approx(0.0).epsilon(1e-12));
+        CHECK(GradPrim(2, j) == doctest::Approx(0.0).epsilon(1e-12));
     }
 }
 

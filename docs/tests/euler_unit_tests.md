@@ -33,7 +33,7 @@ ctest --test-dir build -R euler_gas_thermo --output-on-failure
 @see test_GasThermo.cpp
 
 Serial tests for ideal-gas thermodynamics and Euler eigenvector routines
-in `Gas.hpp`.  24 test cases.  No MPI or mesh; all
+in `Gas.hpp`. No MPI or mesh; all
 functions are pure.
 
 ### IdealGasThermal
@@ -76,7 +76,6 @@ eigenvectors.
 
 | Test case | Description |
 |---|---|
-| `IdealGasUIncrement: zero increment gives zero` | delta_U = 0 produces delta_{u,p} = 0. |
 | `IdealGasUIncrement: finite-difference verification` | Increment matches prim(U+dU) - prim(U) to O(dU^2). |
 
 ### Roe Average
@@ -92,8 +91,7 @@ eigenvectors.
 
 | Test case | Description |
 |---|---|
-| `GradientCons2Prim: zero gradient produces zero` | Pure sanity check. |
-| `GradientCons2Prim: finite-difference verification` | Transformed gradient matches numerical differentiation. |
+| `GradientCons2Prim: finite-difference verification` | The perturbed direction matches numerical differentiation and both unperturbed directions remain zero. |
 
 ### Compression Ratio and Viscous Flux
 
@@ -158,25 +156,15 @@ Serial tests for Roe, HLLC, and HLLEP Riemann solvers in `Gas.hpp`.
 @see test_RANS.cpp
 
 Serial tests for k-omega Wilcox 2006, k-omega SST, and Realizable k-epsilon
-model functions in `RANS_ke.hpp`.  26 test cases.
-
-The SA model is excluded because `GetSource_SA` references
-`EulerEvaluator::settings` (evaluator context) and cannot be tested
-standalone.  SA coverage is provided through the EulerEvaluator pipeline
-test on the NACA0012 case.
+model functions in `RANS_ke.hpp`. The suite also exercises SA source
+limiting, rotation and DES through its configuration interface.
 
 ### Turbulent Viscosity (GetMut)
 
 | Test case | Description |
 |---|---|
-| `GetMut_KOWilcox: non-negative` | mut >= 0. |
-| `GetMut_KOWilcox: bounded by 1e5 * muLam` | CFL3D limiting. |
 | `GetMut_KOWilcox: golden value` | Regression against captured value. |
-| `GetMut_SST: non-negative` | mut >= 0. |
-| `GetMut_SST: bounded by 1e5 * muLam` | CFL3D limiting. |
 | `GetMut_SST: golden value` | Regression against captured value. |
-| `GetMut_RealizableKe: non-negative` | mut >= 0. |
-| `GetMut_RealizableKe: bounded by 1e5 * muLam` | CFL3D limiting. |
 | `GetMut_RealizableKe: golden value` | Regression against captured value. |
 
 ### Mut Sensitivity

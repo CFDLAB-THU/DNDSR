@@ -114,11 +114,24 @@ function(dnds_add_mpi_test TEST_NAME SRC_FILE LIBS)
     set_target_properties(${TARGET_NAME} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
+    # Keep rank-local cases at np1, or at the first configured rank count
+    # when np1 is absent. MPI-dependent cases still run at every count.
+    if("LOCAL_CASES_ONCE" IN_LIST ARGN AND DNDS_TEST_NP_LIST)
+        if("1" IN_LIST DNDS_TEST_NP_LIST)
+            set(_local_case_np 1)
+        else()
+            list(GET DNDS_TEST_NP_LIST 0 _local_case_np)
+        endif()
+    endif()
     foreach(NP ${DNDS_TEST_NP_LIST})
+        set(_case_filter)
+        if(DEFINED _local_case_np AND NOT NP EQUAL _local_case_np)
+            set(_case_filter --test-suite-exclude=rank-local)
+        endif()
         _dnds_np_timeout(${NP} _TIMEOUT)
         add_test(NAME dnds_${TEST_NAME}_np${NP}
             COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${NP}
-                    ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
+                    ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS} ${_case_filter})
         _dnds_maybe_set_timeout(dnds_${TEST_NAME}_np${NP} ${_TIMEOUT})
         set_tests_properties(dnds_${TEST_NAME}_np${NP} PROPERTIES
             PROCESSORS ${NP}
@@ -227,7 +240,7 @@ if(DNDS_USE_CANTERA)
     endforeach()
 endif()
 dnds_add_unit_test(cauchy_rigid_motion "Cauchy/test_RigidMotion.cpp" "cauchy;cfv;geom;dnds")
-dnds_add_mpi_test(cauchy_boundary_inputs "Cauchy/test_BoundaryInputs.cpp" "cauchy;cfv;geom;dnds")
+dnds_add_mpi_test(cauchy_boundary_inputs "Cauchy/test_BoundaryInputs.cpp" "cauchy;cfv;geom;dnds" LOCAL_CASES_ONCE)
 dnds_add_mpi_test(cauchy_wall_distance "Cauchy/test_WallDistanceSamples.cpp" "cauchy;cfv;geom;dnds")
 dnds_add_mpi_test(cauchy_rans_fv "Cauchy/test_RANSFiniteVolume.cpp" "cauchy;physics;cfv;geom;dnds")
 dnds_add_mpi_test(cauchy_multidomain_mesh "Cauchy/test_MultidomainMesh.cpp" "cauchy;cfv;geom;dnds")
@@ -341,7 +354,7 @@ target_include_directories(cauchy_experiment_multidomain_iv PRIVATE ${DNDS_EXTER
 target_link_libraries(cauchy_experiment_multidomain_iv PRIVATE cauchy cfv geom dnds ${DNDS_EXTERNAL_LIBS})
 target_compile_definitions(cauchy_experiment_multidomain_iv PRIVATE CGAL_CORE_USE_BOOST_BACKEND=1 CGAL_DISABLE_GMP=1)
 target_compile_definitions(dnds_test_cauchy_checkpoint PRIVATE DNDS_TEST_SOURCE_ROOT="${PROJECT_SOURCE_DIR}")
-dnds_add_mpi_test(cauchy_jacobian "Cauchy/test_Jacobian.cpp" "cauchy;cfv;geom;dnds")
+dnds_add_mpi_test(cauchy_jacobian "Cauchy/test_Jacobian.cpp" "cauchy;cfv;geom;dnds" LOCAL_CASES_ONCE)
 add_custom_target(cauchy_unit_tests)
 if(Python_EXECUTABLE)
     add_dependencies(cauchy_unit_tests cauchy_solver)
@@ -415,7 +428,7 @@ dnds_add_unit_test(csv_log "DNDS/test_CsvLog.cpp" "dnds")
 add_dependencies(dnds_unit_tests dnds_test_csv_log)
 dnds_add_unit_test(hard_eigen "DNDS/test_HardEigen.cpp" "dnds")
 add_dependencies(dnds_unit_tests dnds_test_hard_eigen)
-dnds_add_mpi_test(object_contracts "DNDS/test_ObjectContracts.cpp" "dnds")
+dnds_add_mpi_test(object_contracts "DNDS/test_ObjectContracts.cpp" "dnds" LOCAL_CASES_ONCE)
 target_sources(dnds_test_object_contracts PRIVATE DNDS/test_LocalChecks.cpp)
 
 dnds_add_mpi_test(serializer "DNDS/test_Serializer.cpp" "dnds")

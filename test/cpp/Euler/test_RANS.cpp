@@ -14,8 +14,6 @@
  *   - GetVisFlux_RealizableKe: viscous flux
  *
  * Key properties tested:
- *   - mut >= 0 (non-negative turbulent viscosity)
- *   - mut <= 1e5 * muLam (CFL3D limiting)
  *   - Zero gradient -> zero production in source
  *   - Zero gradient -> zero viscous flux
  *   - Finite output (no NaN/Inf)
@@ -99,25 +97,6 @@ static const real g_Sshear = 500.0; // du/dy
 // GetMut_KOWilcox
 // ===================================================================
 
-TEST_CASE("GetMut_KOWilcox: non-negative")
-{
-    auto U = buildState(g_rho, g_u, 0, 0, g_p, g_k, g_omega);
-    auto DiffU = buildShearGrad(U, g_Sshear);
-    real mut = GetMut_KOWilcox<dim>(U, DiffU, g_mu, g_d, g_kOmegaConfig);
-
-    CHECK(mut >= 0.0);
-    CHECK(std::isfinite(mut));
-}
-
-TEST_CASE("GetMut_KOWilcox: bounded by 1e5 * muLam")
-{
-    auto U = buildState(g_rho, g_u, 0, 0, g_p, g_k, g_omega);
-    auto DiffU = buildShearGrad(U, g_Sshear);
-    real mut = GetMut_KOWilcox<dim>(U, DiffU, g_mu, g_d, g_kOmegaConfig);
-
-    CHECK(mut <= 1e5 * g_mu + 1e-10);
-}
-
 TEST_CASE("GetMut_KOWilcox: golden value")
 {
     auto U = buildState(g_rho, g_u, 0, 0, g_p, g_k, g_omega);
@@ -135,25 +114,6 @@ TEST_CASE("GetMut_KOWilcox: golden value")
 // GetMut_SST
 // ===================================================================
 
-TEST_CASE("GetMut_SST: non-negative")
-{
-    auto U = buildState(g_rho, g_u, 0, 0, g_p, g_k, g_omega);
-    auto DiffU = buildShearGrad(U, g_Sshear);
-    real mut = GetMut_SST<dim>(U, DiffU, g_mu, g_d, g_kOmegaSSTConfig);
-
-    CHECK(mut >= 0.0);
-    CHECK(std::isfinite(mut));
-}
-
-TEST_CASE("GetMut_SST: bounded by 1e5 * muLam")
-{
-    auto U = buildState(g_rho, g_u, 0, 0, g_p, g_k, g_omega);
-    auto DiffU = buildShearGrad(U, g_Sshear);
-    real mut = GetMut_SST<dim>(U, DiffU, g_mu, g_d, g_kOmegaSSTConfig);
-
-    CHECK(mut <= 1e5 * g_mu + 1e-10);
-}
-
 TEST_CASE("GetMut_SST: golden value")
 {
     auto U = buildState(g_rho, g_u, 0, 0, g_p, g_k, g_omega);
@@ -169,25 +129,6 @@ TEST_CASE("GetMut_SST: golden value")
 // ===================================================================
 // GetMut_RealizableKe
 // ===================================================================
-
-TEST_CASE("GetMut_RealizableKe: non-negative")
-{
-    auto U = buildState(g_rho, g_u, 0, 0, g_p, g_k, g_epsilon);
-    auto DiffU = buildShearGrad(U, g_Sshear);
-    real mut = GetMut_RealizableKe<dim>(U, DiffU, g_mu, g_d, g_rkeConfig);
-
-    CHECK(mut >= 0.0);
-    CHECK(std::isfinite(mut));
-}
-
-TEST_CASE("GetMut_RealizableKe: bounded by 1e5 * muLam")
-{
-    auto U = buildState(g_rho, g_u, 0, 0, g_p, g_k, g_epsilon);
-    auto DiffU = buildShearGrad(U, g_Sshear);
-    real mut = GetMut_RealizableKe<dim>(U, DiffU, g_mu, g_d, g_rkeConfig);
-
-    CHECK(mut <= 1e5 * g_mu + 1e-10);
-}
 
 TEST_CASE("GetMut_RealizableKe: golden value")
 {

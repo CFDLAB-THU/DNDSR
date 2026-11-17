@@ -25,7 +25,7 @@ namespace
     }
 }
 
-TEST_CASE("Six-component frozen face leaves retain EOS coupling and additive matrix and strided product semantics")
+TEST_CASE("Six-component frozen face leaves retain EOS coupling and additive matrix and strided product semantics" * doctest::test_suite("rank-local"))
 {
     std::array<DNDS::real, 6> mean{1.2, .31, -.18, .07, 3.1, .13};
     // A nonzero composition column rules out a perfect-gas/passive shortcut.
