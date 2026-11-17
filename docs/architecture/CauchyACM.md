@@ -84,3 +84,10 @@ and FP64 ACM face fluxes. CUDA requires combined AoS and the resident Jacobi
 or supported Krylov path. See the periodic [vortex](../../cases/cauchy/acm_translating_vortex_20.json)
 and the [SA](../../cases/cauchy/acm_plate_sa.json) and
 [SST](../../cases/cauchy/acm_plate_sst.json) plate inputs for complete configurations.
+
+On the supplied stretched plate mesh the SA fixture uses Green–Gauss P1 face
+states. The SST fixture uses cell means at faces and the normal jump for face
+diffusion, retaining gradients for the turbulence source. Both fixtures require
+convergence of the turbulence variables along with momentum and continuity.
+These choices are specific to this grid. Inspect wall friction and profiles
+separately from the nonlinear stopping criterion.

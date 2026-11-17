@@ -29,8 +29,8 @@
       "cfv": {"maxOrder": 3, "intOrder": 6, "jacobiRelax": 0.8, "boundaryDerivativeWeights": [1, 0, 0, 0]}
     },
     "implicit": {
-      "diagonal": "block", "jacobianAction": "assembled", "iterations": 300,
-      "relativeTolerance": 1e-8, "absoluteTolerance": 1e-12,
+      "diagonal": "block", "jacobianAction": "assembled", "iterations": 800,
+      "relativeTolerance": 1e-8, "absoluteTolerance": 1e-10,
       "residualComponents": ["u", "v", "p"], "rejectUnconvergedStages": true,
       "linear": {"method": "jacobi", "stopping": "fixedCount", "iterations": 8}
     }
