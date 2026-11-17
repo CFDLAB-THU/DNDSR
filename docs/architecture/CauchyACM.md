@@ -92,6 +92,9 @@ default fraction and theta its sequential corrections diverged on this
 fixture even with consistent initial data. The invertibility check on the
 coupled time equations establishes independence of the two constraints.
 Convergence of the alternating corrections requires separate verification.
+For U2R1, setting `time.ditr.fraction` to 1/3 gives the two-stage Radau IIA
+tableau. This choice accepted a vortex step at dt=0.1 with the original
+theta and the same nonlinear tolerances as the default-fraction trial.
 
 On the supplied stretched plate mesh the SA fixture uses Green–Gauss P1 face
 states. The SST fixture uses cell means at faces and the normal jump for face
