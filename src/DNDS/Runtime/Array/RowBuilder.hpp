@@ -55,8 +55,8 @@ namespace DNDS::Runtime
             return result;
         }
         std::vector<size_t> lengths(rows);
-        for (size_t row = 0; row < rows; ++row)
-            lengths[row] = size(row);
+        FillKnownRows(rows, parallel, [&](size_t row)
+                      { lengths[row] = size(row); });
         Array<T> result(RowLayout::Ragged(lengths));
         {
             auto write = result.Write();

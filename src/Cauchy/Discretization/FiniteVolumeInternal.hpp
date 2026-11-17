@@ -173,12 +173,14 @@ namespace DNDS::Cauchy
                 options.preflight = Runtime::TransferPreflight::AbortOnFailure;
             return options;
         }
-        static CFV::FiniteVolumeMetricOptions MetricOptions(const DomainSettings &settings)
+        static CFV::FiniteVolumeMetricOptions MetricOptions(const DomainSettings &settings,
+                                                            Diagnostics::SetupProgress progress)
         {
             CFV::FiniteVolumeMetricOptions options;
             options.integrationOrder = settings.numerics.cfv.intOrder;
             options.faceIntegrationOrder = settings.numerics.RHSIntegrationOrder();
             options.collectivePreflight = settings.implicit.collectiveChecks;
+            options.progress = std::move(progress);
             return options;
         }
         const ThermalBounds &FixedFlowThermalBounds() const
@@ -188,20 +190,22 @@ namespace DNDS::Cauchy
                 "fixed-flow thermal policy is unavailable for this equation");
             return *fixedFlowThermalBounds;
         }
-        Data(ssp<Geom::UnstructuredMesh> source, DomainSettings controls, EquationSystem physics)
+        Data(ssp<Geom::UnstructuredMesh> source, DomainSettings controls, EquationSystem physics,
+             Diagnostics::SetupProgress progress)
             : mesh(std::move(source)), settings(std::move(controls)), equation(std::move(physics)), boundaryPoint(equation), motion(settings.motion, settings.mesh.dimension), flux(Riemann::RiemannFlux::Resolve(settings.numerics.flux)),
               fluxPolicy(FiniteVolumeDetail::ResolveFluxKernelPolicy(settings, flux)),
-              boundary(settings.boundaries, equation), metrics(CFV::FiniteVolumePlan::ConstructMetrics(mesh, MetricOptions(settings))),
+              boundary(settings.boundaries, equation), metrics(CFV::FiniteVolumePlan::ConstructMetrics(mesh, MetricOptions(settings, progress))),
               // Only the variational family owns Taylor bases, reconstruction
               // matrices and modal coefficient storage. Direct P0/P1 consume
               // means or physical gradients without a compatibility plan.
               reconstruction(settings.numerics.reconstruction == "variational"
                                  ? std::make_optional(CFV::VariationalReconstructionPlan::ConstructRecCoeff(
                                        metrics, settings.numerics.cfv,
-                                       FiniteVolumeDetail::ReconstructionSupport(settings)))
+                                       FiniteVolumeDetail::ReconstructionSupport(settings), progress))
                                  : std::nullopt),
               gradient(CFV::GradientPlan::Prepare(*mesh, metrics, settings.numerics.gradient == "greenGauss" ? CFV::GradientMethod::GreenGauss : settings.numerics.gradient == "ggmp" ? CFV::GradientMethod::GGMP
-                                                                                                                                                                                      : CFV::GradientMethod::LeastSquares)),
+                                                                                                                                                                                      : CFV::GradientMethod::LeastSquares,
+                                                  1e-13, progress)),
               partition(metrics.CellWorkPartition())
         {
             if (settings.execution.communicationExecution == "worker")

@@ -97,14 +97,6 @@ namespace DNDS::Cauchy
                 domainProgressWriter |= simulation.Local(iDomain) &&
                                         simulation.Placement().DomainRank(iDomain) == 0;
             logger = std::make_shared<OperationalLogger>(output, mpi.rank, domainProgressWriter);
-            for (index iDomain = 0; iDomain < domains; ++iDomain)
-                if (simulation.Local(iDomain) && simulation.Placement().DomainRank(iDomain) == 0)
-                {
-                    const auto &timing = simulation.SetupTimings(iDomain);
-                    logger->Info(fmt::format(
-                        "Cauchy {:>10} setup timers (domain-root elapsed): read/partition {:9.3f}s  prepare {:9.3f}s  FV/VR/state {:9.3f}s",
-                        config.Domains()[iDomain].placement.name, timing.meshIngress, timing.meshPreparation, timing.domainSetup));
-                }
             const auto &restored = simulation.RestoredOutputController();
             continueOutput = restored && restored->is_object() &&
                              restored->value("prefix", std::string{}) ==
@@ -194,7 +186,7 @@ namespace DNDS::Cauchy
                             progress[size_t(iDomain)] =
                                 std::make_unique<ProgressOutputController>(
                                     domain.Equation().Schema(), output,
-                                    domain.Name(), plan.HistoryBare(iDomain),
+                                    domains == 1 ? std::string{} : domain.Name(), plan.HistoryBare(iDomain),
                                     simulation.Placement().DomainRank(iDomain) == 0,
                                     logger,
                                     continueOutput
@@ -224,7 +216,7 @@ namespace DNDS::Cauchy
                     const Json manifest{
                         {"schema", "dndsr.cauchy.run-output.v1"},
                         {"resolvedConfig", plan.ResolvedPath()},
-                        {"historySchema", "dndsr.cauchy.detailed-history.v1"},
+                        {"historySchema", "dndsr.cauchy.detailed-history.v2"},
                         {"progressStatus",
                          {{"nonlinearIteration", 0},
                           {"implicitStageEnd", 1},
@@ -450,6 +442,11 @@ namespace DNDS::Cauchy
                                   domain.LastCoupledIterations();
                               accepted.coupledResidualTargetRatio =
                                   domain.LastCoupledTargetRatio();
+                              if (!domain.LastImplicitStages().empty())
+                              {
+                                  accepted.residual = domain.LastImplicitStages().back().residual;
+                                  accepted.pseudoCFL = domain.LastImplicitStages().back().pseudoCFL;
+                              }
                               accepted.positivity = domain.LastPositivity();
                               accepted.timePPLimitedCells = limit.limitedCells;
                               accepted.timePPMinimumAlpha = limit.minimumAlpha;

@@ -1,7 +1,10 @@
 #include "Cauchy/Core/Simulation.hpp"
 #include "Cauchy/Interface/InterfaceCoupling.hpp"
+#include "Cauchy/IO/ProgressOutput.hpp"
 #include "Geom/Unstructured/UnstructuredMeshHelpers.hpp"
 #include "DNDS/Core/OMP.hpp"
+
+#include <fmt/format.h>
 
 namespace DNDS::Cauchy
 {
@@ -9,7 +12,8 @@ namespace DNDS::Cauchy
     {
         ssp<Geom::UnstructuredMesh> ReadMesh(
             const DomainConfig &domain, const MPIInfo &mpi,
-            const std::shared_ptr<Runtime::CommunicationContext> &domainCommunication, DomainSetupTimings &timings)
+            const std::shared_ptr<Runtime::CommunicationContext> &domainCommunication, DomainSetupTimings &timings,
+            Diagnostics::SetupProgress progress)
         {
             DNDS_check_throw_info(!domain.settings.mesh.file.empty(),
                                   "Cauchy mesh path is empty");
@@ -28,6 +32,7 @@ namespace DNDS::Cauchy
                 std::array<real, 3>{0, 0, 0})
             {
                 periodic.emplace();
+                periodic->progress = progress;
                 for (int d = 0; d < 3; ++d)
                 {
                     periodic->frames.translation[d + 1].map().setZero();
@@ -42,19 +47,21 @@ namespace DNDS::Cauchy
                 mpi, domain.settings.mesh.dimension, domain.settings.mesh.file,
                 partition, mapper, periodic, domain.settings.mesh.elevation,
                 domain.settings.mesh.bisect, 0, Geom::MeshAuditOptions{},
-                communication);
+                communication, progress);
             timings.meshIngress = MPI_Wtime() - ingressStarted;
             const real prepareStarted = MPI_Wtime();
             Geom::PrepareMeshOptions prepare;
             prepare.buildSerialOut = false;
             prepare.reorderCells = 1;
             prepare.reorderParts = OMP::DistributedThreads();
+            prepare.progress = progress;
             auto mesh = Geom::UnstructuredMesh::FromNative(
                 mpi, Geom::PrepareNativeMeshForSolverOwned(
                          std::move(owned), mpi, prepare));
             const auto &settings = domain.settings.mesh;
             if (settings.scale != 1 || settings.rotationZDegrees != 0)
             {
+                auto setupStage = progress.Stage("mesh/geometry");
                 // Import/matching uses the file frame. The ordinary Geom
                 // publication transforms coordinates AND periodic frames
                 // together, exactly once before metrics/initial-state sampling.
@@ -105,6 +112,13 @@ namespace DNDS::Cauchy
                 _nonlinearCollectiveChecks |= controls.collectiveChecks;
             }
         }
+        bool domainProgressWriter = false;
+        for (auto local : _placement.LocalDomains())
+            domainProgressWriter |= _placement.DomainRank(local) == 0;
+        auto setupLogger = std::make_shared<OperationalLogger>(
+            _config.Output(), MPIWorldRank(), domainProgressWriter);
+        const int requestedWorkers = OMP::DistributedThreads();
+        const int observedWorkers = Diagnostics::SetupProgress::ObservedWorkers();
         for (auto iDomain : _placement.LocalDomains())
         {
             const auto &domain = _config.Domains()[iDomain];
@@ -113,16 +127,37 @@ namespace DNDS::Cauchy
             // second preprocessing request rather than scaling it twice.
             DNDS_check_throw_info(!factory || (domain.settings.mesh.scale == 1 && domain.settings.mesh.rotationZDegrees == 0),
                                   "factory-injected meshes require identity mesh preprocessing");
+            const std::string domainPrefix = _domains.size() > 1
+                                                 ? "D[" + domain.placement.name + "]/"
+                                                 : "";
+            Diagnostics::SetupProgress progress(
+                [setupLogger, requestedWorkers, observedWorkers](const Diagnostics::SetupProgressEvent &event)
+                {
+                    const char *state = event.state == Diagnostics::SetupProgressState::Starting
+                                            ? "starting"
+                                        : event.state == Diagnostics::SetupProgressState::Done ? "done"
+                                                                                               : "failed";
+                    std::string suffix;
+                    if (event.state == Diagnostics::SetupProgressState::Starting)
+                        suffix = fmt::format("workers {}/{}{}{}", requestedWorkers, observedWorkers,
+                                             event.detail.empty() ? "" : "  ", event.detail);
+                    else
+                        suffix = fmt::format("{:10.3f} s", event.seconds);
+                    const auto line = fmt::format("=== Setup [{:<24}] {:<9} {}", event.phase, state, suffix);
+                    setupLogger->Progress(line, line);
+                });
+            progress = progress.WithPrefix(domainPrefix);
+            auto completeStage = progress.Stage("complete");
             const real started = MPI_Wtime();
             auto mesh = factory ? factory(iDomain, domain, mpi)
                                 : ReadMesh(domain, mpi,
-                                           _placement.Context(iDomain), _setupTimings[iDomain]);
+                                           _placement.Context(iDomain), _setupTimings[iDomain], progress);
             if (factory)
                 _setupTimings[iDomain].meshIngress = MPI_Wtime() - started;
             const real domainStarted = MPI_Wtime();
             _domains[iDomain] = std::make_unique<Domain>(
                 domain.placement.name, std::move(mesh), domain.settings,
-                _config.Time());
+                _config.Time(), progress);
             _setupTimings[iDomain].domainSetup = MPI_Wtime() - domainStarted;
         }
         if (!_config.Interfaces().empty())

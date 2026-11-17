@@ -86,29 +86,19 @@ namespace DNDS::Cauchy
             const auto enabled = [terminal](const std::string &policy)
             { return policy == "always" || (policy == "auto" && terminal); };
             const bool color = enabled(settings.consoleColor), bold = enabled(settings.consoleBold);
-            if (color || bold)
-            {
-                auto console = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-                console->set_color_mode(spdlog::color_mode::always);
 #ifndef _WIN32
-                const auto style = [bold, color](const char *hue)
-                { return std::string(bold ? "\033[1m" : "") + (color ? hue : ""); };
-                console->set_color(spdlog::level::trace, style("\033[37m"));
-                console->set_color(spdlog::level::debug, style("\033[34m"));
-                console->set_color(spdlog::level::info, style("\033[36m"));
-                console->set_color(spdlog::level::warn, style("\033[33m"));
-                console->set_color(spdlog::level::err, style("\033[31m"));
-                console->set_color(spdlog::level::critical, style("\033[31m"));
+            _style.bold = bold ? "\033[1m" : "";
+            _style.red = color ? "\033[31m" : "";
+            _style.green = color ? "\033[32m" : "";
+            _style.yellow = color ? "\033[33m" : "";
+            _style.cyan = color ? "\033[36m" : "";
+            _style.reset = color || bold ? "\033[0m" : "";
 #endif
-                console->set_pattern("%^[%l] %v%$");
-                sinks.push_back(std::move(console));
-            }
-            else
-            {
-                auto console = std::make_shared<spdlog::sinks::stdout_sink_mt>();
-                console->set_pattern("[%l] %v");
-                sinks.push_back(std::move(console));
-            }
+            auto console = std::make_shared<spdlog::sinks::stdout_sink_mt>();
+            console->set_pattern("%v");
+            _console = std::make_shared<spdlog::logger>("cauchy-console-rank-" + std::to_string(globalRank), console);
+            _console->set_level(LogLevel(settings.diagnostics.level));
+            _console->flush_on(spdlog::level::info);
         }
         if (settings.eventLog && (globalRank == 0 || domainProgressWriter))
         {
@@ -139,26 +129,43 @@ namespace DNDS::Cauchy
     }
     OperationalLogger::~OperationalLogger()
     {
+        if (_console)
+            _console->flush();
         if (_logger)
             _logger->flush();
     }
     void OperationalLogger::Info(const std::string &message)
     {
+        if (_console)
+            _console->info("[info] [rank {}] {}", _globalRank, message);
         if (_logger)
             _logger->info("[rank {}] {}", _globalRank, message);
     }
     void OperationalLogger::Warn(const std::string &message)
     {
+        if (_console)
+            _console->warn("[warn] [rank {}] {}", _globalRank, message);
         if (_logger)
             _logger->warn("[rank {}] {}", _globalRank, message);
     }
     void OperationalLogger::Error(const std::string &message)
     {
+        if (_console)
+            _console->error("[error] [rank {}] {}", _globalRank, message);
         if (_logger)
             _logger->error("[rank {}] {}", _globalRank, message);
     }
+    void OperationalLogger::Progress(const std::string &styled, const std::string &plain)
+    {
+        if (_console)
+            _console->info(styled);
+        if (_logger)
+            _logger->info(plain);
+    }
     void OperationalLogger::Flush()
     {
+        if (_console)
+            _console->flush();
         if (_logger)
             _logger->flush();
     }
@@ -173,7 +180,7 @@ namespace DNDS::Cauchy
     CsvSchema DetailedHistorySchema(const EquationSchema &schema)
     {
         using T = CsvColumnType;
-        std::vector<CsvColumn> result{{"step", T::Integer}, {"stage", T::Integer}, {"coupled_stage", T::Integer}, {"iteration", T::Integer}, {"attempt", T::Integer}, {"time", T::Real}, {"dt", T::Real}, {"wall", T::Real}, {"status", T::Integer}, {"pseudo_cfl", T::Real}, {"residual_target_ratio", T::Real}, {"linear_iterations", T::Integer}, {"vr_sweeps", T::Integer}, {"vr_relative_update", T::Real}, {"rhs_limited", T::Integer}, {"rhs_alpha_min", T::Real}, {"increment_limited", T::Integer}, {"increment_alpha_min", T::Real}, {"mass", T::Real}, {"energy", T::Real}, {"rho_min", T::Real}, {"p_min", T::Real}, {"residual_l2", T::Real}, {"force_x", T::Real}, {"force_y", T::Real}, {"force_z", T::Real}, {"rho_error_l1", T::Real}, {"rho_error_l2", T::Real}, {"rho_error_linf", T::Real}, {"temperature_min", T::Real}, {"face_fallbacks", T::Integer}, {"retries", T::Integer}, {"pp_rec_cells", T::Integer}, {"pp_beta_min", T::Real}, {"pp_stage_cells", T::Integer}, {"pp_alpha_min", T::Real}, {"characteristic_fallbacks", T::Integer}, {"implicit_stages", T::Integer}, {"nonlinear_iterations", T::Integer}, {"coupled_iterations", T::Integer}, {"coupled_residual_target_ratio", T::Real}, {"time_pp_cells", T::Integer}, {"time_pp_alpha", T::Real}, {"time_growth_limited", T::Integer}};
+        std::vector<CsvColumn> result{{"step", T::Integer}, {"stage", T::Integer}, {"coupled_stage", T::Integer}, {"iteration", T::Integer}, {"attempt", T::Integer}, {"time", T::Real}, {"dt", T::Real}, {"wall", T::Real}, {"iteration_wall", T::Real}, {"stage_iteration_wall_mean", T::Real}, {"step_wall", T::Real}, {"status", T::Integer}, {"pseudo_cfl", T::Real}, {"residual_target_ratio", T::Real}, {"linear_iterations", T::Integer}, {"vr_sweeps", T::Integer}, {"vr_relative_update", T::Real}, {"rhs_limited", T::Integer}, {"rhs_alpha_min", T::Real}, {"increment_limited", T::Integer}, {"increment_alpha_min", T::Real}, {"mass", T::Real}, {"energy", T::Real}, {"rho_min", T::Real}, {"p_min", T::Real}, {"residual_l2", T::Real}, {"force_x", T::Real}, {"force_y", T::Real}, {"force_z", T::Real}, {"rho_error_l1", T::Real}, {"rho_error_l2", T::Real}, {"rho_error_linf", T::Real}, {"temperature_min", T::Real}, {"face_fallbacks", T::Integer}, {"retries", T::Integer}, {"pp_rec_cells", T::Integer}, {"pp_beta_min", T::Real}, {"pp_stage_cells", T::Integer}, {"pp_alpha_min", T::Real}, {"characteristic_fallbacks", T::Integer}, {"implicit_stages", T::Integer}, {"nonlinear_iterations", T::Integer}, {"coupled_iterations", T::Integer}, {"coupled_residual_target_ratio", T::Real}, {"time_pp_cells", T::Integer}, {"time_pp_alpha", T::Real}, {"time_growth_limited", T::Integer}};
         for (const auto &name : EquationComponentNames(schema))
             result.push_back({"res_" + name, T::Real});
         return CsvSchema(std::move(result));
@@ -190,7 +197,9 @@ namespace DNDS::Cauchy
         : _schema(std::move(schema)), _settings(std::move(settings)), _domain(std::move(domain)), _writer(writer),
           _logger(std::move(logger))
     {
-        DNDS_check_throw_info(_logger && !_domain.empty(), "invalid Cauchy progress-output controller");
+        // An empty display domain is the canonical single-domain spelling.
+        // Multi-domain coordinators pass the configured domain name.
+        DNDS_check_throw_info(_logger, "invalid Cauchy progress-output controller");
         if (_writer)
             _history = std::make_unique<ProgressHistory>(DetailedHistorySchema(_schema), bareHistory,
                                                          _settings.historySegmentRows, _settings.historyPrecision, resume);
@@ -229,27 +238,53 @@ namespace DNDS::Cauchy
         row.Set("rhs_alpha_min", progress.minimumRHSAlpha);
         row.Set("increment_limited", progress.incrementLimited);
         row.Set("increment_alpha_min", progress.minimumIncrementAlpha);
+        row.Set("iteration_wall", progress.iterationWallSeconds);
         FillResiduals(row, progress.residual);
     }
-    void ProgressOutputController::ConsoleNonlinear(const ProgressLocation &location,
-                                                    const NonlinearProgress &progress, bool stageEnd) const
+    void ProgressOutputController::BeginAttempt(ProgressLocation location)
     {
-        std::string residual;
+        _attempt = location;
+        _stageTiming.clear();
+    }
+    void ProgressOutputController::ConsoleNonlinear(const ProgressLocation &location,
+                                                    const NonlinearProgress &progress, real stageAverage) const
+    {
+        std::string residual = "[";
         for (const real value : progress.residual)
-            residual += fmt::format(" {:10.3e}", value);
-        std::string message = fmt::format(
-            "Cauchy {:>10} step {:7} stage {:2} coupled {:2} {} residual [{} ] target {:9.2e} CFL {:9.2e} wall {:10.3f}s VR {:3}:",
-            _domain, location.step, location.stage, location.coupledStage,
-            stageEnd ? std::string("end          ") : fmt::format("iteration {:4}", location.iteration),
-            residual, progress.residualTargetRatio, progress.pseudoCFL, location.wall, progress.reconstructionIterations);
+            residual += fmt::format("{}{:9.3e}", residual.size() == 1 ? "" : " ", value);
+        residual += "]";
+        const auto identity = fmt::format("    {}Internal === Step [{:7},{:3},{:5}]",
+                                          _domain.empty() ? "" : "D[" + _domain + "] ",
+                                          location.step, location.stage, location.iteration);
+        const auto physical = fmt::format("t,dt,CFL [{:.3e},{:.3e},{:.3e}]",
+                                          location.time, location.dt, progress.pseudoCFL);
+        const auto positivity = fmt::format("PP [rhs({},{:.3f}),inc({},{:.3f})]",
+                                            progress.rhsLimited, progress.minimumRHSAlpha,
+                                            progress.incrementLimited, progress.minimumIncrementAlpha);
+        std::string vr = fmt::format("VR [{},", progress.reconstructionIterations);
         if (progress.reconstructionUpdateMeasured)
-            message += fmt::format("{:9.2e}", progress.reconstructionRelativeUpdate);
+            vr += fmt::format("{:.3e}]", progress.reconstructionRelativeUpdate);
         else
-            message += "unmeasured";
-        message += fmt::format(" linear {:4}", progress.linearIterations);
+            vr += "unmeasured]";
+        std::string status;
         if (progress.terminal)
-            message += progress.converged ? " converged" : " capped";
-        _logger->Info(message);
+            status = progress.converged ? "converged" : "capped";
+        const auto plain = fmt::format("{}   res {}   {}   {}   {}   linear [{}]   Time [{:.3f} s/iter avg]{}{}",
+                                       identity, residual, physical, positivity, vr, progress.linearIterations,
+                                       stageAverage, status.empty() ? "" : "   ", status);
+        const auto &style = _logger->Style();
+        const auto styled = fmt::format("{}{}{}   res {}{}{}   {}{}{}   {}{}{}   {}   linear [{}]   {}Time [{:.3f} s/iter avg]{}{}{}{}",
+                                        style.bold, identity, style.reset,
+                                        style.red, residual, style.reset,
+                                        style.green, physical, style.reset,
+                                        (progress.rhsLimited || progress.incrementLimited) ? style.yellow : "", positivity,
+                                        (progress.rhsLimited || progress.incrementLimited) ? style.reset : "",
+                                        vr, progress.linearIterations,
+                                        style.cyan, stageAverage, style.reset,
+                                        status.empty() ? "" : "   ",
+                                        status.empty() ? "" : (progress.converged ? style.green : style.yellow),
+                                        status.empty() ? "" : status + style.reset);
+        _logger->Progress(styled, plain);
     }
     void ProgressOutputController::CaptureIteration(const NonlinearProgress &progress, real wall)
     {
@@ -271,17 +306,22 @@ namespace DNDS::Cauchy
         }
         for (const auto &entry : _captured)
         {
+            auto &timing = _stageTiming[{entry.location.step, entry.location.stage, entry.location.coupledStage}];
+            timing.first += entry.progress.iterationWallSeconds;
+            ++timing.second;
+            const real stageAverage = timing.first / real(timing.second);
             const bool history = _settings.implicit.historyInterval > 0 &&
                                  (entry.location.iteration % _settings.implicit.historyInterval == 0 || entry.progress.terminal);
             if (history)
             {
                 auto row = Base(entry.location, ProgressRecordStatus::NonlinearIteration);
                 FillNonlinear(row, entry.progress);
+                row.Set("stage_iteration_wall_mean", stageAverage);
                 _history->Write(row);
             }
             if (_settings.implicit.consoleInterval > 0 &&
                 (entry.location.iteration % _settings.implicit.consoleInterval == 0 || entry.progress.terminal))
-                ConsoleNonlinear(entry.location, entry.progress, false);
+                ConsoleNonlinear(entry.location, entry.progress, stageAverage);
         }
         _captured.clear();
     }
@@ -309,8 +349,6 @@ namespace DNDS::Cauchy
         progress.reconstructionUpdateMeasured = report.reconstructionUpdateMeasured;
         FillNonlinear(row, progress);
         _history->Write(row);
-        if (_settings.implicit.consoleInterval > 0)
-            ConsoleNonlinear(location, progress, true);
     }
     void ProgressOutputController::StepEnd(ProgressLocation location, const AcceptedStepProgress &progress,
                                            bool forceHistory, bool printConsole)
@@ -356,16 +394,32 @@ namespace DNDS::Cauchy
             row.Set("time_pp_cells", progress.timePPLimitedCells);
             row.Set("time_pp_alpha", progress.timePPMinimumAlpha);
             row.Set("time_growth_limited", index(progress.timeGrowthLimited));
+            row.Set("step_wall", progress.stepWallSeconds);
+            if (!progress.residual.empty())
+                FillResiduals(row, progress.residual);
             _history->Write(row);
         }
         if (printConsole)
         {
             const auto &v = progress.diagnostics;
-            _logger->Info(fmt::format(
-                "Cauchy {:>10} step {:7} time {:11.4e} dt {:9.2e} residual {:10.3e} rho_min {:9.2e} p_min {:9.2e} VR {:3.0f}:{:9.2e} rho L1 {:9.2e} face fallbacks {:5} stages {:2} capped {:2} nonlinear/linear {:5}/{:5} retries {:2} step {:9.3f}s wall {:10.3f}s",
-                _domain, location.step, location.time, location.dt, v[4], v[2], v[3], v[8], v[9], v[10],
-                progress.faceFallbacks, progress.implicitStages, progress.cappedStages, progress.nonlinearIterations, progress.linearIterations,
-                progress.retries, progress.stepWallSeconds, location.wall));
+            std::string residual = "[";
+            for (const real value : progress.residual)
+                residual += fmt::format("{}{:9.3e}", residual.size() == 1 ? "" : " ", value);
+            residual += "]";
+            const auto identity = fmt::format("=== {}Step [{:7}]", _domain.empty() ? "" : "D[" + _domain + "] ", location.step);
+            const auto physical = fmt::format("t,dt,CFL [{:.3e},{:.3e},{:.3e}]", location.time, location.dt, progress.pseudoCFL);
+            const auto state = fmt::format("state [rhoMin {:.3e},pMin {:.3e},Tmin {:.3e}]", v[2], v[3], v[13]);
+            const auto pp = fmt::format("PP [rec {},stage {},time {}]", index(progress.positivity[0]), index(progress.positivity[2]), progress.timePPLimitedCells);
+            const auto work = fmt::format("work [stages {},nonlinear {},linear {}]", progress.implicitStages, progress.nonlinearIterations, progress.linearIterations);
+            const auto plain = fmt::format("{}   res {}   {}   {}   {}   {}   Time [{:.3f} s]", identity, residual, physical, state, pp, work, progress.stepWallSeconds);
+            const auto &style = _logger->Style();
+            const auto styled = fmt::format("{}{}{}   res {}{}{}   {}{}{}   {}{}{}   {}{}{}   {}   {}Time [{:.3f} s]{}",
+                                            style.bold, identity, style.reset, style.red, residual, style.reset,
+                                            style.green, physical, style.reset, style.green, state, style.reset,
+                                            (progress.positivity[0] || progress.positivity[2] || progress.timePPLimitedCells) ? style.yellow : "", pp,
+                                            (progress.positivity[0] || progress.positivity[2] || progress.timePPLimitedCells) ? style.reset : "",
+                                            work, style.cyan, progress.stepWallSeconds, style.reset);
+            _logger->Progress(styled, plain);
         }
     }
     void ProgressOutputController::Flush()

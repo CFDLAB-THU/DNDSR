@@ -89,7 +89,8 @@ namespace DNDS::CFV
 
     public:
         static GradientPlan Prepare(Geom::UnstructuredMesh &mesh, FiniteVolumePlan metrics,
-                                    GradientMethod method = GradientMethod::LeastSquares, real relativeCutoff = 1e-13);
+                                    GradientMethod method = GradientMethod::LeastSquares, real relativeCutoff = 1e-13,
+                                    Diagnostics::SetupProgress progress = {});
         Runtime::Device Device() const { return _data->metrics.Device(); }
         /// Synchronous setup placement. The overload accepting placed metrics
         /// shares that publication with the caller instead of duplicating it.

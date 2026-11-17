@@ -21,6 +21,7 @@
 #include "Geom/Compat/NativeMeshLegacyArchive.hpp"
 #include "Geom/Transition/FieldTransfer.hpp"
 #include "DNDS/Serializer/SerializerFactory.hpp"
+#include "DNDS/Diagnostics/SetupProgress.hpp"
 
 #include <functional>
 #include <fstream>
@@ -38,6 +39,7 @@ namespace DNDS::Geom
         int reorderPartsInner = 1;  ///< nested local partitioning
         int ghostLayers = 1;        ///< explicit final cell-ring depth
         bool buildEdges = false;    ///< additionally construct 3D edges
+        Diagnostics::SetupProgress progress;
     };
 
     inline NativeOwnedMeshData DeriveAndPartitionNativeMeshOwned(
@@ -53,7 +55,8 @@ namespace DNDS::Geom
         const PartitionOptions &partOpts, const t_FBCName_2_ID &nameMapper,
         std::optional<NativePeriodicImportOptions> periodic = {},
         int elevation = 0, int bisect = 0, int readerRank = 0,
-        MeshAuditOptions audit = {}, std::shared_ptr<Runtime::CommunicationContext> communication = {});
+        MeshAuditOptions audit = {}, std::shared_ptr<Runtime::CommunicationContext> communication = {},
+        Diagnostics::SetupProgress progress = {});
     inline NativeOwnedMeshData ReadAndDeriveNativeMeshFromOpenFOAMOwned(
         const MPIInfo &mpi, const std::string &meshFile, const PartitionOptions &partOpts,
         const std::map<std::string, std::string> &nameMapping,
@@ -147,11 +150,22 @@ namespace DNDS::Geom
         const MPIInfo &mpi, int dimension, const std::string &meshFile,
         const PartitionOptions &partOpts, const t_FBCName_2_ID &nameMapper,
         std::optional<NativePeriodicImportOptions> periodic, int elevation, int bisect,
-        int readerRank, MeshAuditOptions audit, std::shared_ptr<Runtime::CommunicationContext> communication)
+        int readerRank, MeshAuditOptions audit, std::shared_ptr<Runtime::CommunicationContext> communication,
+        Diagnostics::SetupProgress progress)
     {
-        auto owned = ReadNativeCGNSOwned(mpi, meshFile, dimension, nameMapper, readerRank,
-                                         {1, true, audit, std::move(communication)}, periodic, NativeSerialDistribution::ReaderOwned);
-        return DeriveAndPartitionNativeMeshOwned(std::move(owned), mpi, partOpts, elevation, bisect);
+        if (periodic)
+            periodic->progress = progress;
+        NativeOwnedMeshData owned;
+        {
+            auto stage = progress.Stage("mesh/read");
+            owned = ReadNativeCGNSOwned(mpi, meshFile, dimension, nameMapper, readerRank,
+                                        {1, true, audit, std::move(communication)}, periodic, NativeSerialDistribution::ReaderOwned);
+        }
+        {
+            auto stage = progress.Stage("mesh/partition");
+            owned = DeriveAndPartitionNativeMeshOwned(std::move(owned), mpi, partOpts, elevation, bisect);
+        }
+        return owned;
     }
 
     inline NativeOwnedMeshData ReadAndDeriveNativeMeshFromOpenFOAMOwned(
@@ -178,8 +192,14 @@ namespace DNDS::Geom
                                                      (opts.reorderCells == 0 || opts.reorderCells == 1),
                                                  "native preparation options differ across ranks or invalid depth"); });
         if (opts.reorderCells == 1)
+        {
+            auto stage = opts.progress.Stage("mesh/reorder");
             owned = NativeMeshTransition::ReorderOwnedCells(owned, mpi, opts.reorderParts, opts.reorderPartsInner).owned;
-        owned = NativeMeshTopology::Build(std::move(owned), mpi, true, opts.buildEdges);
+        }
+        {
+            auto stage = opts.progress.Stage("mesh/topology");
+            owned = NativeMeshTopology::Build(std::move(owned), mpi, true, opts.buildEdges);
+        }
         GhostSpec recipe;
         owned.LocalStage(mpi, [&]
                          {
@@ -187,6 +207,7 @@ namespace DNDS::Geom
             if (owned.ghostSpec)
                 recipe.chains.insert(recipe.chains.end(), owned.ghostSpec->chains.begin(), owned.ghostSpec->chains.end());
             owned.ghostSpec = recipe; });
+        auto stage = opts.progress.Stage("mesh/ghost");
         return NativeMeshAssembler::Build(mpi, std::move(owned), recipe);
     }
 

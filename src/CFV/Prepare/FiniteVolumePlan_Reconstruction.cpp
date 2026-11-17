@@ -77,8 +77,10 @@ namespace DNDS::CFV
     }
 
     VariationalReconstructionPlan VariationalReconstructionPlan::ConstructRecCoeff(FiniteVolumePlan metrics, ReconstructionSettings settings,
-                                                                                   ReconstructionCapabilities capabilities)
+                                                                                   ReconstructionCapabilities capabilities,
+                                                                                   Diagnostics::SetupProgress progress)
     {
+        auto completeStage = progress.Stage("VR/complete");
         auto geometry = metrics._data;
         // Capability differences change payload construction and diagnostics
         // collectives. This is required protocol agreement, not optional safety.
@@ -133,20 +135,39 @@ namespace DNDS::CFV
             auto originalRead = geometry->mesh->CurrentNativeState()->ReadOriginalEntityIds(EntityKind::Cell);
             const auto original = originalRead->View<R::FixedRows<1>>();
 
-            // Count all incidence and boundary rows before allocating payloads.
-            index incidences = 0, boundaryCount = 0;
+            // Count rows in parallel, then publish deterministic stable offsets.
+            std::vector<index> incidenceCounts(static_cast<size_t>(nCell));
+            std::vector<index> boundaryCounts(static_cast<size_t>(nCell));
+            std::vector<index> cellOffsets(static_cast<size_t>(nCell + 1));
             std::vector<uint8_t> active(size_t(nFace), 0); // local faces only
-            for (index iCell = 0; iCell < nCell; ++iCell)
+            index incidences = 0, boundaryCount = 0;
+            {
+            auto countStage = progress.Stage("VR/count-prefix");
+            OMP::ForSetupRows(0, nCell, [&](index iCell)
             {
                 const auto faces = mesh.CellFaces(iCell);
-                incidences += faces.size();
+                incidenceCounts[size_t(iCell)] = index(faces.size());
+                index boundaries = 0;
                 for (index slot = 0; slot < faces.size(); ++slot)
                 {
                     const index iFace = faces[slot];
-                    active[size_t(iFace)] = 1;
                     if (mesh.CellFaceOther(iCell, iFace, rowsize(slot)) == UnInitIndex)
-                        boundaryCount += faceOffset(iFace + 1, 0) - faceOffset(iFace, 0);
+                        boundaries += faceOffset(iFace + 1, 0) - faceOffset(iFace, 0);
                 }
+                boundaryCounts[size_t(iCell)] = boundaries;
+            });
+            incidences = OMP::ExclusivePrefixRows(
+                nCell, [&](index row) noexcept { return incidenceCounts[size_t(row)]; },
+                [&](index row, index value) noexcept { cellOffsets[size_t(row)] = value; });
+            boundaryCount = OMP::ExclusivePrefixRows(
+                nCell, [&](index row) noexcept { return boundaryCounts[size_t(row)]; },
+                [](index, index) noexcept {});
+            OMP::ForSetupRows(0, nFace, [&](index iFace)
+            {
+                const auto parents = mesh.FaceCells(iFace);
+                active[size_t(iFace)] = (parents[0] >= 0 && parents[0] < nCell) ||
+                                        (parents[1] >= 0 && parents[1] < nCell);
+            });
             }
             data->moments = R::Array<real>(R::RowLayout::Dense(mesh.NumCellProc(), n + 1));
             data->moments.SetName("CFV/quadrature/cellMoments", DNDS_ALLOCATION_SITE());
@@ -224,6 +245,8 @@ namespace DNDS::CFV
             data->preparationRuntimeScratchBytes += halfBoxStorage.Storage().Bytes();
             auto halfBoxWrite = halfBoxStorage.Write();
             const auto halfBoxes = halfBoxWrite.View<R::FixedRows<3>>();
+            {
+            auto setupStage = progress.Stage("VR/moments");
             OMP::ForSetupRows(0, mesh.NumCellProc(), [&](index iCell)
             {
                 SmallMatrix full;
@@ -247,12 +270,15 @@ namespace DNDS::CFV
                 const real volume = moment(iCell, 0);
                 for (int j = 0; j <= n; ++j) moment(iCell, j) /= volume;
             });
+            }
             OptionalTableWriter systemWrite(systems);
             const auto system = systemWrite.values;
             auto basis = [&](index iCell, const tPoint &p, SmallMatrix &out)
             {
                 polynomial.Reconstruction(out, p, {cell(iCell, 1), cell(iCell, 2), cell(iCell, 3)}, cell(iCell, 7), moment[iCell], degree);
             };
+            {
+            auto setupStage = progress.Stage("VR/face-systems");
             OMP::ForSetupRows(0, nFace, [&](index iFace)
             {
                 if (!active[size_t(iFace)]) return;
@@ -389,6 +415,7 @@ namespace DNDS::CFV
                     Eigen::Map<Matrix>(system[iFace].data() + faceSystem.secondary + n * n, n, n) = secondaryR;
                 }
             });
+            }
             auto offsetsWrite = data->offsets.Write(), neighborsWrite = data->neighbors.Write(), facesWrite = data->faces.Write();
             auto bOffsetsWrite = data->boundaryOffsets.Write(), bPointsWrite = data->boundaryPoints.Write();
             OptionalTableWriter matrixWrite(data->matrixAInvB), vectorWrite(data->vectorAInvB), secondaryWrite(data->secondary), injectionWrite(data->boundaryInjection);
@@ -396,28 +423,34 @@ namespace DNDS::CFV
             const auto bOffsets = bOffsetsWrite.View<R::FixedRows<1>>();
             const auto bPoints = bPointsWrite.View<R::FixedRows<4>>();
             const auto matrices = matrixWrite.values, vectors = vectorWrite.values, secondaries = secondaryWrite.values, injections = injectionWrite.values;
-            index iEntry = 0, iBoundary = 0;
-            // Publish row ranges before independent SVD/fill work. Every cell
-            // writes disjoint incidence and boundary-quadrature rows. No atomics
-            // or concurrent vector growth are needed, and OMP=1 keeps ordering.
-            for (index iCell = 0; iCell < nCell; ++iCell)
             {
-                offsets(iCell, 0) = iEntry;
+            auto prefixStage = progress.Stage("VR/prefix");
+            std::vector<index> entryBoundaryCounts(static_cast<size_t>(incidences));
+            OMP::ForSetupRows(0, nCell, [&](index iCell)
+            {
+                offsets(iCell, 0) = cellOffsets[size_t(iCell)];
+                index iEntry = cellOffsets[size_t(iCell)];
                 const auto c2f = mesh.CellFaces(iCell);
                 for (index slot = 0; slot < c2f.size(); ++slot, ++iEntry)
                 {
-                    bOffsets(iEntry, 0) = iBoundary;
                     const auto iFace = c2f[slot];
-                    if (mesh.CellFaceOther(iCell, iFace, rowsize(slot)) == UnInitIndex)
-                        iBoundary += faceOffset(iFace + 1, 0) - faceOffset(iFace, 0);
+                    entryBoundaryCounts[size_t(iEntry)] =
+                        mesh.CellFaceOther(iCell, iFace, rowsize(slot)) == UnInitIndex
+                            ? faceOffset(iFace + 1, 0) - faceOffset(iFace, 0)
+                            : 0;
                 }
+            });
+            offsets(nCell, 0) = incidences;
+            const index publishedBoundaryCount = OMP::ExclusivePrefixRows(
+                incidences, [&](index row) noexcept { return entryBoundaryCounts[size_t(row)]; },
+                [&](index row, index value) noexcept { bOffsets(row, 0) = value; });
+            DNDS_check_throw_info(publishedBoundaryCount == boundaryCount, "VR setup incidence count changed");
             }
-            offsets(nCell, 0) = iEntry;
-            bOffsets(iEntry, 0) = iBoundary;
-            DNDS_check_throw_info(iEntry == incidences && iBoundary == boundaryCount, "VR setup incidence count changed");
             OptionalTableWriter conditionsWrite(data->inverseConditions);
             const auto conditions = conditionsWrite.values;
             data->inverseDiagnostics.cells = nCell;
+            {
+            auto setupStage = progress.Stage("VR/SVD-matrices");
             OMP::ForSetupRows(0, nCell, [&](index iCell)
             {
                 // Setup scratch and Eigen decompositions belong to this cell.
@@ -561,6 +594,7 @@ namespace DNDS::CFV
                         }
                 }
             });
+            }
             DNDS_check_throw_info(std::find(inverseSymmetry.begin(), inverseSymmetry.end(), uint8_t(0)) == inverseSymmetry.end(),
                                   "local VR inverse is not symmetric to the packed-storage tolerance; full storage is required");
             // Deterministic controller merge after the team. These are setup
@@ -587,8 +621,11 @@ namespace DNDS::CFV
         // The matrix assembly's full derivative scratch and mutable moments
         // leases are gone. Hot sampling prepares only its requested rows and
         // never retains the full-order setup matrices.
-        geometry->communication->LocalStage([&]
-                                            { Detail::PrepareFaceBasis(*data, *geometry); });
+        {
+            auto setupStage = progress.Stage("VR/face-basis");
+            geometry->communication->LocalStage([&]
+                                                { Detail::PrepareFaceBasis(*data, *geometry); });
+        }
         if (capabilities.inverseDiagnostics)
         {
             auto &summary = data->inverseDiagnostics;

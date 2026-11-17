@@ -33,7 +33,8 @@
 namespace DNDS::Cauchy
 {
     namespace R = Runtime;
-    FiniteVolume::FiniteVolume(ssp<Geom::UnstructuredMesh> mesh, const DomainSettings &settings, const EquationSystem &equation)
+    FiniteVolume::FiniteVolume(ssp<Geom::UnstructuredMesh> mesh, const DomainSettings &settings, const EquationSystem &equation,
+                               Diagnostics::SetupProgress progress)
     {
         // Agree the actual selection before optional stages can diverge. The
         // metric plan retains this immutable policy for subsequent operators.
@@ -65,19 +66,34 @@ namespace DNDS::Cauchy
                                   "LVR requires degree2/3 variational reconstruction");
             DNDS_check_throw_info(settings.numerics.viscousGradient == "primitive" || settings.numerics.viscousGradient == "polynomial",
                                   "unknown Cauchy viscous gradient scheme"); }, "invalid Cauchy finite-volume setup");
-        auto data = std::make_shared<Data>(std::move(mesh), ResolveSweepOrdering(settings), equation);
+        auto data = std::make_shared<Data>(std::move(mesh), ResolveSweepOrdering(settings), equation, progress);
         if (equation.HasRANS())
+        {
+            auto setupStage = progress.Stage("FV/RANS-geometry");
             data->metrics.Communication()->LocalStage([&]
                                                       {
                 data->wallDistance.emplace(WallDistanceSamples::Construct(data->mesh, settings.numerics.RHSIntegrationOrder(), settings.numerics.wallDistanceFloor));
                 data->ransCellLength = data->metrics.BuildCellMaxLenScale(); });
+        }
         const bool limitedVR = settings.numerics.limiter == "LVR" && (settings.numerics.limitedVR.alphaMax > 0 || settings.numerics.limitedVR.contactAlphaMax > 0);
-        data->BuildStencil();
-        data->BuildSourceQuadrature();
-        data->BuildPositivityQuadrature(limitedVR);
+        {
+            auto setupStage = progress.Stage("FV/stencil");
+            data->BuildStencil();
+        }
+        {
+            auto setupStage = progress.Stage("FV/source-quadrature");
+            data->BuildSourceQuadrature();
+        }
+        {
+            auto setupStage = progress.Stage("FV/positivity-quadrature");
+            data->BuildPositivityQuadrature(limitedVR);
+        }
         data->stencil.Freeze(data->metrics);
         if (limitedVR)
+        {
+            auto setupStage = progress.Stage("FV/limited-VR");
             data->limitedVRGeometry = std::make_shared<LimitedVRGeometry>(*data);
+        }
         _data = std::move(data);
     }
     const CFV::FiniteVolumePlan &FiniteVolume::Metrics() const { return _data->metrics; }

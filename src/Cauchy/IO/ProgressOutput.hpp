@@ -6,6 +6,7 @@
 
 #include <map>
 #include <optional>
+#include <tuple>
 
 namespace spdlog
 {
@@ -53,8 +54,17 @@ namespace DNDS::Cauchy
     /// messages; only the terminal sink adds color/emphasis.
     class OperationalLogger
     {
-        std::shared_ptr<spdlog::logger> _logger;
+        std::shared_ptr<spdlog::logger> _logger, _console;
         int _globalRank = 0;
+
+    public:
+        struct TerminalStyle
+        {
+            std::string bold, red, green, yellow, cyan, reset;
+        };
+
+    private:
+        TerminalStyle _style;
 
     public:
         /// Domain progress writers may be nonzero world ranks. Grant their
@@ -66,6 +76,9 @@ namespace DNDS::Cauchy
         void Info(const std::string &message);
         void Warn(const std::string &message);
         void Error(const std::string &message);
+        /// Styled terminal row plus byte-clean event/diagnostic row.
+        void Progress(const std::string &styled, const std::string &plain);
+        const TerminalStyle &Style() const { return _style; }
         void Flush();
     };
 
@@ -88,6 +101,8 @@ namespace DNDS::Cauchy
     struct AcceptedStepProgress
     {
         std::array<real, 14> diagnostics{};
+        std::vector<real> residual;
+        real pseudoCFL = 0;
         index faceFallbacks = 0, retries = 0, implicitStages = 0, nonlinearIterations = 0, linearIterations = 0;
         index cappedStages = 0;
         index coupledIterations = 0, timePPLimitedCells = 0;
@@ -119,18 +134,19 @@ namespace DNDS::Cauchy
         std::unique_ptr<ProgressHistory> _history;
         ProgressLocation _attempt;
         std::vector<Captured> _captured;
+        std::map<std::tuple<uint64_t, index, index>, std::pair<real, index>> _stageTiming;
         ProgressRow Base(const ProgressLocation &location, ProgressRecordStatus status) const;
         void FillResiduals(ProgressRow &row, const std::vector<real> &residual) const;
         void FillNonlinear(ProgressRow &row, const NonlinearProgress &progress) const;
         void ConsoleNonlinear(const ProgressLocation &location, const NonlinearProgress &progress,
-                              bool stageEnd) const;
+                              real stageAverage) const;
 
     public:
         ProgressOutputController(EquationSchema schema, OutputSettings settings, std::string domain,
                                  std::string bareHistory, bool writer,
                                  std::shared_ptr<OperationalLogger> logger,
                                  std::optional<CsvLogPosition> resume = std::nullopt);
-        void BeginAttempt(ProgressLocation location) { _attempt = location; }
+        void BeginAttempt(ProgressLocation location);
         /// Capture the frontend's elapsed wall time at observation, not the
         /// attempt-start time or the later sink-flush time.
         void CaptureIteration(const NonlinearProgress &progress, real wall);

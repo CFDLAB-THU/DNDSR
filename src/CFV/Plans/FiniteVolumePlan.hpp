@@ -11,6 +11,7 @@
 #include "Geom/Geometry/Geometric.hpp"
 #include "Geom/Unstructured/UnstructuredMeshFwd.hpp"
 #include "DNDS/Math/HardEigen.hpp"
+#include "DNDS/Diagnostics/SetupProgress.hpp"
 #include "CFV/Math/ReconstructionFunctional.hpp"
 #include "CFV/Math/TaylorBasis.hpp"
 #include "CFV/Math/FaceGeometry.hpp"
@@ -209,6 +210,7 @@ namespace DNDS::CFV
         int faceIntegrationOrder = 0;
         bool axisymmetric = false;
         bool collectivePreflight = true;
+        Diagnostics::SetupProgress progress;
     };
 
     /// Immutable metric publication; copies share Runtime buffers and mesh/order
@@ -616,7 +618,8 @@ namespace DNDS::CFV
         /// ranks. Default support preserves the standalone API; reduced profiles
         /// omit unused tables and fail explicitly on unprepared operations.
         static VariationalReconstructionPlan ConstructRecCoeff(FiniteVolumePlan metrics, ReconstructionSettings settings = {},
-                                                               ReconstructionCapabilities capabilities = {});
+                                                               ReconstructionCapabilities capabilities = {},
+                                                               Diagnostics::SetupProgress progress = {});
         /// Return the same public CFV plan placed on one backend. CUDA setup is
         /// synchronous; hot submissions are stream ordered. Set
         /// retainHostPayloads=false after preparing host geometry queries;

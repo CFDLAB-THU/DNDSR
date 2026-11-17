@@ -210,8 +210,8 @@ namespace DNDS::CFV
             .def("EvaluateQueued", py::overload_cast<Runtime::EagerEngine &, const Runtime::ExecutionStream &, const FVField &, const FVField &, Runtime::Array<real> &, int>(&PolynomialSamplingPlan::Evaluate, py::const_),
                  py::arg("engine"), py::arg("stream"), py::arg("mean"), py::arg("coefficients"), py::arg("output"), py::arg("derivative") = 0);
         py::class_<VariationalReconstructionPlan>(m, "VariationalReconstructionPlan")
-            .def_static("ConstructRecCoeff", &VariationalReconstructionPlan::ConstructRecCoeff,
-                        py::arg("metrics"), py::arg("settings") = ReconstructionSettings{}, py::arg("capabilities") = ReconstructionCapabilities{})
+            .def_static("ConstructRecCoeff", [](FiniteVolumePlan metrics, ReconstructionSettings settings, ReconstructionCapabilities capabilities)
+                        { return VariationalReconstructionPlan::ConstructRecCoeff(std::move(metrics), std::move(settings), capabilities); }, py::arg("metrics"), py::arg("settings") = ReconstructionSettings{}, py::arg("capabilities") = ReconstructionCapabilities{})
             .def("NRecDOF", &VariationalReconstructionPlan::NRecDOF)
             .def("Capabilities", &VariationalReconstructionPlan::Capabilities)
             .def("Require", &VariationalReconstructionPlan::Require)
@@ -219,47 +219,28 @@ namespace DNDS::CFV
             .def("GetInverseDiagnostics", &VariationalReconstructionPlan::GetInverseDiagnostics)
             .def("GetCellInverseDiagnostics", &VariationalReconstructionPlan::GetCellInverseDiagnostics)
             .def("Validate", &VariationalReconstructionPlan::Validate)
-            .def("Place", &VariationalReconstructionPlan::Place,
-                 py::arg("device"), py::arg("context"), py::arg("options") = ReconstructionResidencyOptions{},
-                 "Return the same logical CFV plan placed on the requested backend. CUDA setup is explicit and synchronous.")
+            .def("Place", &VariationalReconstructionPlan::Place, py::arg("device"), py::arg("context"), py::arg("options") = ReconstructionResidencyOptions{}, "Return the same logical CFV plan placed on the requested backend. CUDA setup is explicit and synchronous.")
             .def("Device", &VariationalReconstructionPlan::Device)
             .def("RetainsHostPayloads", &VariationalReconstructionPlan::RetainsHostPayloads)
             .def("SupportsKernel", &VariationalReconstructionPlan::SupportsKernel)
             .def("ResidentBuffers", &VariationalReconstructionPlan::ResidentBuffers)
-            .def("BuildWorkspace", py::overload_cast<index, std::vector<index>>(&VariationalReconstructionPlan::BuildWorkspace, py::const_),
-                 py::arg("components"), py::arg("periodicVectorStarts") = std::vector<index>{})
-            .def("BuildWorkspaceWithLayout", py::overload_cast<index, Runtime::RowLayout, std::vector<index>>(&VariationalReconstructionPlan::BuildWorkspace, py::const_),
-                 py::arg("components"), py::arg("prototype"), py::arg("periodicVectorStarts") = std::vector<index>{})
+            .def("BuildWorkspace", py::overload_cast<index, std::vector<index>>(&VariationalReconstructionPlan::BuildWorkspace, py::const_), py::arg("components"), py::arg("periodicVectorStarts") = std::vector<index>{})
+            .def("BuildWorkspaceWithLayout", py::overload_cast<index, Runtime::RowLayout, std::vector<index>>(&VariationalReconstructionPlan::BuildWorkspace, py::const_), py::arg("components"), py::arg("prototype"), py::arg("periodicVectorStarts") = std::vector<index>{})
             .def("BuildCoefficients", py::overload_cast<index>(&VariationalReconstructionPlan::BuildCoefficients, py::const_), py::arg("components"))
-            .def("BuildCoefficientsWithLayout", py::overload_cast<index, Runtime::RowLayout>(&VariationalReconstructionPlan::BuildCoefficients, py::const_),
-                 py::arg("components"), py::arg("prototype"))
+            .def("BuildCoefficientsWithLayout", py::overload_cast<index, Runtime::RowLayout>(&VariationalReconstructionPlan::BuildCoefficients, py::const_), py::arg("components"), py::arg("prototype"))
             .def("BuildBoundaryValues", &VariationalReconstructionPlan::BuildBoundaryValues)
             .def("PlaceBoundaryValues", &VariationalReconstructionPlan::PlaceBoundaryValues)
             .def("NumBoundaryQuadrature", &VariationalReconstructionPlan::NumBoundaryQuadrature)
             .def("GetBoundaryQuadrature", &VariationalReconstructionPlan::GetBoundaryQuadrature)
             .def("BuildFaceTransform", &VariationalReconstructionPlan::BuildFaceTransform)
             .def("PlaceFaceTransform", &VariationalReconstructionPlan::PlaceFaceTransform)
-            .def("FinalizeFaceTransform", &VariationalReconstructionPlan::FinalizeFaceTransform,
-                 py::arg("transform"), py::arg("checkInverses") = false,
-                 "Publish matrices after filling from cell means; optional inverse diagnostics are off by default. Any later write requires re-finalization.")
-            .def("DoReconstructionIter", &VariationalReconstructionPlan::DoReconstructionIter,
-                 py::arg("mean"), py::arg("coefficients"), py::arg("workspace"), py::arg("boundary"),
-                 py::arg("kernel") = ReconstructionDeviceKernel::FP64,
-                 "One synchronous backend-resolved sweep and commit. Release Python aliases and refresh input halos first.")
-            .def("DoReconstructionIterTo", &VariationalReconstructionPlan::DoReconstructionIterTo,
-                 py::arg("mean"), py::arg("input"), py::arg("workspace"), py::arg("boundary"), py::arg("region") = ReconstructionRegion::All)
-            .def("SubmitReconstructionIterTo", &VariationalReconstructionPlan::SubmitReconstructionIterTo,
-                 py::arg("engine"), py::arg("stream"), py::arg("mean"), py::arg("input"), py::arg("workspace"), py::arg("boundary"),
-                 py::arg("region") = ReconstructionRegion::All, py::arg("kernel") = ReconstructionDeviceKernel::FP64,
-                 "Enqueue one backend-resolved reconstruction sweep. The operation retains all Array owners through completion.")
-            .def("DoReconstructionIterLimitedTo", &VariationalReconstructionPlan::DoReconstructionIterLimitedTo,
-                 py::arg("mean"), py::arg("input"), py::arg("workspace"), py::arg("boundary"), py::arg("target"), py::arg("alpha"),
-                 py::arg("region") = ReconstructionRegion::All,
-                 "CPU A-weighted penalty sweep. Freeze finite target and alpha in [0,1]; refresh input halos before dependent work and commit only after all rows finish.")
+            .def("FinalizeFaceTransform", &VariationalReconstructionPlan::FinalizeFaceTransform, py::arg("transform"), py::arg("checkInverses") = false, "Publish matrices after filling from cell means; optional inverse diagnostics are off by default. Any later write requires re-finalization.")
+            .def("DoReconstructionIter", &VariationalReconstructionPlan::DoReconstructionIter, py::arg("mean"), py::arg("coefficients"), py::arg("workspace"), py::arg("boundary"), py::arg("kernel") = ReconstructionDeviceKernel::FP64, "One synchronous backend-resolved sweep and commit. Release Python aliases and refresh input halos first.")
+            .def("DoReconstructionIterTo", &VariationalReconstructionPlan::DoReconstructionIterTo, py::arg("mean"), py::arg("input"), py::arg("workspace"), py::arg("boundary"), py::arg("region") = ReconstructionRegion::All)
+            .def("SubmitReconstructionIterTo", &VariationalReconstructionPlan::SubmitReconstructionIterTo, py::arg("engine"), py::arg("stream"), py::arg("mean"), py::arg("input"), py::arg("workspace"), py::arg("boundary"), py::arg("region") = ReconstructionRegion::All, py::arg("kernel") = ReconstructionDeviceKernel::FP64, "Enqueue one backend-resolved reconstruction sweep. The operation retains all Array owners through completion.")
+            .def("DoReconstructionIterLimitedTo", &VariationalReconstructionPlan::DoReconstructionIterLimitedTo, py::arg("mean"), py::arg("input"), py::arg("workspace"), py::arg("boundary"), py::arg("target"), py::arg("alpha"), py::arg("region") = ReconstructionRegion::All, "CPU A-weighted penalty sweep. Freeze finite target and alpha in [0,1]; refresh input halos before dependent work and commit only after all rows finish.")
             .def("CommitReconstruction", &VariationalReconstructionPlan::CommitReconstruction)
-            .def("SubmitCommitReconstruction", &VariationalReconstructionPlan::SubmitCommitReconstruction,
-                 py::arg("engine"), py::arg("stream"), py::arg("coefficients"), py::arg("workspace"),
-                 "Enqueue temporary-to-coefficient publication on the selected backend stream.")
+            .def("SubmitCommitReconstruction", &VariationalReconstructionPlan::SubmitCommitReconstruction, py::arg("engine"), py::arg("stream"), py::arg("coefficients"), py::arg("workspace"), "Enqueue temporary-to-coefficient publication on the selected backend stream.")
             .def("DoLimiterWBAP_3Order", [](const VariationalReconstructionPlan &plan, FVField &coefficients, ReconstructionWorkspace &work, int order, const FaceCharacteristicTransform *transform)
                  { plan.DoLimiterWBAP_3Order(coefficients, work, order, transform ? FaceCharacteristicTransformRef(std::cref(*transform)) : std::nullopt); }, py::arg("coefficients"), py::arg("workspace"), py::arg("order"), py::arg("transform") = nullptr, "Call in descending order with a coefficient halo exchange after each order.")
             .def("DoLimiterWBAP_3OrderTo", [](const VariationalReconstructionPlan &plan, const FVField &coefficients, ReconstructionWorkspace &work, int order, const FaceCharacteristicTransform *transform, ReconstructionRegion region, const Runtime::Array<real> *indicator, real threshold)
@@ -299,35 +280,24 @@ namespace DNDS::CFV
             .def_property_readonly("inverse", [](GradientFaceCharacteristicTransform &value)
                                    { return Runtime::PythonArray::Share(value.inverse); });
         py::class_<GradientPlan>(m, "GradientPlan")
-            .def_static("Prepare", &GradientPlan::Prepare, py::arg("mesh"), py::arg("metrics"),
-                        py::arg("method") = GradientMethod::LeastSquares, py::arg("relativeCutoff") = 1e-13)
+            .def_static("Prepare", [](Geom::UnstructuredMesh &mesh, FiniteVolumePlan metrics, GradientMethod method, real cutoff)
+                        { return GradientPlan::Prepare(mesh, std::move(metrics), method, cutoff); }, py::arg("mesh"), py::arg("metrics"), py::arg("method") = GradientMethod::LeastSquares, py::arg("relativeCutoff") = 1e-13)
             .def("NumBoundaryQuadrature", &GradientPlan::NumBoundaryQuadrature)
             .def("GetBoundaryQuadrature", &GradientPlan::GetBoundaryQuadrature)
             .def("Device", &GradientPlan::Device)
             .def("Placed", py::overload_cast<Runtime::Device, Runtime::ExecutionContext>(&GradientPlan::Placed, py::const_))
-            .def("BuildWorkspace", &GradientPlan::BuildWorkspace, py::arg("components"),
-                 py::arg("periodicVectorStarts") = std::vector<index>{}, py::arg("withLimiter") = false)
+            .def("BuildWorkspace", &GradientPlan::BuildWorkspace, py::arg("components"), py::arg("periodicVectorStarts") = std::vector<index>{}, py::arg("withLimiter") = false)
             .def("BuildFaceTransform", &GradientPlan::BuildFaceTransform)
-            .def("FinalizeFaceTransform", &GradientPlan::FinalizeFaceTransform,
-                 py::arg("transform"), py::arg("checkInverses") = false)
+            .def("FinalizeFaceTransform", &GradientPlan::FinalizeFaceTransform, py::arg("transform"), py::arg("checkInverses") = false)
             .def("PlaceFaceTransform", &GradientPlan::PlaceFaceTransform)
             .def("BuildBoundaryValues", [](const GradientPlan &plan, index components)
                  { return Runtime::PythonArray::Share(plan.BuildBoundaryValues(components)); })
-            .def("Evaluate", py::overload_cast<const FVField &, const Runtime::Array<real> &, FVField &, const std::vector<index> &, ReconstructionRegion>(&GradientPlan::Evaluate, py::const_),
-                 py::arg("mean"), py::arg("boundaryValues"), py::arg("gradient"),
-                 py::arg("periodicVectorStarts") = std::vector<index>{}, py::arg("region") = ReconstructionRegion::All)
-            .def("EvaluateQueued", py::overload_cast<Runtime::EagerEngine &, const Runtime::ExecutionStream &, const FVField &, const Runtime::Array<real> &, FVField &, const GradientWorkspace &, ReconstructionRegion>(&GradientPlan::Evaluate, py::const_),
-                 py::arg("engine"), py::arg("stream"), py::arg("mean"), py::arg("boundaryValues"), py::arg("gradient"),
-                 py::arg("workspace"), py::arg("region") = ReconstructionRegion::All)
-            .def("ConvertToCoefficients", py::overload_cast<const FVField &, const VariationalReconstructionPlan &, FVField &>(
-                                              &GradientPlan::ConvertToCoefficients, py::const_))
-            .def("ConvertToCoefficientsQueued", py::overload_cast<Runtime::EagerEngine &, const Runtime::ExecutionStream &,
-                                                                  const FVField &, const VariationalReconstructionPlan &, FVField &>(
-                                                    &GradientPlan::ConvertToCoefficients, py::const_))
-            .def("ExtractLinearGradients", py::overload_cast<const FVField &, const VariationalReconstructionPlan &, FVField &, bool>(&GradientPlan::ExtractLinearGradients, py::const_),
-                 py::arg("coefficients"), py::arg("reconstruction"), py::arg("gradient"), py::arg("ghost") = false)
-            .def("ExtractLinearGradientsQueued", py::overload_cast<Runtime::EagerEngine &, const Runtime::ExecutionStream &, const FVField &, const VariationalReconstructionPlan &, FVField &, bool>(&GradientPlan::ExtractLinearGradients, py::const_),
-                 py::arg("engine"), py::arg("stream"), py::arg("coefficients"), py::arg("reconstruction"), py::arg("gradient"), py::arg("ghost") = false)
+            .def("Evaluate", py::overload_cast<const FVField &, const Runtime::Array<real> &, FVField &, const std::vector<index> &, ReconstructionRegion>(&GradientPlan::Evaluate, py::const_), py::arg("mean"), py::arg("boundaryValues"), py::arg("gradient"), py::arg("periodicVectorStarts") = std::vector<index>{}, py::arg("region") = ReconstructionRegion::All)
+            .def("EvaluateQueued", py::overload_cast<Runtime::EagerEngine &, const Runtime::ExecutionStream &, const FVField &, const Runtime::Array<real> &, FVField &, const GradientWorkspace &, ReconstructionRegion>(&GradientPlan::Evaluate, py::const_), py::arg("engine"), py::arg("stream"), py::arg("mean"), py::arg("boundaryValues"), py::arg("gradient"), py::arg("workspace"), py::arg("region") = ReconstructionRegion::All)
+            .def("ConvertToCoefficients", py::overload_cast<const FVField &, const VariationalReconstructionPlan &, FVField &>(&GradientPlan::ConvertToCoefficients, py::const_))
+            .def("ConvertToCoefficientsQueued", py::overload_cast<Runtime::EagerEngine &, const Runtime::ExecutionStream &, const FVField &, const VariationalReconstructionPlan &, FVField &>(&GradientPlan::ConvertToCoefficients, py::const_))
+            .def("ExtractLinearGradients", py::overload_cast<const FVField &, const VariationalReconstructionPlan &, FVField &, bool>(&GradientPlan::ExtractLinearGradients, py::const_), py::arg("coefficients"), py::arg("reconstruction"), py::arg("gradient"), py::arg("ghost") = false)
+            .def("ExtractLinearGradientsQueued", py::overload_cast<Runtime::EagerEngine &, const Runtime::ExecutionStream &, const FVField &, const VariationalReconstructionPlan &, FVField &, bool>(&GradientPlan::ExtractLinearGradients, py::const_), py::arg("engine"), py::arg("stream"), py::arg("coefficients"), py::arg("reconstruction"), py::arg("gradient"), py::arg("ghost") = false)
             .def("LimitWBAP3", [](const GradientPlan &plan, const FVField &input, FVField &output, const std::vector<index> &vectors, const std::optional<GradientFaceCharacteristicTransform> &transform, ReconstructionRegion region, const std::optional<Runtime::Array<real>> &indicator, real threshold, real centerWeight)
                  { plan.LimitWBAP3(input, output, vectors, transform ? GradientFaceCharacteristicTransformRef(std::cref(*transform)) : std::nullopt,
                                    region, indicator ? LimiterIndicatorRef(std::cref(*indicator)) : std::nullopt, threshold, centerWeight); }, py::arg("input"), py::arg("output"), py::arg("periodicVectorStarts") = std::vector<index>{}, py::arg("transform") = std::nullopt, py::arg("region") = ReconstructionRegion::All, py::arg("indicator") = std::nullopt, py::arg("threshold") = 0, py::arg("centerWeight") = 10)

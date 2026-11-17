@@ -1,28 +1,15 @@
 #include "Geom/IO/NativeMeshPeriodicImport.hpp"
 #include "DNDS/Runtime/Array/RowBuilder.hpp"
 #include "Geom/Spatial/PointCloud.hpp"
+#include "DNDS/Core/OMP.hpp"
 #include <nanoflann.hpp>
 #include <queue>
 
 namespace DNDS::Geom
 {
-    namespace
-    {
-        template <class T>
-        Runtime::Array<T> BuildRows(const std::vector<std::vector<T>> &rows)
-        {
-            Runtime::RowBuilder builder(rows.size(), sizeof(T));
-            for (size_t row = 0; row < rows.size(); ++row)
-            {
-                builder.ResizeRow(row, rows[row].size());
-                std::copy(rows[row].begin(), rows[row].end(), builder.Row<T>(row).data);
-            }
-            return Runtime::Array<T>::FromSharedStorage(builder.Commit());
-        }
-    }
-
     NativeSerialMeshData CanonicalizeNativePeriodic(NativeSerialMeshData source, const NativePeriodicImportOptions &options)
     {
+        auto setupStage = options.progress.Stage("mesh/periodic");
         DNDS_check_throw_info(!source.periodic && !source.cellNodesPbi && !source.boundaryNodesPbi,
                               "periodic serial import must not already be canonicalized");
         const real tolerance = options.tolerance;
@@ -51,16 +38,14 @@ namespace DNDS::Geom
         if (!hasPeriodicLabels)
             return source;
         std::vector<tPoint> points(source.coordinates.RowCount());
-        std::vector<index> persistedIds;
-        persistedIds.reserve(points.size());
-        for (size_t node = 0; node < points.size(); ++node)
-        {
-            DNDS_check_throw_info(coords.View().RowSize(node) == 3 && nodeIds.View().RowSize(node) == 1, "invalid serial periodic node data shape");
-            points[node] = tPoint{coords.View()(node, 0), coords.View()(node, 1), coords.View()(node, 2)};
-            const auto id = nodeIds.View()(node, 0);
-            DNDS_check_throw_info(points[node].allFinite() && id >= 0 && id < INT64_MAX, "invalid serial periodic point or persistent ID");
-            persistedIds.push_back(id);
-        }
+        std::vector<index> persistedIds(points.size());
+        OMP::ForSetupRows(0, index(points.size()), [&](index node)
+                          {
+            DNDS_check_throw_info(coords.View().RowSize(size_t(node)) == 3 && nodeIds.View().RowSize(size_t(node)) == 1, "invalid serial periodic node data shape");
+            points[size_t(node)] = tPoint{coords.View()(size_t(node), 0), coords.View()(size_t(node), 1), coords.View()(size_t(node), 2)};
+            const auto id = nodeIds.View()(size_t(node), 0);
+            DNDS_check_throw_info(points[size_t(node)].allFinite() && id >= 0 && id < INT64_MAX, "invalid serial periodic point or persistent ID");
+            persistedIds[size_t(node)] = id; });
         std::sort(persistedIds.begin(), persistedIds.end());
         DNDS_check_throw_info(std::adjacent_find(persistedIds.begin(), persistedIds.end()) == persistedIds.end(),
                               "serial periodic persistent IDs are duplicated");
@@ -173,6 +158,13 @@ namespace DNDS::Geom
             return source;
         std::vector<index> roots(points.size(), UnInitIndex), compact(points.size(), UnInitIndex);
         std::vector<uint8_t> labels(points.size(), 0);
+        // Most volume nodes do not participate in periodic identification.
+        // Publish their singleton components in parallel, leaving only the
+        // small active boundary graph for deterministic component traversal.
+        OMP::ForSetupRows(0, index(points.size()), [&](index node)
+                          {
+            if (graph[size_t(node)].empty())
+                roots[size_t(node)] = node; });
         for (size_t start = 0; start < points.size(); ++start)
         {
             if (roots[start] != UnInitIndex)
@@ -226,46 +218,58 @@ namespace DNDS::Geom
                 labels[size_t(node)] ^= rootMask;
             }
         }
-        std::vector<index> kept;
-        for (size_t node = 0; node < roots.size(); ++node)
-            if (roots[node] == index(node))
+        std::vector<uint8_t> keep(roots.size());
+        OMP::ForSetupRows(0, index(roots.size()), [&](index node)
+                          { keep[size_t(node)] = roots[size_t(node)] == node; });
+        const index keptNumber = OMP::ExclusivePrefixRows(
+            index(roots.size()), [&](index node) noexcept -> index
+            { return keep[size_t(node)]; },
+            [&](index node, index offset) noexcept
             {
-                compact[node] = index(kept.size());
-                kept.push_back(index(node));
-            }
-        for (size_t node = 0; node < roots.size(); ++node)
-            compact[node] = compact[size_t(roots[node])];
+                if (node < index(compact.size()) && keep[size_t(node)])
+                    compact[size_t(node)] = offset;
+            });
+        std::vector<index> kept(static_cast<size_t>(keptNumber));
+        OMP::ForSetupRows(0, index(roots.size()), [&](index node)
+                          {
+            if (keep[size_t(node)])
+                kept[size_t(compact[size_t(node)])] = node; });
+        OMP::ForSetupRows(0, index(roots.size()), [&](index node)
+                          { compact[size_t(node)] = compact[size_t(roots[size_t(node)])]; });
         NativeSerialMeshData result = source;
         result.coordinates = Runtime::Array<real>(Runtime::RowLayout::Dense(kept.size(), 3));
         result.nodeIds = Runtime::Array<index>(Runtime::RowLayout::Dense(kept.size(), 1));
         {
             auto output = result.coordinates.Write();
             auto ids = result.nodeIds.Write();
-            for (size_t row = 0; row < kept.size(); ++row)
-            {
+            OMP::ForSetupRows(0, index(kept.size()), [&](index row)
+                              {
                 for (size_t component = 0; component < 3; ++component)
-                    output.View()(row, component) = points[size_t(kept[row])][component];
+                    output.View()(size_t(row), component) = points[size_t(kept[size_t(row)])][component];
                 // Periodic identification precedes mesh publication. Match
                 // the legacy serial convention: retained canonical nodes have
                 // compact IDs in retained input-row order, not sparse labels
                 // copied from the main image's pre-identification input row.
-                ids.View()(row, 0) = index(row);
-            }
+                ids.View()(size_t(row), 0) = row; });
         }
         auto remap = [&](const Runtime::Array<index> &input, Runtime::Array<index> &output, std::optional<Runtime::Array<NodePeriodicBits>> &bits)
         {
             auto read = input.Read();
-            std::vector<std::vector<index>> nodes(input.RowCount());
-            std::vector<std::vector<NodePeriodicBits>> images(input.RowCount());
-            for (size_t row = 0; row < input.RowCount(); ++row)
+            output = Runtime::BuildArrayRows<index>(input.RowCount(), [&](size_t row)
+                                                    { return read.View().RowSize(row); }, [&](size_t row, auto target)
+                                                    {
+                size_t slot = 0;
                 for (auto node : read.View()[row])
                 {
                     DNDS_check_throw_info(node >= 0 && size_t(node) < points.size(), "periodic cone node is out of range");
-                    nodes[row].push_back(compact[size_t(node)]);
-                    images[row].push_back(NodePeriodicBits{labels[size_t(node)]});
-                }
-            output = BuildRows(nodes);
-            bits = BuildRows(images);
+                    target[slot++] = compact[size_t(node)];
+                } }, {}, true);
+            bits = Runtime::BuildArrayRows<NodePeriodicBits>(input.RowCount(), [&](size_t row)
+                                                             { return read.View().RowSize(row); }, [&](size_t row, auto target)
+                                                             {
+                size_t slot = 0;
+                for (auto node : read.View()[row])
+                    target[slot++] = NodePeriodicBits{labels[size_t(node)]}; }, {}, true);
         };
         remap(source.cellNodes, result.cellNodes, result.cellNodesPbi);
         remap(source.boundaryNodes, result.boundaryNodes, result.boundaryNodesPbi);

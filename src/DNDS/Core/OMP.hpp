@@ -8,7 +8,9 @@
 #include "Eigen/src/Core/products/Parallelizer.h"
 #include <algorithm>
 #include <exception>
+#include <limits>
 #include <mutex>
+#include <vector>
 
 namespace DNDS::OMP
 {
@@ -47,6 +49,69 @@ namespace DNDS::OMP
 #endif
         for (index iRow = begin; iRow < end; ++iRow)
             body(iRow);
+    }
+
+    /** Deterministic setup-only exclusive prefix over nonnegative row counts.
+     * count(i) and store(i, offset) must not throw. Static chunks preserve row
+     * order; the controller scans only the bounded worker totals.
+     */
+    template <class Count, class Store>
+    index ExclusivePrefixRows(index rowNumber, Count &&count, Store &&store)
+    {
+        DNDS_check_throw_info(rowNumber >= 0, "negative prefix row number");
+        const int threads = int(std::min<index>(DistributedThreads(), std::max<index>(rowNumber, 1)));
+        std::vector<uint64_t> totals(size_t(threads), 0), bases(size_t(threads), 0);
+        int invalid = 0;
+#if defined(DNDS_USE_OMP) && defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp parallel num_threads(threads) reduction(| : invalid)
+#endif
+        {
+            int worker = 0;
+#if defined(DNDS_USE_OMP) && defined(DNDS_DIST_MT_USE_OMP)
+            worker = omp_get_thread_num();
+#endif
+            const index common = rowNumber / threads;
+            const index remainder = rowNumber % threads;
+            const index begin = common * worker + std::min<index>(worker, remainder);
+            const index end = begin + common + (worker < remainder);
+            uint64_t local = 0;
+            for (index row = begin; row < end; ++row)
+            {
+                const index value = count(row);
+                if (value < 0 || uint64_t(value) > uint64_t(std::numeric_limits<index>::max()) - local)
+                    invalid = 1;
+                else
+                    local += uint64_t(value);
+            }
+            totals[size_t(worker)] = local;
+        }
+        DNDS_check_throw_info(!invalid, "setup prefix count is negative or overflows a chunk");
+        uint64_t total = 0;
+        for (int worker = 0; worker < threads; ++worker)
+        {
+            bases[size_t(worker)] = total;
+            DNDS_check_throw_info(totals[size_t(worker)] <= uint64_t(std::numeric_limits<index>::max()) - total,
+                                  "setup prefix total overflows index");
+            total += totals[size_t(worker)];
+        }
+#if defined(DNDS_USE_OMP) && defined(DNDS_DIST_MT_USE_OMP)
+#    pragma omp parallel for schedule(static) num_threads(threads)
+#endif
+        for (int worker = 0; worker < threads; ++worker)
+        {
+            const index common = rowNumber / threads;
+            const index remainder = rowNumber % threads;
+            const index begin = common * worker + std::min<index>(worker, remainder);
+            const index end = begin + common + (worker < remainder);
+            uint64_t local = bases[size_t(worker)];
+            for (index row = begin; row < end; ++row)
+            {
+                store(row, index(local));
+                local += uint64_t(count(row));
+            }
+        }
+        store(rowNumber, index(total));
+        return index(total);
     }
 
     /** Independent row arithmetic with explicit numerical failure status.

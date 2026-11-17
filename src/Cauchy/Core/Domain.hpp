@@ -60,8 +60,10 @@ namespace DNDS::Cauchy
         bool RecordImplicitStage(NonlinearIterationReport report);
         Json UpdatePolicyMetadata() const;
         bool Admissible(const EquationDofs &state) const;
-        Domain(std::string name, ssp<Geom::UnstructuredMesh> mesh, const DomainSettings &settings, const TimeSettings &time, PhysicsResources setup);
-        Domain(std::string name, ssp<Geom::UnstructuredMesh> mesh, const ResolvedPhysicalInputs &inputs, const TimeSettings &time, PhysicsResources setup);
+        Domain(std::string name, ssp<Geom::UnstructuredMesh> mesh, const DomainSettings &settings, const TimeSettings &time, PhysicsResources setup,
+               Diagnostics::SetupProgress progress);
+        Domain(std::string name, ssp<Geom::UnstructuredMesh> mesh, const ResolvedPhysicalInputs &inputs, const TimeSettings &time, PhysicsResources setup,
+               Diagnostics::SetupProgress progress);
         void BeginTrial(real dt);
 
     public:
@@ -169,7 +171,8 @@ namespace DNDS::Cauchy
         void CommitCheckpoint(CheckpointCandidate &candidate);
         void CommitInternalCheckpoint(InternalCheckpointCandidate &candidate);
 
-        Domain(std::string name, ssp<Geom::UnstructuredMesh> mesh, const DomainSettings &settings, const TimeSettings &time = {});
+        Domain(std::string name, ssp<Geom::UnstructuredMesh> mesh, const DomainSettings &settings, const TimeSettings &time = {},
+               Diagnostics::SetupProgress progress = {});
         /// Pin one accepted generation for synchronous or asynchronous output.
         /// The returned zero-copy snapshot blocks accepted-state publication
         /// until all copies are released.

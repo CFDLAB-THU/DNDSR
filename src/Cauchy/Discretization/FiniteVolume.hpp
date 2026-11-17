@@ -658,7 +658,8 @@ namespace DNDS::Cauchy
                              JacobianPreparation controls = {}, real time = 0,
                              std::optional<Physics::Chemistry::ChemicalWorkerPool> workers = std::nullopt,
                              std::optional<JacobianContext> context = std::nullopt) const;
-        FiniteVolume(ssp<Geom::UnstructuredMesh> mesh, const DomainSettings &settings, const EquationSystem &equation);
+        FiniteVolume(ssp<Geom::UnstructuredMesh> mesh, const DomainSettings &settings, const EquationSystem &equation,
+                     Diagnostics::SetupProgress progress = {});
         /// Explicit synchronous setup placement of immutable spatial inputs.
         /// The returned handle uses the same FV API/row spaces; numerical
         /// kernels are still selected by each operator. Does not move means,

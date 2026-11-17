@@ -50,18 +50,22 @@ namespace DNDS::Cauchy
             return std::move(*result);
         }
     }
-    Domain::Domain(std::string name, ssp<Geom::UnstructuredMesh> mesh, const DomainSettings &settings, const TimeSettings &time)
-        : Domain(name, mesh, settings, time, ResolveEquation(name, settings, mesh->getMPI())) {}
-    Domain::Domain(std::string name, ssp<Geom::UnstructuredMesh> mesh, const DomainSettings &settings, const TimeSettings &time, PhysicsResources setup)
-        : Domain(name, mesh, ResolveInputs(settings, setup, mesh->getMPI()), time, setup) {}
-    Domain::Domain(std::string name, ssp<Geom::UnstructuredMesh> mesh, const ResolvedPhysicalInputs &inputs, const TimeSettings &time, PhysicsResources setup)
+    Domain::Domain(std::string name, ssp<Geom::UnstructuredMesh> mesh, const DomainSettings &settings, const TimeSettings &time,
+                   Diagnostics::SetupProgress progress)
+        : Domain(name, mesh, settings, time, ResolveEquation(name, settings, mesh->getMPI()), std::move(progress)) {}
+    Domain::Domain(std::string name, ssp<Geom::UnstructuredMesh> mesh, const DomainSettings &settings, const TimeSettings &time, PhysicsResources setup,
+                   Diagnostics::SetupProgress progress)
+        : Domain(name, mesh, ResolveInputs(settings, setup, mesh->getMPI()), time, setup, std::move(progress)) {}
+    Domain::Domain(std::string name, ssp<Geom::UnstructuredMesh> mesh, const ResolvedPhysicalInputs &inputs, const TimeSettings &time, PhysicsResources setup,
+                   Diagnostics::SetupProgress progress)
         : _problem(std::move(name), mesh, inputs.settings, time,
-                   std::move(setup.equation)),
+                   std::move(setup.equation), progress),
           _state(_problem, inputs.settings, setup.workers,
-                 inputs.initialConservative),
+                 inputs.initialConservative, progress),
           _execution(_problem, _state, inputs.settings.execution,
-                     std::move(setup.workers))
+                     std::move(setup.workers), progress)
     {
+        auto setupStage = progress.Stage("implicit/setup");
         // All spatial operators, including coarse FAS and approximate
         // Jacobians, see the same source-free transport profile when splitting.
         // Physical config/material metadata still describe the chemical PDE.

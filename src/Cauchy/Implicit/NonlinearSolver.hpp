@@ -49,6 +49,9 @@ namespace DNDS::Cauchy
         int reconstructionIterations = 0;
         real reconstructionRelativeUpdate = 0;
         bool reconstructionUpdateMeasured = false;
+        /// Local wall duration of the completed nonlinear iteration. This is
+        /// sink-only telemetry, not restart state or a collective maximum.
+        real iterationWallSeconds = 0;
     };
     /// Optional CPU profile. Values are local wall seconds, not
     /// reduced across ranks. Total encloses the disjoint named sections;

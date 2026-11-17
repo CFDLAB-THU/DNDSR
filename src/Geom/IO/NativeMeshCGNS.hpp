@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Geom/Unstructured/NativeMeshBuilder.hpp"
+#include "DNDS/Diagnostics/SetupProgress.hpp"
 
 namespace DNDS::Geom
 {
@@ -9,6 +10,7 @@ namespace DNDS::Geom
     {
         Periodicity frames;
         real tolerance = 1e-9;
+        Diagnostics::SetupProgress progress;
     };
     enum class NativeSerialDistribution
     {

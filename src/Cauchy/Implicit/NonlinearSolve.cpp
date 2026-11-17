@@ -3,6 +3,7 @@
 #include "Cauchy/Implicit/ResidualConvergence.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <limits>
 
 namespace DNDS::Cauchy
@@ -30,6 +31,7 @@ namespace DNDS::Cauchy
         bool localConverged = false, localTerminal = false, held = false;
         Phase phase = Phase::Idle;
         std::optional<NonlinearProgress> progress;
+        std::chrono::steady_clock::time_point iterationStarted;
 
         Data(ImplicitSettings settingsIn, EquationSchema schemaIn, int rankIn,
              int stageIn, std::shared_ptr<const UpdatePolicy> policyIn,
@@ -177,6 +179,7 @@ namespace DNDS::Cauchy
         data.nextCoupledStage = 0;
         data.localConverged = data.localTerminal = false;
         data.progress.reset();
+        data.iterationStarted = std::chrono::steady_clock::now();
         data.phase = ObservationBeforeUpdate() ? Data::Phase::Observing
                                                : Data::Phase::Updating;
     }
@@ -279,7 +282,8 @@ namespace DNDS::Cauchy
             data.report.minimumIncrementAlpha,
             data.report.reconstructionIterations,
             data.report.reconstructionRelativeUpdate,
-            data.report.reconstructionUpdateMeasured};
+            data.report.reconstructionUpdateMeasured,
+            std::chrono::duration<real>(std::chrono::steady_clock::now() - data.iterationStarted).count()};
         if (data.problem.control.progress && !initialBeforeUpdate)
             data.problem.control.progress(progress);
         if (coordinatedTerminal)

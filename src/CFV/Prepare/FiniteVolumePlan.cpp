@@ -37,6 +37,7 @@ namespace DNDS::CFV
     }
     FiniteVolumePlan FiniteVolumePlan::ConstructMetrics(ssp<UnstructuredMesh> mesh, FiniteVolumeMetricOptions options)
     {
+        auto setupStage = options.progress.Stage("FV/metrics");
         DNDS_check_throw_info(mesh, "finite-volume metrics require a mesh");
         const auto mpi = mesh->getMPI();
         const int intOrder = options.integrationOrder;
@@ -75,13 +76,12 @@ namespace DNDS::CFV
             data->faceOffsets = R::Array<index>(R::RowLayout::Dense(view.NumFaceProc() + 1, 1));
             auto offsets = data->faceOffsets.Write();
             auto offset = offsets.View<R::FixedRows<1>>();
-            index count = 0;
-            for (index iFace = 0; iFace < view.NumFaceProc(); ++iFace)
-            {
-                offset(iFace, 0) = count;
-                count += Quadrature(view.GetFaceElement(iFace), faceIntOrder).GetNumPoints();
-            }
-            offset(view.NumFaceProc(), 0) = count;
+            std::vector<index> facePointCounts(static_cast<size_t>(view.NumFaceProc()));
+            OMP::ForSetupRows(0, view.NumFaceProc(), [&](index iFace)
+                              { facePointCounts[size_t(iFace)] = Quadrature(view.GetFaceElement(iFace), faceIntOrder).GetNumPoints(); });
+            const index count = OMP::ExclusivePrefixRows(
+                view.NumFaceProc(), [&](index iFace) noexcept { return facePointCounts[size_t(iFace)]; },
+                [&](index iFace, index value) noexcept { offset(iFace, 0) = value; });
             data->faceQuadrature = R::Array<real>(R::RowLayout::Dense(count, 7));
             auto cells = data->cell.Write();
             const auto cell = cells.View<R::FixedRows<8>>();

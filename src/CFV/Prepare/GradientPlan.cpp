@@ -7,8 +7,10 @@
 namespace DNDS::CFV
 {
     GradientPlan GradientPlan::Prepare(Geom::UnstructuredMesh &mesh, FiniteVolumePlan metrics,
-                                       GradientMethod method, real relativeCutoff)
+                                       GradientMethod method, real relativeCutoff,
+                                       Diagnostics::SetupProgress progress)
     {
+        auto setupStage = progress.Stage("FV/gradient");
         namespace R = Runtime;
         using namespace Geom;
         DNDS_check_throw_info(method == GradientMethod::GreenGauss || method == GradientMethod::LeastSquares || method == GradientMethod::GGMP,
@@ -28,21 +30,29 @@ namespace DNDS::CFV
         R::Array<index> boundaryOffsets(R::RowLayout::Dense(metrics.NumCell() + 1, 1));
         auto offsetWrite = data->offsets.Write(), boundaryOffsetWrite = boundaryOffsets.Write();
         const auto offsets = offsetWrite.View<R::FixedRows<1>>(), boundaryStarts = boundaryOffsetWrite.View<R::FixedRows<1>>();
-        index entries = 0, boundaryCount = 0;
-        for (index iCell = 0; iCell < metrics.NumCell(); ++iCell)
-        {
-            offsets(iCell, 0) = entries;
-            boundaryStarts(iCell, 0) = boundaryCount;
+        std::vector<index> entryCounts(static_cast<size_t>(metrics.NumCell()));
+        std::vector<index> boundaryCounts(static_cast<size_t>(metrics.NumCell()));
+        OMP::ForSetupRows(0, metrics.NumCell(), [&](index iCell)
+                          {
+            index boundaries = 0;
             for (index slot = 0; slot < view.CellFaces(iCell).size(); ++slot)
             {
                 const index face = view.CellFaces(iCell)[slot];
-                ++entries;
                 if (view.CellFaceOther(iCell, face, rowsize(slot)) == UnInitIndex)
-                    ++boundaryCount;
+                    ++boundaries;
             }
-        }
-        offsets(metrics.NumCell(), 0) = entries;
-        boundaryStarts(metrics.NumCell(), 0) = boundaryCount;
+            entryCounts[size_t(iCell)] = index(view.CellFaces(iCell).size());
+            boundaryCounts[size_t(iCell)] = boundaries; });
+        const index entries = OMP::ExclusivePrefixRows(
+            metrics.NumCell(), [&](index row) noexcept
+            { return entryCounts[size_t(row)]; },
+            [&](index row, index value) noexcept
+            { offsets(row, 0) = value; });
+        const index boundaryCount = OMP::ExclusivePrefixRows(
+            metrics.NumCell(), [&](index row) noexcept
+            { return boundaryCounts[size_t(row)]; },
+            [&](index row, index value) noexcept
+            { boundaryStarts(row, 0) = value; });
         data->boundaryIds = R::Array<index>(R::RowLayout::Dense(entries, 1));
         data->weights = R::Array<real>(R::RowLayout::Dense(entries, 3));
         data->offsets.SetName("CFV/gradient/offsets", DNDS_ALLOCATION_SITE());

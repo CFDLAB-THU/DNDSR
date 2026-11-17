@@ -28,7 +28,7 @@ namespace DNDS::Cauchy
 
         DomainProblem(std::string name, ssp<Geom::UnstructuredMesh> mesh,
                       const DomainSettings &settings, const TimeSettings &time,
-                      EquationSystem equation);
+                      EquationSystem equation, Diagnostics::SetupProgress progress = {});
     };
 
     /// Restart-relevant mutable numerical state. Every member either appears
@@ -55,7 +55,8 @@ namespace DNDS::Cauchy
 
         DomainState(const DomainProblem &problem, const DomainSettings &settings,
                     const std::optional<Physics::Chemistry::ChemicalWorkerPool> &workers,
-                    const std::vector<real> &initialConservative);
+                    const std::vector<real> &initialConservative,
+                    Diagnostics::SetupProgress progress = {});
     };
 
     /// Small host-side description of the currently prepared mathematical
@@ -134,7 +135,8 @@ namespace DNDS::Cauchy
         /// stable; no numerical-loop migration or host fallback is permitted.
         DomainExecution(DomainProblem &problem, DomainState &state,
                         const ExecutionSettings &settings,
-                        std::optional<Physics::Chemistry::ChemicalWorkerPool> workers);
+                        std::optional<Physics::Chemistry::ChemicalWorkerPool> workers,
+                        Diagnostics::SetupProgress progress = {});
 
         Runtime::EagerEngine &Engine() const { return context.Engine(); }
         DomainExecutionContext &Context() { return context; }
