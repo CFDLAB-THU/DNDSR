@@ -232,14 +232,16 @@ namespace DNDS::Cauchy
             std::vector<std::optional<Domain::CandidateReservation>> candidates(_domains.size());
             const auto prepareAndCommit = [&]() -> StepResult
             {
-                localPhase([&](index, Domain &domain)
-                           {
+                if (auto start = localPhase([&](index, Domain &domain)
+                                            {
                     auto &control = domain;
                     MPI::LocalStage(MPIInfo(control.Communicator()),[&]
                     {
                         control.RequireAcceptedClock(_time, _step);
                     });
-                    control.BeginStep(dt); }, "step preparation");
+                    return control.BeginStep(dt); }, "step preparation");
+                    !start)
+                    return start;
                 if (Local(0))
                     trialIdentifier = _domains[0]->TrialIdentifier();
                 MPI_Bcast(&trialIdentifier, 1, MPI_UINT64_T, _placement.SimulationRank(0, 0), _placement.Control());

@@ -27,6 +27,16 @@ TEST_CASE("ACM velocity and relative pressure use independent physical scales")
     CHECK(q == std::vector<double>{1, -2, 0, -2});
     CHECK(converter.Represent(q, P::StateInput::Form::VelocityPressure, true).values == tagged.values);
     CHECK_THROWS(converter.Conservative(P::StateInput::Parse({1, 0, 0, 0, 1})));
+    settings.transport = "Newtonian";
+    settings.viscosity = .01;
+    settings.rans.model = "SA";
+    settings.rans.viscosityReference = .125;
+    const auto sa = C::EquationSystem::Resolve(settings);
+    C::PhysicalStateConverter saConverter(sa, scales);
+    const auto dimensional = P::StateInput::Parse({{"type", "primUP_phy"}, {"state", {3, -6, 0, -36, 3}}});
+    const auto scaled = saConverter.Conservative(dimensional);
+    CHECK(scaled == std::vector<double>{1, -2, 0, -2, 2});
+    CHECK(saConverter.Represent(scaled, P::StateInput::Form::VelocityPressure, true).values == dimensional.values);
 }
 
 TEST_CASE("Perfect gas molecular laws preserve Euler scaling and all property consumers")

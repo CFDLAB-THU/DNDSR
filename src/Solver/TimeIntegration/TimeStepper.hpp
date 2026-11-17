@@ -13,13 +13,13 @@
 namespace DNDS::ODE
 {
     /// Conservative semidiscrete time equations on native fields. Spatial
-    /// operators supply dU/dt; the stage solver receives
-    ///     mass*U - rhsScale*F(U,t) = source.
+    /// operators supply the spatial rate F; the stage solver receives
+    ///     mass*M U - rhsScale*F(U,t) = source.
     /// It owns nonlinear iteration, PP, physical accumulation and MPI policy.
     /// This facade owns transaction/order checks and exactly one method owner.
     /// The method owns its tableau, history, trial scratch and source arithmetic.
-    /// The initial CPU profile uses identity accumulation; a future equation
-    /// with a different mass map needs an explicit accumulation adapter.
+    /// State terms use physical accumulation M; rate and state publication
+    /// use ordinary arithmetic even when M has zero algebraic rows.
     /// Operations supplies NewVector, CheckCompatible, RequireDistinct, a
     /// binding/version snapshot, and the five pointwise algebra actions. It
     /// owns storage/backend access; this class owns one set of time mathematics.
@@ -168,6 +168,17 @@ namespace DNDS::ODE
         /// Serialized group count: DIRK tableau stages, otherwise one group.
         int GroupNumber() const { return _dirk ? _dirk->StageNumber() : 1; }
         int CoupledStageNumber() const { return _ditr ? 2 : 1; }
+        /// Physical spatial rate at a completed coupled update. Both rates
+        /// are retained by the method. A singular mass operator can require
+        /// separate constraint norms even when I+H already meets its target.
+        const Field &CompletedCoupledRate(const StageGroup &group, int coupledStage) const
+        {
+            DNDS_check_throw_info(_ditr && _stagePrepared && group._session == _session &&
+                                      group._generation == _stageGeneration && (coupledStage == 0 || coupledStage == 1),
+                                  "completed coupled rate needs a DITR stage");
+            (void)_ditr->CheckpointControl();
+            return coupledStage == 0 ? _ditr->IntermediateRate() : _ditr->EndpointRate();
+        }
         real PreviousDt() const { return _bdf ? _bdf->PreviousDt() : 0; }
         const Field &PreviousState() const
         {

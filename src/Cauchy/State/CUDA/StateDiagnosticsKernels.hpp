@@ -9,6 +9,7 @@ namespace DNDS::Cauchy::CUDA
     struct StateDiagnosticSummary
     {
         real mass = 0, energy = 0, squaredResidual = 0;
+        real squaredContinuity = 0, integratedPressure = 0;
         real densityMinimum = std::numeric_limits<real>::max();
         real pressureMinimum = std::numeric_limits<real>::max();
         real temperatureMinimum = std::numeric_limits<real>::max();

@@ -116,6 +116,21 @@ TEST_CASE("Time methods own only their relevant history and stage buffers")
         }
     }
 }
+TEST_CASE("DITR transformed algebraic rate equations have independent midpoint and endpoint rows")
+{
+    constexpr double a = .55, theta = .9146;
+    for (auto variant : {O::DITRVariant::U2R1, O::DITRVariant::U2R2})
+    {
+        const O::DITRCoefficients c(a, variant);
+        Eigen::Matrix2d matrix;
+        matrix << theta * c.integration[1], c.interpolation[3] + theta * c.integration[2],
+            c.integration[1], c.integration[2];
+        CHECK(matrix.determinant() == doctest::Approx((variant == O::DITRVariant::U2R1 ? 1. : a) / 6));
+        const auto norm = [](const Eigen::Matrix2d &m)
+        { return m.cwiseAbs().rowwise().sum().maxCoeff(); };
+        CHECK(c.AlgebraicReciprocalCondition(theta) == doctest::Approx(1 / (norm(matrix) * norm(matrix.inverse()))));
+    }
+}
 TEST_CASE("Public DITR method preserves Euler one-correction sequence and I plus H stopping")
 {
     const A::DofSpace space(1);

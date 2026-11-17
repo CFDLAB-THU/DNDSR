@@ -12,6 +12,35 @@ namespace C = DNDS::Cauchy;
 namespace R = DNDS::Runtime;
 namespace A = DNDS::Algebra;
 static DNDS::MPIInfo mpi;
+TEST_CASE("An explicit initial stage rejects a finite state with nonzero discrete continuity")
+{
+    C::DomainSettings settings;
+    settings.equation.system = "incompressibleACM";
+    settings.equation.eos = "none";
+    settings.equation.referenceScales = {{"rho0", 1}, {"U0", 1}, {"L0", 1}, {"T0", 300}};
+    settings.initialState = {{"type", "primUP"}, {"state", {1., 0., 0., -.25}}};
+    settings.numerics.reconstruction = "constant";
+    settings.numerics.faceFallback = settings.numerics.positivity = false;
+    settings.numerics.flux = "rusanov";
+    settings.implicit.residualComponents = {"u", "p"};
+    settings.implicit.diagonal = "block";
+    settings.implicit.jacobianAction = "assembled";
+    C::TimeSettings time;
+    SUBCASE("explicit DIRK stage") { time.method = "trapz"; }
+    SUBCASE("DITR rate history") { time.method = "ditr"; }
+    C::Domain domain("inconsistent", CauchyTest::PeriodicQuads(mpi, 4), settings, time);
+    {
+        auto write = domain.Dofs().CoupledField().Owned().Write();
+        const auto q = write.View<R::UniformTableRows>();
+        for (DNDS::index iCell = 0; iCell < q.RowCount(); ++iCell)
+            q(iCell, 0) += .1 * std::sin(2 * std::acos(-1.) * domain.Discretization().Metrics().GetCellCent(iCell)[0]);
+    }
+    const auto result = domain.Advance(.01);
+    CHECK_FALSE(result.accepted);
+    CHECK(result.reason.find("inconsistent discrete algebraic constraint") != std::string::npos);
+    CHECK(domain.Time() == 0);
+    CHECK(domain.Epoch().acceptedStep == 0);
+}
 namespace
 {
     void CheckFlatMeanIntegral(std::array<double, 2> error, const char *label)

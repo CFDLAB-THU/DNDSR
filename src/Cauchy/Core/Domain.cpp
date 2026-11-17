@@ -230,7 +230,8 @@ namespace DNDS::Cauchy
     {
         DNDS_check_throw_info(!_problem.finiteVolume.HasInterfaces(),
                               "interface domains must advance through their Simulation");
-        BeginStep(dt);
+        if (auto start = BeginStep(dt); !start)
+            return start;
         while (HasNextGroup())
         {
             PrepareGroup();
@@ -255,8 +256,9 @@ namespace DNDS::Cauchy
     {
         PrepareInterfaceReceiver(coupledStage)(input);
     }
-    void Domain::BeginStep(real dt)
+    StepResult Domain::BeginStep(real dt)
     {
+        StepResult result;
         _execution.Context().ClearEvaluationDependency();
         if (_state.internalResume)
         {
@@ -273,8 +275,15 @@ namespace DNDS::Cauchy
             if (_state.timeStepper)
                 _state.timeStepper->BeginStep(
                     _state.initial, _state.trial, _state.time, dt,
-                    [this](auto &state, auto &rate, real time, int stage)
-                    { EvaluateImplicitRate(state, rate, *_execution.workspace, time, stage); },
+                    [this, &result](auto &state, auto &rate, real time, int stage)
+                    {
+                        EvaluateImplicitRate(state, rate, *_execution.workspace, time, stage);
+                        // DITR retains the initial rate as a term in both
+                        // implicit equations. DIRK checks its explicit stage
+                        // through the ordinary CompleteGroup rate callback.
+                        if (_algebraicRateComponent >= 0)
+                            result = ValidateAlgebraicRate(rate, "initial state");
+                    },
                     _steady);
         }
         _lastImplicit.clear();
@@ -284,6 +293,7 @@ namespace DNDS::Cauchy
         _state.stageGroup.reset();
         for (auto &input : _execution.interfaces->coupled)
             input.reset();
+        return result;
     }
     void Domain::PrepareCoupledInterface(int coupledStage, bool reconstructed)
     {
@@ -434,13 +444,31 @@ namespace DNDS::Cauchy
 
     StepResult Domain::CompleteGroup()
     {
+        StepResult result;
         DNDS_check_throw_info(_state.coordinatedPrepared,
                               "no prepared domain group to complete");
+        // The coupled stopping check already measured both rates in a fresh
+        // converged DITR solve. A resumed terminal cursor or an explicitly
+        // accepted cap must verify the immutable rates before publication.
+        if (_algebraicRateComponent >= 0 && _state.stageGroup->coupledStages == 2 &&
+            (_state.internalResume || !_lastImplicit.back().converged))
+            for (int stage = 0; stage < 2; ++stage)
+            {
+                const auto &rate = _state.timeStepper->CompletedCoupledRate(*_state.stageGroup, stage);
+                if (auto checked = ValidateAlgebraicRate(rate, stage == 0 ? "DITR midpoint" : "DITR endpoint"); !checked)
+                    return checked;
+            }
         if (_state.timeStepper)
             _state.timeStepper->CompleteGroup(
                 *_state.stageGroup, _state.trial,
-                [this](auto &state, auto &rate, real time, int stage)
-                { EvaluateImplicitRate(state, rate, *_execution.workspace, time, stage); });
+                [this, &result](auto &state, auto &rate, real time, int stage)
+                {
+                    EvaluateImplicitRate(state, rate, *_execution.workspace, time, stage);
+                    if (_algebraicRateComponent >= 0)
+                        result = ValidateAlgebraicRate(rate, stage == 0 ? "explicit initial stage" : "completed implicit stage");
+                });
+        if (!result)
+            return result;
         _state.coordinatedPrepared = false;
         _state.internalResume = false;
         _state.stageGroup.reset();
@@ -559,7 +587,14 @@ namespace DNDS::Cauchy
         MPI::AllreduceInPlace<MPI::Reduction::Min>(
             MPI::ContiguousView<real>{result.data() + 2, 2}, comm);
         result[4] = MPI::AllreduceValue<MPI::Reduction::Sum>(result[4], comm);
-        result[13] = MPI::AllreduceValue<MPI::Reduction::Min>(result[13], comm);
+        if (_problem.equation.IsACM())
+        {
+            MPI::AllreduceInPlace<MPI::Reduction::Sum>(MPI::ContiguousView<real>{result.data() + 10, 2}, comm);
+            result[10] = std::sqrt(result[10] / result[0]);
+            result[11] /= result[0];
+        }
+        else
+            result[13] = MPI::AllreduceValue<MPI::Reduction::Min>(result[13], comm);
         // Report the volume-integrated L2 defect, matching Euler's res0
         // convention rather than a volume-averaged residual.
         result[4] = std::sqrt(result[4]);
@@ -568,7 +603,7 @@ namespace DNDS::Cauchy
             result[5 + d] = force[d];
         result[8] = _problem.finiteVolume.LastReconstructionIterations(*_execution.observationWorkspace);
         result[9] = _problem.finiteVolume.LastReconstructionUpdate(*_execution.observationWorkspace);
-        if (!_problem.equation.HasMixture() && !_problem.equation.HasRANS() && settings.initialProfile.kind == "isentropicVortex")
+        if (!_problem.equation.IsACM() && !_problem.equation.HasMixture() && !_problem.equation.HasRANS() && settings.initialProfile.kind == "isentropicVortex")
         {
             MPI::LocalStage(mpi, [&]
                             {

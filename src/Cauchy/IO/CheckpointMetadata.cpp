@@ -91,6 +91,7 @@ namespace DNDS::Cauchy::CheckpointMetadata
                 // These new defaults have no meaning in older compressible files.
                 settings["equation"].erase("acmAlpha");
                 settings["equation"].erase("acmBeta2");
+                settings["equation"].erase("acmEntropyFixRatio");
             }
             if (settings.value("initialTemperature", real(0)) == 0)
                 settings.erase("initialTemperature");

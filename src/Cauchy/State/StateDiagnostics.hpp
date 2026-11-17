@@ -21,7 +21,9 @@ namespace DNDS::Cauchy
                          std::optional<Physics::Chemistry::ChemicalWorkerPool> workers = {});
         /// Slots match the Cauchy progress contract: 0 mass, 1 total energy,
         /// 2 min rho, 3 min p, 4 sum_j R_j^2/volume, 13 min T; other slots zero.
-        /// Invalid thermodynamic input is reported at this observation boundary.
+        /// For mechanical flow, mass equals volume, energy is kinetic, and slots
+        /// 10/11 are the squared continuity norm and pressure integral. The
+        /// domain converts these into an RMS divergence and mean gauge pressure.
         std::array<real, 14> Evaluate(Runtime::EagerEngine &, const Runtime::ExecutionStream &,
                                       const EquationDofs &mean, const EquationDofs &residual) const;
     };

@@ -33,6 +33,12 @@ namespace DNDS::Cauchy
         std::vector<index> _ditrComponents;
         ImplicitSettings _implicitControls;
         real _coupledReconstructionTolerance = 0;
+        /// Logical component of the algebraic constraint, or -1 when the
+        /// time method needs no independent multistage constraint check.
+        index _algebraicRateComponent = -1;
+        std::array<real, 2> _coupledAlgebraicRateRMS{};
+        real AlgebraicRateRMS(const EquationDofs &rate) const;
+        StepResult ValidateAlgebraicRate(const EquationDofs &rate, const char *point) const;
         std::optional<DomainCoupledStageOperator> _coupledMiddle;
         PhysicalTimePositivitySettings _timePP;
         int _timeCompressionPower = 1;
@@ -69,7 +75,7 @@ namespace DNDS::Cauchy
     public:
         /// Domain-local preparation operations used by the simulation's
         /// selected update policy. None owns a cross-domain iteration loop.
-        void BeginStep(real dt);
+        [[nodiscard]] StepResult BeginStep(real dt);
         DomainStageGroup PrepareGroup();
         std::optional<NonlinearSession> PrepareGroupSolve();
         StepResult FinishGroupSolve(NonlinearSession &session);

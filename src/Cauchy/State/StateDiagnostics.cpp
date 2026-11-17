@@ -104,6 +104,8 @@ namespace DNDS::Cauchy
         result[0] = value.mass;
         result[1] = value.energy;
         result[4] = value.squaredResidual;
+        result[10] = value.squaredContinuity;
+        result[11] = value.integratedPressure;
         result[2] = value.densityMinimum;
         result[3] = value.pressureMinimum;
         result[13] = retained->equation.IsACM() ? std::numeric_limits<real>::quiet_NaN() : value.temperatureMinimum;

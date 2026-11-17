@@ -88,8 +88,9 @@ namespace DNDS::Cauchy
         MPI::LocalStage(mpi, [&]
                         {
             const auto &limits = _data->settings.numerics;
-            thermal.emplace(equation, limits.densityFloor, limits.temperatureFloor, 0, limits.pressureFloor,
-                workers ? workers->Acquire() : Physics::Chemistry::ChemicalWorkerPool::Lease{});
+            if (!equation.IsACM())
+                thermal.emplace(equation, limits.densityFloor, limits.temperatureFloor, 0, limits.pressureFloor,
+                    workers ? workers->Acquire() : Physics::Chemistry::ChemicalWorkerPool::Lease{});
             evaluator.emplace(equation.MakePointEvaluator(workers ? workers->Acquire() : Physics::Chemistry::ChemicalWorkerPool::Lease{}, {equation.HasRANS()}));
             surface << "cell_id,zone,x,y,z,nx,ny,nz,weight";
             if (equation.IsACM())

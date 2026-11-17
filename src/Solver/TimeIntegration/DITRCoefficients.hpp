@@ -26,6 +26,19 @@ namespace DNDS::ODE
     {
         std::array<real, 4> interpolation;
         std::array<real, 3> integration;
+        /// Reciprocal infinity-norm condition number of the simultaneous
+        /// algebraic-rate system [H+theta I, I] for (g_mid, g_end).
+        /// Its determinant is -w1*c3 (1/6 for U2R1, a/6 for U2R2).
+        /// Use this product directly; subtracting two theta-scaled products
+        /// loses the determinant precisely for the poorly conditioned cases.
+        real AlgebraicReciprocalCondition(real theta) const
+        {
+            const real w1 = integration[1], w2 = integration[2], c3 = interpolation[3];
+            const real a = theta * w1, b = c3 + theta * w2;
+            const real norm = std::max(std::abs(a) + std::abs(b), std::abs(w1) + std::abs(w2));
+            const real adjugateNorm = std::max(std::abs(w2) + std::abs(b), std::abs(w1) + std::abs(a));
+            return std::abs(w1 * c3) / norm / adjugateNorm;
+        }
         explicit DITRCoefficients(real a, DITRVariant variant = DITRVariant::U2R2)
         {
             DNDS_check_throw_info(std::isfinite(a) && a > 0 && a < 1, "DITR fraction must be between zero and one");

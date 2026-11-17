@@ -53,8 +53,17 @@ namespace DNDS::Cauchy
         MPI::LocalStage(mpi, [&]
                         { time.ditr.Validate();
                           _implicitControls = time.method == "ditr" ? time.ditr.ResolveControls(settings.implicit) : settings.implicit;
+                          if (!_steady && time.method != "bdf1" && time.method != "bdf2" &&
+                              _problem.equation.Schema().AccumulationKind() == PhysicalAccumulationKind::ConstantDensityVelocityPressure)
+                              _algebraicRateComponent = _problem.equation.Schema().ResolveComponents({"p"}).front();
                           _ditrComponents = _problem.equation.Schema().ResolveComponents(settings.implicit.residualComponents);
                           const bool ditr = time.method == "ditr";
+                          if (ditr && _algebraicRateComponent >= 0)
+                          {
+                              const ODE::DITRCoefficients coefficients(time.ditr.fraction, time.ditr.variant == "U2R1" ? ODE::DITRVariant::U2R1 : ODE::DITRVariant::U2R2);
+                              DNDS_check_throw_info(coefficients.AlgebraicReciprocalCondition(time.ditr.theta) > 64 * std::numeric_limits<real>::epsilon(),
+                                                    "DITR coupled algebraic equations are numerically singular at the requested fraction/theta");
+                          }
                           _execution.nonlinearSetup = std::make_unique<NonlinearSolveSetup>(
                               _implicitControls, _problem.equation.Schema(), mpi.rank,
                               _implicitControls.updatePolicy,
@@ -124,6 +133,23 @@ namespace DNDS::Cauchy
         // Preserve the actual convergence flag even when Euler-style policy
         // accepts the final iterate. Invalid corrections/states still throw.
         return converged || !_rejectUnconvergedStages;
+    }
+    real Domain::AlgebraicRateRMS(const EquationDofs &rate) const
+    {
+        const auto values = _execution.implicit->MeasureRateNorm(rate, 2);
+        std::array<real, 2> sums{values.at(_algebraicRateComponent), values.back()};
+        MPI::AllreduceInPlace<MPI::Reduction::Sum>(
+            MPI::ContiguousView<real>{sums.data(), sums.size()}, Communicator());
+        DNDS_check_throw_info(sums[1] > 0 && std::isfinite(sums[1]), "invalid domain volume for algebraic rate check");
+        return std::sqrt(sums[0] / sums[1]);
+    }
+    StepResult Domain::ValidateAlgebraicRate(const EquationDofs &rate, const char *point) const
+    {
+        const real rms = AlgebraicRateRMS(rate);
+        if (rms <= _implicitControls.algebraicRateTolerance)
+            return {};
+        return StepResult::Rejected(std::string("inconsistent discrete algebraic constraint at ") + point +
+                                    ": " + Json{{"rms", rms}, {"tolerance", _implicitControls.algebraicRateTolerance}}.dump());
     }
     void Domain::PreserveReconstructionGuess()
     {
@@ -207,26 +233,38 @@ namespace DNDS::Cauchy
                               "DITR update policy was not resolved");
         return NonlinearSession::Prepare(
             *_execution.nonlinearSetup, 0,
-            {std::move(coupledControl), std::move(initial),
-             _coupledReconstructionTolerance, [this]
+            {std::move(coupledControl), std::move(initial), _coupledReconstructionTolerance, [this]
              { _state.timeStepper->AssembleStoppingResidual(
                    *_state.stageGroup, _state.trial,
-                   *_execution.coupledResidual); }, [this, mpi](auto &norms)
+                   *_execution.coupledResidual); },
+             [this, mpi](auto &norms)
              {
-            std::vector<real> sum(norms.size() + 1, 0);
+            std::vector<real> sum;
             MPI::LocalStage(mpi, [&]
             {
                 sum = _execution.implicit->MeasureRateNorm(*_execution.coupledResidual, _implicitControls.normOrder);
+                if (_algebraicRateComponent >= 0)
+                    for (int stage = 0; stage < 2; ++stage)
+                    {
+                        const auto &rate = _state.timeStepper->CompletedCoupledRate(*_state.stageGroup, stage);
+                        sum.push_back(_execution.implicit->MeasureRateNorm(rate, 2).at(_algebraicRateComponent));
+                    }
             });
             MPI::AllreduceInPlace<MPI::Reduction::Sum>(
                 MPI::ContiguousView<real>{sum.data(), sum.size()}, mpi.comm);
-            DNDS_check_throw_info(std::isfinite(sum.back()) && sum.back() > 0, "invalid DITR global volume");
+            const real volume = sum[norms.size()];
+            DNDS_check_throw_info(std::isfinite(volume) && volume > 0, "invalid DITR global volume");
+            if (_algebraicRateComponent >= 0)
+                for (int stage = 0; stage < 2; ++stage)
+                    _coupledAlgebraicRateRMS[stage] = std::sqrt(sum[norms.size() + 1 + stage] / volume);
             for (index j = 0; j < index(norms.size()); ++j)
-                norms[j] = _implicitControls.normOrder == 1 ? sum[j] : std::sqrt(sum[j]); }, [this]
+                norms[j] = _implicitControls.normOrder == 1 ? sum[j] : std::sqrt(sum[j]); },
+             [this]
              {
             const auto a = _coupledMiddle->reconstruction();
             const auto b = _execution.implicit->ReconstructionStats();
-            return std::make_pair(std::max(a.first, b.first), std::max(a.second, b.second)); }, [this](int coupledStage, auto &iteration, bool applyCorrection)
+            return std::make_pair(std::max(a.first, b.first), std::max(a.second, b.second)); },
+             [this](int coupledStage, auto &iteration, bool applyCorrection)
              {
                 SetTimeStage(coupledStage);
                 ActivateCoupledInterface(coupledStage);
@@ -256,6 +294,10 @@ namespace DNDS::Cauchy
                             EvaluateImplicitRate(state, rate,
                                                  *_execution.workspace, time,
                                                  stage);
-                    }); }});
+                    }); },
+             {},
+             _algebraicRateComponent < 0 ? std::function<real()>{} : [this]
+                 { return std::max(_coupledAlgebraicRateRMS[0], _coupledAlgebraicRateRMS[1]) /
+                          _implicitControls.algebraicRateTolerance; }});
     }
 }

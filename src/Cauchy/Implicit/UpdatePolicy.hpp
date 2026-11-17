@@ -50,6 +50,9 @@ namespace DNDS::Cauchy
         /// Optional opaque owner for solver/session exclusion tickets and
         /// method scratch borrowed by callbacks above.
         std::shared_ptr<void> lifetime;
+        /// Optional independent constraint/tolerance ratio, updated by measure.
+        /// A ratio greater than one keeps a coupled nonlinear solve active.
+        std::function<real()> constraintTargetRatio;
         void Validate(const UpdatePolicyDescriptor &descriptor) const;
     };
 

@@ -48,6 +48,10 @@ namespace DNDS::Cauchy
     {
         scales.Validate();
         _data->scalarScales.assign(_data->rans + (_data->species ? _data->species - 1 : 0), 1);
+        // primUP_phy supplies dimensional nuTilde. The SA kernels transport its
+        // ratio to the model viscosityReference (itself in code units).
+        if (equation.IsACM() && _data->rans == 1)
+            _data->scalarScales[0] = scales.U0 * scales.L0 * equation.RANS().Settings().viscosityReference;
         if (_data->rans == 2)
         {
             _data->scalarScales[0] = scales.SpecificEnergy();

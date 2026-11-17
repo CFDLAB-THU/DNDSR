@@ -67,6 +67,8 @@ namespace DNDS::Cauchy::CPU
                 result[0] += volume;
                 result[2] = 1;
                 result[3] = std::min(result[3], flow(iCell, 3));
+                result[10] += rhs(iCell, 3) * rhs(iCell, 3) / volume;
+                result[11] += volume * flow(iCell, 3);
                 for (int d = 0; d < 3; ++d)
                     result[1] += 0.5 * volume * flow(iCell, d) * flow(iCell, d);
                 for (index j = 0; j < width; ++j)

@@ -51,6 +51,18 @@ TEST_CASE("Periodic ACM physical step transports velocity and preserves the pres
     settings.implicit.jacobianAction = "assembled";
     settings.implicit.diagonal = "block";
     settings.implicit.residualComponents = {"u", "v", "p"};
+    SUBCASE("single grid") {}
+    SUBCASE("same-cell FAS with a gradient coarse level")
+    {
+        settings.numerics.reconstruction = "variational";
+        settings.numerics.cfv.maxOrder = 2;
+        settings.numerics.cfv.SORInstead = false;
+        settings.numerics.reconstructionIterations = 10;
+        settings.numerics.reconstructionTolerance = 0;
+        settings.implicit.requireConvergedReconstruction = false;
+        settings.implicit.multigrid.levels = 1;
+        settings.implicit.multigrid.coarseSmooth = 1;
+    }
     const auto mesh = CauchyTest::PeriodicQuads(mpi, 4);
     for (const auto method : {"bdf1", "esdirk2", "ditr"})
     {
@@ -68,7 +80,11 @@ TEST_CASE("Periodic ACM physical step transports velocity and preserves the pres
         REQUIRE(domain.Advance(.01).accepted);
         REQUIRE_FALSE(domain.LastImplicitStages().empty());
         for (const auto &stage : domain.LastImplicitStages())
+        {
             CHECK(stage.converged);
+            if (settings.implicit.multigrid.levels)
+                CHECK(stage.multigridCycles > 0);
+        }
         const auto read = owned.Read();
         const auto values = read.View<R::UniformTableRows>();
         std::array<double, 2> sums{};

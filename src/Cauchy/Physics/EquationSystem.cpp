@@ -30,6 +30,8 @@ namespace DNDS::Cauchy
                                   "invalid incompressible viscosity");
             ACM::Parameters acm{};
             acm.beta2 = settings.acmBeta2;
+            DNDS_check_throw_info(std::isfinite(settings.acmEntropyFixRatio) && settings.acmEntropyFixRatio >= 0, "invalid ACM Roe entropy-fix ratio");
+            acm.entropyFix = settings.acmEntropyFixRatio;
             acm.alpha = settings.acmAlpha;
             acm.kinematicViscosity = settings.viscosity;
             return EquationSystem(acm, viscous).WithRANS(settings.rans);
@@ -72,6 +74,7 @@ namespace DNDS::Cauchy
     EquationSystem EquationSystem::WithRANS(const Physics::RANS::ModelSettings &settings) const
     {
         DNDS_check_throw_info(!HasRANS(), "RANS is already attached to this equation");
+        DNDS_check_throw_info(!IsACM() || !settings.useQCR, "ACM supports the linear eddy-viscosity stress closure only");
         auto result = *this;
         auto model = std::make_shared<const Physics::RANS::Model>(settings);
         if (!model->ComponentNumber())
@@ -128,7 +131,7 @@ namespace DNDS::Cauchy
     EquationPropertyKey EquationSystem::PropertyKey() const
     {
         if (_acm)
-            return {{}, {-1., _acm->alpha, _acm->beta2, _acm->kinematicViscosity, _viscous ? 1. : 0.}};
+            return {{}, {-1., _acm->alpha, _acm->beta2, _acm->entropyFix, _acm->kinematicViscosity, _viscous ? 1. : 0.}};
         if (_mixture)
         {
             const auto &scales = _mixture->Scales();

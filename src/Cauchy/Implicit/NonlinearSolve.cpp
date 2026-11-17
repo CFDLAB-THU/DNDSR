@@ -231,6 +231,8 @@ namespace DNDS::Cauchy
             data.report.initialResidual = data.convergence.Initial();
             data.report.referenceResidual = data.convergence.Reference();
             data.report.residualTargetRatio = data.convergence.TargetRatio();
+            const real constraintRatio = data.problem.constraintTargetRatio ? data.problem.constraintTargetRatio() : 0;
+            data.report.residualTargetRatio = std::max(data.report.residualTargetRatio, constraintRatio);
             data.report.iterations = data.currentIteration;
             data.localConverged =
                 data.currentIteration >=
@@ -239,7 +241,7 @@ namespace DNDS::Cauchy
                  (data.report.reconstructionUpdateMeasured &&
                   data.report.reconstructionRelativeUpdate <=
                       data.problem.reconstructionTolerance)) &&
-                data.convergence.Accepted();
+                data.convergence.Accepted() && constraintRatio <= 1;
             data.localTerminal =
                 data.localConverged || data.currentIteration >= data.limit;
             if (!data.localTerminal && ObservationBeforeUpdate())

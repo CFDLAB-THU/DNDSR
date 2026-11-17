@@ -205,6 +205,7 @@ namespace DNDS::Cauchy
                                   !updatePolicy.empty() &&
                                   iterations > 0 && minIterations >= 0 && minIterations <= iterations && consoleInterval >= 0 &&
                                   nonnegative(relativeTolerance) && nonnegative(absoluteTolerance) &&
+                                  std::isfinite(algebraicRateTolerance) && algebraicRateTolerance > 0 &&
                                   std::isfinite(pseudoCFL) && pseudoCFL > 0 && std::isfinite(maxPseudoCFL) && maxPseudoCFL >= pseudoCFL &&
                                   std::isfinite(pseudoGrowth) && pseudoGrowth >= 1 && std::isfinite(relaxation) && relaxation > 0 && relaxation <= 1,
                               "invalid implicit nonlinear/diagonal/pseudo-time controls");
@@ -403,6 +404,7 @@ namespace DNDS::Cauchy
             require(s.numerics.flux == "Roe" || s.numerics.flux == "rusanov", "ACM Roe or rusanov flux");
             require(s.motion.angularVelocity == Vector3{} && s.motion.translationVelocity == Vector3{}, "ACM on a fixed mesh");
             require(s.equation.rans.model != "RealizableKE", "ACM RANS requires SA, Wilcox or SST");
+            require(!s.equation.rans.useQCR, "ACM RANS uses linear eddy-viscosity stress");
             const auto full = [&](const ImplicitSettings &level)
             {
                 require(level.diagonal == "block" && level.jacobianAction == "assembled", "ACM requires full assembled diagonal blocks at every level");

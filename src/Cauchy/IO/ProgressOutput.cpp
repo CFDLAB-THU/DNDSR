@@ -181,6 +181,17 @@ namespace DNDS::Cauchy
     {
         using T = CsvColumnType;
         std::vector<CsvColumn> result{{"step", T::Integer}, {"stage", T::Integer}, {"coupled_stage", T::Integer}, {"iteration", T::Integer}, {"attempt", T::Integer}, {"time", T::Real}, {"dt", T::Real}, {"wall", T::Real}, {"iteration_wall", T::Real}, {"stage_iteration_wall_mean", T::Real}, {"step_wall", T::Real}, {"status", T::Integer}, {"pseudo_cfl", T::Real}, {"residual_target_ratio", T::Real}, {"linear_iterations", T::Integer}, {"vr_sweeps", T::Integer}, {"vr_relative_update", T::Real}, {"rhs_limited", T::Integer}, {"rhs_alpha_min", T::Real}, {"increment_limited", T::Integer}, {"increment_alpha_min", T::Real}, {"mass", T::Real}, {"energy", T::Real}, {"rho_min", T::Real}, {"p_min", T::Real}, {"residual_l2", T::Real}, {"force_x", T::Real}, {"force_y", T::Real}, {"force_z", T::Real}, {"rho_error_l1", T::Real}, {"rho_error_l2", T::Real}, {"rho_error_linf", T::Real}, {"temperature_min", T::Real}, {"face_fallbacks", T::Integer}, {"retries", T::Integer}, {"pp_rec_cells", T::Integer}, {"pp_beta_min", T::Real}, {"pp_stage_cells", T::Integer}, {"pp_alpha_min", T::Real}, {"characteristic_fallbacks", T::Integer}, {"implicit_stages", T::Integer}, {"nonlinear_iterations", T::Integer}, {"coupled_iterations", T::Integer}, {"coupled_residual_target_ratio", T::Real}, {"time_pp_cells", T::Integer}, {"time_pp_alpha", T::Real}, {"time_growth_limited", T::Integer}};
+        if (schema.family == "incompressibleACM")
+        {
+            result.erase(std::remove_if(result.begin(), result.end(), [](const CsvColumn &column)
+                                        { return column.name == "temperature_min" || column.name.compare(0, 10, "rho_error_") == 0; }),
+                         result.end());
+            for (auto &column : result)
+                if (column.name == "energy")
+                    column.name = "kinetic_energy";
+            result.push_back({"continuity_rms", T::Real});
+            result.push_back({"mean_pressure", T::Real});
+        }
         for (const auto &name : EquationComponentNames(schema))
             result.push_back({"res_" + name, T::Real});
         return CsvSchema(std::move(result));
@@ -361,7 +372,7 @@ namespace DNDS::Cauchy
             auto row = Base(location, ProgressRecordStatus::AcceptedStepEnd);
             const auto &v = progress.diagnostics;
             row.Set("mass", v[0]);
-            row.Set("energy", v[1]);
+            row.Set(_schema.family == "incompressibleACM" ? "kinetic_energy" : "energy", v[1]);
             row.Set("rho_min", v[2]);
             row.Set("p_min", v[3]);
             row.Set("residual_l2", v[4]);
@@ -375,10 +386,18 @@ namespace DNDS::Cauchy
             row.Set("force_z", v[7]);
             row.Set("vr_sweeps", index(v[8]));
             row.Set("vr_relative_update", v[9]);
-            row.Set("rho_error_l1", v[10]);
-            row.Set("rho_error_l2", v[11]);
-            row.Set("rho_error_linf", v[12]);
-            row.Set("temperature_min", v[13]);
+            if (_schema.family == "incompressibleACM")
+            {
+                row.Set("continuity_rms", v[10]);
+                row.Set("mean_pressure", v[11]);
+            }
+            else
+            {
+                row.Set("rho_error_l1", v[10]);
+                row.Set("rho_error_l2", v[11]);
+                row.Set("rho_error_linf", v[12]);
+                row.Set("temperature_min", v[13]);
+            }
             row.Set("face_fallbacks", progress.faceFallbacks);
             row.Set("retries", progress.retries);
             row.Set("pp_rec_cells", index(progress.positivity[0]));
@@ -408,7 +427,9 @@ namespace DNDS::Cauchy
             residual += "]";
             const auto identity = fmt::format("=== {}Step [{:7}]", _domain.empty() ? "" : "D[" + _domain + "] ", location.step);
             const auto physical = fmt::format("t,dt,CFL [{:.3e},{:.3e},{:.3e}]", location.time, location.dt, progress.pseudoCFL);
-            const auto state = fmt::format("state [rhoMin {:.3e},pMin {:.3e},Tmin {:.3e}]", v[2], v[3], v[13]);
+            const auto state = _schema.family == "incompressibleACM"
+                                   ? fmt::format("state [pMin {:.3e},pMean {:.3e},continuityRMS {:.3e}]", v[3], v[11], v[10])
+                                   : fmt::format("state [rhoMin {:.3e},pMin {:.3e},Tmin {:.3e}]", v[2], v[3], v[13]);
             const auto pp = fmt::format("PP [rec {},stage {},time {}]", index(progress.positivity[0]), index(progress.positivity[2]), progress.timePPLimitedCells);
             const auto work = fmt::format("work [stages {},nonlinear {},linear {}]", progress.implicitStages, progress.nonlinearIterations, progress.linearIterations);
             const auto plain = fmt::format("{}   res {}   {}   {}   {}   {}   Time [{:.3f} s]", identity, residual, physical, state, pp, work, progress.stepWallSeconds);

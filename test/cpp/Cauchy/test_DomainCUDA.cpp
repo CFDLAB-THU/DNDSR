@@ -12,6 +12,76 @@ namespace R = DNDS::Runtime;
 using I = DNDS::index;
 static DNDS::MPIInfo mpi;
 
+TEST_CASE("ACM device correction matches CPU on flow4 and mechanical SA and SST")
+{
+    for (const std::string profile : {"none", "SA", "KOmegaSST", "flow4-pMG"})
+    {
+        CAPTURE(profile);
+        const bool multigrid = profile == "flow4-pMG";
+        C::DomainSettings settings;
+        settings.mesh.dimension = 3;
+        settings.equation.system = "incompressibleACM";
+        settings.equation.eos = "none";
+        settings.equation.transport = "Newtonian";
+        settings.equation.viscosity = .001;
+        settings.equation.rans.model = multigrid ? "none" : profile;
+        settings.equation.rans.viscosityReference = .001;
+        settings.equation.referenceScales = {{"rho0", 1}, {"U0", 1}, {"L0", 1}, {"T0", 300}};
+        std::vector<double> initial{.2, -.03, .04, -.1};
+        if (settings.equation.rans.model != "none")
+            initial.push_back(.03);
+        if (settings.equation.rans.model == "KOmegaSST")
+            initial.push_back(2.);
+        settings.initialState = {{"type", "primUP"}, {"state", initial}};
+        settings.referenceState = settings.initialState;
+        settings.boundaries["7"].kind = "noSlipWall";
+        settings.numerics.reconstruction = "constant";
+        settings.numerics.viscousGradient = "polynomial";
+        settings.numerics.faceFallback = false;
+        settings.implicit.residualComponents.clear();
+        settings.implicit.diagonal = "block";
+        settings.implicit.jacobianAction = "assembled";
+        settings.implicit.linear.method = "jacobi";
+        settings.implicit.linear.stopping = "fixedCount";
+        settings.implicit.linear.iterations = 3;
+        settings.implicit.iterations = settings.implicit.minIterations = 2;
+        if (multigrid)
+        {
+            settings.numerics.reconstruction = "variational";
+            settings.numerics.cfv.maxOrder = 2;
+            settings.numerics.cfv.SORInstead = false;
+            settings.numerics.reconstructionIterations = 4;
+            settings.numerics.reconstructionTolerance = 0;
+            settings.implicit.requireConvergedReconstruction = false;
+            settings.implicit.multigrid.levels = 1;
+            settings.implicit.multigrid.coarseSmooth = 1;
+        }
+        C::TimeSettings time;
+        time.method = "bdf1";
+        auto mesh = CFVTest::CartesianHexes(mpi, 3);
+        std::optional<R::Array<double>> reference;
+        for (const auto *backend : {"cpu", "cuda"})
+        {
+            settings.execution.device = backend;
+            C::Domain domain("acm", mesh, settings, time);
+            REQUIRE(domain.Advance(.0001).accepted);
+            REQUIRE_FALSE(domain.LastImplicitStages().empty());
+            if (multigrid)
+                CHECK(domain.LastImplicitStages().front().multigridCycles > 0);
+            auto values = domain.Dofs().CoupledField().Owned().To(R::Device::Host());
+            if (!reference)
+            {
+                reference = values.Clone();
+                continue;
+            }
+            auto expected = reference->Read(), actual = values.Read();
+            for (I iCell = 0; iCell < values.RowCount(); ++iCell)
+                for (I j = 0; j < I(initial.size()); ++j)
+                    CHECK(actual.View()(iCell, j) == doctest::Approx(expected.View()(iCell, j)).epsilon(1e-8).scale(1));
+        }
+    }
+}
+
 TEST_CASE("Automatic A100 kernels advance raw P3 flow with frozen explicit reference selectors")
 {
     const auto mesh = CFVTest::CartesianHexes(mpi, 3);

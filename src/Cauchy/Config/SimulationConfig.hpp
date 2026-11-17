@@ -37,7 +37,7 @@ namespace DNDS::Cauchy
     {
         std::string system = "compressible", eos = "perfectGas", transport = "inviscid", source = "none";
         real gamma = 1.4, gasConstant = 1., viscosity = 0., prandtl = 0.72;
-        real acmAlpha = 0, acmBeta2 = 1;
+        real acmAlpha = 0, acmBeta2 = 1, acmEntropyFixRatio = .05;
         std::string viscosityModel = "constant";
         real viscosityReferenceTemperature = 1., sutherlandConstant = 0.;
         MixtureSettings mixture;
@@ -50,6 +50,7 @@ namespace DNDS::Cauchy
             DNDS_FIELD(system, "Coupled equation family");
             DNDS_FIELD(acmAlpha, "Scheme-A artificial-compressibility parameter");
             DNDS_FIELD(acmBeta2, "Positive artificial wave speed squared in code velocity units");
+            DNDS_FIELD(acmEntropyFixRatio, "Relative Harten width for mechanical Roe flux; zero disables smoothing");
             DNDS_FIELD(eos, "Thermodynamic closure");
             DNDS_FIELD(transport, "inviscid or NewtonianFourier");
             DNDS_FIELD(source, "none or chemical reactive volume source; attached RANS sources are independent");
@@ -478,6 +479,7 @@ namespace DNDS::Cauchy
         index iterations = 100, minIterations = 1;
         index consoleInterval = 0;
         real relativeTolerance = 1e-8, absoluteTolerance = 1e-11;
+        real algebraicRateTolerance = 1e-8;
         int normOrder = 2;
         std::string residualReference = "runningMaximum";
         std::vector<std::string> residualComponents{"rho"};
@@ -511,6 +513,7 @@ namespace DNDS::Cauchy
             DNDS_FIELD(consoleInterval, "Rank-zero nonlinear residual/VR progress interval; zero disables it");
             DNDS_FIELD(relativeTolerance, "Selected-component stage residual tolerance relative to its configured reference");
             DNDS_FIELD(absoluteTolerance, "Per-component absolute volume-integrated stage residual tolerance");
+            DNDS_FIELD(algebraicRateTolerance, "Absolute volume-weighted RMS tolerance on each spatial algebraic rate in a multistage DAE method (code units)");
             DNDS_FIELD(normOrder, "Volume-integrated residual norm order: 1 or 2");
             DNDS_FIELD(residualReference, "runningMaximum (Euler default) or initial per-component reference within one solve; reset at solve entry");
             DNDS_FIELD(residualComponents, "Named nonlinear and DITR convergence components, e.g. rho, flow.rhou or rhoY:H2. Default [rho]; empty selects all. Names resolve against the equation schema");

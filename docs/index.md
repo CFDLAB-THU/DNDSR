@@ -43,6 +43,8 @@ The [experimental FV and VR matrix storage guide](dev/plan613_matrix_storage.md)
 describes independent layouts, raw VR sweeps, and allocation controls.
 
 Cauchy development starts at the [solver contracts and ledger](architecture/Cauchy.md).
+The [constant-density ACM guide](architecture/CauchyACM.md) covers mechanical
+state input, pressure constraints, turbulence transport and qualification cases.
 The [November 5 pMG and distributed-failure audit](dev/cauchy_pmg_distributed_errors_2026-11-05.md)
 records the coarse-gradient correction, fail-fast boundary and publication checks.
 The [multidomain input and restart guide](guides/cauchy_multidomain.md) gives the

@@ -19,6 +19,8 @@ namespace DNDS::Cauchy::CUDA
                 a.mass += b.mass;
                 a.energy += b.energy;
                 a.squaredResidual += b.squaredResidual;
+                a.squaredContinuity += b.squaredContinuity;
+                a.integratedPressure += b.integratedPressure;
                 a.densityMinimum = fmin(a.densityMinimum, b.densityMinimum);
                 a.pressureMinimum = fmin(a.pressureMinimum, b.pressureMinimum);
                 a.temperatureMinimum = fmin(a.temperatureMinimum, b.temperatureMinimum);
@@ -43,6 +45,8 @@ namespace DNDS::Cauchy::CUDA
                     value.mass += volume;
                     value.densityMinimum = 1;
                     value.pressureMinimum = fmin(value.pressureMinimum, mean(iCell, 3));
+                    value.squaredContinuity += residual(iCell, 3) * residual(iCell, 3) / volume;
+                    value.integratedPressure += volume * mean(iCell, 3);
                     for (int d = 0; d < 3; ++d)
                         value.energy += .5 * volume * mean(iCell, d) * mean(iCell, d);
                 }

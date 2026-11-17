@@ -80,6 +80,67 @@ TEST_CASE("Scheme A characteristic action reproduces the differentiated mechanic
     }
 }
 
+TEST_CASE("Rotational periodic ACM matrix differentiates the production face residual in stored axes")
+{
+    auto mesh = CFVTest::Sector(mpi);
+    C::DomainSettings settings;
+    settings.equation.system = "incompressibleACM";
+    settings.equation.eos = "none";
+    settings.numerics.reconstruction = "constant";
+    settings.numerics.flux = "rusanov";
+    settings.numerics.faceFallback = false;
+    settings.boundaries["12"].kind = settings.boundaries["13"].kind = "slipWall";
+    const auto equation = C::EquationSystem::Resolve(settings.equation);
+    C::FiniteVolume fv(mesh, settings, equation);
+    const auto makeState = [&]
+    { return Bind(fv, fv.Metrics().BuildField(4)); };
+    auto state = makeState(), direction = makeState(), product = makeState(), plus = makeState(), minus = makeState();
+    auto workspace = fv.BuildWorkspace(state);
+    auto reconstruction = fv.BuildReconstructionState(state);
+    R::EagerEngine engine;
+    const auto stream = engine.CreateCPUStream();
+    auto setState = [&](double h)
+    {
+        auto u = state.WriteOwned(), du = direction.WriteOwned();
+        for (DNDS::index i = 0; i < fv.Metrics().NumCell(); ++i)
+            for (int j = 0; j < 4; ++j)
+            {
+                const auto id = fv.Metrics().Cells().LocalToGlobal(i);
+                const double delta = .3 * std::cos(.7 * id + .9 * j);
+                u.Block("flow")(i, j) = .2 + .1 * id - .12 * j + h * delta;
+                du.Block("flow")(i, j) = delta;
+            }
+    };
+    const double h = 1e-5;
+    setState(h);
+    fv.Evaluate(state, plus, *reconstruction, *workspace, engine, stream);
+    setState(-h);
+    fv.Evaluate(state, minus, *reconstruction, *workspace, engine, stream);
+    setState(0);
+    fv.BindHalo(state.CoupledField()).Begin().Wait();
+    fv.BindHalo(direction.CoupledField()).Begin().Wait();
+    C::AuxiliaryRequest request;
+    request.faceSpectralRadius = true;
+    auto aux = fv.BuildAuxiliaryValues(request);
+    fv.PrepareAuxValues(state, aux);
+    R::Array<double> tau(R::RowLayout::Dense(fv.Metrics().NumCell(), 1));
+    {
+        auto write = tau.Write();
+        for (DNDS::index i = 0; i < tau.RowCount(); ++i)
+            write.View()(i, 0) = 0;
+    }
+    auto matrix = fv.BuildLinearProblem(state, C::DiagonalStorage::Block, C::OffDiagonalStorage::Assembled);
+    fv.PrepareJacobian(state, aux, tau, *matrix, {0, 1, false});
+    matrix->Apply(direction, product);
+    const auto pos = plus.ReadOwned(), neg = minus.ReadOwned(), action = product.ReadOwned();
+    for (DNDS::index i = 0; i < fv.Metrics().NumCell(); ++i)
+        for (int j = 0; j < 4; ++j)
+        {
+            const auto derivative = (pos.Block("flow")(i, j) - neg.Block("flow")(i, j)) / (2 * h);
+            CHECK(std::abs(action.Block("flow")(i, j) + derivative) < 3e-7);
+        }
+}
+
 TEST_CASE("Six-component frozen face leaves retain EOS coupling and additive matrix and strided product semantics")
 {
     std::array<DNDS::real, 6> mean{1.2, .31, -.18, .07, 3.1, .13};
