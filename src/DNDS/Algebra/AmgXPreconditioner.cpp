@@ -49,6 +49,24 @@ namespace DNDS::Algebra
         {
             DNDS_check_throw_info(code == cudaSuccess, std::string("AmgX CUDA boundary: ") + cudaGetErrorString(code));
         }
+        void ReadAllocatorMemory(AmgXMemorySnapshot &output)
+        {
+            AMGX_allocator_memory_info info{};
+            Check(AMGX_get_allocator_memory(&info));
+            output.allocationTracking = info.tracking_enabled;
+            output.cudaPoolAvailable = info.cuda_pool_available;
+            output.requestedLive = info.requested_live_bytes;
+            output.requestedPeak = info.requested_peak_bytes;
+            output.liveAllocations = info.live_allocations;
+            output.devicePoolUsed = info.device_pool_used_bytes;
+            output.devicePoolReserved = info.device_pool_reserved_bytes;
+            output.pinnedPoolUsed = info.pinned_pool_used_bytes;
+            output.pinnedPoolReserved = info.pinned_pool_reserved_bytes;
+            output.cudaPoolUsed = info.cuda_pool_used_bytes;
+            output.cudaPoolReserved = info.cuda_pool_reserved_bytes;
+            output.cudaPoolUsedPeak = info.cuda_pool_used_peak_bytes;
+            output.cudaPoolReservedPeak = info.cuda_pool_reserved_peak_bytes;
+        }
         struct DeviceScope
         {
             int previous = -1;
@@ -144,6 +162,9 @@ namespace DNDS::Algebra
         index rows = 0, entries = 0;
         int blockSize = 1;
         bool pattern = false, uploaded = false, ready = false;
+        std::optional<Runtime::Array<real>> nativeValues;
+        uint64_t nativeEpoch = 0;
+        AmgXCopyStatistics copies;
 #ifdef DNDS_USE_AMGX
         std::shared_ptr<ProviderResources> provider;
         AMGX_config_handle config = nullptr;
@@ -216,7 +237,9 @@ namespace DNDS::Algebra
     void AmgXPreconditioner::SetPattern(const Runtime::Array<int> &offsetArray, const Runtime::Array<int> &columnArray,
                                         int blockSize, bool separateDiagonal)
     {
-        DNDS_check_throw_info(blockSize == 1 || (blockSize >= 5 && blockSize <= 7), "unsupported AmgX native block width");
+        DNDS_check_throw_info(!_state->nativeValues,
+                              "AmgX native attachment freezes the pattern; create another provider for a new pattern");
+        DNDS_check_throw_info((blockSize >= 1 && blockSize <= 10) || blockSize == 19, "unsupported AmgX native block width");
         auto offsetRead = offsetArray.Read(), columnRead = columnArray.Read();
         const auto offsets = offsetRead.View(), columns = columnRead.View();
         CheckScalarTable(offsets, Runtime::Device::Host());
@@ -225,6 +248,12 @@ namespace DNDS::Algebra
                                   columns.rows <= std::numeric_limits<int>::max(),
                               "AmgX block CSR exceeds int32 range");
         const index rows = offsets.rows - 1;
+        // The selected provider's Vector resize still multiplies native block
+        // counts in int32. Validate numeric extent as well as CSR indices before
+        // entering upload/attachment; wide M=19 blocks reach this limit first.
+        const index numericBlocks = columns.rows + (separateDiagonal ? rows : 1);
+        DNDS_check_throw_info(numericBlocks <= std::numeric_limits<int>::max() / (blockSize * blockSize),
+                              "AmgX native numeric extent exceeds provider int32 arithmetic");
         DNDS_check_throw_info(offsets(0, 0) == 0 && offsets(rows, 0) == columns.rows, "invalid AmgX CSR endpoints");
         std::vector<int> row;
         for (index iRow = 0; iRow < rows; ++iRow)
@@ -266,6 +295,7 @@ namespace DNDS::Algebra
                                                   std::optional<Runtime::ArrayView<const real>> diagonal)
     {
         DNDS_check_throw_info(context.device == GetDevice() && _state->pattern, "AmgX update needs its device and pattern");
+        DNDS_check_throw_info(!_state->nativeValues, "AmgX native attachment cannot be updated through public upload");
         CheckScalarTable(values, GetDevice());
         DNDS_check_throw_info(values.rows == _state->entries * _state->blockSize * _state->blockSize, "AmgX value count mismatch");
         DNDS_check_throw_info(bool(diagonal) == _state->separateDiagonal, "AmgX separate diagonal is missing or unexpected");
@@ -291,11 +321,92 @@ namespace DNDS::Algebra
                 Check(AMGX_vector_bind(_state->rhs, _state->matrix));
                 Check(AMGX_vector_bind(_state->solution, _state->matrix));
             }
+            if (!_state->uploaded)
+                _state->copies.patternHostToDevice += uint64_t(sizeof(int)) * (_state->rows + 1 + _state->entries);
+            _state->copies.matrixDeviceToDevice += uint64_t(sizeof(real)) * (_state->entries + (_state->separateDiagonal ? _state->rows : 0)) * _state->blockSize * _state->blockSize;
+            ++_state->copies.setups;
             Check(AMGX_solver_setup(_state->solver, _state->matrix));
             CheckCUDA(cudaDeviceSynchronize());
         }
         _state->uploaded = _state->ready = true;
 #endif
+    }
+    void AmgXPreconditioner::AttachValues(Runtime::ExecutionContext context, const Runtime::Array<real> &values)
+    {
+        DNDS_check_throw_info(context.device == GetDevice() && _state->pattern && (!_state->uploaded || _state->nativeValues),
+                              "AmgX attachment needs its device, pattern and an unused/native instance");
+        const auto layout = values.Layout();
+        const index blocks = _state->entries + (_state->separateDiagonal ? _state->rows : 1);
+        const index elements = blocks * _state->blockSize * _state->blockSize;
+        DNDS_check_throw_info(values.GetDevice() == GetDevice() && layout.Kind() == Runtime::RowLayoutKind::Table &&
+                                  layout.Stride() == layout.Width() && layout.RowCount() * layout.Width() == elements,
+                              "AmgX attachment requires one compatible compact native values allocation");
+        _state->ready = false;
+        auto read = values.Read(context);
+        // Retain before entering the provider so failed setup cannot leave a
+        // dangling external numeric view during provider retirement.
+        _state->nativeValues = values;
+#ifdef DNDS_USE_AMGX
+        std::lock_guard<std::mutex> lock(Provider().mutex);
+        DeviceScope scope(context.device.ordinal);
+        CheckCUDA(cudaStreamSynchronize(static_cast<cudaStream_t>(context.stream)));
+        if (_state->rows)
+        {
+            // Matrix owns only a non-owning numeric view; this retained Array
+            // owns the actual allocation until after provider destruction.
+            Check(AMGX_matrix_attach_device_values(_state->matrix, int(_state->rows), int(_state->entries), _state->blockSize,
+                                                   _state->offsetRead->View().data, _state->columnRead->View().data,
+                                                   const_cast<real *>(read.View().data), size_t(elements), _state->separateDiagonal));
+            _state->copies.patternHostToDevice += uint64_t(sizeof(int)) * (_state->rows + 1 + _state->entries);
+            if (!_state->uploaded)
+            {
+                Check(AMGX_vector_bind(_state->rhs, _state->matrix));
+                Check(AMGX_vector_bind(_state->solution, _state->matrix));
+            }
+            Check(AMGX_solver_setup(_state->solver, _state->matrix));
+            ++_state->copies.setups;
+            CheckCUDA(cudaDeviceSynchronize());
+        }
+#endif
+        _state->nativeEpoch = values.MutationEpoch();
+        _state->uploaded = _state->ready = true;
+    }
+    AmgXMemorySnapshot AmgXPreconditioner::MemorySnapshot() const
+    {
+        AmgXMemorySnapshot output;
+        output.nativeStorage = bool(_state->nativeValues);
+        output.copies = _state->copies;
+#ifdef DNDS_USE_AMGX
+        std::lock_guard<std::mutex> lock(Provider().mutex);
+        DeviceScope scope(GetDevice().ordinal);
+        CheckCUDA(cudaDeviceSynchronize());
+        if (_state->ready && _state->rows)
+        {
+            int count = 0;
+            Check(AMGX_solver_get_hierarchy_memory(_state->solver, 0, nullptr, &count));
+            std::vector<AMGX_level_memory_info> levels(size_t(count), AMGX_level_memory_info{});
+            Check(AMGX_solver_get_hierarchy_memory(_state->solver, count, levels.data(), &count));
+            for (const auto &level : levels)
+                output.levels.push_back({level.level, level.block_rows, level.block_nonzeros, level.block_dim,
+                                         level.numeric_owned_bytes, level.numeric_borrowed_bytes, level.pattern_bytes,
+                                         level.inverse_bytes, level.transfer_bytes, level.workspace_bytes});
+        }
+        ReadAllocatorMemory(output);
+#endif
+        return output;
+    }
+    AmgXMemorySnapshot AmgXPreconditioner::AllocatorMemorySnapshot(Runtime::Device device)
+    {
+        DNDS_check_throw_info(device.IsValid() && device.space == Runtime::MemorySpace::CUDA && Available(),
+                              "AmgX allocator diagnostics require the enabled CUDA provider");
+        AmgXMemorySnapshot output;
+#ifdef DNDS_USE_AMGX
+        std::lock_guard<std::mutex> lock(Provider().mutex);
+        DeviceScope scope(device.ordinal);
+        CheckCUDA(cudaDeviceSynchronize());
+        ReadAllocatorMemory(output);
+#endif
+        return output;
     }
     void AmgXPreconditioner::ApplyBorrowed(Runtime::ExecutionContext context, Runtime::ArrayView<const real> residual,
                                            Runtime::ArrayView<real> correction)
@@ -306,6 +417,22 @@ namespace DNDS::Algebra
         DNDS_check_throw_info(residual.rows == RowNumber() && correction.rows == RowNumber() &&
                                   (!_state->rows || residual.data != correction.data),
                               "AmgX vector shape or alias mismatch");
+        std::optional<Runtime::Array<real>::ReadLease> nativeRead;
+        if (_state->nativeValues)
+        {
+            nativeRead.emplace(_state->nativeValues->Read(context));
+            DNDS_check_throw_info(_state->nativeEpoch == _state->nativeValues->MutationEpoch(),
+                                  "native AmgX values changed without hierarchy refresh");
+            const auto begin = reinterpret_cast<uintptr_t>(nativeRead->View().data);
+            const auto bytes = _state->nativeValues->Storage().Bytes();
+            const auto overlaps = [begin, bytes](auto view)
+            {
+                const auto address = reinterpret_cast<uintptr_t>(view.data);
+                const auto extent = size_t(view.rows) * sizeof(real);
+                return extent && bytes && (address < begin ? begin - address < extent : address - begin < bytes);
+            };
+            DNDS_check_throw_info(!overlaps(residual) && !overlaps(correction), "AmgX vectors alias attached matrix values");
+        }
 #ifdef DNDS_USE_AMGX
         std::lock_guard<std::mutex> lock(Provider().mutex);
         DeviceScope scope(context.device.ordinal);
@@ -320,6 +447,9 @@ namespace DNDS::Algebra
         DNDS_check_throw_info(status == AMGX_SOLVE_SUCCESS || status == AMGX_SOLVE_NOT_CONVERGED,
                               "AmgX fixed-cycle preconditioner failed or diverged");
         Check(AMGX_vector_download(_state->solution, correction.data));
+        ++_state->copies.applications;
+        _state->copies.rhsDeviceToDevice += uint64_t(sizeof(real)) * RowNumber();
+        _state->copies.resultDeviceToDevice += uint64_t(sizeof(real)) * RowNumber();
         CheckCUDA(cudaDeviceSynchronize());
 #endif
     }

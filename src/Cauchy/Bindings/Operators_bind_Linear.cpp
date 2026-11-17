@@ -29,7 +29,8 @@ namespace DNDS::Cauchy::Bindings
             .def_readwrite("inverse", &LinearMatrixOptions::inverse)
             .def_readwrite("off_diagonal", &LinearMatrixOptions::offDiagonal)
             .def_readwrite("indices", &LinearMatrixOptions::indices)
-            .def_readwrite("row_major_blocks", &LinearMatrixOptions::rowMajorBlocks);
+            .def_readwrite("row_major_blocks", &LinearMatrixOptions::rowMajorBlocks)
+            .def_readwrite("amgx_native_storage", &LinearMatrixOptions::amgxNativeStorage);
         py::enum_<DiagonalStorage>(m, "DiagonalStorage")
             .value("Entries", DiagonalStorage::Entries)
             .value("Block", DiagonalStorage::Block);

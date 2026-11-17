@@ -95,7 +95,7 @@ static void Run(int argc, char **argv)
     const auto boundary = plan.BuildBoundaryValues(components);
     auto db = resident.PlaceBoundaryValues(boundary);
     auto workspace = resident.BuildWorkspace(components);
-    resident.SubmitReconstructionIterTo(engine, stream, dm, du, workspace, db, C::ReconstructionRegion::All, C::ReconstructionDeviceKernel::FP64MatrixShared);
+    resident.SubmitReconstructionIterTo(engine, stream, dm, du, workspace, db, C::ReconstructionRegion::All, C::ReconstructionDeviceKernel::FP64);
     engine.Synchronize();
     const auto reference = workspace.temporary.Owned().To(R::Device::Host());
     if (const auto *snapshot = std::getenv("DNDS_VR_SWEEP_SNAPSHOT"))
@@ -159,11 +159,16 @@ static void Run(int argc, char **argv)
     const auto arithmeticFor = [](const J &row)
     {
         const auto kernel = row.at("kernel").get<std::string>();
-        return kernel == "float-float"        ? D::ReconstructionSweepArithmetic::FloatFloat
-               : kernel == "tensor"           ? D::ReconstructionSweepArithmetic::FP64TensorCore
-               : kernel == "quantized-simt"   ? D::ReconstructionSweepArithmetic::FP32
-               : kernel == "quantized-tensor" ? D::ReconstructionSweepArithmetic::TF32
-                                              : D::ReconstructionSweepArithmetic::FP64;
+        return kernel == "float-float"           ? D::ReconstructionSweepArithmetic::FloatFloat
+               : kernel == "tensor"              ? D::ReconstructionSweepArithmetic::FP64TensorCore
+               : kernel == "quantized-simt"      ? D::ReconstructionSweepArithmetic::FP32
+               : kernel == "quantized-tensor"    ? D::ReconstructionSweepArithmetic::TF32
+               : kernel == "fp32"                ? D::ReconstructionSweepArithmetic::FP32Reference
+               : kernel == "fp32Accum"           ? D::ReconstructionSweepArithmetic::FP32FullAccumulation
+               : kernel == "fp32FloatFloatAccum" ? D::ReconstructionSweepArithmetic::FP32FloatFloatAccumulation
+               : kernel == "tf32"                ? D::ReconstructionSweepArithmetic::TF32Synchronous
+               : kernel == "matrix-shared"       ? D::ReconstructionSweepArithmetic::FP64MatrixShared
+                                                 : D::ReconstructionSweepArithmetic::FP64;
     };
     const auto launch = [&](const J &row)
     {
@@ -174,7 +179,9 @@ static void Run(int argc, char **argv)
             D::LaunchJacobiMatrixShared(context, view, selection, {starts.View()}, {mo.View(), mg.View()}, {co.View(), cg.View()}, bc.View(), output.View(), status.View().ConstView());
         else
         {
-            DNDS_check_throw_info(kernel == "simt" || kernel == "tensor" || kernel == "float-float" || kernel == "quantized-simt" || kernel == "quantized-tensor", "unknown retained sweep kernel");
+            DNDS_check_throw_info(kernel == "simt" || kernel == "tensor" || kernel == "float-float" || kernel == "quantized-simt" || kernel == "quantized-tensor" ||
+                                      kernel == "fp32" || kernel == "fp32Accum" || kernel == "fp32FloatFloatAccum" || kernel == "tf32",
+                                  "unknown retained sweep kernel");
             D::LaunchStagedJacobi(context, view, selection, {starts.View()}, {mo.View(), mg.View()}, {co.View(), cg.View()},
                                   bc.View(), output.View(), status.View().ConstView(), optionsFor(row), arithmeticFor(row));
             if (kernel == "float-float" || kernel == "quantized-simt" || kernel == "quantized-tensor")
@@ -187,8 +194,20 @@ static void Run(int argc, char **argv)
         record["representation"] = representation;
         record["subpartitions"] = partitions;
         record["device"] = properties.name;
+        const auto kernel = row.at("kernel").get<std::string>();
+        const bool narrow = kernel == "quantized-simt" || kernel == "quantized-tensor" || kernel == "fp32" ||
+                            kernel == "fp32Accum" || kernel == "fp32FloatFloatAccum" || kernel == "tf32";
+        const bool raw = representation == "raw-full" || representation == "raw-triangle";
+        if ((raw && kernel != "general" && kernel != "simt") ||
+            (representation == "quantized" && kernel != "general" && !narrow) ||
+            (representation != "quantized" && narrow))
+        {
+            record["status"] = "unsupported_storage_fixture";
+            std::cout << "VR_SWEEP " << record.dump() << std::endl;
+            continue;
+        }
         if ((row.at("kernel") == "tensor" && !D::FP64TensorCoreAvailable(device)) ||
-            (row.at("kernel") == "quantized-tensor" && !D::TF32TensorCoreAvailable(device)))
+            ((row.at("kernel") == "quantized-tensor" || row.at("kernel") == "tf32") && !D::TF32TensorCoreAvailable(device)))
         {
             record["status"] = "unsupported_tensor_device";
             std::cout << "VR_SWEEP " << record.dump() << std::endl;

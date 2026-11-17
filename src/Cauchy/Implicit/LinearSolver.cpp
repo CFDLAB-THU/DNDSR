@@ -1,4 +1,5 @@
 #include "Cauchy/Implicit/LinearSolver.hpp"
+#include "Cauchy/Config/CUDAKernelDefaults.hpp"
 #include "DNDS/Diagnostics/Timeline.hpp"
 #include "Cauchy/Implicit/LinearSolverAlgebra.hpp"
 #include "Cauchy/Implicit/LocalAMGPreconditioner.hpp"
@@ -841,6 +842,7 @@ namespace DNDS::Cauchy
             const MPIInfo mpi(problem->Space().Communicator());
             MPI::LocalStage(mpi, [&]
                             {
+            settings.cudaDiagonalInverse = ResolveAutomaticCUDAInverse(settings.cudaDiagonalInverse, prototype.Device());
             problem->Validate(); prototype.Validate();
             DNDS_check_throw_info(prototype.Space().Same(problem->Space()) && Ops::Width(prototype) == problem->Components() && prototype.Device() == problem->Device(),
                                   "linear solver prototype differs from its problem");

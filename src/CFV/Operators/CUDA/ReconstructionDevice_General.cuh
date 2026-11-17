@@ -1,182 +1,114 @@
 #pragma once
 
-#include "CFV/Detail/ReconstructionDeviceKernels.hpp"
-#include "DNDS/Math/ComputeScalar.hpp"
+#include "CFV/Detail/ReconstructionSweepArguments.hpp"
+#include "CFV/Math/ReconstructionMatrixAccess.hpp"
 #include <cuda_runtime.h>
 
 namespace DNDS::CFV::Detail
 {
     namespace R = Runtime;
-    /// Sweep-only argument projection. Limiter tables and work lists do not
-    /// belong in the kernel argument block (especially with LVR operands).
-    template <class Scalar, class Layout = R::RowLayout>
-    struct JacobiView
-    {
-        R::ArrayView<const index> offsets, neighbors, boundaryOffsets;
-        R::ArrayView<const uint8_t> rotationActive;
-        R::ArrayView<const Scalar, R::AccessBoundsChecks, Layout> matrixAInvB, vectorAInvB, boundaryInjection;
-        R::ArrayView<const real> rotation;
-        index n;
-        real relax;
-        bool rotated;
-        explicit JacobiView(const ReconstructionDeviceView &p)
-            : offsets(p.offsets), neighbors(p.neighbors), boundaryOffsets(p.boundaryOffsets),
-              rotationActive(p.rotationActive), rotation(p.rotation), n(p.n), relax(p.relax), rotated(p.rotated)
-        {
-            const auto project = [](R::ArrayView<const Scalar> v) -> R::ArrayView<const Scalar, R::AccessBoundsChecks, Layout>
-            { return {v.data, v.offsets, v.rows, v.width, v.stride, v.sizes, v.kind, v.device}; };
-            if constexpr (std::is_same_v<Scalar, float>)
-                matrixAInvB = project(p.matrixAInvB32), vectorAInvB = project(p.vectorAInvB32), boundaryInjection = project(p.boundaryInjection32);
-            else
-                matrixAInvB = project(p.matrixAInvB), vectorAInvB = project(p.vectorAInvB), boundaryInjection = project(p.boundaryInjection);
-        }
-    };
-    // Matrix storage, dense-product arithmetic and whole-update arithmetic are
-    // independent. The defaults preserve the original FP32-product/FP64-update
-    // policy, including the FP64 periodic rotation before its FP32 product.
-    template <bool limited, class Scalar, class AccumScalar = real, class ProductScalar = Scalar, int FixedModes = 0, int Components = 0, class Layout = R::RowLayout, class Status>
-    __global__ void Jacobi(JacobiView<Scalar, Layout> plan, DeviceWorkSelection selection, DevicePeriodicBlocks blocks,
-                           R::PairReadView<real> mean, R::PairReadView<real> input,
-                           R::ArrayView<const real> boundary, R::ArrayView<real> output, Status status,
-                           R::ArrayView<const real> target, R::ArrayView<const real> alpha)
+
+    /** @brief The single runtime-shaped FP64 reference sweep.
+     * @details One CTA owns a cell. Matrix and field physical layouts remain
+     * runtime-described; scratch scales with actual C*M, never a seven-value
+     * ceiling. Raw B is accumulated before the filtered inverse, while
+     * precomputed maps already contain that inverse. LVR's target bypasses
+     * the inverse. At alpha=1 no neighbor, BC or inverse value may be read.
+     * Index/placement checks belong to the wrapper; no host resource is used.
+     */
+    __global__ void GeneralJacobi(RawReconstructionSweepView plan, DeviceWorkSelection selection,
+                                  DevicePeriodicBlocks vectors, R::PairReadView<real> mean,
+                                  R::PairReadView<real> input, R::ArrayView<const real> boundary,
+                                  R::ArrayView<real> output, R::ArrayView<const int> status,
+                                  R::ArrayView<const real> target, R::ArrayView<const real> alpha,
+                                  bool raw, bool limited)
     {
         if (status(0, 0))
             return;
-        const index n = FixedModes ? FixedModes : plan.n;
+        extern __shared__ real right[];
+        const index n = plan.n, width = output.Width();
         for (index iWork = blockIdx.x; iWork < selection.count; iWork += gridDim.x)
         {
-            const auto iCell = selection.Cell(iWork);
-            AccumScalar penalty(0);
-            if constexpr (limited)
-                penalty = AccumScalar(alpha(iCell, 0));
-            const AccumScalar relax(plan.relax);
-            const AccumScalar scale = relax * (AccumScalar(1) - penalty);
-            for (index i = threadIdx.x; i < (Components ? Components * n : output.width); i += blockDim.x)
-            {
-                const index mode = i % n, component = i / n;
-                AccumScalar value = AccumScalar(input(iCell, i)) * (AccumScalar(1) - relax);
-                if constexpr (limited)
-                    if (penalty > 0)
-                        value += (relax * penalty) * AccumScalar(target(iCell, i));
-                // A fully constrained cell must not read a neighbor or BC.
-                // Post-blending an unlimited sweep would propagate NaNs from
-                // values which the CPU LVR operator deliberately never reads.
-                if (scale == AccumScalar(0))
+            const index iCell = selection.Cell(iWork);
+            const real penalty = limited ? alpha(iCell, 0) : 0;
+            const real scale = plan.relax * (1 - penalty);
+            for (index i = threadIdx.x; i < width; i += blockDim.x)
+                right[i] = 0;
+            __syncthreads();
+            if (scale != 0)
+                for (index i = threadIdx.x; i < width; i += blockDim.x)
                 {
-                    output(iCell, i) = Math::ScalarCast<real>(value);
-                    continue;
-                }
-                for (index entry = plan.offsets(iCell, 0); entry < plan.offsets(iCell + 1, 0); ++entry)
-                {
-                    const auto other = plan.neighbors(entry, 0);
-                    if (other != UnInitIndex)
+                    const index mode = i % n, component = i / n;
+                    real value = 0;
+                    for (index entry = plan.offsets(iCell, 0); entry < plan.offsets(iCell + 1, 0); ++entry)
                     {
-                        // The original quantized policy uses an FP32 product
-                        // and FP64 outer sum. The full policies instead use the
-                        // chosen scalar throughout, casting FP64 inputs directly
-                        // and retaining the already quantized FP32 maps.
-                        ProductScalar product(0);
-                        for (index j = 0; j < n; ++j)
-                            product += ProductScalar(plan.matrixAInvB(entry, j * n + mode)) * ProductScalar(input(other, component * n + j));
-                        value += scale * AccumScalar(product);
-                        const auto first = plan.rotated && plan.rotationActive(entry, 0)
-                                               ? blocks.First(component)
-                                               : -1;
-                        if (first >= 0)
+                        const index other = plan.neighbors(entry, 0);
+                        if (other == UnInitIndex)
                         {
-                            ProductScalar correction(0);
+                            for (index q = plan.boundaryOffsets(entry, 0); q < plan.boundaryOffsets(entry + 1, 0); ++q)
+                                value += plan.injection(q, mode) * (boundary(q, component) - mean(iCell, component));
+                            continue;
+                        }
+                        const bool rotates = plan.rotated && plan.rotationActive(entry, 0);
+                        const index first = rotates ? vectors.First(component) : -1;
+                        if (!raw || other != iCell || rotates)
+                        {
+                            real product = 0;
                             for (index j = 0; j < n; ++j)
+                                product += Math::ReconstructionCouplingEntry(plan.matrices, plan.faces, plan.faceSide,
+                                                                             entry, mode, j, n, plan.faceCoupling) *
+                                           input(other, component * n + j);
+                            value += product;
+                            if (first >= 0)
                             {
-                                AccumScalar rotated(0);
-                                for (index d = 0; d < 3; ++d)
-                                    rotated += AccumScalar(input(other, (first + d) * n + j)) *
-                                               (AccumScalar(plan.rotation(entry, d * 3 + component - first)) - AccumScalar(component - first == d ? 1 : 0));
-                                correction += ProductScalar(plan.matrixAInvB(entry, j * n + mode)) * ProductScalar(rotated);
+                                real correction = 0;
+                                for (index j = 0; j < n; ++j)
+                                {
+                                    real rotated = 0;
+                                    for (index d = 0; d < 3; ++d)
+                                        rotated += input(other, (first + d) * n + j) *
+                                                   (plan.rotation(entry, d * 3 + component - first) - (component - first == d ? 1 : 0));
+                                    correction += Math::ReconstructionCouplingEntry(plan.matrices, plan.faces, plan.faceSide,
+                                                                                    entry, mode, j, n, plan.faceCoupling) *
+                                                  rotated;
+                                }
+                                value += correction;
                             }
-                            value += scale * AccumScalar(correction);
                         }
-                        AccumScalar otherMean(mean(other, component));
+                        real average = mean(other, component);
                         if (first >= 0)
                         {
-                            otherMean = AccumScalar(0);
+                            average = 0;
                             for (index d = 0; d < 3; ++d)
-                                otherMean += AccumScalar(plan.rotation(entry, d * 3 + component - first)) * AccumScalar(mean(other, first + d));
+                                average += plan.rotation(entry, d * 3 + component - first) * mean(other, first + d);
                         }
-                        value += AccumScalar(plan.vectorAInvB(entry, mode)) * (scale * (otherMean - AccumScalar(mean(iCell, component))));
+                        value += plan.vectors(entry, mode) * (average - mean(iCell, component));
                     }
-                    else
-                        for (index q = plan.boundaryOffsets(entry, 0); q < plan.boundaryOffsets(entry + 1, 0); ++q)
-                            value += AccumScalar(plan.boundaryInjection(q, mode)) * (scale * (AccumScalar(boundary(q, component)) - AccumScalar(mean(iCell, component))));
+                    right[i] = value;
                 }
-                output(iCell, i) = Math::ScalarCast<real>(value);
+            __syncthreads();
+            for (index i = threadIdx.x; i < width; i += blockDim.x)
+            {
+                real value = (1 - plan.relax) * input(iCell, i);
+                if (limited && penalty > 0)
+                    value += plan.relax * penalty * target(iCell, i);
+                if (scale != 0)
+                {
+                    real update = right[i];
+                    if (raw)
+                    {
+                        update = 0;
+                        for (index j = 0; j < n; ++j)
+                            update += Math::ReconstructionInverseEntry(plan.inverse, iCell, i % n, j, n, plan.triangle) * right[(i / n) * n + j];
+                    }
+                    value += scale * update;
+                }
+                output(iCell, i) = value;
             }
+            __syncthreads();
         }
     }
-    /// Borrowed host-only launch descriptor. Never retained past submission;
-    /// the public operator owns scheduled operands and completion lifetimes.
-    struct GeneralSweepArguments
-    {
-        R::ExecutionContext context;
-        ReconstructionDeviceView plan;
-        DeviceWorkSelection selection;
-        DevicePeriodicBlocks vectors;
-        R::PairReadView<real> mean, input;
-        R::ArrayView<const real> boundary;
-        R::ArrayView<real> output;
-        R::ArrayView<const int> status;
-        R::ArrayView<const real> target, alpha;
-    };
-    template <class Storage, class Accum, class Product, bool Limited = false>
-    void RunGeneralShapes(const GeneralSweepArguments &a)
-    {
-        const auto modes = [&](auto n)
-        {
-            const auto components = [&](auto c)
-            {
-                Jacobi<Limited, Storage, Accum, Product, decltype(n)::value, decltype(c)::value><<<
-                    unsigned(std::min<index>(a.selection.count, 256)), 128, 0, static_cast<cudaStream_t>(a.context.stream)>>>(
-                    JacobiView<Storage>(a.plan), a.selection, a.vectors, a.mean, a.input, a.boundary, a.output, a.status, a.target, a.alpha);
-            };
-            switch (a.mean.owned.width)
-            {
-            case 5:
-                components(std::integral_constant<int, 5>{});
-                break;
-            case 6:
-                components(std::integral_constant<int, 6>{});
-                break;
-            case 7:
-                components(std::integral_constant<int, 7>{});
-                break;
-            default:
-                components(std::integral_constant<int, 0>{});
-                break;
-            }
-        };
-        switch (a.plan.n)
-        {
-        case 2:
-            modes(std::integral_constant<int, 2>{});
-            break;
-        case 3:
-            modes(std::integral_constant<int, 3>{});
-            break;
-        case 5:
-            modes(std::integral_constant<int, 5>{});
-            break;
-        case 9:
-            modes(std::integral_constant<int, 9>{});
-            break;
-        case 19:
-            modes(std::integral_constant<int, 19>{});
-            break;
-        default:
-            modes(std::integral_constant<int, 0>{});
-            break;
-        }
-    }
+
     void RunGeneralFP64(const GeneralSweepArguments &);
-    void RunGeneralFP32(const GeneralSweepArguments &, bool full);
-    void RunGeneralFloatFloat(const GeneralSweepArguments &);
     void RunGeneralLimited(const GeneralSweepArguments &);
 }

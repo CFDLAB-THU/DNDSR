@@ -75,7 +75,7 @@ namespace DNDS::Cauchy
                                                std::vector<std::vector<index>> columns,
                                                std::vector<index> core, DiagonalStorage diagonal, OffDiagonalStorage offDiagonal, R::Device device, LinearSweepPartitions partitions, LinearMatrixOptions matrixOptions)
         : _space(std::move(space)), _pattern(BuildPattern(_space, std::move(columns), std::move(core), std::move(partitions), matrixOptions.indices)), _components(components), _diagonalStorage(diagonal), _rowMajorBlocks(matrixOptions.rowMajorBlocks),
-          _diagonal(matrixOptions.diagonal.MakeLayout(_pattern->partition->owned, DiagonalWidth(components, diagonal)), device, matrixOptions.diagonal.Allocation()),
+          _diagonal(matrixOptions.amgxNativeStorage ? R::RowLayout{} : matrixOptions.diagonal.MakeLayout(_pattern->partition->owned, DiagonalWidth(components, diagonal)), device, matrixOptions.diagonal.Allocation()),
           _inverse(matrixOptions.inverse.MakeLayout(_pattern->partition->owned, DiagonalWidth(components, diagonal)), device, matrixOptions.inverse.Allocation()), _offDiagonalStorage(offDiagonal)
     {
         _diagonal.SetName("Cauchy/linear/diagonal", DNDS_ALLOCATION_SITE());
@@ -84,7 +84,32 @@ namespace DNDS::Cauchy
                               "invalid off-diagonal storage mode");
         if (offDiagonal == OffDiagonalStorage::Assembled)
         {
-            _offDiagonal.emplace(Counts(Columns()), components, device, matrixOptions.offDiagonal, matrixOptions.rowMajorBlocks);
+            const auto counts = Counts(Columns());
+            std::optional<R::Array<real>> nativeOffDiagonal;
+            if (matrixOptions.amgxNativeStorage)
+            {
+                DNDS_check_throw_info(device.space == R::MemorySpace::CUDA && diagonal == DiagonalStorage::Block &&
+                                          matrixOptions.rowMajorBlocks && matrixOptions.indices == LinearIndexStorage::Int32 &&
+                                          matrixOptions.diagonal.layout == Algebra::MatrixTableLayout::AoS &&
+                                          matrixOptions.offDiagonal.layout == Algebra::MatrixTableLayout::AoS &&
+                                          matrixOptions.diagonal.rowStridePaddingMultiple == 1 &&
+                                          matrixOptions.offDiagonal.rowStridePaddingMultiple == 1,
+                                      "native AmgX matrix storage requires compact row-major int32 CUDA full blocks");
+                index entries = 0;
+                for (index count : counts)
+                    entries += count;
+                const index rows = _pattern->partition->owned, width = components * components;
+                auto allocation = matrixOptions.offDiagonal.Allocation();
+                allocation.alignmentBytes = std::max(allocation.alignmentBytes, matrixOptions.diagonal.Allocation().alignmentBytes);
+                _nativeAMGXValues.emplace(R::RowLayout::Dense(entries + rows, width), device, allocation);
+                nativeOffDiagonal.emplace(R::Array<real>::FromStorage(R::RowLayout::Dense(entries, width),
+                                                                      _nativeAMGXValues->Storage().Subspan(0, size_t(entries * width) * sizeof(real))));
+                const auto diagonalBuffer = _nativeAMGXValues->Storage().Subspan(size_t(entries * width) * sizeof(real), size_t(rows * width) * sizeof(real));
+                DNDS_check_throw_info(!matrixOptions.diagonal.allocationAlignmentBytes || diagonalBuffer.IsAligned(matrixOptions.diagonal.allocationAlignmentBytes),
+                                      "native contiguous AmgX diagonal cannot satisfy its requested alignment");
+                _diagonal = R::Array<real>::FromStorage(R::RowLayout::Dense(rows, width), diagonalBuffer);
+            }
+            _offDiagonal.emplace(counts, components, device, matrixOptions.offDiagonal, matrixOptions.rowMajorBlocks, std::move(nativeOffDiagonal));
             _offDiagonal->Values().SetName("Cauchy/linear/offDiagonal/values", DNDS_ALLOCATION_SITE());
             _offDiagonal->OffsetArray().SetName("Cauchy/linear/offDiagonal/blockOffsets", DNDS_ALLOCATION_SITE());
         }
@@ -96,6 +121,15 @@ namespace DNDS::Cauchy
             placed->hasGhostColumns = _pattern->hasGhostColumns;
             placed->sweepPartitions = _pattern->sweepPartitions;
             _pattern = std::move(placed);
+        }
+        DNDS_check_throw_info(!matrixOptions.amgxNativeStorage || _nativeAMGXValues,
+                              "native AmgX storage needs an assembled operator");
+        if (_nativeAMGXValues)
+        {
+            // Buffer subranges deliberately share one allocation diagnostic
+            // record as well as one access controller. Attribute the combined
+            // allocation once; naming either alias would rename this parent.
+            _nativeAMGXValues->SetName("Cauchy/linear/nativeAmgxValues", DNDS_ALLOCATION_SITE());
         }
         _diagonalStoragePin = _diagonal.SharedStorage();
         _diagonalShape = _diagonal.ShapeVersion();

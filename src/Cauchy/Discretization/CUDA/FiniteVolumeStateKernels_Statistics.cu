@@ -1,5 +1,6 @@
 #include "Cauchy/Discretization/CUDA/FiniteVolumeStateKernels.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
+#include "DNDS/Algebra/CUDA/CountRows.cuh"
 #include <cuda_runtime.h>
 
 namespace DNDS::Cauchy::CUDA
@@ -8,32 +9,6 @@ namespace DNDS::Cauchy::CUDA
     namespace
     {
         constexpr int Threads = 128;
-        template <bool Partial>
-        __global__ void FlagCount(R::ArrayView<const uint8_t, R::AccessBoundsChecks, R::FixedRows<1>> flags,
-                                  LimiterCountOutput partial, LimiterCountOutput result)
-        {
-            __shared__ index counts[Threads];
-            index count = 0;
-            const index rows = Partial ? flags.RowCount() : partial.RowCount();
-            for (index iRow = index(blockIdx.x) * Threads + threadIdx.x; iRow < rows; iRow += index(gridDim.x) * Threads)
-                if constexpr (Partial)
-                    count += flags(iRow, 0) != 0;
-                else
-                    count += partial(iRow, 0);
-            counts[threadIdx.x] = count;
-            __syncthreads();
-            for (int stride = Threads / 2; stride; stride /= 2)
-            {
-                if (threadIdx.x < stride)
-                    counts[threadIdx.x] += counts[threadIdx.x + stride];
-                __syncthreads();
-            }
-            if (!threadIdx.x)
-                if constexpr (Partial)
-                    partial(blockIdx.x, 0) = counts[0];
-                else
-                    result(0, 0) = counts[0];
-        }
         template <bool Partial>
         __global__ void LimiterStatistics(StateInput beta, LimiterCountOutput partialCount,
                                           LimiterMinimumOutput partialMinimum,
@@ -109,8 +84,8 @@ namespace DNDS::Cauchy::CUDA
                               "flag reduction shape or alias differs");
         R::CheckKernelArgumentBudget<decltype(flags), LimiterCountOutput, LimiterCountOutput>();
         const auto stream = static_cast<cudaStream_t>(context.stream);
-        FlagCount<true><<<unsigned(partialCount.RowCount()), Threads, 0, stream>>>(flags, partialCount, count);
-        FlagCount<false><<<1, Threads, 0, stream>>>(flags, partialCount, count);
+        Algebra::CUDA::CountRows<Threads, true><<<unsigned(partialCount.RowCount()), Threads, 0, stream>>>(flags, partialCount);
+        Algebra::CUDA::CountRows<Threads, false><<<1, Threads, 0, stream>>>(partialCount.ConstView(), count);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "flag reduction launch failed");
     }
 }

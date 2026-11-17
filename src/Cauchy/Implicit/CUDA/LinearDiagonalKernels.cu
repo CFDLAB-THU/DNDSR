@@ -2,6 +2,7 @@
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include "Solver/InverseRefinement.hpp"
 #include "Solver/SmallBlockInverse.hpp"
+#include "DNDS/Algebra/BlockIndex.hpp"
 #include <cuda_runtime.h>
 #include <limits>
 
@@ -13,7 +14,7 @@ namespace DNDS::Cauchy::CUDA
         __global__ void ResetCount(DiagonalCount count) { count(0, 0) = 0; }
         // Logical dense entries have one canonical meaning; the optional
         // row-major provider representation changes addresses, not algebra.
-        __device__ int Entry(int i, int j, int n, bool rowMajor) { return rowMajor ? i * n + j : i + n * j; }
+        __device__ int Entry(int i, int j, int n, bool rowMajor) { return int(Algebra::DenseBlockEntry(i, j, n, rowMajor)); }
 
         template <int N>
         __device__ bool Normalize(DiagonalRead diagonal, index iCell,

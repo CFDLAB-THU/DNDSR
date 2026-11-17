@@ -56,6 +56,7 @@ Runtime/Communication/RowTransfer.cpp
 Runtime/Communication/NCCLTransfer.cpp
 Algebra/DofAlgebra.cpp
 Algebra/AmgXPreconditioner.cpp
+Algebra/AmgXDiagnostics.cpp
 Algebra/BatchedSVD.cpp
 Algebra/LocalProducts.cpp
 Diagnostics/Profiling.cpp

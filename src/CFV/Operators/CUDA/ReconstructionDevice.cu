@@ -1,111 +1,11 @@
 #include "CFV/Detail/ReconstructionDeviceKernels.hpp"
-#include "CFV/Operators/CUDA/ReconstructionDevice_General.cuh"
+#include "CFV/Detail/ReconstructionSweepArguments.hpp"
 #include <cuda_runtime.h>
 #include <cmath>
 
 namespace DNDS::CFV::Detail
 {
     namespace R = Runtime;
-    /// Candidate SIMT alternative to the reference and DMMA implementations.
-    /// Each block stages one neighbor row, then reuses it across target modes.
-    /// Keep entry, mode-product, rotation-correction and mean/BC addition order
-    /// identical to the general FP64 Jacobi sweep. Barriers are block-uniform, including
-    /// lanes with no output slot. No limited/LVR semantics are changed here.
-    template <int FixedModes, int Components, class Layout = R::RowLayout>
-    __global__ void JacobiSharedSIMT(JacobiView<real, Layout> plan, DeviceWorkSelection selection, DevicePeriodicBlocks blocks,
-                                     R::PairReadView<real> mean, R::PairReadView<real> input,
-                                     R::ArrayView<const real> boundary, R::ArrayView<real> output, R::ArrayView<const int> status)
-    {
-        if (status(0, 0))
-            return;
-        const index n = FixedModes ? FixedModes : plan.n;
-        __shared__ real staticCoefficients[Components ? FixedModes * Components : 1];
-        __shared__ real staticMatrix[Components ? FixedModes * FixedModes : 1];
-        extern __shared__ real dynamic[];
-        real *coefficients = Components ? staticCoefficients : dynamic;
-        real *matrix = Components ? staticMatrix : dynamic + output.width;
-        const index slots = (output.width + blockDim.x - 1) / blockDim.x;
-        for (index iWork = blockIdx.x; iWork < selection.count; iWork += gridDim.x)
-        {
-            const auto iCell = selection.Cell(iWork);
-            real values[Components ? (19 * Components + 95) / 96 : 1]{};
-            for (int slot = 0; slot < slots; ++slot)
-            {
-                const index i = threadIdx.x + slot * blockDim.x;
-                if (i < output.width)
-                {
-                    if constexpr (Components)
-                        values[slot] = input(iCell, i) * (1 - plan.relax);
-                    else
-                        output(iCell, i) = input(iCell, i) * (1 - plan.relax);
-                }
-            }
-            for (index entry = plan.offsets(iCell, 0); entry < plan.offsets(iCell + 1, 0); ++entry)
-            {
-                const auto other = plan.neighbors(entry, 0);
-                if (other != UnInitIndex)
-                {
-                    for (index i = threadIdx.x; i < output.width; i += blockDim.x)
-                        coefficients[i] = input(other, i);
-                    for (index i = threadIdx.x; i < n * n; i += blockDim.x)
-                        matrix[i] = plan.matrixAInvB(entry, i);
-                }
-                __syncthreads();
-                for (int slot = 0; slot < slots; ++slot)
-                {
-                    const index i = threadIdx.x + slot * blockDim.x;
-                    if (i >= output.width)
-                        continue;
-                    real &value = Components ? values[slot] : output(iCell, i);
-                    const index mode = i % n, component = i / n;
-                    if (other != UnInitIndex)
-                    {
-                        real product = 0;
-                        for (index j = 0; j < n; ++j)
-                        {
-                            const real a = matrix[j * n + mode];
-                            product += a * coefficients[component * n + j];
-                        }
-                        value += plan.relax * product;
-                        const auto first = plan.rotated && plan.rotationActive(entry, 0) ? blocks.First(component) : -1;
-                        if (first >= 0)
-                        {
-                            real correction = 0;
-                            for (index j = 0; j < n; ++j)
-                            {
-                                real rotated = 0;
-                                for (index d = 0; d < 3; ++d)
-                                    rotated += coefficients[(first + d) * n + j] *
-                                               (plan.rotation(entry, d * 3 + component - first) - (component - first == d ? 1 : 0));
-                                const real a = matrix[j * n + mode];
-                                correction += a * rotated;
-                            }
-                            value += plan.relax * correction;
-                        }
-                        real otherMean = mean(other, component);
-                        if (first >= 0)
-                        {
-                            otherMean = 0;
-                            for (index d = 0; d < 3; ++d)
-                                otherMean += plan.rotation(entry, d * 3 + component - first) * mean(other, first + d);
-                        }
-                        value += plan.vectorAInvB(entry, mode) * (plan.relax * (otherMean - mean(iCell, component)));
-                    }
-                    else
-                        for (index q = plan.boundaryOffsets(entry, 0); q < plan.boundaryOffsets(entry + 1, 0); ++q)
-                            value += plan.boundaryInjection(q, mode) * (plan.relax * (boundary(q, component) - mean(iCell, component)));
-                }
-                __syncthreads(); // No lane may overwrite a still-consumed neighbor.
-            }
-            if constexpr (Components)
-                for (int slot = 0; slot < slots; ++slot)
-                {
-                    const index i = threadIdx.x + slot * blockDim.x;
-                    if (i < output.width)
-                        output(iCell, i) = values[slot];
-                }
-        }
-    }
     __global__ void ValidateIndicator(R::ArrayView<const real> indicator, R::ArrayView<int> status)
     {
         for (index i = index(blockIdx.x) * blockDim.x + threadIdx.x; i < indicator.rows; i += index(gridDim.x) * blockDim.x)
@@ -289,21 +189,16 @@ namespace DNDS::CFV::Detail
     void LaunchJacobi(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection, DevicePeriodicBlocks blocks,
                       R::PairReadView<real> mean, R::PairReadView<real> input, R::ArrayView<const real> boundary, R::ArrayView<real> output, R::ArrayView<const int> status)
     {
-        if (plan.raw)
-        {
-            LaunchRawJacobi(context, plan, selection, blocks, mean, input, boundary, output, status, {}, {}, false, false);
-            return;
-        }
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA, "CUDA Jacobi requires a CUDA context");
         R::ValidateViewDevices(context.device, plan, selection, blocks, mean, input, boundary, output, status);
-        R::CheckKernelArgumentBudget<JacobiView<real>, decltype(selection), decltype(blocks), decltype(mean),
+        R::CheckKernelArgumentBudget<RawReconstructionSweepView, decltype(selection), decltype(blocks), decltype(mean),
                                      decltype(input), decltype(boundary), decltype(output), decltype(status),
                                      R::ArrayView<const real>, R::ArrayView<const real>>();
         if (!selection.count)
             return;
         const GeneralSweepArguments args{context, plan, selection, blocks, mean, input, boundary, output, status, {}, {}};
         if (plan.quantized)
-            RunGeneralFP32(args, false);
+            LaunchStagedJacobi(context, plan, selection, blocks, mean, input, boundary, output, status, {}, ReconstructionSweepArithmetic::FP32Reference);
         else
             RunGeneralFP64(args);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA Jacobi launch failed");
@@ -326,114 +221,40 @@ namespace DNDS::CFV::Detail
         DNDS_check_throw_info(!floatFloat, "float-float Jacobi requires DNDS_USE_CCCL_COMPUTE");
 #endif
         R::ValidateViewDevices(context.device, plan, selection, blocks, mean, input, boundary, output, status);
-        R::CheckKernelArgumentBudget<JacobiView<float>, decltype(selection), decltype(blocks), decltype(mean),
+        R::CheckKernelArgumentBudget<RawReconstructionSweepView, decltype(selection), decltype(blocks), decltype(mean),
                                      decltype(input), decltype(boundary), decltype(output), decltype(status),
                                      R::ArrayView<const real>, R::ArrayView<const real>>();
         if (!selection.count)
             return;
-        const GeneralSweepArguments args{context, plan, selection, blocks, mean, input, boundary, output, status.ConstView(), {}, {}};
-        if (floatFloat)
-            RunGeneralFloatFloat(args);
-        else
-            RunGeneralFP32(args, true);
+        LaunchStagedJacobi(context, plan, selection, blocks, mean, input, boundary, output, status.ConstView(), {},
+                           floatFloat ? ReconstructionSweepArithmetic::FP32FloatFloatAccumulation : ReconstructionSweepArithmetic::FP32FullAccumulation);
         LaunchValidateJacobiResult(context, selection, output.ConstView(), status);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "full accumulation CUDA Jacobi launch failed");
     }
     void LaunchJacobiMatrixShared(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection,
                                   DevicePeriodicBlocks blocks, R::PairReadView<real> mean, R::PairReadView<real> input,
-                                  R::ArrayView<const real> boundary, R::ArrayView<real> output,
-                                  R::ArrayView<const int> status)
+                                  R::ArrayView<const real> boundary, R::ArrayView<real> output, R::ArrayView<const int> status)
     {
-        if (plan.raw)
-        {
-            LaunchRawJacobi(context, plan, selection, blocks, mean, input, boundary, output, status, {}, {}, false, true);
-            return;
-        }
-        DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && !plan.quantized,
-                              "optimized FP64 Jacobi requires a CUDA context, FP64 maps and a valid mapping");
-        R::ValidateViewDevices(context.device, plan, selection, blocks, mean, input, boundary, output, status);
-        DNDS_check_throw_info(output.Width() == mean.owned.Width() * plan.n &&
-                                  input.owned.Width() == output.Width() && output.RowCount() == mean.owned.RowCount(),
-                              "optimized FP64 Jacobi field shape differs");
-        DNDS_check_throw_info(plan.n == 2 || plan.n == 3 || plan.n == 5 || plan.n == 9 || plan.n == 19,
-                              "static FP64 Jacobi requires P1..P3 modal dimensions");
-        DNDS_check_throw_info(mean.owned.Width() >= 1 && mean.owned.Width() <= INT_MAX / plan.n,
-                              "invalid matrix-shared FP64 Jacobi component count");
-        R::CheckKernelArgumentBudget<JacobiView<real>, decltype(selection), decltype(blocks), decltype(mean),
-                                     decltype(input), decltype(boundary), decltype(output), decltype(status),
-                                     R::ArrayView<const real>, R::ArrayView<const real>>();
-        if (!selection.count)
-            return;
-        const auto stream = static_cast<cudaStream_t>(context.stream);
-        // More blocks make sufficient independent cells available to every SM.
-        // The reference's 256-block cap is retained by LaunchJacobi for a clean
-        // comparison; changing this limit never changes arithmetic order.
-        const unsigned grid = unsigned(std::min<index>(selection.count, 65535));
-        {
-            const auto launch = [&](auto modes)
-            {
-                constexpr int N = decltype(modes)::value;
-                const auto launchLayout = [&](auto layout)
-                {
-                    using Layout = decltype(layout);
-                    const auto components = [&](auto c)
-                    {
-                        JacobiSharedSIMT<N, decltype(c)::value, Layout><<<grid, 96, decltype(c)::value ? 0 : size_t(output.width + N * N) * sizeof(real), stream>>>(JacobiView<real, Layout>(plan), selection, blocks, mean, input, boundary, output, status);
-                    };
-                    switch (mean.owned.width)
-                    {
-                    case 5:
-                        components(std::integral_constant<int, 5>{});
-                        break;
-                    case 6:
-                        components(std::integral_constant<int, 6>{});
-                        break;
-                    case 7:
-                        components(std::integral_constant<int, 7>{});
-                        break;
-                    default:
-                        components(std::integral_constant<int, 0>{});
-                        break;
-                    }
-                };
-                // Projection is checked once by the wrapper, never per element.
-                if (plan.matrixAInvB.kind == R::RowLayoutKind::Table && plan.vectorAInvB.kind == R::RowLayoutKind::Table &&
-                    plan.boundaryInjection.kind == R::RowLayoutKind::Table)
-                    launchLayout(R::TableRows{});
-                else
-                    launchLayout(R::RowLayout{});
-            };
-            if (plan.n == 2)
-                launch(std::integral_constant<int, 2>{});
-            else if (plan.n == 3)
-                launch(std::integral_constant<int, 3>{});
-            else if (plan.n == 5)
-                launch(std::integral_constant<int, 5>{});
-            else if (plan.n == 9)
-                launch(std::integral_constant<int, 9>{});
-            else
-                launch(std::integral_constant<int, 19>{});
-        }
-        DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "optimized FP64 Jacobi launch failed");
+        LaunchStagedJacobi(context, plan, selection, blocks, mean, input, boundary, output, status, {}, ReconstructionSweepArithmetic::FP64MatrixShared);
     }
     void LaunchLimitedJacobi(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection,
                              DevicePeriodicBlocks blocks, R::PairReadView<real> mean, R::PairReadView<real> input,
                              R::ArrayView<const real> boundary, R::ArrayView<const real> target, R::ArrayView<const real> alpha,
-                             R::ArrayView<real> output, R::ArrayView<int> status)
+                             R::ArrayView<real> output, R::ArrayView<int> status, bool pipeline, const ReconstructionSweepLaunch &options)
     {
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA, "CUDA limited Jacobi requires a CUDA context");
         R::ValidateViewDevices(context.device, plan, selection, blocks, mean, input, boundary, target, alpha, output, status);
         DNDS_check_throw_info(target.rows == output.rows && target.width == output.width && alpha.rows == output.rows && alpha.width == 1,
                               "CUDA limited Jacobi penalty/target shape mismatch");
-        R::CheckKernelArgumentBudget<JacobiView<real>, decltype(selection), decltype(blocks), decltype(mean), decltype(input),
+        R::CheckKernelArgumentBudget<RawReconstructionSweepView, decltype(selection), decltype(blocks), decltype(mean), decltype(input),
                                      decltype(boundary), decltype(output), decltype(status), decltype(target), decltype(alpha)>();
         if (!selection.count)
             return;
         // A separate stream-ordered validation pass avoids a status read/write
         // race between cell blocks and prevents partial publication on error.
         ValidatePenalty<<<unsigned(std::min<index>(256, (alpha.rows + 127) / 128)), 128, 0, static_cast<cudaStream_t>(context.stream)>>>(alpha, status);
-        if (plan.raw)
-            LaunchRawJacobi(context, plan, selection, blocks, mean, input, boundary, output, status.ConstView(), target, alpha, true, false);
+        if (pipeline)
+            LaunchLimitedStagedJacobi(context, plan, selection, blocks, mean, input, boundary, output, status.ConstView(), target, alpha, options);
         else
             RunGeneralLimited({context, plan, selection, blocks, mean, input, boundary, output, status.ConstView(), target, alpha});
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA limited Jacobi launch failed");

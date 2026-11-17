@@ -1,9 +1,8 @@
-#include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Launch.hpp"
-#include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Inputs.hpp"
+#include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Shapes.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Compute.hpp"
-#include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Staging.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Segments.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
+#include "FiniteVolumeRHSKernels_Instantiations.hpp"
 #include <cuda_runtime.h>
 
 namespace DNDS::Cauchy::CUDA
@@ -79,9 +78,11 @@ namespace DNDS::Cauchy::CUDA
         void ValidateField(const RHSField &field, index owned, index ghost, index width, bool requireGhost)
         {
             const auto supported = [](auto view)
-            { return view.kind == R::RowLayoutKind::Table || (view.kind == R::RowLayoutKind::TiledColMajorTable && view.stride == 32); };
+            { return !view.offsets && !view.sizes && (!view.RowCount() || view.data) &&
+                     ((view.kind == R::RowLayoutKind::Table && view.stride == view.Width()) ||
+                      (view.kind == R::RowLayoutKind::TiledColMajorTable && view.stride == 32)); };
             DNDS_check_throw_info(field.owned.RowCount() == owned && field.owned.Width() == width && supported(field.owned),
-                                  "CUDA RHS requires correctly shaped AoS or tiled32 input");
+                                  "CUDA RHS requires correctly shaped compact AoS or tiled32 input; padded field rows are unsupported");
             if (requireGhost || field.ghost.RowCount())
                 DNDS_check_throw_info(field.ghost.RowCount() == ghost && field.ghost.Width() == width && supported(field.ghost),
                                       "CUDA RHS ghost field is incomplete or has another layout");
@@ -102,7 +103,7 @@ namespace DNDS::Cauchy::CUDA
             output.wallForce.ValidateDevice(context.device);
         const index owned = g.stencil.jacobianOffsets.RowCount() - 1, ghost = g.cells.RowCount() - owned, nFaces = g.stencil.stencilFaces.RowCount();
         DNDS_check_throw_info(parameters.RowCount() == 1 && output.high.RowCount() == nFaces && output.high.Width() == controls.components &&
-                                  output.high.kind == R::RowLayoutKind::Table && output.status.RowCount() == nFaces && output.fallbackCounts.RowCount() == nFaces,
+                                  output.high.kind == R::RowLayoutKind::Table && output.high.stride == controls.components && output.status.RowCount() == nFaces && output.fallbackCounts.RowCount() == nFaces,
                               "CUDA RHS face output/profile mismatch");
         ValidateField(fields.mean, owned, ghost, controls.components, requireGhost);
         const bool reconstruct = !controls.firstOrder && (!controls.direct || controls.linear);
@@ -132,28 +133,21 @@ namespace DNDS::Cauchy::CUDA
             ValidateField(fields.pressureMinimum, owned, ghost, 1, requireGhost);
         }
         if (fields.hasIncoming)
-            DNDS_check_throw_info(fields.incoming.Width() == controls.components, "CUDA RHS interface width differs");
+            DNDS_check_throw_info(fields.incoming.Width() == controls.components && fields.incoming.kind == R::RowLayoutKind::Table &&
+                                      fields.incoming.stride == fields.incoming.Width(),
+                                  "CUDA RHS interface values require compact AoS rows");
         if (controls.components > 5)
             DNDS_check_throw_info(g.hasWall && g.wallMean.RowCount() == g.cells.RowCount() && g.wallFaces.RowCount() + 1 == g.faceOffsets.RowCount(),
                                   "CUDA RANS RHS requires placed wall samples");
         if (controls.produceLow)
-            DNDS_check_throw_info(output.low.RowCount() == nFaces && output.low.Width() == controls.components && output.low.kind == R::RowLayoutKind::Table,
+            DNDS_check_throw_info(output.low.RowCount() == nFaces && output.low.Width() == controls.components && output.low.kind == R::RowLayoutKind::Table && output.low.stride == controls.components,
                                   "CUDA RHS low face output differs");
         R::CheckKernelArgumentBudget<GeometryView, ParametersView, RHSKernelControls, RHSFields, RHSFaceOutputs, RHSIndices>();
         if (!faces.RowCount())
             return;
-        if (controls.mapping == RHSFaceMapping::WarpSegments || controls.mapping == RHSFaceMapping::CTASegments)
-        {
-            Detail::LaunchSegmentedFluxFaces(context, geometry, parameters, controls, fields, output, faces, packages);
-            DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "segmented CUDA RHS face launch failed");
-            return;
-        }
-        if (controls.doubleBuffer)
-        {
-            Detail::LaunchBufferedFluxFaces(context, geometry, parameters, controls, fields, output, faces);
-            DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "buffered CUDA RHS face launch failed");
-            return;
-        }
+        const unsigned segmentBlocks = controls.mapping == RHSFaceMapping::CTASegments
+                                           ? Detail::ValidateSegmentedFluxFaces(context, geometry, controls, faces, packages)
+                                           : 0;
         using P = DNDS::Math::ComputePrecision;
         if (controls.polynomialPrecision != P::FP64 || controls.fluxPrecision != P::FP64 || controls.dissipationPrecision != P::FP64)
         {
@@ -161,31 +155,8 @@ namespace DNDS::Cauchy::CUDA
             DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA RHS compute face launch failed");
             return;
         }
-        switch (controls.components)
-        {
-        case 5:
-        {
-            using Table = R::TableRows;
-            using Tiled = R::TiledColMajorTable<32>;
-            const bool tiledMean = fields.mean.owned.kind == R::RowLayoutKind::TiledColMajorTable;
-            const bool tiledRec = fields.reconstruction.owned.RowCount() ? fields.reconstruction.owned.kind == R::RowLayoutKind::TiledColMajorTable : fields.viscousData.owned.kind == R::RowLayoutKind::TiledColMajorTable;
-            if (tiledMean && tiledRec)
-                Detail::LaunchFluxFaces<5>(context, geometry, parameters, controls, Detail::ProjectRHSFields<Tiled, Tiled>(fields), output, faces);
-            else if (tiledMean)
-                Detail::LaunchFluxFaces<5>(context, geometry, parameters, controls, Detail::ProjectRHSFields<Tiled, Table>(fields), output, faces);
-            else if (tiledRec)
-                Detail::LaunchFluxFaces<5>(context, geometry, parameters, controls, Detail::ProjectRHSFields<Table, Tiled>(fields), output, faces);
-            else
-                Detail::LaunchFluxFaces<5>(context, geometry, parameters, controls, Detail::ProjectRHSFields<Table, Table>(fields), output, faces);
-            break;
-        }
-        case 6:
-            Detail::LaunchFluxFaces<6>(context, geometry, parameters, controls, fields, output, faces);
-            break;
-        case 7:
-            Detail::LaunchFluxFaces<7>(context, geometry, parameters, controls, fields, output, faces);
-            break;
-        }
+        const Detail::RHSFaceLaunch launch{context, geometry, parameters, controls, fields, output, faces, packages, segmentBlocks};
+        Detail::LaunchFP64RHS(launch);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA RHS face launch failed");
     }
     void GatherFluxCells(R::ExecutionContext context, const RHSGeometryPublication &geometry, RHSInput highFaces, RHSInput lowFaces,

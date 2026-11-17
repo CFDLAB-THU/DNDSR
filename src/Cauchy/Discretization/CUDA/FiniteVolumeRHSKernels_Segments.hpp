@@ -4,9 +4,8 @@
 
 namespace DNDS::Cauchy::CUDA::Detail
 {
-    /// Common weighted point leaf and explicit CTA-local shared staging; the
-    /// submitted operation retains geometry, packages and all changing fields.
-    void LaunchSegmentedFluxFaces(Runtime::ExecutionContext, const RHSGeometryPublication &,
-                                  Runtime::ArrayView<const RHSKernelParameters, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>,
-                                  RHSKernelControls, RHSFields, RHSFaceOutputs, RHSIndices, RHSFacePackageView);
+    /// Validate setup-prepared packages once and return the launch grid. Shape
+    /// instantiation TUs share this host contract; no numerical dispatch here.
+    unsigned ValidateSegmentedFluxFaces(Runtime::ExecutionContext, const RHSGeometryPublication &,
+                                        RHSKernelControls, RHSIndices, RHSFacePackageView);
 }

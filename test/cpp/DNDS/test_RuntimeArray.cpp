@@ -3,6 +3,7 @@
 #include "DNDS/Runtime/Array/Array.hpp"
 #include "DNDS/Runtime/Array/RowBuilder.hpp"
 #include "DNDS/Runtime/Execution/EagerArray.hpp"
+#include "DNDS/Runtime/Execution/KernelViews.hpp"
 #include "DNDS/Algebra/EigenView.hpp"
 #include "DNDS/Runtime/Array/ArrayCopy.hpp"
 #include "DNDS/Core/OMP.hpp"
@@ -1099,6 +1100,43 @@ TEST_CASE("Physical projections are checked once and retain specialized componen
     CHECK_THROWS(write.View<R::FixedWidthRows<R::TiledColMajorTable<8>, 4>>());
     CHECK(soa.Read().View<R::ColMajorTable>().ElementStride() == 16);
     CHECK_THROWS(soa.Read().View<R::FixedRows<5>>());
+}
+
+TEST_CASE("Kernel projections preserve fixed row extents and independent padded owned ghost pitches")
+{
+    R::ArrayPair<int> pair{R::Array<int>(R::RowLayout::Dense(3, 5, 8)),
+                           R::Array<int>(R::RowLayout::Dense(2, 5, 6))};
+    for (auto *part : {&pair.owned, &pair.ghost})
+    {
+        auto write = part->Write();
+        const auto view = R::ProjectKernelView<R::FixedRows<5>>(write.View<R::UniformTableRows>());
+        static_assert(decltype(view)::row_width == 5);
+        static_assert(decltype(view[0])::row_width == 5);
+        static_assert(std::is_trivially_copyable_v<decltype(view)>);
+        for (DNDS::index iRow = 0; iRow < view.RowCount(); ++iRow)
+            for (DNDS::index j = 0; j < 5; ++j)
+                view[iRow][j] = int(100 * iRow + j);
+    }
+    const auto read = pair.Read();
+    const auto view = R::ProjectKernelPair<R::FixedRows<5>>(read.View());
+    static_assert(decltype(view)::row_width == 5);
+    CHECK(view.owned.stride == 8);
+    CHECK(view.ghost.stride == 6);
+    CHECK(view[2][4] == 204);
+    CHECK(view[4][4] == 104);
+    CHECK(view.owned.data == read.View().owned.data);
+    CHECK(view.ghost.data == read.View().ghost.data);
+    CHECK_THROWS(R::ProjectKernelView<R::FixedRows<6>>(read.View().owned));
+    R::Array<int> csr(R::RowLayout::Ragged({5, 5}));
+    CHECK_THROWS(R::ProjectKernelView<R::FixedRows<5>>(csr.Read().View()));
+
+    R::Array<int> tiled(R::RowLayout::TiledColMajor(9, 5, 8));
+    auto write = tiled.Write();
+    const auto fixed = R::ProjectKernelView<R::FixedWidthRows<R::TiledColMajorTable<8>, 5>>(write.View());
+    static_assert(decltype(fixed[0])::row_width == 5);
+    static_assert(decltype(fixed[0])::component_stride == 8);
+    fixed[8][4] = 73;
+    CHECK(write.At(8, 4) == 73);
 }
 
 TEST_CASE("Pair views keep independent column pitches and eager workers retain physical layout")

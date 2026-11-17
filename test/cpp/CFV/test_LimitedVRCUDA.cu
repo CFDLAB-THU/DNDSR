@@ -132,14 +132,19 @@ TEST_CASE("Limited CUDA Jacobi matches CPU relaxation and excludes neighbors for
     const auto compare = [&]
     {
         plan.DoReconstructionIterLimitedTo(mean, input, reference, bc, target, alpha);
+        for (const auto kernel : {C::ReconstructionDeviceKernel::FP64, C::ReconstructionDeviceKernel::FP64Pipelined})
         {
-            auto ghost = di.Ghost().Write(context);
-            resident.SubmitReconstructionIterLimitedTo(engine, stream, dm, di, work, db, dt, da, C::ReconstructionRegion::Core);
+            {
+                auto ghost = di.Ghost().Write(context);
+                resident.SubmitReconstructionIterLimitedTo(engine, stream, dm, di, work, db, dt, da,
+                                                           C::ReconstructionRegion::Core, kernel);
+            }
+            resident.SubmitReconstructionIterLimitedTo(engine, stream, dm, di, work, db, dt, da,
+                                                       C::ReconstructionRegion::HaloDependent, kernel);
+            engine.Synchronize();
+            resident.CheckStatus(work);
+            Equal(reference.temporary.Owned(), work.temporary.Owned());
         }
-        resident.SubmitReconstructionIterLimitedTo(engine, stream, dm, di, work, db, dt, da, C::ReconstructionRegion::HaloDependent);
-        engine.Synchronize();
-        resident.CheckStatus(work);
-        Equal(reference.temporary.Owned(), work.temporary.Owned());
     };
     compare();
     // Both implementations must omit *all* neighbor/BC contributions for alpha

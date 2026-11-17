@@ -1,6 +1,6 @@
 #include "Cauchy/Discretization/FiniteVolumeWorkspaceInternal.hpp"
 #include "Cauchy/Discretization/CPU/FiniteVolumeReconstructionKernels.hpp"
-#include "Cauchy/Discretization/CUDA/FiniteVolumeReconstructionKernels.hpp"
+#include "Cauchy/Discretization/CUDA/FiniteVolumeCharacteristicKernels.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeStateKernels.hpp"
 #include "Cauchy/Core/NumericalFailure.hpp"
 #include "DNDS/Runtime/Execution/EagerArrayBatch.hpp"

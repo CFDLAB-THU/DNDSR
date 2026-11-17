@@ -584,7 +584,7 @@ namespace DNDS::CFV
         {
             R::EagerEngine engine;
             const auto stream = engine.CreateStream(std::make_shared<R::CUDALauncher>(Device().ordinal));
-            SubmitDeviceReconstructionIterLimitedTo(engine, stream, mean, input, work, boundary, target, alpha, region);
+            SubmitDeviceReconstructionIterLimitedTo(engine, stream, mean, input, work, boundary, target, alpha, region, ReconstructionDeviceKernel::FP64);
             engine.Synchronize();
             CheckStatus(work);
             return;
@@ -617,11 +617,11 @@ namespace DNDS::CFV
     void VariationalReconstructionPlan::SubmitReconstructionIterLimitedTo(
         R::EagerEngine &engine, const R::ExecutionStream &stream, const FVField &mean, const FVField &input,
         ReconstructionWorkspace &work, const ReconstructionBoundaryValues &boundary, const FVField &target,
-        const R::Array<real> &alpha, ReconstructionRegion region) const
+        const R::Array<real> &alpha, ReconstructionRegion region, ReconstructionDeviceKernel kernel) const
     {
         if (_device)
         {
-            SubmitDeviceReconstructionIterLimitedTo(engine, stream, mean, input, work, boundary, target, alpha, region);
+            SubmitDeviceReconstructionIterLimitedTo(engine, stream, mean, input, work, boundary, target, alpha, region, kernel);
             return;
         }
         Require(ReconstructionOperation::Sweep);

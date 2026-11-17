@@ -76,7 +76,7 @@ TEST_CASE("Single-device AmgX applies a fixed linear local preconditioner and re
     REQUIRE(DNDS::Algebra::AmgXPreconditioner::Available());
     // Each physical cell remains one native block row through aggregation,
     // restriction and smoothing, including the RANS widths six and seven.
-    for (const I components : {5, 6, 7})
+    for (const I components : {1, 2, 3, 4, 5, 6, 7, 8, 9, 19})
     {
         INFO("components = ", components);
         constexpr I cells = 31;
@@ -96,7 +96,7 @@ TEST_CASE("Single-device AmgX applies a fixed linear local preconditioner and re
                     for (I i = 0; i < components; ++i)
                         for (I j = 0; j < components; ++j)
                             a.View()(entry * components * components + i * components + j, 0) =
-                                neighbor == iCell ? (i == j ? 4 : -.1) : (i == j ? -1 : 0);
+                                neighbor == iCell ? (i == j ? 4 + .1 * std::max<I>(0, components - 5) : -.1) : (i == j ? -1 : 0);
                     ++entry;
                 }
                 for (I j = 0; j < components; ++j)
@@ -139,7 +139,7 @@ TEST_CASE("Single-device AmgX applies a fixed linear local preconditioner and re
                 const I column = columnRead.View()(entry, 0);
                 for (I j = 0; j < components; ++j)
                 {
-                    const double value = column == cell ? (i == j ? 4 : -.1) : (i == j ? -1 : 0);
+                    const double value = column == cell ? (i == j ? 4 + .1 * std::max<I>(0, components - 5) : -.1) : (i == j ? -1 : 0);
                     residual -= value * v(column * components + j, 0);
                 }
             }
@@ -189,14 +189,14 @@ TEST_CASE("Single-device AmgX applies a fixed linear local preconditioner and re
     }
 }
 
-TEST_CASE("Native RANS block inversion covers all launched thread scratch and dense entries")
+TEST_CASE("Native flow and modal block inversion covers all launched thread scratch and dense entries")
 {
     // The old grid-limit-sized scratch overflows beyond 256 block rows
     // (16 lanes/block); 5003 also exercises several full CTAs and a tail.
     // One uncoupled block per row makes one undamped Jacobi
     // sweep an exact solve, independently checked against a prescribed vector.
     for (I cells : {I(1), I(63), I(5003)})
-        for (I n : {I(6), I(7)})
+        for (I n : {I(2), I(3), I(4), I(5), I(6), I(7), I(8), I(9), I(19)})
         {
             CAPTURE(n);
             CAPTURE(cells);
@@ -246,5 +246,120 @@ TEST_CASE("Native RANS block inversion covers all launched thread scratch and de
             for (I cell = 0; cell < cells; ++cell)
                 for (I j = 0; j < n; ++j)
                     CHECK(read.View()(cell * n + j, 0) == doctest::Approx(exact(cell, j)).epsilon(2e-12));
+        }
+}
+
+TEST_CASE("Native matrix attachment shares values with fixed-cycle upload equivalence and refresh")
+{
+    // One inline/native operator, one provider-private uploaded copy. Exercise
+    // ordinary flow and the largest modal width without component padding.
+    for (const I width : {I(5), I(19)})
+        for (const bool separate : {false, true})
+        {
+            CAPTURE(width);
+            CAPTURE(separate);
+            constexpr I rows = 47;
+            const I entries = separate ? 2 * rows - 2 : 3 * rows - 2;
+            const I blocks = entries + (separate ? rows : 1);
+            R::Array<int> offsets(R::RowLayout::Dense(rows + 1, 1)), columns(R::RowLayout::Dense(entries, 1));
+            R::Array<double> host(R::RowLayout::Dense(blocks * width * width, 1));
+            R::Array<double> hostRhs(R::RowLayout::Dense(rows * width, 1));
+            {
+                auto o = offsets.Write(), c = columns.Write();
+                auto a = host.Write(), b = hostRhs.Write();
+                I entry = 0;
+                for (I iRow = 0; iRow < rows; ++iRow)
+                {
+                    o.View()(iRow, 0) = int(entry);
+                    for (I column = std::max<I>(0, iRow - 1); column <= std::min<I>(rows - 1, iRow + 1); ++column)
+                    {
+                        const bool diagonal = iRow == column;
+                        const I block = separate && diagonal ? entries + iRow : entry;
+                        if (!separate || !diagonal)
+                            c.View()(entry++, 0) = int(column);
+                        for (I i = 0; i < width; ++i)
+                            for (I j = 0; j < width; ++j)
+                                a.View()(block * width * width + i * width + j, 0) =
+                                    diagonal ? (i == j ? 6 + .1 * i : -.01) : (i == j ? -1 : 0);
+                    }
+                    for (I j = 0; j < width; ++j)
+                        b.View()(iRow * width + j, 0) = 1 + .01 * (iRow + j);
+                }
+                o.View()(rows, 0) = int(entry);
+                REQUIRE(entry == entries);
+            }
+            const auto device = R::Device::CUDA(0);
+            const auto context = R::ExecutionContext::CUDA(0);
+            auto values = host.To(device), rhs = hostRhs.To(device);
+            R::Array<double> expected(hostRhs.Layout(), device), actual(hostRhs.Layout(), device);
+            DNDS::Algebra::AmgXPreconditioner upload(device), attached(device);
+            upload.SetPattern(offsets, columns, int(width), separate);
+            attached.SetPattern(offsets, columns, int(width), separate);
+            {
+                const auto read = values.Read(context);
+                auto a = read.View();
+                a.rows = entries * width * width;
+                auto diagonal = read.View();
+                diagonal.data += entries * width * width;
+                diagonal.rows = rows * width * width;
+                upload.UpdateValuesBorrowed(context, a, separate ? std::optional<decltype(diagonal)>(diagonal) : std::nullopt);
+            }
+            attached.AttachValues(context, values);
+            if (width == 5 && !separate)
+                CHECK_THROWS(attached.SetPattern(offsets, columns, int(width), separate));
+            const auto apply = [&](auto &provider, auto &output)
+            {
+                const auto b = rhs.Read(context);
+                auto x = output.Write(context);
+                provider.ApplyBorrowed(context, b.View(), x.View());
+            };
+            apply(upload, expected);
+            apply(attached, actual);
+            const auto reference = expected.To(R::Device::Host()), result = actual.To(R::Device::Host());
+            {
+                const auto r = reference.Read(), x = result.Read();
+                for (I i = 0; i < rows * width; ++i)
+                    CHECK(x.View()(i, 0) == doctest::Approx(r.View()(i, 0)).epsilon(2e-12));
+            }
+            // Provider setup/application must not alter the caller's finest values.
+            {
+                const auto after = values.To(R::Device::Host());
+                const auto a = after.Read(), h = host.Read();
+                for (I i = 0; i < blocks * width * width; ++i)
+                    CHECK(a.View()(i, 0) == h.View()(i, 0));
+            }
+            const auto memory = attached.MemorySnapshot(), publicMemory = upload.MemorySnapshot();
+            REQUIRE(!memory.levels.empty());
+            CHECK(memory.nativeStorage);
+            CHECK(memory.levels.front().numericOwned == 0);
+            CHECK(memory.levels.front().numericBorrowed == uint64_t(blocks * width * width * sizeof(double)));
+            CHECK(memory.copies.matrixDeviceToDevice == 0);
+            CHECK(publicMemory.copies.matrixDeviceToDevice == uint64_t((entries + (separate ? rows : 0)) * width * width * sizeof(double)));
+            CHECK(publicMemory.levels.front().numericOwned >= publicMemory.copies.matrixDeviceToDevice);
+            // Explicit between-solve mutation is allowed; unrefreshed application is not.
+            {
+                auto a = host.Write();
+                for (I i = 0; i < blocks * width * width; ++i)
+                    a.View()(i, 0) *= 2;
+            }
+            values.CopyFrom(host, context).Wait();
+            {
+                const auto b = rhs.Read(context);
+                auto x = actual.Write(context);
+                CHECK_THROWS(attached.ApplyBorrowed(context, b.View(), x.View()));
+                x.CancelUnmodified();
+            }
+            attached.AttachValues(context, values);
+            apply(attached, actual);
+            {
+                const auto after = actual.To(R::Device::Host());
+                const auto a = after.Read(), r = reference.Read();
+                for (I i = 0; i < rows * width; ++i)
+                    CHECK(2 * a.View()(i, 0) == doctest::Approx(r.View()(i, 0)).epsilon(2e-12));
+            }
+            // The provider retains the allocation even after the submitting
+            // C++ handle is released. Public/private provider owners coexist.
+            values = R::Array<double>{};
+            apply(attached, actual);
         }
 }

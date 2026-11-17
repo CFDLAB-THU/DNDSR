@@ -11,7 +11,7 @@ if(DNDS_USE_AMGX)
         HINTS "${DNDS_AMGX_ROOT}" PATH_SUFFIXES include REQUIRED)
     find_library(DNDS_AMGX_LIBRARY NAMES amgxsh amgx
         HINTS "${DNDS_AMGX_ROOT}" PATH_SUFFIXES lib lib64 REQUIRED)
-    # The pinned provider requires the native 6/7 block patch. Reject an old
+    # The pinned provider requires the modal/native-storage patch. Reject an old
     # install during configuration rather than falling back to scalar CSR.
     get_filename_component(_dnds_amgx_prefix "${DNDS_AMGX_INCLUDE_DIR}" DIRECTORY)
     set(_dnds_amgx_manifest "${_dnds_amgx_prefix}/dndsr-amgx-build.json")
@@ -27,6 +27,10 @@ if(DNDS_USE_AMGX)
     string(JSON _dnds_amgx_revision ERROR_VARIABLE _dnds_amgx_error GET "${_dnds_amgx_provenance}" revision)
     if(_dnds_amgx_error OR NOT _dnds_amgx_revision STREQUAL "cc1cebdbb32b14d33762d4ddabcb2e23c1669f47")
         message(FATAL_ERROR "AmgX provider revision does not match the audited pin")
+    endif()
+    string(JSON _dnds_amgx_native_api ERROR_VARIABLE _dnds_amgx_error GET "${_dnds_amgx_provenance}" native_storage_api)
+    if(_dnds_amgx_error OR NOT _dnds_amgx_native_api EQUAL 1)
+        message(FATAL_ERROR "AmgX native-storage API is absent; rebuild the Plan 61-6 provider")
     endif()
     get_filename_component(_dnds_amgx_library_name "${DNDS_AMGX_LIBRARY}" NAME)
     string(JSON _dnds_amgx_library_hash ERROR_VARIABLE _dnds_amgx_error GET

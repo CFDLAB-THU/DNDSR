@@ -56,3 +56,15 @@ A successful provider setup is not evidence of nonlinear CFD convergence.
 The earlier SA run used scalar expansion and GMRES, so it is not a qualification
 of this native-block, fixed-count preconditioner-only path. Actual SA operator
 residuals and corrected case runs remain separate experimental evidence.
+
+
+## Plan 61-6 extension
+
+The current patch additionally qualifies native widths 2/3/4/5/6/7/8/9/19
+(with scalar 1 and the existing width-10 reference), adds restricted dDDI
+numeric attachment and per-level/allocation diagnostics. See the fork's
+`doc/NativeStorage.md` and `docs/guides/amgx.md`. New grouped validation is
+pending; historical 6/7 results above must not be credited to these new paths.
+A dedicated `amgx-plan616` install protects existing reference artifacts.
+The builder's `--source-tree` checks the public fork's compiled source against
+the exact bundled patch without resetting or rewriting that checkout.

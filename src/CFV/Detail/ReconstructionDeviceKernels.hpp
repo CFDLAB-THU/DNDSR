@@ -16,13 +16,24 @@ namespace DNDS::CFV::Detail
         FloatFloat,
         FP64TensorCore,
         FP32,
-        TF32
+        TF32,
+        FP64MatrixShared,
+        FP32Reference,
+        FP32FullAccumulation,
+        FP32FloatFloatAccumulation,
+        TF32Synchronous
     };
     /// Full modal batches, with explicit checked mapping/launch/shared-memory
     /// policy. The caller retains every view through stream completion.
     void LaunchStagedJacobi(Runtime::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
                             Runtime::PairReadView<real>, Runtime::PairReadView<real>, Runtime::ArrayView<const real>,
                             Runtime::ArrayView<real>, Runtime::ArrayView<const int>, const ReconstructionSweepLaunch &, ReconstructionSweepArithmetic);
+    /// Production pipeline with statically selected LVR; alpha=1 excludes all
+    /// neighbor, boundary and inverse reads. The caller validates alpha first.
+    void LaunchLimitedStagedJacobi(Runtime::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
+                                   Runtime::PairReadView<real>, Runtime::PairReadView<real>, Runtime::ArrayView<const real>,
+                                   Runtime::ArrayView<real>, Runtime::ArrayView<const int>, Runtime::ArrayView<const real>,
+                                   Runtime::ArrayView<const real>, const ReconstructionSweepLaunch &);
     /// Untimed launch feasibility/resource inquiry; never enqueues a kernel.
     ReconstructionSweepResources InspectStagedJacobi(Runtime::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
                                                      Runtime::PairReadView<real>, Runtime::PairReadView<real>, Runtime::ArrayView<const real>,
@@ -46,13 +57,8 @@ namespace DNDS::CFV::Detail
     /// invalid penalties through the retained device status, without a drain.
     void LaunchLimitedJacobi(Runtime::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
                              Runtime::PairReadView<real>, Runtime::PairReadView<real>, Runtime::ArrayView<const real>,
-                             Runtime::ArrayView<const real>, Runtime::ArrayView<const real>, Runtime::ArrayView<real>, Runtime::ArrayView<int>);
-    /// Original B gather followed by a local inverse, with independently laid-out
-    /// matrix/vector/inverse payloads. matrixShared selects the retained shared path.
-    void LaunchRawJacobi(Runtime::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
-                         Runtime::PairReadView<real>, Runtime::PairReadView<real>, Runtime::ArrayView<const real>,
-                         Runtime::ArrayView<real>, Runtime::ArrayView<const int>, Runtime::ArrayView<const real>,
-                         Runtime::ArrayView<const real>, bool limited, bool matrixShared);
+                             Runtime::ArrayView<const real>, Runtime::ArrayView<const real>, Runtime::ArrayView<real>, Runtime::ArrayView<int>,
+                             bool pipeline, const ReconstructionSweepLaunch &);
     void LaunchWBAP(Runtime::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
                     Runtime::PairReadView<real>, Runtime::ArrayView<real>, Runtime::ArrayView<real>, DeviceCharacteristicView,
                     Runtime::ArrayView<const real>, Runtime::ArrayView<int>, index, index, real, index);

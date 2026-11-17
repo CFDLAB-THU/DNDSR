@@ -505,8 +505,7 @@ namespace DNDS::CFV
             DNDS_HD_assert(derivative >= 0 && derivative < availableDerivatives && mode >= 0 && mode < polynomial.size - 1);
             if (derivative < cachedDerivatives)
                 return DNDS::Math::ScalarCast<Scalar>(cached(2 * iPoint + side, mode * cachedDerivatives + derivative));
-            const Scalar value = polynomial.Derivative(derivative, mode + 1, point);
-            return derivative == 0 ? value - DNDS::Math::ScalarCast<Scalar>(moments(iCell, mode + 1)) : value;
+            return polynomial.ReconstructionDerivative(derivative, mode, point, moments, iCell);
         }
         DNDS_DEVICE_CALLABLE real Evaluate(index iCell, index iPoint, int side, const std::array<real, 3> &point,
                                            int derivative, int mode) const noexcept
@@ -523,8 +522,7 @@ namespace DNDS::CFV
         DNDS_DEVICE_CALLABLE Scalar EvaluateAtPoint(index iCell, const Math::TaylorPointEvaluationT<Scalar> &point,
                                                     int derivative, int mode) const noexcept
         {
-            const Scalar value = polynomial.Derivative(derivative, mode + 1, point);
-            return derivative == 0 ? value - DNDS::Math::ScalarCast<Scalar>(moments(iCell, mode + 1)) : value;
+            return polynomial.ReconstructionDerivative(derivative, mode, point, moments, iCell);
         }
     };
     /// Pins the geometry generation and Runtime cache allocations once outside
@@ -576,6 +574,7 @@ namespace DNDS::CFV
     class VariationalReconstructionPlan
     {
         friend class PolynomialSamplingPlan;
+        friend class ReconstructionAMGPlan;
         std::shared_ptr<const Detail::ReconstructionData> _data;
         std::shared_ptr<const Detail::ReconstructionPlacementData> _device;
         std::shared_ptr<const Detail::ReconstructionIdentity> _identity;
@@ -593,7 +592,7 @@ namespace DNDS::CFV
         void SubmitDeviceReconstructionIterLimitedTo(Runtime::EagerEngine &, const Runtime::ExecutionStream &,
                                                      const FVField &, const FVField &, ReconstructionWorkspace &,
                                                      const ReconstructionBoundaryValues &, const FVField &,
-                                                     const Runtime::Array<real> &, ReconstructionRegion) const;
+                                                     const Runtime::Array<real> &, ReconstructionRegion, ReconstructionDeviceKernel) const;
         void SubmitDeviceCommitReconstruction(Runtime::EagerEngine &, const Runtime::ExecutionStream &,
                                               FVField &, ReconstructionWorkspace &) const;
         void SubmitDeviceLimiterWBAP_3OrderTo(Runtime::EagerEngine &, const Runtime::ExecutionStream &,
@@ -732,7 +731,8 @@ namespace DNDS::CFV
                                                const FVField &mean, const FVField &input, ReconstructionWorkspace &work,
                                                const ReconstructionBoundaryValues &boundary, const FVField &target,
                                                const Runtime::Array<real> &alpha,
-                                               ReconstructionRegion region = ReconstructionRegion::All) const;
+                                               ReconstructionRegion region = ReconstructionRegion::All,
+                                               ReconstructionDeviceKernel kernel = ReconstructionDeviceKernel::FP64) const;
         /// Copy the completed temporary into owned coefficients. The caller
         /// certifies every owned row was produced and all old sends completed.
         void CommitReconstruction(FVField &coefficients, ReconstructionWorkspace &work) const;

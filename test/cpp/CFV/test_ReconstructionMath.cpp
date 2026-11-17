@@ -106,13 +106,24 @@ TEST_CASE("Prepared Taylor points preserve nonunit-scale physical derivatives an
                 std::array<DNDS::real, 20> moments{};
                 for (int mode = 0; mode < basis.Size(); ++mode)
                     moments[mode] = 0.03 * (mode + 1);
+                M::SmallMatrix momentRows(1, basis.Size());
+                for (int mode = 0; mode < basis.Size(); ++mode)
+                    momentRows(0, mode) = moments[mode];
                 M::SmallMatrix reconstruction;
+                const M::SmallMatrix noMoments;
                 basis.Reconstruction(reconstruction, {point[0], point[1], point[2]}, {center[0], center[1], center[2]}, scale, moments, degree);
                 for (int derivative = 0; derivative < basis.Size(); ++derivative)
                     for (int mode = 1; mode < basis.Size(); ++mode)
+                    {
                         CHECK(reconstruction(derivative, mode - 1) == doctest::Approx(
                                                                           parameters.Derivative(derivative, mode, prepared) - (derivative == 0 ? moments[mode] : 0))
                                                                           .epsilon(2e-13));
+                        CHECK(parameters.ReconstructionDerivative(derivative, mode - 1, prepared, momentRows, 0) ==
+                              doctest::Approx(reconstruction(derivative, mode - 1)).epsilon(2e-13));
+                        if (derivative != 0)
+                            CHECK(parameters.ReconstructionDerivative(derivative, mode - 1, prepared, noMoments, 0) ==
+                                  doctest::Approx(reconstruction(derivative, mode - 1)).epsilon(2e-13));
+                    }
             }
 }
 

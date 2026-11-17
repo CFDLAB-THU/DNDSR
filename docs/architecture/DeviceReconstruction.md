@@ -105,61 +105,55 @@ the same workspace on different streams requires an explicit join. No device
 allocation occurs in these kernels. This is a correct baseline mapping, not a
 claim of optimal occupancy or fastest layout.
 
-SOR/GS, GPU gradients/conversion/sampling/linear actions, tree meshes, CUDA graph
-capture and automatic stream-dependency checking are not provided by this API.
-CPU-only operators keep their placement checks and reject GPU input. These are
-explicit unsupported capabilities, never a hidden CPU fallback.
+CUDA SOR/GS and tree meshes remain outside this reconstruction sweep API.
+Gradient/conversion and polynomial sampling have separate queued CFV operators;
+they are not CPU fallbacks hidden in a sweep. CUDA graph capture is a separate
+qualification target, not implied by a device-resident operand.
 
-### Explicit FP64 tensor-core Jacobi
+### Plan 61-6 sweep catalog and typed access
 
-The default `ReconstructionDeviceKernel::FP64` remains selectable. Pass
-`FP64TensorCore` as the final argument of the synchronous or `...To` Jacobi
-wrapper to select the alternative matrix-product implementation. Python exposes
-the same enum/default and `SupportsKernel`. Device preparation caches the
-capability; unsupported or unknown explicit requests throw before submission.
-The initial guard permits datacenter SM80/SM90 with a suitable compiled image;
-the validated hardware and shapes are recorded separately.
+Plan 61-6 consolidates the sweep implementation into two numerical bodies:
 
-`DNDS/Algebra/CUDA/FP64Matrix.cuh` provides a small warp-level8x8x4 double-input,
-double-accumulator MMA adapter. The CFV kernel stages padded matrix/coefficient
-tiles in1KiB per warp, processes four independent cells per block and handles
-non-multiple modes/components with zero tails. Mean and boundary terms retain
-the FV formula; periodic vector transformations are applied while loading the
-neighbor coefficients. Internal Geom/CFV matrix storage and WBAP are unchanged.
-This path uses actual FP64 tensor instructions, not TF32/FP32 substitution.
-Different summation order is allowed within validated FP64 tolerances; byte
-identity is not promised. Padding/staging cost can outweigh MMA gains for small
-shapes, so explicit selection does not change the default or promise a speedup.
+1. `FP64` is the runtime-C/runtime-M reference. It accepts the existing generic
+   field layouts and dynamically selects precomputed/raw, full/triangular
+   inverse and LVR behavior.
+2. `FP64Pipelined` is the production optimized body. It statically selects
+   M=2/3/5/9/19, C=5/6/7 or a genuine dynamic-C fallback, raw/precomputed,
+   full/triangular inverse and LVR. The optimized field operands are AoS tables,
+   with compact physical field rows; padded field inputs are rejected. Matrix
+   row padding remains an independent prepared-storage choice. A component count above seven is
+   valid for this mathematical CFV operator; no seven-value scratch ceiling
+   may be inferred from the CUDA Cauchy physics scope.
 
-`FP64TensorCoreShared` assigns one block to a cell and separate warps to
-eight-component tiles. It stages the neighbor matrix once for all four warps,
-with coalesced component/mode loads into shared storage. Mode counts2/3/5/9/19
-and common component counts5/21 have simple static dispatch; other component
-counts keep a generic path. The owned/ghost and physical-layout contracts stay
-the same. Shared staging does not change the mesh or CFV publication formats.
+Each other retained selector has exactly one comparison fixture: C=5, M=19,
+precomputed maps and no LVR. This includes `FP64MatrixShared`,
+`FP64TensorCoreAsync`, `FloatFloatPipelined`, `FP32Pipelined`, `FP32`,
+`TF32TensorCore`, `TF32Pipelined`, `FP32FullAccumulation` and
+`FP32FloatFloatAccumulation`. Precision, multiplication and accumulation
+policies remain distinct. An unavailable shape/layout is an explicit error,
+not permission to run another kernel. `SupportsKernel` reports plan/device
+capability; the launch wrapper additionally checks the actual field width.
 
-`FP64TensorCoreAsync` uses the same mapping with two raw shared-memory slots.
-It issues eight-byte `cp.async` copies of the next neighbor while processing
-the current product. Every consumer waits for its copy group and block barrier;
-every slot overwrite follows the previous block-wide reads. No per-call device
-allocation, dynamic host pointer or host wait is introduced. Periodic vector
-transforms preserve their mathematical input, including triples crossing a tile.
-Kernel selection is explicit in C++/Python; keep ordinary FP64 as the default.
-The optimization assessment in the independent plan repository records measured
-shape/layout winners and losers rather than inferring them from tensor usage.
+The optimized wrappers check compact field rows and project whole-array views
+once. Static C/M extents and field pitch continue through row spans and
+numerical helpers. Prepared matrix rows retain their independent physical
+stride. `Runtime::ProjectKernelView` and `ProjectKernelPair` change only the
+access type, preserving data pointers and devices. Scheduled operands retain
+ownership and readiness as before.
 
-On the measured local two-A10065536-cell cases, the original tensor mapping
-remains best for5 components. Async is the measured choice for21-component
-degree-one AoS/column and degree-two column, while ordinary FP64 remains faster
-for degree-two21-component AoS/tiled. The degree-one tiled margin is small.
-At degree-two21-component column, Jacobi oldtensor/ordinary/async is
-3.180/2.391/2.242ms; integrated iteration is3.350/2.610/2.478ms. These are
-explicit choices, not a hidden autotuner or universal backend policy.
-The final shared/async implementation passes CPU CFV30/30, CUDA4/4 np1/2,
-all6 kernel sanitizer checks and rebuilt Python8 tests at np1 and per np2 rank.
-Sanitizer API reporting retains the existing external MPI limitation.
-Source, binaries and three successive timing controls are recorded in the plan
-repository's `experiments/cauchy-preliminary/nccl-fp64/TENSOR_OPTIMIZATION.md`.
+SIMT uses one block per cell; MMA uses one warp per cell. The production
+neighbor pipeline has two slots and consumes a staged matrix for all output
+modes/components. Synchronous matrix sharing and MMA are static choices within
+the same optimized body, rather than numerical copies. The existing
+`DNDS/Algebra/CUDA/FP64Matrix.cuh` adapter still supplies actual FP64 MMA;
+TF32 and quantized policies remain explicitly different arithmetic.
+
+The historical preliminary tensor/shared/async measurements are retained in
+the plan repository's `experiments/cauchy-preliminary/nccl-fp64/` records.
+Their retired selector names and broad shape coverage do not define the
+Plan 61-6 catalog. Current source validation and matched before/after timing
+must be reported separately; changing source organization alone establishes
+neither performance nor a new numerical acceptance result.
 
 ## Execution and caller responsibilities
 
@@ -225,21 +219,26 @@ CTest includes one GPU and two ranks with one GPU each. Existing Runtime CUDA
 tests cover array indexing, alignment, async release, algebra and interop.
 
 `cfv_benchmark_reconstruction_cuda width degree components repetitions
-[direct|packed|nccl] [fp64|tensor]` measures
+[direct|packed|nccl] [fp64|pipelined] [all|aos]` measures
 real wrappers on a connected Cartesian quad mesh. It checks CPU numerical
 oracles before timing. Setup/upload are separate from repeated resident Jacobi,
 highest-order WBAP, direct communication and integrated split iteration. Jacobi
 and WBAP microtimings read a fixed iterate; the integrated timing commits each
 iteration. Report these scopes separately. Local CPU timings are not substituted
 for matched, allocated-node CPU evidence.
+Use `aos` with the optimized pipelined path. The retained comparison selectors
+require the 3D C=5/M=19 fixture and belong in
+`cfv_benchmark_reconstruction_sweep`; the 2D wrapper benchmark cannot supply
+that modal shape.
 
 The NCCL integrated timing queues ordered iterations before its final engine
 observation; portable MPI retains host progress/observation between iterations.
 Report that scheduling difference with communication and operator microtimings.
 Only compare actual completed numerical/timing rows. Graph capture is not used.
 
-The current CUDA baseline uses up to256 blocks,128 threads per block, and
-strides over cells/coefficients. On the sm80 build the compiled Jacobi/WBAP
-kernels use117/191 registers per thread, respectively, with zero reported local
-memory or stack. This leaves substantial scope for occupancy and view-descriptor
-optimization. Kernel resource counts alone do not establish occupancy or speed.
+The historical general CUDA baseline used up to256 blocks,128 threads per
+block and grid-stride cell/entry traversal. Its sm80 Jacobi/WBAP resource
+counts were117/191 registers per thread, with zero reported local memory or
+stack. Those counts do not describe the consolidated specialized kernels;
+report current resource/timing measurements against their exact source.
+Kernel resource counts alone do not establish occupancy or speed.

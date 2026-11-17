@@ -1,9 +1,10 @@
 #pragma once
 
-#include "CFV/Detail/ReconstructionDeviceKernels.hpp"
+#include "CFV/Detail/ReconstructionSweepArguments.hpp"
 #include "CFV/Math/ReconstructionMatrixAccess.hpp"
 #include "DNDS/Algebra/CUDA/FP64Matrix.cuh"
 #include "DNDS/Math/ComputeScalar.hpp"
+#include "DNDS/Runtime/Execution/KernelViews.hpp"
 #include <mma.h>
 #include <cuda_runtime.h>
 
@@ -13,37 +14,38 @@ namespace DNDS::CFV::Detail
     namespace Staged
     {
         // This projection omits limiter/basis buffers from the launch arguments.
-        // Matrix tables are checked once by the wrapper; state views retain
-        // their own strides, including supported SoA/AoSoA DOF views.
+        // Matrix/field tables are checked once by the wrapper. Static logical
+        // field widths use compact AoS pitches; matrix padding stays independent.
         template <class T, class Layout>
         using Table = R::ArrayView<const T, R::AccessBoundsChecks, Layout>;
         template <class Layout, class T>
         Table<T, Layout> Project(R::ArrayView<const T> view)
         {
-            return {view.data, view.offsets, view.rows, view.width, view.stride, view.sizes, view.kind, view.device};
+            return R::ProjectKernelView<Layout>(view);
         }
-        template <class Storage>
+        template <int N, class Storage, bool Triangle>
         struct Sweep
         {
             Table<index, R::FixedRows<1>> offsets, neighbors, faces, boundaryOffsets;
             Table<uint8_t, R::FixedRows<1>> rotationActive, faceSide;
-            Table<Storage, R::TableRows> matrices, vectors, injection;
-            Table<real, R::TableRows> inverse;
+            Table<Storage, R::FixedRows<N * N>> matrices;
+            Table<Storage, R::FixedRows<N>> vectors, injection;
+            Table<real, R::FixedRows<Triangle ? N *(N + 1) / 2 : N * N>> inverse;
             Table<real, R::FixedRows<9>> rotation;
             real relax;
-            bool rotated, triangle, faceCoupling;
+            bool rotated, faceCoupling;
             explicit Sweep(const ReconstructionDeviceView &p)
                 : offsets(Project<R::FixedRows<1>>(p.offsets)), neighbors(Project<R::FixedRows<1>>(p.neighbors)),
                   faces(Project<R::FixedRows<1>>(p.faces)), boundaryOffsets(Project<R::FixedRows<1>>(p.boundaryOffsets)),
                   rotationActive(Project<R::FixedRows<1>>(p.rotationActive)), faceSide(Project<R::FixedRows<1>>(p.faceSide)),
-                  inverse(Project<R::TableRows>(p.localInverse)),
+                  inverse(Project<R::FixedRows<Triangle ? N *(N + 1) / 2 : N * N>>(p.localInverse)),
                   rotation(Project<R::FixedRows<9>>(p.rotation)), relax(p.relax), rotated(p.rotated),
-                  triangle(p.inverseTriangle), faceCoupling(p.faceCoupling)
+                  faceCoupling(p.faceCoupling)
             {
                 if constexpr (std::is_same_v<Storage, float>)
-                    matrices = Project<R::TableRows>(p.matrixAInvB32), vectors = Project<R::TableRows>(p.vectorAInvB32), injection = Project<R::TableRows>(p.boundaryInjection32);
+                    matrices = Project<R::FixedRows<N * N>>(p.matrixAInvB32), vectors = Project<R::FixedRows<N>>(p.vectorAInvB32), injection = Project<R::FixedRows<N>>(p.boundaryInjection32);
                 else
-                    matrices = Project<R::TableRows>(p.matrixAInvB), vectors = Project<R::TableRows>(p.vectorAInvB), injection = Project<R::TableRows>(p.boundaryInjection);
+                    matrices = Project<R::FixedRows<N * N>>(p.matrixAInvB), vectors = Project<R::FixedRows<N>>(p.vectorAInvB), injection = Project<R::FixedRows<N>>(p.boundaryInjection);
             }
         };
         template <bool Warp>
@@ -54,10 +56,11 @@ namespace DNDS::CFV::Detail
             else
                 __syncthreads();
         }
-        template <class T>
+        template <bool Pipeline, class T>
         __device__ void CopyWord(real *destination, const T *source)
         {
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
+            if constexpr (Pipeline)
             {
                 const unsigned address = unsigned(__cvta_generic_to_shared(destination));
                 if constexpr (sizeof(T) == 8)
@@ -65,27 +68,30 @@ namespace DNDS::CFV::Detail
                 else
                     asm volatile("cp.async.ca.shared.global [%0], [%1], 4;" ::"r"(address), "l"(source) : "memory");
             }
-#else
-            *reinterpret_cast<T *>(destination) = *source;
+            else
 #endif
+                *reinterpret_cast<T *>(destination) = *source;
         }
+        template <bool Pipeline>
         __device__ inline void CommitCopies()
         {
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
-            asm volatile("cp.async.commit_group;" ::: "memory");
+            if constexpr (Pipeline)
+                asm volatile("cp.async.commit_group;" ::: "memory");
 #endif
         }
-        template <bool Warp>
+        template <bool Warp, bool Pipeline>
         __device__ void WaitCopies()
         {
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
-            asm volatile("cp.async.wait_group 0;" ::: "memory");
+            if constexpr (Pipeline)
+                asm volatile("cp.async.wait_group 0;" ::: "memory");
 #endif
             Join<Warp>();
         }
-        template <int N, class Storage>
-        __device__ void StageEntry(Sweep<Storage> plan, index entry, real *slot,
-                                   R::PairReadView<real> input,
+        template <int N, bool Pipeline, class Storage, bool Triangle, class Input>
+        __device__ void StageEntry(Sweep<N, Storage, Triangle> plan, index entry, real *slot,
+                                   Input input,
                                    int components, int rank, int teamSize)
         {
             const index other = plan.neighbors(entry, 0);
@@ -94,18 +100,18 @@ namespace DNDS::CFV::Detail
             const index matrixRow = plan.faceCoupling ? plan.faces(entry, 0) : entry;
             const auto matrix = plan.matrices[matrixRow];
             for (int i = rank; i < N * N; i += teamSize)
-                CopyWord(slot + i, &matrix[i]);
+                CopyWord<Pipeline>(slot + i, &matrix[i]);
             const auto values = input[other];
             for (int i = rank; i < N * components; i += teamSize)
-                CopyWord(slot + N * N + i, &values[i]);
+                CopyWord<Pipeline>(slot + N * N + i, &values[i]);
         }
         template <class Scalar>
         struct alignas(8) Word
         {
             Scalar value;
         };
-        template <int N, class Scalar, class Storage>
-        __device__ Scalar Coefficient(Sweep<Storage> plan, DevicePeriodicBlocks vectors, index entry,
+        template <int N, class Scalar, class Storage, bool Triangle>
+        __device__ Scalar Coefficient(Sweep<N, Storage, Triangle> plan, DevicePeriodicBlocks vectors, index entry,
                                       const Word<Scalar> *coefficients, int component, int mode)
         {
             const auto first = plan.rotated && plan.rotationActive(entry, 0) ? vectors.First(component) : -1;
@@ -116,10 +122,9 @@ namespace DNDS::CFV::Detail
                 value += Scalar(plan.rotation(entry, d * 3 + component - first)) * coefficients[(first + d) * N + mode].value;
             return value;
         }
-        template <int N, class Scalar, class Storage>
-        __device__ Scalar OtherTerms(Sweep<Storage> plan, DevicePeriodicBlocks vectors, index iCell,
-                                     int component, int mode, R::PairReadView<real> mean,
-                                     R::ArrayView<const real> boundary)
+        template <int N, class Scalar, class Storage, bool Triangle, class Mean, class Boundary>
+        __device__ Scalar OtherTerms(Sweep<N, Storage, Triangle> plan, DevicePeriodicBlocks vectors, index iCell,
+                                     int component, int mode, Mean mean, Boundary boundary)
         {
             Scalar value(0);
             const auto first = plan.rotated ? vectors.First(component) : -1;
@@ -191,6 +196,27 @@ namespace DNDS::CFV::Detail
             }
         };
 #endif
+        template <int Width>
+        using FieldPolicy = std::conditional_t<Width == 0, R::TableRows, R::FixedRows<Width, Width>>;
+        template <int Components, int N>
+        struct Fields
+        {
+            R::PairReadView<real, R::AccessBoundsChecks, FieldPolicy<Components>> mean;
+            R::PairReadView<real, R::AccessBoundsChecks, FieldPolicy<Components * N>> input;
+            Table<real, FieldPolicy<Components>> boundary;
+            R::ArrayView<real, R::AccessBoundsChecks, FieldPolicy<Components * N>> output;
+            Table<real, FieldPolicy<Components * N>> target;
+            Table<real, R::FixedRows<1>> alpha;
+        };
+        template <class Scalar, class Input, class Target>
+        __device__ Scalar Updated(Input input, Target target, index iCell, int i,
+                                  Scalar keep, Scalar relax, Scalar penalty, Scalar scale, Scalar increment)
+        {
+            Scalar value = keep * Scalar(input(iCell, i));
+            if (penalty > Scalar(0))
+                value += relax * penalty * Scalar(target(iCell, i));
+            return value + scale * increment;
+        }
         /** @brief Stage one complete neighbor, consuming every output mode.
          * @details SIMT owns one cell/block; MMA owns one cell/warp. Both use
          * two neighbor slots. No full-row or repeated-output-tile staging.
@@ -198,16 +224,20 @@ namespace DNDS::CFV::Detail
          * raw inverse application and relaxation. FP64 is only storage/I/O in
          * the float-float specialization. Distinct outputs remain mandatory.
          */
-        template <int N, int Components, class Storage, class Scalar, bool Tensor, bool TF32>
-        __global__ void StagedJacobi(Sweep<Storage> plan, bool raw, DeviceWorkSelection selection, DevicePeriodicBlocks vectors,
-                                     R::PairReadView<real> mean, R::PairReadView<real> input,
-                                     R::ArrayView<const real> boundary, R::ArrayView<real> output,
-                                     R::ArrayView<const int> status, int teamWords)
+        template <int N, int Components, bool Raw, bool Triangle, bool LVR, class Storage, class Scalar,
+                  bool Tensor, bool TF32, bool Pipeline, class Product = Scalar>
+        __global__ void StagedJacobi(Sweep<N, Storage, Triangle> plan, DeviceWorkSelection selection, DevicePeriodicBlocks vectors,
+                                     Fields<Components, N> fields, R::ArrayView<const int> status, int teamWords)
         {
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
             if (status(0, 0))
                 return;
             extern __shared__ __align__(32) real shared[];
+            const auto mean = fields.mean;
+            const auto input = fields.input;
+            const auto boundary = fields.boundary;
+            const auto output = fields.output;
+            constexpr bool wideMMA = Tensor && TF32 && std::is_same_v<Scalar, real>;
             const int components = Components ? Components : int(output.width / N);
             const int entryWords = N * N + N * components;
             const int team = Tensor ? threadIdx.x / 32 : 0;
@@ -215,44 +245,57 @@ namespace DNDS::CFV::Detail
             const int teamSize = Tensor ? 32 : blockDim.x;
             const int teams = Tensor ? blockDim.x / 32 : 1;
             real *slots = shared + team * teamWords;
-            auto *right = reinterpret_cast<Scalar *>(slots + 2 * entryWords);
-            auto *inverse = reinterpret_cast<Scalar *>(slots + ((2 * entryWords + N * components + 3) / 4) * 4);
+            auto *right = reinterpret_cast<Scalar *>(slots + (Pipeline ? 2 : 1) * entryWords);
+            auto *inverse = reinterpret_cast<Scalar *>(slots + (((Pipeline ? 2 : 1) * entryWords + N * components + 3) / 4) * 4);
             using Tile = std::conditional_t<TF32, TF32Tile, Algebra::CUDA::FP64Tile8>;
-            auto &tile = *reinterpret_cast<Tile *>(inverse + (raw ? ((N * N + 3) / 4) * 4 : 0));
+            auto &tile = *reinterpret_cast<Tile *>(inverse + (Raw ? ((N * N + 3) / 4) * 4 : 0));
             constexpr int M = TF32 ? 16 : 8, K = TF32 ? 8 : 4, C = TF32 ? 16 : 8;
             const index stride = index(gridDim.x) * teams;
             const Scalar relax(plan.relax), keep = Scalar(1) - relax;
             for (index work = index(blockIdx.x) * teams + team; work < selection.count; work += stride)
             {
                 const auto iCell = selection.Cell(work);
+                const Scalar penalty = LVR ? Scalar(fields.alpha(iCell, 0)) : Scalar(0);
+                const Scalar scale = relax * (Scalar(1) - penalty);
+                if (scale == Scalar(0))
+                {
+                    for (int i = rank; i < N * components; i += teamSize)
+                        output(iCell, i) = DNDS::Math::ScalarCast<real>(Updated(input, fields.target, iCell, i, keep, relax, penalty, scale, Scalar(0)));
+                    Join<Tensor>();
+                    continue;
+                }
                 const index begin = plan.offsets(iCell, 0), end = plan.offsets(iCell + 1, 0);
-                Scalar accumulated[(N * (Components ? Components : 7) + 31) / 32]{};
+                Scalar accumulated[Components ? (N * Components + 31) / 32 : 1]{};
                 using Accumulator = std::conditional_t<TF32, TF32Accumulator, Algebra::CUDA::FP64Accumulator8>;
                 Accumulator products[(N + M - 1) / M];
-                if constexpr (!Components)
+                if constexpr (!Components || wideMMA)
                 {
                     for (int i = rank; i < N * components; i += teamSize)
                         right[i] = Scalar(0);
                     Join<Tensor>();
                 }
-                if (begin < end)
-                {
-                    StageEntry<N>(plan, begin, slots, input, components, rank, teamSize);
-                    CommitCopies();
-                }
+                if constexpr (Pipeline)
+                    if (begin < end)
+                    {
+                        StageEntry<N, Pipeline>(plan, begin, slots, input, components, rank, teamSize);
+                        CommitCopies<Pipeline>();
+                    }
                 for (index entry = begin; entry < end; ++entry)
                 {
-                    const int slot = int((entry - begin) % 2);
-                    WaitCopies<Tensor>();
-                    if (entry + 1 < end)
-                    {
-                        StageEntry<N>(plan, entry + 1, slots + (1 - slot) * entryWords, input, components, rank, teamSize);
-                        CommitCopies();
-                    }
+                    const int slot = Pipeline ? int((entry - begin) % 2) : 0;
+                    if constexpr (!Pipeline)
+                        StageEntry<N, Pipeline>(plan, entry, slots, input, components, rank, teamSize);
+                    WaitCopies<Tensor, Pipeline>();
+                    if constexpr (Pipeline)
+                        if (entry + 1 < end)
+                        {
+                            StageEntry<N, Pipeline>(plan, entry + 1, slots + (1 - slot) * entryWords, input, components, rank, teamSize);
+                            CommitCopies<Pipeline>();
+                        }
                     const auto other = plan.neighbors(entry, 0);
                     const bool rotated = plan.rotated && plan.rotationActive(entry, 0);
                     const bool transpose = plan.faceCoupling && plan.faceSide(entry, 0);
-                    if (other != UnInitIndex && (!raw || other != iCell || rotated))
+                    if (other != UnInitIndex && (!Raw || other != iCell || rotated))
                     {
                         ConvertSlot<N, Storage, Scalar, Tensor>(slots + slot * entryWords, entryWords, rank, teamSize);
                         const auto *matrix = reinterpret_cast<const Word<Scalar> *>(slots + slot * entryWords);
@@ -285,13 +328,13 @@ namespace DNDS::CFV::Detail
                                             tile.b[i] = value;
                                         }
                                         __syncwarp();
-                                        if constexpr (Components)
+                                        if constexpr (Components && !wideMMA)
                                             products[modeTile].AddProduct(tile);
                                         else
                                             partial[modeTile].AddProduct(tile);
                                         __syncwarp();
                                     }
-                                if constexpr (!Components)
+                                if constexpr (!Components || wideMMA)
                                     for (int m = 0; m < (N + M - 1) / M; ++m)
                                     {
                                         partial[m].Store(tile);
@@ -307,19 +350,19 @@ namespace DNDS::CFV::Detail
                         {
                             for (int i = rank; i < N * components; i += teamSize)
                             {
-                                Scalar product(0);
+                                Product product(0);
                                 for (int j = 0; j < N; ++j)
-                                    product += matrix[transpose ? (i % N) * N + j : j * N + i % N].value * Coefficient<N, Scalar>(plan, vectors, entry, coefficients, i / N, j);
+                                    product += Product(matrix[transpose ? (i % N) * N + j : j * N + i % N].value) * Product(Coefficient<N, Scalar>(plan, vectors, entry, coefficients, i / N, j));
                                 if constexpr (Components)
-                                    accumulated[i / teamSize] += product;
+                                    accumulated[i / teamSize] += Scalar(product);
                                 else
-                                    right[i] += product;
+                                    right[i] += Scalar(product);
                             }
                         }
                     }
                     Join<Tensor>();
                 }
-                if constexpr (Tensor && Components)
+                if constexpr (Tensor && Components && !wideMMA)
                 {
                     for (int m = 0; m < (N + M - 1) / M; ++m)
                     {
@@ -337,70 +380,46 @@ namespace DNDS::CFV::Detail
                 Join<Tensor>();
                 for (int i = rank; i < N * components; i += teamSize)
                     right[i] += OtherTerms<N, Scalar>(plan, vectors, iCell, i / N, i % N, mean, boundary);
-                if (raw)
+                if constexpr (Raw)
                 {
                     const auto row = plan.inverse[iCell];
                     for (int i = rank; i < N * N; i += teamSize)
-                        inverse[i] = Scalar(row[plan.triangle ? Math::SymmetricTriangleEntry(i % N, i / N) : i]);
+                        inverse[i] = Scalar(row[Triangle ? Math::SymmetricTriangleEntry(i % N, i / N) : i]);
                 }
                 Join<Tensor>();
-                if constexpr (Tensor && Components && !TF32)
+                for (int i = rank; i < N * components; i += teamSize)
                 {
-                    if (raw)
-                        for (int m = 0; m < (N + 7) / 8; ++m)
-                        {
-                            Algebra::CUDA::FP64Accumulator8 update;
-                            for (int k = 0; k < N; k += 4)
-                            {
-                                const int mode = m * 8 + rank / 4, ka = k + rank % 4;
-                                tile.a[rank] = mode < N && ka < N ? inverse[ka * N + mode] : 0;
-                                const int c = rank % 8, kb = k + rank / 8;
-                                tile.b[rank] = c < components && kb < N ? right[c * N + kb] : 0;
-                                __syncwarp();
-                                update.AddProduct(tile);
-                                __syncwarp();
-                            }
-                            update.Store(tile);
-                            __syncwarp();
-                            for (int i = rank; i < 64; i += 32)
-                            {
-                                const int mode = m * 8 + i / 8, c = i % 8;
-                                if (mode < N && c < components)
-                                    output(iCell, c * N + mode) = keep * input(iCell, c * N + mode) + relax * tile.c[i];
-                            }
-                            __syncwarp();
-                        }
-                }
-                if (!Tensor || !raw || !Components || TF32)
-                    for (int i = rank; i < N * components; i += teamSize)
+                    Scalar value = right[i];
+                    if constexpr (Raw)
                     {
-                        Scalar value = right[i];
-                        if (raw)
-                        {
-                            value = Scalar(0);
-                            for (int j = 0; j < N; ++j)
-                                value += inverse[j * N + i % N] * right[(i / N) * N + j];
-                        }
-                        output(iCell, i) = DNDS::Math::ScalarCast<real>(keep * Scalar(input(iCell, i)) + relax * value);
+                        value = Scalar(0);
+                        for (int j = 0; j < N; ++j)
+                            value += inverse[j * N + i % N] * right[(i / N) * N + j];
                     }
+                    output(iCell, i) = DNDS::Math::ScalarCast<real>(Updated(input, fields.target, iCell, i, keep, relax, penalty, scale, value));
+                }
                 Join<Tensor>();
             }
 #else
             asm("trap;");
 #endif
         }
-        template <int N, int Components, class Storage, class Scalar, bool Tensor, bool TF32>
+        template <int N, int Components, bool Raw, bool Triangle, bool LVR, class Storage, class Scalar,
+                  bool Tensor, bool TF32, bool Pipeline, class Product = Scalar>
         ReconstructionSweepResources Launch(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection,
                                             DevicePeriodicBlocks vectors, R::PairReadView<real> mean, R::PairReadView<real> input,
                                             R::ArrayView<const real> boundary, R::ArrayView<real> output, R::ArrayView<const int> status,
-                                            const ReconstructionSweepLaunch &options, bool execute)
+                                            const ReconstructionSweepLaunch &options, bool execute,
+                                            R::ArrayView<const real> target = {}, R::ArrayView<const real> alpha = {})
         {
-            const int threads = options.threads ? options.threads : Tensor && output.width / N <= 7 ? 128
-                                                                                                    : 32;
+            const int threads = options.threads ? options.threads : Pipeline ? (Tensor ? 128 : 32)
+                                                                             : (Tensor ? 128 : 96);
+            R::CheckKernelArgumentBudget<Sweep<N, Storage, Triangle>, DeviceWorkSelection, DevicePeriodicBlocks,
+                                         Fields<Components, N>, R::ArrayView<const int>, int>();
             const int teams = Tensor ? threads / 32 : 1;
             const index components = output.width / N;
-            const index words = 2 * (N * N + N * components) + N * components;
-            const index inverseEnd = (words + 3) / 4 * 4 + (plan.raw ? (N * N + 3) / 4 * 4 : 0);
+            const index words = (Pipeline ? 2 : 1) * (N * N + N * components) + N * components;
+            const index inverseEnd = (words + 3) / 4 * 4 + (Raw ? (N * N + 3) / 4 * 4 : 0);
             const index teamWords = (inverseEnd + (Tensor ? (TF32 ? sizeof(TF32Tile) : sizeof(Algebra::CUDA::FP64Tile8)) / sizeof(real) : 0) + 3) / 4 * 4;
             const index bytes = teamWords * teams * sizeof(real);
             static thread_local int cachedOrdinal = -1;
@@ -409,7 +428,7 @@ namespace DNDS::CFV::Detail
             {
                 DNDS_check_throw_info(cudaGetDeviceProperties(&device, context.device.ordinal) == cudaSuccess,
                                       "CUDA VR device properties unavailable");
-                DNDS_check_throw_info(cudaFuncSetAttribute(StagedJacobi<N, Components, Storage, Scalar, Tensor, TF32>, cudaFuncAttributeMaxDynamicSharedMemorySize,
+                DNDS_check_throw_info(cudaFuncSetAttribute(StagedJacobi<N, Components, Raw, Triangle, LVR, Storage, Scalar, Tensor, TF32, Pipeline, Product>, cudaFuncAttributeMaxDynamicSharedMemorySize,
                                                            int(device.sharedMemPerBlockOptin)) == cudaSuccess,
                                       "CUDA VR shared-memory opt-in failed");
                 cachedOrdinal = context.device.ordinal;
@@ -422,84 +441,73 @@ namespace DNDS::CFV::Detail
             if (!execute)
             {
                 cudaFuncAttributes attributes{};
-                DNDS_check_throw_info(cudaFuncGetAttributes(&attributes, StagedJacobi<N, Components, Storage, Scalar, Tensor, TF32>) == cudaSuccess &&
+                DNDS_check_throw_info(cudaFuncGetAttributes(&attributes, StagedJacobi<N, Components, Raw, Triangle, LVR, Storage, Scalar, Tensor, TF32, Pipeline, Product>) == cudaSuccess &&
                                           cudaOccupancyMaxActiveBlocksPerMultiprocessor(&resource.activeBlocksPerSM,
-                                                                                        StagedJacobi<N, Components, Storage, Scalar, Tensor, TF32>, threads, size_t(bytes)) == cudaSuccess,
+                                                                                        StagedJacobi<N, Components, Raw, Triangle, LVR, Storage, Scalar, Tensor, TF32, Pipeline, Product>, threads, size_t(bytes)) == cudaSuccess,
                                       "CUDA VR kernel resource query failed");
                 resource.registersPerThread = attributes.numRegs;
                 return resource;
             }
-            StagedJacobi<N, Components, Storage, Scalar, Tensor, TF32><<<grid, threads, size_t(bytes), static_cast<cudaStream_t>(context.stream)>>>(
-                Sweep<Storage>(plan), plan.raw, selection, vectors, mean, input, boundary, output, status, int(teamWords));
+            StagedJacobi<N, Components, Raw, Triangle, LVR, Storage, Scalar, Tensor, TF32, Pipeline, Product><<<grid, threads, size_t(bytes), static_cast<cudaStream_t>(context.stream)>>>(
+                Sweep<N, Storage, Triangle>(plan), selection, vectors,
+                Fields<Components, N>{R::ProjectKernelPair<FieldPolicy<Components>>(mean),
+                                      R::ProjectKernelPair<FieldPolicy<Components * N>>(input),
+                                      R::ProjectKernelView<FieldPolicy<Components>>(boundary),
+                                      R::ProjectKernelView<FieldPolicy<Components * N>>(output),
+                                      R::ProjectKernelView<FieldPolicy<Components * N>>(target),
+                                      R::ProjectKernelView<R::FixedRows<1>>(alpha)},
+                status, int(teamWords));
             return resource;
         }
     }
-    struct StagedSweepArguments
-    {
-        R::ExecutionContext context;
-        ReconstructionDeviceView plan;
-        DeviceWorkSelection selection;
-        DevicePeriodicBlocks vectors;
-        R::PairReadView<real> mean, input;
-        R::ArrayView<const real> boundary;
-        R::ArrayView<real> output;
-        R::ArrayView<const int> status;
-        ReconstructionSweepLaunch options;
-        bool execute;
-    };
     namespace Staged
     {
-        template <class Storage, class Scalar, bool Tensor, bool TF32 = false>
-        ReconstructionSweepResources RunShapes(const StagedSweepArguments &a)
+        template <int N, int Components>
+        ReconstructionSweepResources ProductionShape(const StagedSweepArguments &a)
         {
-            ReconstructionSweepResources result;
-            const auto modes = [&](auto n)
+            const auto launch = [&](auto raw, auto triangle, auto limited)
             {
-                const auto components = [&](auto c)
-                {
-                    result = Launch<decltype(n)::value, decltype(c)::value, Storage, Scalar, Tensor, TF32>(
-                        a.context, a.plan, a.selection, a.vectors, a.mean, a.input, a.boundary, a.output, a.status, a.options, a.execute);
-                };
-                switch (a.mean.owned.width)
-                {
-                case 5:
-                    components(std::integral_constant<int, 5>{});
-                    break;
-                case 6:
-                    components(std::integral_constant<int, 6>{});
-                    break;
-                case 7:
-                    components(std::integral_constant<int, 7>{});
-                    break;
-                default:
-                    components(std::integral_constant<int, 0>{});
-                    break;
-                }
+                return Launch<N, Components, decltype(raw)::value, decltype(triangle)::value,
+                              decltype(limited)::value, real, real, false, false, true>(
+                    a.context, a.plan, a.selection, a.vectors, a.mean, a.input, a.boundary,
+                    a.output, a.status, a.options, a.execute, a.target, a.alpha);
             };
-            switch (a.plan.n)
+            const auto limited = [&](auto raw, auto triangle)
             {
-            case 2:
-                modes(std::integral_constant<int, 2>{});
-                break;
-            case 3:
-                modes(std::integral_constant<int, 3>{});
-                break;
+                return a.limited ? launch(raw, triangle, std::true_type{}) : launch(raw, triangle, std::false_type{});
+            };
+            if (!a.plan.raw)
+                return limited(std::false_type{}, std::false_type{});
+            return a.plan.inverseTriangle ? limited(std::true_type{}, std::true_type{}) : limited(std::true_type{}, std::false_type{});
+        }
+        template <int N>
+        ReconstructionSweepResources ProductionModes(const StagedSweepArguments &a)
+        {
+            switch (a.mean.owned.Width())
+            {
             case 5:
-                modes(std::integral_constant<int, 5>{});
-                break;
-            case 9:
-                modes(std::integral_constant<int, 9>{});
-                break;
-            case 19:
-                modes(std::integral_constant<int, 19>{});
-                break;
+                return ProductionShape<N, 5>(a);
+            case 6:
+                return ProductionShape<N, 6>(a);
+            case 7:
+                return ProductionShape<N, 7>(a);
             default:
-                DNDS_check_throw_info(false, "unsupported staged CUDA VR mode count");
+                return ProductionShape<N, 0>(a);
             }
-            return result;
+        }
+        template <class Storage, class Scalar, bool Tensor, bool TF32, bool Pipeline, class Product = Scalar>
+        ReconstructionSweepResources Comparison(const StagedSweepArguments &a)
+        {
+            DNDS_check_throw_info(a.plan.n == 19 && a.mean.owned.Width() == 5 && !a.plan.raw && !a.limited,
+                                  "this comparison VR selector has only the C=5/M=19 precomputed non-LVR fixture");
+            return Launch<19, 5, false, false, false, Storage, Scalar, Tensor, TF32, Pipeline, Product>(
+                a.context, a.plan, a.selection, a.vectors, a.mean, a.input, a.boundary,
+                a.output, a.status, a.options, a.execute);
         }
     }
     ReconstructionSweepResources RunStagedFP64(const StagedSweepArguments &, bool tensor);
+    ReconstructionSweepResources RunMatrixShared(const StagedSweepArguments &);
+    ReconstructionSweepResources RunQuantizedComparison(const StagedSweepArguments &, int policy);
     ReconstructionSweepResources RunStagedFloatFloat(const StagedSweepArguments &);
     ReconstructionSweepResources RunStagedFP32(const StagedSweepArguments &, bool tensor);
 }

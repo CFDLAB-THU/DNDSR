@@ -128,7 +128,7 @@ namespace DNDS::Cauchy
                     DNDS_check_throw_info(value == "warpPerCell" || value == "blockPerCell", "unknown modal PP CUDA mapping");
                     launch.mapping = value == "blockPerCell" ? CUDA::ModalPositivityMapping::BlockPerCell : CUDA::ModalPositivityMapping::WarpPerCell;
                 }
-                const index threads = EnvironmentInteger("DNDS_CAUCHY_CUDA_MODAL_PP_THREADS", 128);
+                const index threads = EnvironmentInteger("DNDS_CAUCHY_CUDA_MODAL_PP_THREADS", owner->settings.execution.kernels.polynomialPPThreads ? owner->settings.execution.kernels.polynomialPPThreads : 128);
                 DNDS_check_throw_info(threads <= INT_MAX, "modal PP block size overflows int");
                 launch.threads = int(threads);
                 launch.blocks = EnvironmentInteger("DNDS_CAUCHY_CUDA_MODAL_PP_BLOCKS", 0);

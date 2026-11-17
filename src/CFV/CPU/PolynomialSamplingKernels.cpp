@@ -23,11 +23,7 @@ namespace DNDS::CFV::Detail
                 const std::array<real, 3> center{plan.geometry(iCell, 1), plan.geometry(iCell, 2), plan.geometry(iCell, 3)};
                 const auto evaluation = Math::TaylorPointEvaluation::FromPoint(point, center, plan.geometry(iCell, 7));
                 for (int mode = 0; mode < modes; ++mode)
-                {
-                    values[mode] = plan.polynomial.Derivative(derivative, mode + 1, evaluation);
-                    if (derivative == 0)
-                        values[mode] -= plan.moments(iCell, mode + 1);
-                }
+                    values[mode] = plan.polynomial.ReconstructionDerivative(derivative, mode, evaluation, plan.moments, iCell);
             }
             const auto meanRow = mean[iCell], coefficientRow = coefficients[iCell];
             const auto result = output[iOutput];

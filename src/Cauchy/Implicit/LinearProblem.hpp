@@ -67,6 +67,9 @@ namespace DNDS::Cauchy
         /// default remains column-major; AmgX chooses primary row-major blocks
         /// for diagonal, inverse and off-diagonal together, without shadows.
         bool rowMajorBlocks = false;
+        /// Allocate [off-diagonal][diagonal] in one native buffer, with disjoint
+        /// Array aliases. Only the compatible single-device AmgX route uses it.
+        bool amgxNativeStorage = false;
     };
     /// Integrated residual convention: A=M/dTau+physicalMass*M-residualScale*J_R.
     /// Roe dissipation requires a full diagonal block. Scalar dissipation may
@@ -126,6 +129,7 @@ namespace DNDS::Cauchy
         DiagonalStorage _diagonalStorage;
         bool _rowMajorBlocks;
         Runtime::Array<real> _diagonal, _inverse;
+        std::optional<Runtime::Array<real>> _nativeAMGXValues;
         OffDiagonalStorage _offDiagonalStorage;
         std::optional<Algebra::BlockMatrixStorage> _offDiagonal;
         std::shared_ptr<const OffDiagonalEvaluator> _offDiagonalEvaluator;
@@ -183,6 +187,12 @@ namespace DNDS::Cauchy
         }
         index Components() const { return _components; }
         bool RowMajorBlocks() const { return _rowMajorBlocks; }
+        bool HasNativeAMGXValues() const { return bool(_nativeAMGXValues); }
+        const Runtime::Array<real> &NativeAMGXValues() const
+        {
+            DNDS_check_throw_info(_nativeAMGXValues, "linear matrix has no native AmgX packed allocation");
+            return *_nativeAMGXValues;
+        }
         Runtime::Device Device() const { return _diagonal.GetDevice(); }
         /// Prepare optional layout shadows for vector reads only. Primary state,
         /// matrix blocks and output remain unchanged. Call before queued actions;

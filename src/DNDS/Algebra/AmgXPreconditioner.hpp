@@ -3,6 +3,7 @@
 #include "DNDS/Runtime/Array/Array.hpp"
 #include <memory>
 #include <optional>
+#include <vector>
 
 namespace DNDS::Algebra
 {
@@ -23,6 +24,37 @@ namespace DNDS::Algebra
         AmgXBlockFormat blockFormat = AmgXBlockFormat::RowMajor;
     };
 
+    /// Provider-owned capacities exclude borrowed finest values and allocator reserve.
+    struct AmgXLevelMemory
+    {
+        int level = 0, blockRows = 0, blockNonzeros = 0, blockSize = 0;
+        uint64_t numericOwned = 0, numericBorrowed = 0, pattern = 0;
+        uint64_t inverse = 0, transfer = 0, workspace = 0;
+    };
+    struct AmgXCopyStatistics
+    {
+        uint64_t patternHostToDevice = 0, matrixDeviceToDevice = 0;
+        uint64_t rhsDeviceToDevice = 0, resultDeviceToDevice = 0;
+        uint64_t setups = 0, applications = 0;
+    };
+    /** @brief Explicit completed provider diagnostic snapshot.
+     * @details requestedLive/Peak are AmgX allocator requests, enabled by
+     * AMGX_TRACK_ALLOCATIONS=1 before the first provider resource. They are not
+     * physical completion peaks of asynchronous frees. CUDA-pool figures cover
+     * this process/device's default CUDA pool, potentially shared with DNDS;
+     * do not add them to level capacities or label all reserve as AmgX-owned.
+     */
+    struct AmgXMemorySnapshot
+    {
+        std::vector<AmgXLevelMemory> levels;
+        AmgXCopyStatistics copies;
+        bool allocationTracking = false, nativeStorage = false, cudaPoolAvailable = false;
+        uint64_t requestedLive = 0, requestedPeak = 0, liveAllocations = 0;
+        uint64_t devicePoolUsed = 0, devicePoolReserved = 0;
+        uint64_t pinnedPoolUsed = 0, pinnedPoolReserved = 0;
+        uint64_t cudaPoolUsed = 0, cudaPoolReserved = 0, cudaPoolUsedPeak = 0, cudaPoolReservedPeak = 0;
+    };
+
     /** Single-device FP64 AMG for one rank's owned-owned principal matrix.
      * DNDS owns the global operator and every MPI operation. This adapter never
      * receives a communicator. CSR includes all entries of coupled blocks;
@@ -40,7 +72,8 @@ namespace DNDS::Algebra
      * A pattern/value change is forbidden during a GMRES solve by the caller.
      * Concurrent preconditioner owners share one process-wide provider resource
      * on one device, preserving AmgX pools across replacement and pMG levels.
-     * Matrices, vectors and solver configurations remain private. Simultaneous
+     * Matrix descriptors, coarse values, vectors and configurations stay private;
+     * explicit native attachment shares only the managed finest numeric values. Simultaneous
      * different-device owners in one process are rejected; use one rank per GPU.
      */
     class AmgXPreconditioner
@@ -60,9 +93,11 @@ namespace DNDS::Algebra
         /// index copy occurs. Columns must be unique and local. A separate
         /// diagonal permits the CSR to contain off-diagonal entries only.
         /// Zero-row ranks use offsets={0}, columns={} and perform an empty apply.
-        /// blockSize=1 represents a genuinely scalar system; 5/6/7 use native
-        /// blocks in settings.blockFormat. The pinned provider patch enables widths 6/7
-        /// without padding or scalarizing coupled equations.
+        /// Native widths 1/2/3/4/5/6/7/8/9/19 are supported without padding or
+        /// scalarization; width 10 remains available for the provider regression
+        /// reference. This block catalog does not expand Cauchy's physics scope.
+        /// After native attachment the pattern is frozen; construct another
+        /// provider for a replacement pattern. This is checked before mutation.
         void SetPattern(const Runtime::Array<int> &offsets,
                         const Runtime::Array<int> &columns, int blockSize = 1, bool separateDiagonal = false);
         /// Device values ordered by CSR entry, then configured block order,
@@ -71,6 +106,22 @@ namespace DNDS::Algebra
         void UpdateValuesBorrowed(Runtime::ExecutionContext context,
                                   Runtime::ArrayView<const real> values,
                                   std::optional<Runtime::ArrayView<const real>> diagonal = {});
+        /** @brief Deep integration: attach one managed native numeric allocation.
+         * @details Compact row-major device storage contains E off-diagonal
+         * blocks followed by N separate diagonal blocks, or E inline-diagonal
+         * blocks followed by one zero sentinel block. No numeric copy occurs.
+         * The retained Array pins the allocation; read leases are held during
+         * setup/apply only. The caller may mutate between solves and must call
+         * AttachValues again before applying. Stale values are rejected by epoch.
+         * This synchronous provider route still has explicit stream/device joins.
+         * Upload and attachment modes cannot be mixed on one provider instance.
+         */
+        void AttachValues(Runtime::ExecutionContext context, const Runtime::Array<real> &values);
+        /// Query capacities, logical allocator peaks and exact boundary copy counts.
+        /// Explicitly synchronizes the provider device; diagnostic use only.
+        AmgXMemorySnapshot MemorySnapshot() const;
+        /// Diagnostic allocator/pool state, also valid after the last provider retires.
+        static AmgXMemorySnapshot AllocatorMemorySnapshot(Runtime::Device device);
         /// Apply from zero with fixed cycles. Input/output are compact scalar
         /// tables (N x 1), never aliased. Completion is host-visible on return.
         void ApplyBorrowed(Runtime::ExecutionContext context,

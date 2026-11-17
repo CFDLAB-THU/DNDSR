@@ -49,6 +49,10 @@ namespace DNDS::Cauchy::NonlinearDetail
                              ? LinearIndexStorage::Int32
                              : LinearIndexStorage::Int64;
         result.rowMajorBlocks = amg;
+        DNDS_check_throw_info(settings.matrixStorage.amgxStorage == "upload" ||
+                                  (amg && settings.matrixStorage.amgxStorage == "native"),
+                              "invalid AmgX numeric storage mode");
+        result.amgxNativeStorage = settings.matrixStorage.amgxStorage == "native";
         return result;
     }
     inline LinearSolveSettings ResolveLinear(const ImplicitSettings &settings)

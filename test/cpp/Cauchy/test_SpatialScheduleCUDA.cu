@@ -13,6 +13,7 @@
 #include "Cauchy/Discretization/FiniteVolumeWorkspaceInternal.hpp"
 #include "Cauchy/State/EquationDofAlgebra.hpp"
 #include "Cauchy/Implicit/NonlinearOperators.hpp"
+#include "Cauchy/Implicit/LocalAMGPreconditioner.hpp"
 #include "DNDS/Runtime/Execution/CUDAExecution.hpp"
 #include "../CFV/ReconstructionFixture.hpp"
 #include "CompactManagedStencilFixture.hpp"
@@ -328,6 +329,21 @@ TEST_CASE("Spatial residual uses one managed schedule for inline worker and CUDA
             auto tau = hostTau.To(device, copy);
             auto matrix = plan.BuildLinearProblem(state, C::DiagonalStorage::Block);
             auto evaluated = plan.BuildLinearProblem(state, C::DiagonalStorage::Block, C::OffDiagonalStorage::DirectEvaluated);
+            std::shared_ptr<C::LinearProblemContext> nativeAMG, uploadedAMG;
+            std::unique_ptr<C::LocalAMGPreconditioner> nativePreconditioner, uploadedPreconditioner;
+            if (backend == 2 && mpi.size == 1 && scenario != 1 && DNDS::Algebra::AmgXPreconditioner::Available())
+            {
+                C::LinearMatrixOptions storage;
+                storage.indices = C::LinearIndexStorage::Int32;
+                storage.rowMajorBlocks = true;
+                uploadedAMG = plan.BuildLinearProblem(state, C::DiagonalStorage::Block, C::OffDiagonalStorage::Assembled, storage);
+                storage.amgxNativeStorage = true;
+                nativeAMG = plan.BuildLinearProblem(state, C::DiagonalStorage::Block, C::OffDiagonalStorage::Assembled, storage);
+                DNDS::Algebra::AmgXSettings settings;
+                settings.minCoarseRows = 4;
+                nativePreconditioner = std::make_unique<C::LocalAMGPreconditioner>(*nativeAMG, settings);
+                uploadedPreconditioner = std::make_unique<C::LocalAMGPreconditioner>(*uploadedAMG, settings);
+            }
             auto action = C::EquationDofOperations::NewVector(state);
             for (int pass = 0; pass < 2; ++pass)
             {
@@ -416,6 +432,33 @@ TEST_CASE("Spatial residual uses one managed schedule for inline worker and CUDA
                 evaluated->CheckQueuedActions(context.Engine(), context.ComputeStream());
                 context.Synchronize();
                 Compare(expectedAction[pass], action.CoupledField().Owned().To(R::Device::Host()));
+                if (nativeAMG)
+                {
+                    // Actual production CUDA assembly writes the two disjoint
+                    // aliases on one stream. Their parent has one controller
+                    // and mutation epoch; no secondary fine matrix is copied
+                    // into the native provider. Repeat after state mutation to
+                    // exercise hierarchy refresh as well as the initial setup.
+                    const auto previousEpoch = nativeAMG->NativeAMGXValues().MutationEpoch();
+                    plan.PrepareJacobian(state, auxiliary, tau, *nativeAMG, controls, 0, {}, jacobianContext);
+                    CHECK(nativeAMG->NativeAMGXValues().MutationEpoch() > previousEpoch);
+                    nativeAMG->SubmitApply(context.Engine(), context.ComputeStream(), state, action);
+                    context.Synchronize();
+                    Compare(expectedAction[pass], action.CoupledField().Owned().To(R::Device::Host()));
+                    plan.PrepareJacobian(state, auxiliary, tau, *uploadedAMG, controls, 0, {}, jacobianContext);
+                    auto nativeCorrection = C::EquationDofOperations::NewVector(state);
+                    auto uploadedCorrection = C::EquationDofOperations::NewVector(state);
+                    nativePreconditioner->Update(context.Engine(), context.ComputeStream(), *nativeAMG);
+                    uploadedPreconditioner->Update(context.Engine(), context.ComputeStream(), *uploadedAMG);
+                    nativePreconditioner->Apply(context.Engine(), context.ComputeStream(), action.CoupledField().Owned(), nativeCorrection.CoupledField().Owned());
+                    uploadedPreconditioner->Apply(context.Engine(), context.ComputeStream(), action.CoupledField().Owned(), uploadedCorrection.CoupledField().Owned());
+                    Compare(uploadedCorrection.CoupledField().Owned().To(R::Device::Host()), nativeCorrection.CoupledField().Owned().To(R::Device::Host()));
+                    const auto memory = nativePreconditioner->MemorySnapshot();
+                    REQUIRE(!memory.levels.empty());
+                    CHECK(memory.nativeStorage);
+                    CHECK(memory.levels.front().numericOwned == 0);
+                    CHECK(memory.copies.matrixDeviceToDevice == 0);
+                }
                 C::EquationDofOperations::Axpy(context.Engine(), context.ComputeStream(), state,
                                                dt / cellVolume, residual);
                 context.Synchronize();

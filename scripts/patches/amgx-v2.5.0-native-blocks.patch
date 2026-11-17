@@ -1,8 +1,194 @@
+diff --git a/include/aggregation/aggregation_amg_level.h b/include/aggregation/aggregation_amg_level.h
+index ef8a1d9..eb9ea27 100644
+--- a/include/aggregation/aggregation_amg_level.h
++++ b/include/aggregation/aggregation_amg_level.h
+@@ -82,6 +82,12 @@ class Aggregation_AMG_Level_Base : public AMG_Level<T_Config>
+             delete m_coarseAGenerator;
+         }
+ 
++        size_t transfer_storage_bytes() const
++        {
++            return (m_R_row_offsets.capacity() + m_R_column_indices.capacity() +
++                    m_aggregates.capacity() + m_aggregates_fine_idx.capacity()) * sizeof(IndexType);
++        }
++
+         void createCoarseVertices();
+         void createCoarseMatrices();
+         bool isClassicalAMGLevel() { return false; }
+diff --git a/include/amg_level.h b/include/amg_level.h
+index e562e69..db92450 100644
+--- a/include/amg_level.h
++++ b/include/amg_level.h
+@@ -164,6 +164,9 @@ class AMG_Level
+ 
+         inline size_t getNumRows() { return A->get_num_rows(); }
+ 
++        size_t cycle_storage_bytes() const { return (bc.capacity() + xc.capacity() + r.capacity()) * sizeof(ValueTypeB); }
++        virtual size_t transfer_storage_bytes() const { return 0; }
++
+         //todo add smoother allocation also...
+         inline size_t bytes(bool device_only = false)
+         {
+diff --git a/include/amgx_c.h b/include/amgx_c.h
+index dc60a54..a3729a4 100644
+--- a/include/amgx_c.h
++++ b/include/amgx_c.h
+@@ -278,6 +278,50 @@ AMGX_RC AMGX_API AMGX_matrix_upload_all
+  const void *data,
+  const void *diag_data);
+ 
++/** Diagnostic capacities; borrowed numeric bytes are not provider-owned.
++ * Capacity excludes allocator rounding/pool reserve. These entries cover the
++ * selected single-device aggregation hierarchy, not external library scratch.
++ */
++typedef struct
++{
++    int level, block_rows, block_nonzeros, block_dim;
++    unsigned long long numeric_owned_bytes, numeric_borrowed_bytes;
++    unsigned long long pattern_bytes, inverse_bytes, transfer_bytes, workspace_bytes;
++} AMGX_level_memory_info;
++
++typedef struct AMGX_allocator_memory_info
++{
++    unsigned long long requested_live_bytes, requested_peak_bytes, live_allocations;
++    unsigned long long device_pool_used_bytes, device_pool_reserved_bytes;
++    unsigned long long pinned_pool_used_bytes, pinned_pool_reserved_bytes;
++    unsigned long long cuda_pool_used_bytes, cuda_pool_reserved_bytes;
++    unsigned long long cuda_pool_used_peak_bytes, cuda_pool_reserved_peak_bytes;
++    int tracking_enabled, cuda_pool_available;
++} AMGX_allocator_memory_info;
++
++/** Query after a completed provider call; capacity=0 queries level count. */
++AMGX_RC AMGX_API AMGX_solver_get_hierarchy_memory
++(AMGX_solver_handle solver, int capacity, AMGX_level_memory_info *levels, int *count);
++/** Set AMGX_TRACK_ALLOCATIONS=1 before resource creation for allocation peaks.
++ * CUDA default-pool fields are process/device-wide, not AmgX-only ownership.
++ */
++AMGX_RC AMGX_API AMGX_get_allocator_memory(AMGX_allocator_memory_info *info);
++
++/** Experimental single-device dDDI native numeric attachment.
++ * Shares, never copies/frees, one row-major device values buffer. CSR indices
++ * are uploaded normally. With separate_diagonal != 0, values contains nnz
++ * off-diagonal blocks then n diagonal blocks; otherwise nnz inline blocks
++ * plus one readable zero sentinel block. value_count must match exactly.
++ * The caller retains the allocation and serializes updates with setup/solve.
++ * Restricted to the non-coloring, non-scaling block-Jacobi AMG profile.
++ * Public upload/replace cannot mutate an attached matrix. Rebinding another
++ * compatible allocation requires a complete solver setup before next use.
++ */
++AMGX_RC AMGX_API AMGX_matrix_attach_device_values
++(AMGX_matrix_handle mtx, int n, int nnz, int block_dim,
++ const int *row_ptrs, const int *col_indices,
++ void *values, size_t value_count, int separate_diagonal);
++
+ AMGX_RC AMGX_API AMGX_matrix_replace_coefficients
+ (AMGX_matrix_handle mtx,
+  int n,
+diff --git a/include/global_thread_handle.h b/include/global_thread_handle.h
+index 48c8ac7..fc2c1a6 100644
+--- a/include/global_thread_handle.h
++++ b/include/global_thread_handle.h
+@@ -23,6 +23,8 @@ typedef pthread_t _thread_id;
+ 
+ _thread_id getCurrentThreadId();
+ 
++struct AMGX_allocator_memory_info;
++
+ namespace amgx
+ {
+ namespace memory
+@@ -173,6 +175,8 @@ void destroyAllPinnedMemoryPools();
+ void destroyAllDeviceMemoryPools();
+ 
+ void printInfo();
++// Caller joins provider work before querying this diagnostic snapshot.
++void getAllocatorMemoryInfo(AMGX_allocator_memory_info &info);
+ 
+ // adds pre-allocated block to the device pool
+ void expandDeviceMemoryPool(size_t size, size_t max_block_size);
+diff --git a/include/matrix.h b/include/matrix.h
+index 2500065..4e59aaa 100644
+--- a/include/matrix.h
++++ b/include/matrix.h
+@@ -673,6 +673,15 @@ class MatrixBase : public AuxData, public Operator<T_Config>
+         /********************************************************/
+         inline unsigned int getProps() const { return props; };
+ 
++        size_t numeric_owned_bytes() const { return values.is_external() ? 0 : values.capacity() * sizeof(value_type); }
++        size_t numeric_borrowed_bytes() const { return values.is_external() ? values.size() * sizeof(value_type) : 0; }
++        size_t pattern_capacity_bytes() const
++        {
++            return (row_offsets.capacity() + col_indices.capacity() + row_indices.capacity() + diag.capacity() +
++                    m_seq_offsets.capacity() + m_larger_color_offsets.capacity() + m_smaller_color_offsets.capacity() +
++                    m_diag_end_offsets.capacity() + m_values_permutation_vector.capacity()) * sizeof(index_type);
++        }
++
+         inline size_t bytes(bool device_only = false)
+         {
+             return row_offsets.bytes(device_only) +
+@@ -784,6 +793,11 @@ class MatrixBase : public AuxData, public Operator<T_Config>
+         inline bool getColsReorderedByColor() const {return m_cols_reordered_by_color;}
+ 
+         inline bool is_matrix_setup() const {return m_is_matrix_setup;}
++        void reset_matrix_setup()
++        {
++            if (is_initialized()) FatalError("Cannot reset initialized matrix setup", AMGX_ERR_BAD_PARAMETERS);
++            m_is_matrix_setup = false;
++        }
+ 
+         inline void set_is_matrix_setup(bool is_matrix_setup) {m_is_matrix_setup = is_matrix_setup;}
+ 
+diff --git a/include/solvers/algebraic_multigrid_solver.h b/include/solvers/algebraic_multigrid_solver.h
+index 0054524..bcc0c76 100644
+--- a/include/solvers/algebraic_multigrid_solver.h
++++ b/include/solvers/algebraic_multigrid_solver.h
+@@ -43,6 +43,8 @@ class AlgebraicMultigrid_Solver: public Solver<T_Config>
+         // Override parent attribute.
+         Matrix<T_Config> *m_A;
+     public:
++        AMG<vecPrec, matPrec, indPrec> &hierarchy() { return m_amg; }
++
+         // Constructor.
+         AlgebraicMultigrid_Solver( AMG_Config &cfg, const std::string &cfg_scope, ThreadManager *tmng );
+ 
 diff --git a/include/solvers/block_common_solver.h b/include/solvers/block_common_solver.h
-index d05fc9b..917ef5b 100644
+index d05fc9b..b34a890 100644
 --- a/include/solvers/block_common_solver.h
 +++ b/include/solvers/block_common_solver.h
-@@ -344,6 +344,10 @@ void compute_block_inverse2( volatile ValueType *s_Amat, const int s_offset, con
+@@ -110,6 +110,11 @@ void compute_block_inverse_row_major( volatile ValueType *s_Amat, const int s_of
+ //ROW MAJOR
+     ValueType diag;
+     ValueType tmp;
++    // A block occupies <=25 lanes, and several small blocks can share a warp.
++    // Padding/tail lanes have already left the caller; publish every shared
++    // phase among the remaining participating lanes before dependent reads.
++    const unsigned lane_mask = __activemask();
++    __syncwarp(lane_mask);
+ 
+     for (int row = 0; row < bsize; row++)
+     {
+@@ -121,17 +126,20 @@ void compute_block_inverse_row_major( volatile ValueType *s_Amat, const int s_of
+             s_A_lval(tmp, row, j_ind);
+         }
+ 
++        __syncwarp(lane_mask);
+         if ((i_ind != row) && !(j_ind == row))
+         {
+             tmp = types::util<ValueType>::invert(s_A_rval(i_ind, row) * s_A_rval(row, j_ind)) + s_A_rval(i_ind, j_ind);
+             s_A_lval(tmp, i_ind, j_ind);
+         }
+ 
++        __syncwarp(lane_mask);
+         if (i_ind == 0)
+         {
+             tmp = (j_ind == row) ? diag : types::util<ValueType>::invert(s_A_rval(j_ind, row) * diag);
+             s_A_lval(tmp, j_ind, row);
+         }
++        __syncwarp(lane_mask);
+     }
+ 
+     Einv[e_offset] = s_A_rval(i_ind, j_ind);
+@@ -344,6 +352,10 @@ void compute_block_inverse2( volatile ValueType *s_Amat, const int s_offset, con
  #define s_A2_rval(ROW,COL)   types::util<ValueType>::volcast(s_Amat[s_offset+(ROW)*bsize+(COL)])
  ValueType diag;
  ValueType tmp;
@@ -13,7 +199,7 @@ index d05fc9b..917ef5b 100644
  
      for (int row = 0; row < bsize; row++)
      {
-@@ -356,20 +360,24 @@ ValueType tmp;
+@@ -356,20 +368,24 @@ ValueType tmp;
                  s_A2_lval(tmp, row, j_ind + t2 * 4);
              }
  
@@ -39,6 +225,197 @@ index d05fc9b..917ef5b 100644
      }
  
      for (int t1 = 0; t1 < tile_num; t1++)
+diff --git a/include/solvers/block_jacobi_solver.h b/include/solvers/block_jacobi_solver.h
+index 3730f55..b7cfa7f 100644
+--- a/include/solvers/block_jacobi_solver.h
++++ b/include/solvers/block_jacobi_solver.h
+@@ -56,6 +56,9 @@ class BlockJacobiSolver_Base : public Solver<T_Config>
+         virtual void smooth_BxB(Matrix<T_Config> &A, VVector &b, VVector &x, bool xIsZero, ViewType separation_flags) = 0;
+ 
+     public:
++        size_t inverse_storage_bytes() const { return Dinv.capacity() * sizeof(ValueTypeA); }
++        size_t workspace_storage_bytes() const { return (t_res.capacity() + y.capacity()) * sizeof(ValueTypeB); }
++
+         // Constructor.
+         BlockJacobiSolver_Base( AMG_Config &cfg, const std::string &cfg_scope);
+ 
+diff --git a/include/solvers/solver.h b/include/solvers/solver.h
+index 58a7a82..584b137 100644
+--- a/include/solvers/solver.h
++++ b/include/solvers/solver.h
+@@ -168,6 +168,10 @@ class Solver : public AuxData
+         // Print the solver settings
+         virtual void printSolverParameters() const {}
+ 
++        /// Opt-in hierarchy memory query; capacities, not allocator reserve.
++        virtual size_t inverse_storage_bytes() const { return 0; }
++        virtual size_t workspace_storage_bytes() const { return 0; }
++
+         // Sets the solver name
+         inline void setName(std::string &solver_name ) { m_solver_name = solver_name; }
+ 
+diff --git a/include/vector.h b/include/vector.h
+index 85e2a7e..7582392 100644
+--- a/include/vector.h
++++ b/include/vector.h
+@@ -156,8 +156,8 @@ class Vector<TemplateConfig<AMGX_host, t_vecPrec, t_matPrec, t_indPrec> > : publ
+         Vector() :  block_dimx(1), block_dimy(1), num_rows(0), num_cols(1), lda(0), buffer(NULL), buffer_size(0), dirtybit(1), in_transfer(IDLE), tag(-1), delayed_send(1), cancel(0), manager(NULL), v_is_transformed(false), v_is_read_partitioned(false), host_send_recv_buffer(NULL), linear_buffers_size(0), explicit_host_buffer(NULL), explicit_buffer_size(0), m_unconsolidated_size(0), m_resources(0) { };
+         inline Vector(unsigned int N) : amgx::thrust::host_vector<value_type>(N), block_dimx(1), block_dimy(1), num_rows(0), num_cols(1), lda(0), buffer(NULL), buffer_size(0), dirtybit(1), in_transfer(IDLE), tag(-1), delayed_send(1), cancel(0), manager(NULL), v_is_transformed(false), v_is_read_partitioned(false), host_send_recv_buffer(NULL), linear_buffers_size(0), explicit_buffer_size(0), explicit_host_buffer(NULL), m_unconsolidated_size(0), m_resources(0) {}
+         inline Vector(unsigned int N, value_type v) : amgx::thrust::host_vector<value_type>(N, v), block_dimx(1), block_dimy(1), num_rows(0), num_cols(1), lda(0), buffer(NULL), buffer_size(0), dirtybit(1), in_transfer(IDLE), tag(-1), delayed_send(1), cancel(0), manager(NULL), v_is_transformed(false), v_is_read_partitioned(false), host_send_recv_buffer(NULL), linear_buffers_size(0), explicit_buffer_size(0), explicit_host_buffer(NULL), m_unconsolidated_size(0), m_resources(0) {}
+-        inline Vector(const Vector<TConfig_h> &a) : amgx::thrust::host_vector<value_type>(a), block_dimx(a.get_block_dimx()), block_dimy(a.get_block_dimy()), num_rows(a.get_num_rows()), num_cols(a.get_num_cols()), lda(a.get_lda()), buffer(NULL), buffer_size(0), dirtybit(1), in_transfer(IDLE), tag(-1), delayed_send(1), cancel(0), manager(NULL), v_is_transformed(false), v_is_read_partitioned(false), host_send_recv_buffer(NULL), linear_buffers_size(0), explicit_buffer_size(0), explicit_host_buffer(NULL), m_unconsolidated_size(0), m_resources(0) {}
+-        inline Vector(const Vector<TConfig_d> &a) : amgx::thrust::host_vector<value_type>(a), block_dimx(a.get_block_dimx()), block_dimy(a.get_block_dimy()), num_rows(a.get_num_rows()), num_cols(a.get_num_cols()), lda(a.get_lda()), buffer(NULL), buffer_size(0), dirtybit(1), in_transfer(IDLE), tag(-1), delayed_send(1), cancel(0), manager(NULL), v_is_transformed(false), v_is_read_partitioned(false), host_send_recv_buffer(NULL), linear_buffers_size(0), explicit_buffer_size(0), explicit_host_buffer(NULL), m_unconsolidated_size(0), m_resources(0) {}
++        inline Vector(const Vector<TConfig_h> &a) : amgx::thrust::host_vector<value_type>(a.begin(), a.end()), block_dimx(a.get_block_dimx()), block_dimy(a.get_block_dimy()), num_rows(a.get_num_rows()), num_cols(a.get_num_cols()), lda(a.get_lda()), buffer(NULL), buffer_size(0), dirtybit(1), in_transfer(IDLE), tag(-1), delayed_send(1), cancel(0), manager(NULL), v_is_transformed(false), v_is_read_partitioned(false), host_send_recv_buffer(NULL), linear_buffers_size(0), explicit_buffer_size(0), explicit_host_buffer(NULL), m_unconsolidated_size(0), m_resources(0) {}
++        inline Vector(const Vector<TConfig_d> &a) : amgx::thrust::host_vector<value_type>(a.begin(), a.end()), block_dimx(a.get_block_dimx()), block_dimy(a.get_block_dimy()), num_rows(a.get_num_rows()), num_cols(a.get_num_cols()), lda(a.get_lda()), buffer(NULL), buffer_size(0), dirtybit(1), in_transfer(IDLE), tag(-1), delayed_send(1), cancel(0), manager(NULL), v_is_transformed(false), v_is_read_partitioned(false), host_send_recv_buffer(NULL), linear_buffers_size(0), explicit_buffer_size(0), explicit_host_buffer(NULL), m_unconsolidated_size(0), m_resources(0) {}
+ 
+         ~Vector()
+         {
+@@ -299,6 +299,8 @@ class Vector<TemplateConfig<AMGX_host, t_vecPrec, t_matPrec, t_indPrec> > : publ
+         inline Vector<TConfig_h> &operator=(const Vector<TConfig_h> &a) { copy(a); return *this; }
+         inline Vector<TConfig_h> &operator=(const Vector<TConfig_d> &a) { copy(a); return *this; }
+ 
++        bool is_external() const { return false; }
++
+         inline value_type *raw()
+         {
+             if (bytes() > 0) { return amgx::thrust::raw_pointer_cast(this->data()); }
+@@ -419,8 +421,8 @@ class Vector<TemplateConfig<AMGX_device, t_vecPrec, t_matPrec, t_indPrec> > : pu
+         inline Vector(unsigned int N) : device_vector_alloc<value_type>(N), block_dimx(1), block_dimy(1), num_rows(0), num_cols(1), lda(0), buffer(NULL), dirtybit(1), in_transfer(IDLE), tag(-1), delayed_send(1), cancel(0), manager(NULL), v_is_transformed(false), v_is_read_partitioned(false), host_send_recv_buffer(NULL), linear_buffers_size(0), explicit_buffer_size(0), explicit_host_buffer(NULL), m_unconsolidated_size(0), m_resources(0) {}
+         inline Vector(unsigned int N, int dimx, int dimy) : device_vector_alloc<value_type>(N), block_dimx(dimx), block_dimy(dimy), num_rows(0), num_cols(1), lda(0), buffer(NULL), dirtybit(1), in_transfer(IDLE), tag(-1), delayed_send(1), cancel(0), manager(NULL), v_is_transformed(false), v_is_read_partitioned(false), host_send_recv_buffer(NULL), linear_buffers_size(0), explicit_buffer_size(0), explicit_host_buffer(NULL), m_unconsolidated_size(0), m_resources(0) {}
+         inline Vector(unsigned int N, value_type v) : device_vector_alloc<value_type>(N, v), block_dimx(1), block_dimy(1), num_rows(0), num_cols(1), lda(0), buffer(NULL), buffer_size(0), dirtybit(1), in_transfer(IDLE), tag(-1), delayed_send(1), cancel(0), manager(NULL), v_is_transformed(false), v_is_read_partitioned(false), host_send_recv_buffer(NULL), linear_buffers_size(0), explicit_buffer_size(0), explicit_host_buffer(NULL), m_unconsolidated_size(0), m_resources(0) {}
+-        inline Vector(const Vector<TConfig_h> &a) : device_vector_alloc<value_type>(a), block_dimx(a.get_block_dimx()), block_dimy(a.get_block_dimy()), num_rows(a.get_num_rows()), num_cols(a.get_num_cols()), lda(a.get_lda()), buffer(NULL), buffer_size(0), dirtybit(1), in_transfer(IDLE), tag(-1), delayed_send(1), cancel(0), manager(NULL), v_is_transformed(false), v_is_read_partitioned(false), host_send_recv_buffer(NULL), linear_buffers_size(0), explicit_buffer_size(0), explicit_host_buffer(NULL), m_unconsolidated_size(0), m_resources(0) {}
+-        inline Vector(const Vector<TConfig_d> &a) : device_vector_alloc<value_type>(a), block_dimx(a.get_block_dimx()), block_dimy(a.get_block_dimy()), num_rows(a.get_num_rows()), num_cols(a.get_num_cols()), lda(a.get_lda()), buffer(NULL), buffer_size(0), dirtybit(1), in_transfer(IDLE), tag(-1), delayed_send(1), cancel(0), manager(NULL), v_is_transformed(false), v_is_read_partitioned(false), host_send_recv_buffer(NULL), linear_buffers_size(0), explicit_buffer_size(0), explicit_host_buffer(NULL), m_unconsolidated_size(0), m_resources(0) {}
++        inline Vector(const Vector<TConfig_h> &a) : device_vector_alloc<value_type>(a.begin(), a.end()), block_dimx(a.get_block_dimx()), block_dimy(a.get_block_dimy()), num_rows(a.get_num_rows()), num_cols(a.get_num_cols()), lda(a.get_lda()), buffer(NULL), buffer_size(0), dirtybit(1), in_transfer(IDLE), tag(-1), delayed_send(1), cancel(0), manager(NULL), v_is_transformed(false), v_is_read_partitioned(false), host_send_recv_buffer(NULL), linear_buffers_size(0), explicit_buffer_size(0), explicit_host_buffer(NULL), m_unconsolidated_size(0), m_resources(0) {}
++        inline Vector(const Vector<TConfig_d> &a) : device_vector_alloc<value_type>(a.begin(), a.end()), block_dimx(a.get_block_dimx()), block_dimy(a.get_block_dimy()), num_rows(a.get_num_rows()), num_cols(a.get_num_cols()), lda(a.get_lda()), buffer(NULL), buffer_size(0), dirtybit(1), in_transfer(IDLE), tag(-1), delayed_send(1), cancel(0), manager(NULL), v_is_transformed(false), v_is_read_partitioned(false), host_send_recv_buffer(NULL), linear_buffers_size(0), explicit_buffer_size(0), explicit_host_buffer(NULL), m_unconsolidated_size(0), m_resources(0) {}
+ 
+         ~Vector()
+         {
+@@ -475,6 +477,8 @@ class Vector<TemplateConfig<AMGX_device, t_vecPrec, t_matPrec, t_indPrec> > : pu
+         template< typename OtherVector >
+         inline void copy( const OtherVector &a )
+         {
++            if (is_external())
++                FatalError("Cannot assign externally attached matrix values", AMGX_ERR_BAD_PARAMETERS);
+             //copy dimensions
+             this->set_block_dimx( a.get_block_dimx());
+             this->set_block_dimy( a.get_block_dimy());
+@@ -515,6 +519,8 @@ class Vector<TemplateConfig<AMGX_device, t_vecPrec, t_matPrec, t_indPrec> > : pu
+ 
+         inline void copy_async(const Vector<TConfig_h> &a, cudaStream_t s = 0)
+         {
++            if (is_external())
++                FatalError("Cannot assign externally attached matrix values", AMGX_ERR_BAD_PARAMETERS);
+             //copy dimensions
+             this->set_block_dimx( a.get_block_dimx());
+             this->set_block_dimy( a.get_block_dimy());
+@@ -556,6 +562,8 @@ class Vector<TemplateConfig<AMGX_device, t_vecPrec, t_matPrec, t_indPrec> > : pu
+ 
+         inline void copy_async(const Vector<TConfig_d> &a, cudaStream_t s = 0)
+         {
++            if (is_external())
++                FatalError("Cannot assign externally attached matrix values", AMGX_ERR_BAD_PARAMETERS);
+             //copy dimensions
+             this->set_block_dimx( a.get_block_dimx());
+             this->set_block_dimy( a.get_block_dimy());
+@@ -602,14 +610,88 @@ class Vector<TemplateConfig<AMGX_device, t_vecPrec, t_matPrec, t_indPrec> > : pu
+         inline Vector<TConfig_d> &operator=(const Vector<TConfig_h> &a) { copy(a); return *this; }
+         inline Vector<TConfig_d> &operator=(const Vector<TConfig_d> &a) { copy(a); return *this; }
+ 
++        /** Restricted non-owning payload for native device-matrix attachment.
++         * The base Thrust vector remains empty and never owns this pointer.
++         * The caller retains the allocation; resizing/assignment/swap are forbidden.
++         * Only the documented fixed single-device aggregation profile may use it.
++         */
++        using Storage = device_vector_alloc<value_type>;
++        using iterator = typename Storage::iterator;
++        using const_iterator = typename Storage::const_iterator;
++        using size_type = typename Storage::size_type;
++        bool is_external() const { return m_external_data != nullptr; }
++        void bind_external(value_type *data, size_type count)
++        {
++            if (!data || !count || Storage::size())
++                FatalError("Native attachment requires nonempty external data and empty owned storage", AMGX_ERR_BAD_PARAMETERS);
++            m_external_data = data;
++            m_external_size = count;
++        }
++        size_type size() const { return is_external() ? m_external_size : Storage::size(); }
++        size_type capacity() const { return is_external() ? m_external_size : Storage::capacity(); }
++        bool empty() const { return size() == 0; }
++        iterator begin() { return is_external() ? iterator(amgx::thrust::device_pointer_cast(m_external_data)) : Storage::begin(); }
++        const_iterator begin() const { return is_external() ? const_iterator(amgx::thrust::device_pointer_cast(static_cast<const value_type *>(m_external_data))) : Storage::begin(); }
++        typename Storage::pointer data() { return is_external() ? amgx::thrust::device_pointer_cast(m_external_data) : Storage::data(); }
++        typename Storage::const_pointer data() const { return is_external() ? amgx::thrust::device_pointer_cast(static_cast<const value_type *>(m_external_data)) : Storage::data(); }
++        iterator end() { return begin() + size(); }
++        const_iterator end() const { return begin() + size(); }
++        typename Storage::reference operator[](size_type i) { return *(begin() + i); }
++        typename Storage::const_reference operator[](size_type i) const { return *(begin() + i); }
++        typename Storage::reference front() { return *begin(); }
++        typename Storage::const_reference front() const { return *begin(); }
++        typename Storage::reference back() { return *(end() - 1); }
++        typename Storage::const_reference back() const { return *(end() - 1); }
++        void resize(size_type count)
++        {
++            if (is_external())
++            {
++                if (count != m_external_size)
++                    FatalError("Cannot resize externally attached matrix values", AMGX_ERR_BAD_PARAMETERS);
++                return;
++            }
++            Storage::resize(count);
++        }
++        void resize(size_type count, const value_type &value)
++        {
++            if (is_external())
++                FatalError("Cannot fill externally attached matrix values", AMGX_ERR_BAD_PARAMETERS);
++            Storage::resize(count, value);
++        }
++        void clear()
++        {
++            if (is_external())
++                FatalError("Cannot clear externally attached matrix values", AMGX_ERR_BAD_PARAMETERS);
++            Storage::clear();
++        }
++        void shrink_to_fit() { if (!is_external()) Storage::shrink_to_fit(); }
++        void reserve(size_type count)
++        {
++            if (is_external())
++            {
++                if (count > m_external_size)
++                    FatalError("Cannot reserve externally attached matrix values", AMGX_ERR_BAD_PARAMETERS);
++                return;
++            }
++            Storage::reserve(count);
++        }
++        void swap(Vector<TConfig_d> &other)
++        {
++            if (is_external() || other.is_external())
++                FatalError("Cannot swap externally attached matrix values", AMGX_ERR_BAD_PARAMETERS);
++            Storage::swap(other);
++        }
++
+         inline value_type *raw()
+         {
+-            if (bytes() > 0) { return amgx::thrust::raw_pointer_cast(this->data()); }
++            if (is_external()) { return m_external_data; }
++            if (bytes() > 0) { return amgx::thrust::raw_pointer_cast(Storage::data()); }
+             else { return 0; }
+         }
+         inline const value_type *raw() const
+         {
+-            if (bytes() > 0) { return amgx::thrust::raw_pointer_cast(this->data()); }
++            if (is_external()) { return m_external_data; }
++            if (bytes() > 0) { return amgx::thrust::raw_pointer_cast(Storage::data()); }
+             else { return 0; }
+         }
+ 
+@@ -693,6 +775,8 @@ class Vector<TemplateConfig<AMGX_device, t_vecPrec, t_matPrec, t_indPrec> > : pu
+         short block_dimx, block_dimy;
+         unsigned int num_rows, num_cols, lda;
+ 
++        value_type *m_external_data = nullptr;
++        size_t m_external_size = 0;
+         Resources *m_resources;
+ 
+ };
 diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
 index 6c1542c..3ec90c9 100644
 --- a/src/CMakeLists.txt
@@ -55,10 +432,10 @@ index 6c1542c..3ec90c9 100644
  add_library(amgx_tests_libs OBJECT ${tests_all})
  
 diff --git a/src/aggregation/aggregation_amg_level.cu b/src/aggregation/aggregation_amg_level.cu
-index 447fb3f..f57c95f 100644
+index 447fb3f..15cdcea 100644
 --- a/src/aggregation/aggregation_amg_level.cu
 +++ b/src/aggregation/aggregation_amg_level.cu
-@@ -499,6 +499,16 @@ void Aggregation_AMG_Level<TemplateConfig<AMGX_device, t_vecPrec, t_matPrec, t_i
+@@ -499,11 +499,31 @@ void Aggregation_AMG_Level<TemplateConfig<AMGX_device, t_vecPrec, t_matPrec, t_i
              cudaCheckError();
              break;
  
@@ -75,8 +452,23 @@ index 447fb3f..f57c95f 100644
          case 8:
              restrictResidualBlockDiaCsrKernel<IndexType, ValueTypeB, 8> <<< num_blocks, block_size>>>(R_row_offsets_ptr, R_column_indices_ptr, r_ptr, rr_ptr, max_threads);
              cudaCheckError();
+             break;
+ 
++        case 9:
++            restrictResidualBlockDiaCsrKernel<IndexType, ValueTypeB, 9> <<< num_blocks, block_size>>>(R_row_offsets_ptr, R_column_indices_ptr, r_ptr, rr_ptr, max_threads);
++            cudaCheckError();
++            break;
++
++        case 19:
++            restrictResidualBlockDiaCsrKernel<IndexType, ValueTypeB, 19> <<< num_blocks, block_size>>>(R_row_offsets_ptr, R_column_indices_ptr, r_ptr, rr_ptr, max_threads);
++            cudaCheckError();
++            break;
++
+         case 10:
+             restrictResidualBlockDiaCsrKernel<IndexType, ValueTypeB, 10> <<< num_blocks, block_size>>>(R_row_offsets_ptr, R_column_indices_ptr, r_ptr, rr_ptr, max_threads);
+             cudaCheckError();
 diff --git a/src/aggregation/coarseAgenerators/low_deg_coarse_A_generator.cu b/src/aggregation/coarseAgenerators/low_deg_coarse_A_generator.cu
-index 38a1ef3..99ea6d8 100644
+index 38a1ef3..457d61c 100644
 --- a/src/aggregation/coarseAgenerators/low_deg_coarse_A_generator.cu
 +++ b/src/aggregation/coarseAgenerators/low_deg_coarse_A_generator.cu
 @@ -718,8 +718,12 @@ void fill_A_kernel_NxN_large( const int  R_num_rows, // same as num_aggregates.
@@ -208,29 +600,467 @@ index 38a1ef3..99ea6d8 100644
          case 8:
              fill_A_kernel_NxN_large<Value_type, 8, CTA_SIZE, SMEM_SIZE, 32, HAS_DIAG, false, 2> <<< GRID_SIZE, CTA_SIZE>>>(
                  R_num_rows,
+@@ -1105,6 +1154,50 @@ void fill_A_dispatch( Workspace &hash_wk,
+                 cudaCheckError();
+             break;
+ 
++        case 9:
++            fill_A_kernel_NxN_large<Value_type, 9, CTA_SIZE, SMEM_SIZE, 32, HAS_DIAG, false, 3> <<< GRID_SIZE, CTA_SIZE>>>(
++                R_num_rows,
++                R_rows,
++                R_cols,
++                A_rows,
++                A_cols,
++                A_diag,
++                A_vals,
++                aggregates,
++                Ac_rows,
++                Ac_cols,
++                Ac_pos,
++                Ac_diag,
++                Ac_vals,
++                hash_wk.get_gmem_size(),
++                hash_wk.get_keys(),
++                reinterpret_cast<int *>( hash_wk.get_vals() ),
++                hash_wk.get_work_queue() );
++                cudaCheckError();
++            break;
++
++        case 19:
++            fill_A_kernel_NxN_large<Value_type, 19, CTA_SIZE, SMEM_SIZE, 32, HAS_DIAG, false, 12> <<< GRID_SIZE, CTA_SIZE>>>(
++                R_num_rows,
++                R_rows,
++                R_cols,
++                A_rows,
++                A_cols,
++                A_diag,
++                A_vals,
++                aggregates,
++                Ac_rows,
++                Ac_cols,
++                Ac_pos,
++                Ac_diag,
++                Ac_vals,
++                hash_wk.get_gmem_size(),
++                hash_wk.get_keys(),
++                reinterpret_cast<int *>( hash_wk.get_vals() ),
++                hash_wk.get_work_queue() );
++                cudaCheckError();
++            break;
++
+         case 10:
+             fill_A_kernel_NxN_large<Value_type, 10, CTA_SIZE, SMEM_SIZE, 32, HAS_DIAG, false, 4> <<< GRID_SIZE, CTA_SIZE>>>(
+                 R_num_rows,
+diff --git a/src/amgx_c.cu b/src/amgx_c.cu
+index 6fe3b4c..06ecc55 100644
+--- a/src/amgx_c.cu
++++ b/src/amgx_c.cu
+@@ -11,6 +11,8 @@
+ #include <thrust/copy.h>
+ #include <thrust/fill.h>
+ #include <amg_solver.h>
++#include <amg.h>
++#include <solvers/algebraic_multigrid_solver.h>
+ #include "amg_signal.h"
+ #include <matrix_io.h>
+ #include "amgx_c.h"
+@@ -27,6 +29,7 @@
+ #include "util.h"
+ #include "reorder_partition.h"
+ #include <algorithm>
++#include <climits>
+ #include <solvers/solver.h>
+ #include <matrix.h>
+ #include <vector.h>
+@@ -874,6 +877,8 @@ inline AMGX_RC matrix_upload_all(AMGX_matrix_handle mtx,
+         //FatalError("Error: Failure in matrix_upload_all().\n", AMGX_ERR_BAD_PARAMETERS);
+         typedef typename MatPrecisionMap<AMGX_GET_MODE_VAL(AMGX_MatPrecision, CASE)>::Type ValueType;
+ 
++    if (A.values.is_external())
++        AMGX_CHECK_API_ERROR(AMGX_ERR_BAD_PARAMETERS, resources)
+     A.set_initialized(0);
+     cudaSetDevice(A.getResources()->getDevice(0));
+     cudaCheckError();
+@@ -933,6 +938,8 @@ inline AMGX_RC matrix_replace_coefficients(AMGX_matrix_handle mtx,
+     typedef CWrapHandle<AMGX_matrix_handle, MatrixLetterT> MatrixW;
+     MatrixW wrapA(mtx);
+     MatrixLetterT &A = *wrapA.wrapped();
++    if (A.values.is_external())
++        AMGX_CHECK_API_ERROR(AMGX_ERR_BAD_PARAMETERS, resources)
+     cudaSetDevice(A.getResources()->getDevice(0));
+     cudaCheckError();
+     typedef typename MatPrecisionMap<AMGX_GET_MODE_VAL(AMGX_MatPrecision, CASE)>::Type ValueType;
+@@ -3043,6 +3050,126 @@ extern "C" {
+         return AMGX_matrix_upload_all_impl(mtx, n, nnz, block_dimx, block_dimy, row_ptrs, col_indices, data, diag_data);
+     }
+ 
++    AMGX_RC AMGX_API AMGX_get_allocator_memory(AMGX_allocator_memory_info *info)
++    {
++        if (!info) return AMGX_RC_BAD_PARAMETERS;
++        AMGX_ERROR rc = AMGX_OK;
++        AMGX_TRIES()
++        {
++            memory::getAllocatorMemoryInfo(*info);
++        }
++        AMGX_CATCHES(rc)
++        AMGX_CHECK_API_ERROR_NORSRC(rc)
++        return AMGX_RC_OK;
++    }
++
++    AMGX_RC AMGX_API AMGX_solver_get_hierarchy_memory(AMGX_solver_handle handle,
++        int capacity, AMGX_level_memory_info *levels, int *count)
++    {
++        if (!count || capacity < 0 || (capacity && !levels)) return AMGX_RC_BAD_PARAMETERS;
++        Resources *resources;
++        AMGX_CHECK_API_ERROR_NORSRC(getAMGXerror(getResourcesFromSolverHandle(handle, &resources)))
++        if (get_mode_from<AMGX_solver_handle>(handle) != AMGX_mode_dDDI) return AMGX_RC_BAD_MODE;
++        AMGX_ERROR rc = AMGX_OK;
++        AMGX_TRIES()
++        {
++            typedef typename TemplateMode<AMGX_mode_dDDI>::Type Config;
++            auto *wrapped = get_mode_object_from<AMGX_mode_dDDI, AMG_Solver, AMGX_solver_handle>(handle);
++            auto *solver = dynamic_cast<AlgebraicMultigrid_Solver<Config> *>(wrapped->getSolverObject());
++            if (!solver) return AMGX_RC_BAD_MODE;
++            typename MemorySpaceMap<AMGX_device>::Type device;
++            typename MemorySpaceMap<AMGX_host>::Type host;
++            auto *level = solver->hierarchy().getFinestLevel(device);
++            int n = 0;
++            for (; level; level = level->getNextLevel(device), ++n)
++            {
++                if (level->getNextLevel(host)) return AMGX_RC_NOT_SUPPORTED_TARGET;
++                if (n < capacity)
++                {
++                    auto &m = level->getA();
++                    auto *smooth = level->getSmoother();
++                    levels[n] = {n, m.get_num_rows(), m.get_num_nz(), m.get_block_dimy(),
++                        m.numeric_owned_bytes(), m.numeric_borrowed_bytes(), m.pattern_capacity_bytes(),
++                        smooth ? smooth->inverse_storage_bytes() : 0, level->transfer_storage_bytes(),
++                        level->cycle_storage_bytes() + (smooth ? smooth->workspace_storage_bytes() : 0)};
++                }
++            }
++            *count = n;
++        }
++        AMGX_CATCHES(rc)
++        AMGX_CHECK_API_ERROR(rc, resources)
++        return AMGX_RC_OK;
++    }
++
++    AMGX_RC AMGX_API AMGX_matrix_attach_device_values(AMGX_matrix_handle mtx,
++        int n, int nnz, int block_dim, const int *row_ptrs, const int *col_indices,
++        void *values, size_t value_count, int separate_diagonal)
++    {
++        Resources *resources;
++        AMGX_CHECK_API_ERROR_NORSRC(getAMGXerror(getResourcesFromMatrixHandle(mtx, &resources)))
++        if (get_mode_from<AMGX_matrix_handle>(mtx) != AMGX_mode_dDDI || n < 1 || nnz < 0 ||
++            !row_ptrs || (nnz && !col_indices) || !values || block_dim < 1 ||
++            (block_dim > 10 && block_dim != 19) || (separate_diagonal != 0 && separate_diagonal != 1))
++            return AMGX_RC_BAD_PARAMETERS;
++        const size_t blocks = size_t(nnz) + (separate_diagonal ? size_t(n) : size_t(1));
++        // Matrix::resize and selected numeric/vector kernels retain int32
++        // element arithmetic, not only int32 CSR indices. Guard the public
++        // entry too; a raw C API caller need not use the downstream adapter.
++        if (blocks > size_t(INT_MAX) / (size_t(block_dim) * size_t(block_dim)) ||
++            size_t(n) > size_t(INT_MAX) / size_t(block_dim) ||
++            value_count != blocks * size_t(block_dim) * size_t(block_dim))
++            return AMGX_RC_BAD_PARAMETERS;
++        AMGX_ERROR rc = AMGX_OK;
++        AMGX_TRIES()
++        {
++            typedef typename TemplateMode<AMGX_mode_dDDI>::Type Config;
++            Matrix<Config> &A = *get_mode_object_from<AMGX_mode_dDDI, Matrix, AMGX_matrix_handle>(mtx);
++            if (A.manager || (!A.values.empty() && !A.values.is_external() && A.get_num_rows()))
++                return AMGX_RC_BAD_PARAMETERS;
++            if (A.values.is_external() &&
++                (A.get_num_rows() != n || A.get_num_nz() != nnz || A.get_block_dimy() != block_dim ||
++                 A.hasProps(DIAG) != bool(separate_diagonal)))
++                return AMGX_RC_BAD_PARAMETERS;
++            // Matrix's empty constructor reserves one sentinel scalar. Release
++            // that private empty storage, never any caller-attached allocation.
++            if (!A.values.is_external())
++            {
++                A.values.clear();
++                A.values.shrink_to_fit();
++            }
++            cudaSetDevice(A.getResources()->getDevice(0));
++            cudaCheckError();
++            cudaPointerAttributes pointer;
++            const cudaError_t pointer_result = cudaPointerGetAttributes(&pointer, values);
++            if (pointer_result != cudaSuccess)
++            {
++                cudaGetLastError();
++                return AMGX_RC_BAD_PARAMETERS;
++            }
++            if (pointer.type != cudaMemoryTypeDevice || pointer.device != A.getResources()->getDevice(0) ||
++                reinterpret_cast<size_t>(values) % alignof(double))
++                return AMGX_RC_BAD_PARAMETERS;
++            A.set_initialized(0);
++            A.reset_matrix_setup();
++            A.addProps(CSR);
++            A.delProps(COO);
++            A.setColsReorderedByColor(false);
++            if (separate_diagonal) A.addProps(DIAG);
++            else A.delProps(DIAG);
++            A.values.bind_external(static_cast<double *>(values), value_count);
++            A.resize(n, n, nnz, block_dim, block_dim, 1);
++            cudaMemcpy(A.row_offsets.raw(), row_ptrs, sizeof(int) * (size_t(n) + 1), cudaMemcpyDefault);
++            cudaCheckError();
++            if (nnz) cudaMemcpy(A.col_indices.raw(), col_indices, sizeof(int) * size_t(nnz), cudaMemcpyDefault);
++            cudaCheckError();
++            A.computeDiagonal();
++            A.set_initialized(1);
++        }
++        AMGX_CATCHES(rc)
++        AMGX_CHECK_API_ERROR(rc, resources)
++        return AMGX_RC_OK;
++    }
++
+     AMGX_RC AMGX_API AMGX_matrix_replace_coefficients(AMGX_matrix_handle mtx, int n, int nnz, const void *data, const void *diag_data)
+     {
+         nvtxRange nvrf(__func__);
+diff --git a/src/global_thread_handle.cu b/src/global_thread_handle.cu
+index 26d95d1..b1c3774 100644
+--- a/src/global_thread_handle.cu
++++ b/src/global_thread_handle.cu
+@@ -2,6 +2,9 @@
+ //
+ // SPDX-License-Identifier: BSD-3-Clause
+ 
++#include <amgx_c.h>
++#include <cstdlib>
++#include <string>
+ #include <global_thread_handle.h>
+ #include <iostream>
+ #include <memory>
+@@ -496,6 +499,32 @@ struct MemoryManager
+         return m_use_cudamallocasync;
+     }
+ 
++    // Optional logical allocation attribution. This does not include CUDA
++    // library-private allocations or count a stream-queued free as completed.
++    bool m_track_allocations = std::getenv("AMGX_TRACK_ALLOCATIONS") &&
++                               std::string(std::getenv("AMGX_TRACK_ALLOCATIONS")) == "1";
++    std::map<void *, size_t> m_requested_blocks;
++    size_t m_requested_live = 0, m_requested_peak = 0;
++    void record_allocation(void *pointer, size_t bytes)
++    {
++        if (!m_track_allocations || !pointer) return;
++        std::lock_guard<std::recursive_mutex> guard(m_mutex);
++        m_requested_blocks[pointer] = bytes;
++        m_requested_live += bytes;
++        m_requested_peak = std::max(m_requested_peak, m_requested_live);
++    }
++    void record_release(void *pointer)
++    {
++        if (!m_track_allocations || !pointer) return;
++        std::lock_guard<std::recursive_mutex> guard(m_mutex);
++        auto found = m_requested_blocks.find(pointer);
++        if (found != m_requested_blocks.end())
++        {
++            m_requested_live -= found->second;
++            m_requested_blocks.erase(found);
++        }
++    }
++
+     // Mutex to make functions thread-safe.
+     std::recursive_mutex m_mutex;
+ 
+@@ -856,7 +885,9 @@ cudaError_t cudaMallocAsync(void **ptr, size_t size, cudaStream_t stream)
+ #ifdef USE_CUDAMALLOCASYNC
+     if (manager.uses_cudamallocasync())
+     {
+-        return ::cudaMallocAsync(ptr, size, stream);
++        const auto result = ::cudaMallocAsync(ptr, size, stream);
++        if (result == cudaSuccess) manager.record_allocation(*ptr, size);
++        return result;
+     }
+ #endif
+ 
+@@ -964,12 +995,14 @@ cudaError_t cudaMallocAsync(void **ptr, size_t size, cudaStream_t stream)
+     }
+ 
+ #endif
++    if (error == cudaSuccess) manager.record_allocation(*ptr, size);
+     return error;
+ }
+ 
+ cudaError_t cudaFreeAsync(void *ptr, cudaStream_t stream)
+ {
+     MemoryManager &manager = MemoryManager::get_instance();
++    manager.record_release(ptr);
+ 
+ #ifdef USE_CUDAMALLOCASYNC
+     if (manager.uses_cudamallocasync())
+@@ -1119,6 +1152,47 @@ void joinDevicePools()
+     }
+ }
+ 
++void getAllocatorMemoryInfo(AMGX_allocator_memory_info &info)
++{
++    MemoryManager &manager = MemoryManager::get_instance();
++    std::lock_guard<std::recursive_mutex> guard(manager.m_mutex);
++    info = {};
++    info.tracking_enabled = manager.m_track_allocations;
++    info.requested_live_bytes = manager.m_requested_live;
++    info.requested_peak_bytes = manager.m_requested_peak;
++    info.live_allocations = manager.m_requested_blocks.size();
++    std::vector<const MemoryPool *> seen;
++    const auto pool = [&](const MemoryPool *p, bool pinned)
++    {
++        if (!p || std::find(seen.begin(), seen.end(), p) != seen.end()) return;
++        seen.push_back(p);
++        auto &used = pinned ? info.pinned_pool_used_bytes : info.device_pool_used_bytes;
++        auto &reserved = pinned ? info.pinned_pool_reserved_bytes : info.device_pool_reserved_bytes;
++        used += p->get_used_mem();
++        reserved += p->get_used_mem() + p->get_free_mem();
++    };
++    pool(manager.m_main_device_pool, false);
++    for (const auto &p : manager.m_thread_device_pools) pool(p.second, false);
++    pool(manager.m_main_pinned_pool, true);
++    for (const auto &p : manager.m_thread_pinned_pools) pool(p.second, true);
++#if CUDART_VERSION >= 11020
++    int device = 0, supported = 0;
++    if (::cudaGetDevice(&device) == cudaSuccess &&
++        ::cudaDeviceGetAttribute(&supported, cudaDevAttrMemoryPoolsSupported, device) == cudaSuccess && supported)
++    {
++        cudaMemPool_t p;
++        if (::cudaDeviceGetDefaultMemPool(&p, device) == cudaSuccess)
++        {
++            info.cuda_pool_available =
++                ::cudaMemPoolGetAttribute(p, cudaMemPoolAttrUsedMemCurrent, &info.cuda_pool_used_bytes) == cudaSuccess &&
++                ::cudaMemPoolGetAttribute(p, cudaMemPoolAttrReservedMemCurrent, &info.cuda_pool_reserved_bytes) == cudaSuccess &&
++                ::cudaMemPoolGetAttribute(p, cudaMemPoolAttrUsedMemHigh, &info.cuda_pool_used_peak_bytes) == cudaSuccess &&
++                ::cudaMemPoolGetAttribute(p, cudaMemPoolAttrReservedMemHigh, &info.cuda_pool_reserved_peak_bytes) == cudaSuccess;
++        }
++    }
++#endif
++}
++
+ void printInfo()
+ {
+     //
 diff --git a/src/solvers/block_jacobi_solver.cu b/src/solvers/block_jacobi_solver.cu
-index 19bd6fe..1ef30b9 100644
+index 19bd6fe..c904be2 100644
 --- a/src/solvers/block_jacobi_solver.cu
 +++ b/src/solvers/block_jacobi_solver.cu
-@@ -1089,12 +1089,14 @@ void BlockJacobiSolver<TemplateConfig<AMGX_device, t_vecPrec, t_matPrec, t_indPr
+@@ -2,6 +2,7 @@
+ //
+ // SPDX-License-Identifier: BSD-3-Clause
+ 
++#include <type_traits>
+ #include <solvers/block_jacobi_solver.h>
+ #include <solvers/block_common_solver.h>
+ #include <gaussian_elimination.h>
+@@ -671,6 +672,7 @@ void jacobiSmooth4by4BlockDiaCsrKernel_NAIVE_tex_readDinv2(const IndexType *row_
+     int eighthwarp_id = row_offset + (tid >> log_bsize);
+     const int block_eighthwarp_id = threadIdx.x >> log_bsize;
+     const int vec_entry_index = threadIdx.x & (bsize - 1);
++    const unsigned lane_mask = ((1u << bsize) - 1) << ((threadIdx.x & 31) / bsize * bsize);
+     volatile __shared__ ValueTypeB s_xtemp[ bsize * eighthwarps_per_block ];
+     ValueTypeB bmAx, xin;
+     ValueTypeB temp[bsize];
+@@ -685,6 +687,7 @@ void jacobiSmooth4by4BlockDiaCsrKernel_NAIVE_tex_readDinv2(const IndexType *row_
+         // Contribution from diagonal
+         xin = x[offset];
+         types::util<ValueTypeB>::volcast(xin, s_xtemp + threadIdx.x);
++        __syncwarp(lane_mask);
+         // Load dia_values and do matrix multiply
+         loadAsVector<bsize>(nonzero_values + bsize_sq * dia_indices[i] + vec_entry_index * bsize, temp);
+         s_offset = block_eighthwarp_id * bsize;
+@@ -695,6 +698,7 @@ void jacobiSmooth4by4BlockDiaCsrKernel_NAIVE_tex_readDinv2(const IndexType *row_
+             bmAx = bmAx - temp[m] * types::util<ValueTypeB>::volcast(s_xtemp[s_offset + m]);
+         }
+ 
++        __syncwarp(lane_mask);
+         // Contribution from each nonzero column
+         int jmax = row_offsets[i + 1];
+ 
+@@ -706,6 +710,7 @@ void jacobiSmooth4by4BlockDiaCsrKernel_NAIVE_tex_readDinv2(const IndexType *row_
+             {
+                 offset = jcol * bsize + vec_entry_index;
+                 types::util<ValueTypeB>::volcast(x[offset], s_xtemp + threadIdx.x);
++                __syncwarp(lane_mask);
+                 // Load nonzero_values
+                 s_offset = block_eighthwarp_id * bsize;
+                 offset = jind * bsize * bsize + vec_entry_index * bsize;
+@@ -716,10 +721,12 @@ void jacobiSmooth4by4BlockDiaCsrKernel_NAIVE_tex_readDinv2(const IndexType *row_
+                 {
+                     bmAx = bmAx - temp[m] * types::util<ValueTypeB>::volcast(s_xtemp[s_offset + m]);
+                 }
++                __syncwarp(lane_mask);
+             }
+         }
+ 
+         types::util<ValueTypeB>::volcast(bmAx, s_xtemp + threadIdx.x);
++        __syncwarp(lane_mask);
+         bmAx = types::util<ValueTypeB>::get_zero();
+         // 2. Multiply by Dinv
+         // Load Dinv and multiply to RHS
+@@ -733,6 +740,7 @@ void jacobiSmooth4by4BlockDiaCsrKernel_NAIVE_tex_readDinv2(const IndexType *row_
+             bmAx = bmAx + temp[m] * types::util<ValueTypeB>::volcast(s_xtemp[s_offset + m]);
+         }
+ 
++        __syncwarp(lane_mask);
+         xout[i * bsize + vec_entry_index] = xin + bmAx * weight;
+         eighthwarp_id += gridDim.x * blockDim.x >> log_bsize;
+     }
+@@ -1089,16 +1097,26 @@ void BlockJacobiSolver<TemplateConfig<AMGX_device, t_vecPrec, t_matPrec, t_indPr
      const IndexType *A_dia_idx_ptr = A.diag.raw();
      ValueTypeA *Dinv_ptr = this->Dinv.raw();
      const ValueTypeA *A_nonzero_values_ptr = A.values.raw();
 -    MVector temp(AMGX_GRID_MAX_SIZE * ((bsize - 1) / 4 + 1) * ((bsize - 1) / 4 + 1));
 -    ValueTypeA *temp_ptr = temp.raw();
-     // MUST BE MULTIPLE OF 16
-     const int threads_per_block = 512;
-     const int halfwarps_per_block = threads_per_block / 16;
-     const int num_blocks = std::min(AMGX_GRID_MAX_SIZE, (int) (A.get_num_rows() - 1) / halfwarps_per_block + 1);
-+    // The kernel assigns tile storage per launched thread, not per block.
-+    const size_t tile_count = (bsize - 1) / 4 + 1;
-+    MVector temp(size_t(num_blocks) * threads_per_block * tile_count * tile_count);
-+    ValueTypeA *temp_ptr = temp.raw();
-     cudaFuncSetCacheConfig(setupBlockJacobiSmoothbBigBlockDiaCsrKernel<IndexType, ValueTypeA, threads_per_block, halfwarps_per_block>, cudaFuncCachePreferL1);
-     setupBlockJacobiSmoothbBigBlockDiaCsrKernel<IndexType, ValueTypeA, threads_per_block, halfwarps_per_block> <<< num_blocks, threads_per_block, sizeof(ValueTypeA)*bsize *bsize *halfwarps_per_block>>>
-     (A_row_offsets_ptr, A_column_indices_ptr, A_nonzero_values_ptr, A_dia_idx_ptr, Dinv_ptr, A.get_num_rows(), bsize, bsize * bsize, temp_ptr);
+-    // MUST BE MULTIPLE OF 16
+-    const int threads_per_block = 512;
+-    const int halfwarps_per_block = threads_per_block / 16;
+-    const int num_blocks = std::min(AMGX_GRID_MAX_SIZE, (int) (A.get_num_rows() - 1) / halfwarps_per_block + 1);
+-    cudaFuncSetCacheConfig(setupBlockJacobiSmoothbBigBlockDiaCsrKernel<IndexType, ValueTypeA, threads_per_block, halfwarps_per_block>, cudaFuncCachePreferL1);
+-    setupBlockJacobiSmoothbBigBlockDiaCsrKernel<IndexType, ValueTypeA, threads_per_block, halfwarps_per_block> <<< num_blocks, threads_per_block, sizeof(ValueTypeA)*bsize *bsize *halfwarps_per_block>>>
+-    (A_row_offsets_ptr, A_column_indices_ptr, A_nonzero_values_ptr, A_dia_idx_ptr, Dinv_ptr, A.get_num_rows(), bsize, bsize * bsize, temp_ptr);
+-    cudaCheckError();
++    // One half warp cooperates on a block. Large modal blocks must not use
++    // the 512-thread launch: 32*19*19 doubles exceeds default shared memory.
++    // Both choices stay below 48 KiB for every supported scalar precision.
++    const auto launch = [&](auto threads)
++    {
++        constexpr int threads_per_block = decltype(threads)::value;
++        constexpr int halfwarps_per_block = threads_per_block / 16;
++        const int num_blocks = std::min(AMGX_GRID_MAX_SIZE, (int)(A.get_num_rows() - 1) / halfwarps_per_block + 1);
++        const size_t tile_count = (bsize - 1) / 4 + 1;
++        MVector temp(size_t(num_blocks) * threads_per_block * tile_count * tile_count);
++        const size_t shared_bytes = sizeof(ValueTypeA) * bsize * bsize * halfwarps_per_block;
++        cudaFuncSetCacheConfig(setupBlockJacobiSmoothbBigBlockDiaCsrKernel<IndexType, ValueTypeA, threads_per_block, halfwarps_per_block>, cudaFuncCachePreferL1);
++        setupBlockJacobiSmoothbBigBlockDiaCsrKernel<IndexType, ValueTypeA, threads_per_block, halfwarps_per_block><<<num_blocks, threads_per_block, shared_bytes>>>
++            (A_row_offsets_ptr, A_column_indices_ptr, A_nonzero_values_ptr, A_dia_idx_ptr, Dinv_ptr, A.get_num_rows(), bsize, bsize * bsize, temp.raw());
++        cudaCheckError();
++    };
++    if (sizeof(ValueTypeA) * bsize * bsize * 32 > 48 * 1024)
++        launch(std::integral_constant<int, 64>{});
++    else
++        launch(std::integral_constant<int, 512>{});
+ }
+ 
+ 
+diff --git a/src/solvers/solver.cu b/src/solvers/solver.cu
+index c1498db..c033181 100644
+--- a/src/solvers/solver.cu
++++ b/src/solvers/solver.cu
+@@ -411,6 +411,14 @@ void Solver<TConfig>::setup( Operator<TConfig> &A, bool reuse_matrix_structure)
+         }
+ #endif
+ 
++        // A native attached numeric payload is read-only to setup/solve.
++        // Its caller owns shape, ordering, scaling and allocation lifetime.
++        if (B.values.is_external() &&
++            (isColoringNeeded() || getReorderColsByColorDesired() || getInsertDiagonalDesired() || m_scaling != "NONE" ||
++             m_cfg->template getParameter<BlockFormat>("block_format", "default") != ROW_MAJOR ||
++             (getName() != "AMG" && getName() != "BLOCK_JACOBI")))
++            FatalError("Native matrix attachment forbids coloring/reordering/scaling", AMGX_ERR_CONFIGURATION);
++
+         // Color the matrix, set the block format, reorder columns if necessary
+         if (!B.is_matrix_setup())
+         {
 diff --git a/src/tests/aggregates_coarse_generator.cu b/src/tests/aggregates_coarse_generator.cu
-index bfcd9c7..c8a9d09 100644
+index bfcd9c7..8a9367a 100644
 --- a/src/tests/aggregates_coarse_generator.cu
 +++ b/src/tests/aggregates_coarse_generator.cu
 @@ -115,14 +115,16 @@ void compare_matrices_kernel( const int  num_rows,
@@ -262,7 +1092,7 @@ index bfcd9c7..c8a9d09 100644
      cudaCheckError();
      MatrixA A, Ac;
 -    int bsizes[] = {1, 2, 3, 4, 5, 8, 10};
-+    int bsizes[] = {1, 2, 3, 4, 5, 6, 7, 8, 10};
++    int bsizes[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 19};
  
      for (int diag_prop = 0; diag_prop < 2; diag_prop++)
      {
@@ -301,3 +1131,44 @@ index bfcd9c7..c8a9d09 100644
              // simple check on matrix size
              this->PrintOnFail("Coarse matrix has wrong size %i != num aggregates %i", Ac.get_num_rows(), num_aggregates);
              UNITTEST_ASSERT_TRUE( Ac.get_num_rows() == num_aggregates );
+@@ -328,4 +345,40 @@ AMGX_FORALL_BUILDS_DEVICE(AMGX_CASE_LINE)
+ //AggregatesCoarseGeneratorTest<TemplateMode<AMGX_mode_dDDI>::Type> AggregatesCoarseGeneratorTest_dDDI;
+ 
+ 
++DECLARE_UNITTEST_BEGIN(NativeValuesStorageTest);
++void run()
++{
++    typedef typename Matrix<TConfig>::MVector Values;
++    Values owner(38, typename Values::value_type(2));
++    auto *pointer = owner.raw();
++    {
++        Values borrowed;
++        borrowed.bind_external(pointer, owner.size());
++        UNITTEST_ASSERT_TRUE(borrowed.is_external());
++        UNITTEST_ASSERT_TRUE(borrowed.raw() == pointer);
++        UNITTEST_ASSERT_EQUAL(borrowed.size(), owner.size());
++        UNITTEST_ASSERT_EQUAL(borrowed.end() - borrowed.begin(), owner.size());
++        // Copying an external descriptor must deep-copy values, not the empty
++        // base-vector allocation or the non-owning pointer.
++        Values copy(borrowed);
++        UNITTEST_ASSERT_TRUE(!copy.is_external());
++        UNITTEST_ASSERT_TRUE(copy.raw() != pointer);
++        UNITTEST_ASSERT_EQUAL(static_cast<typename Values::value_type>(copy[17]), typename Values::value_type(2));
++        borrowed.resize(owner.size());
++        UNITTEST_ASSERT_EXCEPTION_START;
++        borrowed.resize(owner.size() + 1);
++        UNITTEST_ASSERT_EXCEPTION_END_AMGX_ERR(AMGX_ERR_BAD_PARAMETERS);
++        UNITTEST_ASSERT_EXCEPTION_START;
++        borrowed = owner;
++        UNITTEST_ASSERT_EXCEPTION_END_AMGX_ERR(AMGX_ERR_BAD_PARAMETERS);
++        UNITTEST_ASSERT_TRUE(borrowed.raw() == pointer);
++    }
++    // Destruction of the borrowed view never frees the retained caller buffer.
++    owner[17] = typename Values::value_type(3);
++    UNITTEST_ASSERT_EQUAL(owner.raw(), pointer);
++    UNITTEST_ASSERT_EQUAL(static_cast<typename Values::value_type>(owner[17]), typename Values::value_type(3));
++}
++DECLARE_UNITTEST_END(NativeValuesStorageTest);
++NativeValuesStorageTest<TemplateMode<AMGX_mode_dDDI>::Type> NativeValuesStorageTest_dDDI;
++
+ } //namespace amgx

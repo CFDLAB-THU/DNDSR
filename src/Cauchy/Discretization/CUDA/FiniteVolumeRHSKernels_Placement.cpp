@@ -67,16 +67,13 @@ namespace DNDS::Cauchy::CUDA
         DNDS_check_throw_info(!produceLow || components == 5, "low-order flux blending applies to flow5 only");
         using P = DNDS::Math::ComputePrecision;
         DNDS_check_throw_info(blockSize == 64 || blockSize == 128 || blockSize == 256 || blockSize == 512, "invalid CUDA RHS block size");
-        DNDS_check_throw_info(!doubleBuffer || (components == 5 && polynomialPrecision == P::FP64 &&
-                                                dissipationPrecision == P::FP64 && fluxPrecision == P::FP64),
-                              "double buffering currently qualifies FP64 flow5 only");
-        DNDS_check_throw_info(mapping == RHSFaceMapping::Thread || (components == 5 && polynomialPrecision == P::FP64 &&
-                                                                    dissipationPrecision == P::FP64 && fluxPrecision == P::FP64),
-                              "warp quadrature currently qualifies FP64 flow5 only");
-        DNDS_check_throw_info(mapping >= RHSFaceMapping::Thread && mapping <= RHSFaceMapping::CTASegments &&
-                                  reduction >= RHSFaceReduction::Serial && reduction <= RHSFaceReduction::Segmented && gridBlocks >= 0,
+        const bool fp64 = polynomialPrecision == P::FP64 && dissipationPrecision == P::FP64 && fluxPrecision == P::FP64;
+        DNDS_check_throw_info(!doubleBuffer, "buffered-face RHS experiment has been retired");
+        DNDS_check_throw_info(mapping == (fp64 ? RHSFaceMapping::CTASegments : RHSFaceMapping::Thread),
+                              "FP64 CUDA RHS requires CTA segments; reduced-precision comparisons require thread mapping");
+        DNDS_check_throw_info(reduction >= RHSFaceReduction::Serial && reduction <= RHSFaceReduction::Segmented && gridBlocks >= 0,
                               "invalid CUDA RHS mapping/reduction/grid selector");
-        DNDS_check_throw_info(mapping < RHSFaceMapping::WarpSegments || (!doubleBuffer && blockSize >= 128),
+        DNDS_check_throw_info(mapping != RHSFaceMapping::CTASegments || blockSize >= 128,
                               "segmented RHS uses its own shared staging and 128/256/512 threads");
         P selected = P::FP64;
         for (const auto precision : {polynomialPrecision, dissipationPrecision, fluxPrecision})

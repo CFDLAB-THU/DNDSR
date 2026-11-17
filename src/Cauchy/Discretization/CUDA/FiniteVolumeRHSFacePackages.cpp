@@ -11,11 +11,12 @@ namespace DNDS::Cauchy::CUDA
     RHSFaceStageShape RHSFacePackages::StageShape(const RHSKernelControls &controls)
     {
         RHSFaceStageShape result;
+        result.components = controls.components;
         const bool reconstruct = !controls.firstOrder && (!controls.direct || controls.linear);
-        result.reconstruction = reconstruct ? 5 * (controls.direct ? controls.dimension : controls.modes) : 0;
+        result.reconstruction = reconstruct ? controls.components * (controls.direct ? controls.dimension : controls.modes) : 0;
         result.viscous = controls.primitiveGradient ? 5 * controls.dimension : controls.viscous && controls.distinctViscous ? result.reconstruction
                                                                                                                             : 0;
-        result.width = 5 + result.reconstruction + result.viscous + 4;
+        result.width = controls.components + result.reconstruction + result.viscous + 4;
         return result;
     }
     struct RHSFacePackages::Data
@@ -34,8 +35,8 @@ namespace DNDS::Cauchy::CUDA
     {
         controls.Validate();
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && selection.GetDevice() == context.device &&
-                                  (controls.mapping == RHSFaceMapping::WarpSegments || controls.mapping == RHSFaceMapping::CTASegments),
-                              "RHS segments require placed CUDA selection and an explicit segmented mapping");
+                                  controls.mapping == RHSFaceMapping::CTASegments,
+                              "RHS segments require placed CUDA selection and CTA-segment mapping");
         auto data = std::make_shared<Data>(selection, context);
         auto &view = data->view;
         view.selection = data->selection.View<R::FixedRows<1>>();
@@ -45,7 +46,7 @@ namespace DNDS::Cauchy::CUDA
         view.shape = StageShape(controls);
         // Per lane: high/(optional low) flux, error code/detail/row/point,
         // and integer fallback count. No point state leaves CTA memory.
-        const size_t scratch = size_t(controls.blockSize) * (5 * sizeof(real) * (controls.produceLow ? 2 : 1) + 2 * sizeof(int) + 3 * sizeof(index));
+        const size_t scratch = size_t(controls.blockSize) * (controls.components * sizeof(real) * (controls.produceLow ? 2 : 1) + 2 * sizeof(int) + 3 * sizeof(index));
         const size_t stagePerFace = size_t(2 * view.shape.width) * sizeof(real);
         constexpr size_t budget = 48 * 1024;
         DNDS_check_throw_info(scratch < budget && stagePerFace <= budget - scratch,
@@ -73,10 +74,8 @@ namespace DNDS::Cauchy::CUDA
             DNDS_check_throw_info(iAux >= 0 && iAux < counts.size() && counts[iAux] > 0,
                                   "RHS package has an unavailable or empty face rule");
             const index points = counts[iAux];
-            const int lanes = int(std::min<index>(points, view.mapping == RHSFaceMapping::WarpSegments ? 32 : controls.blockSize));
+            const int lanes = int(std::min<index>(points, controls.blockSize));
             int start = cursor;
-            if (view.mapping == RHSFaceMapping::WarpSegments && start % 32 + lanes > 32)
-                start = (start / 32 + 1) * 32;
             if (current.faces == capacity || start + lanes > controls.blockSize)
             {
                 finish();

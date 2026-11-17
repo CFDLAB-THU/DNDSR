@@ -28,10 +28,7 @@ namespace DNDS::CFV::CPU
                 if (point >= 0 && input.cached.data && derivative < input.cachedDerivatives)
                     scratch(derivative, mode) = input.cached(2 * point + side, mode * input.cachedDerivatives + derivative);
                 else
-                {
-                    const real value = parameters.Derivative(derivative, mode + 1, prepared);
-                    scratch(derivative, mode) = derivative == 0 ? value - input.moments(cell, mode + 1) : value;
-                }
+                    scratch(derivative, mode) = parameters.ReconstructionDerivative(derivative, mode, prepared, input.moments, cell);
             }
         return {scratch.data(), int(scratch.rows()), input.modes,
                 int(scratch.rows())};

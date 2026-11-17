@@ -165,6 +165,10 @@ namespace DNDS::Cauchy
                                   validMatrixTable(linear.matrixStorage.offDiagonal) &&
                                   (linear.matrixStorage.indices == "auto" || linear.matrixStorage.indices == "int32" || linear.matrixStorage.indices == "int64"),
                               "invalid independent linear matrix storage settings");
+        DNDS_check_throw_info((linear.matrixStorage.amgxStorage == "upload" || linear.matrixStorage.amgxStorage == "native") &&
+                                  (linear.matrixStorage.amgxStorage != "native" || (usesAMG &&
+                                                                                    linear.matrixStorage.diagonal.rowStridePaddingMultiple == 1 && linear.matrixStorage.offDiagonal.rowStridePaddingMultiple == 1)),
+                              "native AmgX storage requires the AmgX backend with compact block rows");
         DNDS_check_throw_info(!usesAMG || (linear.matrixStorage.indices != "int64" && linear.matrixStorage.diagonal.layout == "aos" &&
                                            linear.matrixStorage.offDiagonal.layout == "aos" &&
                                            (components * components) % linear.matrixStorage.diagonal.rowStridePaddingMultiple == 0 &&
@@ -197,7 +201,7 @@ namespace DNDS::Cauchy
                                   std::isfinite(pseudoGrowth) && pseudoGrowth >= 1 && std::isfinite(relaxation) && relaxation > 0 && relaxation <= 1,
                               "invalid implicit nonlinear/diagonal/pseudo-time controls");
         DNDS_check_throw_info((linear.cudaJacobiMapping == "thread" || linear.cudaJacobiMapping == "componentGroup") &&
-                                  (linear.cudaDiagonalInverse == "batchedSVD" || linear.cudaDiagonalInverse == "guardedLU") &&
+                                  (linear.cudaDiagonalInverse == "auto" || linear.cudaDiagonalInverse == "batchedSVD" || linear.cudaDiagonalInverse == "guardedLU") &&
                                   linear.diagonalInverseRefinement >= 0 && linear.diagonalInverseRefinement <= 3 &&
                                   (!linear.diagonalInverseRefinement ||
                                    (diagonal == "block" && (linear.method == "sgs" || linear.method == "jacobi" ||
@@ -270,7 +274,7 @@ namespace DNDS::Cauchy
     CFV::ReconstructionDeviceKernel ExecutionSettings::ReconstructionKernel() const
     {
         using Kernel = CFV::ReconstructionDeviceKernel;
-        if (reconstructionKernel == "fp64")
+        if (reconstructionKernel == "auto" || reconstructionKernel == "fp64")
             return Kernel::FP64;
         if (reconstructionKernel == "fp64MatrixShared")
             return Kernel::FP64MatrixShared;
@@ -310,23 +314,30 @@ namespace DNDS::Cauchy
                     reconstructionKernel != CFV::ReconstructionDeviceKernel::FloatFloatPipelined,
                 "float-float reconstruction requires DNDS_USE_CCCL_COMPUTE");
 #endif
-        const auto &kernels = s.execution.kernels;
+        auto kernels = s.execution.kernels;
         require(cuda || kernels.Default(), "operator compute/layout experiments require CUDA");
-        require(kernels.rhsMapping == "thread" || kernels.rhsMapping == "warpQuadrature" || kernels.rhsMapping == "warpSegments" || kernels.rhsMapping == "ctaSegments", "RHS kernel mapping " + kernels.rhsMapping);
+        // Resolve capabilities without probing a device during JSON parsing.
+        // CPU kernels retain their ordinary defaults and do not use this map.
+        const bool fp64RHS = kernels.polynomialArithmetic == "fp64" &&
+                             kernels.dissipationArithmetic == "fp64" && kernels.fluxArithmetic == "fp64";
+        if (kernels.rhsMapping == "auto")
+            kernels.rhsMapping = cuda && fp64RHS ? "ctaSegments" : "thread";
+        if (kernels.rhsReduction == "auto")
+            kernels.rhsReduction = kernels.rhsMapping == "ctaSegments" ? "segmented" : "serial";
+        require(kernels.polynomialPPThreads == 0 || kernels.polynomialPPThreads == 128 || kernels.polynomialPPThreads == 256 || kernels.polynomialPPThreads == 512, "invalid polynomial PP block size");
+        require(!cuda || kernels.rhsMapping == (fp64RHS ? "ctaSegments" : "thread"),
+                "FP64 CUDA RHS requires ctaSegments; reduced-precision comparisons require thread");
         require(kernels.rhsBlockSize == 64 || kernels.rhsBlockSize == 128 || kernels.rhsBlockSize == 256 || kernels.rhsBlockSize == 512, "RHS block size must be 64, 128, 256 or 512");
-        require(!kernels.rhsDoubleBuffer || (kernels.polynomialArithmetic == "fp64" &&
-                                             kernels.dissipationArithmetic == "fp64" && kernels.fluxArithmetic == "fp64"),
-                "double buffering currently qualifies FP64 only");
-        require(kernels.rhsMapping == "thread" || (kernels.polynomialArithmetic == "fp64" &&
-                                                   kernels.dissipationArithmetic == "fp64" && kernels.fluxArithmetic == "fp64"),
-                "warp quadrature currently qualifies FP64 arithmetic only");
+        require(!kernels.rhsDoubleBuffer, "buffered-face RHS experiment has been retired");
         require(kernels.rhsReduction == "serial" || kernels.rhsReduction == "segmented", "unknown RHS face reduction");
         require(kernels.rhsGridBlocks >= 0, "RHS grid block cap cannot be negative");
-        require((kernels.rhsMapping != "warpSegments" && kernels.rhsMapping != "ctaSegments") ||
+        require(kernels.rhsMapping != "ctaSegments" ||
                     (!kernels.rhsDoubleBuffer && kernels.rhsBlockSize >= 128),
                 "RHS segment mappings require their own staging and 128/256/512 threads");
         for (const auto *layout : {&kernels.stateInputLayout, &kernels.reconstructionInputLayout})
             require(*layout == "aos" || *layout == "aosoa32", "kernel input layout " + *layout);
+        require(!cuda || !fp64RHS || (kernels.stateInputLayout == "aos" && kernels.reconstructionInputLayout == "aos"),
+                "FP64 CTA RHS requires compact AoS input fields; tiled shadows are reduced-precision comparison inputs only");
         for (const auto *precision : {&kernels.polynomialArithmetic, &kernels.dissipationArithmetic, &kernels.fluxArithmetic})
         {
             require(*precision == "fp64" || *precision == "fp32" || *precision == "f32f32", "kernel arithmetic " + *precision);
@@ -344,8 +355,9 @@ namespace DNDS::Cauchy
                         "one RHS launch requires one common reduced arithmetic type");
                 reducedArithmetic = *precision;
             }
-        require(s.numerics.limiter != "LVR" || reconstructionKernel == CFV::ReconstructionDeviceKernel::FP64,
-                "LVR currently requires the fp64 reconstruction kernel");
+        require(s.numerics.limiter != "LVR" || reconstructionKernel == CFV::ReconstructionDeviceKernel::FP64 ||
+                    reconstructionKernel == CFV::ReconstructionDeviceKernel::FP64Pipelined,
+                "LVR currently requires the fp64 or fp64Pipelined reconstruction kernel");
         require(s.execution.device == "cpu" || cuda, "residual/BC/reconstruction backend " + s.execution.device);
 #ifndef DNDS_USE_CUDA
         require(!cuda, "backend cuda requires a CUDA-enabled build");
@@ -364,8 +376,15 @@ namespace DNDS::Cauchy
         require(s.equation.system == "compressible", "equation " + s.equation.system);
         const bool mixture = s.equation.eos == "idealGasMixture";
         const bool rans = s.equation.rans.model != "none", extended = mixture || rans;
-        require(!kernels.rhsDoubleBuffer || !extended, "double buffering currently qualifies flow5 only");
-        require(kernels.rhsMapping == "thread" || !extended, "warp quadrature currently qualifies flow5 only");
+        const bool comparisonSweep = reconstructionKernel != CFV::ReconstructionDeviceKernel::FP64 &&
+                                     reconstructionKernel != CFV::ReconstructionDeviceKernel::FP64Pipelined;
+        require(!comparisonSweep || (s.mesh.dimension == 3 && s.numerics.reconstruction == "variational" &&
+                                     s.numerics.cfv.maxOrder == 3 && !extended &&
+                                     !s.numerics.cfv.storage.Raw() && s.numerics.limiter != "LVR" &&
+                                     s.implicit.multigrid.levels == 0),
+                "comparison reconstruction kernels require single-grid 3D P3 flow5 precomputed non-LVR storage; use fp64/fp64Pipelined for other shapes");
+        require(kernels.rhsMapping == "thread" || !mixture,
+                "cooperative CUDA RHS mappings require perfect-gas non-species physics");
         require(reducedArithmetic.empty() || !extended, "experimental reduced RHS arithmetic requires perfect-gas flow5");
         require(kernels.fluxArithmetic == "fp64" || s.numerics.viscousGradient == "polynomial",
                 "reduced full flux currently requires conservative polynomial gradients");

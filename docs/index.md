@@ -24,6 +24,12 @@ distributed gates and the measured gains and regressions by shape.
 The [Plan 61-2 profiling guide](dev/plan612_cuda_optimization.md) describes
 opt-in CUDA timeline ranges and the fixed uncached TGV optimization baseline.
 
+The [automatic A100 kernel defaults](dev/cauchy_a100_kernel_defaults.md) describe
+setup-time device/shape selection and explicit reproducibility overrides.
+
+The [Plan 61-6 consolidation record](dev/plan616_cuda_consolidation.md) describes
+the bounded generated RHS/VR catalogs, shared helpers and native AMG exploration.
+
 The [Plan 61 CUDA inventory](dev/plan61_cuda_inventory.md) tracks the specialized
 perfect-gas device path and its grouped implementation/validation status.
 

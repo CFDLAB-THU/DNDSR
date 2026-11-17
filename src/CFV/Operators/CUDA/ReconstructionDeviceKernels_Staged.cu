@@ -1,82 +1,130 @@
-#include "CFV/Operators/CUDA/ReconstructionDeviceKernels_Staged.cuh"
+#include "CFV/Detail/ReconstructionSweepArguments.hpp"
+#include <cuda_runtime.h>
 
 namespace DNDS::CFV::Detail
 {
-    static ReconstructionSweepResources DispatchStagedJacobi(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection,
-                                                             DevicePeriodicBlocks vectors, R::PairReadView<real> mean, R::PairReadView<real> input,
-                                                             R::ArrayView<const real> boundary, R::ArrayView<real> output, R::ArrayView<const int> status,
-                                                             const ReconstructionSweepLaunch &options, ReconstructionSweepArithmetic arithmetic, bool execute)
+    namespace
     {
-        options.Validate();
-        DNDS_check_throw_info(arithmetic == ReconstructionSweepArithmetic::FP64 || arithmetic == ReconstructionSweepArithmetic::FloatFloat ||
-                                  arithmetic == ReconstructionSweepArithmetic::FP64TensorCore || arithmetic == ReconstructionSweepArithmetic::FP32 || arithmetic == ReconstructionSweepArithmetic::TF32,
-                              "unknown staged VR arithmetic");
-        const bool quantized = arithmetic == ReconstructionSweepArithmetic::FP32 || arithmetic == ReconstructionSweepArithmetic::TF32;
-        const bool tensor = arithmetic == ReconstructionSweepArithmetic::FP64TensorCore || arithmetic == ReconstructionSweepArithmetic::TF32;
+        ReconstructionSweepResources Dispatch(StagedSweepArguments args, ReconstructionSweepArithmetic arithmetic)
+        {
+            args.options.Validate();
+            ValidateSweepArguments(args, args.limited);
+            const auto &plan = args.plan;
+            const auto table = [](auto v, index width)
+            { return v.kind == R::RowLayoutKind::Table && v.width == width && v.stride >= width && !v.offsets && !v.sizes && (!v.rows || v.data); };
+            const auto field = [&](auto v, index width)
+            { return !v.rows || (table(v, width) && v.stride == width); };
+            const bool quantized = arithmetic == ReconstructionSweepArithmetic::FP32 || arithmetic == ReconstructionSweepArithmetic::TF32 ||
+                                   arithmetic == ReconstructionSweepArithmetic::FP32Reference || arithmetic == ReconstructionSweepArithmetic::FP32FullAccumulation ||
+                                   arithmetic == ReconstructionSweepArithmetic::FP32FloatFloatAccumulation || arithmetic == ReconstructionSweepArithmetic::TF32Synchronous;
+            const bool tensor = arithmetic == ReconstructionSweepArithmetic::FP64TensorCore || arithmetic == ReconstructionSweepArithmetic::TF32 ||
+                                arithmetic == ReconstructionSweepArithmetic::TF32Synchronous;
+            const bool comparison = arithmetic != ReconstructionSweepArithmetic::FP64;
+            DNDS_check_throw_info(arithmetic >= ReconstructionSweepArithmetic::FP64 && arithmetic <= ReconstructionSweepArithmetic::TF32Synchronous,
+                                  "unknown VR arithmetic selector");
 #ifndef DNDS_USE_CCCL_COMPUTE
-        DNDS_check_throw_info(arithmetic != ReconstructionSweepArithmetic::FloatFloat, "float-float VR requires DNDS_USE_CCCL_COMPUTE");
+            DNDS_check_throw_info(arithmetic != ReconstructionSweepArithmetic::FloatFloat && arithmetic != ReconstructionSweepArithmetic::FP32FloatFloatAccumulation,
+                                  "float-float VR requires DNDS_USE_CCCL_COMPUTE");
 #endif
-        // Native maps are contiguous tables, including padded row pitches.
-        // Project their static access pattern once, rather than carrying CSR/
-        // SoA/tile branches through every inner product. Solution fields stay
-        // layout-generic; only their frozen row spans are staged.
-        const auto table = [](auto view, index width)
-        { return view.kind == R::RowLayoutKind::Table && view.width == width && view.stride >= width && !view.offsets && !view.sizes && (!view.rows || view.data); };
-        DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && plan.quantized == quantized && !(quantized && plan.raw) &&
-                                  plan.n > 0 && plan.n <= 19 && output.width % plan.n == 0 &&
-                                  selection.count >= 0 && selection.count <= plan.owned &&
-                                  (!selection.indirect || selection.rows.rows >= selection.count) &&
-                                  output.width / plan.n >= 1 && output.width <= INT_MAX / 4 &&
-                                  (quantized ? (table(plan.matrixAInvB32, plan.n * plan.n) && table(plan.vectorAInvB32, plan.n) && table(plan.boundaryInjection32, plan.n))
-                                             : (table(plan.matrixAInvB, plan.n * plan.n) && table(plan.vectorAInvB, plan.n) && table(plan.boundaryInjection, plan.n))) &&
-                                  table(plan.offsets, 1) && table(plan.neighbors, 1) && table(plan.boundaryOffsets, 1) &&
-                                  (!plan.raw || table(plan.localInverse, plan.localInverse.width)) &&
-                                  (!plan.faceCoupling || (table(plan.faces, 1) && table(plan.faceSide, 1))) &&
-                                  (!plan.rotated || (table(plan.rotation, 9) && table(plan.rotationActive, 1))) &&
-                                  plan.offsets.rows == plan.owned + 1 && plan.neighbors.width == 1 &&
-                                  plan.boundaryOffsets.rows == plan.neighbors.rows + 1 &&
-                                  (quantized ? plan.vectorAInvB32.rows : plan.vectorAInvB.rows) == plan.neighbors.rows &&
-                                  table(status, 1) && status.rows == 1 &&
-                                  (!plan.faceCoupling || (plan.faces.rows == plan.neighbors.rows && plan.faceSide.rows == plan.neighbors.rows)) &&
-                                  (!plan.rotated || (plan.rotation.rows == plan.neighbors.rows && plan.rotationActive.rows == plan.neighbors.rows)) &&
-                                  (!plan.raw || (plan.localInverse.rows == plan.owned &&
-                                                 plan.localInverse.width == (plan.inverseTriangle ? plan.n * (plan.n + 1) / 2 : plan.n * plan.n))) &&
-                                  input.owned.width == output.width && mean.owned.width == output.width / plan.n &&
-                                  (!input.ghost.rows || input.ghost.width == output.width) &&
-                                  (!mean.ghost.rows || mean.ghost.width == mean.owned.width) &&
-                                  (!boundary.rows || boundary.width == mean.owned.width) &&
-                                  mean.owned.rows == plan.owned && input.owned.rows == plan.owned && output.rows == plan.owned &&
-                                  (!output.rows || (output.data != input.owned.data && output.data != input.ghost.data)) &&
-                                  (!tensor || (quantized ? TF32TensorCoreAvailable(context.device) : FP64TensorCoreAvailable(context.device))),
-                              "stage-once CUDA VR requires FP64 P1..P3, a valid component count and supported device and compute policy");
-        R::ValidateViewDevices(context.device, plan, selection, vectors, mean, input, boundary, output, status);
-        R::CheckKernelArgumentBudget<Staged::Sweep<real>, bool, decltype(selection), decltype(vectors), decltype(mean), decltype(input),
-                                     decltype(boundary), decltype(output), decltype(status), int>();
-        if (!selection.count)
-            return {};
-        const StagedSweepArguments args{context, plan, selection, vectors, mean, input, boundary, output, status, options, execute};
-        ReconstructionSweepResources resource;
-        if (quantized)
-            resource = RunStagedFP32(args, tensor);
-        else if (arithmetic == ReconstructionSweepArithmetic::FloatFloat)
-            resource = RunStagedFloatFloat(args);
-        else
-            resource = RunStagedFP64(args, tensor);
-        DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "stage-once CUDA VR launch failed");
-        return resource;
+            DNDS_check_throw_info(args.context.device.space == R::MemorySpace::CUDA && plan.quantized == quantized && !(quantized && plan.raw) &&
+                                      plan.n > 0 && plan.n <= 19 && args.output.Width() % plan.n == 0 &&
+                                      args.selection.count >= 0 && args.selection.count <= plan.owned &&
+                                      (!args.selection.indirect || args.selection.rows.RowCount() >= args.selection.count) &&
+                                      args.mean.owned.Width() >= 1 && args.output.Width() <= INT_MAX / 4 &&
+                                      (quantized ? (table(plan.matrixAInvB32, plan.n * plan.n) && table(plan.vectorAInvB32, plan.n) && table(plan.boundaryInjection32, plan.n))
+                                                 : (table(plan.matrixAInvB, plan.n * plan.n) && table(plan.vectorAInvB, plan.n) && table(plan.boundaryInjection, plan.n))) &&
+                                      table(plan.offsets, 1) && table(plan.neighbors, 1) && table(plan.boundaryOffsets, 1) &&
+                                      (!plan.raw || table(plan.localInverse, plan.inverseTriangle ? plan.n * (plan.n + 1) / 2 : plan.n * plan.n)) &&
+                                      (!plan.faceCoupling || (table(plan.faces, 1) && table(plan.faceSide, 1))) &&
+                                      (!plan.rotated || (table(plan.rotation, 9) && table(plan.rotationActive, 1))) &&
+                                      plan.offsets.RowCount() == plan.owned + 1 &&
+                                      plan.boundaryOffsets.RowCount() == plan.neighbors.RowCount() + 1 &&
+                                      (quantized ? plan.vectorAInvB32.RowCount() : plan.vectorAInvB.RowCount()) == plan.neighbors.RowCount() &&
+                                      table(args.status, 1) && args.status.RowCount() == 1 &&
+                                      (!plan.faceCoupling || (plan.faces.RowCount() == plan.neighbors.RowCount() && plan.faceSide.RowCount() == plan.neighbors.RowCount())) &&
+                                      (!plan.rotated || (plan.rotation.RowCount() == plan.neighbors.RowCount() && plan.rotationActive.RowCount() == plan.neighbors.RowCount())) &&
+                                      (!plan.raw || plan.localInverse.RowCount() == plan.owned) &&
+                                      args.input.owned.Width() == args.output.Width() && args.mean.owned.Width() == args.output.Width() / plan.n &&
+                                      field(args.mean.owned, args.mean.owned.Width()) && field(args.mean.ghost, args.mean.owned.Width()) &&
+                                      field(args.input.owned, args.output.Width()) && field(args.input.ghost, args.output.Width()) &&
+                                      field(args.boundary, args.mean.owned.Width()) && field(args.output, args.output.Width()) &&
+                                      args.mean.owned.RowCount() == plan.owned && args.input.owned.RowCount() == plan.owned && args.output.RowCount() == plan.owned &&
+                                      (!args.output.RowCount() || (args.output.data != args.input.owned.data && args.output.data != args.input.ghost.data)) &&
+                                      (!tensor || (quantized ? TF32TensorCoreAvailable(args.context.device) : FP64TensorCoreAvailable(args.context.device))),
+                                  "optimized VR needs compact resident AoS P1..P3 fields, compatible maps and supported device arithmetic; padded field rows are unsupported");
+            DNDS_check_throw_info(!comparison || (plan.n == 19 && args.mean.owned.Width() == 5 && !plan.raw && !args.limited),
+                                  "comparison VR selectors require C=5/M=19 precomputed non-LVR; use fp64Pipelined for other shapes");
+            if (args.limited)
+                DNDS_check_throw_info(field(args.target, args.output.Width()) && args.target.RowCount() == plan.owned &&
+                                          field(args.alpha, 1) && args.alpha.RowCount() == plan.owned,
+                                      "optimized LVR target/penalty shape differs");
+            R::ValidateViewDevices(args.context.device, plan, args.selection, args.vectors, args.mean, args.input, args.boundary,
+                                   args.output, args.status, args.target, args.alpha);
+            if (!args.selection.count)
+                return {};
+            ReconstructionSweepResources resource;
+            switch (arithmetic)
+            {
+            case ReconstructionSweepArithmetic::FP64:
+                resource = RunStagedFP64(args, false);
+                break;
+            case ReconstructionSweepArithmetic::FP64TensorCore:
+                resource = RunStagedFP64(args, true);
+                break;
+            case ReconstructionSweepArithmetic::FP64MatrixShared:
+                resource = RunMatrixShared(args);
+                break;
+            case ReconstructionSweepArithmetic::FloatFloat:
+                resource = RunStagedFloatFloat(args);
+                break;
+            case ReconstructionSweepArithmetic::FP32:
+                resource = RunStagedFP32(args, false);
+                break;
+            case ReconstructionSweepArithmetic::TF32:
+                resource = RunStagedFP32(args, true);
+                break;
+            case ReconstructionSweepArithmetic::FP32Reference:
+                resource = RunQuantizedComparison(args, 0);
+                break;
+            case ReconstructionSweepArithmetic::FP32FullAccumulation:
+                resource = RunQuantizedComparison(args, 1);
+                break;
+            case ReconstructionSweepArithmetic::FP32FloatFloatAccumulation:
+                resource = RunQuantizedComparison(args, 2);
+                break;
+            case ReconstructionSweepArithmetic::TF32Synchronous:
+                resource = RunQuantizedComparison(args, 3);
+                break;
+            }
+            DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "optimized VR launch failed");
+            return resource;
+        }
     }
     void LaunchStagedJacobi(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection,
                             DevicePeriodicBlocks vectors, R::PairReadView<real> mean, R::PairReadView<real> input,
                             R::ArrayView<const real> boundary, R::ArrayView<real> output, R::ArrayView<const int> status,
                             const ReconstructionSweepLaunch &options, ReconstructionSweepArithmetic arithmetic)
     {
-        (void)DispatchStagedJacobi(context, plan, selection, vectors, mean, input, boundary, output, status, options, arithmetic, true);
+        (void)Dispatch({context, plan, selection, vectors, mean, input, boundary, output, status, options, true}, arithmetic);
+    }
+    void LaunchLimitedStagedJacobi(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection,
+                                   DevicePeriodicBlocks vectors, R::PairReadView<real> mean, R::PairReadView<real> input,
+                                   R::ArrayView<const real> boundary, R::ArrayView<real> output, R::ArrayView<const int> status,
+                                   R::ArrayView<const real> target, R::ArrayView<const real> alpha, const ReconstructionSweepLaunch &options)
+    {
+        (void)Dispatch({context, plan, selection, vectors, mean, input, boundary, output, status, options, true, target, alpha, true}, ReconstructionSweepArithmetic::FP64);
     }
     ReconstructionSweepResources InspectStagedJacobi(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection,
                                                      DevicePeriodicBlocks vectors, R::PairReadView<real> mean, R::PairReadView<real> input,
                                                      R::ArrayView<const real> boundary, R::ArrayView<real> output, R::ArrayView<const int> status,
                                                      const ReconstructionSweepLaunch &options, ReconstructionSweepArithmetic arithmetic)
     {
-        return DispatchStagedJacobi(context, plan, selection, vectors, mean, input, boundary, output, status, options, arithmetic, false);
+        return Dispatch({context, plan, selection, vectors, mean, input, boundary, output, status, options, false}, arithmetic);
+    }
+    void LaunchJacobiTF32(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection,
+                          DevicePeriodicBlocks vectors, R::PairReadView<real> mean, R::PairReadView<real> input,
+                          R::ArrayView<const real> boundary, R::ArrayView<real> output, R::ArrayView<const int> status)
+    {
+        LaunchStagedJacobi(context, plan, selection, vectors, mean, input, boundary, output, status, {}, ReconstructionSweepArithmetic::TF32Synchronous);
     }
 }

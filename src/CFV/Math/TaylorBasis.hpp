@@ -91,6 +91,20 @@ namespace DNDS::CFV::Math
                                      point.CoordinatePower(1, alpha[1] - beta[1]) * point.CoordinatePower(2, alpha[2] - beta[2]);
             return numerator * point.DerivativeScale(beta[0] + beta[1] + beta[2]);
         }
+        /** @brief Derivative of one zero-mean reconstruction mode.
+         * @details Coefficient mode zero denotes polynomial mode one. For the
+         * value, phi_m = psi_(m+1) - mean(psi_(m+1)); nonzero derivatives do not
+         * read the moment table. The prepared point is reused across all modes
+         * and components. MomentRows is a borrowed matrix/view, never an owner.
+         */
+        template <class Scalar, class MomentRows>
+        DNDS_DEVICE_CALLABLE Scalar ReconstructionDerivative(int derivative, int mode,
+                                                             const TaylorPointEvaluationT<Scalar> &point,
+                                                             const MomentRows &moments, index iCell) const noexcept
+        {
+            const Scalar value = Derivative(derivative, mode + 1, point);
+            return derivative == 0 ? value - DNDS::Math::ScalarCast<Scalar>(moments(iCell, mode + 1)) : value;
+        }
         /// Scalar convenience API. Hot loops should prepare once and use the
         /// context overload instead of rebuilding powers for every mode.
         DNDS_DEVICE_CALLABLE real Derivative(int derivative, int mode, const std::array<real, 3> &x, real scale) const noexcept

@@ -2,6 +2,34 @@
 
 This document describes the Plan60 free-kernel extraction. It is a source
 contract, not a CUDA implementation or a numerical validation receipt.
+
+## CUDA RHS shape catalog
+
+The perfect-gas, non-species FP64 RHS uses CTA segments. Its shared private
+numerical implementation specializes component count C=5/6/7, geometry
+dimension D=2/3 and modal count M. Valid VR shapes are M=2/5/9 in 2D and
+M=3/9/19 in 3D. M=0 is the non-VR constant/direct-gradient path; implicit P1
+VR still uses M=D and retains its VR allocations. Block size, optional input
+roles and face reduction choice do not multiply the kernel catalog.
+
+Mean/interface rows have width C, polynomial rows C*M, conservative physical
+gradients C*D and flow5 primitive gradients 5*D. Optional viscous polynomial
+coefficients also have width C*M. The host wrapper validates residency, compact
+AoS row shape and selected roles once; static typed row access is used within
+the specialized numerical body. No per-element device/residency validation or
+hidden input transfer is added. Thread-mapped reduced-precision flow5 kernels
+remain separate comparison leaves; discarded FP64 mapping experiments are not
+fallbacks. Gradient construction and gradient-specific limiter kernels keep
+their existing runtime-dimension interfaces.
+
+`scripts/manifests/cauchy_rhs_shapes.json` is the only instantiation registry.
+The stdlib Python generator writes 24 one-kernel CUDA translation units plus a
+host switch/declarations/source index into the build tree. CMake tracks script
+and manifest changes, shares one generation target between static/shared
+libraries, and restores missing outputs. Numerical implementation changes are
+ordinary compiler include dependencies. Generated wrappers are not tracked in
+Git. This bounded catalog reduces compiler tail size; performance claims still
+refer to measured shapes/devices rather than every specialization.
 Validation state is tracked separately in the Plan60 execution ledger.
 
 ## Ownership and execution boundary

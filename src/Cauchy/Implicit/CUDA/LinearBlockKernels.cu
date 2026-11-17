@@ -1,4 +1,5 @@
 #include "Cauchy/Implicit/CUDA/LinearBlockKernels.hpp"
+#include "DNDS/Algebra/BlockIndex.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include <cuda_runtime.h>
 
@@ -27,7 +28,7 @@ namespace DNDS::Cauchy::CUDA
                     {
                         if (request.fullDiagonal)
                             for (int j = 0; j < N; ++j)
-                                value[i] += diagonal[request.rowMajorBlocks ? i * N + j : i + N * j] * owned(iCell, j);
+                                value[i] += diagonal[Algebra::DenseBlockEntry<N>(i, j, N, request.rowMajorBlocks)] * owned(iCell, j);
                         else
                             value[i] = diagonal[i] * owned(iCell, i);
                     }
@@ -43,7 +44,7 @@ namespace DNDS::Cauchy::CUDA
                         {
                             real product = 0;
                             for (int j = 0; j < N; ++j)
-                                product += block[request.blocks.rowMajorBlocks ? i * N + j : i + N * j] * neighbor[j];
+                                product += block[Algebra::DenseBlockEntry<N>(i, j, N, request.blocks.rowMajorBlocks)] * neighbor[j];
                             if constexpr (Jacobi)
                                 value[i] -= product;
                             else
@@ -58,7 +59,7 @@ namespace DNDS::Cauchy::CUDA
                         result = 0;
                         if (request.fullDiagonal)
                             for (int j = 0; j < N; ++j)
-                                result += diagonal[request.rowMajorBlocks ? i * N + j : i + N * j] * value[j];
+                                result += diagonal[Algebra::DenseBlockEntry<N>(i, j, N, request.rowMajorBlocks)] * value[j];
                         else
                             result = diagonal[i] * value[i];
                     }
@@ -99,7 +100,7 @@ namespace DNDS::Cauchy::CUDA
                         {
                             const real other = __shfl_sync(mask, neighbor, j, lanes);
                             if (component < N)
-                                product += block[request.blocks.rowMajorBlocks ? component * N + j : component + N * j] * other;
+                                product += block[Algebra::DenseBlockEntry<N>(component, j, N, request.blocks.rowMajorBlocks)] * other;
                         }
                         value -= product;
                     }
@@ -109,7 +110,7 @@ namespace DNDS::Cauchy::CUDA
                     {
                         const real other = __shfl_sync(mask, value, j, lanes);
                         if (component < N)
-                            result += diagonal[request.rowMajorBlocks ? component * N + j : component + N * j] * other;
+                            result += diagonal[Algebra::DenseBlockEntry<N>(component, j, N, request.rowMajorBlocks)] * other;
                     }
                 else if (component < N)
                     result = diagonal[component] * value;

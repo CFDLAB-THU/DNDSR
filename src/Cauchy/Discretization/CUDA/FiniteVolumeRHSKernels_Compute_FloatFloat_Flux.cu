@@ -1,6 +1,6 @@
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Compute.hpp"
 #ifdef DNDS_USE_CCCL_COMPUTE
-#    include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Launch.hpp"
+#    include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Compute_Impl.cu.inc"
 
 namespace DNDS::Cauchy::CUDA::Detail
 {

@@ -1,3 +1,4 @@
+#include "DNDS/Algebra/BlockIndex.hpp"
 #include "Cauchy/Implicit/CUDA/FrozenJacobianKernels.hpp"
 #include "Cauchy/Implicit/CUDA/FrozenJacobianKernels_Point.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
@@ -86,7 +87,7 @@ namespace DNDS::Cauchy::CUDA
                         value[i] = rhs(iCell, i);
                     else if (fullDiagonal)
                         for (int j = 0; j < N; ++j)
-                            value[i] += diagonal(iCell, rowMajorBlocks ? i * N + j : i + N * j) * owned(iCell, j);
+                            value[i] += diagonal(iCell, Algebra::DenseBlockEntry<N>(i, j, N, rowMajorBlocks)) * owned(iCell, j);
                     else
                         value[i] = diagonal(iCell, i) * owned(iCell, i);
                 for (index iBlock = 0; iBlock < s.geometry.columns.RowSize(iCell) && checked; ++iBlock)
@@ -116,7 +117,7 @@ namespace DNDS::Cauchy::CUDA
                             result = 0;
                             if (fullDiagonal)
                                 for (int j = 0; j < N; ++j)
-                                    result += diagonal(iCell, rowMajorBlocks ? i * N + j : i + N * j) * value[j];
+                                    result += diagonal(iCell, Algebra::DenseBlockEntry<N>(i, j, N, rowMajorBlocks)) * value[j];
                             else
                                 result = diagonal(iCell, i) * value[i];
                         }

@@ -1,5 +1,10 @@
 #include "Cauchy/Implicit/LocalAMGPreconditioner.hpp"
 #include "DNDS/Runtime/Execution/EagerArray.hpp"
+#include "DNDS/Algebra/AmgXDiagnostics.hpp"
+#include "nlohmann/json.hpp"
+#include <chrono>
+#include <cstdlib>
+#include <iostream>
 #include <climits>
 
 namespace DNDS::Cauchy
@@ -29,6 +34,14 @@ namespace DNDS::Cauchy
         index components = 0;
         uint64_t diagonalEpoch = 0, offDiagonalEpoch = 0;
         bool current = false;
+        /// Opt-in completed snapshots; never executed by ordinary production.
+        bool diagnostics = std::getenv("DNDS_AMGX_FLOW_DIAGNOSTICS") != nullptr;
+        void Report(const char *phase, double seconds, uint64_t nativeMatrixBytes) const
+        {
+            if (!diagnostics)
+                return;
+            std::cout << "AMGX_FLOW_MEMORY " << nlohmann::ordered_json{{"phase", phase}, {"seconds", seconds}, {"rows", partition->owned}, {"components", components}, {"native_matrix_bytes", nativeMatrixBytes}, {"memory", nlohmann::ordered_json::parse(Algebra::AmgXMemoryReport(provider->MemorySnapshot()))}}.dump() << std::endl;
+        }
     };
     LocalAMGPreconditioner::LocalAMGPreconditioner(const LinearProblemContext &problem, Algebra::AmgXSettings settings)
         : _state(std::make_shared<State>())
@@ -56,6 +69,7 @@ namespace DNDS::Cauchy
         settings.blockFormat = Algebra::AmgXBlockFormat::RowMajor;
         data.provider = std::make_shared<Algebra::AmgXPreconditioner>(problem.Device(), settings);
         data.provider->SetPattern(pattern.Offsets32(), pattern.Columns32(), int(n), true);
+        data.Report("provider_created", 0, uint64_t(rows + problem.OffDiagonal().Values().RowCount()) * n * n * sizeof(real));
     }
     void LocalAMGPreconditioner::Update(R::EagerEngine &engine, const R::ExecutionStream &stream, const LinearProblemContext &problem)
     {
@@ -67,16 +81,27 @@ namespace DNDS::Cauchy
         const uint64_t diagonalEpoch = problem.Diagonal().MutationEpoch(), offEpoch = problem.OffDiagonal().Values().MutationEpoch();
         if (data.current && data.diagonalEpoch == diagonalEpoch && data.offDiagonalEpoch == offEpoch)
             return;
+        const bool refresh = data.current;
         data.current = false;
+        const auto started = data.diagnostics ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
         // AmgX is an explicit host-visible boundary. Drain host-progressed MPI
         // before its device-wide join; this provider has no stream API.
         engine.Synchronize();
         const auto diagonal = problem.Diagonal().Read(stream.Context());
         const auto blocks = problem.OffDiagonal().Values().Read(stream.Context());
-        data.provider->UpdateValuesBorrowed(stream.Context(), ScalarView(blocks.View()), ScalarView(diagonal.View()));
+        if (problem.HasNativeAMGXValues())
+            data.provider->AttachValues(stream.Context(), problem.NativeAMGXValues());
+        else
+            data.provider->UpdateValuesBorrowed(stream.Context(), ScalarView(blocks.View()), ScalarView(diagonal.View()));
         data.diagonalEpoch = diagonalEpoch;
         data.offDiagonalEpoch = offEpoch;
         data.current = true;
+        // Diagnostic snapshots join the provider and are excluded from normal
+        // timings. Use the before/after epoch/copy counts to identify refresh.
+        if (data.diagnostics)
+            data.Report(refresh ? "value_refresh" : "initial_setup",
+                        std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count(),
+                        uint64_t(problem.Diagonal().RowCount() + problem.OffDiagonal().Values().RowCount()) * data.components * data.components * sizeof(real));
     }
     void LocalAMGPreconditioner::Apply(R::EagerEngine &engine, const R::ExecutionStream &stream,
                                        const R::Array<real> &rhs, R::Array<real> &output)
@@ -90,6 +115,14 @@ namespace DNDS::Cauchy
         engine.Synchronize();
         const auto read = rhs.Read(stream.Context());
         auto write = output.Write(stream.Context());
+        const auto started = data.diagnostics ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
         data.provider->ApplyBorrowed(stream.Context(), ScalarView(read.View()), ScalarView(write.View()));
+        if (data.diagnostics)
+            data.Report("apply", std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count(), 0);
     }
+    Algebra::AmgXMemorySnapshot LocalAMGPreconditioner::MemorySnapshot() const
+    {
+        return _state->provider->MemorySnapshot();
+    }
+
 }

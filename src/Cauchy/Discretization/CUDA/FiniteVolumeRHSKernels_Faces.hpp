@@ -111,11 +111,11 @@ namespace DNDS::Cauchy::CUDA::Detail
      * leaf common prevents mapping experiments from changing flux/PP/BC policy.
      */
     template <int Components, class PolynomialScalar = real, class FluxScalar = real,
-              class DissipationScalar = real, class Fields>
+              class DissipationScalar = real, class Fields, class Outputs>
     DNDS_DEVICE_CALLABLE NumericalStatus EvaluateFacePoint(
         const RHSGeometry &geometry, const RHSKernelParameters &parameters,
         const RHSKernelControls &controls, const Fields &fields,
-        const RHSFaceOutputs &output, index iFace, index iPoint,
+        const Outputs &output, index iFace, index iPoint,
         std::array<real, Components> &integrated, std::array<real, Components> &integratedLow,
         index &fallbacks) noexcept
     {
@@ -343,70 +343,30 @@ namespace DNDS::Cauchy::CUDA::Detail
         return {};
     }
 
-    /** Generic CPU equation-RHS arithmetic specialized to five/seven bounded
+    /** Perfect-gas non-species RHS arithmetic specialized to 5/6/7 bounded
      * scalars, with a face-owned flux and a separate cell gather. No atomics,
      * per-point allocation, EOS callbacks or exception recovery are used.
      * Residuals keep the CPU sign convention: -weight*normalFlux.
      */
     template <int Components, class PolynomialScalar = real, class FluxScalar = real, class DissipationScalar = real,
-              bool WarpQuadrature = false, class Fields>
+              class Fields, class Outputs>
     DNDS_DEVICE_CALLABLE NumericalStatus EvaluateFace(const RHSGeometry &geometry, const RHSKernelParameters &parameters,
                                                       const RHSKernelControls &controls, const Fields &fields,
-                                                      const RHSFaceOutputs &output, index iFace, index &fallbacks) noexcept
+                                                      const Outputs &output, index iFace, index &fallbacks) noexcept
     {
         const auto anchor = geometry.FaceAnchor(iFace);
         const index first = geometry.faceOffsets(anchor.face, 0);
         const index end = first + geometry.faceOffsets(anchor.face + 1, 0) - geometry.faceOffsets(anchor.face, 0);
         std::array<real, Components> integrated{}, integratedLow{};
-        // Mapping policy only: one lane computes one quadrature point. All
-        // lanes stay live through the final warp collectives, including lanes
-        // beyond the face's quadrature width. The serial mapping is the exact
-        // canonical summation order; warp mode is an explicit FP64 experiment.
-        const int lane = WarpQuadrature ? int(threadIdx.x % 32) : 0;
-        NumericalStatus faceFailure;
-        for (index entry = first + lane; entry < end; entry += WarpQuadrature ? 32 : 1)
+        // Reduced-precision comparison leaves retain a serial point sum.
+        // The production FP64 path uses the separate CTA-segment shell above
+        // this common point arithmetic; no warp-mapping variant is retained.
+        for (index entry = first; entry < end; ++entry)
         {
             const auto pointStatus = EvaluateFacePoint<Components, PolynomialScalar, FluxScalar, DissipationScalar>(
                 geometry, parameters, controls, fields, output, iFace, entry, integrated, integratedLow, fallbacks);
-
             if (!pointStatus)
-            {
-                if constexpr (!WarpQuadrature)
-                    return pointStatus;
-                else
-                {
-                    faceFailure = pointStatus;
-                    break;
-                }
-            }
-        }
-        if constexpr (WarpQuadrature)
-        {
-#ifdef __CUDA_ARCH__
-            constexpr unsigned mask = 0xffffffffu;
-            const unsigned failures = __ballot_sync(mask, !bool(faceFailure));
-            if (failures)
-            {
-                const int failedLane = __ffs(failures) - 1;
-                const auto code = NumericalError(__shfl_sync(mask, int(faceFailure.code), failedLane));
-                const auto detail = __shfl_sync(mask, faceFailure.detail, failedLane);
-                const auto row = __shfl_sync(mask, static_cast<long long>(faceFailure.row), failedLane);
-                const auto point = __shfl_sync(mask, static_cast<long long>(faceFailure.point), failedLane);
-                return NumericalStatus{code, detail, row, point};
-            }
-            for (int offset = 16; offset; offset /= 2)
-            {
-                fallbacks += __shfl_down_sync(mask, static_cast<long long>(fallbacks), offset);
-                for (int j = 0; j < Components; ++j)
-                {
-                    integrated[j] += __shfl_down_sync(mask, integrated[j], offset);
-                    if (controls.produceLow)
-                        integratedLow[j] += __shfl_down_sync(mask, integratedLow[j], offset);
-                }
-            }
-            if (lane)
-                return {};
-#endif
+                return pointStatus;
         }
         if constexpr (!std::is_same_v<PolynomialScalar, real> || !std::is_same_v<FluxScalar, real> || !std::is_same_v<DissipationScalar, real>)
             for (int j = 0; j < Components; ++j)

@@ -175,8 +175,12 @@ TEST_CASE("Queued boundary operator retains P3 basis and matches CPU physical an
         gpuRec->WarmValues().CoupledField().Owned().CopyFrom(cpuRec->WarmValues().CoupledField().Owned(), context).Wait();
         auto cpuWork = cpu.BuildWorkspace(mean), gpuWork = gpu.BuildWorkspace(resident);
         auto cpuBinding = cpuWork->BindReconstruction(*cpuRec), gpuBinding = gpuWork->BindReconstruction(*gpuRec);
-        auto evaluator = equation.MakePointEvaluator();
-        cpuWork->FillBoundary(mean, true, .4, evaluator);
+        {
+            R::EagerEngine hostEngine;
+            const auto hostStream = hostEngine.CreateCPUStream();
+            cpuWork->SubmitBoundary(hostEngine, hostStream, mean, true, .4);
+            hostEngine.Synchronize();
+        }
         R::EagerEngine engine(0, std::make_shared<R::AccessTrackingContext>());
         const auto stream = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
         gpuWork->ResetPreparationStatus(engine, stream);
@@ -557,7 +561,12 @@ TEST_CASE("Managed CUDA flux matches generic CPU for P0 P1 and P3 with distribut
         auto evaluator = equation.MakePointEvaluator({}, {true, true, true});
         if (degree == 1)
         {
-            cpuWork->FillBoundary(mean, false, .3, evaluator);
+            {
+                R::EagerEngine hostEngine;
+                const auto hostStream = hostEngine.CreateCPUStream();
+                cpuWork->SubmitBoundary(hostEngine, hostStream, mean, false, .3);
+                hostEngine.Synchronize();
+            }
             auto &field = cpuWork->fields.front();
             cpuWork->owner->gradient.Evaluate(mean.CoupledField(), *field.gradientBoundary, *field.gradient, {1});
             cpuWork->PreparePrimitiveGradient(mean, DNDS::CFV::ReconstructionRegion::All);

@@ -1,6 +1,6 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
-#include "Cauchy/Discretization/CUDA/FiniteVolumeReconstructionKernels.hpp"
+#include "Cauchy/Discretization/CUDA/FiniteVolumeCharacteristicKernels.hpp"
 #include "Cauchy/Physics/EquationSystem.hpp"
 #include "Cauchy/Config/SimulationConfig.hpp"
 #include "DNDS/Runtime/Execution/CUDAExecution.hpp"

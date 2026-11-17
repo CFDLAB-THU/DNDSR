@@ -70,10 +70,11 @@ namespace DNDS::Cauchy
     {
         std::string stateInputLayout = "aos", reconstructionInputLayout = "aos";
         std::string polynomialArithmetic = "fp64", dissipationArithmetic = "fp64", fluxArithmetic = "fp64";
-        std::string rhsMapping = "thread", rhsReduction = "serial";
+        std::string rhsMapping = "auto", rhsReduction = "auto";
         int rhsGridBlocks = 0;
         int rhsBlockSize = 128;
         bool rhsDoubleBuffer = false;
+        int polynomialPPThreads = 0;
         DNDS_DECLARE_CONFIG(KernelExecutionSettings)
         {
             DNDS_FIELD(stateInputLayout, "Experimental CUDA mean/linear input shadows: aos or aosoa32; primary storage is unchanged");
@@ -81,17 +82,18 @@ namespace DNDS::Cauchy
             DNDS_FIELD(polynomialArithmetic, "Point-local polynomial compute: fp64, fp32 or f32f32; coefficients remain FP64");
             DNDS_FIELD(dissipationArithmetic, "Gas-agnostic Riemann dissipation arithmetic: fp64, fp32 or f32f32");
             DNDS_FIELD(fluxArithmetic, "Point physics and full flux arithmetic: fp64, fp32 or f32f32; residual sums remain FP64");
-            DNDS_FIELD(rhsMapping, "CUDA FP64 mapping: thread, warpQuadrature, warpSegments, or ctaSegments");
-            DNDS_FIELD(rhsReduction, "Segmented mapping face sum: serial quadrature order or deterministic segmented tree");
+            DNDS_FIELD(rhsMapping, "auto selects ctaSegments for FP64 non-species perfect gas; thread is reserved for reduced-precision flow5 comparisons");
+            DNDS_FIELD(rhsReduction, "auto selects deterministic segmented reduction for automatic CTA mapping; explicit serial or segmented remains available");
             DNDS_FIELD(rhsGridBlocks, "CUDA RHS maximum grid blocks; 0 keeps the mapping default cap");
-            DNDS_FIELD(rhsBlockSize, "CUDA RHS threads per block: 64, 128, 256 or 512; segments require at least 128");
-            DNDS_FIELD(rhsDoubleBuffer, "Experimental FP64 flow5 double-buffered shared means/coefficient/auxiliary face batches");
+            DNDS_FIELD(rhsBlockSize, "CUDA RHS runtime threads per block: 128, 256 or 512 for CTA segments; 64 is also available for reduced-precision thread comparisons");
+            DNDS_FIELD(rhsDoubleBuffer, "Retired buffered-face experiment; must remain false");
+            DNDS_FIELD(polynomialPPThreads, "CUDA polynomial PP block size: 0 selects the device/shape default (512 for measured A100 P3 flow5, otherwise 128); explicit 128/256/512 or the existing environment override is preserved");
         }
         bool Default() const
         {
             return stateInputLayout == "aos" && reconstructionInputLayout == "aos" &&
-                   polynomialArithmetic == "fp64" && dissipationArithmetic == "fp64" && fluxArithmetic == "fp64" && rhsMapping == "thread" &&
-                   rhsBlockSize == 128 && !rhsDoubleBuffer && rhsReduction == "serial" && rhsGridBlocks == 0;
+                   polynomialArithmetic == "fp64" && dissipationArithmetic == "fp64" && fluxArithmetic == "fp64" && (rhsMapping == "auto" || rhsMapping == "thread") &&
+                   rhsBlockSize == 128 && !rhsDoubleBuffer && (rhsReduction == "auto" || rhsReduction == "serial") && rhsGridBlocks == 0 && polynomialPPThreads == 0;
         }
     };
     struct ExecutionSettings
@@ -100,10 +102,10 @@ namespace DNDS::Cauchy
         std::string fieldGrouping = "coupled";
         std::string transferPreflight = "collective";
         std::string communicationExecution = "caller";
-        /// Explicit CFV CUDA sweep policy. Quantized variants keep solution
+        /// Automatic or explicit CFV CUDA sweep policy. Quantized variants keep solution
         /// coefficients in FP64; only already-inverted sweep maps/products
         /// change precision. CPU and existing solver defaults remain FP64.
-        std::string reconstructionKernel = "fp64";
+        std::string reconstructionKernel = "auto";
         // Stage-once scan launch settings belong to numerics.cfv.cudaSweep;
         // Cauchy selects the operator policy and never launches a CFV kernel.
         KernelExecutionSettings kernels;
@@ -127,7 +129,7 @@ namespace DNDS::Cauchy
             DNDS_FIELD(transferPreflight, "MPI launch validation: collective (default) or abortOnFailure (local checks, fatal MPI abort, no per-launch global agreement); setup remains collective");
             DNDS_FIELD(hostThreads, "CPU worker count; zero means inline execution");
             DNDS_FIELD(communicationExecution, "MPI payload execution: caller (default) or worker (CPU Direct/HostPacked, requires MPI_THREAD_MULTIPLE)");
-            DNDS_FIELD(reconstructionKernel, "CUDA VR: fp64 (general default), fp64MatrixShared, fp64Pipelined (block-team neighbor pipeline), floatFloatPipelined (the entire SIMT sweep in CCCL fp32mp2, FP64 storage), fp64TensorAsync (warp-team FP64 MMA). Launch dimensions: numerics.cfv.cudaSweep. Quantized-map policies: fp32 (general), fp32Pipelined (SIMT), tf32Pipelined (tensor), fp32Accum, fp32FloatFloatAccum, tf32. The quantized float-float policy cannot restore map precision; floatFloatPipelined uses FP64 maps. Float-float requires DNDS_USE_CCCL_COMPUTE. P1..P3 have static 5/6/7-component and dynamic paths; coefficient storage/WBAP stay FP64. No CPU fallback; nondefault kernels require CUDA and are unavailable with LVR.");
+            DNDS_FIELD(reconstructionKernel, "auto keeps CPU FP64 and selects measured CUDA device/shape defaults (A100 P3 flow5: fp64Pipelined; other qualified CUDA shapes: fp64MatrixShared; LVR: fp64). Explicit fp64, fp64MatrixShared, fp64Pipelined, floatFloatPipelined, fp64TensorAsync and quantized fp32/fp32Pipelined/tf32Pipelined/fp32Accum/fp32FloatFloatAccum/tf32 remain overrides. Launch dimensions: numerics.cfv.cudaSweep. Precision is never reduced automatically. Nondefault kernels require CUDA; LVR requires fp64.");
             config.field_section(&T::kernels, "kernels", "Operator-local CUDA input layout and compute arithmetic policies");
             DNDS_FIELD(checkAccess, "Validate declared scheduled accesses at submission");
             DNDS_FIELD(overlap, "Overlap input halo exchanges with owned-only core work; false waits then runs unsplit kernels");
@@ -313,12 +315,13 @@ namespace DNDS::Cauchy
     struct ImplicitMatrixStorageSettings
     {
         ImplicitMatrixTableSettings diagonal, inverse, offDiagonal;
-        std::string indices = "auto";
+        std::string indices = "auto", amgxStorage = "upload";
         DNDS_DECLARE_CONFIG(ImplicitMatrixStorageSettings)
         {
             config.field_section(&T::diagonal, "diagonal", "Assembled diagonal blocks");
             config.field_section(&T::inverse, "inverse", "Prepared local diagonal inverses");
             config.field_section(&T::offDiagonal, "offDiagonal", "Assembled off-diagonal blocks");
+            DNDS_FIELD(amgxStorage, "upload: public provider copies; native: one compatible shared device matrix allocation without numeric upload copies");
             DNDS_FIELD(indices, "Primary sparse index storage: auto selects int32 for amgx and int64 otherwise; int32/int64 are explicit alternatives. AmgX requires native int32 and compatible aos blocks without adapter repacking.");
         }
     };
@@ -332,7 +335,7 @@ namespace DNDS::Cauchy
         int subspace = 10;
         int jacobiLocalSweeps = 1;
         int diagonalInverseRefinement = 0;
-        std::string cudaDiagonalInverse = "batchedSVD";
+        std::string cudaDiagonalInverse = "auto";
         std::string cudaJacobiMapping = "thread";
         ImplicitMatrixStorageSettings matrixStorage;
         real relativeTolerance = .1, absoluteTolerance = 1e-12;
@@ -341,7 +344,7 @@ namespace DNDS::Cauchy
             DNDS_FIELD(method, "sgs or jacobi stationary sweeps, ilu or amgx stationary defect correction, or restarted left-gmres; amgx requires assembled CUDA storage");
             DNDS_FIELD(jacobiLocalSweeps, "One or two local Jacobi sweeps per iteration; two freezes remote iterate values between sweeps, with one input exchange");
             DNDS_FIELD(diagonalInverseRefinement, "Optional guarded block-inverse corrections: 0 (default) preserves the existing inversion, 1..3 refines within retained SVD subspaces without changing the cutoff. Requires block-diagonal SGS/Jacobi; unavailable for ILU/AmgX.");
-            DNDS_FIELD(cudaDiagonalInverse, "CUDA block inverse kernel: batchedSVD (reference/default) or guardedLU (experimental fixed 5/6/7 LU with the CPU condition guard and filtered SVD fallback); CPU inversion is unchanged");
+            DNDS_FIELD(cudaDiagonalInverse, "auto selects guardedLU on A100 and batchedSVD elsewhere; explicit providers are preserved. Guarded 5/6/7 LU retains the CPU condition guard and filtered SVD fallback. CPU inversion is unchanged");
             DNDS_FIELD(cudaJacobiMapping, "CUDA assembled Jacobi mapping: thread (reference/default) or componentGroup (experimental eight lanes per cell); CPU row arithmetic is unchanged");
             config.field_section(&T::matrixStorage, "matrixStorage", "Independent matrix-table and native sparse-index formats; no hot-path format conversion");
             DNDS_FIELD(preconditioner, "Fixed sgs, zero-started jacobi, rank-local ilu or single-device amgx for GMRES; amgx requires assembled CUDA storage; unused by stationary methods");

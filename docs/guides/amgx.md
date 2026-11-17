@@ -34,9 +34,8 @@ Runtime adapter calls must order input readiness and output completion according
 to AmgX's actual API, without assuming it uses the application's stream.
 
 `DNDS::Algebra::AmgXPreconditioner` accepts native block CSR for
-5/6/7-component cell Jacobians; Cauchy never expands them into scalar rows.
-The bundled [provider patch](../../scripts/patches/README.amgx.md) enables
-6/7 throughout the selected AMG path and repairs its large-block kernels.
+native block widths 1/2/3/4/5/6/7/8/9/19 (and the retained width-10 reference); Cauchy flow5/SA/2EQ remain 5/6/7 and never expand into scalar rows.
+The bundled [provider patch](../../scripts/patches/README.amgx.md) enables the modal widths 9/19 throughout the selected AMG path and retains the corrected 6/7 large-block kernels.
 Genuinely scalar DNDS matrices may still use width one. `SetPattern` shares the
 caller's compact host `Runtime::Array<int>` offsets/columns and retains read
 leases, so those symbolic arrays cannot mutate until replacement/destruction.
@@ -111,3 +110,105 @@ default scope, so the requested 0.75 was ignored and 0.9 was actually used.
 The corrected default is the requested 0.75; one undamped sweep with requested
 factor 1 is independently checked against an exact nonsymmetric block solve.
 Historical results therefore also differ in effective smoother damping.
+
+## Native attached storage and diagnostics (Plan 61-6)
+
+The ordinary `upload` path passes native numeric pointers directly to public
+AmgX upload, which makes its own device copy. Explicit
+`implicit.linear.matrixStorage.amgxStorage="native"` instead allocates the
+canonical matrix once as `[off-diagonal blocks][diagonal blocks]`.
+`LinearProblemContext` exposes the usual diagonal and off-diagonal Arrays as
+disjoint shared-allocation subranges. There is no second DNDS numeric matrix.
+The fork's restricted attachment API gives AmgX a non-owning numeric view of
+that allocation; CSR indices, coarse operators and smoother inverses are still
+provider-owned. Matrix-vector action uses the same native blocks.
+
+`AmgXPreconditioner::AttachValues(context, array)` is the reusable managed
+boundary. For inline diagonals the allocation includes all CSR blocks plus
+one zero sentinel block; for separate diagonal it contains E off-diagonal
+blocks followed by N diagonal blocks. Storage is compact FP64 row-major on the
+selected CUDA device. The adapter retains the Array owner and acquires read
+leases during each synchronous setup/apply. Between solves native mutation is
+allowed, but applying before another `AttachValues` refresh rejects stale
+matrix epochs. These semantics do not promise asynchronous provider execution.
+Native attachment freezes the symbolic pattern. `SetPattern` then rejects
+without changing state; create another provider for a different pattern.
+
+The provider refuses resizing, filling, swapping, coloring, reordering or
+scaling attached matrix payload. Upload/replace APIs cannot overwrite it.
+Public and native attachment modes cannot be mixed on one preconditioner.
+Native storage requires the exact patched fork; build in a new dependency root
+so existing reference libraries remain available:
+
+```sh
+python3 scripts/build_amgx.py --root workspace/dependencies/amgx-plan616 \
+  --source-tree /path/to/AMGX-native-blocks --architectures '80;86' \
+  --cuda-compiler /usr/local/cuda-13.2/bin/nvcc --host-compiler /usr/bin/g++-12 --jobs 16
+```
+
+The external source is verified against the exact compiled-source patch and is
+never reset or rewritten by the recipe. The manifest records its checkout
+revision, immutable upstream pin, patch and installed library hashes.
+
+`MemorySnapshot()` is an explicit diagnostic synchronization boundary. It
+reports per-level numeric-owned/numeric-borrowed, pattern, inverse, transfer and
+workspace capacities, plus boundary H2D/D2D byte counts. Set
+`AMGX_TRACK_ALLOCATIONS=1` before the first provider creation to record logical
+allocator live/peak requests. The CUDA default-pool high-water/reserve figures
+cover the process/device pool, potentially shared with DNDS; they are not
+additional AmgX-owned buffers and must not be added to level capacities.
+Provider library-private allocations and allocator rounding are distinct from
+array payload capacity. Record initial upload, setup, first/warm apply, refresh
+and owner retirement separately. Production numerical kernels contain no
+allocation-statistics atomics.
+
+
+The maintained `dnds_benchmark_amgx` target emits one JSON record at each
+matrix/setup/apply/refresh/retirement boundary for a reproducible block-CSR
+microbenchmark. For example, separately run `65536 5 upload 8` and
+`65536 5 native 8` on the same selected device. Repeat without
+`AMGX_TRACK_ALLOCATIONS` for timing; allocation-traced setup is diagnostic work.
+These synthetic operators qualify ownership/copy cost and do not replace CFD
+convergence evidence. `LocalAMGPreconditioner::MemorySnapshot` forwards the same
+explicit diagnostics for a prepared flow operator after the caller drains its
+engine; do not query during host-progressed communication.
+
+For a bounded real flow run, `DNDS_AMGX_FLOW_DIAGNOSTICS=1` prints
+`AMGX_FLOW_MEMORY` JSON records at provider creation, initial setup, value
+refresh and apply. The switch is off by default. Snapshot joins and printing
+belong to diagnostic runs; use a separate run without this switch or allocator
+tracking for timing. Native matrix bytes are reported separately from provider
+capacity and must not be added again to the borrowed finest-level capacity.
+
+## Experimental VR operator
+
+`CFV::ReconstructionAMGPlan` prepares the **projected fixed-point operator**
+`I - A^+ B` from a host `VariationalReconstructionPlan`. Here `A^+` is the
+already prepared CFV filtered inverse. The new provider does not reinterpret
+singular unprojected reconstruction matrices using its own diagonal inverse.
+Repeated neighbor columns, including periodic self columns, are accumulated
+into unique block-CSR columns. Raw full/triangular input is normalized during
+CPU preparation; precomputed input supplies the same projected maps directly.
+
+The current profile is one rank/device, non-LVR and no rotated periodicity.
+It preserves the existing mean and boundary forcing. Translation periodicity
+is supported; missing local columns fail explicitly. One modal-block hierarchy
+is shared across physical components, with fixed zero-start defect corrections.
+Combined coefficient rows remain `[component][mode]`; component gather/scatter
+is explicit device work and provider RHS/result D2D copies remain. This is an
+exploration facility, not a hidden replacement for the ordinary Jacobi sweep.
+
+`Prepare` accepts `PublicUpload` or `NativeStorage`. In both cases the plan
+owns one directly assembled native modal matrix. Native storage additionally
+borrows it into the provider, without a provider finest numeric copy. The plan
+retains immutable arrays and their leases; submitted operations retain the
+plan and mutable workspace operands. A workspace is serially reused and its
+output is distinct from input. Source mesh generations are still validated.
+
+`SubmitDefectCorrection` currently drains its engine before the synchronous
+provider call for each component. It is not stream-ordered or graph-capturable.
+Setup/apply timing, contraction, vector adaptation and provider memory must be
+reported separately. Requested widths 2/3/4/5/6/7/8/9/19 qualify the selected
+provider kernels; they do not guarantee that AMG will converge for every
+nonsymmetric VR operator. Incompatible block layouts and provider numeric
+extents beyond its int32 arithmetic are rejected rather than repacked.

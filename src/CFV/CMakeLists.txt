@@ -23,6 +23,7 @@ Legacy/VariationalReconstruction.cpp
 Legacy/ModelEvaluator.cpp
 Prepare/FiniteVolumePlan.cpp
 Prepare/FiniteVolumePlan_Reconstruction.cpp
+Prepare/ReconstructionAMGPlan.cpp
 Detail/ReconstructionData_FaceBasis.cpp
 Prepare/FiniteVolumePlan_Placement.cpp
 Prepare/GradientPlan.cpp
@@ -49,20 +50,25 @@ Plans/DistributedInterfaceSamplingPlan.cpp
 CPU/DistributedInterfaceSamplingKernels.cpp
 CPU/ReconstructionBasisKernels.cpp
 CPU/ReconstructionKernels.cpp
+CPU/ReconstructionAMGKernels.cpp
 CPU/ReconstructionKernels_Linear.cpp
 Operators/FiniteVolumePlan_Reconstruction.cpp
 Operators/FiniteVolumePlan_Linear.cpp
 )
 if (DNDS_USE_CUDA)
 list(APPEND CPPS Operators/CUDA/CharacteristicKernels_CUDA.cu Operators/CUDA/GradientKernels_CUDA.cu Operators/CUDA/LimitedVRKernels_CUDA.cu Operators/CUDA/PolynomialSamplingKernels_CUDA.cu Legacy/VRDefines.cu Operators/CUDA/ReconstructionDevice.cu Operators/CUDA/ReconstructionTensorCore.cu)
-list(APPEND CPPS Operators/CUDA/ReconstructionDeviceKernels_TF32.cu Operators/CUDA/ReconstructionDeviceKernels_Raw.cu Operators/CUDA/ReconstructionDeviceKernels_Staged.cu
+list(APPEND CPPS Operators/CUDA/ReconstructionDeviceKernels_Staged.cu
     Operators/CUDA/ReconstructionDeviceKernels_Staged_FP64.cu
+    Operators/CUDA/ReconstructionDeviceKernels_Staged_FP64_M2.cu
+    Operators/CUDA/ReconstructionDeviceKernels_Staged_FP64_M3.cu
+    Operators/CUDA/ReconstructionDeviceKernels_Staged_FP64_M5.cu
+    Operators/CUDA/ReconstructionDeviceKernels_Staged_FP64_M9.cu
+    Operators/CUDA/ReconstructionDeviceKernels_Staged_FP64_M19.cu
     Operators/CUDA/ReconstructionDeviceKernels_Staged_FloatFloat.cu
     Operators/CUDA/ReconstructionDeviceKernels_Staged_FP32.cu
-    Operators/CUDA/ReconstructionDevice_General_FP64.cu
-    Operators/CUDA/ReconstructionDevice_General_FP32.cu
-    Operators/CUDA/ReconstructionDevice_General_FloatFloat.cu)
+    Operators/CUDA/ReconstructionDevice_General_FP64.cu)
 list(APPEND CPPS Operators/CUDA/DistributedInterfaceSamplingKernels.cu)
+list(APPEND CPPS Operators/CUDA/ReconstructionAMGKernels_CUDA.cu)
 endif()
 
 file(GLOB EXPLICIT_INST_CPP_FILES CONFIGURE_DEPENDS "Legacy/ExplicitInstantiations/*.cpp")

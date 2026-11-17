@@ -401,7 +401,7 @@ namespace DNDS::Cauchy
                 _data->reconstruction->SubmitReconstructionIterLimitedTo(
                     engine, stream, state.CoupledField(), reconstruction.WarmValues().CoupledField(),
                     *field.reconstruction, *field.reconstructionBoundary, work.limitedVR->targetCoefficients,
-                    work.limitedVR->alpha, region);
+                    work.limitedVR->alpha, region, _data->reconstructionKernel);
                 work.EndQueuedPhase(engine, stream, timing);
                 return;
             }

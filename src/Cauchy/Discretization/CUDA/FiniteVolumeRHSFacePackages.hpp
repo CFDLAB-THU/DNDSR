@@ -21,9 +21,9 @@ namespace DNDS::Cauchy::CUDA
     struct RHSKernelControls;
     struct RHSFaceStageShape
     {
-        int reconstruction = 0, viscous = 0, width = 0;
-        DNDS_DEVICE_CALLABLE int ViscousFirst() const { return 5 + reconstruction; }
-        DNDS_DEVICE_CALLABLE int AuxFirst() const { return 5 + reconstruction + viscous; }
+        int components = 5, reconstruction = 0, viscous = 0, width = 0;
+        DNDS_DEVICE_CALLABLE int ViscousFirst() const { return components + reconstruction; }
+        DNDS_DEVICE_CALLABLE int AuxFirst() const { return components + reconstruction + viscous; }
     };
     /// Every segment is a complete face. lanes is its bounded point tile;
     /// larger quadrature rules revisit those lanes in increasing point tiles.
@@ -54,8 +54,8 @@ namespace DNDS::Cauchy::CUDA
     };
     /** @brief Setup-only complete-face packing for a selected ready work set.
      * @details Preserves selection order and exact selected-array identity.
-     * WarpSegments never crosses a warp; CTASegments packs tightly and may
-     * cross warps, never CTAs. Shared scratch and staging fit 48 KiB or reject
+     * CTASegments packs tightly and may cross warps, never CTAs. Shared scratch
+     * and staging fit 48 KiB or reject
      * explicitly. No shadow mesh/state or point-to-face field is retained.
      * Prepare may download selected face IDs once; no hot-path allocation,
      * upload or immediate access is hidden in View. Retain the owner through
@@ -68,8 +68,8 @@ namespace DNDS::Cauchy::CUDA
         explicit RHSFacePackages(std::shared_ptr<const Data> data) : _data(std::move(data)) {}
 
     public:
-        /// Central shared-field shape, also used by the existing buffered
-        /// face mapping. It depends on semantic operands, not their values.
+        /// Central shared-field shape for the CTA-segment kernel. It depends
+        /// on semantic operands, not their values or static instantiation.
         static RHSFaceStageShape StageShape(const RHSKernelControls &controls);
         static RHSFacePackages Prepare(const Runtime::Array<index> &selection, SpanView<const index> quadratureCountsByAux,
                                        const RHSKernelControls &controls, Runtime::ExecutionContext context);

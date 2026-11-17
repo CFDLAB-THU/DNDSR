@@ -293,99 +293,125 @@ TEST_CASE("Copy-free local AmgX consumes native int32 unsorted row-major blocks"
     std::vector<I> core(rows);
     std::iota(core.begin(), core.end(), I(0));
     for (const int n : {5, 6, 7})
-    {
-        CAPTURE(n);
-        C::LinearMatrixOptions options;
-        options.indices = C::LinearIndexStorage::Int32;
-        options.rowMajorBlocks = true;
-        auto problemOwner = std::make_shared<C::LinearProblemContext>(space, n, columns, core, C::DiagonalStorage::Block,
-                                                                      C::OffDiagonalStorage::Assembled, device, C::LinearSweepPartitions{}, options);
-        auto &problem = *problemOwner;
-        CHECK(problem.HostPattern().UsesInt32());
-        R::Array<real> diagonal(R::RowLayout::Dense(rows, n * n)), rhs(R::RowLayout::Dense(rows, n));
-        A::BlockMatrixStorage blocks(std::vector<I>(rows, 2), n, R::Device::Host(), {}, true);
-        const auto exact = [](I iCell, I j)
-        { return .4 + .03 * iCell + .07 * j; };
+        for (const bool native : {false, true})
         {
-            auto d = diagonal.Write(), b = rhs.Write();
-            auto a = blocks.Write();
-            for (I iCell = 0; iCell < rows; ++iCell)
-                for (int i = 0; i < n; ++i)
-                {
-                    real value = 0;
-                    for (int j = 0; j < n; ++j)
+            CAPTURE(n);
+            CAPTURE(native);
+            C::LinearMatrixOptions options;
+            options.indices = C::LinearIndexStorage::Int32;
+            options.rowMajorBlocks = true;
+            options.amgxNativeStorage = native;
+            auto problemOwner = std::make_shared<C::LinearProblemContext>(space, n, columns, core, C::DiagonalStorage::Block,
+                                                                          C::OffDiagonalStorage::Assembled, device, C::LinearSweepPartitions{}, options);
+            auto &problem = *problemOwner;
+            CHECK(problem.HostPattern().UsesInt32());
+            R::Array<real> diagonal(R::RowLayout::Dense(rows, n * n)), rhs(R::RowLayout::Dense(rows, n));
+            A::BlockMatrixStorage blocks(std::vector<I>(rows, 2), n, R::Device::Host(), {}, true);
+            const auto exact = [](I iCell, I j)
+            { return .4 + .03 * iCell + .07 * j; };
+            {
+                auto d = diagonal.Write(), b = rhs.Write();
+                auto a = blocks.Write();
+                for (I iCell = 0; iCell < rows; ++iCell)
+                    for (int i = 0; i < n; ++i)
                     {
-                        const real own = i == j ? 4 + .2 * i : .012 * (i + 1) - .019 * (j + 1);
-                        d.View()(iCell, i * n + j) = own;
-                        value += own * exact(iCell, j);
-                        for (I k = 0; k < 2; ++k)
+                        real value = 0;
+                        for (int j = 0; j < n; ++j)
                         {
-                            const real other = .003 * (i + 1) - .005 * (j + 1) + .001 * k;
-                            a.ArrayView().Element(iCell, k, i, j) = other;
-                            value += other * exact(columns[iCell][k], j);
+                            const real own = i == j ? 4 + .2 * i : .012 * (i + 1) - .019 * (j + 1);
+                            d.View()(iCell, i * n + j) = own;
+                            value += own * exact(iCell, j);
+                            for (I k = 0; k < 2; ++k)
+                            {
+                                const real other = .003 * (i + 1) - .005 * (j + 1) + .001 * k;
+                                a.ArrayView().Element(iCell, k, i, j) = other;
+                                value += other * exact(columns[iCell][k], j);
+                            }
                         }
+                        b.View()(iCell, i) = value;
                     }
-                    b.View()(iCell, i) = value;
+            }
+            R::EagerEngine engine;
+            const auto stream = engine.CreateStream(std::make_shared<R::CUDALauncher>(device.ordinal));
+            problem.Diagonal().CopyFrom(diagonal, stream.Context()).Wait();
+            auto values = problem.OffDiagonal().Values();
+            values.CopyFrom(blocks.Values(), stream.Context()).Wait();
+            if (native)
+            {
+                const auto epoch = problem.NativeAMGXValues().MutationEpoch();
+                {
+                    auto write = problem.Diagonal().Write(stream.Context());
+                    write.CancelUnmodified();
                 }
+                CHECK(problem.NativeAMGXValues().MutationEpoch() > epoch);
+                const auto parentRead = problem.NativeAMGXValues().Read(stream.Context());
+                CHECK_THROWS(problem.Diagonal().Write(stream.Context()));
+            }
+            A::AmgXSettings settings;
+            settings.maxLevels = 1;
+            settings.coarseSweeps = 40;
+            settings.relaxation = .9;
+            C::LocalAMGPreconditioner preconditioner(problem, settings);
+            auto input = rhs.To(device);
+            R::Array<real> output(R::RowLayout::Dense(rows, n), device);
+            preconditioner.Update(engine, stream, problem);
+            preconditioner.Apply(engine, stream, input, output);
+            const auto memory = preconditioner.MemorySnapshot();
+            REQUIRE(!memory.levels.empty());
+            CHECK(memory.nativeStorage == native);
+            CHECK(memory.levels.front().numericOwned >= (native ? 0 : uint64_t(3 * rows * n * n * sizeof(real))));
+            if (native)
+                CHECK(memory.levels.front().numericOwned == 0);
+            CHECK(memory.copies.matrixDeviceToDevice == (native ? 0 : uint64_t(3 * rows * n * n * sizeof(real))));
+            if (native)
+            {
+                CHECK(problem.Diagonal().Storage().Identity() == problem.OffDiagonal().Values().Storage().Identity());
+                CHECK_FALSE(problem.Diagonal().Storage().Overlaps(problem.OffDiagonal().Values().Storage()));
+            }
+            const auto host = output.To(R::Device::Host());
+            const auto read = host.Read();
+            for (I iCell = 0; iCell < rows; ++iCell)
+                for (int j = 0; j < n; ++j)
+                    CHECK(read.View()(iCell, j) == doctest::Approx(exact(iCell, j)).epsilon(3e-11));
+            // The adapter must reject incompatible representation rather than
+            // silently allocating a packed shadow matrix/vector.
+            R::Array<real> padded(R::RowLayout::Dense(rows, n, n + 1), device);
+            CHECK_THROWS(preconditioner.Apply(engine, stream, padded, output));
+            C::DomainSettings domain;
+            if (n > 5)
+            {
+                domain.equation.transport = "NewtonianFourier";
+                domain.equation.viscosity = .01;
+                domain.equation.rans.model = n == 6 ? "SA" : "KOmegaSST";
+            }
+            const auto equation = C::EquationSystem::Resolve(domain.equation);
+            A::DofField<real> field(space, input, R::Array<real>(R::RowLayout::Dense(0, n), device));
+            auto bundle = C::EquationDofs::Coupled(equation.Schema(), field);
+            const auto route = R::RowTransferPlan::Known(communication, rows, 0, std::vector<std::vector<I>>(1), std::vector<std::vector<I>>(1));
+            const auto bind = [&](auto &part)
+            {
+                return R::PayloadPlan(route, part.Owned().Layout(), part.Ghost().Layout(), R::ElementSchema::Arithmetic<real>())
+                    .Bind(part.Owned(), part.Ghost());
+            };
+            C::LinearSolveSettings controls;
+            controls.method = "amgx";
+            controls.stopping = "fixedCount";
+            controls.maxIterations = 2;
+            controls.relativeTolerance = 1e30;
+            C::LinearExecution execution;
+            execution.collectiveChecks = false;
+            execution.overlap = false;
+            execution.streams = C::LinearExecution::Streams{stream, engine.CreateStream(std::make_shared<R::CUDALauncher>(device.ordinal))};
+            C::DofLinearSolver fixed(problemOwner, bundle, bind, controls, execution);
+            const auto report = fixed.Solve(bundle);
+            CHECK(report.usable);
+            CHECK(report.stop == DNDS::Linear::LinearStop::FixedCount);
+            CHECK(report.iterations == 2);
+            CHECK(report.preconditionerApplications == 2);
+            CHECK(report.operatorApplications == 1);
+            CHECK(report.innerProductBatches == 0);
+            CHECK_FALSE(report.converged);
+            CHECK(std::isnan(report.trueResidual));
+            engine.Close();
         }
-        R::EagerEngine engine;
-        const auto stream = engine.CreateStream(std::make_shared<R::CUDALauncher>(device.ordinal));
-        problem.Diagonal().CopyFrom(diagonal, stream.Context()).Wait();
-        auto values = problem.OffDiagonal().Values();
-        values.CopyFrom(blocks.Values(), stream.Context()).Wait();
-        A::AmgXSettings settings;
-        settings.maxLevels = 1;
-        settings.coarseSweeps = 40;
-        settings.relaxation = .9;
-        C::LocalAMGPreconditioner preconditioner(problem, settings);
-        auto input = rhs.To(device);
-        R::Array<real> output(R::RowLayout::Dense(rows, n), device);
-        preconditioner.Update(engine, stream, problem);
-        preconditioner.Apply(engine, stream, input, output);
-        const auto host = output.To(R::Device::Host());
-        const auto read = host.Read();
-        for (I iCell = 0; iCell < rows; ++iCell)
-            for (int j = 0; j < n; ++j)
-                CHECK(read.View()(iCell, j) == doctest::Approx(exact(iCell, j)).epsilon(3e-11));
-        // The adapter must reject incompatible representation rather than
-        // silently allocating a packed shadow matrix/vector.
-        R::Array<real> padded(R::RowLayout::Dense(rows, n, n + 1), device);
-        CHECK_THROWS(preconditioner.Apply(engine, stream, padded, output));
-        C::DomainSettings domain;
-        if (n > 5)
-        {
-            domain.equation.transport = "NewtonianFourier";
-            domain.equation.viscosity = .01;
-            domain.equation.rans.model = n == 6 ? "SA" : "KOmegaSST";
-        }
-        const auto equation = C::EquationSystem::Resolve(domain.equation);
-        A::DofField<real> field(space, input, R::Array<real>(R::RowLayout::Dense(0, n), device));
-        auto bundle = C::EquationDofs::Coupled(equation.Schema(), field);
-        const auto route = R::RowTransferPlan::Known(communication, rows, 0, std::vector<std::vector<I>>(1), std::vector<std::vector<I>>(1));
-        const auto bind = [&](auto &part)
-        {
-            return R::PayloadPlan(route, part.Owned().Layout(), part.Ghost().Layout(), R::ElementSchema::Arithmetic<real>())
-                .Bind(part.Owned(), part.Ghost());
-        };
-        C::LinearSolveSettings controls;
-        controls.method = "amgx";
-        controls.stopping = "fixedCount";
-        controls.maxIterations = 2;
-        controls.relativeTolerance = 1e30;
-        C::LinearExecution execution;
-        execution.collectiveChecks = false;
-        execution.overlap = false;
-        execution.streams = C::LinearExecution::Streams{stream, engine.CreateStream(std::make_shared<R::CUDALauncher>(device.ordinal))};
-        C::DofLinearSolver fixed(problemOwner, bundle, bind, controls, execution);
-        const auto report = fixed.Solve(bundle);
-        CHECK(report.usable);
-        CHECK(report.stop == DNDS::Linear::LinearStop::FixedCount);
-        CHECK(report.iterations == 2);
-        CHECK(report.preconditionerApplications == 2);
-        CHECK(report.operatorApplications == 1);
-        CHECK(report.innerProductBatches == 0);
-        CHECK_FALSE(report.converged);
-        CHECK(std::isnan(report.trueResidual));
-        engine.Close();
-    }
 }

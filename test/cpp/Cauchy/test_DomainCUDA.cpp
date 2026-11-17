@@ -2,6 +2,8 @@
 #include "doctest.h"
 #include "Cauchy/Core/Domain.hpp"
 #include "CartesianFixture.hpp"
+#include "../CFV/ReconstructionFixture.hpp"
+#include "Cauchy/Config/CUDAKernelDefaults.hpp"
 #include <filesystem>
 #include <unistd.h>
 
@@ -9,6 +11,82 @@ namespace C = DNDS::Cauchy;
 namespace R = DNDS::Runtime;
 using I = DNDS::index;
 static DNDS::MPIInfo mpi;
+
+TEST_CASE("Automatic A100 kernels advance raw P3 flow with frozen explicit reference selectors")
+{
+    const auto mesh = CFVTest::CartesianHexes(mpi, 3);
+    const auto metrics = DNDS::CFV::FiniteVolumePlan::ConstructMetrics(mesh);
+    C::DomainSettings settings;
+    settings.mesh.dimension = 3;
+    settings.execution.device = "cuda";
+    settings.execution.overlap = false;
+    settings.numerics.reconstruction = "variational";
+    settings.numerics.cfv.maxOrder = 3;
+    settings.numerics.cfv.intOrder = 5;
+    settings.numerics.cfv.cacheDiffBase = false;
+    settings.numerics.cfv.storage.representation = "raw";
+    settings.numerics.cfv.storage.faceCoupling = true;
+    settings.numerics.cfv.SORInstead = false;
+    settings.numerics.reconstructionIterations = 1;
+    settings.numerics.reconstructionTolerance = 0;
+    settings.numerics.positivity = true;
+    settings.numerics.faceFallback = false;
+    settings.implicit.iterations = settings.implicit.minIterations = 2;
+    settings.implicit.requireConvergedReconstruction = false;
+    settings.implicit.rejectUnconvergedStages = false;
+    settings.implicit.linear.method = "jacobi";
+    settings.implicit.linear.stopping = "fixedCount";
+    settings.implicit.linear.iterations = 8;
+    settings.boundaries["7"].kind = "extrapolate";
+    const auto gas = C::EquationSystem::Resolve(settings.equation).Gas();
+    R::Array<double> initial(R::RowLayout::Dense(metrics.NumCell(), 5));
+    {
+        auto write = initial.Write();
+        for (I iCell = 0; iCell < metrics.NumCell(); ++iCell)
+        {
+            const auto x = metrics.GetCellCent(iCell);
+            const auto value = gas.Conservative({1 + .01 * x[0], .3 + .01 * x[1], .2, .1, 1});
+            for (int j = 0; j < 5; ++j)
+                write.View()(iCell, j) = value[j];
+        }
+    }
+    C::TimeSettings time;
+    time.method = "bdf1";
+    std::optional<R::Array<double>> reference;
+    for (bool automatic : {false, true})
+    {
+        auto selected = settings;
+        if (!automatic)
+        {
+            selected.execution.reconstructionKernel = "fp64";
+            selected.execution.kernels.rhsMapping = "ctaSegments";
+            selected.execution.kernels.rhsReduction = "serial";
+            selected.execution.kernels.polynomialPPThreads = 128;
+            selected.implicit.linear.cudaDiagonalInverse = "batchedSVD";
+        }
+        C::Domain domain("fluid", mesh, selected, time);
+        const auto &resolved = domain.Discretization().Settings().execution;
+        if (automatic && C::IsA100Device(R::Device::CUDA(0)))
+        {
+            CHECK(resolved.reconstructionKernel == "fp64Pipelined");
+            CHECK(resolved.kernels.rhsMapping == "ctaSegments");
+            CHECK(resolved.kernels.rhsReduction == "segmented");
+            CHECK(resolved.kernels.polynomialPPThreads == 512);
+        }
+        domain.Dofs().CoupledField().Owned().CopyFrom(initial, {R::Device::CUDA(0), nullptr}).Wait();
+        REQUIRE(domain.Advance(1e-4).accepted);
+        const auto final = domain.Dofs().CoupledField().Owned().To(R::Device::Host());
+        if (!automatic)
+            reference = final.Clone();
+        const auto actual = final.Read(), expected = reference->Read();
+        for (I iCell = 0; iCell < final.RowCount(); ++iCell)
+            for (int j = 0; j < 5; ++j)
+            {
+                CHECK(std::isfinite(actual.View()(iCell, j)));
+                CHECK(actual.View()(iCell, j) == doctest::Approx(expected.View()(iCell, j)).epsilon(2e-8).scale(1));
+            }
+    }
+}
 
 TEST_CASE("Device domains advance nonuniform implicit flow through single grid and pMG with restart")
 {
@@ -108,9 +186,13 @@ TEST_CASE("Device domains advance nonuniform implicit flow through single grid a
 
 TEST_CASE("Domain reconstruction selection runs quantized maps and shared or direct quadrature with FP64 evolving fields")
 {
-    const auto mesh = CauchyTest::PeriodicQuads(mpi, 6);
+    // Quantized comparison selectors deliberately retain only C=5/M=19.
+    // Keep the evolving-field/cache oracle on that supported 3D P3 fixture;
+    // the preceding domain matrix retains translational-periodic 2D coverage.
+    const auto mesh = CFVTest::CartesianHexes(mpi, 3);
     const auto metrics = DNDS::CFV::FiniteVolumePlan::ConstructMetrics(mesh);
     C::DomainSettings settings;
+    settings.mesh.dimension = 3;
     settings.execution.device = "cuda";
     settings.execution.deviceOrdinal = 0;
     settings.numerics.reconstruction = "variational";
@@ -122,6 +204,7 @@ TEST_CASE("Domain reconstruction selection runs quantized maps and shared or dir
     settings.numerics.faceFallback = false;
     settings.numerics.positivity = true;
     settings.implicit.linear.method = "jacobi";
+    settings.boundaries["7"].kind = "extrapolate";
     C::TimeSettings time;
     time.method = "ssprk3";
     const auto gas = C::EquationSystem::Resolve(settings.equation).Gas();

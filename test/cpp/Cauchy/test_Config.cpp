@@ -1,9 +1,48 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
 #include "Cauchy/Config/SimulationConfig.hpp"
+#include "Cauchy/Config/CUDAKernelDefaults.hpp"
 #include "DNDS/Algebra/AmgXPreconditioner.hpp"
 
 namespace C = DNDS::Cauchy;
+TEST_CASE("Automatic CUDA policies select measured A100 kernels and preserve explicit overrides")
+{
+    C::DomainSettings base;
+    base.mesh.dimension = 3;
+    base.numerics.reconstruction = "variational";
+    base.numerics.cfv.maxOrder = 3;
+    base.numerics.cfv.intOrder = 5;
+    auto a100 = base;
+    C::ResolveAutomaticCUDAKernels(a100, true, true);
+    CHECK(a100.execution.kernels.rhsMapping == "ctaSegments");
+    CHECK(a100.execution.kernels.rhsReduction == "segmented");
+    CHECK(a100.execution.reconstructionKernel == "fp64Pipelined");
+    CHECK(a100.execution.kernels.polynomialPPThreads == 512);
+    CHECK(a100.numerics.cfv.storage.representation == base.numerics.cfv.storage.representation);
+    auto other = base;
+    C::ResolveAutomaticCUDAKernels(other, false, true);
+    CHECK(other.execution.kernels.rhsMapping == "ctaSegments");
+    CHECK(other.execution.reconstructionKernel == "fp64");
+    CHECK(other.execution.kernels.polynomialPPThreads == 128);
+    auto explicitPolicy = base;
+    explicitPolicy.execution.reconstructionKernel = "fp64";
+    explicitPolicy.execution.kernels.rhsMapping = "ctaSegments";
+    explicitPolicy.execution.kernels.rhsReduction = "serial";
+    explicitPolicy.execution.kernels.polynomialPPThreads = 256;
+    C::ResolveAutomaticCUDAKernels(explicitPolicy, true, true);
+    CHECK(explicitPolicy.execution.reconstructionKernel == "fp64");
+    CHECK(explicitPolicy.execution.kernels.rhsMapping == "ctaSegments");
+    CHECK(explicitPolicy.execution.kernels.rhsReduction == "serial");
+    CHECK(explicitPolicy.execution.kernels.polynomialPPThreads == 256);
+    auto limited = base;
+    limited.numerics.limiter = "LVR";
+    C::ResolveAutomaticCUDAKernels(limited, true, true);
+    CHECK(limited.execution.reconstructionKernel == "fp64");
+    CHECK(C::ExecutionSettings{}.kernels.Default());
+    CHECK(C::ExecutionSettings{}.ReconstructionKernel() == DNDS::CFV::ReconstructionDeviceKernel::FP64);
+    CHECK(C::ResolveAutomaticCUDAInverse("auto", DNDS::Runtime::Device::Host()) == "batchedSVD");
+    CHECK(C::ResolveAutomaticCUDAInverse("guardedLU", DNDS::Runtime::Device::Host()) == "guardedLU");
+}
 TEST_CASE("Mesh preprocessing is explicit and validates a positive uniform scale")
 {
     const auto defaults = C::SimulationConfig::Resolve(C::Json::object(), 1);
@@ -94,7 +133,12 @@ TEST_CASE("CUDA capability resolution requires a complete combined perfect gas p
         CHECK_NOTHROW(C::ResolvedExecutionPlan::Resolve(domain));
     }
     settings.execution.reconstructionKernel = "fp32";
-    CHECK_NOTHROW(C::ResolvedExecutionPlan::Resolve(domain));
+    CHECK_THROWS_WITH(C::ResolvedExecutionPlan::Resolve(domain), doctest::Contains("comparison reconstruction kernels"));
+    auto comparison = domain;
+    comparison.settings.equation.rans.model = "none";
+    comparison.settings.mesh.dimension = 3;
+    comparison.settings.implicit.multigrid.levels = 0;
+    CHECK_NOTHROW(C::ResolvedExecutionPlan::Resolve(comparison));
     settings.numerics.limiter = "LVR";
     CHECK_THROWS_WITH(C::ResolvedExecutionPlan::Resolve(domain), doctest::Contains("LVR currently requires"));
     settings.numerics.limiter = "none";

@@ -126,10 +126,14 @@ TEST_CASE("Contiguous VR payloads and raw face storage preserve oriented distrib
             auto deviceWork = resident.BuildWorkspace(components, std::vector<I>{1});
             R::EagerEngine engine;
             const auto stream = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
-            resident.SubmitReconstructionIterLimitedTo(engine, stream, dm, du, deviceWork, db, dt, da);
-            engine.Synchronize();
-            resident.CheckStatus(deviceWork);
-            Equal(work.temporary, deviceWork.temporary, 2e-9);
+            for (const auto kernel : {C::ReconstructionDeviceKernel::FP64, C::ReconstructionDeviceKernel::FP64Pipelined})
+            {
+                resident.SubmitReconstructionIterLimitedTo(engine, stream, dm, du, deviceWork, db, dt, da,
+                                                           C::ReconstructionRegion::All, kernel);
+                engine.Synchronize();
+                resident.CheckStatus(deviceWork);
+                Equal(work.temporary, deviceWork.temporary, 2e-9);
+            }
         }
     }
 }

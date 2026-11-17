@@ -35,46 +35,43 @@ TEST_CASE("Complete-face packages preserve mixed rules tails and bounded point t
             write.View()(iFace, 0) = (iFace * 17) % I(counts.size());
     }
     const auto selected = host.To(device, context);
-    for (const auto mapping : {K::RHSFaceMapping::WarpSegments, K::RHSFaceMapping::CTASegments})
-        for (const int threads : {128, 256, 512})
+    for (const int threads : {128, 256, 512})
+    {
+        K::RHSKernelControls controls;
+        controls.mapping = K::RHSFaceMapping::CTASegments;
+        controls.blockSize = threads;
+        controls.modes = 19;
+        const auto owner = K::RHSFacePackages::Prepare(selected, {counts.data(), I(counts.size())}, controls, context);
+        const auto view = owner.View();
+        CHECK(view.selection.data == selected.Read(context).View().data);
+        REQUIRE(view.sharedBytes <= 48 * 1024);
+        const auto packages = Download<K::RHSFacePackage>(view.packages);
+        const auto segments = Download<K::RHSFaceSegment>(view.segments);
+        I seen = 0;
+        for (const auto &package : packages)
         {
-            K::RHSKernelControls controls;
-            controls.mapping = mapping;
-            controls.blockSize = threads;
-            controls.modes = 19;
-            const auto owner = K::RHSFacePackages::Prepare(selected, {counts.data(), I(counts.size())}, controls, context);
-            const auto view = owner.View();
-            CHECK(view.selection.data == selected.Read(context).View().data);
-            REQUIRE(view.sharedBytes <= 48 * 1024);
-            const auto packages = Download<K::RHSFacePackage>(view.packages);
-            const auto segments = Download<K::RHSFaceSegment>(view.segments);
-            I seen = 0;
-            for (const auto &package : packages)
+            CHECK(package.firstSegment == seen);
+            CHECK(package.faces > 0);
+            int end = 0, tiles = 0;
+            for (int slot = 0; slot < package.faces; ++slot)
             {
-                CHECK(package.firstSegment == seen);
-                CHECK(package.faces > 0);
-                int end = 0, tiles = 0;
-                for (int slot = 0; slot < package.faces; ++slot)
-                {
-                    const auto segment = segments[package.firstSegment + slot];
-                    CHECK(segment.auxiliaryFace == (seen * 17) % I(counts.size()));
-                    CHECK(segment.points == counts[segment.auxiliaryFace]);
-                    CHECK(segment.firstLane >= end);
-                    CHECK(segment.lanes > 0);
-                    CHECK(segment.firstLane + segment.lanes <= threads);
-                    if (mapping == K::RHSFaceMapping::WarpSegments)
-                        CHECK(segment.firstLane / 32 == (segment.firstLane + segment.lanes - 1) / 32);
-                    end = segment.firstLane + segment.lanes;
-                    tiles = std::max(tiles, int(segment.points / segment.lanes + (segment.points % segment.lanes != 0)));
-                    ++seen;
-                }
-                CHECK(package.tiles == tiles);
+                const auto segment = segments[package.firstSegment + slot];
+                CHECK(segment.auxiliaryFace == (seen * 17) % I(counts.size()));
+                CHECK(segment.points == counts[segment.auxiliaryFace]);
+                CHECK(segment.firstLane >= end);
+                CHECK(segment.lanes > 0);
+                CHECK(segment.firstLane + segment.lanes <= threads);
+                end = segment.firstLane + segment.lanes;
+                tiles = std::max(tiles, int(segment.points / segment.lanes + (segment.points % segment.lanes != 0)));
+                ++seen;
             }
-            CHECK(seen == I(counts.size()));
+            CHECK(package.tiles == tiles);
         }
+        CHECK(seen == I(counts.size()));
+    }
 }
 
-TEST_CASE("Nine-point packages distinguish warp containment from tight CTA packing")
+TEST_CASE("Nine-point packages pack tightly across warps within the CTA budget")
 {
     const auto device = R::Device::CUDA(0);
     const R::ExecutionContext context{device, nullptr};
@@ -86,21 +83,20 @@ TEST_CASE("Nine-point packages distinguish warp containment from tight CTA packi
             write.View()(iFace, 0) = iFace;
     }
     const auto selected = host.To(device, context);
-    for (const auto mapping : {K::RHSFaceMapping::WarpSegments, K::RHSFaceMapping::CTASegments})
     {
         K::RHSKernelControls controls;
-        controls.mapping = mapping;
+        controls.mapping = K::RHSFaceMapping::CTASegments;
         controls.modes = 19;
         const auto owner = K::RHSFacePackages::Prepare(selected, {counts.data(), I(counts.size())}, controls, context);
         const auto view = owner.View();
         const auto packages = Download<K::RHSFacePackage>(view.packages);
         const auto segments = Download<K::RHSFaceSegment>(view.segments);
         REQUIRE(!packages.empty());
-        CHECK(packages[0].faces == (mapping == K::RHSFaceMapping::WarpSegments ? 12 : 14));
+        CHECK(packages[0].faces == 14);
         bool crossesWarp = false;
         for (const auto &segment : segments)
             crossesWarp |= segment.firstLane / 32 != (segment.firstLane + segment.lanes - 1) / 32;
-        CHECK(crossesWarp == (mapping == K::RHSFaceMapping::CTASegments));
+        CHECK(crossesWarp);
         // A resource-limited profile must reject rather than silently launch
         // fewer threads, omit the low flux, or replace the requested mapping.
         controls.blockSize = 512;

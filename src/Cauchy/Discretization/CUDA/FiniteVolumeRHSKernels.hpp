@@ -89,7 +89,7 @@ namespace DNDS::Cauchy::CUDA
         bool direct = false, linear = false, firstOrder = false;
         bool viscous = false, primitiveGradient = false, distinctViscous = false;
         bool positivity = false, faceFallback = false, useStencil = false, produceLow = false;
-        RHSFaceMapping mapping = RHSFaceMapping::Thread;
+        RHSFaceMapping mapping = RHSFaceMapping::CTASegments;
         RHSFaceReduction reduction = RHSFaceReduction::Serial;
         int gridBlocks = 0;
         int blockSize = 128;
@@ -102,13 +102,21 @@ namespace DNDS::Cauchy::CUDA
     /// combined uniform-row fields are supported. viscousData denotes primitive
     /// gradients when primitiveGradient is selected, otherwise optional
     /// conservative gradients/Taylor coefficients with the reconstruction shape.
-    template <class MeanPolicy = Runtime::UniformTableRows, class CoefficientPolicy = Runtime::UniformTableRows>
+    template <class MeanPolicy = Runtime::UniformTableRows, class CoefficientPolicy = Runtime::UniformTableRows,
+              class ViscousPolicy = CoefficientPolicy, int Modes = 0>
     struct RHSFieldsT
     {
+        static constexpr int static_modes = Modes;
+        static constexpr int static_dimension = 0;
+        static constexpr bool separate_roles = false;
+        using IncomingPolicy = std::conditional_t<MeanPolicy::row_width == Runtime::DynamicExtent, Runtime::TableRows,
+                                                  Runtime::FixedWidthRows<Runtime::TableRows, MeanPolicy::row_width>>;
         Runtime::PairReadView<real, Runtime::AccessBoundsChecks, MeanPolicy> mean;
-        Runtime::PairReadView<real, Runtime::AccessBoundsChecks, CoefficientPolicy> reconstruction, viscousData;
+        Runtime::PairReadView<real, Runtime::AccessBoundsChecks, CoefficientPolicy> reconstruction;
+        Runtime::PairReadView<real, Runtime::AccessBoundsChecks, ViscousPolicy> viscousData;
         RHSField waveJump, pressureMinimum;
-        RHSInput preparedMean, incoming;
+        RHSInput preparedMean;
+        Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, IncomingPolicy> incoming;
         bool hasPreparedMean = false, hasIncoming = false, hasWave = false, hasPressure = false;
         void ValidateDevice(Runtime::Device device) const
         {
@@ -124,16 +132,25 @@ namespace DNDS::Cauchy::CUDA
         }
     };
     using RHSFields = RHSFieldsT<>;
-    struct RHSFaceOutputs
+    template <class Policy = Runtime::TableRows>
+    struct RHSFaceOutputsT
     {
-        RHSOutput high, low;
+        Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Policy> high, low;
         Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::FixedRows<3>> wallForce;
         RHSStatus status;
         Runtime::ArrayView<index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> fallbackCounts;
     };
-    /// Launch one independent thread per selected auxiliary face, integrating
-    /// quadrature in CPU order. Caller uses mesh-classified face subsets and
-    /// declares ghosts only for dependent work. No MPI or atomics occur here.
+    using RHSFaceOutputs = RHSFaceOutputsT<>;
+    /** @brief Launch the selected perfect-gas face mapping with validated views.
+     * @details Only calorically perfect-gas flow5/SA/2EQ is supported. This is
+     * not a species, chemistry or arbitrary-EOS entry: validate the immutable
+     * RHSKernelParameters before publishing them to the device. Combined AoS
+     * fields use fixed-width 5/6/7 row views and static P1/P2/P3 modal extents;
+     * the existing uniform-layout path retains runtime access. No field data
+     * is copied to obtain a static view. Caller uses mesh-classified face
+     * subsets, declares ghosts only for dependent work and retains all owners
+     * through stream completion. No MPI or floating-point atomic sums occur.
+     */
     void EvaluateFluxFaces(Runtime::ExecutionContext context, const RHSGeometryPublication &geometry,
                            Runtime::ArrayView<const RHSKernelParameters, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> parameters,
                            RHSKernelControls controls, RHSFields fields, RHSFaceOutputs output, RHSIndices faces, bool requireGhost = true, RHSFacePackageView packages = {});

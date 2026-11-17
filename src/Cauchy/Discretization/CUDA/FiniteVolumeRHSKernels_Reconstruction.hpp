@@ -8,11 +8,10 @@ namespace DNDS::Cauchy::CUDA::Detail
     template <int Components, class Fields>
     DNDS_DEVICE_CALLABLE void MeanPoint(const Fields &fields, index iCell, PerfectGasKernelPoint<Components> &point) noexcept
     {
-        for (int j = 0; j < Components; ++j)
-        {
-            point.values[j] = fields.mean(iCell, j);
-            point.gradients[j] = {};
-        }
+        // Share the auxiliary/RHS mean loader. Gradients are explicitly absent
+        // here; reconstructed point gradients are filled below, not borrowed
+        // from a previous auxiliary calculation.
+        point.Load(iCell, fields.mean, fields.mean, 0, false);
     }
     /// The sample's other center is already a periodic coordinate image in
     /// the anchor frame. Undo only the vector map, then add the native center.
@@ -42,7 +41,7 @@ namespace DNDS::Cauchy::CUDA::Detail
     {
         const index iCell = other ? sample.other : sample.cell;
         MeanPoint(fields, iCell, point);
-        const int dimension = controls.dimension;
+        const int dimension = Fields::static_dimension ? Fields::static_dimension : controls.dimension;
         if (!controls.firstOrder && (!controls.direct || controls.linear))
         {
             using S = PolynomialScalar;
@@ -51,16 +50,44 @@ namespace DNDS::Cauchy::CUDA::Detail
             for (int j = 0; j < Components; ++j)
                 values[j] = DNDS::Math::ScalarCast<S>(point.values[j]);
             const auto position = ParentPoint(geometry, sample, other);
-            const auto &viscous = controls.distinctViscous && !controls.primitiveGradient ? fields.viscousData : fields.reconstruction;
-            if (controls.direct)
+            const int modes = Fields::separate_roles || Fields::static_modes ? Fields::static_modes : controls.modes;
+            const bool direct = Fields::separate_roles ? Fields::static_modes == 0 : controls.direct;
+            // These operands can have different static extents (primitive
+            // gradients versus modal coefficients). Select scalar values,
+            // without decaying either typed view back to a dynamic policy.
+            const auto coefficient = [&](int j)
+            {
+                if constexpr (Fields::separate_roles)
+                {
+                    if constexpr (Fields::static_modes == 0)
+                        return fields.gradients(iCell, j);
+                    else
+                        return fields.coefficients(iCell, j);
+                }
+                else
+                    return fields.reconstruction(iCell, j);
+            };
+            const auto viscous = [&](int j)
+            {
+                if constexpr (Fields::separate_roles)
+                {
+                    if constexpr (Fields::static_modes == 0)
+                        return controls.distinctViscous ? fields.viscousGradients(iCell, j) : fields.gradients(iCell, j);
+                    else
+                        return controls.distinctViscous ? fields.viscousCoefficients(iCell, j) : fields.coefficients(iCell, j);
+                }
+                else
+                    return controls.distinctViscous && !controls.primitiveGradient ? fields.viscousData(iCell, j) : fields.reconstruction(iCell, j);
+            };
+            if (direct)
             {
                 for (int j = 0; j < Components; ++j)
                     for (int d = 0; d < dimension; ++d)
                     {
-                        values[j] += DNDS::Math::ScalarCast<S>(fields.reconstruction(iCell, j * dimension + d)) *
+                        values[j] += DNDS::Math::ScalarCast<S>(coefficient(j * dimension + d)) *
                                      (DNDS::Math::ScalarCast<S>(position[d]) - DNDS::Math::ScalarCast<S>(geometry.cells(iCell, 4 + d)));
                         if (controls.viscous && !controls.primitiveGradient)
-                            gradients[j][d] = DNDS::Math::ScalarCast<S>(viscous(iCell, j * dimension + d));
+                            gradients[j][d] = DNDS::Math::ScalarCast<S>(viscous(j * dimension + d));
                     }
             }
             else
@@ -72,16 +99,16 @@ namespace DNDS::Cauchy::CUDA::Detail
                 // Consume one modal basis across all equations before advancing.
                 // This keeps the original per-equation summation order while
                 // avoiding a 4x19 thread-local table in the hot face kernel.
-                for (int mode = 0; mode < controls.modes; ++mode)
+                for (int mode = 0; mode < modes; ++mode)
                 {
                     S basis[4];
                     for (int d = 0; d < derivatives; ++d)
                         basis[d] = geometry.basis.Evaluate(iCell, sample.point, other ? 1 - sample.side : sample.side, prepared, d, mode);
                     for (int j = 0; j < Components; ++j)
                     {
-                        values[j] += DNDS::Math::ScalarCast<S>(fields.reconstruction(iCell, j * controls.modes + mode)) * basis[0];
+                        values[j] += DNDS::Math::ScalarCast<S>(coefficient(j * modes + mode)) * basis[0];
                         for (int d = 1; d < derivatives; ++d)
-                            gradients[j][d - 1] += DNDS::Math::ScalarCast<S>(viscous(iCell, j * controls.modes + mode)) * basis[d];
+                            gradients[j][d - 1] += DNDS::Math::ScalarCast<S>(viscous(j * modes + mode)) * basis[d];
                     }
                 }
             }
@@ -102,7 +129,10 @@ namespace DNDS::Cauchy::CUDA::Detail
         if (controls.primitiveGradient)
             for (int j = 0; j < 5; ++j)
                 for (int d = 0; d < dimension; ++d)
-                    point.gradients[j][d] = fields.viscousData(iCell, j * dimension + d);
+                    if constexpr (Fields::separate_roles)
+                        point.gradients[j][d] = fields.primitiveGradients(iCell, j * dimension + d);
+                    else
+                        point.gradients[j][d] = fields.viscousData(iCell, j * dimension + d);
         // PP POLICY: temporary point fallback only. Raw coefficient/gradient
         // arrays are unchanged. Perfect gas has no composition to project.
         if ((controls.positivity || controls.faceFallback) &&

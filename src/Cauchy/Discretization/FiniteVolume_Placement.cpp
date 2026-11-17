@@ -1,6 +1,7 @@
 #include "Cauchy/Discretization/FiniteVolumeInternal.hpp"
 #include "Cauchy/Discretization/LimitedVRInternal.hpp"
 #include "Cauchy/Discretization/PerfectGasKernelPoint.hpp"
+#include "Cauchy/Config/CUDAKernelDefaults.hpp"
 
 namespace DNDS::Cauchy
 {
@@ -45,6 +46,7 @@ namespace DNDS::Cauchy
         // source plan stays usable. Runtime topology/control metadata remain
         // host-owned; replaced numerical payloads do not retain CPU duplicates.
         auto placed = std::make_shared<Data>(*_data);
+        ResolveAutomaticCUDAKernels(placed->settings, IsA100Device(device), !_data->equation.HasRANS());
         placed->metrics = _data->metrics.Placed(device, context);
         placed->gradient = _data->gradient.Placed(placed->metrics, context);
         CFV::SamplingPlacementMemo samplingPlacement(device, context);
@@ -58,7 +60,7 @@ namespace DNDS::Cauchy
                                              _data->settings.numerics.reconstructionBoundaryFromPolynomial;
             options.basis = true;
             options.basisDerivativeOrder = 1;
-            placed->reconstructionKernel = _data->settings.execution.ReconstructionKernel();
+            placed->reconstructionKernel = placed->settings.execution.ReconstructionKernel();
             if (placed->reconstructionKernel == CFV::ReconstructionDeviceKernel::FP32 ||
                 placed->reconstructionKernel == CFV::ReconstructionDeviceKernel::FP32Pipelined ||
                 placed->reconstructionKernel == CFV::ReconstructionDeviceKernel::TF32Pipelined ||
@@ -67,8 +69,9 @@ namespace DNDS::Cauchy
                 placed->reconstructionKernel == CFV::ReconstructionDeviceKernel::TF32TensorCore)
                 options.matrixPrecision = CFV::ReconstructionMatrixPrecision::FP32;
             DNDS_check_throw_info(_data->settings.numerics.limiter != "LVR" ||
-                                      placed->reconstructionKernel == CFV::ReconstructionDeviceKernel::FP64,
-                                  "LVR currently requires the fp64 reconstruction kernel");
+                                      (placed->reconstructionKernel == CFV::ReconstructionDeviceKernel::FP64 ||
+                                       placed->reconstructionKernel == CFV::ReconstructionDeviceKernel::FP64Pipelined),
+                                  "LVR requires general fp64 or production fp64Pipelined reconstruction");
             placed->reconstruction = _data->reconstruction->Place(device, context, options);
             placed->quadrature.faceBasis = placed->reconstruction->SamplingFaceBasis();
             samplingPlacement.Seed(_data->quadrature.faceBasis, placed->quadrature.faceBasis);

@@ -1,3 +1,4 @@
+#include "DNDS/Algebra/BlockIndex.hpp"
 #include "Cauchy/Implicit/CUDA/FiniteVolumeJacobianKernels.hpp"
 #include "Cauchy/Implicit/CUDA/FrozenJacobianKernels_Point.hpp"
 #include "Cauchy/Boundary/BoundaryJacobian.hpp"
@@ -20,7 +21,7 @@ namespace DNDS::Cauchy::CUDA
             std::array<real, N * N> own{};
             for (int j = 0; j < N; ++j)
                 for (int i = 0; i < N; ++i)
-                    own[i + N * j] = fullBlock ? diagonal(iCell, q.rowMajorBlocks ? i * N + j : i + N * j) : (i == j ? diagonal(iCell, i) : 0);
+                    own[i + N * j] = fullBlock ? diagonal(iCell, Algebra::DenseBlockEntry<N>(i, j, N, q.rowMajorBlocks)) : (i == j ? diagonal(iCell, i) : 0);
             std::array<real, N> mean{};
             for (int j = 0; j < N; ++j)
                 mean[j] = q.means(iCell, j);
@@ -178,7 +179,7 @@ namespace DNDS::Cauchy::CUDA
                         return NumericalStatus{NumericalError::InvalidState, 5, iCell};
                 }
             for (int j = 0; j < (fullBlock ? N * N : N); ++j)
-                diagonal(iCell, fullBlock && q.rowMajorBlocks ? (j % N) * N + j / N : j) = fullBlock ? own[j] : own[j + N * j];
+                diagonal(iCell, fullBlock ? Algebra::DenseBlockEntry<N>(j % N, j / N, N, q.rowMajorBlocks) : j) = fullBlock ? own[j] : own[j + N * j];
             return {};
         }
         template <int N>

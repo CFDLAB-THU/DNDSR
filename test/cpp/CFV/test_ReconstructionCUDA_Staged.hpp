@@ -56,7 +56,9 @@ TEST_CASE("Stage-once VR pipelines preserve complete modal batches and queued de
     // product of geometry/degree/storage choices.
     for (const auto profile : {Profile{0, 1, 5, false, false}, Profile{2, 1, 6, true, false},
                                Profile{0, 3, 5, false, false}, Profile{1, 2, 6, true, false}, Profile{2, 3, 7, true, true},
-                               Profile{2, 2, 6, false, false}, Profile{0, 2, 21, false, false}, Profile{2, 3, 37, true, false}})
+                               Profile{2, 2, 6, false, false}, Profile{0, 2, 21, false, false}, Profile{2, 3, 37, true, false},
+                               Profile{2, 3, 5, false, false}, Profile{0, 1, 8, true, true},
+                               Profile{2, 1, 8, false, false}, Profile{2, 2, 8, true, false}})
     {
         CAPTURE(profile.fixture);
         auto mesh = profile.fixture == 0 ? CFVTest::MixedCells(mpi) : profile.fixture == 1 ? CFVTest::Sector(mpi)
@@ -87,6 +89,11 @@ TEST_CASE("Stage-once VR pipelines preserve complete modal batches and queued de
         for (int candidate = 0; candidate < 7; ++candidate)
         {
             CAPTURE(candidate);
+            // Production FP64 plus general reference cover every profile.
+            // Each optional comparison policy retains only its fixed fixture.
+            const bool comparison = candidate != 0 && candidate != 6;
+            if (comparison && (profile.fixture != 2 || profile.degree != 3 || profile.components != 5 || profile.raw))
+                continue;
             const bool tensor = candidate == 2 || candidate == 4;
             const bool quantized = candidate == 3 || candidate == 4;
             settings.storage.representation = profile.raw && !quantized ? "raw" : "precomputed";
@@ -113,8 +120,10 @@ TEST_CASE("Stage-once VR pipelines preserve complete modal batches and queued de
             auto boundary = plan.BuildBoundaryValues(profile.components);
             boundary.values.CopyFrom(referenceBoundary.values).Wait();
             auto deviceBoundary = resident.PlaceBoundaryValues(boundary);
-            auto deviceMean = metrics.BuildField(mean.Owned().Layout(), context.device);
-            auto deviceCoefficients = resident.BuildCoefficients(profile.components);
+            auto deviceMean = metrics.BuildField(R::RowLayout::Dense(0, profile.components), context.device);
+            const I coefficientWidth = profile.components * plan.NRecDOF();
+            auto deviceCoefficients = resident.BuildCoefficients(profile.components,
+                                                                 R::RowLayout::Dense(0, coefficientWidth));
             for (auto pair : {std::make_pair(&deviceMean, &mean), std::make_pair(&deviceCoefficients, &coefficients)})
             {
                 pair.first->Owned().CopyFrom(pair.second->Owned(), context).Wait();
@@ -123,12 +132,24 @@ TEST_CASE("Stage-once VR pipelines preserve complete modal batches and queued de
             const auto producerInput = deviceCoefficients.Owned().Clone(context);
             Fill(deviceCoefficients, 0); // The producer restores the real input.
             auto work = resident.BuildWorkspace(profile.components, std::vector<I>{1});
+            if (candidate == 0 && profile.fixture == 0 && profile.degree == 1 && profile.components == 5)
+            {
+                CHECK_FALSE(resident.SupportsKernel(C::ReconstructionDeviceKernel::FP64MatrixShared));
+                R::EagerEngine rejected;
+                const auto rejectedStream = rejected.CreateStream(std::make_shared<R::CUDALauncher>(0));
+                CHECK_THROWS(resident.SubmitReconstructionIterTo(rejected, rejectedStream, deviceMean, deviceCoefficients,
+                                                                 work, deviceBoundary, C::ReconstructionRegion::All,
+                                                                 C::ReconstructionDeviceKernel::FP64MatrixShared));
+            }
             R::EagerEngine engine;
             const auto producer = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
             const auto compute = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
             R::SubmitArrays(engine, producer, [](R::ExecutionContext launchContext, auto source, auto target)
                             {
-                                const auto bytes = size_t(source.RowCount() * source.Width()) * sizeof(double);
+                                DNDS_check_throw_info(source.kind == R::RowLayoutKind::Table && target.kind == R::RowLayoutKind::Table &&
+                                                          source.stride == target.stride && source.Width() == target.Width(),
+                                                      "test VR producer requires identical physical pitches");
+                                const auto bytes = size_t(source.RowCount() * source.stride) * sizeof(double);
                                 if (bytes)
                                     DNDS_check_throw_info(cudaMemcpyAsync(target.data, source.data, bytes, cudaMemcpyDeviceToDevice,
                                                                           static_cast<cudaStream_t>(launchContext.stream)) == cudaSuccess,
@@ -143,7 +164,7 @@ TEST_CASE("Stage-once VR pipelines preserve complete modal batches and queued de
             resident.CheckStatus(work);
             Equal(reference.temporary, work.temporary, candidate == 4 ? 3e-3 : quantized ? 2e-5
                                                                                          : 2e-10);
-            if (candidate == 1 && profile.fixture == 0 && profile.degree == 1)
+            if (candidate == 1 && profile.fixture == 2 && profile.degree == 3 && profile.components == 5)
             {
                 // Narrow exponent overflow is an explicit failed publication,
                 // not a silent fallback or partial overwrite of durable URec.
@@ -195,15 +216,18 @@ TEST_CASE("Float-float VR preserves low limbs through a cancelling modal product
     auto offsets = upload(std::vector<I>{0, 1}, 1);
     auto neighbors = upload(std::vector<I>{0}, 1);
     auto boundaryOffsets = upload(std::vector<I>{0, 0}, 1);
-    auto matrix = upload(std::vector<double>{1, 0, -1, 0}, 4);
-    auto vector = upload(std::vector<double>{0, 0}, 2);
-    auto injection = upload(std::vector<double>{}, 2);
+    constexpr I modes = 19;
+    std::vector<double> entries(modes * modes, 0);
+    entries[0] = 1, entries[modes] = -1;
+    auto matrix = upload(entries, modes * modes);
+    auto vector = upload(std::vector<double>(modes, 0), modes);
+    auto injection = upload(std::vector<double>{}, modes);
     auto mean = upload(std::vector<double>(5, 0), 5);
-    std::vector<double> values(10);
+    std::vector<double> values(5 * modes, 0);
     for (I j = 0; j < 5; ++j)
-        values[j * 2] = 1e8 + .25, values[j * 2 + 1] = 1e8;
-    auto coefficients = upload(values, 10);
-    auto output = upload(std::vector<double>(10, -7), 10);
+        values[j * modes] = 1e8 + .25, values[j * modes + 1] = 1e8;
+    auto coefficients = upload(values, 5 * modes);
+    auto output = upload(std::vector<double>(5 * modes, -7), 5 * modes);
     auto status = upload(std::vector<int>{0}, 1);
     {
         auto offsetsRead = offsets.Read(context), neighborsRead = neighbors.Read(context), boundaryRead = boundaryOffsets.Read(context);
@@ -212,7 +236,7 @@ TEST_CASE("Float-float VR preserves low limbs through a cancelling modal product
         auto statusWrite = status.Write(context);
         auto result = output.Write(context);
         D::ReconstructionDeviceView plan;
-        plan.owned = 1, plan.n = 2, plan.relax = 1;
+        plan.owned = 1, plan.n = modes, plan.relax = 1;
         plan.offsets = offsetsRead.View(), plan.neighbors = neighborsRead.View(), plan.boundaryOffsets = boundaryRead.View();
         plan.matrixAInvB = matrixRead.View(), plan.vectorAInvB = vectorRead.View(), plan.boundaryInjection = injectionRead.View();
         D::LaunchStagedJacobi(context, plan, {{}, 1, false}, {}, {meanRead.View(), {}}, {coefficientsRead.View(), {}}, {},
@@ -224,8 +248,9 @@ TEST_CASE("Float-float VR preserves low limbs through a cancelling modal product
     const auto read = host.Read();
     for (I j = 0; j < 5; ++j)
     {
-        CHECK(read.View()(0, j * 2) == .25);
-        CHECK(read.View()(0, j * 2 + 1) == 0);
+        CHECK(read.View()(0, j * modes) == .25);
+        for (I mode = 1; mode < modes; ++mode)
+            CHECK(read.View()(0, j * modes + mode) == 0);
     }
     const auto flag = status.To(R::Device::Host());
     CHECK(flag.Read().View()(0, 0) == 0);

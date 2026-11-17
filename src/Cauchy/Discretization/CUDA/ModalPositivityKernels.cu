@@ -9,14 +9,6 @@ namespace DNDS::Cauchy::CUDA
     namespace R = Runtime;
     namespace
     {
-        DNDS_DEVICE_CALLABLE NumericalStatus FirstFailure(NumericalStatus a, NumericalStatus b)
-        {
-            if (a)
-                return b;
-            if (b)
-                return a;
-            return b.row < a.row || (b.row == a.row && b.point < a.point) ? b : a;
-        }
         template <bool Block>
         __device__ void GroupSync()
         {
@@ -226,7 +218,7 @@ namespace DNDS::Cauchy::CUDA
                     request.degree(iCell, 0) = result.degree;
                     request.beta(iCell, 0) = result.beta;
                     if (!result.status)
-                        failure = FirstFailure(failure, result.status.At(iCell, result.status.point));
+                        failure = PositivityReductionDetail::FirstFailure{}(failure, result.status.At(iCell, result.status.point));
                     else if (result.beta < 1)
                     {
                         ++limited;
@@ -244,7 +236,7 @@ namespace DNDS::Cauchy::CUDA
             real minimum = 1;
             for (index iRow = threadIdx.x; iRow < partials.status.RowCount(); iRow += blockDim.x)
             {
-                status = FirstFailure(status, partials.status(iRow, 0));
+                status = PositivityReductionDetail::FirstFailure{}(status, partials.status(iRow, 0));
                 count += partials.count(iRow, 0);
                 minimum = std::min(minimum, partials.minimum(iRow, 0));
             }

@@ -13,6 +13,7 @@
 #include <cuda_runtime.h>
 #include <limits>
 #include <cstdlib>
+#include <optional>
 #include "RotatedSectorFixture.hpp"
 #include "ReconstructionFixture.hpp"
 
@@ -21,7 +22,7 @@ namespace R = DNDS::Runtime;
 namespace G = DNDS::Geom;
 using I = DNDS::index;
 static DNDS::MPIInfo mpi;
-static C::ReconstructionDeviceKernel jacobiKernel = C::ReconstructionDeviceKernel::FP64;
+static std::optional<C::ReconstructionDeviceKernel> comparisonKernel;
 static std::shared_ptr<R::NCCLTransferProvider> nccl;
 static R::TransferBinding Halo(const C::VariationalReconstructionPlan &plan, C::FVField &field, R::TransferTransport transport = R::TransferTransport::Direct)
 {
@@ -80,11 +81,16 @@ static void CompareSharedSweep(const C::FiniteVolumePlan &metrics, const C::Vari
     const auto originalOwned = coefficients.Owned().Clone();
     const auto originalGhost = coefficients.Ghost().Clone();
     plan.DoReconstructionIter(mean, coefficients, cpu, boundary);
-    std::vector<C::ReconstructionDeviceKernel> kernels{C::ReconstructionDeviceKernel::FP64MatrixShared,
+    std::vector<C::ReconstructionDeviceKernel> kernels{C::ReconstructionDeviceKernel::FP64,
                                                        C::ReconstructionDeviceKernel::FP64Pipelined};
-    for (auto kernel : {C::ReconstructionDeviceKernel::FloatFloatPipelined, C::ReconstructionDeviceKernel::FP64TensorCoreAsync})
-        if (resident.SupportsKernel(kernel))
-            kernels.push_back(kernel);
+    // Comparison policies have one deliberately bounded C=5/M=19 fixture.
+    // Other shapes retain their full CPU/general/production sweep coverage.
+    if (components == 5 && plan.NRecDOF() == 19 && !plan.Settings().storage.Raw())
+        for (auto kernel : {C::ReconstructionDeviceKernel::FP64MatrixShared,
+                            C::ReconstructionDeviceKernel::FloatFloatPipelined,
+                            C::ReconstructionDeviceKernel::FP64TensorCoreAsync})
+            if ((!comparisonKernel || *comparisonKernel == kernel) && resident.SupportsKernel(kernel))
+                kernels.push_back(kernel);
     for (auto kernel : kernels)
         for (bool split : {false, true})
         {
@@ -649,7 +655,7 @@ TEST_CASE("Device-only reconstruction placement releases host payloads and remai
     for (int step = 0; step < 2; ++step)
     {
         coefficientHalo.Begin(R::ExecutionContext::CUDA(0)).Wait();
-        resident->DoReconstructionIter(*mean, coefficients, work, boundary, jacobiKernel);
+        resident->DoReconstructionIter(*mean, coefficients, work, boundary, C::ReconstructionDeviceKernel::FP64);
         resident->CommitReconstruction(coefficients, work);
     }
     resident->DoLimiterWBAP_3Order(coefficients, work, 1, std::cref(*transform));
@@ -697,9 +703,10 @@ TEST_CASE("Opt-in FP32 sweep maps retain FP64 coefficients and avoid duplicate d
 {
     const auto device = R::Device::CUDA(0);
     const auto context = R::ExecutionContext::CUDA(0);
-    for (const bool sector : {true, false})
+    // Quantized comparison policies are fixed to C=5/M=19. Rotated geometry
+    // and extended components remain covered by the production FP64 tests.
     {
-        const auto mesh = sector ? CFVTest::Sector(mpi) : CFVTest::CartesianHexes(mpi, 3);
+        const auto mesh = CFVTest::CartesianHexes(mpi, 3);
         auto metrics = C::FiniteVolumePlan::ConstructMetrics(mesh);
         C::ReconstructionSettings settings;
         settings.maxOrder = 3;
@@ -732,7 +739,7 @@ TEST_CASE("Opt-in FP32 sweep maps retain FP64 coefficients and avoid duplicate d
             CHECK(std::none_of(smallBuffers.begin(), smallBuffers.end(), [&](const auto &buffer)
                                { return buffer.name == name; }));
         }
-        const I components = sector ? 5 : 7;
+        const I components = 5;
         auto mean = metrics.BuildField(components);
         auto input = cpu.BuildCoefficients(components);
         Fill(mean, 1.1);
@@ -792,7 +799,7 @@ TEST_CASE("Opt-in FP32 sweep maps retain FP64 coefficients and avoid duplicate d
                 engine.Synchronize();
                 reduced.CheckStatus(accumulationWork);
                 // Same frozen CPU input and P3 oracle as the existing policy:
-                // Sector rotates the vector block; Hex exercises 3D BC sums.
+                // This fixed-shape Hex fixture exercises 3D BC sums.
                 // Float-float still has FP32 map quantization error.
                 Equal(work.temporary, accumulationWork.temporary, 2e-5);
                 // The CPU convenience call commits into input. Compare the
@@ -832,12 +839,16 @@ TEST_CASE("Opt-in FP32 sweep maps retain FP64 coefficients and avoid duplicate d
         deviceInput.Owned().CopyFrom(input.Owned(), context).Wait();
         deviceInput.Ghost().CopyFrom(input.Ghost(), context).Wait();
         cpu.DoReconstructionIterLimitedTo(mean, input, work, boundary, target, penalty);
-        reduced.SubmitReconstructionIterLimitedTo(engine, stream, deviceMean, deviceInput, deviceWork, deviceBoundary,
-                                                  deviceTarget, devicePenalty);
-        engine.Synchronize();
-        reduced.CheckStatus(deviceWork);
-        Equal(work.temporary, deviceWork.temporary, 2e-5);
-        if (!sector)
+        auto limitedWork = full.BuildWorkspace(components, std::vector<I>{1});
+        const auto fullBoundary = full.PlaceBoundaryValues(boundary);
+        for (const auto kernel : {C::ReconstructionDeviceKernel::FP64, C::ReconstructionDeviceKernel::FP64Pipelined})
+        {
+            full.SubmitReconstructionIterLimitedTo(engine, stream, deviceMean, deviceInput, limitedWork, fullBoundary,
+                                                   deviceTarget, devicePenalty, C::ReconstructionRegion::All, kernel);
+            engine.Synchronize();
+            full.CheckStatus(limitedWork);
+            Equal(work.temporary, limitedWork.temporary, 5e-11);
+        }
         {
             // Isolate mean/BC subtraction from dense products. A common 1e8
             // offset erases the small differences if the complete update uses
@@ -893,7 +904,6 @@ TEST_CASE("Opt-in FP32 sweep maps retain FP64 coefficients and avoid duplicate d
                 }
             }
         }
-        else
         {
             // Narrow arithmetic overflow is deferred to retained status. A
             // queued commit must preserve the original durable FP64 state.
@@ -943,7 +953,10 @@ TEST_CASE("CUDA Jacobi and WBAP agree with CPU for physical DOF layouts and dire
             CAPTURE(degree);
             CAPTURE(shape.Kind());
             Fill(referenceCoefficients, .02);
-            auto deviceMean = metrics.BuildField(R::RowLayout::ColMajor(0, components, {32, 1}), resident.Device());
+            auto deviceMean = metrics.BuildField(shape.Kind() == R::RowLayoutKind::Table
+                                                     ? R::RowLayout::Dense(0, components)
+                                                     : R::RowLayout::ColMajor(0, components, {32, 1}),
+                                                 resident.Device());
             Fill(deviceMean, 1.0);
             auto work = resident.BuildWorkspace(components, shape);
             auto coefficients = resident.BuildCoefficients(components, shape);
@@ -970,7 +983,9 @@ TEST_CASE("CUDA Jacobi and WBAP agree with CPU for physical DOF layouts and dire
                 }
                 else
                     pending = deviceHalo.Begin(R::ExecutionContext::CUDA(0));
-                const auto kernel = step == 3 ? C::ReconstructionDeviceKernel::FP64MatrixShared : jacobiKernel;
+                const auto kernel = step == 3 && shape.Kind() == R::RowLayoutKind::Table
+                                        ? C::ReconstructionDeviceKernel::FP64Pipelined
+                                        : C::ReconstructionDeviceKernel::FP64;
                 resident.SubmitReconstructionIterTo(engine, stream, deviceMean, coefficients, work, deviceBC, C::ReconstructionRegion::Core, kernel);
                 if (nccl)
                     stream.WaitFor(comm.Record());
@@ -1086,8 +1101,11 @@ TEST_CASE("CUDA degree three 3D reconstruction supports 37 coupled components an
         auto plan = C::VariationalReconstructionPlan::ConstructRecCoeff(metrics, settings);
         REQUIRE(plan.NRecDOF() == 19);
         auto resident = plan.Place(R::Device::CUDA(0), R::ExecutionContext::CUDA(0));
-        // Seven P3 fields have 133 coefficients: exercise the second output
-        // slot and inactive lanes, including the fixture's empty participants.
+        // The retained comparison catalog is tested only on its fixed shape.
+        // Seven P3 fields separately exercise production's second output slot
+        // and inactive lanes, including the fixture's empty participants.
+        if (gridWidth == 1)
+            CompareSharedSweep(metrics, plan, resident, 5);
         CompareSharedSweep(metrics, plan, resident, 7);
         const I components = 37, width = components * plan.NRecDOF();
         auto mean = metrics.BuildField(components);
@@ -1203,6 +1221,7 @@ TEST_CASE("Device errors reject unsupported SOR stale publications and invalid i
 // Storage variants share the exact distributed fixtures and CPU oracle above.
 #include "test_ReconstructionCUDA_Storage.hpp"
 #include "test_ReconstructionCUDA_Staged.hpp"
+#include "test_ReconstructionCUDA_AMG.hpp"
 
 int main(int argc, char **argv)
 {
@@ -1211,8 +1230,10 @@ int main(int argc, char **argv)
     if (const auto *value = std::getenv("DNDS_TEST_RECONSTRUCTION_KERNEL"))
     {
         const std::string name(value);
-        DNDS_check_throw_info(name == "async" || name == "floatFloat", "unknown test reconstruction kernel");
-        jacobiKernel = name == "floatFloat" ? C::ReconstructionDeviceKernel::FloatFloatPipelined : C::ReconstructionDeviceKernel::FP64TensorCoreAsync;
+        DNDS_check_throw_info(name == "async" || name == "tensor" || name == "shared" || name == "floatFloat", "unknown test reconstruction kernel");
+        comparisonKernel = name == "shared"       ? C::ReconstructionDeviceKernel::FP64MatrixShared
+                           : name == "floatFloat" ? C::ReconstructionDeviceKernel::FloatFloatPipelined
+                                                  : C::ReconstructionDeviceKernel::FP64TensorCoreAsync;
     }
     if (const auto *value = std::getenv("DNDS_TEST_TRANSFER_PROVIDER"))
     {

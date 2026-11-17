@@ -33,6 +33,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", required=True, type=Path,
                         help="Dedicated dependency directory containing source/build/install")
+    parser.add_argument("--source-tree", type=Path,
+                        help="Use an existing exact patched source (for example the public fork) without modifying it")
     parser.add_argument("--architectures", required=True,
                         help="CMake CUDA architecture list, for example 80;86 or 86")
     parser.add_argument("--cuda-compiler", type=Path)
@@ -45,24 +47,32 @@ def main():
 
     root = args.root.expanduser().resolve()
     source, build, install = (root / name for name in ("source", "build", "install"))
+    if args.source_tree:
+        source = args.source_tree.expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
     if not source.exists():
         run(["git", "clone", "--depth=1", "--branch", AMGX_TAG,
              "https://github.com/NVIDIA/AMGX.git", source])
-    if git_output(source, "rev-parse", "HEAD") != AMGX_REVISION:
-        raise RuntimeError("Existing AmgX source differs from the pinned revision; it was not modified")
     patch = AMGX_PATCH.read_bytes()
-    status = git_output(source, "status", "--porcelain")
-    if status:
-        current = subprocess.check_output(["git", "-C", str(source), "diff", "--binary", "HEAD"])
-        # Exact patch matching also rejects partial or manually edited patches.
-        # No staged/untracked changes or unrelated source changes are accepted.
-        if (current != patch or git_output(source, "diff", "--cached", "--name-only")
-                or git_output(source, "ls-files", "--others", "--exclude-standard")):
-            raise RuntimeError("AmgX source has changes other than the bundled patch; it was not modified")
+    if args.source_tree:
+        # The public fork may contain the already committed original block fix.
+        # Compare all compiled source to the immutable upstream pin plus our
+        # exact patch, rather than resetting or modifying that user's checkout.
+        current = subprocess.check_output(["git", "-C", str(source), "diff", "--binary", AMGX_REVISION, "--", "include", "src"])
+        if current != patch:
+            raise RuntimeError("External AmgX compiled source differs from the exact bundled patch; it was not modified")
     else:
-        run(["git", "-C", source, "apply", "--check", AMGX_PATCH])
-        run(["git", "-C", source, "apply", AMGX_PATCH])
+        if git_output(source, "rev-parse", "HEAD") != AMGX_REVISION:
+            raise RuntimeError("Existing AmgX source differs from the pinned revision; it was not modified")
+        status = git_output(source, "status", "--porcelain")
+        if status:
+            current = subprocess.check_output(["git", "-C", str(source), "diff", "--binary", "HEAD"])
+            if (current != patch or git_output(source, "diff", "--cached", "--name-only")
+                    or git_output(source, "ls-files", "--others", "--exclude-standard")):
+                raise RuntimeError("AmgX source has changes other than the bundled patch; it was not modified")
+        else:
+            run(["git", "-C", source, "apply", "--check", AMGX_PATCH])
+            run(["git", "-C", source, "apply", AMGX_PATCH])
     run(["git", "-C", source, "submodule", "update", "--init", "--recursive", "--depth=1"])
 
     configure = ["cmake", "-S", source, "-B", build,
@@ -97,7 +107,9 @@ def main():
     if not libraries:
         raise RuntimeError("AmgX install produced no libraries")
     provenance = dict(libraries_sha256=libraries, revision=AMGX_REVISION, tag=AMGX_TAG, mpi=False,
-                      native_block_widths=[1, 5, 6, 7],
+                      native_block_widths=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 19],
+                      native_storage_api=1, allocation_diagnostics_api=1,
+                      checkout_revision=git_output(source, "rev-parse", "HEAD"),
                       patch_sha256=hashlib.sha256(patch).hexdigest(),
                       patch_name=AMGX_PATCH.name,
                       architectures=args.architectures,

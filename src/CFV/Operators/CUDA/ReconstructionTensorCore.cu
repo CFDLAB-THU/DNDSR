@@ -23,4 +23,14 @@ namespace DNDS::CFV::Detail
         ordinal = device.ordinal;
         return available;
     }
+    bool TF32TensorCoreAvailable(Runtime::Device device)
+    {
+        if (device.space != Runtime::MemorySpace::CUDA || cudaSetDevice(device.ordinal) != cudaSuccess)
+            return false;
+        cudaDeviceProp properties{};
+        cudaFuncAttributes attributes{};
+        return cudaGetDeviceProperties(&properties, device.ordinal) == cudaSuccess &&
+               cudaFuncGetAttributes(&attributes, TensorImageMarker) == cudaSuccess && properties.major >= 8 &&
+               attributes.binaryVersion >= 80 && attributes.ptxVersion >= 80;
+    }
 }

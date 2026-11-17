@@ -1,9 +1,11 @@
 #pragma once
 
+#include "DNDS/Algebra/BlockIndex.hpp"
 #include "DNDS/Runtime/Array/Array.hpp"
 #include "DNDS/Algebra/EigenView.hpp"
 #include <limits>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace DNDS::Algebra
@@ -74,7 +76,7 @@ namespace DNDS::Algebra
         {
             if constexpr (Runtime::AccessBoundsChecks)
                 DNDS_HD_assert(i >= 0 && i < blockSize && j >= 0 && j < blockSize);
-            return (*this)(iRow, iBlock)[rowMajorBlocks ? i * blockSize + j : i + blockSize * j];
+            return (*this)(iRow, iBlock)[DenseBlockEntry(i, j, blockSize, rowMajorBlocks)];
         }
         /// Validate once at the host launcher, never per matrix entry.
         void ValidateDevice(Runtime::Device device) const
@@ -207,7 +209,8 @@ namespace DNDS::Algebra
         };
 
         BlockMatrixStorage(const std::vector<index> &blocksPerRow, index blockSize,
-                           Runtime::Device device = Runtime::Device::Host(), MatrixTableOptions options = {}, bool rowMajorBlocks = false)
+                           Runtime::Device device = Runtime::Device::Host(), MatrixTableOptions options = {}, bool rowMajorBlocks = false,
+                           std::optional<Runtime::Array<real>> values = {})
         {
             DNDS_check_throw_info(blockSize > 0 && blockSize <= std::numeric_limits<rowsize>::max() / blockSize,
                                   "invalid dense block dimension");
@@ -231,7 +234,15 @@ namespace DNDS::Algebra
                     offsets(iRow + 1, 0) = totalBlocks;
                 }
             }
-            _values = Runtime::Array<real>(options.MakeLayout(totalBlocks, blockSize * blockSize), device, layout->allocation);
+            if (values)
+            {
+                DNDS_check_throw_info(values->GetDevice() == device && values->RowCount() == totalBlocks &&
+                                          values->Layout().Width() == blockSize * blockSize,
+                                      "shared block-matrix values differ from the declared block shape/device");
+                _values = std::move(*values);
+            }
+            else
+                _values = Runtime::Array<real>(options.MakeLayout(totalBlocks, blockSize * blockSize), device, layout->allocation);
             if (device != Runtime::Device::Host())
                 _offsets = _offsets.To(device);
             _layout = std::move(layout);

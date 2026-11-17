@@ -37,10 +37,10 @@ namespace DNDS::Cauchy
         /// original policy, 1..3 preserves the SVD cutoff/retained subspace.
         /// Applies to SGS/Jacobi, not ILU or provider-owned AMG inverses.
         int diagonalInverseRefinement = 0;
-        /// Experimental CUDA block inverse: batchedSVD (reference/default) or
-        /// guardedLU (fixed 5/6/7 partial-pivot LU with filtered SVD fallback).
+        /// Automatic CUDA block inverse: guardedLU on A100, batchedSVD
+        /// elsewhere. Either explicit provider overrides this setup choice.
         /// CPU continues to use its canonical Eigen guarded LU/SVD policy.
-        std::string cudaDiagonalInverse = "batchedSVD";
+        std::string cudaDiagonalInverse = "auto";
         /// Assembled CUDA Jacobi mapping. componentGroup shares one cell among
         /// eight lanes, preserving component-dot and sparse-neighbor order.
         std::string cudaJacobiMapping = "thread";

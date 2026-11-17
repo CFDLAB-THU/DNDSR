@@ -16,6 +16,7 @@ set(CPPS
     Config/SimulationConfig.cpp
     Config/SimulationConfig_Validation.cpp
     Config/SimulationConfig_Schema.cpp
+    Config/CUDAKernelDefaults.cpp
 
     Physics/EquationSystem.cpp
     Physics/PhysicsResources.cpp
@@ -178,6 +179,11 @@ if(DNDS_USE_CUDA)
     list(APPEND CPPS Multigrid/CUDA/PolynomialMultigridKernels.cu)
     list(APPEND CPPS Discretization/CUDA/FiniteVolumeAuxiliaryKernels.cu Discretization/CUDA/FiniteVolumeBoundaryKernels.cu)
     list(APPEND CPPS Discretization/CUDA/FiniteVolumeRHSKernels.cu Discretization/CUDA/FiniteVolumeRHSKernels_Placement.cpp)
+    # One manifest owns the valid C/M/D catalog. Generate one specialization
+    # per CUDA TU in the build tree, shared by static and Python libraries.
+    include("${PROJECT_SOURCE_DIR}/cmake/DndsCauchyRHS.cmake")
+    dnds_generate_cauchy_rhs(_rhs_sources _rhs_include _rhs_codegen)
+    list(APPEND CPPS ${_rhs_sources})
     # Keep reduced-precision face kernels in bounded instantiation groups.
     # Their host dispatcher does not include the numerical kernel definitions.
     list(APPEND CPPS
@@ -192,20 +198,28 @@ if(DNDS_USE_CUDA)
     # A 512-thread segment CTA has at most 128 registers per lane on the
     # qualified SM80/SM86 devices. Apply the same bound to its out-of-line
     # numerical callees; launch_bounds alone constrains only the entry kernel.
-    # Keep this local to the experimental segments TU, never all RHS policies.
-    set_property(SOURCE Discretization/CUDA/FiniteVolumeRHSKernels_Segments.cu
-        APPEND PROPERTY COMPILE_OPTIONS "--maxrregcount=128")
+    # Block size is runtime, not another template axis. This bound also keeps
+    # the shared numerical callee valid for the supported 512-thread launch.
+    set_property(SOURCE ${_rhs_sources}
+        APPEND PROPERTY COMPILE_OPTIONS "$<$<COMPILE_LANGUAGE:CUDA>:--maxrregcount=128>")
     list(APPEND CPPS Discretization/CUDA/FiniteVolumeSourceKernels.cu)
     list(APPEND CPPS Discretization/CUDA/ModalPositivityKernels.cu Discretization/CUDA/FiniteVolumePositivityKernels.cu)
     list(APPEND CPPS Discretization/CUDA/FiniteVolumeGradientKernels.cu)
     list(APPEND CPPS Discretization/CUDA/FiniteVolumeLimitedVRKernels.cu)
     list(APPEND CPPS Discretization/CUDA/FiniteVolumeReconstructionKernels.cu)
+    list(APPEND CPPS Discretization/CUDA/FiniteVolumeCharacteristicKernels.cu)
     list(APPEND CPPS Discretization/CUDA/FiniteVolumeStateKernels.cu)
     list(APPEND CPPS Discretization/CUDA/FiniteVolumeStateKernels_Statistics.cu)
     list(APPEND CPPS Discretization/CUDA/FiniteVolumeStateKernels_Profile.cu)
 endif()
 dnds_add_lib(cauchy "${CPPS}" "physics;cfv;geom;dnds;${DNDS_EXTERNAL_LIBS}" "${DNDS_PCH_TARGETS_FAST}" OFF ON ON)
 dnds_add_lib(cauchy_shared "${CPPS}" "physics_shared;cfv_shared;geom_shared;dnds_shared;${DNDS_EXTERNAL_LIBS}" "${DNDS_PCH_TARGETS_FAST}" ON ON ON)
+if(DNDS_USE_CUDA)
+    foreach(_rhs_consumer cauchy cauchy_shared)
+        target_include_directories(${_rhs_consumer} PRIVATE "${_rhs_include}")
+        add_dependencies(${_rhs_consumer} ${_rhs_codegen})
+    endforeach()
+endif()
 target_link_libraries(cauchy PUBLIC DNDS::ComputeScalar)
 target_link_libraries(cauchy_shared PUBLIC DNDS::ComputeScalar)
 install(TARGETS cauchy_shared LIBRARY DESTINATION "DNDSR/lib" COMPONENT py OPTIONAL)

@@ -55,6 +55,10 @@ int main(int argc, char **argv)
                                                                                      : kernelName == "floatFloat" ? C::ReconstructionDeviceKernel::FloatFloatPipelined
                                                                                      : kernelName == "async"      ? C::ReconstructionDeviceKernel::FP64TensorCoreAsync
                                                                                                                   : C::ReconstructionDeviceKernel::FP64;
+        DNDS_check_throw_info(kernel == C::ReconstructionDeviceKernel::FP64 || kernel == C::ReconstructionDeviceKernel::FP64Pipelined,
+                              "this 2D benchmark cannot exercise C=5/M=19 comparison selectors; use cfv_benchmark_reconstruction_sweep");
+        DNDS_check_throw_info(kernel == C::ReconstructionDeviceKernel::FP64 || layouts == "aos",
+                              "optimized VR requires the explicit aos layout selection; use fp64 for generic layouts");
         const auto device = R::Device::CUDA(0);
         const auto context = R::ExecutionContext::CUDA(0);
         R::TransferOptions transferOptions;

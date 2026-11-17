@@ -698,8 +698,10 @@ namespace DNDS::CFV
     void VariationalReconstructionPlan::SubmitDeviceReconstructionIterLimitedTo(
         R::EagerEngine &engine, const R::ExecutionStream &stream, const FVField &mean,
         const FVField &input, ReconstructionWorkspace &work, const ReconstructionBoundaryValues &boundary,
-        const FVField &target, const R::Array<real> &alpha, ReconstructionRegion region) const
+        const FVField &target, const R::Array<real> &alpha, ReconstructionRegion region, ReconstructionDeviceKernel kernel) const
     {
+        DNDS_check_throw_info(kernel == ReconstructionDeviceKernel::FP64 || kernel == ReconstructionDeviceKernel::FP64Pipelined,
+                              "LVR supports general FP64 or production fp64Pipelined, not fixed comparison fixtures");
         ValidateDeviceStream(*this, stream);
         ValidateDeviceWorkspace(_device, work, input);
         ValidateDeviceField(*this, mean, work.components);
@@ -717,11 +719,11 @@ namespace DNDS::CFV
                                   "limited Jacobi output aliases an input");
         const auto selection = Selection(*_device, region);
         auto pin = _device;
-        auto launch = [pin, selection](R::ExecutionContext context, auto mo, auto mg, auto ro, auto rg,
-                                       auto bc, auto wanted, auto penalty, auto output, auto blocks, auto status)
+        auto launch = [pin, selection, kernel](R::ExecutionContext context, auto mo, auto mg, auto ro, auto rg,
+                                               auto bc, auto wanted, auto penalty, auto output, auto blocks, auto status)
         {
             Detail::LaunchLimitedJacobi(context, pin->view, selection, {blocks}, {mo, mg}, {ro, rg},
-                                        bc, wanted, penalty, output, status);
+                                        bc, wanted, penalty, output, status, kernel == ReconstructionDeviceKernel::FP64Pipelined, pin->settings.cudaSweep);
         };
         if (region == ReconstructionRegion::Core)
             R::SubmitArrays(engine, stream, [launch](R::ExecutionContext c, auto mo, auto ro, auto bc, auto wanted, auto penalty, auto output, auto blocks, auto status)
@@ -825,23 +827,24 @@ namespace DNDS::CFV
         DNDS_check_throw_info(_identity, "reconstruction plan is empty");
         if (!_device)
             return kernel == ReconstructionDeviceKernel::FP64;
-        if (_device->view.quantized)
-            return kernel == ReconstructionDeviceKernel::FP32 ||
-                   kernel == ReconstructionDeviceKernel::FP32Pipelined ||
-                   kernel == ReconstructionDeviceKernel::FP32FullAccumulation ||
-#ifdef DNDS_USE_CCCL_COMPUTE
-                   kernel == ReconstructionDeviceKernel::FP32FloatFloatAccumulation ||
-#endif
-                   ((kernel == ReconstructionDeviceKernel::TF32TensorCore || kernel == ReconstructionDeviceKernel::TF32Pipelined) && _device->tf32TensorCore);
         const auto n = _device->view.n;
         const bool staticModes = n == 2 || n == 3 || n == 5 || n == 9 || n == 19;
-        return kernel == ReconstructionDeviceKernel::FP64 ||
-               (staticModes && (kernel == ReconstructionDeviceKernel::FP64MatrixShared || kernel == ReconstructionDeviceKernel::FP64Pipelined ||
+        const bool comparison = n == 19 && !_device->view.raw;
+        if (_device->view.quantized)
+            return comparison && (kernel == ReconstructionDeviceKernel::FP32 || kernel == ReconstructionDeviceKernel::FP32Pipelined ||
+                                  kernel == ReconstructionDeviceKernel::FP32FullAccumulation ||
 #ifdef DNDS_USE_CCCL_COMPUTE
-                                kernel == ReconstructionDeviceKernel::FloatFloatPipelined ||
+                                  kernel == ReconstructionDeviceKernel::FP32FloatFloatAccumulation ||
 #endif
-                                (kernel == ReconstructionDeviceKernel::FP64TensorCoreAsync && _device->fp64TensorCore)));
+                                  ((kernel == ReconstructionDeviceKernel::TF32TensorCore || kernel == ReconstructionDeviceKernel::TF32Pipelined) && _device->tf32TensorCore));
+        return kernel == ReconstructionDeviceKernel::FP64 || (staticModes && kernel == ReconstructionDeviceKernel::FP64Pipelined) ||
+               (comparison && (kernel == ReconstructionDeviceKernel::FP64MatrixShared ||
+#ifdef DNDS_USE_CCCL_COMPUTE
+                               kernel == ReconstructionDeviceKernel::FloatFloatPipelined ||
+#endif
+                               (kernel == ReconstructionDeviceKernel::FP64TensorCoreAsync && _device->fp64TensorCore)));
     }
+
 #ifndef DNDS_USE_CUDA
     namespace Detail
     {
@@ -857,6 +860,12 @@ namespace DNDS::CFV
                                 R::ArrayView<const int>, const ReconstructionSweepLaunch &, ReconstructionSweepArithmetic)
         {
             DNDS_check_throw_info(false, "stage-once CUDA VR unavailable in this build");
+        }
+        void LaunchLimitedStagedJacobi(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
+                                       R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>,
+                                       R::ArrayView<const int>, R::ArrayView<const real>, R::ArrayView<const real>, const ReconstructionSweepLaunch &)
+        {
+            DNDS_check_throw_info(false, "limited CUDA VR pipeline unavailable in this build");
         }
         void LaunchValidateCharacteristics(R::ExecutionContext, DeviceCharacteristicView, R::ArrayView<int>)
         {
@@ -888,7 +897,7 @@ namespace DNDS::CFV
         }
         void LaunchLimitedJacobi(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
                                  R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<const real>,
-                                 R::ArrayView<const real>, R::ArrayView<real>, R::ArrayView<int>)
+                                 R::ArrayView<const real>, R::ArrayView<real>, R::ArrayView<int>, bool, const ReconstructionSweepLaunch &)
         {
             DNDS_check_throw_info(false, "CUDA limited Jacobi unavailable");
         }
