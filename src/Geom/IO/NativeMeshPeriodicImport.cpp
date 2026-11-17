@@ -39,8 +39,8 @@ namespace DNDS::Geom
             return source;
         std::vector<tPoint> points(source.coordinates.RowCount());
         std::vector<index> persistedIds(points.size());
-        OMP::ForSetupRows(0, index(points.size()), [&](index node)
-                          {
+        OMP::ForIngressRows(0, index(points.size()), [&](index node)
+                            {
             DNDS_check_throw_info(coords.View().RowSize(size_t(node)) == 3 && nodeIds.View().RowSize(size_t(node)) == 1, "invalid serial periodic node data shape");
             points[size_t(node)] = tPoint{coords.View()(size_t(node), 0), coords.View()(size_t(node), 1), coords.View()(size_t(node), 2)};
             const auto id = nodeIds.View()(size_t(node), 0);
@@ -161,8 +161,8 @@ namespace DNDS::Geom
         // Most volume nodes do not participate in periodic identification.
         // Publish their singleton components in parallel, leaving only the
         // small active boundary graph for deterministic component traversal.
-        OMP::ForSetupRows(0, index(points.size()), [&](index node)
-                          {
+        OMP::ForIngressRows(0, index(points.size()), [&](index node)
+                            {
             if (graph[size_t(node)].empty())
                 roots[size_t(node)] = node; });
         for (size_t start = 0; start < points.size(); ++start)
@@ -219,9 +219,9 @@ namespace DNDS::Geom
             }
         }
         std::vector<uint8_t> keep(roots.size());
-        OMP::ForSetupRows(0, index(roots.size()), [&](index node)
-                          { keep[size_t(node)] = roots[size_t(node)] == node; });
-        const index keptNumber = OMP::ExclusivePrefixRows(
+        OMP::ForIngressRows(0, index(roots.size()), [&](index node)
+                            { keep[size_t(node)] = roots[size_t(node)] == node; });
+        const index keptNumber = OMP::ExclusivePrefixIngressRows(
             index(roots.size()), [&](index node) noexcept -> index
             { return keep[size_t(node)]; },
             [&](index node, index offset) noexcept
@@ -230,20 +230,20 @@ namespace DNDS::Geom
                     compact[size_t(node)] = offset;
             });
         std::vector<index> kept(static_cast<size_t>(keptNumber));
-        OMP::ForSetupRows(0, index(roots.size()), [&](index node)
-                          {
+        OMP::ForIngressRows(0, index(roots.size()), [&](index node)
+                            {
             if (keep[size_t(node)])
                 kept[size_t(compact[size_t(node)])] = node; });
-        OMP::ForSetupRows(0, index(roots.size()), [&](index node)
-                          { compact[size_t(node)] = compact[size_t(roots[size_t(node)])]; });
+        OMP::ForIngressRows(0, index(roots.size()), [&](index node)
+                            { compact[size_t(node)] = compact[size_t(roots[size_t(node)])]; });
         NativeSerialMeshData result = source;
         result.coordinates = Runtime::Array<real>(Runtime::RowLayout::Dense(kept.size(), 3));
         result.nodeIds = Runtime::Array<index>(Runtime::RowLayout::Dense(kept.size(), 1));
         {
             auto output = result.coordinates.Write();
             auto ids = result.nodeIds.Write();
-            OMP::ForSetupRows(0, index(kept.size()), [&](index row)
-                              {
+            OMP::ForIngressRows(0, index(kept.size()), [&](index row)
+                                {
                 for (size_t component = 0; component < 3; ++component)
                     output.View()(size_t(row), component) = points[size_t(kept[size_t(row)])][component];
                 // Periodic identification precedes mesh publication. Match

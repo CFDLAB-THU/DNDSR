@@ -1,6 +1,10 @@
 # CPU threading and setup preprocessing
 
-Native DNDS algebra, Geom, CFV and Cauchy share the distributed OpenMP policy.
+DNDS uses two explicit OpenMP controls. `OMP_NUM_THREADS` is the ordinary
+OpenMP runtime team size, including reader-owned and pre-distribution work.
+`DNDS_DIST_OMP_NUM_THREADS` is the per-rank team requested by native DNDS
+row kernels after distributed ownership exists. Native DNDS algebra, Geom,
+CFV and Cauchy share the latter policy.
 Enable **both** `DNDS_USE_OMP=ON` and `DNDS_DIST_MT_USE_OMP=ON` when configuring.
 The first switch alone does not enable native row helpers. Run, for example,
 with `OMP_NUM_THREADS=16 DNDS_DIST_OMP_NUM_THREADS=16`, BLAS/MKL/OpenBLAS
@@ -11,11 +15,20 @@ CUDA qualification runs use 16 setup threads, including pre-distribution work,
 unless reproducing a historical comparison that explicitly fixes OMP1. Do not
 mix those reorder/setup policies in a matched GPU performance comparison.
 
-`DNDS_DIST_OMP_NUM_THREADS` is recognized; `DNDS_MT_OMP_NUM_THREADS` is not an
-alias. The value is read once per process. Cauchy's entry initializes the
-policy before mesh ingress and disables Eigen's internal team. CPU-inline and
-CPU-worker launchers use the same explicit helper policy. Helpers called
-inside an active team run their inner loops serially.
+Both values are read once per process; launchers must set each intended policy
+explicitly. Cauchy starts in the ordinary `OMP_NUM_THREADS` context. For each
+file-backed domain it retains that context through reader-owned import, serial
+partitioning and distribution, then switches to `DNDS_DIST_OMP_NUM_THREADS`
+before topology, reorder, CFV setup and state initialization. A later colocated
+domain restores the reader context for its own ingress. Factory-injected meshes
+enter the distributed context directly. Eigen remains single-threaded in both
+contexts.
+
+CPU-inline and CPU-worker launchers use the same explicit native-helper policy.
+Helpers called inside an active team run their inner loops serially. Direct
+OpenMP regions without an explicit `num_threads` clause follow the current
+process OpenMP control variable; native row helpers request the distributed
+value explicitly.
 
 ## Ownership and numerical boundaries
 

@@ -15,6 +15,10 @@ namespace DNDS::Cauchy
             const std::shared_ptr<Runtime::CommunicationContext> &domainCommunication, DomainSetupTimings &timings,
             Diagnostics::SetupProgress progress)
         {
+            // A preceding colocated domain may already have entered the
+            // per-rank context. Restore the reader-owned team for this domain's
+            // import, serial partitioning and distribution.
+            OMP::set_serial_ingress_OMP();
             DNDS_check_throw_info(!domain.settings.mesh.file.empty(),
                                   "Cauchy mesh path is empty");
             Geom::PartitionOptions partition;
@@ -49,6 +53,9 @@ namespace DNDS::Cauchy
                 domain.settings.mesh.bisect, 0, Geom::MeshAuditOptions{},
                 communication, progress);
             timings.meshIngress = MPI_Wtime() - ingressStarted;
+            // Native topology, reorder, CFV setup and solver work now belong to
+            // distributed ranks and must not inherit the node-wide reader team.
+            OMP::set_full_parallel_OMP();
             const real prepareStarted = MPI_Wtime();
             Geom::PrepareMeshOptions prepare;
             prepare.buildSerialOut = false;
@@ -118,7 +125,9 @@ namespace DNDS::Cauchy
         auto setupLogger = std::make_shared<OperationalLogger>(
             _config.Output(), MPIWorldRank(), domainProgressWriter);
         const int requestedWorkers = OMP::DistributedThreads();
-        const int observedWorkers = Diagnostics::SetupProgress::ObservedWorkers();
+        const int observedWorkers = Diagnostics::SetupProgress::ObservedWorkers(requestedWorkers);
+        const int ingressWorkers = OMP::IngressThreads();
+        const int observedIngress = Diagnostics::SetupProgress::ObservedWorkers(ingressWorkers);
         for (auto iDomain : _placement.LocalDomains())
         {
             const auto &domain = _config.Domains()[iDomain];
@@ -131,7 +140,8 @@ namespace DNDS::Cauchy
                                                  ? "D[" + domain.placement.name + "]/"
                                                  : "";
             Diagnostics::SetupProgress progress(
-                [setupLogger, requestedWorkers, observedWorkers](const Diagnostics::SetupProgressEvent &event)
+                [setupLogger, requestedWorkers, observedWorkers,
+                 ingressWorkers, observedIngress](const Diagnostics::SetupProgressEvent &event)
                 {
                     const char *state = event.state == Diagnostics::SetupProgressState::Starting
                                             ? "starting"
@@ -139,8 +149,16 @@ namespace DNDS::Cauchy
                                                                                                : "failed";
                     std::string suffix;
                     if (event.state == Diagnostics::SetupProgressState::Starting)
-                        suffix = fmt::format("workers {}/{}{}{}", requestedWorkers, observedWorkers,
-                                             event.detail.empty() ? "" : "  ", event.detail);
+                    {
+                        const bool ingress = event.phase.find("mesh/read") != std::string::npos ||
+                                             event.phase.find("mesh/periodic") != std::string::npos ||
+                                             event.phase.find("mesh/partition") != std::string::npos;
+                        suffix = ingress
+                                     ? fmt::format("workers reader {}/{}{}{}", ingressWorkers, observedIngress,
+                                                   event.detail.empty() ? "" : "  ", event.detail)
+                                     : fmt::format("workers rank {}/{}{}{}", requestedWorkers, observedWorkers,
+                                                   event.detail.empty() ? "" : "  ", event.detail);
+                    }
                     else
                         suffix = fmt::format("{:10.3f} s", event.seconds);
                     const auto line = fmt::format("=== Setup [{:<24}] {:<9} {}", event.phase, state, suffix);
@@ -149,6 +167,8 @@ namespace DNDS::Cauchy
             progress = progress.WithPrefix(domainPrefix);
             auto completeStage = progress.Stage("complete");
             const real started = MPI_Wtime();
+            if (factory)
+                OMP::set_full_parallel_OMP();
             auto mesh = factory ? factory(iDomain, domain, mpi)
                                 : ReadMesh(domain, mpi,
                                            _placement.Context(iDomain), _setupTimings[iDomain], progress);

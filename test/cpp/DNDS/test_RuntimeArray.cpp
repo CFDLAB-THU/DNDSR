@@ -78,6 +78,48 @@ TEST_CASE("Native setup failures are emitted after all row workers join")
         CHECK(visited[4] == 0); // Canonical serial exception short-circuits.
 }
 
+TEST_CASE("Reader ingress and distributed row teams retain independent policies")
+{
+    const int ingress = DNDS::OMP::IngressThreads();
+    const int distributed = DNDS::OMP::DistributedThreads();
+#if defined(DNDS_USE_OMP)
+    const int dynamic = omp_get_dynamic();
+    omp_set_dynamic(0);
+#endif
+    const auto observed = [](auto &&run)
+    {
+        std::vector<int> workers(64, -1);
+        run(0, DNDS::index(workers.size()), [&](DNDS::index iRow)
+            {
+#if defined(DNDS_USE_OMP)
+                workers[size_t(iRow)] = omp_get_thread_num();
+#else
+                workers[size_t(iRow)] = 0;
+#endif
+            });
+        return std::set<int>(workers.begin(), workers.end());
+    };
+    const auto ingressWorkers = observed([](DNDS::index begin, DNDS::index end, auto &&body)
+                                         { DNDS::OMP::ForIngressRows(begin, end, std::forward<decltype(body)>(body)); });
+    const auto distributedWorkers = observed([](DNDS::index begin, DNDS::index end, auto &&body)
+                                             { DNDS::OMP::ForSetupRows(begin, end, std::forward<decltype(body)>(body)); });
+    CHECK(ingressWorkers.size() == size_t(ingress));
+    CHECK(distributedWorkers.size() == size_t(distributed));
+
+    std::array<DNDS::index, 9> offsets{};
+    const auto total = DNDS::OMP::ExclusivePrefixIngressRows(
+        8, [](DNDS::index row) noexcept -> DNDS::index
+        { return row + 1; },
+        [&](DNDS::index row, DNDS::index offset) noexcept
+        { offsets[size_t(row)] = offset; });
+    CHECK(total == 36);
+    const std::array<DNDS::index, 9> expected{0, 1, 3, 6, 10, 15, 21, 28, 36};
+    CHECK(offsets == expected);
+#if defined(DNDS_USE_OMP)
+    omp_set_dynamic(dynamic);
+#endif
+}
+
 TEST_CASE("Array mutation epochs cover aliases and canceled reservations without claiming completion")
 {
     R::Array<double> array(R::RowLayout::Dense(7, 5));

@@ -10,10 +10,24 @@
 #include <exception>
 #include <limits>
 #include <mutex>
+#include <utility>
 #include <vector>
 
 namespace DNDS::OMP
 {
+    /// Ordinary OpenMP team used by the designated reader before ownership is
+    /// distributed. This is intentionally independent of the per-rank team.
+    inline int IngressThreads() noexcept
+    {
+#if defined(DNDS_USE_OMP)
+        if (omp_in_parallel())
+            return 1;
+        return std::max(1, get_env_OMP_NUM_THREADS());
+#else
+        return 1;
+#endif
+    }
+
     /// Explicit team size for distributed kernels. Querying this on a CPU
     /// worker gives the same policy as on the controller; OpenMP's per-thread
     /// inherited max-team setting is deliberately not the policy source.
@@ -56,18 +70,20 @@ namespace DNDS::OMP
      * order; the controller scans only the bounded worker totals.
      */
     template <class Count, class Store>
-    index ExclusivePrefixRows(index rowNumber, Count &&count, Store &&store)
+    index ExclusivePrefixRowsWithThreads(index rowNumber, int requestedThreads,
+                                         Count &&count, Store &&store)
     {
         DNDS_check_throw_info(rowNumber >= 0, "negative prefix row number");
-        const int threads = int(std::min<index>(DistributedThreads(), std::max<index>(rowNumber, 1)));
+        const int threads = int(std::min<index>(std::max(1, requestedThreads),
+                                                std::max<index>(rowNumber, 1)));
         std::vector<uint64_t> totals(size_t(threads), 0), bases(size_t(threads), 0);
         int invalid = 0;
-#if defined(DNDS_USE_OMP) && defined(DNDS_DIST_MT_USE_OMP)
+#if defined(DNDS_USE_OMP)
 #    pragma omp parallel num_threads(threads) reduction(| : invalid)
 #endif
         {
             int worker = 0;
-#if defined(DNDS_USE_OMP) && defined(DNDS_DIST_MT_USE_OMP)
+#if defined(DNDS_USE_OMP)
             worker = omp_get_thread_num();
 #endif
             const index common = rowNumber / threads;
@@ -94,7 +110,7 @@ namespace DNDS::OMP
                                   "setup prefix total overflows index");
             total += totals[size_t(worker)];
         }
-#if defined(DNDS_USE_OMP) && defined(DNDS_DIST_MT_USE_OMP)
+#if defined(DNDS_USE_OMP)
 #    pragma omp parallel for schedule(static) num_threads(threads)
 #endif
         for (int worker = 0; worker < threads; ++worker)
@@ -112,6 +128,23 @@ namespace DNDS::OMP
         }
         store(rowNumber, index(total));
         return index(total);
+    }
+
+    template <class Count, class Store>
+    index ExclusivePrefixRows(index rowNumber, Count &&count, Store &&store)
+    {
+        return ExclusivePrefixRowsWithThreads(
+            rowNumber, DistributedThreads(), std::forward<Count>(count),
+            std::forward<Store>(store));
+    }
+
+    template <class Count, class Store>
+    index ExclusivePrefixIngressRows(index rowNumber, Count &&count,
+                                     Store &&store)
+    {
+        return ExclusivePrefixRowsWithThreads(
+            rowNumber, IngressThreads(), std::forward<Count>(count),
+            std::forward<Store>(store));
     }
 
     /** Independent row arithmetic with explicit numerical failure status.
@@ -213,9 +246,10 @@ namespace DNDS::OMP
      * Do not use this helper for hot numerical kernels or numerical fallback.
      */
     template <class Body>
-    void ForSetupRows(index begin, index end, Body &&body)
+    void ForSetupRowsWithThreads(index begin, index end, int threads,
+                                 Body &&body)
     {
-        if (DistributedThreads() == 1)
+        if (threads <= 1 || end - begin <= 1)
         {
             for (index iRow = begin; iRow < end; ++iRow)
                 body(iRow);
@@ -224,8 +258,11 @@ namespace DNDS::OMP
         std::mutex failureMutex;
         std::exception_ptr failure;
         index failedRow = end;
-        ForRows(begin, end, [&](index iRow) noexcept
-                {
+#if defined(DNDS_USE_OMP)
+#    pragma omp parallel for schedule(static) num_threads(threads)
+#endif
+        for (index iRow = begin; iRow < end; ++iRow)
+        {
             try
             {
                 body(iRow);
@@ -238,9 +275,43 @@ namespace DNDS::OMP
                     failedRow = iRow;
                     failure = std::current_exception();
                 }
-            } });
+            }
+        }
         if (failure)
             std::rethrow_exception(failure);
+    }
+
+    template <class Body>
+    void ForSetupRows(index begin, index end, Body &&body)
+    {
+        ForSetupRowsWithThreads(begin, end, DistributedThreads(),
+                                std::forward<Body>(body));
+    }
+
+    /** Reader-owned setup rows. Unlike ForSetupRows, this follows the ordinary
+     * `OMP_NUM_THREADS` policy and remains available without distributed-MT.
+     */
+    template <class Body>
+    void ForIngressRows(index begin, index end, Body &&body)
+    {
+        ForSetupRowsWithThreads(begin, end, IngressThreads(),
+                                std::forward<Body>(body));
+    }
+
+    /**
+     * @brief Restore the ordinary OpenMP team for reader-owned ingress.
+     *
+     * @details Reader-owned file import and serial partitioning may use a much
+     * larger share of a node than each distributed MPI rank. Direct OpenMP
+     * regions in that phase therefore follow `OMP_NUM_THREADS`, independently
+     * of the later per-rank native-kernel policy.
+     */
+    inline void set_serial_ingress_OMP()
+    {
+#ifdef DNDS_USE_OMP
+        omp_set_num_threads(std::max(1, get_env_OMP_NUM_THREADS()));
+#endif
+        Eigen::setNbThreads(1);
     }
 
     /**
@@ -255,12 +326,7 @@ namespace DNDS::OMP
     inline void set_full_parallel_OMP()
     {
 #ifdef DNDS_USE_OMP
-        // omp_set_num_threads( // note that the meaning is like "omp_set_max_threads()"
-        //     DNDS::MPIWorldSize() == -1
-        //         ? std::min(omp_get_num_procs(), omp_get_max_threads())
-        //         : (get_env_DNDS_DIST_OMP_NUM_THREADS() == 0 ? 1 : DNDS::get_env_DNDS_DIST_OMP_NUM_THREADS()));
-        omp_set_num_threads(
-            (get_env_DNDS_DIST_OMP_NUM_THREADS() == 0 ? 1 : DNDS::get_env_DNDS_DIST_OMP_NUM_THREADS()));
+        omp_set_num_threads(DistributedThreads());
 #endif
         Eigen::setNbThreads(1); // ! sets Eigen's multithreading!
     }

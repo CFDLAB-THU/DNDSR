@@ -360,10 +360,10 @@ namespace DNDS
 
 namespace DNDS
 {
-    /// @brief Read `OMP_NUM_THREADS` env var, returning 1 if unset / invalid.
+    /// @brief Read `OMP_NUM_THREADS`; zero means unset and a negative value is invalid.
     extern int get_env_OMP_NUM_THREADS();
-    /// @brief Read the DNDSR-specific @ref DNDS_DIST_OMP_NUM_THREADS override,
-    /// falling back to #get_env_OMP_NUM_THREADS.
+    /// @brief Read the per-rank native-kernel team size from
+    /// `DNDS_DIST_OMP_NUM_THREADS`; zero means it was not supplied.
     extern int get_env_DNDS_DIST_OMP_NUM_THREADS();
 }
 

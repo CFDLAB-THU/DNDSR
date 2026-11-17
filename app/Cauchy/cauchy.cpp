@@ -15,7 +15,9 @@
 /// Keep every MPI-owning solver object inside this scope, before DNDS Finalize.
 static int Run(int argc, char **argv, double started)
 {
-    DNDS::OMP::set_full_parallel_OMP();
+    // The designated reader and serial partitioner may use a node-wide team.
+    // Simulation switches to the per-rank team only after distribution.
+    DNDS::OMP::set_serial_ingress_OMP();
     int status = 0;
     {
         const DNDS::MPIInfo mpi(MPI_COMM_WORLD);

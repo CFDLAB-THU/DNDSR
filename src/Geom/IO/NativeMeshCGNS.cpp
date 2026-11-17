@@ -653,12 +653,12 @@ namespace DNDS::Geom
                     std::array<cgsize_t, 3> RMax{nNodes, 0, 0};
                     //* READ X
                     NATIVE_CGNS_CHECK(cg_coord_read(cgns_file, iBase, iZone, "CoordinateX", RealDouble, RMin.data(), RMax.data(), coordsRead.data()));
-                    OMP::ForSetupRows(0, nNodes, [&](index iNode)
-                                      { ZoneCoords.back()->operator[](iNode)[0] = coordsRead.at(iNode); });
+                    OMP::ForIngressRows(0, nNodes, [&](index iNode)
+                                        { ZoneCoords.back()->operator[](iNode)[0] = coordsRead.at(iNode); });
                     //* READ Y
                     NATIVE_CGNS_CHECK(cg_coord_read(cgns_file, iBase, iZone, "CoordinateY", RealDouble, RMin.data(), RMax.data(), coordsRead.data()));
-                    OMP::ForSetupRows(0, nNodes, [&](index iNode)
-                                      { ZoneCoords.back()->operator[](iNode)[1] = coordsRead.at(iNode); });
+                    OMP::ForIngressRows(0, nNodes, [&](index iNode)
+                                        { ZoneCoords.back()->operator[](iNode)[1] = coordsRead.at(iNode); });
                     //* READ Z
                     if (dimension == 3)
                     {
@@ -667,8 +667,8 @@ namespace DNDS::Geom
                     else
                         for (auto &i : coordsRead)
                             i = 0;
-                    OMP::ForSetupRows(0, nNodes, [&](index iNode)
-                                      { ZoneCoords.back()->operator[](iNode)[2] = coordsRead.at(iNode); });
+                    OMP::ForIngressRows(0, nNodes, [&](index iNode)
+                                        { ZoneCoords.back()->operator[](iNode)[2] = coordsRead.at(iNode); });
 
                     DNDS::log() << "CGNS === Zone " << iZone << " Coords Reading Done" << std::endl;
                 }
@@ -944,8 +944,8 @@ namespace DNDS::Geom
 
         NativeRequire(!ZoneCoords.empty());
         for (const auto &coordinates : ZoneCoords)
-            OMP::ForSetupRows(0, coordinates->Size(), [&](index iNode)
-                              { NativeRequire((*coordinates)[iNode].allFinite()); });
+            OMP::ForIngressRows(0, coordinates->Size(), [&](index iNode)
+                                { NativeRequire((*coordinates)[iNode].allFinite()); });
             /***************************************************************************/
             // ASSEMBLE: deduplicate shared nodes across zones
 #ifdef DNDS_USE_CGNS_ZONE_DFS_LEGACY
@@ -971,12 +971,12 @@ namespace DNDS::Geom
             cellElemInfoSerial, bndElemInfoSerial, coordSerial);
 
         // fill in original indices
-        OMP::ForSetupRows(0, cell2cellOrigSerial->Size(), [&](index iCell)
-                          { cell2cellOrigSerial->operator()(iCell, 0) = iCell; });
-        OMP::ForSetupRows(0, node2nodeOrigSerial->Size(), [&](index iNode)
-                          { node2nodeOrigSerial->operator()(iNode, 0) = iNode; });
-        OMP::ForSetupRows(0, bnd2bndOrigSerial->Size(), [&](index iBnd)
-                          { bnd2bndOrigSerial->operator()(iBnd, 0) = iBnd; });
+        OMP::ForIngressRows(0, cell2cellOrigSerial->Size(), [&](index iCell)
+                            { cell2cellOrigSerial->operator()(iCell, 0) = iCell; });
+        OMP::ForIngressRows(0, node2nodeOrigSerial->Size(), [&](index iNode)
+                            { node2nodeOrigSerial->operator()(iNode, 0) = iNode; });
+        OMP::ForIngressRows(0, bnd2bndOrigSerial->Size(), [&](index iBnd)
+                            { bnd2bndOrigSerial->operator()(iBnd, 0) = iBnd; });
 
         const int closeResult = cg_close(cgns_file);
         fileGuard.handle = -1;
@@ -1096,7 +1096,7 @@ namespace DNDS::Geom
             auto check = [&](const auto &array, size_t width)
             {
                 auto read = array.Read();
-                OMP::ForSetupRows(0, array.RowCount(), [&](index iRow)
+                OMP::ForIngressRows(0, array.RowCount(), [&](index iRow)
                                   { DNDS_check_throw_info(read.View().RowSize(iRow) == width, "native serial companion width invalid"); });
             };
             check(serial.coordinates, 3); check(serial.cellInfo, 1); check(serial.boundaryInfo, 1);
@@ -1104,13 +1104,13 @@ namespace DNDS::Geom
             for (const auto *cone : {&serial.cellNodes, &serial.boundaryNodes})
             {
                 auto read = cone->Read();
-                OMP::ForSetupRows(0, cone->RowCount(), [&](index iRow)
+                OMP::ForIngressRows(0, cone->RowCount(), [&](index iRow)
                                   {
                     for (auto node : read.View()[iRow])
                         DNDS_check_throw_info(node >= 0 && uint64_t(node) < nn, "native serial cone node outside global range"); });
             }
             auto points = serial.coordinates.Read();
-            OMP::ForSetupRows(0, index(nn), [&](index row)
+            OMP::ForIngressRows(0, index(nn), [&](index row)
             {
                 for (size_t component = 0; component < 3; ++component)
                     DNDS_check_throw_info(std::isfinite(points.View()(row, component)), "native serial coordinate nonfinite");
@@ -1192,8 +1192,8 @@ namespace DNDS::Geom
                         nativeCopyRowRows.fetch_add(uint64_t(layout.RowCount()), std::memory_order_relaxed);
                         const auto sourceView = input.View();
                         const auto targetView = destination.View();
-                        OMP::ForSetupRows(0, sourceView.RowCount(), [&](index iRow)
-                                          { std::copy_n(sourceView.Row(iRow), sourceView.RowSize(iRow), targetView.Row(iRow)); });
+                        OMP::ForIngressRows(0, sourceView.RowCount(), [&](index iRow)
+                                            { std::copy_n(sourceView.Row(iRow), sourceView.RowSize(iRow), targetView.Row(iRow)); });
                     }
                 }
                 return output;

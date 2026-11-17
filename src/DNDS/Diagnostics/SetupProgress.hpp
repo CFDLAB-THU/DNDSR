@@ -108,9 +108,8 @@ namespace DNDS::Diagnostics
         }
 
         /// One bounded team formation used only for setup reporting.
-        static int ObservedWorkers()
+        static int ObservedWorkers(int requested = OMP::DistributedThreads())
         {
-            const int requested = OMP::DistributedThreads();
             int observed = 1;
 #if defined(DNDS_USE_OMP) && defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel num_threads(requested)
