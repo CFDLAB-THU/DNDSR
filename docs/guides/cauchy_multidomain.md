@@ -59,7 +59,11 @@ mesh coordinates unchanged. Absolute momentum is expressed in each mesh's axes.
 The current default C++ `Simulation` loader reads **one CGNS file per domain**
 from `mesh.file`, distributes owned data and prepares native topology/ghosts.
 CGNS boundary names require explicit `mesh.boundaryIds`; periodic translations
-use `mesh.periodicLengths`. A shared multi-zone CGNS file is not automatically
+use `mesh.periodicLengths`, expressed in the input file's coordinate system.
+Periodic matching happens before `mesh.scale`/rotation; the later geometry
+transform updates both coordinates and periodic frames. For a unit-cube mesh
+scaled by `2*pi`, specify periodic lengths `[1,1,1]`, not `[2*pi,2*pi,2*pi]`.
+A shared multi-zone CGNS file is not automatically
 split into fluid domains. Paths resolve relative to the executable's working
 directory.
 

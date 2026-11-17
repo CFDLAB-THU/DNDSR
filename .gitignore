@@ -44,6 +44,7 @@ docs/presentations/*.overflow.json
 *.bbl
 # python
 venv*
+.venv*
 *.pyc
 srcOrig
 newSrc*

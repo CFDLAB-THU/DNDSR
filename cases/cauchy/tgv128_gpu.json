@@ -4,7 +4,7 @@
       "file": "/mnt/ssd-SATARAID5/harry/mesh/Uniform128_3D_Periodic.cgns",
       "scale": 6.283185307179586,
       "dimension": 3,
-      "periodicLengths": [6.283185307179586, 6.283185307179586, 6.283185307179586],
+      "periodicLengths": [1, 1, 1],
       "boundaryIds": {
         "PERIODIC_1": -1, "PERIODIC_1_DONOR": -4,
         "PERIODIC_2": -2, "PERIODIC_2_DONOR": -5,
