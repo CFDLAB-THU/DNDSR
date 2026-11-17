@@ -90,6 +90,64 @@ namespace DNDS::Cauchy
                   [&]
                   { EquationDofOperations::LinearCombination(out, a, x, b, y); });
         }
+        /// Physical-time arithmetic on this lane retains queued operand leases.
+        void PhysicalCopyScale(State &out, real a, const State &x) const
+        {
+            if (out.Schema().AccumulationKind() == PhysicalAccumulationKind::Identity)
+            {
+                Copy(out, x);
+                Scale(out, a);
+            }
+            else
+                Apply([&](auto &e, const auto &s)
+                      { SubmitPhysical(e, s, PhysicalOperation::CopyScale, out, x, {}, {}, a, 0); },
+                      [&]
+                      { EquationDofOperations::PhysicalCopyScale(out, a, x); });
+        }
+        void PhysicalLinearCombination(State &out, real a, const State &x, real b, const State &y) const
+        {
+            if (out.Schema().AccumulationKind() == PhysicalAccumulationKind::Identity)
+                LinearCombination(out, a, x, b, y);
+            else
+                Apply([&](auto &e, const auto &s)
+                      { SubmitPhysical(e, s, PhysicalOperation::Combination, out, x, std::cref(y), {}, a, b); },
+                      [&]
+                      { EquationDofOperations::PhysicalLinearCombination(out, a, x, b, y); });
+        }
+        void PhysicalStateAndRate(State &out, real a, const State &x, real b, const State &rate) const
+        {
+            if (out.Schema().AccumulationKind() == PhysicalAccumulationKind::Identity)
+                LinearCombination(out, a, x, b, rate);
+            else
+                Apply([&](auto &e, const auto &s)
+                      { SubmitPhysical(e, s, PhysicalOperation::StateAndRate, out, x, std::cref(rate), {}, a, b); },
+                      [&]
+                      { EquationDofOperations::PhysicalStateAndRate(out, a, x, b, rate); });
+        }
+        void PhysicalAxpy(State &out, real a, const State &x) const
+        {
+            if (out.Schema().AccumulationKind() == PhysicalAccumulationKind::Identity)
+                Axpy(out, a, x);
+            else
+                Apply([&](auto &e, const auto &s)
+                      { SubmitPhysical(e, s, PhysicalOperation::Axpy, out, x, {}, {}, a, 0); },
+                      [&]
+                      { EquationDofOperations::PhysicalAxpy(out, a, x); });
+        }
+        void AssembleTimeResidual(State &out, const State &constant, const State &state,
+                                  const State &rate, real m, real a) const
+        {
+            if (out.Schema().AccumulationKind() == PhysicalAccumulationKind::Identity)
+            {
+                LinearCombination(out, 1, constant, -m, state);
+                Axpy(out, a, rate);
+            }
+            else
+                Apply([&](auto &e, const auto &s)
+                      { SubmitPhysical(e, s, PhysicalOperation::TimeResidual, out, constant, std::cref(state), std::cref(rate), m, a); },
+                      [&]
+                      { EquationDofOperations::AssembleTimeResidual(out, constant, state, rate, m, a); });
+        }
         /// Explicit host observation boundary, also progressing host MPI.
         void Synchronize() const
         {

@@ -119,8 +119,7 @@ namespace DNDS::ODE
             const real inverseDt = 1 / dt;
             if (implicit)
             {
-                _operations.Copy(_source, _initial);
-                _operations.Scale(_source, inverseDt);
+                _operations.PhysicalCopyScale(_source, inverseDt, _initial);
                 for (int previous = 0; previous < stage; ++previous)
                     if (_tableau.a[stage][previous] != 0)
                         _operations.Axpy(_source, _tableau.a[stage][previous], _rates[previous]);

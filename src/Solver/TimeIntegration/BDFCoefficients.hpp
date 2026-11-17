@@ -42,14 +42,13 @@ namespace DNDS::ODE
             {
                 DNDS_check_throw_info(prev, "BDF2 source requires accepted history");
                 Operations::RequireDistinct(out, *prev);
-                operations.LinearCombination(out, initial, start, previous, *prev);
+                operations.PhysicalLinearCombination(out, initial, start, previous, *prev);
             }
             else if (initial == 0)
                 operations.Fill(out, 0);
             else
             {
-                operations.Copy(out, start);
-                operations.Scale(out, initial);
+                operations.PhysicalCopyScale(out, initial, start);
             }
         }
     };

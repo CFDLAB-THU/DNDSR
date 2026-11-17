@@ -5,6 +5,14 @@
 
 namespace DNDS::Cauchy
 {
+    /// Physical-time accumulation selected once by the equation adapter.
+    /// Pseudo-time preconditioning is a separate spatial/nonlinear policy.
+    enum class PhysicalAccumulationKind
+    {
+        Identity,
+        ConstantDensityVelocityPressure
+    };
+
     struct ComponentSchema
     {
         std::string name, units, conservationGroup;
@@ -44,6 +52,16 @@ namespace DNDS::Cauchy
     {
         std::string family, energyConvention, physicalAccumulation;
         std::vector<EquationBlockSchema> blocks;
+
+        PhysicalAccumulationKind AccumulationKind() const
+        {
+            if (physicalAccumulation == "conservative-volume" || physicalAccumulation == "identity")
+                return PhysicalAccumulationKind::Identity;
+            if (physicalAccumulation == "constant-density-velocity-pressure")
+                return PhysicalAccumulationKind::ConstantDensityVelocityPressure;
+            DNDS_check_throw_info(false, "unknown equation physical accumulation: " + physicalAccumulation);
+            return PhysicalAccumulationKind::Identity;
+        }
 
         /// Flatten the schema without referring to physical Array grouping.
         /// This is a setup/publication operation; no numerical loop calls it.

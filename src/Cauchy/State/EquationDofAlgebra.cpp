@@ -1,5 +1,9 @@
 #include "Cauchy/State/EquationDofAlgebra.hpp"
+#include "Cauchy/State/CPU/EquationDofAlgebraKernels.hpp"
 #include "DNDS/Runtime/Execution/EagerArrayBatch.hpp"
+#ifdef DNDS_USE_CUDA
+#    include "Cauchy/State/CUDA/FieldKernels.hpp"
+#endif
 
 namespace DNDS::Cauchy
 {
@@ -210,5 +214,118 @@ namespace DNDS::Cauchy
             }
             else
                 DispatchCPUEquationLayouts([&](auto out) { Algebra::ApplyHostRows(operation, out, EquationBlockedView<const real>{}, EquationBlockedView<const real>{}, a, b); }, destination); }, std::move(reads), std::move(writes));
+    }
+
+    void EquationDofOperations::SubmitPhysical(R::EagerEngine &engine, const R::ExecutionStream &lane,
+                                               PhysicalOperation op, State &out, const State &x,
+                                               OptionalRef<const State> y, OptionalRef<const State> z, real a, real b)
+    {
+        DNDS_check_throw_info(engine.Owns(lane) && out.Device() == lane.Context().device &&
+                                  out.Schema().blocks.front().components.size() == 4,
+                              "invalid ACM accumulation binding");
+        std::vector<R::ArrayOperand<real, false, R::UniformTableRows>> reads;
+        std::vector<R::ArrayOperand<real, true, R::UniformTableRows>> writes;
+        std::vector<State> states;
+        std::array<index, 3> first{};
+        auto checkLayout = [&](const State &state)
+        {
+            if (lane.Context().device != R::Device::Host())
+                DNDS_check_throw_info(state.CoupledField().Owned().Layout().Kind() == R::RowLayoutKind::Table, "ACM CUDA requires combined AoS");
+        };
+        auto bind = [&](const State &input)
+        {
+            out.RequireCompatible(input);
+            RequireDistinct(out, input);
+            checkLayout(input);
+            first[states.size()] = index(reads.size());
+            states.emplace_back(input.NumericAlias());
+            for (index f = 0; f < input.PhysicalFieldNumber(); ++f)
+                reads.push_back(R::ReadAs<R::UniformTableRows>(input.PhysicalField(f).Owned()));
+        };
+        checkLayout(out);
+        bind(x);
+        if (y)
+            bind(*y);
+        if (z)
+            bind(*z);
+        for (index f = 0; f < out.PhysicalFieldNumber(); ++f)
+        {
+            auto &v = out.PhysicalField(f).Owned();
+            writes.push_back(op == PhysicalOperation::Axpy ? R::ReadWriteAs<R::UniformTableRows>(v) : R::WriteAs<R::UniformTableRows>(v));
+        }
+        R::SubmitArrayBatch(engine, lane, [out = out.NumericAlias(), states = std::move(states), first, op, a, b](R::ExecutionContext context, auto inputs, auto outputs)
+                            {
+#ifdef DNDS_USE_CUDA
+            if (context.device != R::Device::Host())
+            {
+                CUDA::ApplyAccumulation(context, op, out.ComponentNumber(), outputs[0].DynamicView(), inputs[0].DynamicView(),
+                    states.size() >= 2 ? inputs[first[1]].DynamicView() : R::ArrayView<const real>{},
+                    states.size() >= 3 ? inputs[first[2]].DynamicView() : R::ArrayView<const real>{}, a, b);
+                return;
+            }
+#endif
+            const EquationViewLayout<real> dst(out, WriteBlocks{out, outputs});
+            auto source = [&](index k)
+            { return EquationViewLayout<const real>(states[k], ReadBlocks{states[k], inputs, first[k]}); };
+            const auto empty = EquationBlockedView<const real>{};
+            if (states.size() == 3)
+                DispatchCPUEquationLayouts([&](auto o, auto u, auto v, auto w) { CPU::ApplyConstantDensityAccumulation(op,o,u,v,w,a,b); }, dst,source(0),source(1),source(2));
+            else if (states.size() == 2)
+                DispatchCPUEquationLayouts([&](auto o, auto u, auto v) { CPU::ApplyConstantDensityAccumulation(op,o,u,v,empty,a,b); }, dst,source(0),source(1));
+            else
+                DispatchCPUEquationLayouts([&](auto o, auto u) { CPU::ApplyConstantDensityAccumulation(op,o,u,empty,empty,a,b); }, dst,source(0)); }, std::move(reads), std::move(writes));
+    }
+    void EquationDofOperations::ApplyPhysical(PhysicalOperation operation, State &out,
+                                              const State *x, const State *y, const State *z,
+                                              real a, real b)
+    {
+        CheckCompatible(out, out);
+        DNDS_check_throw_info(out.Schema().AccumulationKind() == PhysicalAccumulationKind::ConstantDensityVelocityPressure,
+                              "unsupported nonidentity physical accumulation");
+        DNDS_check_throw_info(out.ComponentNumber() >= 4 && out.Schema().blocks.front().name == "flow" &&
+                                  out.Schema().blocks.front().components.size() == 4,
+                              "constant-density accumulation requires leading flow4");
+        for (const auto *input : {x, y, z})
+            if (input)
+            {
+                CheckCompatible(out, *input);
+                RequireDistinct(out, *input);
+            }
+        DNDS_check_throw_info(x &&
+                                  (operation == PhysicalOperation::CopyScale || operation == PhysicalOperation::Axpy
+                                       ? !y && !z
+                                   : operation == PhysicalOperation::Combination || operation == PhysicalOperation::StateAndRate ? y && !z
+                                                                                                                                 : y && z),
+                              "physical accumulation operands differ from operation");
+        const auto readX = x->ReadOwned();
+        std::optional<State::ReadScope> readY, readZ;
+        if (y)
+            readY.emplace(y->ReadOwned());
+        if (z)
+            readZ.emplace(z->ReadOwned());
+        auto write = out.WriteOwned();
+        const EquationViewLayout<real> output(out, write);
+        const EquationViewLayout<const real> inputX(*x, readX);
+        const auto empty = EquationBlockedView<const real>{};
+        const auto launch = [&](auto target, auto left, auto right, auto extra)
+        {
+            CPU::ApplyConstantDensityAccumulation(operation, target, left, right, extra, a, b);
+        };
+        if (readZ)
+        {
+            const EquationViewLayout<const real> inputY(*y, *readY), inputZ(*z, *readZ);
+            DispatchCPUEquationLayouts(launch, output, inputX, inputY, inputZ);
+        }
+        else if (readY)
+        {
+            const EquationViewLayout<const real> inputY(*y, *readY);
+            DispatchCPUEquationLayouts([&](auto target, auto left, auto right)
+                                       { launch(target, left, right, empty); },
+                                       output, inputX, inputY);
+        }
+        else
+            DispatchCPUEquationLayouts([&](auto target, auto left)
+                                       { launch(target, left, empty, empty); },
+                                       output, inputX);
     }
 }

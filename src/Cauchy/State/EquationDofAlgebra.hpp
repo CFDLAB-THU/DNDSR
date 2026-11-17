@@ -1,4 +1,5 @@
 #pragma once
+#include "Cauchy/State/PhysicalAccumulation.hpp"
 
 #include "Cauchy/State/EquationViews.hpp"
 #include "DNDS/Algebra/LocalProducts.hpp"
@@ -90,9 +91,14 @@ namespace DNDS::Cauchy
             }
         };
 
+    protected:
+        static void SubmitPhysical(Runtime::EagerEngine &, const Runtime::ExecutionStream &, PhysicalOperation,
+                                   State &, const State &, OptionalRef<const State>, OptionalRef<const State>, real, real);
+
     private:
         static void SubmitApply(Runtime::EagerEngine &, const Runtime::ExecutionStream &, Algebra::PointwiseOperation,
                                 State &, OptionalRef<const State>, OptionalRef<const State>, real, real);
+        static void ApplyPhysical(PhysicalOperation, State &, const State *, const State *, const State *, real, real);
         static bool SameOwnedBinding(const State &a, const State &b)
         {
             for (index iBlock = 0; iBlock < a.BlockNumber(); ++iBlock)
@@ -191,6 +197,49 @@ namespace DNDS::Cauchy
         static void LinearCombination(State &out, real a, const State &x, real b, const State &y)
         {
             Apply(Algebra::PointwiseOperation::Combination, out, &x, &y, a, b);
+        }
+        static void PhysicalCopyScale(State &out, real a, const State &x)
+        {
+            if (out.Schema().AccumulationKind() == PhysicalAccumulationKind::Identity)
+            {
+                Copy(out, x);
+                Scale(out, a);
+            }
+            else
+                ApplyPhysical(PhysicalOperation::CopyScale, out, &x, nullptr, nullptr, a, 0);
+        }
+        static void PhysicalLinearCombination(State &out, real a, const State &x, real b, const State &y)
+        {
+            if (out.Schema().AccumulationKind() == PhysicalAccumulationKind::Identity)
+                LinearCombination(out, a, x, b, y);
+            else
+                ApplyPhysical(PhysicalOperation::Combination, out, &x, &y, nullptr, a, b);
+        }
+        static void PhysicalStateAndRate(State &out, real a, const State &x, real b, const State &rate)
+        {
+            if (out.Schema().AccumulationKind() == PhysicalAccumulationKind::Identity)
+                LinearCombination(out, a, x, b, rate);
+            else
+                ApplyPhysical(PhysicalOperation::StateAndRate, out, &x, &rate, nullptr, a, b);
+        }
+        static void PhysicalAxpy(State &out, real a, const State &x)
+        {
+            if (out.Schema().AccumulationKind() == PhysicalAccumulationKind::Identity)
+                Axpy(out, a, x);
+            else
+                ApplyPhysical(PhysicalOperation::Axpy, out, &x, nullptr, nullptr, a, 0);
+        }
+        static void AssembleTimeResidual(State &out, const State &constant, const State &state,
+                                         const State &rate, real inverseDt, real rhsScale)
+        {
+            if (out.Schema().AccumulationKind() == PhysicalAccumulationKind::Identity)
+            {
+                LinearCombination(out, 1, constant, -inverseDt, state);
+                Axpy(out, rhsScale, rate);
+            }
+            else
+                ApplyPhysical(PhysicalOperation::TimeResidual, out, &constant, &state, &rate,
+                              inverseDt, rhsScale);
         }
         /// Owned local dot-product batch in logical row/component order. The
         /// caller owns its communicator/reduction and distributed error policy.

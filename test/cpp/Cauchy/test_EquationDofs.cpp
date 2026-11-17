@@ -509,6 +509,53 @@ TEST_CASE("Owned-only pointwise algebra and reductions overlap direct halo write
             }
         }
 }
+TEST_CASE("Constant-density physical accumulation omits only the algebraic pressure channel")
+{
+    Fixture fixture;
+    auto schema = Schema(4);
+    schema.family = "incompressible-constant-density";
+    schema.energyConvention = "none";
+    schema.physicalAccumulation = "constant-density-velocity-pressure";
+    schema.blocks.resize(2); // flow4 + one differential RANS scalar
+    for (int layout = 0; layout < 3; ++layout)
+        for (bool split : {false, true})
+        {
+            CAPTURE(layout);
+            CAPTURE(split);
+            auto state = fixture.Build(schema, layout, split);
+            Fill(state);
+            auto result = C::EquationDofOperations::NewVector(state);
+            const auto check = [&](double differentialScale, double pressureScale)
+            {
+                const auto read = result.ReadOwned();
+                I first = 0;
+                for (I iBlock = 0; iBlock < result.BlockNumber(); ++iBlock)
+                {
+                    const auto values = read.Block(iBlock).owned;
+                    for (I iRow = 0; iRow < values.RowCount(); ++iRow)
+                        for (I j = 0; j < values.ComponentNumber(); ++j)
+                        {
+                            const I component = first + j;
+                            const double scale = component == 3 ? pressureScale : differentialScale;
+                            CHECK(values(iRow, j) == doctest::Approx(scale * Value(mpi.rank, iRow, component)));
+                        }
+                    first += values.ComponentNumber();
+                }
+            };
+
+            C::EquationDofOperations::PhysicalCopyScale(result, 2, state);
+            check(2, 0);
+            C::EquationDofOperations::PhysicalLinearCombination(result, 2, state, -1, state);
+            check(1, 0);
+            C::EquationDofOperations::PhysicalStateAndRate(result, 2, state, -1, state);
+            check(1, -1);
+            C::EquationDofOperations::Copy(result, state);
+            C::EquationDofOperations::PhysicalAxpy(result, 2, state);
+            check(3, 1);
+            C::EquationDofOperations::AssembleTimeResidual(result, state, state, state, 2, 3);
+            check(2, 4);
+        }
+}
 TEST_CASE("Semantic validation and writer reservation reject bad bindings without partial publication")
 {
     Fixture fixture;

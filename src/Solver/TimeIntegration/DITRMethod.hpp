@@ -151,15 +151,15 @@ namespace DNDS::ODE
                 const auto &w = _coefficients.integration;
                 if (coupledStage == 0)
                 {
-                    _operations.LinearCombination(_resOther, (c[0] + _theta) * _inverseDt, _initial,
-                                                  (c[1] - _theta) * _inverseDt, endpoint);
+                    _operations.PhysicalLinearCombination(_resOther, (c[0] + _theta) * _inverseDt, _initial,
+                                                          (c[1] - _theta) * _inverseDt, endpoint);
                     _operations.Axpy(_resOther, c[2] + _theta * w[0], _initialRate);
                     _operations.Axpy(_resOther, c[3] + _theta * w[2], _endRate);
                     _otherBinding.emplace(endpoint); _otherRateBinding.emplace(_endRate);
                 }
                 else
                 {
-                    _operations.LinearCombination(_resOther, _inverseDt, _initial, w[0], _initialRate);
+                    _operations.PhysicalStateAndRate(_resOther, _inverseDt, _initial, w[0], _initialRate);
                     _operations.Axpy(_resOther, w[1], _middleRate);
                     _otherBinding.emplace(_middle); _otherRateBinding.emplace(_middleRate);
                 }
@@ -197,8 +197,8 @@ namespace DNDS::ODE
                     Operations::RequireDistinct(residual, *input);
                 const auto &c = _coefficients.interpolation;
                 const auto &w = _coefficients.integration;
-                _operations.LinearCombination(residual, (1 + c[0]) * _inverseDt, _initial, (c[1] - 1) * _inverseDt, endpoint);
-                _operations.Axpy(residual, -_inverseDt, _middle);
+                _operations.PhysicalLinearCombination(residual, (1 + c[0]) * _inverseDt, _initial, (c[1] - 1) * _inverseDt, endpoint);
+                _operations.PhysicalAxpy(residual, -_inverseDt, _middle);
                 _operations.Axpy(residual, w[0] + c[2], _initialRate);
                 _operations.Axpy(residual, w[1], _middleRate);
                 _operations.Axpy(residual, w[2] + c[3], _endRate); });

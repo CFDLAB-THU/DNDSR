@@ -54,5 +54,27 @@ namespace DNDS::ODE
         static void Scale(Field &out, real value) { Algebra::Scale(out, value); }
         static void Axpy(Field &out, real value, const Field &x) { Algebra::Axpy(out, value, x); }
         static void LinearCombination(Field &out, real a, const Field &x, real b, const Field &y) { Algebra::LinearCombination(out, a, x, b, y); }
+        /// Identity physical accumulation for the generic single-field ODE
+        /// adapter. Equation-specific adapters may replace these three actions.
+        static void PhysicalCopyScale(Field &out, real a, const Field &x)
+        {
+            Copy(out, x);
+            Scale(out, a);
+        }
+        static void PhysicalLinearCombination(Field &out, real a, const Field &x, real b, const Field &y)
+        {
+            LinearCombination(out, a, x, b, y);
+        }
+        static void PhysicalAxpy(Field &out, real a, const Field &x) { Axpy(out, a, x); }
+        static void PhysicalStateAndRate(Field &out, real a, const Field &x, real b, const Field &rate)
+        {
+            LinearCombination(out, a, x, b, rate);
+        }
+        static void AssembleTimeResidual(Field &out, const Field &constant, const Field &state,
+                                         const Field &rate, real inverseDt, real rhsScale)
+        {
+            LinearCombination(out, 1, constant, -inverseDt, state);
+            Axpy(out, rhsScale, rate);
+        }
     };
 }

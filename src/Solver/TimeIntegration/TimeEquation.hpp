@@ -30,8 +30,7 @@ namespace DNDS::ODE
             Operations::RequireDistinct(out, resOther);
             Operations::RequireDistinct(out, state);
             Operations::RequireDistinct(out, rate);
-            operations.LinearCombination(out, 1, resOther, -inverseDt, state);
-            operations.Axpy(out, rhsScale, rate);
+            operations.AssembleTimeResidual(out, resOther, state, rate, inverseDt, rhsScale);
         }
     };
 

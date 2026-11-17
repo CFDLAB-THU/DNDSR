@@ -11,6 +11,13 @@ namespace DNDS::Cauchy::CUDA
     namespace
     {
         constexpr int Threads = 128;
+        template <PhysicalOperation Op>
+        __global__ void AccumulateRows(index width, R::ArrayView<real> out, R::ArrayView<const real> x,
+                                       R::ArrayView<const real> y, R::ArrayView<const real> z, real a, real b)
+        {
+            for (index row = index(blockIdx.x) * Threads + threadIdx.x; row < out.RowCount(); row += index(gridDim.x) * Threads)
+                ApplyAccumulatedRow<Op>(row, width, out, x, y, z, a, b);
+        }
         struct Merge
         {
             __device__ NumericalStatus operator()(NumericalStatus a, NumericalStatus b) const
@@ -51,6 +58,22 @@ namespace DNDS::Cauchy::CUDA
         }
     }
     index FieldCheckScratchRows(index rows) { return std::max(index(1), std::min(index(256), (rows + Threads - 1) / Threads)); }
+    void ApplyAccumulation(R::ExecutionContext context, PhysicalOperation op, index width,
+                           R::ArrayView<real> out, R::ArrayView<const real> x,
+                           R::ArrayView<const real> y, R::ArrayView<const real> z, real a, real b)
+    {
+        R::ValidateViewDevices(context.device, out, x);
+        if (op == PhysicalOperation::Combination || op == PhysicalOperation::StateAndRate || op == PhysicalOperation::TimeResidual)
+            R::ValidateViewDevices(context.device, y);
+        if (op == PhysicalOperation::TimeResidual)
+            R::ValidateViewDevices(context.device, z);
+        if (out.RowCount() == 0)
+            return;
+        const auto stream = R::CUDAStream(context);
+        DispatchPhysicalOperation(op, [&](auto tag)
+                                  { AccumulateRows<decltype(tag)::value><<<unsigned(FieldCheckScratchRows(out.RowCount())), Threads, 0, stream>>>(width, out, x, y, z, a, b); });
+        DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA accumulation launch failed");
+    }
     void CheckFieldRows(R::ExecutionContext context, EquationBlockArrayView<const real> values,
                         bool capped, std::array<real, 2> caps, FieldCheckOutput partial, FieldCheckOutput result)
     {
