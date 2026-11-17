@@ -778,11 +778,12 @@ namespace DNDS::Cauchy
                 {active.data(), index(active.size())}, {scale, data.settings.positivity.incrementRelax,
                     data.settings.positivity.compressionPower, data.positivity});
             limited = result.alpha.limited; minimum = result.alpha.minimum; frozen = result.frozen; });
-        // Candidate checks precede all state writers. Scalar repair may not
+        // An unanchored domain has one arbitrary pressure constant. Restore the
+        // previous volume mean before validating the candidate on this level.
         if (data.preservePressureGauge && (updateComponents.empty() ||
                                            std::find(updateComponents.begin(), updateComponents.end(), 3) != updateComponents.end()))
             data.operators.PreservePressureGauge(engine, data.stream, state, data.candidate);
-        // silently unfreeze a masked component, even when density changed.
+        // Scalar repair may not unfreeze a masked component, even when density changed.
         const auto validateCandidate = [&]
         {
             DNDS_check_throw_info(frozen, "equation scalar repair would change a frozen component");
