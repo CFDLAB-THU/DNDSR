@@ -133,7 +133,10 @@ namespace DNDS::Cauchy
                         CUDA::AuxiliaryInput gradOwned, CUDA::AuxiliaryInput gradGhost, CUDA::AuxiliaryInput wall) const
         {
             CUDA::AuxiliaryStateInput result;
-            result.parameters = R::MetadataArrayView(data->devicePhysics, owner.Device());
+            if (data->equation.IsACM())
+                result.acm = R::MetadataArrayView(data->deviceACMPhysics, owner.Device());
+            else
+                result.parameters = R::MetadataArrayView(data->devicePhysics, owner.Device());
             result.mean = {owned, ghost};
             result.gradient = {gradOwned, gradGhost};
             result.components = int(source.ComponentNumber());

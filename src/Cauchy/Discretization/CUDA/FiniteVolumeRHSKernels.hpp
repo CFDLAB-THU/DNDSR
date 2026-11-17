@@ -2,6 +2,8 @@
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSFacePackages.hpp"
 
 #include "Cauchy/Discretization/PerfectGasKernelPoint.hpp"
+#include "Cauchy/Discretization/ACMKernelPoint.hpp"
+#include "Cauchy/Boundary/ACMBoundary.hpp"
 #include "Cauchy/Discretization/FiniteVolumeStencil.hpp"
 #include "Cauchy/Discretization/FiniteVolumeKernelPolicy.hpp"
 #include "Cauchy/Boundary/PerfectGasBoundary.hpp"
@@ -15,6 +17,7 @@ namespace DNDS::Cauchy::CUDA
     using RHSOutput = Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::TableRows>;
     using RHSField = Runtime::PairReadView<real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows>;
     using RHSIndices = Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
+    using RHSWallOutput = Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::FixedRows<3>>;
     using RHSStatus = Runtime::ArrayView<NumericalStatus, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
 
     /// Immutable borrowed numerical geometry; no field values, physics workers
@@ -32,6 +35,8 @@ namespace DNDS::Cauchy::CUDA
         Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> wallMean;
         Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::CSRRows> wallFaces;
         bool hasBasis = false, hasWall = false;
+        Runtime::ArrayView<const ACM::SpatialParameters, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> acm;
+        Runtime::ArrayView<const ACM::BoundaryParameters, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> acmBC;
         void ValidateDevice(Runtime::Device device) const;
         DNDS_DEVICE_CALLABLE FiniteVolumeDetail::SampleRecord FaceSample(index iAux, index iPoint) const
         {
@@ -94,6 +99,7 @@ namespace DNDS::Cauchy::CUDA
         int gridBlocks = 0;
         int blockSize = 128;
         bool doubleBuffer = false;
+        bool mechanical = false;
         void Validate() const;
     };
     static_assert(std::is_trivially_copyable_v<RHSKernelControls>);
@@ -141,8 +147,10 @@ namespace DNDS::Cauchy::CUDA
         Runtime::ArrayView<index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> fallbackCounts;
     };
     using RHSFaceOutputs = RHSFaceOutputsT<>;
-    /** @brief Launch the selected perfect-gas face mapping with validated views.
-     * @details Only calorically perfect-gas flow5/SA/2EQ is supported. This is
+    /** @brief Launch the selected mechanical or perfect-gas face mapping with validated views.
+     * @details ACM flow4/SA/2EQ uses FP64 thread-per-face integration and the
+     * immutable mechanical parameters in geometry. The compressible path
+     * supports calorically perfect-gas flow5/SA/2EQ. This is
      * not a species, chemistry or arbitrary-EOS entry: validate the immutable
      * RHSKernelParameters before publishing them to the device. Combined AoS
      * fields use fixed-width 5/6/7 row views and static P1/P2/P3 modal extents;
@@ -153,7 +161,7 @@ namespace DNDS::Cauchy::CUDA
      */
     void EvaluateFluxFaces(Runtime::ExecutionContext context, const RHSGeometryPublication &geometry,
                            Runtime::ArrayView<const RHSKernelParameters, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> parameters,
-                           RHSKernelControls controls, RHSFields fields, RHSFaceOutputs output, RHSIndices faces, bool requireGhost = true, RHSFacePackageView packages = {});
+                           RHSKernelControls controls, RHSFields fields, RHSFaceOutputs output, RHSIndices faces, bool requireGhost = true, RHSFacePackageView packages = {}, RHSWallOutput wallShear = {});
     /// Gather face contributions in canonical cell order. Opposite periodic
     /// faces rotate momentum only, including self-periodic neighbors. Outputs
     /// are integrated residuals (no division by volume). Failed face status

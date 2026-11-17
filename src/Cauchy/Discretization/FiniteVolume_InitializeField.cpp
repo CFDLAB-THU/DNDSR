@@ -45,9 +45,12 @@ namespace DNDS::Cauchy
                                                      for (index j = 0; j < width; ++j)
                                                          background[size_t(j)] = rows(iCell, j);
                                                      FlowState flow;
-                                                     std::copy_n(background.begin(), 5, flow.begin());
-                                                     flow = frame.WorldState(flow);
-                                                     std::copy(flow.begin(), flow.end(), background.begin());
+                                                     if (frame.moving)
+                                                     {
+                                                         std::copy_n(background.begin(), 5, flow.begin());
+                                                         flow = frame.WorldState(flow);
+                                                         std::copy(flow.begin(), flow.end(), background.begin());
+                                                     }
                                                      std::fill(average.begin(), average.end(), 0);
                                                      Geom::tSmallCoords coords;
                                                      mesh.GetCoordsOnCell(iCell, coords);
@@ -84,9 +87,12 @@ namespace DNDS::Cauchy
                                                      }
                                                      for (auto &value : average)
                                                          value /= volume;
-                                                     std::copy_n(average.begin(), 5, flow.begin());
-                                                     flow = frame.LocalState(flow);
-                                                     std::copy(flow.begin(), flow.end(), average.begin());
+                                                     if (frame.moving)
+                                                     {
+                                                         std::copy_n(average.begin(), 5, flow.begin());
+                                                         flow = frame.LocalState(flow);
+                                                         std::copy(flow.begin(), flow.end(), average.begin());
+                                                     }
                                                      for (index j = 0; j < width; ++j)
                                                          rows(iCell, j) = average[size_t(j)];
                                                  }

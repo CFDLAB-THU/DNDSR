@@ -314,6 +314,7 @@ namespace DNDS::Cauchy
         auto require = [&](bool found, const std::string &operation)
         { if (!found) missing.push_back(operation); };
         const bool cuda = s.execution.device == "cuda";
+        const bool acm = s.equation.system == "incompressibleACM";
         const bool amgVR = s.numerics.reconstructionSolver.UsesAMG();
         require(s.numerics.reconstructionSolver.method == "relaxation" || amgVR, "unknown reconstruction solver");
         require(!amgVR || (cuda && Algebra::AmgXPreconditioner::Available() && domain.placement.ranks.size() == 1),
@@ -337,12 +338,12 @@ namespace DNDS::Cauchy
         const bool fp64RHS = kernels.polynomialArithmetic == "fp64" &&
                              kernels.dissipationArithmetic == "fp64" && kernels.fluxArithmetic == "fp64";
         if (kernels.rhsMapping == "auto")
-            kernels.rhsMapping = cuda && fp64RHS ? "ctaSegments" : "thread";
+            kernels.rhsMapping = cuda && !acm && fp64RHS ? "ctaSegments" : "thread";
         if (kernels.rhsReduction == "auto")
             kernels.rhsReduction = kernels.rhsMapping == "ctaSegments" ? "segmented" : "serial";
         require(kernels.polynomialPPThreads == 0 || kernels.polynomialPPThreads == 128 || kernels.polynomialPPThreads == 256 || kernels.polynomialPPThreads == 512, "invalid polynomial PP block size");
-        require(!cuda || kernels.rhsMapping == (fp64RHS ? "ctaSegments" : "thread"),
-                "FP64 CUDA RHS requires ctaSegments; reduced-precision comparisons require thread");
+        require(!cuda || kernels.rhsMapping == (!acm && fp64RHS ? "ctaSegments" : "thread"),
+                "CUDA RHS uses CTA segments for compressible FP64 and thread mapping for ACM or reduced precision");
         require(kernels.rhsBlockSize == 64 || kernels.rhsBlockSize == 128 || kernels.rhsBlockSize == 256 || kernels.rhsBlockSize == 512, "RHS block size must be 64, 128, 256 or 512");
         require(!kernels.rhsDoubleBuffer, "buffered-face RHS experiment has been retired");
         require(kernels.rhsReduction == "serial" || kernels.rhsReduction == "segmented", "unknown RHS face reduction");
@@ -389,16 +390,25 @@ namespace DNDS::Cauchy
         }
         require(s.execution.transferPreflight == "collective" || s.execution.transferPreflight == "abortOnFailure", "transfer preflight " + s.execution.transferPreflight);
         require(s.execution.fieldGrouping == "equationBlocks" || s.execution.fieldGrouping == "coupled", "field grouping " + s.execution.fieldGrouping);
-        const bool acm = s.equation.system == "incompressibleACM";
         require(s.equation.system == "compressible" || acm, "equation " + s.equation.system);
         if (acm)
         {
             require(s.numerics.limiter == "none", "ACM requires unlimited reconstruction");
-            require(s.numerics.flux == "Roe" || s.numerics.flux == "Rusanov", "ACM Roe or Rusanov flux");
+            require(!s.numerics.positivity, "ACM has relative pressure and no thermodynamic positivity limiter");
+            require(s.implicit.sourceJacobianMode == "center", "ACM source Jacobian uses the cell mean");
+            const auto &components = s.implicit.residualComponents;
+            require(components.empty() || std::find(components.begin(), components.end(), "p") != components.end() ||
+                        std::find(components.begin(), components.end(), "flow.p") != components.end(),
+                    "ACM nonlinear convergence requires the continuity residual (p)");
+            require(s.numerics.flux == "Roe" || s.numerics.flux == "rusanov", "ACM Roe or rusanov flux");
             require(s.motion.angularVelocity == Vector3{} && s.motion.translationVelocity == Vector3{}, "ACM on a fixed mesh");
             require(s.equation.rans.model != "RealizableKE", "ACM RANS requires SA, Wilcox or SST");
             const auto full = [&](const ImplicitSettings &level)
-            { require(level.diagonal == "block" && level.jacobianAction == "assembled", "ACM requires full assembled diagonal blocks at every level"); };
+            {
+                require(level.diagonal == "block" && level.jacobianAction == "assembled", "ACM requires full assembled diagonal blocks at every level");
+                require(level.linear.method != "gmres" || level.linear.componentScaling == "none",
+                        "ACM GMRES uses unscaled code-unit components");
+            };
             full(s.implicit);
             for (index l = 1; l <= s.implicit.multigrid.levels; ++l)
                 full(s.implicit.ResolveCoarseLevel(l));
@@ -408,7 +418,7 @@ namespace DNDS::Cauchy
         const bool comparisonSweep = reconstructionKernel != CFV::ReconstructionDeviceKernel::FP64 &&
                                      reconstructionKernel != CFV::ReconstructionDeviceKernel::FP64Pipelined;
         require(!comparisonSweep || (s.mesh.dimension == 3 && s.numerics.reconstruction == "variational" &&
-                                     s.numerics.cfv.maxOrder == 3 && !extended &&
+                                     s.numerics.cfv.maxOrder == 3 && !extended && !acm &&
                                      !s.numerics.cfv.storage.Raw() && s.numerics.limiter != "LVR" &&
                                      s.implicit.multigrid.levels == 0),
                 "comparison reconstruction kernels require single-grid 3D P3 flow5 precomputed non-LVR storage; use fp64/fp64Pipelined for other shapes");
@@ -441,7 +451,10 @@ namespace DNDS::Cauchy
             // residency are checked by context creation and host launchers.
             require(s.execution.layout == "aos" && s.execution.fieldGrouping == "coupled",
                     "CUDA requires combined AoS equation fields");
-            require(s.equation.eos == "perfectGas", "backend cuda requires perfectGas EOS");
+            require(acm ? s.equation.eos == "none" : s.equation.eos == "perfectGas",
+                    "CUDA supports perfect-gas compressible flow or constant-density ACM");
+            require(!acm || (fp64RHS && kernels.rhsReduction == "serial" && s.numerics.viscousGradient == "polynomial"),
+                    "CUDA ACM requires FP64 serial face quadrature with equation gradients");
             require(!rans || s.equation.rans.model == "SA" || s.equation.rans.model == "KOmegaWilcox" ||
                         s.equation.rans.model == "KOmegaSST",
                     "CUDA RANS profile " + s.equation.rans.model);

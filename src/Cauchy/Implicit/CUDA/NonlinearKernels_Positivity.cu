@@ -30,6 +30,17 @@ namespace DNDS::Cauchy::CUDA
             if (summary.status)
                 summary.status = {NumericalError::InvalidState, detail, row};
         }
+        __global__ void SpectralPseudoTime(NonlinearCells cells, LinearReadRows spectral, LinearWriteRows inverse, real cfl)
+        {
+            for (index row = index(blockIdx.x) * blockDim.x + threadIdx.x; row < inverse.RowCount(); row += index(gridDim.x) * blockDim.x)
+            {
+                const real volume = cells(row, 0);
+                const real value = spectral(row, 0) / (volume * cfl);
+                inverse(row, 0) = volume > 0 && value > 0 && std::isfinite(value)
+                                      ? value
+                                      : std::numeric_limits<real>::quiet_NaN();
+            }
+        }
         __global__ void PseudoTime(NonlinearCells cells, LinearReadRows mean, LinearWriteRows defect,
                                    LinearReadRows spectral, LinearWriteRows inverseTau, LinearWriteRows alpha,
                                    PseudoTimeParameters parameters, NonlinearSummaryOutput scratch)
@@ -161,7 +172,7 @@ namespace DNDS::Cauchy::CUDA
                         rans.RepairIncrement(oldRANS, deltaRANS);
                         for (int j = 0; j < rans.components; ++j)
                             nextRANS[j] = oldRANS[j] + deltaRANS[j];
-                        rans.RepairMean(candidate(iCell, 0), nextRANS);
+                        rans.RepairMean(parameters.admissibility.thermal.flowFirst < 0 ? real(1) : candidate(iCell, 0), nextRANS);
                         for (int j = 0; j < rans.components; ++j)
                         {
                             candidate(iCell, first + j) = nextRANS[j];
@@ -175,6 +186,19 @@ namespace DNDS::Cauchy::CUDA
                         candidate(iCell, j) = std::numeric_limits<real>::quiet_NaN();
             }
             D::PublishBlock(local, scratch);
+        }
+    }
+    void PrepareSpectralPseudoTime(R::ExecutionContext context, NonlinearCells cells, LinearReadRows spectral,
+                                   LinearWriteRows inverse, real cfl)
+    {
+        const index rows = spectral.RowCount();
+        D::CheckCells(context, cells, rows);
+        D::CheckRows(context, spectral, rows, 1);
+        D::CheckRows(context, inverse, rows, 1);
+        if (rows)
+        {
+            SpectralPseudoTime<<<unsigned(NonlinearScratchRows(rows)), D::Threads, 0, R::CUDAStream(context)>>>(cells, spectral, inverse, cfl);
+            D::CheckLaunch();
         }
     }
     void PreparePseudoTime(R::ExecutionContext context, NonlinearCells cells, LinearReadRows mean,
@@ -233,12 +257,17 @@ namespace DNDS::Cauchy::CUDA
         D::CheckRows(context, increment, mean.RowCount(), mean.Width());
         D::CheckRows(context, candidate, mean.RowCount(), mean.Width());
         D::CheckSummary(context, mean.RowCount(), scratch, result);
-        D::CheckThermal(parameters.admissibility.thermal, int(mean.Width()));
+        const int flowWidth = parameters.admissibility.thermal.flowFirst < 0 ? 4 : 5;
+        if (flowWidth == 5)
+            D::CheckThermal(parameters.admissibility.thermal, int(mean.Width()));
+        else
+            DNDS_check_throw_info(!parameters.positivity && parameters.admissibility.thermal.components == mean.Width(),
+                                  "ACM correction requires the nonthermal policy");
         const auto rans = parameters.admissibility.rans;
-        const bool ransValid = (mean.Width() == 5 && rans.components == 0) ||
-                               (parameters.admissibility.ransFirst == 5 && rans.components == mean.Width() - 5 &&
-                                ((mean.Width() == 6 && rans.kind == Physics::RANS::ModelKind::SA) ||
-                                 (mean.Width() == 7 && (rans.kind == Physics::RANS::ModelKind::KOmegaSST || rans.kind == Physics::RANS::ModelKind::KOmegaWilcox))));
+        const bool ransValid = (mean.Width() == flowWidth && rans.components == 0) ||
+                               (parameters.admissibility.ransFirst == flowWidth && rans.components == mean.Width() - flowWidth &&
+                                ((rans.components == 1 && rans.kind == Physics::RANS::ModelKind::SA) ||
+                                 (rans.components == 2 && (rans.kind == Physics::RANS::ModelKind::KOmegaSST || rans.kind == Physics::RANS::ModelKind::KOmegaWilcox))));
         DNDS_check_throw_info(ransValid && std::isfinite(parameters.scale) && parameters.scale > 0 &&
                                   std::isfinite(parameters.incrementRelax) && parameters.incrementRelax >= 0 && parameters.incrementRelax <= 1 && parameters.compressionPower > 0,
                               "invalid CUDA correction policy");

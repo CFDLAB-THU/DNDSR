@@ -45,6 +45,7 @@ namespace DNDS::Cauchy
         _rejectUnconvergedStages = settings.implicit.rejectUnconvergedStages;
         if (time.method == "ssprk3" && !_steady)
         {
+            DNDS_check_throw_info(!_problem.equation.IsACM(), "SSPRK3 requires invertible physical accumulation");
             DNDS_check_throw_info(!settings.implicit.multigrid.levels, "polynomial FAS requires an implicit time method");
             return;
         }

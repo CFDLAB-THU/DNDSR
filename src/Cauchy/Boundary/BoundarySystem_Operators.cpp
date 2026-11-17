@@ -8,7 +8,7 @@ namespace DNDS::Cauchy
     {
         DNDS_check_throw_info(kind == BoundaryKind::Extrapolate || kind == BoundaryKind::Farfield || kind == BoundaryKind::TotalConditionInlet ||
                                   kind == BoundaryKind::SlipWall || kind == BoundaryKind::NoSlipWall ||
-                                  kind == BoundaryKind::Interface ||
+                                  kind == BoundaryKind::Interface || kind == BoundaryKind::VelocityInlet || kind == BoundaryKind::PressureOutlet ||
                                   (kind == BoundaryKind::DoubleMachBottom && hasPerfectGasState) ||
                                   (kind == BoundaryKind::Analytic &&
                                    (profile.kind == "constant" || hasPerfectGasState)),

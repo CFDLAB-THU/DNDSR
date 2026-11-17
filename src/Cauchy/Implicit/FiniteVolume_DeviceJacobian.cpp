@@ -1,4 +1,5 @@
 #include "Cauchy/Implicit/FiniteVolumeDeviceJacobian.hpp"
+#include "Cauchy/Implicit/CUDA/ACMJacobianKernels.hpp"
 #include "DNDS/Diagnostics/Timeline.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeStateKernels.hpp"
 #include "Cauchy/Core/NumericalFailure.hpp"
@@ -18,15 +19,14 @@ namespace DNDS::Cauchy
         output.Validate();
         const index n = state.ComponentNumber(), owned = Metrics().NumCell(), all = Metrics().NumCellProc();
         const auto device = Device();
-        const auto physics = PerfectGasSpatialParameters::FromEquation(_data->equation, Metrics().Dimension());
-        physics.Validate(int(n));
+        const bool acm = _data->equation.IsACM();
         DNDS_check_throw_info(context.stream && context.stream->Context().device == device &&
                                   device.space == R::MemorySpace::CUDA && state.Device() == device &&
                                   state.PhysicalFieldNumber() == 1 && output.Device() == device &&
                                   output.Space().Same(state.Space()) && output.Components() == n,
                               "device Jacobian requires one matching combined-AoS state, matrix and execution lane");
         const bool full = output.DiagonalMode() == DiagonalStorage::Block;
-        DNDS_check_throw_info(!controls.roeDissipation || (n == 5 && full),
+        DNDS_check_throw_info(acm || !controls.roeDissipation || (n == 5 && full),
                               "Roe Jacobian requires the flow5 full-block profile");
         DNDS_check_throw_info(std::isfinite(time) && std::isfinite(controls.physicalMass) && controls.physicalMass >= 0 &&
                                   std::isfinite(controls.residualScale) && controls.residualScale >= 0,
@@ -58,6 +58,54 @@ namespace DNDS::Cauchy
         checkAlias(field.Ghost());
         checkAlias(inversePseudoTime);
         checkAlias(*auxiliary.faceSpectralRadius);
+        if (acm)
+        {
+            DNDS_check_throw_info(full && output.HasAssembledOffDiagonal() && n >= 4 && n <= 6 &&
+                                      !HasInterfaces() && !_data->motion.At(time).moving,
+                                  "CUDA ACM Jacobian requires stationary single-domain full blocks");
+            auto session = work.session.Acquire();
+            const auto &lane = *context.stream;
+            auto engine = lane.LockEngine();
+            if (!work.deviceJacobian)
+                work.deviceJacobian = std::make_shared<Workspace::DeviceJacobianData>(_data, n, lane.Context());
+            const auto scratch = work.deviceJacobian;
+            auto physics = _data->equation.ACMParameters();
+            physics.roe = _data->settings.numerics.flux == "Roe";
+            const auto rans = _data->equation.HasRANS() ? _data->equation.RANS().KernelParameters() : Physics::RANS::PointParameters{};
+            std::array<bool, 6> active{};
+            const Algebra::ComponentSelection selection(n, controls.updateComponents);
+            for (index j = 0; j < n; ++j)
+                active[j] = selection.Includes(j);
+            R::SubmitArrays(engine, lane, [](auto where, auto result)
+                            { CUDA::ClearNumericalStatus(where, result); }, R::WriteAs<R::FixedRows<1>>(scratch->result));
+            auto blocks = output.OffDiagonal().Values();
+            R::SubmitArrays(engine, lane, [scratch, physics, rans, active, scale = controls.residualScale, mass = controls.physicalMass, rowMajor = output.RowMajorBlocks()](auto where, auto owned, auto ghost, auto tau, auto radius, auto offsets, auto diagonal, auto blocks, auto status)
+                            {
+                CUDA::ACMJacobianInput q{};
+                q.input = {owned,ghost};
+                q.stencil = scratch->stencil.KernelDescriptor();
+                const auto bc = scratch->owner->deviceACMBoundaryConditions.View(where.device);
+                q.conditions.rows = {bc.data(),nullptr,index(bc.size()),1,1,nullptr,R::RowLayoutKind::Table,where.device};
+                q.physics = physics;
+                q.tau = tau;
+                q.radius = radius;
+                if (scratch->walls) q.wallMean = scratch->walls->View().cellMean;
+                if (scratch->acmLengths) q.lengths = scratch->acmLengths->View<R::FixedRows<1>>();
+                q.rans = rans;
+                q.diagonal = diagonal;
+                q.offDiagonal = {blocks,offsets,owned.Width(),rowMajor};
+                q.mass = mass;
+                q.residualScale = scale;
+                q.active = active;
+                CUDA::PrepareACMJacobian(where,q,status); }, R::ReadAs<R::TableRows>(field.Owned()), R::ReadAs<R::TableRows>(field.Ghost()), R::ReadAs<R::TableRows>(inversePseudoTime), R::ReadAs<R::TableRows>(*auxiliary.faceSpectralRadius), R::ReadAs<R::FixedRows<1>>(output.OffDiagonal().OffsetArray()), R::WriteAs<R::UniformTableRows>(output.Diagonal()), R::WriteAs<R::UniformTableRows>(blocks), R::WriteAs<R::FixedRows<1>>(scratch->rowsStatus));
+            scratch->AppendStatus(engine, lane, scratch->rowsStatus);
+            engine.Synchronize();
+            const auto result = scratch->result.To(R::Device::Host(), lane.Context());
+            RequireNumericalSuccess(result.Read().View()(0, 0), "CUDA ACM Jacobian preparation");
+            return;
+        }
+        const auto physics = PerfectGasSpatialParameters::FromEquation(_data->equation, Metrics().Dimension());
+        physics.Validate(int(n));
         const bool wave = controls.roeDissipation && _data->settings.numerics.riemann.useStencil && _data->flux.UsesTransverseSignal();
         const bool pressure = controls.roeDissipation && _data->settings.numerics.riemann.useStencil && _data->flux.UsesPressureStencil();
         DNDS_check_throw_info((!wave || auxiliary.cellWaveJump) && (!pressure || auxiliary.cellPressureMinimum),

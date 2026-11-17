@@ -254,6 +254,12 @@ namespace DNDS::Cauchy
         request.faceValues = faceValues;
         request.lowFaceValues = lowFaceValues;
         request.wallFlux = wallFlux;
+        std::optional<R::Array<real>::WriteLease> shearWrite;
+        if (boundaryWallShear)
+        {
+            shearWrite.emplace(boundaryWallShear->Write());
+            request.wallShear = shearWrite->View<R::FixedRows<3>>();
+        }
         request.wall = wallRead ? wallRead->HostView() : WallDistanceView{};
         request.thermal = thermal.View();
         request.frame = owner->motion.At(time);

@@ -18,7 +18,7 @@ namespace DNDS::Cauchy
         std::shared_ptr<const Data> owner;
         CFV::FiniteVolumeRead metric;
         FiniteVolumeStencilStorage::ReadAccess stencil;
-        R::ReadAccess conditions;
+        std::optional<R::ReadAccess> conditions;
         std::optional<CFV::ReconstructionResidentRead> basis;
         std::optional<WallDistanceRead> walls;
         std::optional<CUDA::RHSGeometryPublication> geometry;
@@ -34,8 +34,7 @@ namespace DNDS::Cauchy
 
         DeviceFluxData(std::shared_ptr<const Data> data, ThermalView thermal, bool meanOnly, bool primitiveGradient, bool produceLow)
             : owner(std::move(data)), metric(owner->metrics.AcquireRead({owner->metrics.Device(), nullptr})),
-              stencil(owner->stencil.Read({owner->metrics.Device(), nullptr})),
-              conditions(owner->deviceBoundaryConditions.Read({owner->metrics.Device(), nullptr}))
+              stencil(owner->stencil.Read({owner->metrics.Device(), nullptr}))
         {
             const auto device = owner->metrics.Device();
             const R::ExecutionContext context{device, nullptr};
@@ -44,7 +43,8 @@ namespace DNDS::Cauchy
             const auto &n = owner->settings.numerics;
             controls.fluxPolicy = owner->fluxPolicy;
             controls.solver = owner->flux.Kind();
-            controls.components = int(thermal.components);
+            controls.mechanical = owner->equation.IsACM();
+            controls.components = int(owner->equation.Schema().LogicalComponents().size());
             controls.dimension = owner->metrics.Dimension();
             const auto precision = [](const std::string &name)
             {
@@ -69,9 +69,9 @@ namespace DNDS::Cauchy
             controls.firstOrder = meanOnly || n.firstOrderConvection;
             controls.viscous = !meanOnly && owner->equation.Viscous();
             controls.primitiveGradient = primitiveGradient;
-            controls.positivity = n.positivity;
-            controls.faceFallback = n.faceFallback;
-            controls.useStencil = n.riemann.useStencil;
+            controls.positivity = !controls.mechanical && n.positivity;
+            controls.faceFallback = !controls.mechanical && n.faceFallback;
+            controls.useStencil = !controls.mechanical && n.riemann.useStencil;
             controls.produceLow = produceLow;
             controls.distinctViscous = controls.viscous && !primitiveGradient && !controls.firstOrder &&
                                        (!controls.direct || controls.linear) && !n.viscousLimited &&
@@ -82,8 +82,17 @@ namespace DNDS::Cauchy
             view.faceOffsets = metrics.faceOffsets;
             view.cells = metrics.cells;
             view.quadrature = metrics.quadrature;
-            view.conditions = {conditions.View<PerfectGasBoundaryParameters>().data, nullptr,
-                               index(owner->deviceBoundaryConditions.size()), 1, 1, nullptr, R::RowLayoutKind::Table, device};
+            if (controls.mechanical)
+            {
+                view.acm = R::MetadataArrayView(owner->deviceACMPhysics, device);
+                view.acmBC = R::MetadataArrayView(owner->deviceACMBoundaryConditions, device);
+            }
+            else
+            {
+                conditions.emplace(owner->deviceBoundaryConditions.Read(context));
+                view.conditions = {conditions->View<PerfectGasBoundaryParameters>().data, nullptr,
+                                   index(owner->deviceBoundaryConditions.size()), 1, 1, nullptr, R::RowLayoutKind::Table, device};
+            }
             if (owner->reconstruction)
             {
                 basis.emplace(owner->reconstruction->AcquireResidentRead());
@@ -101,17 +110,20 @@ namespace DNDS::Cauchy
                 view.hasWall = true;
             }
             geometry.emplace(view, context);
-            CUDA::RHSKernelParameters physics;
-            physics.physics = PerfectGasSpatialParameters::FromEquation(owner->equation, owner->metrics.Dimension());
-            physics.thermal = thermal;
-            physics.Validate(int(thermal.components));
-            parameters = R::MetadataBuffer<CUDA::RHSKernelParameters>({physics}).CopyTo(device, context);
-            parameters.SetDiagnosticName("Cauchy/rhsPolicy", DNDS_ALLOCATION_SITE());
-            parameterRead.emplace(parameters.Read(context));
+            if (!controls.mechanical)
+            {
+                CUDA::RHSKernelParameters physics;
+                physics.physics = PerfectGasSpatialParameters::FromEquation(owner->equation, owner->metrics.Dimension());
+                physics.thermal = thermal;
+                physics.Validate(int(thermal.components));
+                parameters = R::MetadataBuffer<CUDA::RHSKernelParameters>({physics}).CopyTo(device, context);
+                parameters.SetDiagnosticName("Cauchy/rhsPolicy", DNDS_ALLOCATION_SITE());
+                parameterRead.emplace(parameters.Read(context));
+            }
             const index cells = owner->metrics.NumCell(), faces = incidence.stencilFaces.RowCount();
             const auto &kernels = owner->settings.execution.kernels;
             const index ghosts = owner->metrics.NumCellProc() - cells;
-            const index components = thermal.components;
+            const index components = controls.components;
             const index recWidth = components * (owner->reconstruction ? owner->reconstruction->NRecDOF() : owner->metrics.Dimension());
             const index viscousWidth = owner->settings.numerics.viscousGradient == "primitive" ? 5 * owner->metrics.Dimension() : recWidth;
             const auto &numerics = owner->settings.numerics;
@@ -171,6 +183,8 @@ namespace DNDS::Cauchy
         }
         auto Parameters() const
         {
+            if (!parameterRead)
+                return R::ArrayView<const CUDA::RHSKernelParameters, R::AccessBoundsChecks, R::FixedRows<1>>{};
             return R::ArrayView<const CUDA::RHSKernelParameters, R::AccessBoundsChecks, R::FixedRows<1>>{
                 parameterRead->View<CUDA::RHSKernelParameters>().data, nullptr, 1, 1, 1, nullptr, R::RowLayoutKind::Table, owner->metrics.Device()};
         }
@@ -313,17 +327,24 @@ namespace DNDS::Cauchy
         const auto &visGhostInput = pin->Input(5, visGhost, engine, stream);
         // Inactive low-order outputs alias their primary arrays deliberately;
         // the leaf never accesses them. Tracking merges their access footprints.
-        R::SubmitArrays(engine, stream, [pin, controls, ghosts, hasMean, hasIncoming, hasWave, hasPressure, packageSlot = region == CFV::ReconstructionRegion::All ? 0 : region == CFV::ReconstructionRegion::Core ? 1
-                                                                                                                                                                                                                   : 2](R::ExecutionContext context, auto u, auto ug, auto rec, auto recg, auto vis, auto visg, auto prepared, auto packet, auto wave, auto waveg, auto pressure, auto pressureg, auto high, auto low, auto force, auto status, auto counts, auto selected)
-                        {
+        const auto submitFaces = [&](auto... shearOperand)
+        {
+            R::SubmitArrays(engine, stream, [pin, controls, ghosts, hasMean, hasIncoming, hasWave, hasPressure, packageSlot = region == CFV::ReconstructionRegion::All ? 0 : region == CFV::ReconstructionRegion::Core ? 1
+                                                                                                                                                                                                                       : 2](R::ExecutionContext context, auto u, auto ug, auto rec, auto recg, auto vis, auto visg, auto prepared, auto packet, auto wave, auto waveg, auto pressure, auto pressureg, auto high, auto low, auto force, auto status, auto counts, auto selected, auto... shear)
+                            {
                 CUDA::RHSFields fields;
                 fields.mean = {u, ug}; fields.reconstruction = {rec, recg}; fields.viscousData = {vis, visg};
                 fields.preparedMean = prepared; fields.incoming = packet;
                 fields.waveJump = {wave, waveg}; fields.pressureMinimum = {pressure, pressureg};
                 fields.hasPreparedMean = hasMean; fields.hasIncoming = hasIncoming; fields.hasWave = hasWave; fields.hasPressure = hasPressure;
                 CUDA::EvaluateFluxFaces(context, *pin->geometry, pin->Parameters(), controls, fields, {high, low, force, status, counts}, selected, ghosts,
-                    pin->packages[packageSlot] ? pin->packages[packageSlot]->View() : CUDA::RHSFacePackageView{}); },
-                        R::ReadAs<R::UniformTableRows>(meanInput), R::ReadAs<R::UniformTableRows>(meanGhostInput), R::ReadAs<R::UniformTableRows>(recInput), R::ReadAs<R::UniformTableRows>(recGhostInput), R::ReadAs<R::UniformTableRows>(visInput), R::ReadAs<R::UniformTableRows>(visGhostInput), R::ReadAs<R::TableRows>(prepared), R::ReadAs<R::TableRows>(packet), R::ReadAs<R::UniformTableRows>(wave), R::ReadAs<R::UniformTableRows>(waveGhost), R::ReadAs<R::UniformTableRows>(pressure), R::ReadAs<R::UniformTableRows>(pressureGhost), R::WriteAs<R::TableRows>(faceFlux), R::WriteAs<R::TableRows>(lowFace), R::WriteAs<R::FixedRows<3>>(boundaryMomentumFlux), R::WriteAs<R::FixedRows<1>>(pin->faceStatus), R::WriteAs<R::FixedRows<1>>(pin->fallbackCounts), R::ReadAs<R::FixedRows<1>>(faces));
+                    pin->packages[packageSlot] ? pin->packages[packageSlot]->View() : CUDA::RHSFacePackageView{}, shear...); },
+                            R::ReadAs<R::UniformTableRows>(meanInput), R::ReadAs<R::UniformTableRows>(meanGhostInput), R::ReadAs<R::UniformTableRows>(recInput), R::ReadAs<R::UniformTableRows>(recGhostInput), R::ReadAs<R::UniformTableRows>(visInput), R::ReadAs<R::UniformTableRows>(visGhostInput), R::ReadAs<R::TableRows>(prepared), R::ReadAs<R::TableRows>(packet), R::ReadAs<R::UniformTableRows>(wave), R::ReadAs<R::UniformTableRows>(waveGhost), R::ReadAs<R::UniformTableRows>(pressure), R::ReadAs<R::UniformTableRows>(pressureGhost), R::WriteAs<R::TableRows>(faceFlux), R::WriteAs<R::TableRows>(lowFace), R::WriteAs<R::FixedRows<3>>(boundaryMomentumFlux), R::WriteAs<R::FixedRows<1>>(pin->faceStatus), R::WriteAs<R::FixedRows<1>>(pin->fallbackCounts), R::ReadAs<R::FixedRows<1>>(faces), shearOperand...);
+        };
+        if (boundaryWallShear)
+            submitFaces(R::WriteAs<R::FixedRows<3>>(*boundaryWallShear));
+        else
+            submitFaces();
         R::SubmitArrays(engine, stream, [pin, low = controls.produceLow](R::ExecutionContext context, auto highFaces, auto lowFaces, auto faceStatus, auto high, auto lowValues, auto status, auto cells)
                         { CUDA::GatherFluxCells(context, *pin->geometry, highFaces, lowFaces, faceStatus, high, lowValues, status, cells, low); }, R::ReadAs<R::TableRows>(faceFlux), R::ReadAs<R::TableRows>(lowFace), R::ReadAs<R::FixedRows<1>>(pin->faceStatus), R::WriteAs<R::TableRows>(output.CoupledField().Owned()), R::WriteAs<R::TableRows>(lowOutput), R::WriteAs<R::FixedRows<1>>(pin->cellStatus), R::ReadAs<R::FixedRows<1>>(cells));
         R::SubmitArrays(engine, stream, [pin](R::ExecutionContext context, auto status, auto partial, auto result)

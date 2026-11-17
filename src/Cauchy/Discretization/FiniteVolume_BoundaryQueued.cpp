@@ -98,8 +98,16 @@ namespace DNDS::Cauchy
         R::SubmitArrays(engine, stream, [pin, options, frame, components, mapped, primitive, hasIncoming](R::ExecutionContext context, auto mean, auto rec, auto incoming, auto target, auto status, auto faces, auto wall)
                         {
                 CUDA::BoundaryTraceRequest request;
-                request.parameters = R::MetadataArrayView(pin->owner->deviceBoundaryPolicy, context.device);
-                request.conditions = R::MetadataArrayView(pin->owner->deviceBoundaryConditions, context.device);
+                if (pin->owner->equation.IsACM())
+                {
+                    request.acm = R::MetadataArrayView(pin->owner->deviceACMPhysics, context.device);
+                    request.acmBC = R::MetadataArrayView(pin->owner->deviceACMBoundaryConditions,context.device);
+                }
+                else
+                {
+                    request.parameters = R::MetadataArrayView(pin->owner->deviceBoundaryPolicy, context.device);
+                    request.conditions = R::MetadataArrayView(pin->owner->deviceBoundaryConditions, context.device);
+                }
                 request.stencil = pin->stencil.KernelDescriptor();
                 request.faces = faces;
                 request.means = mean; request.coefficients = rec; request.incoming = incoming;

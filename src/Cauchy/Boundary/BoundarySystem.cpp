@@ -371,13 +371,24 @@ namespace DNDS::Cauchy
         : BoundarySystem(settings, OptionalRef<const PerfectGas>{}) {}
     BoundarySystem::BoundarySystem(const std::map<std::string, BoundarySettings> &settings, const EquationSystem &equation)
         : BoundarySystem(settings,
-                         equation.HasMixture()
+                         equation.HasMixture() || equation.IsACM()
                              ? OptionalRef<const PerfectGas>{}
                              : OptionalRef<const PerfectGas>(equation.Gas()))
     {
         for (const auto &[zone, source] : settings)
         {
             auto &condition = _conditions.at(std::stoi(zone));
+            if (equation.IsACM())
+            {
+                if (condition.kind == BoundaryKind::Farfield || condition.kind == BoundaryKind::PressureOutlet ||
+                    condition.kind == BoundaryKind::VelocityInlet)
+                {
+                    const int width = 4 + (equation.HasRANS() ? equation.RANS().ComponentNumber() : 0);
+                    DNDS_check_throw_info(index(source.resolvedACMState.size()) == width, "ACM prescribed boundary needs resolved primUP state");
+                    std::copy_n(source.resolvedACMState.begin(), width, condition.acmState.begin());
+                }
+                continue;
+            }
             const bool prescribed = condition.kind == BoundaryKind::Farfield || condition.kind == BoundaryKind::Analytic;
             DNDS_check_throw_info(prescribed || source.massFractions.empty(), "mass fractions supplied to a non-prescribed boundary");
             if (prescribed)
@@ -404,12 +415,16 @@ namespace DNDS::Cauchy
         for (const auto &[zone, source] : settings)
         {
             DNDS_check_throw_info(!gas || source.massFractions.empty(), "perfect-gas boundary has unused mass fractions");
-            DNDS_check_throw_info(source.state.is_null() || source.kind == "totalConditionInlet", "resolve tagged boundary state before constructing BoundarySystem directly");
+            DNDS_check_throw_info(source.state.is_null() || source.kind == "totalConditionInlet" || !source.resolvedACMState.empty(), "resolve tagged boundary state before constructing BoundarySystem directly");
             BoundaryCondition condition;
             if (source.kind == "extrapolate")
                 condition.kind = BoundaryKind::Extrapolate;
             else if (source.kind == "farfield")
                 condition.kind = BoundaryKind::Farfield;
+            else if (source.kind == "velocityInlet")
+                condition.kind = BoundaryKind::VelocityInlet;
+            else if (source.kind == "pressureOutlet")
+                condition.kind = BoundaryKind::PressureOutlet;
             else if (source.kind == "totalConditionInlet")
             {
                 condition.kind = BoundaryKind::TotalConditionInlet;

@@ -59,6 +59,22 @@ namespace DNDS::Cauchy::CPU
         auto rhoY = evaluator.SpeciesInput();
         if (end < 0)
             end = rhs.RowCount();
+        if (flow.ComponentNumber() == 4)
+        {
+            for (index iCell = begin; iCell < end; ++iCell)
+            {
+                const real volume = metric.GetCellVol(iCell);
+                result[0] += volume;
+                result[2] = 1;
+                result[3] = std::min(result[3], flow(iCell, 3));
+                for (int d = 0; d < 3; ++d)
+                    result[1] += 0.5 * volume * flow(iCell, d) * flow(iCell, d);
+                for (index j = 0; j < width; ++j)
+                    result[4] += rhs(iCell, j) * rhs(iCell, j) / volume;
+            }
+            result[13] = std::numeric_limits<real>::quiet_NaN();
+            return {};
+        }
         for (index iCell = begin; iCell < end; ++iCell)
         {
             FlowState value;

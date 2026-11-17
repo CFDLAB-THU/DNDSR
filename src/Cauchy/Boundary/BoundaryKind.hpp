@@ -13,6 +13,8 @@ namespace DNDS::Cauchy
         NoSlipWall,
         Analytic,
         DoubleMachBottom,
-        Interface
+        Interface,
+        VelocityInlet,
+        PressureOutlet
     };
 }

@@ -16,8 +16,9 @@ namespace DNDS::Physics::RANS
             return {NumericalError::UnsupportedRequest};
         if (parameters.kind == ModelKind::None)
             return {};
-        if (!(point.state[0] > 0 && point.molecularViscosity > 0 && point.wallDistance > 0 && point.cp > 0 && point.gamma > 1) ||
-            !std::isfinite(point.molecularViscosity) || !std::isfinite(point.wallDistance) || !std::isfinite(point.cp) || !std::isfinite(point.gamma))
+        if (!(point.state[0] > 0 && point.molecularViscosity > 0 && point.wallDistance > 0) ||
+            !std::isfinite(point.molecularViscosity) || !std::isfinite(point.wallDistance) ||
+            (!point.incompressible && (!(point.cp > 0 && point.gamma > 1) || !std::isfinite(point.cp) || !std::isfinite(point.gamma))))
             return {NumericalError::InvalidState};
         for (int j = 0; j < 5 + parameters.ComponentNumber(); ++j)
         {
@@ -55,8 +56,8 @@ namespace DNDS::Physics::RANS
         default:
             return TurbulentTransport{};
         }
-        TurbulentTransport result{viscosity, point.cp * viscosity / parameters.turbulentPrandtl,
-                                  viscosity / std::max(point.state[0] * parameters.turbulentSchmidt, verySmallReal)};
+        TurbulentTransport result{viscosity, point.incompressible ? 0 : point.cp * viscosity / parameters.turbulentPrandtl,
+                                  point.incompressible ? 0 : viscosity / std::max(point.state[0] * parameters.turbulentSchmidt, verySmallReal)};
         if (!std::isfinite(result.viscosity) || !std::isfinite(result.conductivity) || !std::isfinite(result.speciesDiffusivity))
             return NumericalStatus{NumericalError::InvalidState};
         return result;

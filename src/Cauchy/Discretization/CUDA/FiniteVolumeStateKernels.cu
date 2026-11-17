@@ -152,11 +152,12 @@ namespace DNDS::Cauchy::CUDA
         if (activeRows.RowCount())
             activeRows.ValidateDevice(context.device);
         DNDS_check_throw_info(!activeRows.RowCount() || activeRows.RowCount() == means.RowCount(), "CUDA admissibility row mask differs");
-        DNDS_check_throw_info(means.Width() >= 5 && means.Width() <= 7 && bounds.thermal.components == means.Width() &&
-                                  bounds.thermal.flowFirst == 0 && bounds.thermal.independent == 0 &&
+        const int flowWidth = bounds.thermal.flowFirst < 0 ? 4 : 5;
+        DNDS_check_throw_info(means.Width() >= flowWidth && means.Width() <= flowWidth + 2 && bounds.thermal.components == means.Width() &&
+                                  bounds.thermal.independent == 0 &&
                                   bounds.thermal.speciesEnergies[0].empty() && bounds.thermal.speciesEnergies[1].empty() &&
-                                  bounds.rans.components == means.Width() - 5 && (!bounds.rans.components || bounds.ransFirst == 5),
-                              "CUDA admissibility supports combined perfect-gas flow5/SA/2EQ only");
+                                  bounds.rans.components == means.Width() - flowWidth && (!bounds.rans.components || bounds.ransFirst == flowWidth),
+                              "CUDA admissibility view differs from the declared flow and RANS blocks");
         R::CheckKernelArgumentBudget<StateInput, AdmissibilityView, StateReductionOutput, ActiveRows>();
         const auto stream = ::DNDS::Runtime::CUDAStream(context);
         // The temporary all-ones value bits are an unsigned atomic identity,

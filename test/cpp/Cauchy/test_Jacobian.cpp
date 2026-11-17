@@ -2,6 +2,7 @@
 #include "doctest.h"
 #include "Cauchy/Discretization/FiniteVolume.hpp"
 #include "Cauchy/Implicit/CPU/JacobianKernels.hpp"
+#include "Cauchy/Implicit/CPU/ACMJacobianKernels.hpp"
 #include "Cauchy/Physics/PhysicalFlux.hpp"
 #include "Geom/Unstructured/UnstructuredMesh.hpp"
 #include "../CFV/ReconstructionFixture.hpp"
@@ -22,6 +23,60 @@ namespace
     {
         auto state = Bind(fv, field);
         fv.Initialize(state, profile, primitive);
+    }
+}
+
+TEST_CASE("ACM temporal Jacobian distinguishes pressure pseudo mass from differential physical mass")
+{
+    const std::array<double, 6> q{2, -1, 0.5, -12, 0.2, 0.9};
+    Eigen::Matrix<double, 6, 6> block;
+    C::ACM::FillACMTemporalBlock<6>(q, 3., 4., 7., 0.5, 2., block);
+    for (int j = 0; j < 6; ++j)
+        for (int i = 0; i < 6; ++i)
+        {
+            double expected = i == j ? 33. : 0.;
+            if (j == 3)
+                expected = i < 3 ? 9 * q[i] : i == 3 ? 6.
+                                                     : 6 * q[i];
+            CHECK(block(i, j) == doctest::Approx(expected));
+        }
+    C::ACM::FillACMTemporalBlock<6>(q, 3., 4., 0., 0.5, 2., block);
+    CHECK(block(3, 3) == 6.);
+    CHECK(block(4, 3) == 0.);
+    CHECK(block(5, 5) == 12.);
+}
+
+TEST_CASE("Scheme A characteristic action reproduces the differentiated mechanical flux")
+{
+    C::ACM::Parameters parameters;
+    parameters.alpha = .8;
+    parameters.beta2 = 3;
+    const std::array<double, 4> state{1.3, -.4, .7, -2};
+    const std::array<double, 3> normal{.6, .8, 0};
+    const double direction[4]{-.1, .3, .5, -.6};
+    struct Identity
+    {
+        double operator()(double x) const { return x; }
+        double Divided(double, double) const { return 1; }
+    };
+    double primal[4]{};
+    C::ACM::ApplyWaveFunction(parameters, state, normal, direction, Identity{}, primal);
+    const double un = .6 * state[0] + .8 * state[1], dun = .6 * direction[0] + .8 * direction[1];
+    CHECK(primal[3] == doctest::Approx(parameters.beta2 * dun));
+    for (int d = 0; d < 3; ++d)
+        CHECK(primal[d] == doctest::Approx(un * direction[d] - parameters.alpha * state[d] * dun + normal[d] * direction[3]));
+    // Every conserved face flux must cancel when neighboring cells exchange
+    // left/right conventions, including the passive transport by continuity flux.
+    const std::array<double, 6> left{1, .1, -.6, -2, .01, 4}, right{.75, -.3, .2, -.4, .2, 1.5};
+    const std::array<double, 3> reverse{-.6, -.8, 0};
+    for (bool roe : {false, true})
+    {
+        parameters.roe = roe;
+        std::array<double, 6> a{}, b{};
+        C::ACM::NumericalFlux(parameters, left, right, normal, a, 6);
+        C::ACM::NumericalFlux(parameters, right, left, reverse, b, 6);
+        for (int j = 0; j < 6; ++j)
+            CHECK(a[j] == doctest::Approx(-b[j]).epsilon(1e-13));
     }
 }
 

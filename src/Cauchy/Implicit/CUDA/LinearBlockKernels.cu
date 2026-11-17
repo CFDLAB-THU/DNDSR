@@ -145,8 +145,8 @@ namespace DNDS::Cauchy::CUDA
                    LinearWriteRows output, bool jacobi, bool zero)
         {
             DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA &&
-                                      request.components >= 5 && request.components <= 7 && request.ownedRows >= 0,
-                                  "CUDA linear operator requires a CUDA context and 5/6/7 components");
+                                      request.components >= 4 && request.components <= 7 && request.ownedRows >= 0,
+                                  "CUDA linear operator requires a CUDA context and 4 through 7 components");
             R::ValidateViewDevices(context.device, request.rows, request.diagonal, output);
             CheckTable(output, request.ownedRows, request.components);
             CheckMatrix(request.diagonal, request.ownedRows,
@@ -194,7 +194,9 @@ namespace DNDS::Cauchy::CUDA
                 if constexpr (Jacobi)
                     if (componentGroups)
                     {
-                        if (request.components == 5)
+                        if (request.components == 4)
+                            JacobiComponentGroups<4, Zero><<<blocks, 128, 0, stream>>>(projected, right, own, remote, output);
+                        else if (request.components == 5)
                             JacobiComponentGroups<5, Zero><<<blocks, 128, 0, stream>>>(projected, right, own, remote, output);
                         else if (request.components == 6)
                             JacobiComponentGroups<6, Zero><<<blocks, 128, 0, stream>>>(projected, right, own, remote, output);
@@ -202,7 +204,9 @@ namespace DNDS::Cauchy::CUDA
                             JacobiComponentGroups<7, Zero><<<blocks, 128, 0, stream>>>(projected, right, own, remote, output);
                         return;
                     }
-                if (request.components == 5)
+                if (request.components == 4)
+                    LinearRows<4, Jacobi, Zero><<<blocks, 128, 0, stream>>>(projected, right, own, remote, output);
+                else if (request.components == 5)
                     LinearRows<5, Jacobi, Zero><<<blocks, 128, 0, stream>>>(projected, right, own, remote, output);
                 else if (request.components == 6)
                     LinearRows<6, Jacobi, Zero><<<blocks, 128, 0, stream>>>(projected, right, own, remote, output);

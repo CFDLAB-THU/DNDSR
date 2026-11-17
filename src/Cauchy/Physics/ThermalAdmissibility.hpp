@@ -420,7 +420,13 @@ namespace DNDS::Cauchy
         DNDS_DEVICE_CALLABLE bool Admissible(const Row &values,
                                              bool requireSpecies = true) const
         {
-            if (!thermal.Admissible(values, requireSpecies))
+            if (thermal.flowFirst < 0)
+            {
+                for (index j = 0; j < thermal.components; ++j)
+                    if (!std::isfinite(values[j]))
+                        return false;
+            }
+            else if (!thermal.Admissible(values, requireSpecies))
                 return false;
             if (!rans.components)
                 return true;

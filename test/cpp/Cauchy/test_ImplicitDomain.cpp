@@ -37,6 +37,53 @@ namespace
         }
     }
 }
+TEST_CASE("Periodic ACM physical step transports velocity and preserves the pressure gauge")
+{
+    C::DomainSettings settings;
+    settings.equation.system = "incompressibleACM";
+    settings.equation.eos = "none";
+    settings.equation.referenceScales = {{"rho0", 1}, {"U0", 1}, {"L0", 1}, {"T0", 300}};
+    settings.initialState = {{"type", "primUP"}, {"state", {1., .1, 0., -.25}}};
+    settings.numerics.reconstruction = "constant";
+    settings.numerics.positivity = false;
+    settings.numerics.faceFallback = false;
+    settings.numerics.flux = "rusanov";
+    settings.implicit.jacobianAction = "assembled";
+    settings.implicit.diagonal = "block";
+    settings.implicit.residualComponents = {"u", "v", "p"};
+    const auto mesh = CauchyTest::PeriodicQuads(mpi, 4);
+    for (const auto method : {"bdf1", "esdirk2", "ditr"})
+    {
+        CAPTURE(method);
+        C::TimeSettings time;
+        time.method = method;
+        C::Domain domain("acm", mesh, settings, time);
+        auto &owned = domain.Dofs().CoupledField().Owned();
+        {
+            auto write = owned.Write();
+            const auto view = write.View<R::UniformTableRows>();
+            for (DNDS::index iCell = 0; iCell < view.RowCount(); ++iCell)
+                view(iCell, 1) += .02 * std::sin(2 * 3.141592653589793 * domain.Discretization().Metrics().GetCellCent(iCell)[0]);
+        }
+        REQUIRE(domain.Advance(.01).accepted);
+        REQUIRE_FALSE(domain.LastImplicitStages().empty());
+        for (const auto &stage : domain.LastImplicitStages())
+            CHECK(stage.converged);
+        const auto read = owned.Read();
+        const auto values = read.View<R::UniformTableRows>();
+        std::array<double, 2> sums{};
+        for (DNDS::index iCell = 0; iCell < values.RowCount(); ++iCell)
+        {
+            const double vol = domain.Discretization().Metrics().GetCellVol(iCell);
+            const double x = domain.Discretization().Metrics().GetCellCent(iCell)[0];
+            sums[0] += vol * (values(iCell, 3) + .25);
+            sums[1] += vol * std::abs(values(iCell, 1) - (.1 + .02 * std::sin(2 * 3.141592653589793 * x)));
+        }
+        MPI_Allreduce(MPI_IN_PLACE, sums.data(), 2, MPI_DOUBLE, MPI_SUM, mpi.comm);
+        CHECK(std::abs(sums[0]) < 1e-12);
+        CHECK(sums[1] > 1e-6);
+    }
+}
 TEST_CASE("Production DITR controller uses common limits unless an override is supplied")
 {
     const auto mesh = CauchyTest::PeriodicQuads(mpi, 4);

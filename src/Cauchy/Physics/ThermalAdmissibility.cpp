@@ -5,6 +5,13 @@ namespace DNDS::Cauchy
     ThermalPolicy::ThermalPolicy(const EquationSystem &equation, real densityFloor, real temperatureFloor,
                                  real sensibleEnergyFloor, real pressureFloor, Physics::Chemistry::ChemicalWorkerPool::Lease worker)
     {
+        if (equation.IsACM())
+        {
+            _view.flowFirst = _view.speciesFirst = -1;
+            for (const auto &block : equation.Schema().blocks)
+                _view.components += index(block.components.size());
+            return;
+        }
         DNDS_check_throw_info(std::isfinite(densityFloor) && densityFloor > 0 && std::isfinite(temperatureFloor) && temperatureFloor > 0 &&
                                   std::isfinite(sensibleEnergyFloor) && sensibleEnergyFloor >= 0 && std::isfinite(pressureFloor) && pressureFloor > 0,
                               "invalid equation thermal bounds");

@@ -84,6 +84,7 @@ namespace DNDS::Cauchy
             auto setupStage = progress.Stage("FV/source-quadrature");
             data->BuildSourceQuadrature();
         }
+        if (!equation.IsACM())
         {
             auto setupStage = progress.Stage("FV/positivity-quadrature");
             data->BuildPositivityQuadrature(limitedVR);

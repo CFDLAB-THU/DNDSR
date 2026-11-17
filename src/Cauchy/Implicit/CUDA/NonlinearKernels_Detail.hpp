@@ -48,8 +48,8 @@ namespace DNDS::Cauchy::CUDA::NonlinearDetail
     }
     inline void CheckInput(Runtime::ExecutionContext context, LinearReadRows input)
     {
-        DNDS_check_throw_info(context.device.space == Runtime::MemorySpace::CUDA && input.Width() >= 5 && input.Width() <= 7,
-                              "nonlinear CUDA profile requires combined AoS 5/6/7");
+        DNDS_check_throw_info(context.device.space == Runtime::MemorySpace::CUDA && input.Width() >= 4 && input.Width() <= 7,
+                              "nonlinear CUDA profile requires combined AoS width 4 through 7");
         CheckRows(context, input, input.RowCount(), input.Width());
     }
     inline void CheckCells(Runtime::ExecutionContext context, NonlinearCells cells, index rows)

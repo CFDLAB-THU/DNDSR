@@ -24,23 +24,6 @@ namespace DNDS::Cauchy
 #endif
         // Resolve physics and every physical boundary before allocating any
         // resident publication. This is not a permissive capability fallback.
-        const auto physics = PerfectGasSpatialParameters::FromEquation(_data->equation, Metrics().Dimension());
-        physics.Validate(5 + physics.rans.ComponentNumber());
-        std::vector<PerfectGasBoundaryParameters> conditions;
-        conditions.reserve(_data->boundaryConditions.size());
-        for (const auto &condition : _data->boundaryConditions)
-        {
-            if (condition.kind == BoundaryKind::Interior || condition.kind == BoundaryKind::Interface)
-            {
-                // These entries have no prescribed thermodynamic state. The
-                // face kernel takes its neighboring mean or interface packet.
-                PerfectGasBoundaryParameters parameters;
-                parameters.kind = condition.kind;
-                conditions.push_back(parameters);
-            }
-            else
-                conditions.push_back(condition.PerfectGasKernelParameters());
-        }
         // Copy the semantic facade, then replace numerical owners. No second
         // backend-specific public plan/workspace class is introduced. This
         // source plan stays usable. Runtime topology/control metadata remain
@@ -109,28 +92,64 @@ namespace DNDS::Cauchy
         };
         placed->boundaryFaces = moveField(_data->boundaryFaces, "boundary/faces");
         placed->ransCellLength = moveField(_data->ransCellLength, "ransCellLength");
-        placed->deviceBoundaryConditions = R::MetadataBuffer<PerfectGasBoundaryParameters>(conditions).CopyTo(device, context);
-        placed->deviceBoundaryConditions.SetDiagnosticName("Cauchy/boundaryConditions", DNDS_ALLOCATION_SITE());
-        placed->devicePhysics = R::MetadataBuffer<PerfectGasSpatialParameters>({physics}).CopyTo(device, context);
-        placed->devicePhysics.SetDiagnosticName("Cauchy/pointPhysics", DNDS_ALLOCATION_SITE());
-        placed->deviceBoundaryKinds = R::MetadataBuffer<BoundaryKind>::Generate(conditions.size(),
-                                                                                [&](index iCondition)
-                                                                                { return conditions[iCondition].kind; })
+        if (_data->equation.IsACM())
+        {
+            placed->deviceACMBoundaryConditions = R::MetadataBuffer<ACM::BoundaryParameters>::Generate(
+                                                      _data->boundaryConditions.size(), [&](index i)
+                                                      {
+                    const auto &bc = _data->boundaryConditions[i];
+                    return ACM::BoundaryParameters{bc.kind, bc.acmState, bc.velocity}; })
+                                                      .CopyTo(device, context);
+            placed->deviceACMBoundaryConditions.SetDiagnosticName("Cauchy/ACM/boundaryConditions", DNDS_ALLOCATION_SITE());
+            ACM::SpatialParameters parameters{_data->equation.ACMParameters(), {}};
+            parameters.flow.roe = _data->flux.Kind() == Riemann::Solver::Roe;
+            if (_data->equation.HasRANS())
+                parameters.rans = _data->equation.RANS().KernelParameters();
+            placed->deviceACMPhysics = R::MetadataBuffer<ACM::SpatialParameters>({parameters}).CopyTo(device, context);
+            placed->deviceACMPhysics.SetDiagnosticName("Cauchy/ACM/pointPhysics", DNDS_ALLOCATION_SITE());
+        }
+        else
+        {
+            const auto physics = PerfectGasSpatialParameters::FromEquation(_data->equation, Metrics().Dimension());
+            physics.Validate(5 + physics.rans.ComponentNumber());
+            std::vector<PerfectGasBoundaryParameters> conditions;
+            conditions.reserve(_data->boundaryConditions.size());
+            for (const auto &condition : _data->boundaryConditions)
+            {
+                if (condition.kind == BoundaryKind::Interior || condition.kind == BoundaryKind::Interface)
+                {
+                    // These entries have no prescribed thermodynamic state. The
+                    // face kernel takes its neighboring mean or interface packet.
+                    PerfectGasBoundaryParameters parameters;
+                    parameters.kind = condition.kind;
+                    conditions.push_back(parameters);
+                }
+                else
+                    conditions.push_back(condition.PerfectGasKernelParameters());
+            }
+            placed->deviceBoundaryConditions = R::MetadataBuffer<PerfectGasBoundaryParameters>(conditions).CopyTo(device, context);
+            placed->deviceBoundaryConditions.SetDiagnosticName("Cauchy/boundaryConditions", DNDS_ALLOCATION_SITE());
+            placed->devicePhysics = R::MetadataBuffer<PerfectGasSpatialParameters>({physics}).CopyTo(device, context);
+            placed->devicePhysics.SetDiagnosticName("Cauchy/pointPhysics", DNDS_ALLOCATION_SITE());
+            const auto &numerics = _data->settings.numerics;
+            const ThermalPolicy thermal(_data->equation, numerics.densityFloor, numerics.temperatureFloor,
+                                        numerics.sensibleEnergyFloor, numerics.pressureFloor);
+            CUDA::BoundaryKernelParameters boundaryPolicy;
+            boundaryPolicy.gas = _data->equation.Gas();
+            boundaryPolicy.rans = physics.rans.kind;
+            boundaryPolicy.thermal = thermal.View();
+            boundaryPolicy.allowPointFallback = numerics.positivity || numerics.faceFallback;
+#ifdef DNDS_USE_CUDA
+            boundaryPolicy.Validate(5 + physics.rans.ComponentNumber());
+#endif
+            placed->deviceBoundaryPolicy = R::MetadataBuffer<CUDA::BoundaryKernelParameters>({boundaryPolicy}).CopyTo(device, context);
+            placed->deviceBoundaryPolicy.SetDiagnosticName("Cauchy/boundaryPolicy", DNDS_ALLOCATION_SITE());
+        }
+        placed->deviceBoundaryKinds = R::MetadataBuffer<BoundaryKind>::Generate(_data->boundaryConditions.size(),
+                                                                                [&](index i)
+                                                                                { return _data->boundaryConditions[i].kind; })
                                           .CopyTo(device, context);
         placed->deviceBoundaryKinds.SetDiagnosticName("Cauchy/boundaryKinds", DNDS_ALLOCATION_SITE());
-        const auto &numerics = _data->settings.numerics;
-        const ThermalPolicy thermal(_data->equation, numerics.densityFloor, numerics.temperatureFloor,
-                                    numerics.sensibleEnergyFloor, numerics.pressureFloor);
-        CUDA::BoundaryKernelParameters boundaryPolicy;
-        boundaryPolicy.gas = _data->equation.Gas();
-        boundaryPolicy.rans = physics.rans.kind;
-        boundaryPolicy.thermal = thermal.View();
-        boundaryPolicy.allowPointFallback = numerics.positivity || numerics.faceFallback;
-#ifdef DNDS_USE_CUDA
-        boundaryPolicy.Validate(5 + physics.rans.ComponentNumber());
-#endif
-        placed->deviceBoundaryPolicy = R::MetadataBuffer<CUDA::BoundaryKernelParameters>({boundaryPolicy}).CopyTo(device, context);
-        placed->deviceBoundaryPolicy.SetDiagnosticName("Cauchy/boundaryPolicy", DNDS_ALLOCATION_SITE());
         placed->deviceEmpty = R::Array<real>(R::RowLayout::Dense(0, 0), device);
         if (_data->wallDistance)
             placed->wallDistance = _data->wallDistance->Placed(device, context);

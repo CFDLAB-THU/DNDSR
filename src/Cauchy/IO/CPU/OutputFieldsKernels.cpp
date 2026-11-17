@@ -12,6 +12,19 @@ namespace DNDS::Cauchy::CPU
         DispatchCPUEquationLayouts([&](auto values)
                                    {
             const index rows = values.RowCount(), components = values.ComponentNumber();
+            if (output.Width() == components)
+            {
+                OMP::ForRows(0, rows, [&](index iRow) {
+                    NumericalStatus result;
+                    for (index j = 0; j < components; ++j)
+                    {
+                        output(iRow, j) = values(iRow, j);
+                        if (!std::isfinite(output(iRow, j))) result = NumericalStatus{NumericalError::InvalidState, int(j)}.At(iRow);
+                    }
+                    status(iRow, 0) = result;
+                });
+                return;
+            }
             OMP::ForRows(0, workers.size(), [&](index iWorker)
             {
                 auto &evaluator = workers[iWorker].evaluator;

@@ -44,6 +44,7 @@ namespace DNDS::Cauchy
     public:
         explicit BoundaryPointOperator(EquationSystem equation);
 
+        bool IsACM() const { return _equation.IsACM(); }
         index ComponentNumber() const { return _components; }
         index FlowFirst() const { return _flowFirst; }
         index SpeciesFirst() const { return _speciesFirst; }

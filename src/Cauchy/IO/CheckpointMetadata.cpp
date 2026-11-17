@@ -40,7 +40,13 @@ namespace DNDS::Cauchy::CheckpointMetadata
             blocks.push_back({{"name", block.name}, {"components", components}, {"vector_starts", block.vectorStarts}});
         }
         Json result{{"family", schema.family}, {"energy_convention", schema.energyConvention}, {"physical_accumulation", schema.physicalAccumulation}, {"blocks", blocks}};
-        if (equation.HasMixture())
+        if (equation.IsACM())
+        {
+            const auto &model = equation.ACMParameters();
+            result["eos"] = "none";
+            result["acm"] = {{"alpha", model.alpha}, {"beta2", model.beta2}, {"kinematic_viscosity", model.kinematicViscosity}};
+        }
+        else if (equation.HasMixture())
         {
             const auto &material = equation.Mixture();
             const auto &scales = material.Scales();
@@ -80,6 +86,12 @@ namespace DNDS::Cauchy::CheckpointMetadata
             if (!domain.contains("settings") || !domain["settings"].is_object())
                 continue;
             auto &settings = domain["settings"];
+            if (settings.contains("equation") && settings["equation"].value("system", std::string("compressible")) != "incompressibleACM")
+            {
+                // These new defaults have no meaning in older compressible files.
+                settings["equation"].erase("acmAlpha");
+                settings["equation"].erase("acmBeta2");
+            }
             if (settings.value("initialTemperature", real(0)) == 0)
                 settings.erase("initialTemperature");
             if (settings.contains("initialMassFractions") && settings["initialMassFractions"].is_object() && settings["initialMassFractions"].empty())

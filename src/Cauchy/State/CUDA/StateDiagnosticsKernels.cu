@@ -27,28 +27,43 @@ namespace DNDS::Cauchy::CUDA
                 return a;
             }
         };
-        __global__ void Rows(DiagnosticInput mean, DiagnosticInput residual, Cells cells, PerfectGas gas,
+        struct ConstantDensity
+        {
+        };
+        template <class Physics>
+        __global__ void Rows(DiagnosticInput mean, DiagnosticInput residual, Cells cells, Physics gas,
                              DiagnosticOutput partial, DiagnosticOutput result, DiagnosticCounter completed)
         {
             StateDiagnosticSummary value;
             for (index iCell = index(blockIdx.x) * Threads + threadIdx.x; iCell < mean.RowCount(); iCell += index(gridDim.x) * Threads)
             {
-                FlowState flow;
-                for (int j = 0; j < 5; ++j)
-                    flow[j] = mean(iCell, j);
-                const auto point = TryPerfectGasPoint(gas, flow, false);
-                if (!point)
-                {
-                    if (value.status)
-                        value.status = point.status.At(iCell);
-                    continue;
-                }
                 const real volume = cells(iCell, 0);
-                value.mass += volume * flow[0];
-                value.energy += volume * flow[4];
-                value.densityMinimum = fmin(value.densityMinimum, flow[0]);
-                value.pressureMinimum = fmin(value.pressureMinimum, point.value.thermo.pressure);
-                value.temperatureMinimum = fmin(value.temperatureMinimum, point.value.thermo.temperature);
+                if constexpr (std::is_same_v<Physics, ConstantDensity>)
+                {
+                    value.mass += volume;
+                    value.densityMinimum = 1;
+                    value.pressureMinimum = fmin(value.pressureMinimum, mean(iCell, 3));
+                    for (int d = 0; d < 3; ++d)
+                        value.energy += .5 * volume * mean(iCell, d) * mean(iCell, d);
+                }
+                else
+                {
+                    FlowState flow;
+                    for (int j = 0; j < 5; ++j)
+                        flow[j] = mean(iCell, j);
+                    const auto point = TryPerfectGasPoint(gas, flow, false);
+                    if (!point)
+                    {
+                        if (value.status)
+                            value.status = point.status.At(iCell);
+                        continue;
+                    }
+                    value.mass += volume * flow[0];
+                    value.energy += volume * flow[4];
+                    value.densityMinimum = fmin(value.densityMinimum, flow[0]);
+                    value.pressureMinimum = fmin(value.pressureMinimum, point.value.thermo.pressure);
+                    value.temperatureMinimum = fmin(value.temperatureMinimum, point.value.thermo.temperature);
+                }
                 for (index j = 0; j < residual.Width(); ++j)
                     value.squaredResidual += residual(iCell, j) * residual(iCell, j) / volume;
             }
@@ -78,15 +93,17 @@ namespace DNDS::Cauchy::CUDA
         return std::max(index(1), std::min(index(256), rows / Threads + (rows % Threads != 0)));
     }
     void AccumulateStateDiagnostics(R::ExecutionContext context, DiagnosticInput mean, DiagnosticInput residual,
-                                    Cells cells, PerfectGas gas, DiagnosticOutput partial, DiagnosticOutput result, DiagnosticCounter completed)
+                                    Cells cells, std::optional<PerfectGas> gas, DiagnosticOutput partial, DiagnosticOutput result, DiagnosticCounter completed)
     {
         R::ValidateViewDevices(context.device, mean, residual, cells, partial, result, completed);
-        DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && mean.Width() >= 5 && mean.Width() <= 7 &&
+        const index flowWidth = gas ? 5 : 4;
+        DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && mean.Width() >= flowWidth && mean.Width() <= flowWidth + 2 &&
                                   mean.RowCount() == residual.RowCount() && mean.Width() == residual.Width() && cells.RowCount() >= mean.RowCount() &&
                                   partial.RowCount() == StateDiagnosticScratchRows(mean.RowCount()) && result.RowCount() == 1 &&
                                   completed.RowCount() == 1 && partial.data != result.data,
                               "invalid CUDA diagnostic views");
-        gas.Validate();
+        if (gas)
+            gas->Validate();
         const std::array<const void *, 3> outputs{partial.data, result.data, completed.data};
         for (index i = 0; i < index(outputs.size()); ++i)
         {
@@ -98,7 +115,10 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<DiagnosticInput, DiagnosticInput, Cells, PerfectGas, DiagnosticOutput, DiagnosticOutput, DiagnosticCounter>();
         const auto stream = ::DNDS::Runtime::CUDAStream(context);
         DNDS_check_throw_info(cudaMemsetAsync(completed.data, 0, sizeof(unsigned int), stream) == cudaSuccess, "CUDA diagnostic counter reset failed");
-        Rows<<<unsigned(partial.RowCount()), Threads, 0, stream>>>(mean, residual, cells, gas, partial, result, completed);
+        if (gas)
+            Rows<<<unsigned(partial.RowCount()), Threads, 0, stream>>>(mean, residual, cells, *gas, partial, result, completed);
+        else
+            Rows<<<unsigned(partial.RowCount()), Threads, 0, stream>>>(mean, residual, cells, ConstantDensity{}, partial, result, completed);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA diagnostic reduction launch failed");
     }
 }

@@ -29,10 +29,11 @@ namespace DNDS::Cauchy
                 return;
 #ifdef DNDS_USE_CUDA
             const auto thermal = policy.View().thermal;
-            DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && thermal.flowFirst == 0 &&
-                                      thermal.independent == 0 && thermal.components >= 5 && thermal.components <= 7 &&
+            const int flowWidth = thermal.flowFirst < 0 ? 4 : 5;
+            DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA &&
+                                      thermal.independent == 0 && thermal.components == flowWidth + policy.RANS().components &&
                                       thermal.speciesEnergies[0].empty() && thermal.speciesEnergies[1].empty(),
-                                  "CUDA mean-state check requires perfect-gas flow5/SA/2EQ");
+                                  "CUDA mean-state check requires flow4 or flow5 with optional RANS");
             summary = R::Array<CUDA::StateReductionValue>(R::RowLayout::Dense(1, 1), context.device);
             summary.SetName("mean-state/check/summary", DNDS_ALLOCATION_SITE());
 #else

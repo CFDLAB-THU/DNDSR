@@ -18,6 +18,28 @@ namespace DNDS::Cauchy
         DNDS_check_throw_info(std::isfinite(controls.cfl) && controls.cfl > 0 && std::isfinite(controls.forecastScale) && controls.forecastScale >= 0 &&
                                   std::isfinite(controls.relax) && controls.relax >= 0 && controls.relax <= 1 && controls.compressionPower > 0,
                               "invalid nonlinear pseudo-time controls");
+        if (mean.Schema().AccumulationKind() == PhysicalAccumulationKind::ConstantDensityVelocityPressure)
+        {
+            DNDS_check_throw_info(!controls.positivity && !alpha, "ACM pseudo-time uses uncompressed spectral steps");
+            const auto geometry = std::make_shared<CFV::FiniteVolumeRead>(_data->geometry.AcquireRead(stream.Context()));
+            R::SubmitArrays(engine, stream, [geometry, cfl = controls.cfl](R::ExecutionContext context, auto spectrum, auto step)
+                            {
+                if (context.device == R::Device::Host())
+                    CPU::PrepareSpectralPseudoTime(geometry->HostView(), spectrum, step, cfl);
+                else
+                {
+#ifdef DNDS_USE_CUDA
+                    CUDA::PrepareSpectralPseudoTime(context, geometry->View().cells, Table(spectrum), Table(step), cfl);
+#else
+                    Unavailable{}();
+#endif
+                } }, R::ReadAs<R::UniformTableRows>(spectral), R::WriteAs<R::UniformTableRows>(inverse));
+            // CPU assembly takes immediate read access. Device assembly imports
+            // this lane order and validates the inverse step in its own kernel.
+            if (stream.Context().device == R::Device::Host())
+                engine.Synchronize();
+            return {};
+        }
         Inputs inputs;
         Outputs outputs;
         const auto u = AddInput(mean, inputs), d = AddOutput(defect, outputs, true);

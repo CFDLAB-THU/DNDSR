@@ -32,6 +32,7 @@ namespace DNDS::Cauchy
         FiniteVolumeStencilStorage::ReadAccess stencil;
         Runtime::ReadAccess physics, conditions;
         std::optional<WallDistanceRead> walls;
+        std::optional<Runtime::Array<real>::ReadLease> acmLengths;
         std::shared_ptr<const JacobianGeometryStorage> geometry;
         std::shared_ptr<const FrozenJacobianOperator::Geometry> publicationGeometry;
         std::optional<JacobianGeometryStorage::ReadAccess> geometryRead;

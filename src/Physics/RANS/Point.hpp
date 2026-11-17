@@ -26,6 +26,8 @@ namespace DNDS::Physics::RANS
         Eigen::Matrix<real, 3, 7> gradient = Eigen::Matrix<real, 3, 7>::Zero();
         real molecularViscosity = 0, wallDistance = 1, cellLength = 0;
         real cp = 1, gamma = 1.4;
+        /// Mechanical closure with normalized unit density and no thermal or species flux.
+        bool incompressible = false;
     };
     struct TurbulentTransport
     {

@@ -851,8 +851,8 @@ namespace DNDS::Cauchy
                 DNDS_check_throw_info(prototype.Device().space == R::MemorySpace::CUDA &&
                     (settings.method == "jacobi" || settings.method == "amgx" || (settings.method == "gmres" && (settings.preconditioner == "jacobi" || settings.preconditioner == "amgx"))),
                     "CUDA linear profile requires Jacobi, AmgX defect correction or GMRES with Jacobi/AmgX; SGS/ILU have no device fallback");
-                DNDS_check_throw_info(Ops::Width(prototype) >= 5 && Ops::Width(prototype) <= 7 &&
-                    Ops::Owned(prototype).Layout().Kind() == R::RowLayoutKind::Table, "CUDA linear profile requires combined AoS 5/6/7");
+                DNDS_check_throw_info(Ops::Width(prototype) >= 4 && Ops::Width(prototype) <= 7 &&
+                    Ops::Owned(prototype).Layout().Kind() == R::RowLayoutKind::Table, "CUDA linear profile requires combined AoS with 4 to 7 components");
             }
             DNDS_check_throw_info(!UsesAMG(settings) || (problem->Device().space == R::MemorySpace::CUDA &&
                 problem->HasAssembledOffDiagonal() && Algebra::AmgXPreconditioner::Available()),

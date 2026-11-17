@@ -195,6 +195,22 @@ namespace DNDS::Cauchy
                                "schema default", data->provenance);
                 level.update(original);
             }
+            if (resolved["settings"]["equation"]["system"] == "incompressibleACM")
+            {
+                const auto base = "/domains/" + std::to_string(iDomain) + "/settings/implicit/";
+                auto &implicit = resolved["settings"]["implicit"];
+                if (implicit["residualComponents"] == Json::array({"rho"}) &&
+                    data->provenance.at(base + "residualComponents/0") == "schema default")
+                {
+                    implicit["residualComponents"] = {"u", "v", "w", "p"};
+                    Origin(implicit["residualComponents"], base + "residualComponents", "ACM differential and continuity residuals", data->provenance);
+                }
+                if (data->provenance.at(base + "rejectUnconvergedStages") == "schema default")
+                {
+                    implicit["rejectUnconvergedStages"] = true;
+                    data->provenance[base + "rejectUnconvergedStages"] = "ACM constrained stage";
+                }
+            }
             DomainConfig domain{{resolved.at("name").get<std::string>(), resolved.at("ranks").get<std::vector<int>>()}, resolved.at("settings").get<DomainSettings>()};
             const bool requestedCoreFirst = domain.settings.numerics.cfv.coreFirst;
             domain.settings = ResolveSweepOrdering(std::move(domain.settings));
@@ -306,6 +322,8 @@ namespace DNDS::Cauchy
             DNDS_check_throw_info(data->time.method != "ssprk3" || !domain.settings.implicit.multigrid.levels, "polynomial FAS requires an implicit time method");
             DNDS_check_throw_info(domain.settings.equation.system != "incompressibleACM" || data->time.method != "ssprk3",
                                   "SSPRK3 cannot advance the algebraic ACM continuity equation");
+            DNDS_check_throw_info(domain.settings.equation.system != "incompressibleACM" || !data->time.positivity.enabled,
+                                  "ACM has no thermodynamic physical timestep restriction");
             if (data->time.method == "ditr")
                 data->time.ditr.ResolveControls(domain.settings.implicit);
         }

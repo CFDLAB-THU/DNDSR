@@ -237,9 +237,11 @@ namespace DNDS::Cauchy
             auto convert = [&](const Json &input)
             { return converter.Conservative(Physics::StateInput::Parse(input)); };
             prepared.initialConservative = convert(settings.initialState);
+            result.initialState = nullptr;
             if (!settings.referenceState.is_null())
             {
                 prepared.referenceConservative = convert(settings.referenceState);
+                result.referenceState = nullptr;
                 if (equation.HasRANS())
                 {
                     auto &reference = result.numerics.ransState.referenceConservative;

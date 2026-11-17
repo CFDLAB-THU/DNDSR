@@ -361,6 +361,9 @@ namespace DNDS::Cauchy
         std::optional<CFV::PolynomialSamplingPlan> sourceJacobianSampling;
         std::vector<std::array<R::Array<real>, 3>> sourceJacobianGradients;
         R::Array<real> boundaryMomentumFlux;
+        /// Per-area viscous traction of the fluid on a no-slip wall from the last full RHS.
+        /// Its sign uses n outward from the fluid. Other boundary rows are zero.
+        std::optional<R::Array<real>> boundaryWallShear;
         /// Integrated residual contribution in the canonical owned-parent
         /// frame, one row per local stencil face. Refilled on every RHS call.
         R::Array<real> faceFlux;

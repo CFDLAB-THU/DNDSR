@@ -66,7 +66,7 @@ namespace DNDS::Cauchy::CPU
                 // polynomial's beta limiter runs separately, after reconstruction.
                 // Species bounds are not a polynomial condition: the thermal test
                 // uses temporary clipped composition, as in pointwise RHS physics.
-                if (request.polynomial && request.allowPointFallback &&
+                if (!boundary.IsACM() && request.polynomial && request.allowPointFallback &&
                     !request.thermal.ClippedReferenceAdmissible(point))
                     point = cellMean;
                 if (request.rans.components && request.repairRANS)
@@ -99,7 +99,7 @@ namespace DNDS::Cauchy::CPU
 #ifdef USE_FIX_ZERO_SA_NUT_AT_WALL
                 // Preserve Euler's fixUL=true reconstruction target. RHS exterior
                 // reflection remains a separate boundary-producer operation.
-                if (request.rans.components &&
+                if (!boundary.IsACM() && request.rans.components &&
                     request.rans.kind == Physics::RANS::ModelKind::SA &&
                     condition.kind == BoundaryKind::NoSlipWall)
                     point[size_t(request.ransFirst)] = 0;

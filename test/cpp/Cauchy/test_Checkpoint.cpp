@@ -773,6 +773,44 @@ TEST_CASE("Checkpoint changes MPI partition and polynomial degree using persiste
     }
     Remove({plain, polynomial, cold});
 }
+TEST_CASE("ACM BDF2 restart preserves the pressure gauge and differential history")
+{
+    const auto path = Path("cauchy-acm-history-");
+    C::DomainSettings settings;
+    settings.equation.system = "incompressibleACM";
+    settings.equation.eos = "none";
+    settings.equation.referenceScales = {{"rho0", 1}, {"U0", 1}, {"L0", 1}, {"T0", 300}};
+    settings.initialState = {{"type", "primUP"}, {"state", {.5, 0, 0, -2}}};
+    settings.numerics.reconstruction = "constant";
+    settings.implicit.jacobianAction = "assembled";
+    settings.implicit.diagonal = "block";
+    settings.implicit.residualComponents = {"u", "v", "p"};
+    C::TimeSettings time;
+    time.method = "bdf2";
+    auto mesh = CauchyTest::PeriodicQuads(mpi, 4);
+    C::Domain direct("acm", mesh, settings, time), resumed("acm", mesh, settings, time);
+    {
+        auto write = direct.Dofs().WriteOwned();
+        const auto flow = write.Block("flow");
+        for (DNDS::index iCell = 0; iCell < flow.RowCount(); ++iCell)
+            flow(iCell, 1) = .1 * std::sin(2 * 3.141592653589793 * direct.Discretization().Metrics().GetCellCent(iCell)[0]);
+    }
+    REQUIRE(direct.Advance(.01).accepted);
+    REQUIRE(direct.Advance(.007).accepted);
+    const C::Json metadata{{"case", "ACM restart"}};
+    direct.WriteCheckpoint(path, metadata, true);
+    resumed.ReadCheckpoint(path, metadata);
+    REQUIRE(resumed.PreviousTimeStep() == .007);
+    REQUIRE(direct.Advance(.008).accepted);
+    REQUIRE(resumed.Advance(.008).accepted);
+    auto a = direct.Dofs().ReadOwned(), b = resumed.Dofs().ReadOwned();
+    double difference = 0;
+    for (DNDS::index iCell = 0; iCell < a.Block("flow").RowCount(); ++iCell)
+        for (int j = 0; j < 4; ++j)
+            difference = std::max(difference, std::abs(a.Block("flow")(iCell, j) - b.Block("flow")(iCell, j)));
+    CHECK(difference < 1e-14);
+    Remove({path});
+}
 TEST_CASE("Implicit restart preserves variable BDF2 history and rebuilds live DITR stage bindings")
 {
     for (const std::string method : {"bdf2", "ditr"})

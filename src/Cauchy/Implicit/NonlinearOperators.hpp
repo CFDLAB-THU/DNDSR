@@ -49,6 +49,10 @@ namespace DNDS::Cauchy
     public:
         NonlinearOperators(CFV::FiniteVolumePlan, AdmissibilityPolicy, Runtime::ExecutionContext);
         void ValidateMeans(Runtime::EagerEngine &, const Runtime::ExecutionStream &, const EquationDofs &) const;
+        /// Remove the volume-weighted mean pressure correction on a closed
+        /// ACM domain. Retains the gauge of the accepted or restarted state.
+        void PreservePressureGauge(Runtime::EagerEngine &, const Runtime::ExecutionStream &,
+                                   const EquationDofs &previous, EquationDofs &candidate) const;
         /// Integrated residual, with raw L1 or volume-weighted L2 contributions
         /// followed by volume in the returned vector. An empty selection means
         /// every component; otherwise it has exactly the equation width.

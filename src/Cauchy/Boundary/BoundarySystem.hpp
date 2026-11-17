@@ -19,6 +19,7 @@ namespace DNDS::Cauchy
     {
         BoundaryKind kind = BoundaryKind::Interior;
         FlowState farfield{};
+        std::array<real, 6> acmState{};
         Vector3 velocity{};
         real temperature = 1;
         bool isothermal = false;

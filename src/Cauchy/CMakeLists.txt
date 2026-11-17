@@ -139,6 +139,7 @@ set(CPPS
     Implicit/CPU/FiniteVolumeJacobianKernels_Equation.cpp
     Implicit/CPU/FiniteVolumeJacobianKernels_Flow.cpp
     Implicit/CPU/FiniteVolumeJacobianKernels_Preparation.cpp
+    Implicit/CPU/ACMJacobianKernels.cpp
     Multigrid/PolynomialMultigrid.cpp
     Multigrid/PolynomialMultigridOperations.cpp
     Multigrid/CPU/PolynomialMultigridKernels.cpp
@@ -168,6 +169,7 @@ if(DNDS_USE_CUDA)
     list(APPEND CPPS Implicit/CUDA/FrozenJacobianKernels.cu)
     list(APPEND CPPS Implicit/CUDA/FiniteVolumeJacobianKernels.cu)
     list(APPEND CPPS Implicit/CUDA/FiniteVolumeJacobianKernels_Faces.cu)
+    list(APPEND CPPS Implicit/CUDA/ACMJacobianKernels.cu)
     list(APPEND CPPS Implicit/CUDA/LinearBlockKernels.cu)
     list(APPEND CPPS Core/CUDA/TimeStageKernels.cu)
     list(APPEND CPPS State/CUDA/FieldKernels.cu)
@@ -184,6 +186,13 @@ if(DNDS_USE_CUDA)
     include("${PROJECT_SOURCE_DIR}/cmake/DndsCauchyRHS.cmake")
     dnds_generate_cauchy_rhs(_rhs_sources _rhs_include _rhs_codegen)
     list(APPEND CPPS ${_rhs_sources})
+    # One device face kernel per ACM equation width. The runtime basis view
+    # covers direct gradients and polynomial degrees on both mesh dimensions.
+    foreach(acm_width IN ITEMS 4 5 6)
+        set(acm_source "${_rhs_include}/FiniteVolumeACMFluxKernels_C${acm_width}.cu")
+        configure_file(Discretization/CUDA/FiniteVolumeACMFluxKernels.cu.in "${acm_source}" @ONLY)
+        list(APPEND CPPS "${acm_source}")
+    endforeach()
     # Keep reduced-precision face kernels in bounded instantiation groups.
     # Their host dispatcher does not include the numerical kernel definitions.
     list(APPEND CPPS

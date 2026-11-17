@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Cauchy/Discretization/PerfectGasKernelPoint.hpp"
+#include "Cauchy/Discretization/ACMKernelPoint.hpp"
 #include "Cauchy/Motion/RigidFrameParameters.hpp"
 #include "DNDS/Runtime/Array/Array.hpp"
 
@@ -29,7 +30,7 @@ namespace DNDS::Cauchy::CUDA
         MeanDestruction,
         QuadratureDestruction
     };
-    /** Frozen operands of the perfect-gas RANS volume/source-Jacobian leaf.
+    /** Frozen operands of the compressible or ACM RANS volume/source-Jacobian leaf.
      * means is always cell-sized. samples and gradients are quadrature-sized,
      * except MeanDestruction's gradients, which are cell-sized. Destruction
      * adds the Euler positive diagonal approximation to a diagonal-vector or
@@ -41,6 +42,7 @@ namespace DNDS::Cauchy::CUDA
     struct SourceRequest
     {
         Runtime::ArrayView<const PerfectGasSpatialParameters, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> parameters;
+        Runtime::ArrayView<const ACM::SpatialParameters, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> acm;
         SourceInput means, samples;
         std::array<SourceGradient, 3> gradients;
         SourceIndices offsets;

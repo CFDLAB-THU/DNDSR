@@ -45,6 +45,7 @@ namespace DNDS::Cauchy
         std::shared_ptr<LinearProblemContext> problem;
         std::unique_ptr<DofLinearSolver> linear;
         bool positivity;
+        bool preservePressureGauge = false;
         AlphaReduction rhsFPPReduction = AlphaReduction::Cell;
         std::optional<R::Array<real>> cellRHSAlpha;
         real reconstructionTolerance;
@@ -103,9 +104,12 @@ namespace DNDS::Cauchy
               problem(fv.BuildLinearProblem(state, settings.diagonal == "block" ? DiagonalStorage::Block : DiagonalStorage::Entries,
                                             (settings.jacobianAction == "directEvaluated" || settings.jacobianAction == "semiMatrixFree") ? OffDiagonalStorage::DirectEvaluated : OffDiagonalStorage::Assembled,
                                             NonlinearDetail::ResolveMatrixStorage(settings.linear))),
-              positivity(controls.numerics.positivity), reconstructionTolerance(settings.requireConvergedReconstruction && controls.numerics.reconstruction == "variational" ? controls.numerics.reconstructionTolerance : 0)
+              positivity(controls.numerics.positivity && state.Schema().AccumulationKind() == PhysicalAccumulationKind::Identity), reconstructionTolerance(settings.requireConvergedReconstruction && controls.numerics.reconstruction == "variational" ? controls.numerics.reconstructionTolerance : 0)
         {
             spatial.Fields().SetName("Cauchy/nonlinear/spatial", DNDS_ALLOCATION_SITE());
+            if (fv.Equation().IsACM())
+                preservePressureGauge = std::none_of(controls.boundaries.begin(), controls.boundaries.end(), [](const auto &entry)
+                                                     { return entry.second.kind == "pressureOutlet" || entry.second.kind == "farfield"; });
             defect.Fields().SetName("Cauchy/nonlinear/defect", DNDS_ALLOCATION_SITE());
             candidate.Fields().SetName("Cauchy/nonlinear/candidate", DNDS_ALLOCATION_SITE());
             setup = std::make_unique<NonlinearSolveSetup>(
@@ -775,6 +779,9 @@ namespace DNDS::Cauchy
                     data.settings.positivity.compressionPower, data.positivity});
             limited = result.alpha.limited; minimum = result.alpha.minimum; frozen = result.frozen; });
         // Candidate checks precede all state writers. Scalar repair may not
+        if (data.preservePressureGauge && (updateComponents.empty() ||
+                                           std::find(updateComponents.begin(), updateComponents.end(), 3) != updateComponents.end()))
+            data.operators.PreservePressureGauge(engine, data.stream, state, data.candidate);
         // silently unfreeze a masked component, even when density changed.
         const auto validateCandidate = [&]
         {

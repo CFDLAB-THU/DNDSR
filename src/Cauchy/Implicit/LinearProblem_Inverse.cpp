@@ -31,7 +31,7 @@ namespace DNDS::Cauchy
                 return;
             }
 #ifdef DNDS_USE_CUDA
-            DNDS_check_throw_info(width >= 5 && width <= 7, "CUDA inverse only supports widths 5/6/7");
+            DNDS_check_throw_info(width >= 4 && width <= 7, "CUDA inverse requires widths 4 through 7");
             rowStatus = R::Array<NumericalStatus>(R::RowLayout::Dense(rows, 1), where.device);
             statusScratch = R::Array<NumericalStatus>(R::RowLayout::Dense(CUDA::StateReductionScratchRows(rows), 1), where.device);
             rowStatus.SetName("linear/inverse/rowStatus");

@@ -13,6 +13,20 @@ namespace DNDS::Cauchy::CUDA
         using Input = R::ArrayView<const real, R::AccessBoundsChecks, R::TableRows>;
         using Output = R::ArrayView<real, R::AccessBoundsChecks, R::TableRows>;
         using Status = R::ArrayView<NumericalStatus, R::AccessBoundsChecks, R::FixedRows<1>>;
+        __global__ void VelocityPressureRows(Input state, Output output, Status status)
+        {
+            for (index row = index(blockIdx.x) * blockDim.x + threadIdx.x; row < state.RowCount(); row += index(blockDim.x) * gridDim.x)
+            {
+                NumericalStatus ok;
+                for (int j = 0; j < state.Width(); ++j)
+                {
+                    output(row, j) = state(row, j);
+                    if (!std::isfinite(state(row, j)))
+                        ok = NumericalStatus{NumericalError::InvalidState, j}.At(row);
+                }
+                status(row, 0) = ok;
+            }
+        }
         __global__ void OutputRows(PerfectGas gas, Input state, Output output, Status status)
         {
             for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < state.RowCount(); iRow += index(gridDim.x) * blockDim.x)
@@ -42,6 +56,21 @@ namespace DNDS::Cauchy::CUDA
                 output(iRow, components + 5) = sqrt(speedSquared) / properties.value.thermo.soundSpeed;
             }
         }
+    }
+    void PrepareVelocityPressureOutput(R::ExecutionContext context, Input state, Output output, Status status)
+    {
+        R::ValidateViewDevices(context.device, state, output, status);
+        DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && state.Width() >= 4 && state.Width() <= 6 &&
+                                  output.Width() == state.Width() && output.RowCount() == state.RowCount() &&
+                                  status.RowCount() == state.RowCount() && state.kind == R::RowLayoutKind::Table &&
+                                  output.kind == R::RowLayoutKind::Table,
+                              "invalid ACM output bindings");
+        R::CheckKernelArgumentBudget<Input, Output, Status>();
+        if (!state.RowCount())
+            return;
+        const auto blocks = unsigned(std::min<index>((state.RowCount() - 1) / 128 + 1, INT_MAX));
+        VelocityPressureRows<<<blocks, 128, 0, R::CUDAStream(context)>>>(state, output, status);
+        DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "ACM output launch failed");
     }
     void PrepareOutputFields(R::ExecutionContext context, PerfectGas gas, Input state, Output output, Status status)
     {

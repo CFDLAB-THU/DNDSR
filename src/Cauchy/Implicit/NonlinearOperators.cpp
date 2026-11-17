@@ -16,9 +16,10 @@ namespace DNDS::Cauchy
         if (context.device == R::Device::Host())
             return;
 #ifdef DNDS_USE_CUDA
-        DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && flowFirst == 0 && independent == 0 &&
-                                  view.thermal.components >= 5 && view.thermal.components <= 7,
-                              "nonlinear CUDA operators require perfect-gas flow5/SA/2EQ");
+        const int flowWidth = flowFirst < 0 ? 4 : 5;
+        DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && independent == 0 &&
+                                  view.thermal.components == flowWidth + view.rans.components,
+                              "nonlinear CUDA operators require flow4 or flow5 with optional RANS");
         const index rows = geometry.NumCell();
         partial = R::Array<CUDA::NonlinearSummary>(R::RowLayout::Dense(CUDA::NonlinearScratchRows(rows), 1), context.device);
         summary = R::Array<CUDA::NonlinearSummary>(R::RowLayout::Dense(1, 1), context.device);
@@ -76,22 +77,70 @@ namespace DNDS::Cauchy
         Outputs outputs;
         const auto u = AddInput(mean, inputs), r = AddInput(residual, inputs), b = AddInput(constant, inputs), y = AddOutput(output, outputs);
         const auto geometry = std::make_shared<CFV::FiniteVolumeRead>(_data->geometry.AcquireRead(stream.Context()));
-        const auto host = [geometry, u, r, b, y, selection, mass, rhsScale, normOrder, measureNorm](auto input, auto output, Result &result)
+        const auto accumulation = mean.Schema().AccumulationKind();
+        const auto host = [geometry, u, r, b, y, selection, accumulation, mass, rhsScale, normOrder, measureNorm](auto input, auto output, Result &result)
         {
             const auto mean = u.Layout(input), residual = r.Layout(input), constant = b.Layout(input);
             const auto target = y.Layout(output);
             result.status = CPU::AssembleDefect(mean.Descriptor(), residual.Descriptor(), constant.Descriptor(), target.Descriptor(),
-                                                geometry->HostView(), mass, rhsScale, selection.HostView(), normOrder, measureNorm,
+                                                geometry->HostView(), accumulation, mass, rhsScale, selection.HostView(), normOrder, measureNorm,
                                                 {result.norms.data(), index(result.norms.size())}, {result.workerSums.data(), index(result.workerSums.size())});
         };
 #ifdef DNDS_USE_CUDA
-        const auto device = [geometry, u, r, b, y, selection, mass, rhsScale, normOrder, measureNorm](auto context, auto input, auto output, auto scratch, auto summary)
+        const auto device = [geometry, u, r, b, y, selection, accumulation, mass, rhsScale, normOrder, measureNorm](auto context, auto input, auto output, auto scratch, auto summary)
         { CUDA::AssembleDefect(context, geometry->View().cells, Table(input[u.firstSlot]), Table(input[r.firstSlot]), Table(input[b.firstSlot]),
-                               Table(output[y.firstSlot]), DeviceSelection(selection), mass, rhsScale, normOrder, measureNorm, scratch, summary); };
+                               Table(output[y.firstSlot]), DeviceSelection(selection), mass, rhsScale, normOrder, measureNorm, scratch, summary,
+                               accumulation == PhysicalAccumulationKind::ConstantDensityVelocityPressure); };
 #else
         const Unavailable device;
 #endif
         return _data->Reduce(engine, stream, mean.ComponentNumber(), std::move(inputs), std::move(outputs), host, device).norms;
+    }
+    void NonlinearOperators::PreservePressureGauge(R::EagerEngine &engine, const R::ExecutionStream &stream,
+                                                   const EquationDofs &previous, EquationDofs &candidate) const
+    {
+        _data->Check(engine, stream, previous);
+        _data->CheckPair(previous, candidate);
+        Inputs reads;
+        const auto old = AddInput(previous, reads), next = AddInput(candidate, reads);
+        const auto geometry = std::make_shared<CFV::FiniteVolumeRead>(_data->geometry.AcquireRead(stream.Context()));
+        const auto host = [geometry, old, next](auto input, auto, Result &result)
+        {
+            const auto from = old.Components(input), to = next.Components(input);
+            const auto metric = geometry->HostView();
+            result.status = OMP::SumRows(from.View().RowCount(), SpanView<real>{result.norms.data(), 2},
+                                         {result.workerSums.data(), index(result.workerSums.size())}, [&](index i, SpanView<real> sums) -> NumericalStatus
+                                         {
+                    const real volume = metric.GetCellVol(i);
+                    sums[0] += volume * (to.View()(i,3) - from.View()(i,3));
+                    sums[1] += volume;
+                    return {}; });
+        };
+#ifdef DNDS_USE_CUDA
+        const auto device = [geometry, old, next](auto context, auto input, auto, auto scratch, auto summary)
+        { CUDA::PressureGaugeSum(context, geometry->View().cells, Table(input[old.firstSlot]), Table(input[next.firstSlot]), scratch, summary); };
+#else
+        const Unavailable device;
+#endif
+        auto sum = _data->Reduce(engine, stream, 1, std::move(reads), {}, host, device).norms;
+        MPI::AllreduceInPlace<MPI::Reduction::Sum>(MPI::ContiguousView<real>{sum.data(), 2}, _data->geometry.Communicator());
+        DNDS_check_throw_info(sum[1] > 0 && std::isfinite(sum[0]), "invalid global pressure gauge integral");
+        Outputs writes;
+        const auto target = AddOutput(candidate, writes, true);
+        R::SubmitArrayBatch(engine, stream, [target, shift = sum[0] / sum[1]](R::ExecutionContext ctx, auto, auto output)
+                            {
+                                if (ctx.device == R::Device::Host())
+                                {
+                                    const auto field = target.Components(output);
+                                    OMP::ForRows(0, field.View().RowCount(), [&](index i)
+                                                 { field.View()(i, 3) -= shift; });
+                                }
+#ifdef DNDS_USE_CUDA
+                                else
+                                    CUDA::ShiftPressure(ctx, Table(output[target.firstSlot]), shift);
+#endif
+                            },
+                            Inputs{}, std::move(writes));
     }
     std::vector<real> NonlinearOperators::MeasureMeanState(R::EagerEngine &engine, const R::ExecutionStream &stream, const EquationDofs &mean) const
     {
@@ -190,7 +239,8 @@ namespace DNDS::Cauchy
         const auto u = AddInput(mean, inputs), r = AddInput(residual, inputs), y = AddOutput(output, outputs);
         const auto rateBinding = rate ? std::optional(AddOutput(*rate, outputs)) : std::nullopt;
         const auto geometry = std::make_shared<CFV::FiniteVolumeRead>(_data->geometry.AcquireRead(stream.Context()));
-        R::SubmitArrayBatch(engine, stream, [geometry, u, r, y, rateBinding, mass, rhsScale](R::ExecutionContext context, auto input, auto output)
+        const auto accumulation = mean.Schema().AccumulationKind();
+        R::SubmitArrayBatch(engine, stream, [geometry, u, r, y, rateBinding, accumulation, mass, rhsScale](R::ExecutionContext context, auto input, auto output)
                             {
             if (context.device == R::Device::Host())
             {
@@ -199,16 +249,24 @@ namespace DNDS::Cauchy
                 if (rateBinding)
                 {
                     const auto rate = rateBinding->Components<real>(output);
-                    CPU::AssembleEquationAndRateRows(mean.View(), residual.View(), target.View(), rate.View(), geometry->HostView(),
-                        index(u.columns.size()), mass, rhsScale);
+                    if (accumulation == PhysicalAccumulationKind::Identity)
+                        CPU::AssembleEquationAndRateRows<PhysicalAccumulationKind::Identity>(mean.View(), residual.View(), target.View(), rate.View(), geometry->HostView(),
+                            index(u.columns.size()), mass, rhsScale);
+                    else
+                        CPU::AssembleEquationAndRateRows<PhysicalAccumulationKind::ConstantDensityVelocityPressure>(mean.View(), residual.View(), target.View(), rate.View(), geometry->HostView(),
+                            index(u.columns.size()), mass, rhsScale);
                 }
-                else CPU::AssembleEquationRows(mean.View(), residual.View(), target.View(), geometry->HostView(), index(u.columns.size()), mass, rhsScale);
+                else if (accumulation == PhysicalAccumulationKind::Identity)
+                    CPU::AssembleEquationRows<PhysicalAccumulationKind::Identity>(mean.View(), residual.View(), target.View(), geometry->HostView(), index(u.columns.size()), mass, rhsScale);
+                else
+                    CPU::AssembleEquationRows<PhysicalAccumulationKind::ConstantDensityVelocityPressure>(mean.View(), residual.View(), target.View(), geometry->HostView(), index(u.columns.size()), mass, rhsScale);
             }
             else
             {
 #ifdef DNDS_USE_CUDA
                 CUDA::AssembleEquation(context, geometry->View().cells, Table(input[u.firstSlot]), Table(input[r.firstSlot]),
-                    Table(output[y.firstSlot]), rateBinding ? Table(output[rateBinding->firstSlot]) : CUDA::LinearWriteRows{}, mass, rhsScale);
+                    Table(output[y.firstSlot]), rateBinding ? Table(output[rateBinding->firstSlot]) : CUDA::LinearWriteRows{}, mass, rhsScale,
+                    accumulation == PhysicalAccumulationKind::ConstantDensityVelocityPressure);
 #else
                 Unavailable{}();
 #endif

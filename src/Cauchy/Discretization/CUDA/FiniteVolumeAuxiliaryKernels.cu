@@ -9,51 +9,56 @@ namespace DNDS::Cauchy::CUDA
     namespace R = Runtime;
     namespace
     {
-        template <int Components>
-        __device__ PerfectGasKernelPoint<Components> Load(const AuxiliaryStateInput &input, index iCell)
+        template <int Components, bool Mechanical = false>
+        __device__ std::conditional_t<Mechanical, ACM::KernelPoint<Components>, PerfectGasKernelPoint<Components>> Load(const AuxiliaryStateInput &input, index iCell)
         {
-            PerfectGasKernelPoint<Components> point;
+            std::conditional_t<Mechanical, ACM::KernelPoint<Components>, PerfectGasKernelPoint<Components>> point;
             point.Load(iCell, input.mean, input.gradient, input.dimension, input.hasGradient);
             return point;
         }
-        template <int Components>
+        template <int Components, bool Mechanical = false>
         __device__ NumericalResult<std::array<real, 3>> Properties(const AuxiliaryStateInput &input,
-                                                                   const PerfectGasKernelPoint<Components> &point, index iCell)
+                                                                   const std::conditional_t<Mechanical, ACM::KernelPoint<Components>, PerfectGasKernelPoint<Components>> &point, index iCell)
         {
-            return point.Auxiliary(input.parameters(0, 0), input.hasWall ? input.wallMean(iCell, 0) : 1);
+            if constexpr (Mechanical)
+                return point.Auxiliary(input.acm(0, 0), input.hasWall ? input.wallMean(iCell, 0) : 1);
+            else
+                return point.Auxiliary(input.parameters(0, 0), input.hasWall ? input.wallMean(iCell, 0) : 1);
         }
-        template <int Components>
+        template <int Components, bool Mechanical = false>
         __global__ void Means(AuxiliaryStateInput input, AuxiliaryOutput output, AuxiliaryStatus status, index first, index end)
         {
             for (index iCell = first + index(blockIdx.x) * blockDim.x + threadIdx.x; iCell < end; iCell += index(gridDim.x) * blockDim.x)
             {
-                const auto result = Properties(input, Load<Components>(input, iCell), iCell);
+                const auto result = Properties<Components, Mechanical>(input, Load<Components, Mechanical>(input, iCell), iCell);
                 status(iCell, 0) = result.status.At(iCell);
                 if (result)
                     for (int j = 0; j < 3; ++j)
                         output(iCell, j) = result.value[j];
             }
         }
-        template <int Components>
+        template <int Components, bool Mechanical = false>
         __device__ NumericalResult<std::array<real, 3>> Prepared(const AuxiliaryFaceRequest &request,
-                                                                 const PerfectGasKernelPoint<Components> &point, index iCell)
+                                                                 const std::conditional_t<Mechanical, ACM::KernelPoint<Components>, PerfectGasKernelPoint<Components>> &point, index iCell)
         {
             if (request.preparedMeans.RowCount())
                 return std::array<real, 3>{request.preparedMeans(iCell, 0), request.preparedMeans(iCell, 1), request.preparedMeans(iCell, 2)};
-            return Properties(request.state, point, iCell);
+            return Properties<Components, Mechanical>(request.state, point, iCell);
         }
-        template <int Components>
+        template <int Components, bool Mechanical = false>
         __device__ NumericalStatus Face(const AuxiliaryFaceRequest &request, index iAux)
         {
             const auto &stencil = request.stencil(0, 0);
             const auto &metric = stencil.metric;
             const auto iFace = stencil.stencilFaces(iAux, 0), first = metric.FaceQuadratureBegin(iFace);
             const auto anchor = stencil.RHSFaceSample(iFace, 0, first);
-            const auto left = Load<Components>(request.state, anchor.cell);
-            const auto leftResult = Prepared(request, left, anchor.cell);
+            const auto left = Load<Components, Mechanical>(request.state, anchor.cell);
+            const auto leftResult = Prepared<Components, Mechanical>(request, left, anchor.cell);
             if (!leftResult)
                 return leftResult.status.At(anchor.cell);
-            const Riemann::AcousticState leftData{{left.Flow(), leftResult.value[0]}, leftResult.value[1]};
+            Riemann::AcousticState leftData{};
+            if constexpr (!Mechanical)
+                leftData = {{left.Flow(), leftResult.value[0]}, leftResult.value[1]};
             real convection = 0, diffusion = 0, jump = 0, minimum = leftResult.value[0];
             const auto count = metric.FaceQuadratureEnd(iFace) - first;
             for (index q = 0; q < count; ++q)
@@ -76,31 +81,38 @@ namespace DNDS::Cauchy::CUDA
                 }
                 else
                 {
-                    right = Load<Components>(request.state, sample.other);
+                    right = Load<Components, Mechanical>(request.state, sample.other);
                     if (sample.changesFrame)
                         right.Rotate(sample.rotation);
                 }
+                const auto &physics = [&]() -> const auto &
+                { if constexpr (Mechanical) return request.state.acm(0,0); else return request.state.parameters(0,0); }();
                 const auto rightResult = sample.other == UnInitIndex
-                                             ? (interface ? right.Auxiliary(request.state.parameters(0, 0), 1) : leftResult)
-                                             : Prepared(request, right, sample.other);
+                                             ? (interface ? right.Auxiliary(physics, 1) : leftResult)
+                                             : Prepared<Components, Mechanical>(request, right, sample.other);
                 if (!rightResult)
                     return rightResult.status.At(sample.cell, sample.point);
-                const Riemann::AcousticState rightData{{right.Flow(), rightResult.value[0]}, rightResult.value[1]};
+                Riemann::AcousticState rightData{};
+                if constexpr (!Mechanical)
+                    rightData = {{right.Flow(), rightResult.value[0]}, rightResult.value[1]};
                 if (request.needSpectral)
                 {
                     const auto grid = request.frame.GridVelocity(sample.ownPoint);
-                    convection = std::max(convection, std::max(Riemann::SignalSpeed(leftData, sample.normal, grid), Riemann::SignalSpeed(rightData, sample.normal, grid)));
+                    if constexpr (Mechanical)
+                        convection = std::max(convection, std::max(ACM::SpectralRadius(physics.flow, ACM::NormalSpeed(left.values, sample.normal)), ACM::SpectralRadius(physics.flow, ACM::NormalSpeed(right.values, sample.normal))));
+                    else
+                        convection = std::max(convection, std::max(Riemann::SignalSpeed(leftData, sample.normal, grid), Riemann::SignalSpeed(rightData, sample.normal, grid)));
                     real bound = std::max(leftResult.value[2], rightResult.value[2]);
                     if (request.state.hasWall)
                     {
-                        PerfectGasKernelPoint<Components> face;
+                        std::conditional_t<Mechanical, ACM::KernelPoint<Components>, PerfectGasKernelPoint<Components>> face;
                         for (int j = 0; j < Components; ++j)
                         {
                             face.values[j] = sample.other == UnInitIndex ? left.values[j] : .5 * (left.values[j] + right.values[j]);
                             for (int d = 0; d < 3; ++d)
                                 face.gradients[j][d] = .5 * (left.gradients[j][d] + right.gradients[j][d]);
                         }
-                        const auto faceResult = face.Auxiliary(request.state.parameters(0, 0), request.wallFaces(sample.face, q));
+                        const auto faceResult = face.Auxiliary(physics, request.wallFaces(sample.face, q));
                         if (!faceResult)
                             return faceResult.status.At(sample.cell, sample.point);
                         bound = std::max(bound, faceResult.value[2]);
@@ -108,7 +120,7 @@ namespace DNDS::Cauchy::CUDA
                     diffusion = std::max(diffusion, bound * metric.GetFaceArea(stencil.stencilFaces(iAux, 0)) *
                                                         (1 / metric.GetCellVol(sample.cell) + 1 / metric.GetCellVol(sample.other == UnInitIndex ? sample.cell : sample.other)));
                 }
-                if (request.needWave)
+                if (!Mechanical && request.needWave)
                     jump = std::max(jump, Riemann::TransverseSignalJump(leftData, rightData, sample.normal));
                 if (request.needPressure)
                     minimum = std::min(minimum, rightResult.value[0]);
@@ -130,13 +142,13 @@ namespace DNDS::Cauchy::CUDA
             }
             return {};
         }
-        template <int Components>
+        template <int Components, bool Mechanical = false>
         __global__ void Faces(AuxiliaryFaceRequest request, AuxiliaryIndices faces)
         {
             for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < faces.RowCount(); iRow += index(gridDim.x) * blockDim.x)
             {
                 const auto iAux = faces(iRow, 0);
-                request.status(iAux, 0) = Face<Components>(request, iAux);
+                request.status(iAux, 0) = Face<Components, Mechanical>(request, iAux);
             }
         }
         __global__ void Cells(AuxiliaryCellRequest request, AuxiliaryIndices cells)
@@ -175,9 +187,13 @@ namespace DNDS::Cauchy::CUDA
     }
     void AuxiliaryStateInput::Validate(R::Device device) const
     {
-        DNDS_check_throw_info(device.space == R::MemorySpace::CUDA && components >= 5 && components <= 7 && (dimension == 2 || dimension == 3), "invalid CUDA auxiliary profile");
-        R::ValidateViewDevices(device, parameters, mean, gradient, wallMean);
-        DNDS_check_throw_info(parameters.RowCount() == 1 && parameters.Width() == 1 && mean.owned.Width() == components &&
+        DNDS_check_throw_info(device.space == R::MemorySpace::CUDA && (acm.RowCount() ? components >= 4 && components <= 6 : components >= 5 && components <= 7) && (dimension == 2 || dimension == 3), "invalid CUDA auxiliary profile");
+        R::ValidateViewDevices(device, mean, gradient, wallMean);
+        if (acm.RowCount())
+            acm.ValidateDevice(device);
+        else
+            parameters.ValidateDevice(device);
+        DNDS_check_throw_info((acm.RowCount() == 1 || parameters.RowCount() == 1) && mean.owned.Width() == components &&
                                   (!mean.ghost.RowCount() || mean.ghost.Width() == components),
                               "CUDA auxiliary state shape mismatch");
         if (hasGradient)
@@ -200,6 +216,17 @@ namespace DNDS::Cauchy::CUDA
             return;
         const auto stream = ::DNDS::Runtime::CUDAStream(context);
         const unsigned blocks = Blocks(end - first);
+        if (state.acm.RowCount())
+        {
+            if (state.components == 4)
+                Means<4, true><<<blocks, 128, 0, stream>>>(state, output, status, first, end);
+            else if (state.components == 5)
+                Means<5, true><<<blocks, 128, 0, stream>>>(state, output, status, first, end);
+            else
+                Means<6, true><<<blocks, 128, 0, stream>>>(state, output, status, first, end);
+            CheckLaunch();
+            return;
+        }
         switch (state.components)
         {
         case 5:
@@ -240,6 +267,17 @@ namespace DNDS::Cauchy::CUDA
             return;
         const auto stream = ::DNDS::Runtime::CUDAStream(context);
         const unsigned blocks = Blocks(faces.RowCount());
+        if (request.state.acm.RowCount())
+        {
+            if (request.state.components == 4)
+                Faces<4, true><<<blocks, 128, 0, stream>>>(request, faces);
+            else if (request.state.components == 5)
+                Faces<5, true><<<blocks, 128, 0, stream>>>(request, faces);
+            else
+                Faces<6, true><<<blocks, 128, 0, stream>>>(request, faces);
+            CheckLaunch();
+            return;
+        }
         switch (request.state.components)
         {
         case 5:

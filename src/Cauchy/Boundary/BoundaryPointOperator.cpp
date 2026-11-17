@@ -1,4 +1,5 @@
 #include "Cauchy/Boundary/BoundaryPointOperator.hpp"
+#include "Cauchy/Boundary/ACMBoundary.hpp"
 
 #include "Cauchy/Physics/PointProperties.hpp"
 #include "Cauchy/State/RANSState.hpp"
@@ -22,8 +23,8 @@ namespace DNDS::Cauchy
             _components += index(block.components.size());
         }
         DNDS_check_throw_info(_flowFirst >= 0 &&
-                                  _flowFirst <= _components - 5,
-                              "boundary point operator requires flow5");
+                                  _flowFirst <= _components - (_equation.IsACM() ? 4 : 5),
+                              "boundary point operator requires the equation's flow block");
         if (_equation.HasMixture())
         {
             _independentSpecies = _equation.Mixture().SpeciesNumber() - 1;
@@ -86,6 +87,17 @@ namespace DNDS::Cauchy
                  std::isfinite(meanWallDistance) && meanWallDistance > 0)))
             return NumericalStatus{NumericalError::InvalidState, 3, -1};
 
+        if (_equation.IsACM())
+        {
+            const auto &params = _equation.ACMParameters();
+            const real omega = twoEquationWall ? params.kinematicViscosity * Physics::RANS::kWallOmegaCoeff / sqr(meanWallDistance) : 0;
+            std::array<real, 6> exterior{};
+            if (!ACM::Exterior(params, kind, point, condition.acmState, condition.velocity, normal, exterior, int(_components), omega))
+                return {NumericalError::UnsupportedRequest};
+            for (int j = 0; j < _components; ++j)
+                point[j] = stateKind == BoundaryPointStateKind::ExteriorState ? exterior[j] : 0.5 * (point[j] + exterior[j]);
+            return {};
+        }
         FlowState inside{};
         for (int j = 0; j < 5; ++j)
             inside[j] = point[size_t(_flowFirst + j)];

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Cauchy/Discretization/PerfectGasKernelPoint.hpp"
+#include "Cauchy/Discretization/ACMKernelPoint.hpp"
 #include "Cauchy/Discretization/FiniteVolumeStencil.hpp"
 #include "Cauchy/Motion/RigidFrameParameters.hpp"
 #include "DNDS/Runtime/Storage/Buffer.hpp"
@@ -22,6 +23,7 @@ namespace DNDS::Cauchy::CUDA
         Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> wallMean;
         int components = 5, dimension = 3;
         bool hasGradient = false, hasWall = false;
+        Runtime::ArrayView<const ACM::SpatialParameters, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> acm;
         void Validate(Runtime::Device device) const;
     };
 

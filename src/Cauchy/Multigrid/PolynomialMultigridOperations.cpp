@@ -46,7 +46,7 @@ namespace DNDS::Cauchy
 #ifdef DNDS_USE_CUDA
         CUDA::FASSelection DeviceMask(const R::MetadataBuffer<uint8_t> &mask)
         {
-            DNDS_check_throw_info(mask.size() >= 5 && mask.size() <= 7, "unsupported device FAS mask width");
+            DNDS_check_throw_info(mask.size() >= 4 && mask.size() <= 7, "unsupported device FAS mask width");
             CUDA::FASSelection result;
             for (index j = 0; j < mask.size(); ++j)
                 result.active[j] = mask.HostView()[j];
@@ -65,8 +65,8 @@ namespace DNDS::Cauchy
             DNDS_check_throw_info(state.Device() == stream.Context().device, "pMG algebra placement differs from its compute lane");
             if (state.Device() != R::Device::Host())
                 DNDS_check_throw_info(state.CoupledField().Owned().Layout().Kind() == R::RowLayoutKind::Table &&
-                                          state.ComponentNumber() >= 5 && state.ComponentNumber() <= 7,
-                                      "CUDA pMG requires combined AoS flow5/SA/2EQ");
+                                          state.ComponentNumber() >= 4 && state.ComponentNumber() <= 7,
+                                      "CUDA pMG requires a combined AoS equation with 4 to 7 components");
         }
     };
     PolynomialMultigridOperations::PolynomialMultigridOperations(R::ExecutionStream lane)

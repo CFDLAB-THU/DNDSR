@@ -22,12 +22,12 @@ namespace DNDS::Cauchy
 #endif
         if (state.Device() != R::Device::Host())
             DNDS_check_throw_info(state.Device().space == R::MemorySpace::CUDA && !equation.HasMixture() &&
-                                      state.PhysicalFieldNumber() == 1 && state.ComponentNumber() >= 5 && state.ComponentNumber() <= 7 &&
+                                      state.PhysicalFieldNumber() == 1 && state.ComponentNumber() >= (equation.IsACM() ? 4 : 5) && state.ComponentNumber() <= (equation.IsACM() ? 6 : 7) &&
                                       state.CoupledField().Owned().Layout().Kind() == R::RowLayoutKind::Table,
-                                  "CUDA output requires combined AoS perfect-gas flow5/SA/2EQ");
+                                  "CUDA output requires combined AoS perfect-gas or constant-density ACM flow with optional SA/2EQ");
         OutputFields result;
         const index rows = index(state.Space().OwnedRows());
-        result._values = R::Array<real>(R::RowLayout::Dense(rows, state.ComponentNumber() + 6 + species), state.Device());
+        result._values = R::Array<real>(R::RowLayout::Dense(rows, state.ComponentNumber() + (equation.IsACM() ? 0 : 6 + species)), state.Device());
         result._status = R::Array<NumericalStatus>(R::RowLayout::Dense(rows, 1), state.Device());
         result._values.SetName("output/preparedFields", DNDS_ALLOCATION_SITE());
         result._status.SetName("output/fieldStatus", DNDS_ALLOCATION_SITE());
@@ -42,6 +42,8 @@ namespace DNDS::Cauchy
                                     CPU::PrepareOutputFields(layout.Descriptor(), species, output, status, {workers.data(), index(workers.size())});
                                 }
 #ifdef DNDS_USE_CUDA
+                                else if (equation.IsACM())
+                                    CUDA::PrepareVelocityPressureOutput(context, EquationArrayOperands::Table(input[binding.firstSlot]), output, status);
                                 else
                                     CUDA::PrepareOutputFields(context, equation.Gas(), EquationArrayOperands::Table(input[binding.firstSlot]), output, status);
 #endif

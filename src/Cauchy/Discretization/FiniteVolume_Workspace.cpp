@@ -142,6 +142,11 @@ namespace DNDS::Cauchy
           faceFlux(R::RowLayout::Dense(owner->stencil.stencilFaces.RowCount(), state.ComponentNumber()), owner->metrics.Device()),
           chemical(owner->settings.equation.source == "chemical")
     {
+        if (owner->equation.IsACM() && owner->equation.Viscous() && !meanOnly)
+        {
+            boundaryWallShear.emplace(R::RowLayout::Dense(owner->BoundaryValueRows(), 3), owner->metrics.Device());
+            boundaryWallShear->SetName("Cauchy/workspace/wallShear", DNDS_ALLOCATION_SITE());
+        }
         index first = 0;
         std::vector<index> blockOffsets, vectorOffsets;
         std::vector<index> physicalFields(size_t(state.ComponentNumber()), -1),

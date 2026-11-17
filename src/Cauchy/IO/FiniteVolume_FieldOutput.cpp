@@ -52,8 +52,9 @@ namespace DNDS::Cauchy
                                 for (const auto &component : block.components)
                                     names.push_back(component.name);
                             }
-                            for (const auto *name : {"p", "T", "u", "v", "w", "Mach"})
-                                names.push_back(name);
+                            if (!equation.IsACM())
+                                for (const auto *name : {"p", "T", "u", "v", "w", "Mach"})
+                                    names.push_back(name);
                             if (species)
                                 for (const auto &name : equation.Mixture().SpeciesNames())
                                     names.push_back("Y:" + name);
@@ -90,8 +91,18 @@ namespace DNDS::Cauchy
             thermal.emplace(equation, limits.densityFloor, limits.temperatureFloor, 0, limits.pressureFloor,
                 workers ? workers->Acquire() : Physics::Chemistry::ChemicalWorkerPool::Lease{});
             evaluator.emplace(equation.MakePointEvaluator(workers ? workers->Acquire() : Physics::Chemistry::ChemicalWorkerPool::Lease{}, {equation.HasRANS()}));
-            surface << "cell_id,zone,x,y,z,nx,ny,nz,weight,rho,p,u,v,w,T";
+            surface << "cell_id,zone,x,y,z,nx,ny,nz,weight";
+            if (equation.IsACM())
+                for (const auto &name : names) surface << ',' << name;
+            else
+                surface << ",rho,p,u,v,w,T";
             if (species) for (const auto &name : equation.Mixture().SpeciesNames()) surface << ",Y:" << name;
+            std::optional<R::Array<real>::ReadLease> shearRead;
+            if (workspace.boundaryMomentumCurrent && workspace.boundaryWallShear)
+            {
+                shearRead.emplace(workspace.boundaryWallShear->Read());
+                surface << ",last_rhs_wall_shear_x,last_rhs_wall_shear_y,last_rhs_wall_shear_z";
+            }
             surface << '\n' << std::setprecision(17);
             std::optional<EquationDofs> coefficients;
             std::optional<EquationDofs::ReadScope> rec;
@@ -150,7 +161,7 @@ namespace DNDS::Cauchy
                             for (int mode = 0; mode < modes; ++mode)
                                 point.values[first[iBlock] + j] += recBlocks[iBlock](sample.cell, j * modes + mode) * b(0, mode);
                 }
-                if (!thermal->View().Admissible(point.values)) Gather(blocks, sample.cell, point);
+                if (!equation.IsACM() && !thermal->View().Admissible(point.values)) Gather(blocks, sample.cell, point);
                 if (ransModel)
                     RANSReconstructionView{ransModel->Kind(), ransModel->ComponentNumber()}.RepairPoint(ransMean[sample.cell], point.values.data() + ransFirst);
                 if (wallRead) Gather(blocks, sample.cell, cellMean);
@@ -164,12 +175,22 @@ namespace DNDS::Cauchy
                     *evaluator, frame, time, BoundaryPointStateKind::FaceTrace,
                     mean, wallRead ? walls.cellMean(sample.cell, 0) : 0,
                     incoming);
-                const auto flow = point.Flow(flowFirst);
-                const auto properties = evaluator->Evaluate(flow, point.Species(speciesFirst, independent));
                 surface << Mesh().OriginalEntityId(Geom::EntityKind::Cell, sample.cell) << ',' << sample.zone;
                 for (int d = 0; d < 3; ++d) surface << ',' << sample.ownPoint[d];
                 for (int d = 0; d < 3; ++d) surface << ',' << sample.normal[d];
-                surface << ',' << metric.GetFaceWeight(sample.point) << ',' << flow[0] << ',' << properties.thermo.pressure;
+                surface << ',' << metric.GetFaceWeight(sample.point);
+                if (equation.IsACM())
+                {
+                    for (auto value : point.values) surface << ',' << value;
+                    if (shearRead)
+                        for (int d = 0; d < 3; ++d)
+                            surface << ',' << shearRead->View<R::FixedRows<3>>()(sample.boundaryPoint, d);
+                    surface << '\n';
+                    continue;
+                }
+                const auto flow = point.Flow(flowFirst);
+                const auto properties = evaluator->Evaluate(flow, point.Species(speciesFirst, independent));
+                surface << ',' << flow[0] << ',' << properties.thermo.pressure;
                 for (int d = 0; d < 3; ++d) surface << ',' << flow[d + 1] / flow[0];
                 surface << ',' << properties.thermo.temperature;
                 for (int k = 0; k < species; ++k) surface << ',' << properties.fractions[k];

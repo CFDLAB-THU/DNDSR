@@ -9,7 +9,11 @@ namespace DNDS::Cauchy::CUDA
     namespace R = Runtime;
     void RHSGeometry::ValidateDevice(R::Device device) const
     {
-        R::ValidateViewDevices(device, stencil, faceOffsets, cells, quadrature, conditions);
+        R::ValidateViewDevices(device, stencil, faceOffsets, cells, quadrature);
+        if (acm.RowCount())
+            R::ValidateViewDevices(device, acm, acmBC);
+        else
+            conditions.ValidateDevice(device);
         if (hasBasis)
             basis.ValidateDevice(device);
         if (hasWall)
@@ -60,7 +64,7 @@ namespace DNDS::Cauchy::CUDA
     }
     void RHSKernelControls::Validate() const
     {
-        DNDS_check_throw_info(std::isfinite(time) && components >= 5 && components <= 7 && (dimension == 2 || dimension == 3), "invalid CUDA RHS shape/profile");
+        DNDS_check_throw_info(std::isfinite(time) && components >= (mechanical ? 4 : 5) && components <= (mechanical ? 6 : 7) && (dimension == 2 || dimension == 3), "invalid CUDA RHS shape/profile");
         DNDS_check_throw_info(solver >= Riemann::Solver::Rusanov && solver <= Riemann::Solver::AUSMPlusUp2, "unknown CUDA Riemann solver");
         DNDS_check_throw_info(direct || firstOrder || (modes > 0 && modes <= 19), "RHS polynomial degree/shape is missing");
         DNDS_check_throw_info(!primitiveGradient || components == 5, "primitive viscous gradients require pure flow5");
@@ -68,6 +72,13 @@ namespace DNDS::Cauchy::CUDA
         using P = DNDS::Math::ComputePrecision;
         DNDS_check_throw_info(blockSize == 64 || blockSize == 128 || blockSize == 256 || blockSize == 512, "invalid CUDA RHS block size");
         const bool fp64 = polynomialPrecision == P::FP64 && dissipationPrecision == P::FP64 && fluxPrecision == P::FP64;
+        if (mechanical)
+        {
+            DNDS_check_throw_info(fp64 && !produceLow && !positivity && !primitiveGradient && !faceFallback &&
+                                      !frame.moving && mapping == RHSFaceMapping::Thread && !doubleBuffer,
+                                  "unsupported CUDA ACM spatial kernel policy");
+            return;
+        }
         DNDS_check_throw_info(!doubleBuffer, "buffered-face RHS experiment has been retired");
         DNDS_check_throw_info(mapping == (fp64 ? RHSFaceMapping::CTASegments : RHSFaceMapping::Thread),
                               "FP64 CUDA RHS requires CTA segments; reduced-precision comparisons require thread mapping");

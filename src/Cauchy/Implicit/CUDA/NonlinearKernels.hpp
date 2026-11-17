@@ -39,7 +39,7 @@ namespace DNDS::Cauchy::CUDA
     void AssembleDefect(Runtime::ExecutionContext, NonlinearCells, LinearReadRows mean,
                         LinearReadRows residual, LinearReadRows constant, LinearWriteRows output,
                         NonlinearSelection, real mass, real rhsScale, int normOrder, bool measureNorm,
-                        NonlinearSummaryOutput scratch, NonlinearSummaryOutput result);
+                        NonlinearSummaryOutput scratch, NonlinearSummaryOutput result, bool algebraicPressure = false);
 
     struct PseudoTimeParameters
     {
@@ -48,6 +48,12 @@ namespace DNDS::Cauchy::CUDA
         int compressionPower = 1;
         bool positivity = false, compressRHS = false, deferAlpha = false;
     };
+    /// Compute the equation-independent inverse pseudo-step using face spectra.
+    void PrepareSpectralPseudoTime(Runtime::ExecutionContext, NonlinearCells, LinearReadRows spectral,
+                                   LinearWriteRows inverseTau, real cfl);
+    void PressureGaugeSum(Runtime::ExecutionContext, NonlinearCells, LinearReadRows previous, LinearReadRows candidate,
+                          NonlinearSummaryOutput scratch, NonlinearSummaryOutput result);
+    void ShiftPressure(Runtime::ExecutionContext, LinearWriteRows candidate, real shift);
     /** @brief Euler-compatible RHS/dTau forecast on combined 5/6/7 states.
      * @details No RANS scalar admissibility condition enters alpha. A thermal
      * alpha scales the entire coupled defect or the common pseudo-time. With
@@ -90,7 +96,7 @@ namespace DNDS::Cauchy::CUDA
     /// empty rate view omits that output. All provided buffers are distinct.
     void AssembleEquation(Runtime::ExecutionContext, NonlinearCells, LinearReadRows mean,
                           LinearReadRows residual, LinearWriteRows output, LinearWriteRows rate,
-                          real mass, real rhsScale);
+                          real mass, real rhsScale, bool algebraicPressure = false);
     /// Raw volume-weighted component magnitudes for Euler's GMRES metric.
     /// Momentum/energy normalization and MPI agreement stay on the controller.
     void MeasureMeanState(Runtime::ExecutionContext, NonlinearCells, LinearReadRows mean,

@@ -29,7 +29,7 @@ namespace DNDS::Cauchy
             if (context.device == R::Device::Host())
                 return;
 #ifdef DNDS_USE_CUDA
-            DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && !equation.HasMixture(), "CUDA diagnostics require perfect gas");
+            DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && !equation.HasMixture(), "CUDA diagnostics require perfect gas or constant-density ACM");
             partial = R::Array<CUDA::StateDiagnosticSummary>(R::RowLayout::Dense(CUDA::StateDiagnosticScratchRows(metrics.NumCell()), 1), context.device);
             result = R::Array<CUDA::StateDiagnosticSummary>(R::RowLayout::Dense(1, 1), context.device);
             completed = R::Array<unsigned int>(R::RowLayout::Dense(1, 1), context.device);
@@ -85,6 +85,8 @@ namespace DNDS::Cauchy
                     {result->values.data(), index(result->values.size())}); }, std::move(inputs), Outputs{});
             engine.Synchronize();
             RequireNumericalSuccess(result->status, "AccumulateStateDiagnostics");
+            if (retained->equation.IsACM())
+                result->values[13] = std::numeric_limits<real>::quiet_NaN();
             return result->values;
         }
 #ifdef DNDS_USE_CUDA
@@ -92,7 +94,7 @@ namespace DNDS::Cauchy
         residual.CoupledField();
         R::SubmitArrayBatch(engine, stream, [retained, geometry, means, rhs](auto context, auto input, auto, auto partial, auto result, auto completed)
                             { CUDA::AccumulateStateDiagnostics(context, Table(input[means.firstSlot]), Table(input[rhs.firstSlot]),
-                                                               geometry->View().cells, retained->equation.Gas(), partial, result, completed); }, std::move(inputs), Outputs{}, std::make_tuple(R::WriteAs<R::FixedRows<1>>(retained->partial), R::WriteAs<R::FixedRows<1>>(retained->result), R::WriteAs<R::FixedRows<1>>(retained->completed)));
+                                                               geometry->View().cells, retained->equation.IsACM() ? std::nullopt : std::optional{retained->equation.Gas()}, partial, result, completed); }, std::move(inputs), Outputs{}, std::make_tuple(R::WriteAs<R::FixedRows<1>>(retained->partial), R::WriteAs<R::FixedRows<1>>(retained->result), R::WriteAs<R::FixedRows<1>>(retained->completed)));
         engine.Synchronize();
         const auto host = retained->result.To(R::Device::Host(), stream.Context());
         const auto read = host.Read();
@@ -104,7 +106,7 @@ namespace DNDS::Cauchy
         result[4] = value.squaredResidual;
         result[2] = value.densityMinimum;
         result[3] = value.pressureMinimum;
-        result[13] = value.temperatureMinimum;
+        result[13] = retained->equation.IsACM() ? std::numeric_limits<real>::quiet_NaN() : value.temperatureMinimum;
         return result;
 #else
         DNDS_check_throw_info(false, "CUDA diagnostics are not compiled");

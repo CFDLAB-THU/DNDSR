@@ -33,14 +33,14 @@ namespace DNDS::Cauchy::CUDA::Detail
         }
         return result;
     }
-    template <int Components, class PolynomialScalar = real, class Fields>
-    DNDS_DEVICE_CALLABLE void ReconstructPoint(const RHSGeometry &geometry, const RHSKernelParameters &parameters,
+    template <int Components, class PolynomialScalar = real, class Fields, class Params, class Point>
+    DNDS_DEVICE_CALLABLE void ReconstructPoint(const RHSGeometry &geometry, const Params &parameters,
                                                const RHSKernelControls &controls, const Fields &fields,
                                                const FiniteVolumeDetail::SampleRecord &sample, bool other,
-                                               PerfectGasKernelPoint<Components> &point, index &fallbacks) noexcept
+                                               Point &point, index &fallbacks) noexcept
     {
         const index iCell = other ? sample.other : sample.cell;
-        MeanPoint(fields, iCell, point);
+        point.Load(iCell, fields.mean, fields.mean, 0, false);
         const int dimension = Fields::static_dimension ? Fields::static_dimension : controls.dimension;
         if (!controls.firstOrder && (!controls.direct || controls.linear))
         {
@@ -119,27 +119,40 @@ namespace DNDS::Cauchy::CUDA::Detail
                     point.gradients[j][d] = DNDS::Math::ScalarCast<real>(gradients[j][d]);
             }
         }
-        if constexpr (Components > 5)
+        if constexpr (std::is_same_v<Point, ACM::KernelPoint<Components>>)
         {
-            std::array<real, Components - 5> mean;
-            for (int j = 0; j < Components - 5; ++j)
-                mean[j] = fields.mean(iCell, 5 + j);
-            RANSReconstructionView{parameters.physics.rans.kind, Components - 5}.RepairPoint(mean, SpanView<real>{point.values.data() + 5, Components - 5});
+            if constexpr (Components > 4)
+            {
+                std::array<real, Components - 4> mean;
+                for (int j = 0; j < Components - 4; ++j)
+                    mean[j] = fields.mean(iCell, 4 + j);
+                RANSReconstructionView{parameters.rans.kind, Components - 4}.RepairPoint(mean, SpanView<real>{point.values.data() + 4, Components - 4});
+            }
         }
-        if (controls.primitiveGradient)
-            for (int j = 0; j < 5; ++j)
-                for (int d = 0; d < dimension; ++d)
-                    if constexpr (Fields::separate_roles)
-                        point.gradients[j][d] = fields.primitiveGradients(iCell, j * dimension + d);
-                    else
-                        point.gradients[j][d] = fields.viscousData(iCell, j * dimension + d);
-        // PP POLICY: temporary point fallback only. Raw coefficient/gradient
-        // arrays are unchanged. Perfect gas has no composition to project.
-        if ((controls.positivity || controls.faceFallback) &&
-            !(controls.positivity ? parameters.thermal.ClippedReferenceAdmissible(point.values) : parameters.thermal.Admissible(point.values)))
+        else
         {
-            ++fallbacks;
-            MeanPoint(fields, iCell, point);
+            if constexpr (Components > 5)
+            {
+                std::array<real, Components - 5> mean;
+                for (int j = 0; j < Components - 5; ++j)
+                    mean[j] = fields.mean(iCell, 5 + j);
+                RANSReconstructionView{parameters.physics.rans.kind, Components - 5}.RepairPoint(mean, SpanView<real>{point.values.data() + 5, Components - 5});
+            }
+            if (controls.primitiveGradient)
+                for (int j = 0; j < 5; ++j)
+                    for (int d = 0; d < dimension; ++d)
+                        if constexpr (Fields::separate_roles)
+                            point.gradients[j][d] = fields.primitiveGradients(iCell, j * dimension + d);
+                        else
+                            point.gradients[j][d] = fields.viscousData(iCell, j * dimension + d);
+            // PP POLICY: temporary point fallback only. Raw coefficient/gradient
+            // arrays are unchanged. Perfect gas has no composition to project.
+            if ((controls.positivity || controls.faceFallback) &&
+                !(controls.positivity ? parameters.thermal.ClippedReferenceAdmissible(point.values) : parameters.thermal.Admissible(point.values)))
+            {
+                ++fallbacks;
+                MeanPoint(fields, iCell, point);
+            }
         }
         if (other && sample.changesFrame)
             point.Rotate(sample.rotation);

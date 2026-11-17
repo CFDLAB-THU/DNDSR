@@ -7,6 +7,7 @@
 #include "Cauchy/Physics/PointProperties.hpp"
 #include "Cauchy/Physics/PhysicalFlux.hpp"
 #include "Cauchy/Implicit/CPU/FiniteVolumeJacobianKernels.hpp"
+#include "Cauchy/Implicit/CPU/ACMJacobianKernels.hpp"
 #include "Cauchy/Physics/PointWorkerContexts.hpp"
 #include "Cauchy/Discretization/FiniteVolumeInternal.hpp"
 
@@ -137,9 +138,12 @@ namespace DNDS::Cauchy
         Metrics().Validate();
         _data->partition.Validate();
         prototype.RequireSchema(_data->equation.Schema());
+        if (_data->equation.IsACM())
+            DNDS_check_throw_info(diagonal == DiagonalStorage::Block && offDiagonal == OffDiagonalStorage::Assembled,
+                                  "ACM requires a full cell block and assembled off-diagonal blocks");
         if (prototype.Device() == R::Device::Host())
             _data->equation.ResolveKernelProfile(prototype.Device());
-        else
+        else if (!_data->equation.IsACM())
             PerfectGasSpatialParameters::FromEquation(_data->equation, Metrics().Dimension()).Validate(int(prototype.ComponentNumber()));
         DNDS_check_throw_info(prototype.Space().Same(Metrics().Space()) && prototype.Device() == Device(),
                               "equation linear prototype row space or placement differs");
@@ -166,7 +170,8 @@ namespace DNDS::Cauchy
             PrepareDeviceJacobian(state, auxiliary, inversePseudoTime, output, controls, time, *context);
             return;
         }
-        if (controls.roeDissipation && sourceWorkspace && HasRoeJacobianKernel(*sourceWorkspace))
+        const bool acm = _data->equation.IsACM();
+        if (!acm && controls.roeDissipation && sourceWorkspace && HasRoeJacobianKernel(*sourceWorkspace))
         {
             DNDS_check_throw_info(!workers && state.ComponentNumber() == 5 && state.PhysicalFieldNumber() == 1,
                                   "flow5 Roe Jacobian specialization received an extended physical state");
@@ -175,7 +180,7 @@ namespace DNDS::Cauchy
         }
         output.Validate();
         const index nv = state.ComponentNumber(), owned = Metrics().NumCell(), all = Metrics().NumCellProc();
-        DNDS_check_throw_info(output.Space().Same(state.Space()) && output.Components() == nv && !controls.roeDissipation,
+        DNDS_check_throw_info(output.Space().Same(state.Space()) && output.Components() == nv && (acm || !controls.roeDissipation),
                               "equation Jacobian space/components differ or Roe profile is unavailable");
         DNDS_check_throw_info(std::isfinite(controls.physicalMass) && controls.physicalMass >= 0 && std::isfinite(controls.residualScale) && controls.residualScale >= 0, "invalid integrated equation Jacobian controls");
         DNDS_check_throw_info(inversePseudoTime.GetDevice() == R::Device::Host() && inversePseudoTime.RowCount() == owned && !inversePseudoTime.Layout().IsVariable() && inversePseudoTime.Layout().Width() == 1, "equation inverse pseudo-time shape/backend differs");
@@ -199,6 +204,55 @@ namespace DNDS::Cauchy
                                   auxiliary.derivedOwned ? &auxiliary.derivedOwned->Values() : nullptr, auxiliary.derivedGhost ? &auxiliary.derivedGhost->Values() : nullptr})
             if (input)
                 checkAlias(*input);
+        if (acm)
+        {
+            DNDS_check_throw_info(output.DiagonalMode() == DiagonalStorage::Block && output.HasAssembledOffDiagonal(),
+                                  "ACM matrix requires full diagonal and off-diagonal blocks");
+            DNDS_check_throw_info(nv >= 4 && nv <= 6 && !HasInterfaces() && !_data->motion.At(time).moving,
+                                  "ACM Jacobian requires stationary single-domain flow4, flow4+SA or flow4+2EQ");
+            const auto input = state.ReadWithGhost();
+            const auto layout = input.ComponentLayout();
+            const auto stencil = _data->stencil.Read();
+            const auto tau = inversePseudoTime.Read(), radius = auxiliary.faceSpectralRadius->Read();
+            auto physics = _data->equation.ACMParameters();
+            physics.roe = _data->settings.numerics.flux == "Roe";
+            const Algebra::ComponentSelection selection(nv, controls.updateComponents);
+            std::array<bool, 6> active{};
+            for (index j = 0; j < nv; ++j)
+                active[j] = selection.Includes(j);
+            std::optional<WallDistanceRead> walls;
+            std::optional<R::Array<real>::ReadLease> lengths;
+            Physics::RANS::PointParameters rans;
+            if (nv > 4)
+            {
+                DNDS_check_throw_info(_data->wallDistance, "ACM RANS Jacobian requires wall distances");
+                walls.emplace(_data->wallDistance->AcquireRead());
+                lengths.emplace(_data->ransCellLength.Read());
+                rans = _data->equation.RANS().KernelParameters();
+            }
+            auto diagonal = output.Diagonal().Write();
+            std::optional<Algebra::BlockMatrixStorage::WriteAccess> off;
+            try
+            {
+                off.emplace(output.OffDiagonal().Write());
+                RequireNumericalSuccess(CPU::PrepareACMJacobian(
+                                            {physics, stencil.View(), {_data->boundaryConditions.data(), index(_data->boundaryConditions.size())}, layout.View(), tau.View<R::UniformTableRows>(), radius.View<R::UniformTableRows>(), walls ? walls->HostView().cellMean : decltype(WallDistanceView::cellMean){}, lengths ? lengths->View<R::FixedRows<1>>() : decltype(lengths->View<R::FixedRows<1>>()){}, rans, diagonal.View<R::UniformTableRows>(), off->ArrayView(), controls.physicalMass, controls.residualScale, active}),
+                                        "assemble ACM Jacobian");
+            }
+            catch (...)
+            {
+                MPI::AbortIfSolverFailure("Cauchy ACM Jacobian failed");
+                if (off)
+                {
+                    off->Fail();
+                    diagonal.Fail();
+                }
+                else
+                    diagonal.CancelUnmodified();
+                throw;
+            }
+            return;
+        }
         const bool chemical = _data->settings.equation.source == "chemical";
         const bool rans = _data->equation.HasRANS();
         DNDS_check_throw_info(_data->settings.equation.source == "none" || (chemical && _data->equation.HasMixture()), "unsupported equation Jacobian source");

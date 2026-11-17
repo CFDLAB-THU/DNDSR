@@ -349,6 +349,10 @@ namespace DNDS::Cauchy
                     smootherMaxCFL.push_back(lower.implicit.maxPseudoCFL);
                     coarse.push_back(std::make_unique<Coarse>(mesh, lower, fine, state, engine, stream, workers, executionOwner));
                     levelDefinitions.push_back(MakeLevel(coarse.back()->state, *coarse.back()->solver, level + 1));
+                    // These equations use cell-volume-normalized rates. Every
+                    // level has the same schema and cell order. Identity
+                    // restriction thus commutes with M for both I and the
+                    // constant ACM pressure projection, even on curved cells.
                     transferDefinitions.push_back({identity, identity, identity, true});
                 }
                 BuildCycle();

@@ -104,6 +104,50 @@ TEST_CASE("Finite-volume admissibility includes the prepared RANS mean policy")
     CHECK_FALSE(fv.Admissible(state));
 }
 
+TEST_CASE("ACM wall-bounded first implicit correction transports the velocity and turbulence blocks")
+{
+    for (const auto *name : {"SA", "KOmegaWilcox", "KOmegaSST"})
+    {
+        CAPTURE(name);
+        auto settings = Settings();
+        settings.mesh.dimension = 3;
+        settings.equation.system = "incompressibleACM";
+        settings.equation.eos = "none";
+        settings.equation.transport = "Newtonian";
+        settings.equation.referenceScales = {{"rho0", 1}, {"U0", 1}, {"L0", 1}, {"T0", 300}};
+        settings.equation.rans.model = name;
+        settings.equation.rans.viscosityReference = .001;
+        settings.boundaries["7"].kind = "noSlipWall";
+        const bool sa = settings.equation.rans.model == "SA";
+        std::vector<double> initial{.2, 0, 0, -.1, .03};
+        if (!sa)
+            initial.push_back(2.);
+        settings.initialState = {{"type", "primUP"}, {"state", initial}};
+        settings.referenceState = settings.initialState;
+        settings.implicit.residualComponents.clear();
+        settings.implicit.diagonal = "block";
+        settings.implicit.jacobianAction = "assembled";
+        settings.implicit.minIterations = settings.implicit.iterations = 1;
+        C::TimeSettings time;
+        time.method = "bdf1";
+        C::Domain domain("wall", CFVTest::CartesianHexes(mpi, 3), settings, time);
+        REQUIRE(domain.Advance(1e-4).accepted);
+        auto read = domain.Dofs().ReadOwned();
+        const auto flow = read.Block("flow"), rans = read.Block("rans");
+        std::array<double, 2> changes{};
+        for (I cell = 0; cell < flow.RowCount(); ++cell)
+        {
+            changes[0] += std::abs(flow(cell, 0) - initial[0]);
+            changes[1] += std::abs(rans(cell, 0) - initial[4]);
+        }
+        MPI_Allreduce(MPI_IN_PLACE, changes.data(), 2, MPI_DOUBLE, MPI_SUM, mpi.comm);
+        CHECK(std::isfinite(changes[0]));
+        CHECK(std::isfinite(changes[1]));
+        CHECK(changes[0] > 0);
+        CHECK(changes[1] > 0);
+    }
+}
+
 TEST_CASE("Characteristic WBAP transforms only flow5 across combined and segmented equation storage")
 {
     auto mesh = CauchyTest::PeriodicQuads(mpi, 4);

@@ -52,7 +52,7 @@ namespace DNDS::Cauchy::CUDA
         {
             values.ValidateDevice(context.device);
             DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && values.kind == R::RowLayoutKind::Table &&
-                                      values.Width() >= 5 && values.Width() <= 7,
+                                      values.Width() >= 4 && values.Width() <= 7,
                                   "CUDA FAS requires combined AoS flow5/SA/2EQ");
         }
     }

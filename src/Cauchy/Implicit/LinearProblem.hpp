@@ -71,7 +71,9 @@ namespace DNDS::Cauchy
         /// Array aliases. Only the compatible single-device AmgX route uses it.
         bool amgxNativeStorage = false;
     };
-    /// Integrated residual convention: A=M/dTau+physicalMass*M-residualScale*J_R.
+    /// Integrated residual convention: A=V Gamma/dTau+physicalMass V M-residualScale J_R.
+    /// The equation defines the pseudo mass Gamma and physical accumulation
+    /// derivative M independently. J_R acts on the integrated spatial residual.
     /// Roe dissipation requires a full diagonal block. Scalar dissipation may
     /// additionally compose physical boundary derivatives into that diagonal.
     struct JacobianPreparation

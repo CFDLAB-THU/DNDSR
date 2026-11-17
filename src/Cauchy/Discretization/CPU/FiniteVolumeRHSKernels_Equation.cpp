@@ -6,6 +6,8 @@
 #include "Cauchy/Physics/PointProperties.hpp"
 #include "Cauchy/State/RANSState.hpp"
 #include "Cauchy/Discretization/RANSReconstruction.hpp"
+#include "Physics/Incompressible/RANSPoint.hpp"
+#include "Cauchy/Physics/ACMFlux.hpp"
 #include "Cauchy/Physics/RANSFlux.hpp"
 #include "Cauchy/Physics/ViscousFlux.hpp"
 #include "CFV/Math/PeriodicFrame.hpp"
@@ -126,6 +128,8 @@ namespace DNDS::Cauchy::CPU
             // still fails, Cauchy may replace this temporary point by the
             // valid mean without mutating coefficients. Euler's separate
             // point policy is unchanged. See CauchyPositivity.md.
+            if (equation.IsACM() || (!request.faceFallback && !request.positivity))
+                return;
             const bool pointAdmissible = request.positivity
                                              ? thermalBounds.ClippedReferenceAdmissible(point.values)
                                              : thermalBounds.Admissible(point.values);
@@ -220,15 +224,66 @@ namespace DNDS::Cauchy::CPU
                             return status;
                     }
 #ifdef USE_FIX_ZERO_SA_NUT_AT_WALL
-                    if (ransModel && ransModel->Kind() == Physics::RANS::ModelKind::SA && sample.boundary.kind == BoundaryKind::NoSlipWall)
+                    if (!equation.IsACM() && ransModel && ransModel->Kind() == Physics::RANS::ModelKind::SA && sample.boundary.kind == BoundaryKind::NoSlipWall)
                     {
-                        // Euler retains ULxyUnlim before its BC zeros the
+                        // ACM keeps both scalar traces for the diffusive wall jump.
+                        // Compressible Euler retains ULxyUnlim before its BC zeros the
                         // convective SA pair. Preserve that interior value
                         // for the viscous jump without mutating cell means.
                         wallSAViscousInterior = left.values[request.ransFirst];
                         left.values[request.ransFirst] = right.values[request.ransFirst] = 0;
                     }
 #endif
+                }
+                if (equation.IsACM())
+                {
+                    auto params = equation.ACMParameters();
+                    params.roe = !rusanovFlux;
+                    ACM::NumericalFlux(params, left.values, right.values, sample.normal, flux, int(width));
+                    if (viscous)
+                    {
+                        for (int j = 0; j < width; ++j)
+                        {
+                            face.values[j] = .5 * (left.values[j] + right.values[j]);
+                            for (int d = 0; d < 3; ++d)
+                                face.gradient(j, d) = .5 * (left.gradient(j, d) + right.gradient(j, d)) +
+                                                      sample.normal[d] * (right.values[j] - left.values[j]) / sample.viscousDistance;
+                        }
+                        real mu = params.kinematicViscosity;
+                        if (ransModel)
+                        {
+                            const auto at = Physics::Incompressible::RANSPoint(face.values, face.gradient, ransModel->ComponentNumber(),
+                                                                               mu, wallValues.faces(sample.face, sample.point - first), 0);
+                            const auto transport = ransModel->TryTransport(at);
+                            if (!transport)
+                                return transport.status.At(iCell, sample.point);
+                            const auto diffusion = ransModel->TryDiffusionFlux(at, sample.normal, transport.value.viscosity);
+                            if (!diffusion)
+                                return diffusion.status.At(iCell, sample.point);
+                            for (int j = 0; j < ransModel->ComponentNumber(); ++j)
+                                flux[4 + j] -= diffusion.value[j];
+                            mu += transport.value.viscosity;
+                        }
+                        const auto traction = Physics::Transport::NewtonianTraction(face.gradient, sample.normal, mu);
+                        if (request.wallShear.RowCount() && sample.boundaryPoint != UnInitIndex)
+                        {
+                            const auto shear = Physics::Transport::WallShear(traction, sample.normal);
+                            for (int d = 0; d < 3; ++d)
+                                request.wallShear(sample.boundaryPoint, d) = boundaryKind == BoundaryKind::NoSlipWall ? shear[d] : 0;
+                        }
+                        for (int d = 0; d < 3; ++d)
+                            flux[d] -= traction[d] - (width == 6 ? (2. / 3.) * face.values[4] * sample.normal[d] : 0);
+                    }
+                    if (sample.boundaryPoint != UnInitIndex)
+                        for (int d = 0; d < 3; ++d)
+                            request.wallFlux(sample.boundaryPoint, d) = boundaryKind == BoundaryKind::SlipWall || boundaryKind == BoundaryKind::NoSlipWall ? weight * flux[d] : 0;
+                    for (int j = 0; j < width; ++j)
+                    {
+                        if (!std::isfinite(flux[j]))
+                            return NumericalStatus{NumericalError::InvalidState}.At(iCell, sample.point);
+                        integrated[j] -= weight * flux[j];
+                    }
+                    continue;
                 }
                 auto leftFlow = left.Flow(request.flowFirst), rightFlow = right.Flow(request.flowFirst);
                 const bool wallFluxState = noRsOnWall && !internal && boundaryKind == BoundaryKind::NoSlipWall;

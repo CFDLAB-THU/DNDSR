@@ -9,29 +9,36 @@ namespace DNDS::Cauchy::CUDA
     namespace R = Runtime;
     namespace
     {
-        template <int Components>
+        template <int Components, bool Mechanical = false>
         __global__ void Sources(SourceRequest request, SourceIndices selected)
         {
-            const auto &physics = request.parameters(0, 0);
+            constexpr int flow = Mechanical ? 4 : 5;
+            const auto &physics = [&]() -> const auto &
+            {
+                if constexpr (Mechanical)
+                    return request.acm(0, 0);
+                else
+                    return request.parameters(0, 0);
+            }();
             const bool mean = request.evaluation == SourceEvaluation::MeanDestruction;
             const bool jacobian = request.evaluation != SourceEvaluation::QuadratureResidual;
             for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
             {
                 const index iCell = selected(iRow, 0);
                 NumericalStatus status;
-                if (physics.dimension != request.dimension || physics.rans.ComponentNumber() + 5 != Components || !physics.rans.Supported())
+                if (physics.rans.ComponentNumber() + flow != Components || !physics.rans.Supported())
                 {
                     request.status(iCell, 0) = NumericalStatus{NumericalError::InvalidInput}.At(iCell);
                     continue;
                 }
-                std::array<real, Components - 5> source{}, ransMean{};
-                for (int j = 0; j < Components - 5; ++j)
-                    ransMean[j] = request.means(iCell, 5 + j);
+                std::array<real, Components - flow> source{}, ransMean{};
+                for (int j = 0; j < Components - flow; ++j)
+                    ransMean[j] = request.means(iCell, flow + j);
                 const index begin = mean ? iCell : request.offsets(iCell, 0);
                 const index end = mean ? iCell + 1 : request.offsets(iCell + 1, 0);
                 for (index iPoint = begin; iPoint < end; ++iPoint)
                 {
-                    PerfectGasKernelPoint<Components> point;
+                    std::conditional_t<Mechanical, ACM::KernelPoint<Components>, PerfectGasKernelPoint<Components>> point;
                     for (int j = 0; j < Components; ++j)
                     {
                         point.values[j] = mean ? request.means(iCell, j) : request.samples(iPoint, j);
@@ -39,29 +46,36 @@ namespace DNDS::Cauchy::CUDA
                             point.gradients[j][d] = request.gradients[d](iPoint, j);
                     }
                     if (!mean)
-                        RANSReconstructionView{physics.rans.kind, Components - 5}.RepairPoint(ransMean, SpanView<real>{point.values.data() + 5, Components - 5});
-                    const auto properties = TryPerfectGasPoint(physics.gas, point.Flow(), true);
-                    if (!properties)
-                    {
-                        status = properties.status.At(iCell, iPoint);
-                        break;
-                    }
+                        RANSReconstructionView{physics.rans.kind, Components - flow}.RepairPoint(ransMean, SpanView<real>{point.values.data() + flow, Components - flow});
                     const real wall = mean ? request.wallMean(iCell, 0) : request.wallPoints(iCell, iPoint - begin);
-                    const auto value = Physics::RANS::TrySource(physics.rans, point.RANSPoint(properties.value, wall, request.lengths(iCell, 0)), jacobian ? 1 : 0);
+                    const auto value = [&]() -> NumericalResult<std::array<real, 2>>
+                    {
+                        if constexpr (Mechanical)
+                            return Physics::RANS::TrySource(physics.rans, point.Turbulence(physics, wall, request.lengths(iCell, 0)), jacobian ? 1 : 0);
+                        else
+                        {
+                            if (physics.dimension != request.dimension)
+                                return NumericalStatus{NumericalError::InvalidInput};
+                            const auto properties = TryPerfectGasPoint(physics.gas, point.Flow(), true);
+                            if (!properties)
+                                return properties.status;
+                            return Physics::RANS::TrySource(physics.rans, point.RANSPoint(properties.value, wall, request.lengths(iCell, 0)), jacobian ? 1 : 0);
+                        }
+                    }();
                     if (!value)
                     {
                         status = value.status.At(iCell, iPoint);
                         break;
                     }
                     const real weight = mean ? request.cells(iCell, 0) : request.weights(iPoint, 0);
-                    for (int j = 0; j < Components - 5; ++j)
+                    for (int j = 0; j < Components - flow; ++j)
                         source[j] += weight * value.value[j];
                 }
                 request.status(iCell, 0) = status;
                 if (status)
-                    for (int j = 0; j < Components - 5; ++j)
+                    for (int j = 0; j < Components - flow; ++j)
                     {
-                        const int row = 5 + j;
+                        const int row = flow + j;
                         request.output(iCell, jacobian && request.fullBlock ? row + Components * row : row) +=
                             (jacobian ? request.scale : real(1)) * source[j];
                     }
@@ -105,12 +119,18 @@ namespace DNDS::Cauchy::CUDA
     void AddRANSSources(R::ExecutionContext context, SourceRequest request, SourceIndices selected)
     {
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA, "CUDA source requires a CUDA context");
-        R::ValidateViewDevices(context.device, request.parameters, request.means, request.lengths, request.output, request.status, selected);
+        const bool mechanical = request.acm.RowCount() != 0;
+        if (mechanical)
+            request.acm.ValidateDevice(context.device);
+        else
+            request.parameters.ValidateDevice(context.device);
+        const int flow = mechanical ? 4 : 5;
+        R::ValidateViewDevices(context.device, request.means, request.lengths, request.output, request.status, selected);
         const bool mean = request.evaluation == SourceEvaluation::MeanDestruction;
         const bool jacobian = request.evaluation != SourceEvaluation::QuadratureResidual;
-        DNDS_check_throw_info((request.components == 6 || request.components == 7) && (request.dimension == 2 || request.dimension == 3) &&
+        DNDS_check_throw_info((request.components == flow + 1 || request.components == flow + 2) && (request.dimension == 2 || request.dimension == 3) &&
                                   request.evaluation >= SourceEvaluation::QuadratureResidual && request.evaluation <= SourceEvaluation::QuadratureDestruction &&
-                                  std::isfinite(request.scale) && request.parameters.RowCount() == 1,
+                                  std::isfinite(request.scale) && (mechanical ? request.acm.RowCount() : request.parameters.RowCount()) == 1,
                               "unsupported CUDA RANS source shape/policy");
         const index cells = request.means.RowCount();
         CheckTable(request.means, cells, request.components);
@@ -143,7 +163,11 @@ namespace DNDS::Cauchy::CUDA
         if (!selected.RowCount())
             return;
         const auto stream = ::DNDS::Runtime::CUDAStream(context);
-        if (request.components == 6)
+        if (mechanical && request.components == 5)
+            Sources<5, true><<<Blocks(selected.RowCount()), 128, 0, stream>>>(request, selected);
+        else if (mechanical)
+            Sources<6, true><<<Blocks(selected.RowCount()), 128, 0, stream>>>(request, selected);
+        else if (request.components == 6)
             Sources<6><<<Blocks(selected.RowCount()), 128, 0, stream>>>(request, selected);
         else
             Sources<7><<<Blocks(selected.RowCount()), 128, 0, stream>>>(request, selected);

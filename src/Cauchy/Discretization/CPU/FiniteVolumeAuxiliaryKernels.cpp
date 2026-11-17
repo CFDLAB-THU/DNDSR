@@ -1,5 +1,7 @@
 #include "Cauchy/Discretization/CPU/FiniteVolumeAuxiliaryKernels.hpp"
 #include "Cauchy/Discretization/CPU/FiniteVolumePointKernels.hpp"
+#include "Physics/Incompressible/RANSPoint.hpp"
+#include "Cauchy/Boundary/ACMBoundary.hpp"
 #include "DNDS/Core/OMP.hpp"
 #include <limits>
 
@@ -19,6 +21,21 @@ namespace DNDS::Cauchy::CPU
     NumericalResult<std::array<real, 5>> Properties(const AuxiliaryKernelRequest &request, const EquationSystem &equation, EquationFVDetail::PointScratch &point, PointEvaluator &evaluator,
                                                     real wallDistance = 1, bool turbulent = true) noexcept
     {
+        if (equation.IsACM())
+        {
+            const real nu = equation.ACMParameters().kinematicViscosity;
+            real eddy = 0;
+            if (equation.HasRANS() && turbulent)
+            {
+                const auto &model = equation.RANS();
+                const auto input = Physics::Incompressible::RANSPoint(point.values, point.gradient, model.ComponentNumber(), nu, wallDistance, 0);
+                const auto value = model.TryTransport(input);
+                if (!value)
+                    return value.status;
+                eddy = value.value.viscosity;
+            }
+            return std::array<real, 5>{point.values[3], 0, (4.0 / 3.0) * (nu + eddy), 0, 0};
+        }
         const auto flow = point.Flow(request.flowFirst);
         PointProperties result;
         const auto status = evaluator.TryEvaluate(flow, point.Species(request.speciesFirst, request.independentSpecies), 0, result);
@@ -106,7 +123,8 @@ namespace DNDS::Cauchy::CPU
                 if (!leftResult)
                     return leftResult.status.At(anchor.cell);
                 const auto &leftProperties = leftResult.value;
-                const Riemann::AcousticState leftData{{left.Flow(request.flowFirst), leftProperties[0]}, leftProperties[1]};
+                const bool acm = equation.IsACM();
+                const Riemann::AcousticState leftData{{acm ? FlowState{} : left.Flow(request.flowFirst), leftProperties[0]}, leftProperties[1]};
                 real convection = 0, diffusion = 0, jump = 0, minimum = leftProperties[0];
                 const auto count = metric.FaceQuadratureEnd(iFace) - metric.FaceQuadratureBegin(iFace);
                 for (index q = 0; q < count; ++q)
@@ -155,12 +173,16 @@ namespace DNDS::Cauchy::CPU
                     if (!rightResult)
                         return rightResult.status.At(sample.other == UnInitIndex ? sample.cell : sample.other, sample.point);
                     const auto &rightProperties = rightResult.value;
-                    const Riemann::AcousticState rightData{{right.Flow(request.flowFirst), rightProperties[0]}, rightProperties[1]};
+                    const Riemann::AcousticState rightData{{acm ? FlowState{} : right.Flow(request.flowFirst), rightProperties[0]}, rightProperties[1]};
                     const Vector3 normal{sample.normal[0], sample.normal[1], sample.normal[2]};
                     const auto grid = request.frame.GridVelocity({sample.ownPoint[0], sample.ownPoint[1], sample.ownPoint[2]});
                     if (spectral)
                     {
-                        convection = std::max({convection, Riemann::SignalSpeed(leftData, normal, grid), Riemann::SignalSpeed(rightData, normal, grid)});
+                        if (acm)
+                            convection = std::max({convection, ACM::SpectralRadius(equation.ACMParameters(), ACM::NormalSpeed(left.values, normal)),
+                                                   ACM::SpectralRadius(equation.ACMParameters(), ACM::NormalSpeed(right.values, normal))});
+                        else
+                            convection = std::max({convection, Riemann::SignalSpeed(leftData, normal, grid), Riemann::SignalSpeed(rightData, normal, grid)});
                         real bound = std::max(leftProperties[2], rightProperties[2]);
                         if (request.hasWall)
                         {
@@ -179,7 +201,7 @@ namespace DNDS::Cauchy::CPU
                         diffusion = std::max(diffusion, bound * metric.GetFaceArea(request.stencil.stencilFaces(iAux, 0)) *
                                                             (1 / metric.GetCellVol(sample.cell) + 1 / metric.GetCellVol(sample.other == UnInitIndex ? sample.cell : sample.other)));
                     }
-                    if (wave)
+                    if (wave && !acm)
                         jump = std::max(jump, Riemann::TransverseSignalJump(leftData, rightData, normal));
                     if (pressure)
                         minimum = std::min(minimum, rightProperties[0]);

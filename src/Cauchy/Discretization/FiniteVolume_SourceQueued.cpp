@@ -116,7 +116,7 @@ namespace DNDS::Cauchy
         if (!sourceOffsets.RowCount())
             return;
         DNDS_check_throw_info(owner->equation.HasRANS() && sourceValues.size() == 1 && sourceGradients.size() == 1,
-                              "device volume source currently supports perfect-gas RANS only");
+                              "device volume source requires one combined RANS field");
         SubmitSourceSamples(engine, stream, state);
         if (!result)
             return;
@@ -129,7 +129,10 @@ namespace DNDS::Cauchy
         R::SubmitArrays(engine, stream, [pin, dimension, components, interleaved = sourceValuesAreMeans](R::ExecutionContext context, auto means, auto samples, auto g0, auto g1, auto g2, auto offsets, auto weights, auto lengths, auto selected, auto output, auto status, auto cells, auto wallMean, auto wallPoints)
                         {
             CUDA::SourceRequest request;
-            request.parameters = R::MetadataArrayView(pin->owner->devicePhysics, context.device);
+            if (pin->owner->equation.IsACM())
+                request.acm = R::MetadataArrayView(pin->owner->deviceACMPhysics, context.device);
+            else
+                request.parameters = R::MetadataArrayView(pin->owner->devicePhysics, context.device);
             request.means = means; request.samples = samples;
             const std::array<CUDA::SourceInput, 3> gradients{g0, g1, g2};
             for (int d = 0; d < dimension; ++d)

@@ -231,8 +231,8 @@ namespace DNDS::Cauchy::CUDA
         }
         void CheckContext(R::ExecutionContext context, int n)
         {
-            DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && n >= 5 && n <= 7,
-                                  "CUDA inverse requires CUDA and 5/6/7 components");
+            DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && n >= 4 && n <= 7,
+                                  "CUDA inverse requires CUDA and 4 through 7 components");
         }
         void CheckLaunch() { DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA diagonal inverse kernel launch failed"); }
     }
@@ -263,7 +263,9 @@ namespace DNDS::Cauchy::CUDA
             };
             const auto dispatch = [&](auto refine)
             {
-                if (n == 5)
+                if (n == 4)
+                    launch(std::integral_constant<int, 4>{}, refine);
+                else if (n == 5)
                     launch(std::integral_constant<int, 5>{}, refine);
                 else if (n == 6)
                     launch(std::integral_constant<int, 6>{}, refine);

@@ -63,7 +63,7 @@ namespace DNDS::Cauchy::CPU
         RHSFieldView waveJump, pressureMinimum, primitiveGradientValues;
         RHSScalarView incoming;
         RHSOutputView faceValues, lowFaceValues;
-        Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::FixedRows<3>> wallFlux;
+        Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::FixedRows<3>> wallFlux, wallShear;
         WallDistanceView wall;
         ThermalView thermal;
         RigidFrame frame;

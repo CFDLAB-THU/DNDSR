@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Cauchy/Boundary/PerfectGasBoundary.hpp"
+#include "Cauchy/Boundary/ACMBoundary.hpp"
+#include "Cauchy/Discretization/ACMKernelPoint.hpp"
 #include "Cauchy/Discretization/BoundaryTraceGeometry.hpp"
 #include "Cauchy/Physics/ThermalAdmissibility.hpp"
 #include "CFV/Plans/FiniteVolumePlan.hpp"
@@ -41,6 +43,8 @@ namespace DNDS::Cauchy::CUDA
         int components = 5, modes = 0;
         bool centers = false, polynomial = false, exterior = false, hasIncoming = false, repairRANS = true;
         bool forcePointFallback = false;
+        Runtime::ArrayView<const ACM::SpatialParameters, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> acm;
+        Runtime::ArrayView<const ACM::BoundaryParameters, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> acmBC;
     };
 
     /** Host launchers receive borrowed, device-tagged array views. Operators

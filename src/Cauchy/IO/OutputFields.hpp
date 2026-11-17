@@ -11,6 +11,8 @@ namespace DNDS::Cauchy
      * Mach, followed by all species mass fractions when present. Numerical
      * production runs on the supplied lane; CPU supports the equation layouts
      * and mixture workers, CUDA supports combined AoS perfect-gas flow5/SA/2EQ.
+     * Constant-density ACM emits its velocity, gauge pressure and optional
+     * specific RANS scalars in schema order, with no thermodynamic extras.
      * Input allocations and worker resources are retained until completion.
      * No MPI, serialization, state repair or source mutation is performed.
      */

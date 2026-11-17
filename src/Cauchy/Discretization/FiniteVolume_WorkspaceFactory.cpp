@@ -31,15 +31,18 @@ namespace DNDS::Cauchy
             DNDS_check_throw_info(state.Space().Same(Metrics().Space()) && index(values.size()) == width &&
                                       std::all_of(values.begin(), values.end(), [](real v) { return std::isfinite(v); }),
                                   "conservative initializer row space or values differ from equation");
-            FlowState flow;
-            std::copy_n(values.begin(), 5, flow.begin());
-            flow = _data->motion.At(0).LocalState(flow);
+            FlowState flow{};
+            if (!_data->equation.IsACM())
+            {
+                std::copy_n(values.begin(), 5, flow.begin());
+                flow = _data->motion.At(0).LocalState(flow);
+            }
             auto output = state.WriteOwned();
             index offset = 0;
             for (const auto &block : _data->equation.Schema().blocks)
             {
                 const auto rows = output.Block(block.name);
-                CPU::FillConstantRows(rows, block.name == "flow"
+                CPU::FillConstantRows(rows, block.name == "flow" && !_data->equation.IsACM()
                     ? SpanView<const real>{flow.data(), index(flow.size())}
                     : SpanView<const real>{values.data() + offset, rows.ComponentNumber()});
                 offset += index(block.components.size());
@@ -127,8 +130,8 @@ namespace DNDS::Cauchy
                 // Placement/workspace construction does not enable the full
                 // solver backend. Each queued operator resolves its own leaf;
                 // Execute keeps its capability gate until all paths are wired.
-                const auto physics = PerfectGasSpatialParameters::FromEquation(_data->equation, Metrics().Dimension());
-                physics.Validate(int(state.ComponentNumber()));
+                if (!_data->equation.IsACM())
+                    PerfectGasSpatialParameters::FromEquation(_data->equation, Metrics().Dimension()).Validate(int(state.ComponentNumber()));
                 const auto &field = state.CoupledField();
                 DNDS_check_throw_info(field.Owned().Layout().Kind() == R::RowLayoutKind::Table &&
                                           field.Ghost().Layout().Kind() == R::RowLayoutKind::Table,

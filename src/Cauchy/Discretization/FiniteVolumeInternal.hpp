@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Cauchy/Boundary/BoundaryPointOperator.hpp"
+#include "Cauchy/Boundary/ACMBoundary.hpp"
+#include "Cauchy/Discretization/ACMKernelPoint.hpp"
 #include "Cauchy/Discretization/BoundaryTraceGeometry.hpp"
 #include "Cauchy/Discretization/FiniteVolumeStencil.hpp"
 #include "Cauchy/Discretization/FiniteVolumeKernelPolicy.hpp"
@@ -118,6 +120,8 @@ namespace DNDS::Cauchy
         /// these resolved records, never the host condition owners/callbacks.
         /// Empty on the CPU plan; CUDA placement resolves and uploads it once.
         Runtime::MetadataBuffer<PerfectGasBoundaryParameters> deviceBoundaryConditions;
+        Runtime::MetadataBuffer<ACM::BoundaryParameters> deviceACMBoundaryConditions;
+        Runtime::MetadataBuffer<ACM::SpatialParameters> deviceACMPhysics;
         Runtime::MetadataBuffer<PerfectGasSpatialParameters> devicePhysics;
         Runtime::MetadataBuffer<BoundaryKind> deviceBoundaryKinds;
         Runtime::MetadataBuffer<CUDA::BoundaryKernelParameters> deviceBoundaryPolicy;
@@ -212,10 +216,11 @@ namespace DNDS::Cauchy
                 communicationWorker = std::make_shared<Runtime::CommunicationWorker>();
             if (!equation.HasMixture())
             {
-                fixedFlowThermalBounds = equation.PrepareThermalBounds(
-                    settings.numerics.densityFloor,
-                    settings.numerics.temperatureFloor,
-                    settings.numerics.pressureFloor);
+                if (!equation.IsACM())
+                    fixedFlowThermalBounds = equation.PrepareThermalBounds(
+                        settings.numerics.densityFloor,
+                        settings.numerics.temperatureFloor,
+                        settings.numerics.pressureFloor);
                 defaultAdmissibility.emplace(
                     equation, settings.numerics.densityFloor,
                     settings.numerics.temperatureFloor,

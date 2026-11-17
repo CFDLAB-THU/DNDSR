@@ -1,0 +1,35 @@
+{
+  "defaults": {
+    "mesh": {
+      "file": "data/mesh/BL_1EM5.cgns", "dimension": 2,
+      "boundaryIds": {"FAR": 3, "WALL": 2, "WALL_INVIS": 4}
+    },
+    "equation": {
+      "system": "incompressibleACM", "eos": "none", "transport": "Newtonian",
+      "viscosity": 0.000001, "viscosityModel": "constantKinematic",
+      "referenceScales": {"rho0": 1, "U0": 1, "L0": 1, "T0": 300},
+      "acmAlpha": 0, "acmBeta2": 4,
+      "rans": {"model": "KOmegaSST", "viscosityReference": 0.000001}
+    },
+    "initialState": {"type": "primUP", "state": [1, 0, 0, 0, 0.00006, 10]},
+    "referenceState": {"type": "primUP", "state": [1, 0, 0, 0, 0.00006, 10]},
+    "boundaries": {
+      "4": {"kind": "slipWall"}, "2": {"kind": "noSlipWall"},
+      "3": {"kind": "farfield", "state": {"type": "primUP", "state": [1, 0, 0, 0, 0.00006, 10]}}
+    },
+    "numerics": {"reconstruction": "gradient", "gradient": "leastSquares",
+                 "viscousGradient": "polynomial", "flux": "Roe", "limiter": "none",
+                 "positivity": false, "faceFallback": false},
+    "implicit": {"diagonal": "block", "jacobianAction": "assembled",
+                 "iterations": 10000, "pseudoCFL": 10, "maxPseudoCFL": 100,
+                 "pseudoGrowth": 1.01, "residualComponents": [],
+                 "relativeTolerance": 1e-7, "absoluteTolerance": 1e-11,
+                 "rejectUnconvergedStages": true,
+                 "linear": {"method": "ilu", "iterations": 1, "stopping": "fixedCount"},
+                 "ilu": {"fill": 2}}
+  },
+  "time": {"steady": true, "method": "bdf1", "steps": 1},
+  "output": {"prefix": "data/outUnsteady/Cauchy/ACMPlate_sst/run", "forceZones": [2],
+             "checkpointInterval": 0, "visualizationInterval": 0,
+             "implicit": {"consoleInterval": 25, "historyInterval": 1}}
+}

@@ -2,6 +2,7 @@
 #include "Cauchy/Physics/PerfectGasPoint.hpp"
 #include "DNDS/Runtime/Array/Array.hpp"
 #include <limits>
+#include <optional>
 
 namespace DNDS::Cauchy::CUDA
 {
@@ -23,5 +24,5 @@ namespace DNDS::Cauchy::CUDA
     /// No allocation, host observation, MPI or floating-point atomic sum.
     void AccumulateStateDiagnostics(Runtime::ExecutionContext, DiagnosticInput mean, DiagnosticInput residual,
                                     Runtime::ArrayView<const real, false, Runtime::FixedRows<8>> cells,
-                                    PerfectGas, DiagnosticOutput partial, DiagnosticOutput result, DiagnosticCounter);
+                                    std::optional<PerfectGas> gas, DiagnosticOutput partial, DiagnosticOutput result, DiagnosticCounter);
 }

@@ -8,29 +8,36 @@ namespace DNDS::Cauchy
     namespace R = Runtime;
     FiniteVolume::Workspace::DeviceJacobianData::DeviceJacobianData(std::shared_ptr<const Data> data, index width, R::ExecutionContext context)
         : owner(std::move(data)), metric(owner->metrics.AcquireRead({context.device, nullptr})), stencil(owner->stencil.Read({context.device, nullptr})),
-          physics(owner->devicePhysics.Read({context.device, nullptr})), conditions(owner->deviceBoundaryConditions.Read({context.device, nullptr})), components(width)
+          components(width)
     {
 #ifdef DNDS_USE_CUDA
         const auto device = context.device;
         const index owned = owner->metrics.NumCell(), all = owner->metrics.NumCellProc();
-        if (owner->settings.execution.kernels.stateInputLayout == "aosoa32")
+        if (!owner->equation.IsACM())
         {
-            inputOwned.emplace(R::RowLayout::Dense(owned, components), device, "Cauchy/Jacobian/tiledInput");
-            inputGhost.emplace(R::RowLayout::Dense(all - owned, components), device, "Cauchy/Jacobian/tiledGhost");
+            physics = owner->devicePhysics.Read({context.device, nullptr});
+            conditions = owner->deviceBoundaryConditions.Read({context.device, nullptr});
+            if (owner->settings.execution.kernels.stateInputLayout == "aosoa32")
+            {
+                inputOwned.emplace(R::RowLayout::Dense(owned, components), device, "Cauchy/Jacobian/tiledInput");
+                inputGhost.emplace(R::RowLayout::Dense(all - owned, components), device, "Cauchy/Jacobian/tiledGhost");
+            }
+            // Symbolic setup borrows the authoritative CPU topology in the same
+            // local numbering. Only sparse integer incidence routes are uploaded;
+            // centered geometry/periodic maps remain in the shared device stencil.
+            const auto symbolic = owner->mesh->AcquireRead(Geom::MeshReadRequirements::CellFlux());
+            geometry = std::make_shared<JacobianGeometryStorage>(
+                stencil, owner->jacobianColumns->CopyColumns(), symbolic.HostView().CellFaceIncidences(),
+                !owner->hasRotatedFrames, context);
+            publicationGeometry = std::make_shared<FrozenJacobianOperator::Geometry>(owner->jacobianColumns, geometry, context);
+            geometryRead.emplace(geometry->Read({device, nullptr}));
         }
-        // Symbolic setup borrows the authoritative CPU topology in the same
-        // local numbering. Only sparse integer incidence routes are uploaded;
-        // centered geometry/periodic maps remain in the shared device stencil.
-        const auto symbolic = owner->mesh->AcquireRead(Geom::MeshReadRequirements::CellFlux());
-        geometry = std::make_shared<JacobianGeometryStorage>(
-            stencil, owner->jacobianColumns->CopyColumns(), symbolic.HostView().CellFaceIncidences(),
-            !owner->hasRotatedFrames, context);
-        publicationGeometry = std::make_shared<FrozenJacobianOperator::Geometry>(owner->jacobianColumns, geometry, context);
-        geometryRead.emplace(geometry->Read({device, nullptr}));
         if (owner->equation.HasRANS())
         {
             DNDS_check_throw_info(owner->wallDistance, "device RANS Jacobian requires prepared wall distances");
             walls.emplace(owner->wallDistance->AcquireRead({device, nullptr}));
+            if (owner->equation.IsACM())
+                acmLengths.emplace(owner->ransCellLength.Read({device, nullptr}));
         }
         const auto status = [&](index rows, const char *name)
         {
@@ -38,9 +45,12 @@ namespace DNDS::Cauchy
             array.SetName(name, DNDS_ALLOCATION_SITE());
             return array;
         };
-        meansStatus = status(all, "Cauchy/Jacobian/meanStatus");
         rowsStatus = status(owned, "Cauchy/Jacobian/rowStatus");
-        assemblyStatus = status(owned, "Cauchy/Jacobian/assemblyStatus");
+        if (!owner->equation.IsACM())
+        {
+            meansStatus = status(all, "Cauchy/Jacobian/meanStatus");
+            assemblyStatus = status(owned, "Cauchy/Jacobian/assemblyStatus");
+        }
         partial = status(CUDA::StateReductionScratchRows(all + 1), "Cauchy/Jacobian/statusPartials");
         result = status(1, "Cauchy/Jacobian/statusResult");
 #else

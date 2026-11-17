@@ -126,7 +126,7 @@ namespace DNDS::Cauchy
             std::optional<DerivedFields> derivedOwned, derivedGhost;
             std::array<int, 5> derivedColumns{0, 1, 2, -1, -1};
             index derivedWidth = 3;
-            index meanThermodynamics = -1, incoming = -1, faces = -1, lowFaces = -1, wallFlux = -1;
+            index meanThermodynamics = -1, incoming = -1, faces = -1, lowFaces = -1, wallFlux = -1, wallShear = -1;
             index flowFirst = -1, speciesFirst = -1, ransFirst = -1, ransBlock = -1;
             bool meanOnly = false, hasPrimitive = false;
 
@@ -259,6 +259,8 @@ namespace DNDS::Cauchy
             pin->faces = addWrite(faceOutput ? *faceOutput : faceFlux);
             R::FixedRows<3>::Validate(boundaryMomentumFlux.Layout());
             pin->wallFlux = addWrite(boundaryMomentumFlux);
+            if (boundaryWallShear)
+                pin->wallShear = addWrite(*boundaryWallShear);
             if (pin->lowResult)
             {
                 DNDS_check_throw_info(lowOrderFaceFlux && state.ComponentNumber() == 5 && state.PhysicalFieldNumber() == 1,
@@ -362,6 +364,11 @@ namespace DNDS::Cauchy
                 const auto wall = outputs[pin->wallFlux];
                 DNDS_check_throw_info(wall.Width() == 3, "queued boundary momentum width differs");
                 request.wallFlux = {wall.data, wall.offsets, wall.rows, wall.width, wall.stride, wall.sizes, wall.kind, wall.device};
+                if (pin->wallShear >= 0)
+                {
+                    const auto shear = outputs[pin->wallShear];
+                    request.wallShear = {shear.data, shear.offsets, shear.rows, shear.width, shear.stride, shear.sizes, shear.kind, shear.device};
+                }
                 if (pin->walls)
                 {
                     request.wall.faces = {wallFaces.data, wallFaces.offsets, wallFaces.rows, wallFaces.width, wallFaces.stride, wallFaces.sizes, wallFaces.kind, wallFaces.device};

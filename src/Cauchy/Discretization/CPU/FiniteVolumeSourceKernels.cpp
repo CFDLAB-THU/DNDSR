@@ -2,6 +2,7 @@
 #include "Cauchy/State/RANSState.hpp"
 #include "DNDS/Core/OMP.hpp"
 #include "Cauchy/Discretization/RANSReconstruction.hpp"
+#include "Physics/Incompressible/RANSPoint.hpp"
 
 namespace DNDS::Cauchy::CPU
 {
@@ -204,17 +205,23 @@ namespace DNDS::Cauchy::CPU
                     RANSReconstructionView{model.Kind(), model.ComponentNumber()}.RepairPoint(request.ransMean[iCell], point.values.data() + request.ransFirst);
                 }
                 PointProperties properties;
-                const auto status = evaluator.TryEvaluate(point.Flow(request.flowFirst), point.Species(request.speciesFirst, independent), 0,
-                                                          {request.ransFirst >= 0, false, false, request.chemical, false}, properties);
-                if (!status)
-                    return status.At(iCell, iPoint);
+                if (!equation.IsACM())
+                {
+                    const auto status = evaluator.TryEvaluate(point.Flow(request.flowFirst), point.Species(request.speciesFirst, independent), 0,
+                                                              {request.ransFirst >= 0, false, false, request.chemical, false}, properties);
+                    if (!status)
+                        return status.At(iCell, iPoint);
+                }
                 if (request.chemical)
                     for (int k = 0; k < independent; ++k)
                         request.speciesOutput(iCell, k) += request.weights(iPoint, 0) * properties.chemicalSource[k];
                 if (request.ransFirst >= 0)
                 {
                     const auto &model = equation.RANS();
-                    const auto input = RANSPoint(point, request.flowFirst, request.ransFirst, model, properties, request.walls.cells(iCell, iPoint - request.offsets(iCell, 0)), request.lengths(iCell, 0));
+                    const real distance = request.walls.cells(iCell, iPoint - request.offsets(iCell, 0));
+                    const auto input = equation.IsACM()
+                                           ? Physics::Incompressible::RANSPoint(point.values, point.gradient, model.ComponentNumber(), equation.ACMParameters().kinematicViscosity, distance, request.lengths(iCell, 0))
+                                           : RANSPoint(point, request.flowFirst, request.ransFirst, model, properties, distance, request.lengths(iCell, 0));
                     const auto source = model.TrySource(input);
                     if (!source)
                         return source.status.At(iCell, iPoint);
