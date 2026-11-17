@@ -85,6 +85,22 @@ or supported Krylov path. See the periodic [vortex](../../cases/cauchy/acm_trans
 and the [SA](../../cases/cauchy/acm_plate_sa.json) and
 [SST](../../cases/cauchy/acm_plate_sst.json) plate inputs for complete configurations.
 
+For the periodic vortex, start temporal comparisons from the same
+discretely divergence-free time-zero field. The optional
+`cauchy_experiment_acm_vortex_projection` target prepares this checkpoint on
+the supplied uniform 20×20 mesh. It holds pressure fixed while correcting
+the horizontal velocities against the FV continuity residual. Analytically
+divergence-free cell averages alone can fail the explicit-first-stage
+consistency check because the numerical continuity flux includes dissipation.
+
+BDF1/2, trapezoidal, ESDIRK2 and ESDIRK3 have completed a translation cycle
+on this mesh. DITR-U2R2 has passed the two independent stage-continuity
+checks on a physical step. DITR-U2R1 is experimental for ACM. At the
+default fraction and theta its sequential corrections diverged on this
+fixture even with consistent initial data. The invertibility check on the
+coupled time equations establishes independence of the two constraints.
+Convergence of the alternating corrections requires separate verification.
+
 On the supplied stretched plate mesh the SA fixture uses Green–Gauss P1 face
 states. The SST fixture uses cell means at faces and the normal jump for face
 diffusion, retaining gradients for the turbulence source. Both fixtures require
