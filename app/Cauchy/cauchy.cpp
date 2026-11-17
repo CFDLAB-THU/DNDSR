@@ -38,6 +38,12 @@ static int Run(int argc, char **argv, double started)
             arguments.add_argument("--restart")
                 .default_value(std::string{})
                 .help("Restart from a Cauchy checkpoint");
+            arguments.add_argument("--color")
+                .default_value(std::string{})
+                .help("Terminal color: auto, always or never; overrides output.consoleColor");
+            arguments.add_argument("--bold")
+                .default_value(std::string{})
+                .help("Terminal emphasis: auto, always or never; overrides output.consoleBold");
             arguments.add_argument("-k", "--overwrite_key")
                 .append()
                 .default_value<std::vector<std::string>>({})
@@ -81,7 +87,11 @@ static int Run(int argc, char **argv, double started)
                 {
                     DNDS_check_throw_info(!keys[i].empty() && keys[i][0] == '/', "overwrite keys must be nonempty JSON pointers");
                     overrides.push_back({keys[i], DNDS::Cauchy::Json::parse(values[i])});
-                } });
+                }
+                for (const auto &[flag, key] : std::vector<std::pair<std::string, std::string>>{
+                         {"--color", "/output/consoleColor"}, {"--bold", "/output/consoleBold"}})
+                    if (const auto value = arguments.get<std::string>(flag); !value.empty())
+                        overrides.push_back({key, value}); });
             auto config = DNDS::Cauchy::SimulationConfig::ResolveCollective(
                 input, mpi.comm, overrides);
             if (checkConfig)

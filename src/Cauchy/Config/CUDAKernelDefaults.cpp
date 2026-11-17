@@ -44,7 +44,7 @@ namespace DNDS::Cauchy
             // Only the measured A100 case is promoted automatically. The
             // matrix-shared selector is now a fixed comparison fixture, not a
             // general fallback for another shape/physics/storage profile.
-            execution.reconstructionKernel = numerics.limiter != "LVR" && measuredShape ? "fp64Pipelined" : "fp64";
+            execution.reconstructionKernel = !numerics.reconstructionSolver.UsesAMG() && numerics.limiter != "LVR" && measuredShape ? "fp64Pipelined" : "fp64";
         if (!kernels.polynomialPPThreads)
             kernels.polynomialPPThreads = measuredShape ? 512 : 128;
     }

@@ -45,6 +45,10 @@ namespace DNDS::Cauchy
         DNDS_check_throw_info(numerics.vrBoundaryValue == "physicalTrace" || numerics.vrBoundaryValue == "physicalMirrored",
                               "vrBoundaryValue must be physicalTrace or physicalMirrored");
         numerics.ValidatePositivity();
+        numerics.reconstructionSolver.Validate();
+        DNDS_check_throw_info(!numerics.reconstructionSolver.UsesAMG() ||
+                                  (numerics.reconstruction == "variational" && numerics.limiter != "LVR"),
+                              "AMG reconstruction requires variational reconstruction without LVR; LVR-AMG is deferred");
         DNDS_check_throw_info(numerics.reconstructionIterations > 0 && numerics.reconstructionResidualCheckInterval > 0 && std::isfinite(numerics.reconstructionTolerance) && numerics.reconstructionTolerance >= 0,
                               "invalid Cauchy numerical controls");
         numerics.cfv.Validate();
@@ -306,6 +310,14 @@ namespace DNDS::Cauchy
         auto require = [&](bool found, const std::string &operation)
         { if (!found) missing.push_back(operation); };
         const bool cuda = s.execution.device == "cuda";
+        const bool amgVR = s.numerics.reconstructionSolver.UsesAMG();
+        require(s.numerics.reconstructionSolver.method == "relaxation" || amgVR, "unknown reconstruction solver");
+        require(!amgVR || (cuda && Algebra::AmgXPreconditioner::Available() && domain.placement.ranks.size() == 1),
+                "AMG reconstruction requires one CUDA rank and the single-device provider");
+        require(!amgVR || (s.numerics.reconstruction == "variational" && s.numerics.limiter != "LVR"),
+                "AMG reconstruction requires variational reconstruction without LVR; LVR-AMG is deferred");
+        require(!amgVR || s.execution.reconstructionKernel == "auto" || s.execution.reconstructionKernel == "fp64",
+                "AMG reconstruction does not use a relaxation kernel; leave reconstructionKernel at auto or fp64");
         const auto reconstructionKernel = s.execution.ReconstructionKernel();
         require(cuda || reconstructionKernel == CFV::ReconstructionDeviceKernel::FP64,
                 "nondefault reconstruction kernel requires CUDA");
@@ -398,8 +410,9 @@ namespace DNDS::Cauchy
         { return implicit.linear.method == "amgx" || (implicit.linear.method == "gmres" && implicit.linear.preconditioner == "amgx"); };
         const auto requireAMGX = [&](const ImplicitSettings &implicit, const std::string &level)
         {
-            require(!usesAMGX(implicit) || (cuda && implicit.jacobianAction == "assembled" && Algebra::AmgXPreconditioner::Available()),
-                    level + " AmgX requires assembled CUDA storage and the single-device provider in this build");
+            require(!usesAMGX(implicit) || (cuda && implicit.jacobianAction == "assembled" && Algebra::AmgXPreconditioner::Available() &&
+                                            domain.placement.ranks.size() == 1),
+                    level + " AmgX requires assembled CUDA storage, one rank and the single-device provider in this build");
         };
         requireAMGX(s.implicit, "finest");
         for (index level = 1; level <= s.implicit.multigrid.levels; ++level)
@@ -415,7 +428,7 @@ namespace DNDS::Cauchy
             require(!rans || s.equation.rans.model == "SA" || s.equation.rans.model == "KOmegaWilcox" ||
                         s.equation.rans.model == "KOmegaSST",
                     "CUDA RANS profile " + s.equation.rans.model);
-            require(s.numerics.reconstruction != "variational" || !s.numerics.cfv.SORInstead,
+            require(s.numerics.reconstruction != "variational" || amgVR || !s.numerics.cfv.SORInstead,
                     "CUDA variational reconstruction requires Jacobi (SORInstead=false)");
             const auto requireLinear = [&](const ImplicitSettings &implicit, const std::string &level)
             {

@@ -100,3 +100,22 @@ CUDA-enabled Caliper) and header bundle v0.3.0 (coherent CCCL 3.7). Existing
 MPI/HDF5/CGNS/Cantera and the canonical Python environment are reused. See
 [AMGX dependency setup](../guides/amgx.md) and the opt-in
 [source-scoped assertion control](cuda_assertions.md).
+
+The follow-up Cauchy wiring exposes an explicit reconstruction solver setting,
+independent of the flow linear method. Native AMG reconstruction retains the
+same BC refresh, coefficient state, commit, WBAP and PP orchestration; its
+ordinary device sweep matrices are omitted. The provider boundary remains
+synchronous and unsplit. See the [Cauchy configuration and deferred mathematics](../guides/amgx.md).
+LVR-AMG and stream-ordered apply/numeric refresh are documented TODOs, not
+capabilities of this wiring. Focused follow-up validation is recorded separately
+in the plan repository; earlier tests do not qualify newly edited source.
+
+The follow-up grouped rebuild and focused C++/CUDA/installed-Python checks
+pass, including the explicit native Cauchy VR composition test and frontend
+smokes at np1/np2. A 32-cubed native flow+VR run on GPU0/OMP16 completes one
+ESDIRK4 step with finite means; its two-update stage caps do not establish
+nonlinear convergence. CPU chemistry exact-replay coverage uses the OMP1
+anchor: an OMP16 replay differed by 3.31e-24 and remains recorded separately.
+Default plain event logging, forced terminal color/bold, physical-step timing
+and the unchanged combined segmented history have output sanity coverage.
+Euler-style per-BC integration files remain documented future work.

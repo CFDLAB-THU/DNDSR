@@ -49,7 +49,8 @@ namespace DNDS::Cauchy
 
     /// Local operational logger. Scientific history/checkpoints never pass
     /// through spdlog. The default implementation is synchronous so teardown
-    /// has no hidden worker lifetime.
+    /// has no hidden worker lifetime. CLI and plain-text event files share
+    /// messages; only the terminal sink adds color/emphasis.
     class OperationalLogger
     {
         std::shared_ptr<spdlog::logger> _logger;
@@ -88,9 +89,14 @@ namespace DNDS::Cauchy
     {
         std::array<real, 14> diagnostics{};
         index faceFallbacks = 0, retries = 0, implicitStages = 0, nonlinearIterations = 0, linearIterations = 0;
+        index cappedStages = 0;
         index coupledIterations = 0, timePPLimitedCells = 0;
         std::array<real, 5> positivity{};
         real coupledResidualTargetRatio = 0, timePPMinimumAlpha = 1;
+        /// Domain-root elapsed time from the first attempt through acceptance,
+        /// including retries/iteration output, excluding accepted-step I/O and
+        /// diagnostics. This is not a collective maximum or a device timer.
+        real stepWallSeconds = 0;
         bool timeGrowthLimited = false;
     };
 

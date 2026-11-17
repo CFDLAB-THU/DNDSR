@@ -9,7 +9,6 @@
 
 #include <chrono>
 #include <atomic>
-#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
@@ -55,6 +54,7 @@ namespace DNDS::Cauchy
         struct Field
         {
             std::optional<CFV::ReconstructionWorkspace> reconstruction;
+            std::optional<CFV::ReconstructionAMGWorkspace> reconstructionAMG;
             std::optional<CFV::ReconstructionBoundaryValues> reconstructionBoundary;
             Runtime::Array<real> boundaryValues;
             std::optional<CFV::FVField> gradient;

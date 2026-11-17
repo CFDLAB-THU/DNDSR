@@ -53,6 +53,21 @@ namespace DNDS::Cauchy
         if (_data->reconstruction)
         {
             CFV::ReconstructionResidencyOptions options;
+            const auto &solver = placed->settings.numerics.reconstructionSolver;
+            if (solver.UsesAMG())
+            {
+                solver.Validate();
+                Algebra::AmgXSettings settings;
+                settings.cycles = solver.amgxCycles;
+                placed->reconstructionAMG = CFV::ReconstructionAMGPlan::Prepare(
+                    *_data->reconstruction, context,
+                    solver.amgxStorage == "native" ? CFV::ReconstructionAMGStorage::NativeStorage
+                                                   : CFV::ReconstructionAMGStorage::PublicUpload,
+                    settings);
+                // AMG owns the projected matrix. Keep only polynomial sampling
+                // and optional WBAP data in the ordinary resident publication.
+                options.sweeps = false;
+            }
             options.retainHostPayloads = false;
             // Centered boundary consumers evaluate independently of the face
             // quadrature cache and therefore retain central moments/scale.
@@ -82,7 +97,7 @@ namespace DNDS::Cauchy
                 samplingPlacement.Seed(_data->reconstruction->SamplingMoments(), placed->reconstruction->SamplingMoments());
                 samplingPlacement.Seed(_data->reconstruction->SamplingCellGeometry(), placed->reconstruction->SamplingCellGeometry());
             }
-            DNDS_check_throw_info(placed->reconstruction->SupportsKernel(placed->reconstructionKernel),
+            DNDS_check_throw_info(solver.UsesAMG() || placed->reconstruction->SupportsKernel(placed->reconstructionKernel),
                                   "requested CFV reconstruction kernel is unsupported on this CUDA device");
         }
         placed->stencil = _data->stencil.Placed(placed->metrics, context);

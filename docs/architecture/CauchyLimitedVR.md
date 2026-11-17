@@ -3,7 +3,7 @@
 The native LVR path is a penalty inside the variational reconstruction solve,
 not a final WBAP pass on its answer. It preserves the Euler v2/v3 family with
 explicit buffers on the new Array, mesh, gradient and reconstruction facilities.
-The initial physical adapter supports CPU compressible perfect-gas flow5.
+The physical adapter supports CPU and CUDA compressible perfect-gas flow5.
 Unsupported equation/device selections must fail at capability resolution.
 
 ```text
@@ -91,8 +91,12 @@ then reused through that RHS evaluation's VR sweeps. There is no post-LVR
 3WBAP step. Setting both caps to zero omits the target/gate workspace and
 recovers ordinary unlimited VR.
 
-The weak-shock experiment, alternate Barth target, anisotropic/tree/CUDA LVR
-and new physical models are not advertised by this implementation.
+The weak-shock experiment, alternate Barth target, anisotropic/tree LVR and
+new physical models are not advertised by this implementation. LVR with the
+AMG reconstruction solver is also deferred: the existing CUDA LVR capability
+belongs to the relaxation solver. The proposed true-residual formulation and
+base-hierarchy reuse are recorded in the
+[AMG deferred integration guide](../guides/amgx.md#deferred-lvr-integration-preserve-the-base-hierarchy).
 
 ## Numerical history, observation and restart
 

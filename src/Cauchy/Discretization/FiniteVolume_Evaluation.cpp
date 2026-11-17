@@ -392,6 +392,22 @@ namespace DNDS::Cauchy
         {
             const TimelineScope vrTimeline("Cauchy/CFV/Reconstruction/Submit");
             const auto timing = work.BeginQueuedPhase(engine, stream, Workspace::VRPhase);
+            if (_data->reconstructionAMG)
+            {
+                DNDS_check_throw_info(region == CFV::ReconstructionRegion::All,
+                                      "AMG reconstruction is an unsplit single-device operator");
+                for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
+                {
+                    auto &field = work.fields[iField];
+                    DNDS_check_throw_info(field.reconstruction && field.reconstructionBoundary && field.reconstructionAMG,
+                                          "AMG reconstruction workspace is incomplete");
+                    _data->reconstructionAMG->SubmitDefectCorrection(
+                        engine, stream, state.PhysicalField(iField), reconstruction.WarmValues().PhysicalField(iField),
+                        *field.reconstructionBoundary, field.reconstruction->temporary, *field.reconstructionAMG);
+                }
+                work.EndQueuedPhase(engine, stream, timing);
+                return;
+            }
             if (work.limitedVR)
             {
                 auto &field = work.fields.front();
@@ -438,7 +454,7 @@ namespace DNDS::Cauchy
         std::vector<R::TransferOperation> firstCoefficients;
         const auto &numerics = _data->settings.numerics;
         const bool variational = !work.meanOnly && numerics.reconstruction == "variational";
-        const bool firstSweep = overlap && variational && !work.limitedVR && numerics.reconstructionIterations > 0;
+        const bool firstSweep = overlap && variational && !_data->reconstructionAMG && !work.limitedVR && numerics.reconstructionIterations > 0;
         if (firstSweep)
             firstCoefficients = schedule.BeginAfterCompute(reconstruction.coefficientHalo);
         // Post both transfers before queueing core work. A CPU-visible MPI
@@ -550,11 +566,14 @@ namespace DNDS::Cauchy
                     if (numerics.reconstructionBoundaryFromPolynomial)
                         work.SubmitBoundary(engine, stream, state, true, time, {}, incoming, incomingCenters);
                     operations = schedule.BeginAfterCompute(reconstruction.coefficientHalo);
-                    if (overlap)
+                    if (overlap && !_data->reconstructionAMG)
                         sweep(CFV::ReconstructionRegion::Core);
                 }
                 schedule.Await(operations);
-                sweep(rest);
+                // Native AMG currently joins at the provider boundary. It is
+                // callable in either overlap schedule, but is not split into
+                // core/halo and does not promise communication overlap here.
+                sweep(_data->reconstructionAMG ? CFV::ReconstructionRegion::All : rest);
                 bool converged = false;
                 // Explicit host stopping boundary. Fixed-count sweeps do not
                 // observe a residual. Device-side conditional iteration / queue

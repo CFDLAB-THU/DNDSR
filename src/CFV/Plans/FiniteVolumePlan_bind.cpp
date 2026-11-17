@@ -188,6 +188,7 @@ namespace DNDS::CFV
             .def_readwrite("metrics", &ReconstructionResidencyOptions::metrics)
             .def_readwrite("basis", &ReconstructionResidencyOptions::basis)
             .def_readwrite("retain_host_payloads", &ReconstructionResidencyOptions::retainHostPayloads)
+            .def_readwrite("sweeps", &ReconstructionResidencyOptions::sweeps)
             .def_readwrite("arbitrary_point_sampling", &ReconstructionResidencyOptions::arbitraryPointSampling)
             .def_readwrite("basis_derivative_order", &ReconstructionResidencyOptions::basisDerivativeOrder)
             .def_readwrite("matrix_precision", &ReconstructionResidencyOptions::matrixPrecision);

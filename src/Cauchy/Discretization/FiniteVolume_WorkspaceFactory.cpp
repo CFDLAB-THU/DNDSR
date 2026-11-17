@@ -141,6 +141,8 @@ namespace DNDS::Cauchy
             DNDS_check_throw_info((n.reconstruction == "constant" || n.reconstruction == "gradient" || n.reconstruction == "variational") &&
                                   n.reconstructionIterations >= 0 && n.reconstructionResidualCheckInterval > 0,
                                   "invalid equation reconstruction controls");
+            DNDS_check_throw_info(!n.reconstructionSolver.UsesAMG() || _data->reconstructionAMG,
+                                  "AMG reconstruction requires an explicit CUDA placement and available single-device provider");
             DNDS_check_throw_info(!_data->equation.HasMixture() || _data->fluxPolicy.rusanov,
                 "extended EOS or stencil flux needs an explicit preparation provider");
             DNDS_check_throw_info(n.limiter == "none" || n.limiter == "Barth" || n.limiter == "LVR" || n.limiter == "WBAP",

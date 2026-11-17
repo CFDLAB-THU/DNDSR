@@ -18,6 +18,7 @@ run-resolved.json
 run-run-manifest.json
 run-D<domain>-history.csv
 run-D<domain>-history_1.csv ...
+run-events-rank<global-rank>.log         # rank 0 and domain progress writers
 run-D<domain>-S<step>.vtkhdf
 run-D<domain>-T<round-trip-time>.vtkhdf
 run-D<domain>-S<step>_surface_rank<domain-rank>.csv
@@ -35,12 +36,27 @@ checkpoint, volume and surface-shard paths. The run manifest records the
 detailed-history schema, status enumeration and logical component names once,
 so CSV rows remain compact numeric data.
 
-The history is written with `DNDS::CsvLog` and a typed `CsvSchema`. Segments
-repeat the header and contain nonlinear-iteration, stage-end and accepted-step
-rows. `stage=-1,iteration=-1` denotes an accepted step; `iteration=-1` with a
-nonnegative stage denotes a stage end. Empty cells mean that a quantity does
-not apply; they are not serialized as false zero. Console messages and CSV rows
-are constructed by the same `ProgressOutputController` reports.
+The canonical numerical history remains one combined segmented `DNDS::CsvLog`
+stream per domain with a typed schema. It contains nonlinear iterations,
+stage ends and physical-step rows. Force integrations remain the additional
+`force_x`, `force_y`, `force_z` columns on step rows, summed over
+`output.forceZones`. Values use `output.historyPrecision` (default 10 digits
+after the decimal, as in Euler), independently of the shorter CLI display.
+The event log is not a numerical data substitute.
+
+Segments repeat the same header. `stage=-1,iteration=-1` denotes an accepted
+step; `iteration=-1` with a nonnegative stage denotes a stage end. Empty cells
+mean that a quantity does not apply, never false zero. Console messages and
+CSV rows use the same `ProgressOutputController` reports.
+
+The current force query integrates the last completed RHS wall momentum flux,
+including numerical pressure and viscous/RANS traction, in mesh axes with sign
+`pressure*n - traction`. It can select individual wall zones, but the frontend
+currently writes only their configured aggregate. **Deferred:** add Euler-style
+per-BC selection and segmented integration files for force/moment and mass,
+energy or species flows. Reuse frozen quadrature outputs and extend reduction
+payloads as needed; output writers must not repeat BC/EOS arithmetic. This
+extension is annotated at the force API and history emission point.
 
 Each domain's communicator root writes its history and console progress.
 In dislocated placement this can be a nonzero world rank, so the output
@@ -65,6 +81,9 @@ output.checkpointTimeInterval
 output.visualizationTimeInterval        # -1 inherits checkpoint time cadence
 output.endpointSnapRelativeTolerance
 output.consoleInterval
+output.consoleColor                      # auto, always, never
+output.consoleBold                       # auto, always, never (independent)
+output.eventLog                          # true by default
 output.historyInterval
 output.historySegmentRows
 output.historyPrecision
@@ -77,6 +96,30 @@ The deprecated `output.interval` spelling is accepted only when the new
 checkpoint spelling is absent. `spdlog` provides synchronous rank-zero console
 and optional rotating per-rank operational diagnostics. It is not used for
 scientific CSV, MPI aggregation, checkpoints or recovery.
+
+By default the same centralized CLI messages also go to a rotating plain-text
+`prefix-events-rank<R>.log` for world rank zero and each domain's progress
+writer. `output.diagnostics.perRank` additionally enables diagnostic files on
+every rank. Both file sinks use timestamped plain text and the configured
+diagnostics level/rotation limits; formatting adds ANSI codes only in the
+terminal sink. Files flush on ordinary info messages for live monitoring.
+No `tee` is required; Slurm stdout capture can remain a separate duplicate.
+Messages printed directly by external libraries or early mesh ingress are not
+intercepted by this logger.
+
+`--color always --bold always` forces readable styled progress even through a
+pipe. `--color never --bold never` disables all terminal styling. Both flags
+override their named `output` settings, after ordinary `-k`/`-v` overrides.
+Auto styling uses terminal capability detection; numerical files stay plain.
+
+Each physical-step summary includes stage/cap counts, nonlinear/linear update
+counts, retries and its own elapsed step time, in addition to total run wall
+time. The step timer starts at the first attempt and includes retries and
+iteration progress; it excludes timestep selection, subsequent accepted-state
+diagnostics and file output. It is the domain-root host elapsed time, not a
+new collective maximum or GPU event measurement. Existing CSV `wall` remains
+the cumulative elapsed observation time; its schema and append cursor remain
+unchanged. The new CLI timer introduces no device fence or timing reduction.
 
 ## Exact-time stepping
 

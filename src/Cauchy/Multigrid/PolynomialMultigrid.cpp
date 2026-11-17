@@ -561,6 +561,10 @@ namespace DNDS::Cauchy
         // (which retains the face-jump term). Keep reconstruction available
         // for all volume-source gradients, including RANS and chemistry.
         lower.numerics.reconstruction = "gradient";
+        // The coarse direct-gradient operator has no variational system to
+        // solve. Do not inherit the finest VR-only AMG selector; the separate
+        // flow linear-solver settings above remain available on every level.
+        lower.numerics.reconstructionSolver = ReconstructionSolverSettings{};
         lower.numerics.firstOrderConvection = level > 0;
         lower.numerics.cfv.maxOrder = 1;
         if (lower.numerics.limiter == "LVR")

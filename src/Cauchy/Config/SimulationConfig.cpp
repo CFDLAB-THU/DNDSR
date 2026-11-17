@@ -317,6 +317,7 @@ namespace DNDS::Cauchy
                                   data->output.implicit.consoleInterval >= 0 && data->output.implicit.historyInterval > 0 &&
                                   data->output.implicit.checkpointInterval >= 0 && data->output.implicit.visualizationInterval >= -1 &&
                                   (data->output.consoleColor == "auto" || data->output.consoleColor == "always" || data->output.consoleColor == "never") &&
+                                  (data->output.consoleBold == "auto" || data->output.consoleBold == "always" || data->output.consoleBold == "never") &&
                                   std::find(diagnosticLevels.begin(), diagnosticLevels.end(), data->output.diagnostics.level) != diagnosticLevels.end() &&
                                   data->output.diagnostics.maxBytes > 0 && data->output.diagnostics.rotatedFiles > 0 &&
                                   data->output.diagnostics.allocationWarmupSteps >= 0 && !data->output.prefix.empty(),

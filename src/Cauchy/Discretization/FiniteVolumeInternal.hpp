@@ -8,6 +8,7 @@
 // Private shared preparation data. Public callers use FiniteVolume and explicit
 // Workspace/AuxiliaryValues owners; this header is not a mesh or solver API.
 #include "Cauchy/Discretization/FiniteVolume.hpp"
+#include "CFV/Plans/ReconstructionAMGPlan.hpp"
 #include "Cauchy/Discretization/FiniteVolumeQuadrature.hpp"
 #include "Cauchy/Discretization/WallDistanceSamples.hpp"
 #include "Cauchy/Physics/ThermalAdmissibility.hpp"
@@ -80,6 +81,9 @@ namespace DNDS::Cauchy
         /// Present only for the variational family. Constant/P0 and explicit
         /// physical-gradient P1 own no Taylor basis, VR matrices or modal plan.
         std::optional<CFV::VariationalReconstructionPlan> reconstruction;
+        /// Optional projected operator; shares the finest native matrix with
+        /// its provider. Durable coefficients still belong to solver state.
+        std::optional<CFV::ReconstructionAMGPlan> reconstructionAMG;
         /// Frozen operator dispatch, resolved at placement. The schedule has
         /// no device branch and CFV owns all numerical kernel selection.
         CFV::ReconstructionDeviceKernel reconstructionKernel = CFV::ReconstructionDeviceKernel::FP64;

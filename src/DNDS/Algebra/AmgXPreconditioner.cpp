@@ -412,6 +412,9 @@ namespace DNDS::Algebra
     void AmgXPreconditioner::ApplyBorrowed(Runtime::ExecutionContext context, Runtime::ArrayView<const real> residual,
                                            Runtime::ArrayView<real> correction)
     {
+        // TODO(AMGX_STREAM_ORDERED, deferred): replace this completed provider
+        // boundary with a preallocated caller-stream V-cycle, not a background
+        // wrapper around the same device-wide joins. See docs/guides/amgx.md.
         DNDS_check_throw_info(context.device == GetDevice() && _state->ready, "AmgX apply needs its device and completed setup");
         CheckScalarTable(residual, GetDevice());
         CheckScalarTable(correction, GetDevice());

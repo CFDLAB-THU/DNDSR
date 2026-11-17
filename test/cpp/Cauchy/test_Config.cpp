@@ -3,6 +3,7 @@
 #include "Cauchy/Config/SimulationConfig.hpp"
 #include "Cauchy/Config/CUDAKernelDefaults.hpp"
 #include "DNDS/Algebra/AmgXPreconditioner.hpp"
+#include "Cauchy/Multigrid/PolynomialMultigrid.hpp"
 
 namespace C = DNDS::Cauchy;
 TEST_CASE("Automatic CUDA policies select measured A100 kernels and preserve explicit overrides")
@@ -52,6 +53,41 @@ TEST_CASE("Mesh preprocessing is explicit and validates a positive uniform scale
     CHECK(scaled.Domains().front().settings.mesh.scale == doctest::Approx(2 * std::acos(-1.)));
     CHECK(scaled.Domains().front().settings.mesh.rotationZDegrees == 30);
     CHECK_THROWS(C::SimulationConfig::Resolve({{"defaults", {{"mesh", {{"scale", 0}}}}}}, 1));
+}
+TEST_CASE("Native AMG is selected independently for reconstruction and flow")
+{
+    C::DomainConfig domain;
+    domain.placement.ranks = {0};
+    auto &settings = domain.settings;
+    settings.execution.device = "cuda";
+    settings.numerics.reconstruction = "variational";
+    settings.numerics.reconstructionSolver.method = "amgx";
+    settings.numerics.reconstructionSolver.amgxCycles = 2;
+    settings.implicit.linear.method = "amgx";
+    settings.implicit.linear.stopping = "fixedCount";
+    settings.implicit.linear.matrixStorage.amgxStorage = "native";
+    const auto restored = C::Json(settings).get<C::DomainSettings>();
+    CHECK(restored.numerics.reconstructionSolver.UsesAMG());
+    CHECK(restored.numerics.reconstructionSolver.amgxStorage == "native");
+    CHECK(restored.numerics.reconstructionSolver.amgxCycles == 2);
+    CHECK(restored.implicit.linear.matrixStorage.amgxStorage == "native");
+    for (DNDS::index level = 0; level < 2; ++level)
+    {
+        const auto lower = C::PolynomialMultigrid::CoarseSettings(settings, level);
+        CHECK(lower.numerics.reconstruction == "gradient");
+        CHECK_FALSE(lower.numerics.reconstructionSolver.UsesAMG());
+        CHECK(lower.implicit.linear.method == "amgx");
+        CHECK(lower.implicit.linear.matrixStorage.amgxStorage == "native");
+    }
+    C::ResolveAutomaticCUDAKernels(settings, true, true);
+    CHECK(settings.execution.reconstructionKernel == "fp64");
+    if (DNDS::Algebra::AmgXPreconditioner::Available())
+        CHECK_NOTHROW(C::ResolvedExecutionPlan::Resolve(domain));
+    settings.numerics.limiter = "LVR";
+    CHECK_THROWS_WITH(C::ResolvedExecutionPlan::Resolve(domain), doctest::Contains("LVR-AMG is deferred"));
+    settings.numerics.limiter = "none";
+    domain.placement.ranks = {0, 1};
+    CHECK_THROWS_WITH(C::ResolvedExecutionPlan::Resolve(domain), doctest::Contains("one CUDA rank"));
 }
 TEST_CASE("Diagonal inverse refinement is opt-in and rejects unrelated inverse providers")
 {
@@ -113,6 +149,7 @@ TEST_CASE("CUDA capability resolution requires a complete combined perfect gas p
 {
     C::DomainConfig domain;
     domain.placement.name = "device-fluid";
+    domain.placement.ranks = {0};
     auto &settings = domain.settings;
     settings.execution.device = "cuda";
     settings.execution.layout = "aos";

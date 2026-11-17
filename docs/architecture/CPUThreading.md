@@ -7,6 +7,10 @@ with `OMP_NUM_THREADS=16 DNDS_DIST_OMP_NUM_THREADS=16`, BLAS/MKL/OpenBLAS
 threads set to one, sufficient allocated CPU cores per rank and no MPI CPU
 binding. Ordinary pure-MPI runs continue to use one thread per rank.
 
+CUDA qualification runs use 16 setup threads, including pre-distribution work,
+unless reproducing a historical comparison that explicitly fixes OMP1. Do not
+mix those reorder/setup policies in a matched GPU performance comparison.
+
 `DNDS_DIST_OMP_NUM_THREADS` is recognized; `DNDS_MT_OMP_NUM_THREADS` is not an
 alias. The value is read once per process. Cauchy's entry initializes the
 policy before mesh ingress and disables Eigen's internal team. CPU-inline and

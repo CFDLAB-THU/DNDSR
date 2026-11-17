@@ -208,6 +208,11 @@ namespace DNDS::CFV
         }
         R::SubmitArrays(engine, stream, [data](R::ExecutionContext context, auto means, auto values, auto bc, auto defect)
                         { Detail::BuildReconstructionAMGDefect(context, data->geometry, means, values, bc, defect); }, R::Read(mean.Owned()), R::Read(input.Owned()), R::Read(boundary.values), R::Write(work.defect));
+        // TODO(LVR_AMGX, deferred): the true gated residual is
+        // (I-D)*(b-A*x)+D*(target-x); reuse this base hierarchy as a preconditioner
+        // rather than blending a solved base result. See docs/guides/amgx.md.
+        // TODO(AMGX_STREAM_ORDERED, deferred): queue component adaptation and a
+        // preallocated provider V-cycle on the managed caller stream.
         // The current provider is a deliberate host boundary. Drain MPI progress
         // before any provider-wide CUDA join, identically to the flow adapter.
         for (index component = 0; component < components; ++component)

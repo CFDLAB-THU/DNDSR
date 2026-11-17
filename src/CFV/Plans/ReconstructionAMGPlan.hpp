@@ -26,6 +26,19 @@ namespace DNDS::CFV
         index components = 0;
     };
 
+    /** @brief Managed projected VR operator and fixed AMG corrections.
+     * @todo DEFERRED LVR-AMG: for base A*c=b, gate D=diag(alpha_i I) and
+     * frozen target t, evaluate the true residual
+     * \f[r_\alpha(c)=(I-D)(b-Ac)+D(t-c).\f]
+     * Reuse the base hierarchy as P0 and update c += omega*P0^{-1}*r_alpha;
+     * do not solve the base equation and blend its final solution. The effective
+     * operator is (I-D)*A+D, but need not be assembled. Strong-gate convergence
+     * must be qualified; alpha/target remain frozen during a correction sequence.
+     * @todo DEFERRED stream ordering: preallocate provider workspaces and route
+     * every selected V-cycle kernel, library call and vector adaptation through
+     * the supplied managed context. Current native storage still synchronizes.
+     * See docs/guides/amgx.md for the mathematics and provider requirements.
+     */
     class ReconstructionAMGPlan
     {
         struct Data;

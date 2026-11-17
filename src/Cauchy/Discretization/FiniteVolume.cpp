@@ -41,6 +41,10 @@ namespace DNDS::Cauchy
         R::CommunicationDetail::LocalStage(mesh->getMPI().comm, settings.implicit.collectiveChecks, [&]
                                            {
             settings.numerics.ValidatePositivity();
+            settings.numerics.reconstructionSolver.Validate();
+            DNDS_check_throw_info(!settings.numerics.reconstructionSolver.UsesAMG() ||
+                                      (settings.numerics.reconstruction == "variational" && settings.numerics.limiter != "LVR"),
+                                  "AMG reconstruction requires variational reconstruction without LVR; LVR-AMG is deferred");
             DNDS_check_throw_info(settings.numerics.vrBoundaryValue == "physicalTrace" || settings.numerics.vrBoundaryValue == "physicalMirrored",
                                   "vrBoundaryValue must be physicalTrace or physicalMirrored");
             DNDS_check_throw_info(settings.initialState.is_null() && settings.referenceState.is_null(),

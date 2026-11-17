@@ -129,7 +129,7 @@ namespace DNDS::Cauchy
             DNDS_FIELD(transferPreflight, "MPI launch validation: collective (default) or abortOnFailure (local checks, fatal MPI abort, no per-launch global agreement); setup remains collective");
             DNDS_FIELD(hostThreads, "CPU worker count; zero means inline execution");
             DNDS_FIELD(communicationExecution, "MPI payload execution: caller (default) or worker (CPU Direct/HostPacked, requires MPI_THREAD_MULTIPLE)");
-            DNDS_FIELD(reconstructionKernel, "auto keeps CPU FP64 and selects measured CUDA device/shape defaults (A100 P3 flow5: fp64Pipelined; other qualified CUDA shapes: fp64MatrixShared; LVR: fp64). Explicit fp64, fp64MatrixShared, fp64Pipelined, floatFloatPipelined, fp64TensorAsync and quantized fp32/fp32Pipelined/tf32Pipelined/fp32Accum/fp32FloatFloatAccum/tf32 remain overrides. Launch dimensions: numerics.cfv.cudaSweep. Precision is never reduced automatically. Nondefault kernels require CUDA; LVR requires fp64.");
+            DNDS_FIELD(reconstructionKernel, "auto selects fp64Pipelined for measured A100 P3 flow5 relaxation, otherwise fp64. AMG reconstruction uses its solver setting instead. Explicit comparison kernels retain their C5/M19 precomputed non-LVR fixture; fp64/fp64Pipelined support the production shapes and LVR. Launch dimensions: numerics.cfv.cudaSweep. Precision is never reduced automatically; nondefault kernels require CUDA.");
             config.field_section(&T::kernels, "kernels", "Operator-local CUDA input layout and compute arithmetic policies");
             DNDS_FIELD(checkAccess, "Validate declared scheduled accesses at submission");
             DNDS_FIELD(overlap, "Overlap input halo exchanges with owned-only core work; false waits then runs unsplit kernels");
@@ -184,12 +184,33 @@ namespace DNDS::Cauchy
             config.field_schema(&T::referenceConservative, "referenceConservative", "Named conservative RANS reference; rho is required for reconstruction PP primitive-reference conversion, without fallback. RANS values are required for a nonzero omega floor", SpeciesMassFractionsSchema);
         }
     };
+    /// Spatial reconstruction solver; distinct from the relaxation CUDA kernel.
+    /// AMG is an explicit single-rank/device alternative with fixed V-cycles.
+    struct ReconstructionSolverSettings
+    {
+        std::string method = "relaxation", amgxStorage = "native";
+        int amgxCycles = 1;
+        bool UsesAMG() const { return method == "amgx"; }
+        void Validate() const
+        {
+            DNDS_check_throw_info(method == "relaxation" || UsesAMG(), "unknown reconstruction solver");
+            DNDS_check_throw_info((amgxStorage == "native" || amgxStorage == "upload") && amgxCycles > 0,
+                                  "invalid reconstruction AMG storage/cycle controls");
+        }
+        DNDS_DECLARE_CONFIG(ReconstructionSolverSettings)
+        {
+            DNDS_FIELD(method, "relaxation uses the existing Jacobi/SOR operator; amgx uses fixed projected-system defect corrections on one CUDA rank");
+            DNDS_FIELD(amgxStorage, "native shares the prepared finest numeric matrix; upload retains the provider-copy comparison route");
+            DNDS_FIELD(amgxCycles, "Fixed V-cycles per physical component per reconstruction correction; no inner residual stopping");
+        }
+    };
     struct NumericsSettings
     {
         std::string reconstruction = "gradient", gradient = "leastSquares", flux = "rusanov", limiter = "none";
         int reconstructionIterations = 8;
         int reconstructionResidualCheckInterval = 4;
         real reconstructionTolerance = 0;
+        ReconstructionSolverSettings reconstructionSolver;
         bool characteristicLimiter = true, faceFallback = true;
         bool characteristicDiagnostics = false;
         bool reconstructionBoundaryFromPolynomial = true;
@@ -223,9 +244,10 @@ namespace DNDS::Cauchy
             DNDS_FIELD(gradient, "leastSquares, greenGauss, or ggmp");
             DNDS_FIELD(flux, "Numerical inviscid flux family");
             DNDS_FIELD(limiter, "none, direct-gradient Barth, WBAP, or native LVR; positivity is checked separately");
-            DNDS_FIELD(reconstructionIterations, "Fixed local VR sweeps per residual");
+            config.field_section(&T::reconstructionSolver, "reconstructionSolver", "Relaxation or explicit single-device AMG reconstruction solve");
+            DNDS_FIELD(reconstructionIterations, "Maximum local VR relaxation sweeps or AMG defect corrections per residual");
             DNDS_FIELD(reconstructionResidualCheckInterval, "Observe the VR update norm every N sweeps and at the final sweep when reconstructionTolerance is positive; each observation is an explicit host stopping boundary");
-            DNDS_FIELD(reconstructionTolerance, "Relative Jacobi update tolerance; zero uses the fixed sweep count");
+            DNDS_FIELD(reconstructionTolerance, "Relative reconstruction update tolerance for relaxation or AMG; zero uses the fixed correction count");
             DNDS_FIELD(characteristicLimiter, "Use equation-provided cell-mean face characteristics for 3WBAP");
             DNDS_FIELD(characteristicDiagnostics, "Opt-in finite/inverse-matrix diagnostics after characteristic production; not an execution-order check");
             DNDS_FIELD(faceFallback, "Fall back to the cell mean at inadmissible face values; disable for non-PP accuracy studies");
@@ -718,7 +740,8 @@ namespace DNDS::Cauchy
         index historyInterval = 1;
         index historySegmentRows = 10000;
         int historyPrecision = 10;
-        std::string consoleColor = "auto";
+        std::string consoleColor = "auto", consoleBold = "auto";
+        bool eventLog = true;
         int hdfDeflateLevel = 0;
         bool checkpointReconstruction = false;
         bool asynchronous = false;
@@ -739,6 +762,8 @@ namespace DNDS::Cauchy
             DNDS_FIELD(historySegmentRows, "Maximum history rows per CSV segment; each segment has the same header");
             DNDS_FIELD(historyPrecision, "Scientific-notation digits after the decimal point for real CSV cells");
             DNDS_FIELD(consoleColor, "Console color policy: auto, always or never");
+            DNDS_FIELD(consoleBold, "Console emphasis policy, independent of color: auto, always or never");
+            DNDS_FIELD(eventLog, "Write plain-text rotating events-rank<N>.log alongside ordinary CLI progress by default; no tee is needed. Uses diagnostics rotation limits");
             DNDS_FIELD(hdfDeflateLevel, "VTKHDF compression level 0..9; uncompressed is the initial portable baseline");
             DNDS_FIELD(checkpointReconstruction, "Store optional compatible polynomial warm guesses for exact finite-sweep continuation; default omits them");
             DNDS_FIELD(asynchronous, "Bounded background accepted-step output; requires MPI_THREAD_MULTIPLE. Internal output and shutdown drain the queue");

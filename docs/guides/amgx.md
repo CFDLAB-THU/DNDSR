@@ -104,6 +104,11 @@ nonsymmetric-system or all-component RANS convergence guarantee is implied.
 
 ## Caller-stream extension investigation
 
+**Deferred TODO — not part of the current native-storage wiring.** Native
+attachment shares numeric storage; it does not make provider execution
+stream-ordered. A host worker around the blocking API would not establish that
+contract either.
+
 The pinned provider's internal `memory::setStream` is not a safe asynchronous
 API. Selected restriction/prolongation launches still use stream zero;
 `BlockJacobiSolver::smooth_BxB` lazily resizes scratch and uses an unqualified
@@ -127,6 +132,21 @@ extension is the smaller first step. Neither asynchronous support nor CUDA graph
 capture is implemented by this investigation. Capture would additionally require
 stable addresses, no first-use allocation, and nondefault-stream/capture tests;
 setup, adaptive host decisions and synchronizing diagnostics remain excluded.
+
+Flow numeric refresh needs separate work: its Jacobian changes between
+nonlinear corrections. A fully queued path must refresh coarse numeric values
+and smoother inverses on the caller stream, with an explicit policy for reusing
+aggregation/transfer structure. Full hierarchy reconstruction may remain a
+synchronous setup boundary, but must not be described as a sync-free nonlinear
+iteration. Fixed-geometry VR can reuse its prepared hierarchy directly.
+
+The future apply must use preallocated level workspaces and caller-stream
+library handles/policies, retain native Arrays and provider resources through
+the engine's operation record, and replace synchronous vector transfers with
+managed device views. VR component gather/scatter remains explicit queued work.
+No per-kernel host completion or hidden default-stream work is permitted. Test
+nondefault streams, delayed producers, consumer ordering and retirement before
+claiming this capability; graph capture remains a separate qualification.
 
 The adapter explicitly nests Jacobi's `relaxation_factor` in the smoother's
 configuration object. The earlier string-valued smoother selected AmgX's
@@ -220,7 +240,8 @@ is supported; missing local columns fail explicitly. One modal-block hierarchy
 is shared across physical components, with fixed zero-start defect corrections.
 Combined coefficient rows remain `[component][mode]`; component gather/scatter
 is explicit device work and provider RHS/result D2D copies remain. This is an
-exploration facility, not a hidden replacement for the ordinary Jacobi sweep.
+explicit alternative to the ordinary relaxation solver; it is never selected
+automatically as a supposedly faster reconstruction kernel.
 
 `Prepare` accepts `PublicUpload` or `NativeStorage`. In both cases the plan
 owns one directly assembled native modal matrix. Native storage additionally
@@ -236,3 +257,95 @@ reported separately. Requested widths 2/3/4/5/6/7/8/9/19 qualify the selected
 provider kernels; they do not guarantee that AMG will converge for every
 nonsymmetric VR operator. Incompatible block layouts and provider numeric
 extents beyond its int32 arithmetic are rejected rather than repacked.
+
+## Cauchy native flow and VR selection
+
+The two solvers are independent choices. This configuration fragment selects
+native AMG for both; ordinary relaxation remains the reconstruction default:
+
+```json
+{
+  "execution": {"device": "cuda", "layout": "aos", "fieldGrouping": "coupled"},
+  "numerics": {
+    "reconstruction": "variational",
+    "reconstructionSolver": {
+      "method": "amgx", "amgxStorage": "native", "amgxCycles": 1
+    },
+    "reconstructionIterations": 2,
+    "reconstructionTolerance": 0
+  },
+  "implicit": {
+    "jacobianAction": "assembled", "diagonal": "block",
+    "linear": {
+      "method": "amgx", "stopping": "fixedCount", "iterations": 1,
+      "matrixStorage": {"amgxStorage": "native"}
+    }
+  }
+}
+```
+
+Use this as a domain's `settings` or simulation `defaults`. Each domain must
+occupy one rank/device. `reconstructionIterations` counts outer VR defect
+corrections; `amgxCycles` counts fixed provider V-cycles per component within
+each correction. No Krylov method is implied. The existing optional VR update
+norm/tolerance and its observation cadence still control outer stopping.
+
+Both upload and native VR routes use the same boundary-value production,
+boundary refresh between corrections, caller-owned warm coefficients,
+commit, WBAP and PP schedule. AMG is unsplit even when the enclosing execution
+uses overlap; its explicit synchronization does not promise hidden MPI time.
+The normal resident CFV publication keeps sampling and optional WBAP data but
+omits ordinary sweep matrices/inverses, avoiding a second large device matrix.
+Mutable per-component adaptation buffers belong to the temporary workspace.
+The pMG direct-gradient coarse operators have no VR system: they reset this
+reconstruction solver choice to relaxation. Their independent flow linear
+solver settings remain unchanged.
+
+AMG reconstruction requires variational reconstruction, CUDA and the linked
+single-device provider; LVR and rotated periodic coupling remain unsupported.
+Leave `execution.reconstructionKernel` at `auto` or `fp64`: it does not choose
+the AMG algorithm. Requesting unsupported capabilities fails explicitly, without
+falling back to Jacobi or changing the physical discretization.
+
+## Deferred LVR integration: preserve the base hierarchy
+
+**Deferred TODO — the current AMG reconstruction profile does not implement
+LVR.** Let the ordinary projected VR equation be
+
+\[
+  A c=b,\qquad A=I-A_{\rm local}^{+}B,
+\]
+
+and let \(D=\operatorname{diag}(\alpha_i I)\) contain the existing per-cell LVR
+fractions, with frozen limited target coefficients \(c_t\). The current
+Jacobi/GS LVR blend has the fixed-point equation
+
+\[
+ A_\alpha=(I-D)A+D,\qquad
+ b_\alpha=(I-D)b+Dc_t.
+\]
+
+Its true fine-grid residual can be evaluated without assembling a changed
+matrix:
+
+\[
+ r_\alpha(c)=(I-D)(b-Ac)+D(c_t-c).
+\]
+
+The proposed extension retains the base AMG hierarchy as a preconditioner
+\(P_0^{-1}\), using fixed corrections
+
+\[
+ c^{k+1}=c^k+\omega P_0^{-1}r_\alpha(c^k).
+\]
+
+This changes the effective equation while preserving the stored base matrix.
+It has the intended LVR fixed point if the iteration converges; strong gates
+may weaken the base hierarchy as a preconditioner and require qualification.
+Freeze alpha and target for each correction sequence, and refresh them only at
+the outer reconstruction boundary. Alpha zero recovers ordinary VR; alpha one
+imposes the target equation, though one AMG correction need not satisfy it
+exactly. Solving the base equation and blending its final solution is generally
+not equivalent. Do not replace the LVR residual by the base residual when
+checking convergence. A finest-level LVR-aware smoother is a possible later
+extension, not an implemented capability.

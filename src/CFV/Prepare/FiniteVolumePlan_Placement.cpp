@@ -58,6 +58,7 @@ namespace DNDS::CFV
                 // The placed publication contains sweep/limiter tables only;
                 // retaining a host preparation object is not device support.
                 capabilities.linearSystem = capabilities.localPreconditioner = false;
+                capabilities.sweeps = capabilities.sweeps && requested.sweeps;
             }
             template <class T>
             R::ArrayView<const T> Add(const char *name, const R::Array<T> &input, R::ExecutionContext context, R::AllocationOptions allocation = {})
@@ -276,7 +277,9 @@ namespace DNDS::CFV
         Require(ReconstructionOperation::Sweep);
         Validate();
         DNDS_check_throw_info(device.space == R::MemorySpace::CUDA && context.device == device, "device reconstruction requires explicit CUDA placement/context");
-        DNDS_check_throw_info(!Settings().SORInstead, "CUDA SOR requires a logical parallel sweep design and is unsupported");
+        DNDS_check_throw_info(!options.sweeps || !Settings().SORInstead, "CUDA SOR requires a logical parallel sweep design and is unsupported");
+        DNDS_check_throw_info(options.sweeps || options.matrixPrecision == ReconstructionMatrixPrecision::FP64,
+                              "matrix quantization requires resident sweep matrices");
         DNDS_check_throw_info(!options.basis || (options.basisDerivativeOrder >= 0 && options.basisDerivativeOrder <= 3),
                               "invalid resident basis derivative order");
         DNDS_check_throw_info(options.matrixPrecision == ReconstructionMatrixPrecision::FP64 ||
@@ -305,19 +308,19 @@ namespace DNDS::CFV
         DNDS_REC_ADD(neighbors);
         DNDS_REC_ADD(faces);
         DNDS_REC_ADD(boundaryOffsets);
-        if (view.quantized)
+        if (options.sweeps && view.quantized)
         {
             view.matrixAInvB32 = result->AddQuantized("matrixAInvB32", *host.matrixAInvB, context, allocation);
             view.vectorAInvB32 = result->AddQuantized("vectorAInvB32", *host.vectorAInvB, context, allocation);
             view.boundaryInjection32 = result->AddQuantized("boundaryInjection32", *host.boundaryInjection, context, allocation);
         }
-        else
+        else if (options.sweeps)
         {
             view.matrixAInvB = result->Add(view.raw ? "rawMatrixB" : "matrixAInvB", host.SweepMatrices(), context, allocation);
             view.vectorAInvB = result->Add(view.raw ? "rawVectorB" : "vectorAInvB", host.SweepVectors(), context, allocation);
             view.boundaryInjection = result->Add(view.raw ? "rawBoundaryInjection" : "boundaryInjection", host.SweepInjection(), context, allocation);
         }
-        if (view.raw)
+        if (options.sweeps && view.raw)
         {
             view.localInverse = result->Add("localInverse", *host.localInverse, context, allocation);
             if (view.faceCoupling)
@@ -525,13 +528,21 @@ namespace DNDS::CFV
         const auto periodicIdentity = deviceStarts.Identity();
         const auto periodicVersion = deviceStarts.Version();
         const auto width = prototype.Width();
+        // A sampling/AMG-only workspace may be inspected before any CFV sweep
+        // writes its status. Publish the initial successful state during setup.
+        R::Array<int> status(R::RowLayout::Dense(1, 1));
+        {
+            auto write = status.Write();
+            write.View()(0, 0) = 0;
+        }
+        auto deviceStatus = status.To(Device());
         return {BuildDeviceField(std::move(prototype)),
                 R::Array<real>(R::RowLayout::Dense(_device->capabilities.wbap ? blocks * 6 : 0, width), Device()),
                 components,
                 {},
                 std::move(periodic),
                 std::move(deviceStarts),
-                R::Array<int>(R::RowLayout::Dense(1, 1), Device()),
+                std::move(deviceStatus),
                 blocks,
                 periodicIdentity,
                 periodicVersion,
@@ -827,6 +838,8 @@ namespace DNDS::CFV
         DNDS_check_throw_info(_identity, "reconstruction plan is empty");
         if (!_device)
             return kernel == ReconstructionDeviceKernel::FP64;
+        if (!_device->capabilities.sweeps)
+            return false;
         const auto n = _device->view.n;
         const bool staticModes = n == 2 || n == 3 || n == 5 || n == 9 || n == 19;
         const bool comparison = n == 19 && !_device->view.raw;

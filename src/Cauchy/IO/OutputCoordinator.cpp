@@ -61,6 +61,8 @@ namespace DNDS::Cauchy
         const SimulationConfig &config;
         MPIInfo mpi;
         real started;
+        std::optional<real> stepStarted;
+        real stepWallSeconds = 0;
         const OutputSettings &output;
         const TimeSettings &time;
         index domains;
@@ -210,6 +212,7 @@ namespace DNDS::Cauchy
                         {{"index", iDomain},
                          {"name", domain.Name()},
                          {"history", plan.HistoryBare(iDomain) + ".csv"},
+                         {"eventLog", output.eventLog ? Json(output.prefix + "-events-rank" + std::to_string(mpi.rank) + ".log") : Json()},
                          {"components", EquationComponentNames(
                                             domain.Equation().Schema())}});
                 }
@@ -243,8 +246,7 @@ namespace DNDS::Cauchy
                       progress[size_t(iDomain)]->Flush();
                       if (simulation.Placement().DomainRank(iDomain) == 0)
                       {
-                          const auto cursor =
-                              progress[size_t(iDomain)]->HistoryPosition();
+                          const auto cursor = progress[size_t(iDomain)]->HistoryPosition();
                           positions[size_t(2 * iDomain)] = cursor.block;
                           positions[size_t(2 * iDomain + 1)] = cursor.line;
                           roots[size_t(iDomain)] = 1;
@@ -263,9 +265,7 @@ namespace DNDS::Cauchy
                         positions[size_t(2 * iDomain)] >= 0 &&
                         positions[size_t(2 * iDomain + 1)] >= 0,
                     "Cauchy output history cursor has no unique domain root");
-                state.history[size_t(iDomain)] = {
-                    int(positions[size_t(2 * iDomain)]),
-                    positions[size_t(2 * iDomain + 1)]};
+                state.history[size_t(iDomain)] = {int(positions[size_t(2 * iDomain)]), positions[size_t(2 * iDomain + 1)]};
             }
             return state.ToJson();
         }
@@ -440,8 +440,12 @@ namespace DNDS::Cauchy
                               accepted.retries = retries;
                               accepted.implicitStages =
                                   index(domain.LastImplicitStages().size());
+                              accepted.cappedStages = index(std::count_if(
+                                  domain.LastImplicitStages().begin(), domain.LastImplicitStages().end(),
+                                  [](const auto &report) { return !report.converged; }));
                               accepted.nonlinearIterations = nonlinearIterations;
                               accepted.linearIterations = linearIterations;
+                              accepted.stepWallSeconds = stepWallSeconds;
                               accepted.coupledIterations =
                                   domain.LastCoupledIterations();
                               accepted.coupledResidualTargetRatio =
@@ -549,6 +553,10 @@ namespace DNDS::Cauchy
             const std::vector<PhysicalStepLimit> &limits, bool useLimits,
             bool printConsole)
         {
+            // Read the existing host boundary only; no new device fence or
+            // timing collective. Include retries, exclude following file I/O.
+            stepWallSeconds = stepStarted ? MPI_Wtime() - *stepStarted : 0;
+            stepStarted.reset();
             MaybeReportAllocations();
             const bool reached =
                 Record(dt, retries, limits, useLimits, printConsole, false);
@@ -650,6 +658,8 @@ namespace DNDS::Cauchy
     void OutputCoordinator::BeginAttempt(real dt, index retries,
                                          real targetTime)
     {
+        if (!_data->stepStarted)
+            _data->stepStarted = MPI_Wtime();
         _data->Visit([&](index iDomain, Domain &)
                      { _data->progress[size_t(iDomain)]->BeginAttempt(
                            {_data->simulation.Step() + 1, -1, -1, -1, retries, targetTime,

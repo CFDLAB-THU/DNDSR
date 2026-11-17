@@ -787,6 +787,104 @@ TEST_CASE("Visualization field preparation is resident and matches independent p
     }
 }
 
+TEST_CASE("Cauchy AMG reconstruction matches explicit CFV composition and omits sweep matrices")
+{
+    if (mpi.size != 1 || !DNDS::Algebra::AmgXPreconditioner::Available())
+    {
+        MESSAGE("Native AMG integration requires the single-rank CUDA provider; no AMG coverage in this invocation");
+        return;
+    }
+    auto mesh = CFVTest::CartesianHexes(mpi, 3);
+    for (const auto &[storage, overlap] : std::vector<std::pair<std::string, bool>>{
+             {"native", false}, {"native", true}, {"upload", false}})
+    {
+        CAPTURE(storage);
+        CAPTURE(overlap);
+        C::DomainSettings settings;
+        settings.mesh.dimension = 3;
+        settings.execution.device = "cuda";
+        settings.execution.overlap = overlap;
+        settings.numerics.reconstruction = "variational";
+        settings.numerics.reconstructionSolver.method = "amgx";
+        settings.numerics.reconstructionSolver.amgxStorage = storage;
+        settings.numerics.reconstructionIterations = 2;
+        settings.numerics.reconstructionResidualCheckInterval = 2;
+        settings.numerics.reconstructionTolerance = 1e-30;
+        settings.numerics.reconstructionBoundaryFromPolynomial = false;
+        settings.numerics.cfv.maxOrder = 3;
+        settings.numerics.cfv.cacheDiffBase = false;
+        settings.numerics.cfv.SORInstead = false;
+        settings.numerics.cfv.storage.representation = "raw";
+        settings.numerics.cfv.storage.faceCoupling = true;
+        settings.numerics.limiter = "WBAP";
+        settings.numerics.characteristicLimiter = false;
+        settings.boundaries["7"].kind = "extrapolate";
+        const auto equation = C::EquationSystem::Resolve(settings.equation);
+        C::FiniteVolume cpu(mesh, settings, equation);
+        auto seed = C::EquationDofs::Coupled(equation.Schema(), cpu.Metrics().BuildField(5));
+        {
+            const auto geometry = cpu.Metrics().AcquireRead();
+            const auto metric = geometry.HostView();
+            auto write = seed.CoupledField().Owned().Write();
+            for (I iCell = 0; iCell < cpu.Metrics().NumCell(); ++iCell)
+            {
+                const auto x = metric.GetCellCent(iCell);
+                const auto flow = equation.Gas().Conservative({1.1 + .02 * x[0], .2 + .03 * x[1], -.1, .02, 1.2 + .01 * x[2]});
+                for (int j = 0; j < 5; ++j)
+                    write.View()(iCell, j) = flow[j];
+            }
+        }
+        C::DomainExecutionContext execution(settings.execution);
+        auto &engine = execution.Engine();
+        const auto lane = execution.ComputeStream();
+        const auto context = lane.Context();
+        auto plan = cpu.Placed(context.device, context);
+        auto state = C::EquationDofs::Coupled(equation.Schema(), plan.Metrics().BuildField(5));
+        state.CoupledField().Owned().CopyFrom(seed.CoupledField().Owned(), context).Wait();
+        auto reconstruction = plan.BuildReconstructionState(state);
+        auto work = plan.BuildWorkspace(state);
+        auto residual = C::EquationDofOperations::NewVector(state);
+        const auto resident = plan.PolynomialReconstruction();
+        REQUIRE(resident);
+        CHECK_FALSE(resident->Capabilities().sweeps);
+        CHECK_FALSE(resident->SupportsKernel(DNDS::CFV::ReconstructionDeviceKernel::FP64));
+        for (const auto &buffer : resident->ResidentBuffers())
+            CHECK((buffer.name != "rawMatrixB" && buffer.name != "localInverse" && buffer.name != "matrixAInvB"));
+        const auto reference = DNDS::CFV::ReconstructionAMGPlan::Prepare(
+            *cpu.PolynomialReconstruction(), context,
+            storage == "native" ? DNDS::CFV::ReconstructionAMGStorage::NativeStorage
+                                : DNDS::CFV::ReconstructionAMGStorage::PublicUpload);
+        auto referenceWork = reference.BuildWorkspace(5);
+        auto expected = plan.Metrics().BuildField(5 * resident->NRecDOF());
+        auto temporary = plan.Metrics().BuildField(5 * resident->NRecDOF());
+        DNDS::Algebra::Fill(expected, 0.);
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            plan.Execute(state, *reconstruction, *work, execution, C::FiniteVolumeEvaluation::Spatial(residual, 0));
+            REQUIRE(work->iterations == 2);
+            CHECK(std::isfinite(work->relativeUpdate));
+            REQUIRE(work->fields.front().reconstructionBoundary);
+            for (int iteration = 0; iteration < 2; ++iteration)
+            {
+                reference.SubmitDefectCorrection(engine, lane, state.CoupledField(), expected,
+                                                 *work->fields.front().reconstructionBoundary, temporary, referenceWork);
+                DNDS::Algebra::Copy(engine, lane, expected, temporary);
+            }
+            engine.Synchronize();
+            Compare(expected.Owned().To(R::Device::Host(), context),
+                    reconstruction->WarmValues().CoupledField().Owned().To(R::Device::Host(), context));
+            const auto rhs = residual.CoupledField().Owned().To(R::Device::Host(), context);
+            const auto read = rhs.Read();
+            CHECK(std::isfinite(read.View()(0, 0)));
+        }
+        const auto memory = work->owner->reconstructionAMG->MemorySnapshot();
+        CHECK(memory.copies.applications == 20);
+        CHECK(memory.nativeStorage == (storage == "native"));
+        CHECK((memory.copies.matrixDeviceToDevice == 0) == (storage == "native"));
+        engine.Close();
+    }
+}
+
 int main(int argc, char **argv)
 {
     DNDS::MPI::Init_thread(&argc, &argv);

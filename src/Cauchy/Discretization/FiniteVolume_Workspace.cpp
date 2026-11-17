@@ -46,6 +46,8 @@ namespace DNDS::Cauchy
                 field.boundaryValues = field.reconstructionBoundary->values;
                 field.boundaryValues.SetName(name + "/boundaryValues", DNDS_ALLOCATION_SITE());
                 Algebra::Fill(field.reconstruction->temporary, 0.);
+                if (data.reconstructionAMG && !meanOnly)
+                    field.reconstructionAMG = data.reconstructionAMG->BuildWorkspace(index(physical.Width()));
             }
             // A mean-only forecast suppresses face reconstruction, not the
             // physical derivatives in the RANS source. Keep those gradients

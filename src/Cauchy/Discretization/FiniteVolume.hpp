@@ -854,6 +854,10 @@ namespace DNDS::Cauchy
         /// Workspace access is controller-serialized; do not read during Evaluate.
         /// Production callers supply their compute lane. Standalone synchronous
         /// CPU callers may omit it; resident CUDA input requires an explicit lane.
+        /// @todo Add Euler-style per-BC integration selection/reporting for
+        /// force, moment and conservative mass/energy/species fluxes. The
+        /// current frontend reports only the selected-zone aggregate force;
+        /// no generic per-BC integration history files are implemented.
         Vector3 LastBoundaryForce(const Workspace &workspace, const std::vector<int> &zones,
                                   std::optional<Runtime::ExecutionStream> stream = {}) const;
         /// All conservative blocks plus mean thermodynamic/species fields and

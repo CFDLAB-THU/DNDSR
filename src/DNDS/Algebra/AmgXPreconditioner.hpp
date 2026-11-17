@@ -75,6 +75,14 @@ namespace DNDS::Algebra
      * Matrix descriptors, coarse values, vectors and configurations stay private;
      * explicit native attachment shares only the managed finest numeric values. Simultaneous
      * different-device owners in one process are rejected; use one rank per GPU.
+     * @todo DEFERRED stream-ordered apply/refresh: add a restricted preallocated
+     * caller-stream V-cycle to the provider fork; remove its default-stream
+     * kernels, lazy scratch, synchronous vector copies and cudaFreeWait joins.
+     * Native numeric attachment alone does not provide this capability. Flow
+     * also needs queued coarse-value/inverse refresh when its Jacobian changes.
+     * Keep hierarchy rebuilds as explicit setup boundaries until implemented.
+     * See docs/guides/amgx.md; do not silently move these joins into a worker
+     * and label that path stream-ordered or captureable.
      */
     class AmgXPreconditioner
     {

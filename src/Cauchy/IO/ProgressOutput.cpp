@@ -8,6 +8,7 @@
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/stdout_sinks.h>
+#include <spdlog/details/os.h>
 
 #include <algorithm>
 #include <iomanip>
@@ -80,28 +81,60 @@ namespace DNDS::Cauchy
         if ((globalRank == 0 || domainProgressWriter) &&
             (settings.consoleInterval > 0 || settings.implicit.consoleInterval > 0))
         {
-            if (settings.consoleColor == "never")
-                sinks.push_back(std::make_shared<spdlog::sinks::stdout_sink_mt>());
-            else
+            const bool terminal = spdlog::details::os::in_terminal(stdout) &&
+                                  spdlog::details::os::is_color_terminal();
+            const auto enabled = [terminal](const std::string &policy)
+            { return policy == "always" || (policy == "auto" && terminal); };
+            const bool color = enabled(settings.consoleColor), bold = enabled(settings.consoleBold);
+            if (color || bold)
             {
                 auto console = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-                console->set_color_mode(settings.consoleColor == "always" ? spdlog::color_mode::always
-                                                                          : spdlog::color_mode::automatic);
+                console->set_color_mode(spdlog::color_mode::always);
+#ifndef _WIN32
+                const auto style = [bold, color](const char *hue)
+                { return std::string(bold ? "\033[1m" : "") + (color ? hue : ""); };
+                console->set_color(spdlog::level::trace, style("\033[37m"));
+                console->set_color(spdlog::level::debug, style("\033[34m"));
+                console->set_color(spdlog::level::info, style("\033[36m"));
+                console->set_color(spdlog::level::warn, style("\033[33m"));
+                console->set_color(spdlog::level::err, style("\033[31m"));
+                console->set_color(spdlog::level::critical, style("\033[31m"));
+#endif
+                console->set_pattern("%^[%l] %v%$");
                 sinks.push_back(std::move(console));
             }
+            else
+            {
+                auto console = std::make_shared<spdlog::sinks::stdout_sink_mt>();
+                console->set_pattern("[%l] %v");
+                sinks.push_back(std::move(console));
+            }
+        }
+        if (settings.eventLog && (globalRank == 0 || domainProgressWriter))
+        {
+            const auto path = settings.prefix + "-events-rank" + std::to_string(globalRank) + ".log";
+            createOutputDir(path);
+            // Append across restarts. Rotating files receive the same unstyled
+            // messages; ANSI codes are generated only by the console sink.
+            auto events = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+                path, size_t(settings.diagnostics.maxBytes), size_t(settings.diagnostics.rotatedFiles));
+            events->set_pattern("%Y-%m-%dT%H:%M:%S.%e [%l] %v");
+            sinks.push_back(std::move(events));
         }
         if (settings.diagnostics.perRank)
         {
             const auto path = settings.prefix + "-diagnostics-rank" + std::to_string(globalRank) + ".log";
             createOutputDir(path);
-            sinks.push_back(std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-                path, size_t(settings.diagnostics.maxBytes), size_t(settings.diagnostics.rotatedFiles)));
+            auto diagnostics = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+                path, size_t(settings.diagnostics.maxBytes), size_t(settings.diagnostics.rotatedFiles));
+            diagnostics->set_pattern("%Y-%m-%dT%H:%M:%S.%e [%l] %v");
+            sinks.push_back(std::move(diagnostics));
         }
         if (!sinks.empty())
         {
             _logger = std::make_shared<spdlog::logger>("cauchy-rank-" + std::to_string(globalRank), sinks.begin(), sinks.end());
             _logger->set_level(LogLevel(settings.diagnostics.level));
-            _logger->set_pattern("%^[%l]%$ %v");
+            _logger->flush_on(spdlog::level::info);
         }
     }
     OperationalLogger::~OperationalLogger()
@@ -159,7 +192,7 @@ namespace DNDS::Cauchy
     {
         DNDS_check_throw_info(_logger && !_domain.empty(), "invalid Cauchy progress-output controller");
         if (_writer)
-            _history = std::make_unique<ProgressHistory>(DetailedHistorySchema(_schema), std::move(bareHistory),
+            _history = std::make_unique<ProgressHistory>(DetailedHistorySchema(_schema), bareHistory,
                                                          _settings.historySegmentRows, _settings.historyPrecision, resume);
     }
     ProgressRow ProgressOutputController::Base(const ProgressLocation &location, ProgressRecordStatus status) const
@@ -294,6 +327,11 @@ namespace DNDS::Cauchy
             row.Set("rho_min", v[2]);
             row.Set("p_min", v[3]);
             row.Set("residual_l2", v[4]);
+            // TODO(boundary_integrations): retain this aggregate force in the
+            // combined canonical history. Add separately configured per-zone
+            // segmented integration streams (force/moment/mass/energy/species
+            // flux) using the same frozen RHS quadrature outputs and cursors.
+            // Do not duplicate BC/EOS calculations in output writers.
             row.Set("force_x", v[5]);
             row.Set("force_y", v[6]);
             row.Set("force_z", v[7]);
@@ -324,9 +362,10 @@ namespace DNDS::Cauchy
         {
             const auto &v = progress.diagnostics;
             _logger->Info(fmt::format(
-                "Cauchy {:>10} step {:7} time {:11.4e} dt {:9.2e} residual {:10.3e} rho_min {:9.2e} p_min {:9.2e} VR {:3.0f}:{:9.2e} rho L1 {:9.2e} face fallbacks {:5} implicit {:5}/{:5} wall {:10.3f}s",
+                "Cauchy {:>10} step {:7} time {:11.4e} dt {:9.2e} residual {:10.3e} rho_min {:9.2e} p_min {:9.2e} VR {:3.0f}:{:9.2e} rho L1 {:9.2e} face fallbacks {:5} stages {:2} capped {:2} nonlinear/linear {:5}/{:5} retries {:2} step {:9.3f}s wall {:10.3f}s",
                 _domain, location.step, location.time, location.dt, v[4], v[2], v[3], v[8], v[9], v[10],
-                progress.faceFallbacks, progress.nonlinearIterations, progress.linearIterations, location.wall));
+                progress.faceFallbacks, progress.implicitStages, progress.cappedStages, progress.nonlinearIterations, progress.linearIterations,
+                progress.retries, progress.stepWallSeconds, location.wall));
         }
     }
     void ProgressOutputController::Flush()

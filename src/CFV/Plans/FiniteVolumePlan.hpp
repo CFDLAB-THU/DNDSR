@@ -354,6 +354,9 @@ namespace DNDS::CFV
     struct ReconstructionResidencyOptions
     {
         bool mesh = false, metrics = false, basis = false;
+        /// Alternative reconstruction solvers may retain sampling/WBAP without
+        /// uploading ordinary sweep matrices. Such placements reject sweeps.
+        bool sweeps = true;
         /// Keep the CPU preparation publication reachable from the placed
         /// handle. Disable only when all later setup/debug queries use the host
         /// plan separately; device operators retain their own immutable arrays,

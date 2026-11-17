@@ -32,6 +32,14 @@ full `MetricView()` access requires `metrics=true`. Missing optional capabilitie
 throw. Mesh data uses the existing `UnstructuredMeshSnapshot`, including its
 device-callable view; CFV does not create another topology implementation.
 
+`options.sweeps=false` retains the requested sampling and optional WBAP
+publication without uploading ordinary relaxation matrices, inverse blocks or
+mean/boundary sweep injections. Such a publication rejects sweep kernels;
+coefficient allocation, boundary values, sampling, WBAP and explicit commit
+remain available. Cauchy's explicit AMG reconstruction selection uses this
+mode alongside its separately owned projected AMG operator. See the
+[native AMG selection and deferred work](../guides/amgx.md).
+
 `basis=true` supplies `PointBasisView()` for cached or direct point evaluation.
 `basisDerivativeOrder` defaults to one (value and first derivatives); setup
 retains moments and cell geometry only when the configured cache does not
