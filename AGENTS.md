@@ -122,6 +122,24 @@ cmake --build . -t euler -j 8
 
 ### Python Package (scikit-build-core)
 
+Prefer reusing an existing verified DNDSR venv, including the canonical parent
+checkout's venv when working in a linked worktree. DNDSR itself is typically
+not installed into that venv: build the active checkout's Python bindings,
+run `cmake --install <build> --component py`, and select that checkout through
+`PYTHONPATH=<active_checkout>/python`. The venv supplies dependencies and the
+Python interpreter; it does not select the source checkout. Do not create a
+task-specific venv or run `pip install DNDSR` merely to test another worktree.
+Use a separate environment only when dependency isolation or an explicit user
+request requires it.
+
+Before reusing a venv, verify that its Python ABI matches the configured
+pybind11 build and that mpi4py/h5py use the project's MPI/HDF5 (including MPI
+support). If the ABI differs, reconfigure and rebuild the Python targets for
+the reused interpreter. Do not substitute binary mpi4py/h5py wheels or rely on
+import order to hide a library mismatch; when dependency setup is actually
+needed, use `scripts/install_python_deps.sh` with the intended MPI compiler
+and HDF5 prefix. Do not mutate a shared venv merely to switch checkouts.
+
 ```bash
 # Full install
 CC=/usr/bin/gcc CXX=/usr/bin/g++ CMAKE_BUILD_PARALLEL_LEVEL=16 pip install . --verbose
