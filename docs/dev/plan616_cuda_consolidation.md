@@ -52,7 +52,7 @@ were not relaxed to recover these checks.
 An inherited experiment Python 3.11 environment had a noncanonical h5py wheel.
 Import-order-assisted tests are not final dependency qualification. The parent
 DNDSR venv has MPI-enabled h5py/mpi4py using the supplied HDF5 1.14.3 and
-OpenMPI 5.0.9. Binding targets are being rebuilt for its Python 3.12 ABI, with
+OpenMPI 5.0.9. Binding targets were rebuilt for its Python 3.12 ABI, with
 the active checkout selected by `PYTHONPATH`; DNDSR is not pip-installed into
 that environment. An unrelated legacy CFV Python test has a missing `os`
 import; this work does not rewrite that test.
@@ -72,13 +72,28 @@ finite updates: immutable read scopes fenced the caller's already-destroyed
 non-default stream after engine.Close(). Contexts now retain shared abstract
 stream resources, so static pins need no special completion workaround; actual
 queued consumers retain their normal operation lifetime. The focused test prepares on a non-default engine stream
-and closes it before plan retirement. Large-VR corrected measurements and
-complete flow-provider observations remain distinct from synthetic timings.
+and closes it before plan retirement. Both corrected 32-cubed VR storage routes
+complete through teardown and have identical residual ratio 0.052408 after
+three corrections. Both capped one-step flow routes complete and their final
+mean fields agree exactly. These fixed-work observations do not establish
+fully converged flow stages.
 
 The optional VR AMG unit body initially lacked its compile definition because
 the provider dependency is private to DNDS. CMake now enables that body on the
 CFV test target explicitly when AMGX is selected; whole-suite pass counts from
 before this correction must not be credited as VR AMG integration coverage.
+The explicitly enabled case now passes 274 assertions. Twenty focused CTest
+entries pass, along with direct two-rank MPI-backed CFV tests and canonical
+Python checks (59 at np1, 60 per rank at np2). Capability/rank skips and shared-GPU
+NCCL deselections remain documented; no two-device coverage is inferred.
+
+Native attachment removes the finest numeric matrix allocation/copy: about
+662 MB for the VR matrix and 45.9 MB for the flow matrix. It does not eliminate
+coarse operators or provider vector copies. The current flow-native refresh
+also reuploads pattern metadata; this prototype is not an entirely copy-free
+provider. VR AMG costs roughly 89–90 ms per five-component correction here,
+versus about 2 ms for an ordinary Jacobi sweep, despite stronger contraction.
+It remains an explicit exploratory choice rather than a production default.
 
 Canonical dependencies now come from cfd_externals (modified AMGX fork plus
 CUDA-enabled Caliper) and header bundle v0.3.0 (coherent CCCL 3.7). Existing
