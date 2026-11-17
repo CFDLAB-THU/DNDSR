@@ -214,6 +214,20 @@ Available presets (defined in `CMakePresets.json`):
 
 ### Manual CMake Configuration
 
+Prefer **Ninja for new build directories** when it is installed, unless a user
+or cluster profile requires another generator. Use `-G Ninja` explicitly; it
+can also accompany a configure preset, for example
+`cmake --preset release-test -G Ninja`. Existing build directories keep their
+configured generator. Do not delete their cache or compiled objects just to
+change generators; use a separate directory if a migration is needed.
+
+Ninja schedules independent targets in one dependency graph. With CMake's Unix
+Makefiles generator, listing multiple targets can process them sequentially,
+even with `-j16`; parallelism then applies only inside the current target. For
+an existing Makefiles build, prefer a suitable aggregate target such as
+`all_unit_tests` when building a group. Keep the requested parallelism bounded
+by the local or cluster allocation.
+
 ```bash
 cmake -S . -B build -G Ninja -DDNDS_BUILD_TESTS=ON
 cmake --build build -t euler -j32           # Build a solver

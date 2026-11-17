@@ -146,8 +146,12 @@ or other external side effects by itself.
    underlying compiler selected by both MPI wrappers: `CC=mpicc CXX=mpicxx`
    alone does not select it. For AOCC-default Open MPI with GCC, preserve the
    profile's `OMPI_CC=gcc OMPI_CXX=g++` overrides and GCC runtime library paths.
-   Follow the profile's build parallelism and generator choices; preserve an
-   existing build's generator. Record wrapper versions and library resolution,
+   Follow the profile's build parallelism and generator choices. For a new
+   build directory, prefer `-G Ninja` when Ninja is available unless the user
+   or profile requires another generator. Preserve an existing build's
+   generator and cached objects. In an existing Unix Makefiles build, use one
+   suitable aggregate target for a group of independent targets; listing
+   separate targets can serialize them despite `-j`. Record wrapper versions and library resolution,
    and print runtime modules and threading in the job log.
 7. Materialize a run-specific submission script and config record. Print the
    absolute log directory, exact command, source commit, and scheduler request

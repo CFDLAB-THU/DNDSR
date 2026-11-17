@@ -95,16 +95,24 @@ directory; edit the shared source, not separate harness-specific copies.
 
 ### C++ (CMake)
 
+For a **new build directory**, prefer the Ninja generator whenever `ninja` is
+available, unless the user or selected cluster profile requires another
+generator. Pass `-G Ninja` explicitly, including with a configure preset.
+Preserve the generator of an existing build directory; never delete its cache
+or rebuild it from scratch solely to switch generators. For existing Unix
+Makefiles builds, use one aggregate target when building several independent
+targets: a list of separate targets may serialize them despite `-j`.
+
 ```bash
 # Configure (from project root)
 mkdir build && cd build
-CC=mpicc CXX=mpicxx cmake ..
+CC=mpicc CXX=mpicxx cmake .. -G Ninja # Omit -G Ninja if unavailable.
 # ^ Use CC=mpicc CXX=mpicxx when unsure which MPI CMake will find.
 
 # Or use CMake presets (see CMakePresets.json)
-cmake --preset release-test   # Release with tests enabled
-cmake --preset debug          # Debug with tests enabled
-cmake --preset cuda           # Release with CUDA and tests
+cmake --preset release-test -G Ninja # Fresh Release build with tests enabled
+cmake --preset debug -G Ninja        # Fresh Debug build with tests enabled
+cmake --preset cuda -G Ninja         # Fresh CUDA build with tests
 
 # Build a specific target (-j for parallel)
 cmake --build . -t euler -j 8
