@@ -228,8 +228,8 @@ namespace DNDS::Cauchy
             _data->equation.ResolveKernelProfile(state.Device());
         else
         {
-            const auto physics = PerfectGasSpatialParameters::FromEquation(_data->equation, Metrics().Dimension());
-            physics.Validate(int(state.ComponentNumber()));
+            if (!_data->equation.IsACM())
+                PerfectGasSpatialParameters::FromEquation(_data->equation, Metrics().Dimension()).Validate(int(state.ComponentNumber()));
             const auto &field = state.CoupledField();
             DNDS_check_throw_info(field.Owned().Layout().Kind() == R::RowLayoutKind::Table &&
                                       field.Ghost().Layout().Kind() == R::RowLayoutKind::Table,

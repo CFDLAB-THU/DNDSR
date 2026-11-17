@@ -49,7 +49,7 @@ namespace DNDS::CFV
         DNDS_check_throw_info(components > 0 && components <= std::numeric_limits<index>::max() / (6 * _data->metrics.Dimension()),
                               "gradient component count is invalid");
         if (Device().space == R::MemorySpace::CUDA)
-            DNDS_check_throw_info(components >= 5 && components <= 7, "CUDA gradient supports combined flow5/SA/2EQ only");
+            DNDS_check_throw_info(components >= 4 && components <= 7, "CUDA gradient requires a combined table with 4 to 7 components");
         Detail::ValidateVectorBlocks(components, periodicVectorStarts);
         R::Array<index> starts(R::RowLayout::Dense(index(periodicVectorStarts.size()), 1));
         {

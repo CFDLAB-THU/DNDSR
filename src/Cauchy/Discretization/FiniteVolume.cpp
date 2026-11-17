@@ -84,6 +84,10 @@ namespace DNDS::Cauchy
             auto setupStage = progress.Stage("FV/source-quadrature");
             data->BuildSourceQuadrature();
         }
+        // Face polynomial values belong to the spatial operator. Even a
+        // profile with no positivity limiter needs the same cache for RHS.
+        if (data->reconstruction)
+            data->quadrature.faceBasis = data->reconstruction->SamplingFaceBasis();
         if (!equation.IsACM())
         {
             auto setupStage = progress.Stage("FV/positivity-quadrature");

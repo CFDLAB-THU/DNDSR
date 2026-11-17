@@ -7,8 +7,6 @@ namespace DNDS::Cauchy
     void FiniteVolume::Data::BuildPositivityQuadrature(bool limitedVR)
     {
         namespace R = Runtime;
-        if (reconstruction)
-            quadrature.faceBasis = reconstruction->SamplingFaceBasis();
         // Direct gradients and LVR's physical gradient target have their own
         // face-center check set. They never need modal face/volume queries.
         (void)limitedVR;

@@ -85,7 +85,7 @@ namespace DNDS::CFV::Detail
         }
     };
     /// scratch is a reserved CPU-worker table with six gradient-width segments
-    /// per row. CUDA uses bounded thread-local scratch for 5/6/7 components.
+    /// per row. CUDA uses bounded thread-local scratch for 4 to 7 components.
     void LimitGradient(GradientLimiterView plan, DeviceWorkSelection selection, GradientVectorRanges vectors,
                        GradientLimiterValues values, GradientOutput output, GradientOutput scratch);
     void LaunchGradientLimiter(Runtime::ExecutionContext context, GradientLimiterView plan, DeviceWorkSelection selection,

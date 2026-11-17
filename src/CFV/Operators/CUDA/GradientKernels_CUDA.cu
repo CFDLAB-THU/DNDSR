@@ -27,7 +27,7 @@ namespace DNDS::CFV::Detail
         R::ValidateViewDevices(context.device, plan, selection, vectors, mean, boundary, output);
         R::CheckKernelArgumentBudget<decltype(plan), decltype(selection), decltype(vectors), decltype(mean), decltype(boundary), decltype(output)>();
         const index components = mean.owned.Width();
-        DNDS_check_throw_info(components >= 5 && components <= 7 && (plan.dimension == 2 || plan.dimension == 3) &&
+        DNDS_check_throw_info(components >= 4 && components <= 7 && (plan.dimension == 2 || plan.dimension == 3) &&
                                   output.Width() == components * plan.dimension && output.RowCount() == mean.owned.RowCount() &&
                                   boundary.Width() == components && plan.offsets.RowCount() == output.RowCount() + 1,
                               "CUDA gradient shape/profile mismatch");
@@ -39,6 +39,9 @@ namespace DNDS::CFV::Detail
         const auto stream = ::DNDS::Runtime::CUDAStream(context);
         switch (components)
         {
+        case 4:
+            EvaluateRows<4><<<blocks, 128, 0, stream>>>(plan, selection, vectors, mean, boundary, output);
+            break;
         case 5:
             EvaluateRows<5><<<blocks, 128, 0, stream>>>(plan, selection, vectors, mean, boundary, output);
             break;

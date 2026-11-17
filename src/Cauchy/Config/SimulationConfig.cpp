@@ -197,6 +197,12 @@ namespace DNDS::Cauchy
             }
             if (resolved["settings"]["equation"]["system"] == "incompressibleACM")
             {
+                const auto gradientKey = "/domains/" + std::to_string(iDomain) + "/settings/numerics/viscousGradient";
+                if (data->provenance.at(gradientKey) == "schema default")
+                {
+                    resolved["settings"]["numerics"]["viscousGradient"] = "polynomial";
+                    data->provenance[gradientKey] = "ACM mechanical gradients";
+                }
                 const auto base = "/domains/" + std::to_string(iDomain) + "/settings/implicit/";
                 auto &implicit = resolved["settings"]["implicit"];
                 if (implicit["residualComponents"] == Json::array({"rho"}) &&
