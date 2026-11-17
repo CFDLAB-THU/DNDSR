@@ -16,9 +16,9 @@
       "exprtkInitializers": [{
         "stateType": "primUP",
         "exprs": [
-          "var k := 0.62831853071795865; var X := k*(x[0]-t); var Y := k*(x[1]-t);",
-          "UExprtk[0] := 1 + 0.2*sin(X)*cos(Y); UExprtk[1] := 1 - 0.2*cos(X)*sin(Y);",
-          "UExprtk[2] := 0; UExprtk[3] := 0.01*(cos(2*X)+cos(2*Y)); inRegion := 1; 0;"
+          "var k := 0.62831853071795865; var phaseX := k*(x[0]-t); var phaseY := k*(x[1]-t);",
+          "UExprtk[0] := 1 + 0.2*sin(phaseX)*cos(phaseY); UExprtk[1] := 1 - 0.2*cos(phaseX)*sin(phaseY);",
+          "UExprtk[2] := 0; UExprtk[3] := 0.01*(cos(2*phaseX)+cos(2*phaseY)); inRegion := 1; 0;"
         ]
       }]
     },
