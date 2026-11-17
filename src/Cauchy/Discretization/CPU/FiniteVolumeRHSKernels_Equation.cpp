@@ -256,10 +256,10 @@ namespace DNDS::Cauchy::CPU
                                                                                mu, wallValues.faces(sample.face, sample.point - first), 0);
                             const auto transport = ransModel->TryTransport(at);
                             if (!transport)
-                                return transport.status.At(iCell, sample.point);
+                                return NumericalStatus{transport.status.code, 6201, iCell, sample.point};
                             const auto diffusion = ransModel->TryDiffusionFlux(at, sample.normal, transport.value.viscosity);
                             if (!diffusion)
-                                return diffusion.status.At(iCell, sample.point);
+                                return NumericalStatus{diffusion.status.code, 6202, iCell, sample.point};
                             for (int j = 0; j < ransModel->ComponentNumber(); ++j)
                                 flux[4 + j] -= diffusion.value[j];
                             mu += transport.value.viscosity;
@@ -280,7 +280,7 @@ namespace DNDS::Cauchy::CPU
                     for (int j = 0; j < width; ++j)
                     {
                         if (!std::isfinite(flux[j]))
-                            return NumericalStatus{NumericalError::InvalidState}.At(iCell, sample.point);
+                            return NumericalStatus{NumericalError::InvalidState, 6210 + j, iCell, sample.point};
                         integrated[j] -= weight * flux[j];
                     }
                     continue;
