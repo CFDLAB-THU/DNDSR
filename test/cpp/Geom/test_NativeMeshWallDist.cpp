@@ -135,10 +135,13 @@ TEST_CASE("Wall distance rejects a rank without native authority collectively")
     DNDS::MPIInfo mpi(MPI_COMM_WORLD);
     if (mpi.size == 1)
         return;
-    auto mesh = Fixture(mpi);
-    auto legacy = std::make_shared<G::UnstructuredMesh>(mpi, 2);
-    if (mpi.rank == 0)
-        mesh = legacy;
+    // FromNative retains the preparation context's communicator, which need
+    // not be MPI_COMM_WORLD. Reject missing authority on that SAME communicator
+    // on every rank, and keep its owner alive while the empty facade uses it.
+    auto source = Fixture(mpi);
+    auto mesh = mpi.rank == 0
+                    ? std::make_shared<G::UnstructuredMesh>(source->getMPI(), 2)
+                    : source;
     auto stamp = mesh->versions.Stamp();
     CHECK_THROWS(mesh->BuildNodeWallDist([](auto)
                                          { return true; }));

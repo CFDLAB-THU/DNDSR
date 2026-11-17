@@ -1211,7 +1211,15 @@ namespace DNDS::Geom
         std::map<AdjacencyDescriptor, RArray> movedRelations;
         std::vector<Runtime::TransferOperation> pendingMoves;
         source.LocalStage(mpi, [&]
-                          { pendingMoves.reserve(original.size() + source.spaces.size() * 3 + 12); });
+                          {
+            // Validate every descriptor before posting the first payload. In
+            // particular, the serial-owned remap does not need the discovery
+            // scan above, so an invalid later alias could otherwise throw with
+            // earlier transfers still active. Tests can reject this admission
+            // coherently; production retains its terminal failure policy.
+            for (const auto &[key, unused] : original)
+                (void)acquireInput(key);
+            pendingMoves.reserve(original.size() + source.spaces.size() * 3 + 12); });
         auto *pending = cellOld2New ? nullptr : &pendingMoves;
         // Routing preserves row slots. Sorting belongs to the destination's
         // semantic descriptor, not the wire payload: sorted and topological

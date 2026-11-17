@@ -257,9 +257,17 @@ namespace DNDS::Geom
                     }
             }
         } close{serializer, false, factory.type == "JSON"};
-        // Backend I/O can be collective; only the path/probe preparation above
-        // may be wrapped in LocalStage. Let I/O failures escape immediately.
-        serializer->OpenFile(path, true);
+        // JSON opens/parses one independent file per rank. Agree on parse
+        // success before any rank enters the schema collectives: otherwise a
+        // rank-local malformed file can strand peers in schema Bcast while a
+        // coordinated caller proceeds to its failure/cleanup agreement.
+        // HDF5 OpenFile may itself be collective and must not be wrapped in a
+        // recoverable local-stage guard. Solver catches still terminate.
+        if (factory.type == "JSON")
+            FieldTransferDetail::LocalStage(mpi, [&]
+                                            { serializer->OpenFile(path, true); });
+        else
+            serializer->OpenFile(path, true);
         close.opened = true;
         const auto partition = repartition && !serializer->IsPerRank() ? Serializer::ArrayGlobalOffset_EvenSplit : Serializer::ArrayGlobalOffset_Unknown;
         auto owned = ReadCompatibleNativeMeshArchiveOwned(mpi, serializer, "meshPart", partition);

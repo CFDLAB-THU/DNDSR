@@ -2,6 +2,7 @@ from DNDSR import DNDS, Geom, CFV
 from DNDSR.Geom.utils import *
 import numpy as np
 import json
+import os
 
 
 def test_basic():

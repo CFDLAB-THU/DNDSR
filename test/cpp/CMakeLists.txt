@@ -407,6 +407,9 @@ if(DNDS_USE_CUDA)
     target_sources(runtime_array_bridge_test PRIVATE DNDS/RuntimeArrayBridge_CUDA.cu ../demos/MockStencil.cu)
 endif()
 set_target_properties(runtime_array_bridge_test PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+# The registered Python tests exercise this extension too. Building the full
+# test target must make it available even in a fresh separate build directory.
+add_dependencies(all_unit_tests runtime_array_bridge_test)
 dnds_add_unit_test(config "DNDS/test_Config.cpp" "dnds")
 dnds_add_unit_test(csv_log "DNDS/test_CsvLog.cpp" "dnds")
 add_dependencies(dnds_unit_tests dnds_test_csv_log)

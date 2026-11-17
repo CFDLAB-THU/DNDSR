@@ -663,6 +663,9 @@ def test():
 
     mpi = DNDS.MPIInfo()
     mpi.setWorld()
+    if mpi.size != 1:
+        import pytest
+        pytest.skip("WaveTester requires its single free cell on this rank; distributed CFV coverage lives in the reconstruction tests")
     tester = WaveTester(mpi, batch_size=3)
     # print(
     #     tester.test_one_wave(

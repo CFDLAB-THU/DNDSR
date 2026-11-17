@@ -200,7 +200,9 @@ def test_native_helpers_reject_mixed_authority_before_dispatch(tmp_path):
     mpi.setWorld()
     path = _fixture(tmp_path)
     native = read_mesh(path, mpi, 2, native=True).mesh
-    empty = Geom.UnstructuredMesh(mpi, 2)
+    # Match the native facade's retained preparation communicator, not WORLD.
+    # The native variable keeps that communicator alive on the empty rank too.
+    empty = Geom.UnstructuredMesh(native.getMPI(), 2)
     mixed = empty if mpi.rank == 0 else native
     output = Geom.UnstructuredMeshSerialRW(mixed, 0)
     for operation in (

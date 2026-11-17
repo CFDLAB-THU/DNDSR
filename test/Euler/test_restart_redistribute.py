@@ -37,7 +37,7 @@ import pytest
 # ---------------------------------------------------------------------------
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 PROJECT_ROOT = os.path.realpath(os.path.join(SCRIPT_DIR, "..", ".."))
-BUILD_DIR = os.path.join(PROJECT_ROOT, "build")
+BUILD_DIR = os.path.abspath(os.environ.get("DNDS_BUILD_DIR", os.path.join(PROJECT_ROOT, "build")))
 EULER_EXE = os.path.join(BUILD_DIR, "app", "euler.exe")
 BASE_CONFIG = os.path.join(PROJECT_ROOT, "cases",
                            "euler", "euler_config_IV.json")
@@ -380,6 +380,9 @@ def test_restart_redistribute_different_np(work_dir):
     print("=== PASS ===")
 
 
+# This integration case launches a writer plus five independent MPI restarts.
+# Bound the complete campaign rather than applying the short unit-test budget.
+@pytest.mark.timeout(300)
 def test_restart_redistribute_large_mesh_multi_np(work_dir_large):
     """Write restart at np=4 with 20x20 mesh, read at np=4..8."""
     if not os.path.isfile(EULER_EXE):
