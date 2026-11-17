@@ -44,6 +44,16 @@ Subtracting a constant pressure changes the gauge and cannot remove a spatial
 continuity residual. BDF1 and BDF2 impose continuity inside the implicit
 equation, so their initial data need no explicit-stage check.
 
+For the supplied 20×20 periodic vortex, the separate
+`cauchy_experiment_acm_vortex_projection` target prepares discretely
+consistent time-zero means. Run it from the mesh checkout with the case JSON
+and a fresh checkpoint filename. It holds the analytical pressure fixed,
+corrects the horizontal velocity, and verifies the resulting rate with the
+same finite-volume operator used by the solver. Supply this checkpoint with
+`--restart` to use identical initial data across integrators. A time-zero
+snapshot containing only means carries no active nonlinear iteration. An
+internal checkpoint still requires its original method and update policy.
+
 ## Face operators and turbulence
 
 Scheme A uses the arithmetic mean velocity and the `acmAlpha` and `acmBeta2`

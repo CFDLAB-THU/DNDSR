@@ -105,13 +105,19 @@ namespace DNDS::Cauchy
         if (entries.count("last_accepted_dt") && (history || historyArchive))
             DNDS_check_throw_info(lastDt == historyDt, "stored last accepted timestep conflicts with BDF history");
         auto storedConfig = Json::parse(config, nullptr, false);
+        // Before the first step a mean-only snapshot is initial data. Its
+        // producer has never applied a nonlinear update policy. The consumer
+        // initializes its own method (including both DITR stages) from it.
+        const bool initialMeansOnly = step == 0 && time == 0 && lastDt == 0 &&
+                                      !entries.count("cauchy_internal_format") && !history && !historyArchive &&
+                                      !reconstruction && !reconstructionArchive && !limitedVRHistory;
         int valid = name == _problem.name && !storedConfig.is_discarded() && CompatibleConfig(storedConfig) == CompatibleConfig(resolved) && std::isfinite(time) && time >= 0 && step >= 0 &&
                     (stateArchive ? stateArchive->Compatible(_state.trial) && stateArchive->fields[0].RowCount() == ids.RowCount()
                                   : flow && _state.trial.ComponentNumber() == 5 && _state.trial.PhysicalFieldNumber() == 1 &&
                                         flow->RowCount() == ids.RowCount() && flow->Layout().Width() == 5);
         valid = valid && (version < 4 || (metadata.is_object() && metadata.value("schema_version", 0) == 1 &&
                                           CompatibleEquationMetadata(metadata.value("flow", Json())) == CompatibleEquationMetadata(EquationMetadata(_problem.equation)) &&
-                                          (!metadata.contains("update_policy") || metadata.at("update_policy") == UpdatePolicyMetadata())));
+                                          (initialMeansOnly || !metadata.contains("update_policy") || metadata.at("update_policy") == UpdatePolicyMetadata())));
         valid = valid && CompatibleFrame(metadata, _problem.finiteVolume, std::isfinite(time) ? time : 0);
         valid = valid && (!limitedVRHistory || ((reconstruction || reconstructionArchive) && limitedVRHistory->RowCount() == ids.RowCount() &&
                                                 !limitedVRHistory->Layout().IsVariable() && limitedVRHistory->Layout().Width() == 2));

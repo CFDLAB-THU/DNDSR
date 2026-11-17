@@ -811,6 +811,29 @@ TEST_CASE("ACM BDF2 restart preserves the pressure gauge and differential histor
     CHECK(difference < 1e-14);
     Remove({path});
 }
+TEST_CASE("A mean-only initial checkpoint can seed a different nonlinear stage policy")
+{
+    const auto path = Path("cauchy-initial-method-");
+    C::DomainSettings settings;
+    const auto mesh = CauchyTest::PeriodicQuads(mpi, 4);
+    C::TimeSettings time;
+    time.method = "bdf1";
+    C::Domain source("fluid", mesh, settings, time);
+    Initialize(source);
+    time.method = "ditr";
+    C::Domain restored("fluid", mesh, settings, time);
+    const C::Json metadata{{"case", "initial means"}};
+    source.WriteCheckpoint(path, metadata, false);
+    restored.ReadCheckpoint(path, metadata);
+    REQUIRE(restored.Time() == 0);
+    const auto expected = source.Dofs().ReadOwned();
+    const auto actual = restored.Dofs().ReadOwned();
+    for (DNDS::index iCell = 0; iCell < actual.Block("flow").RowCount(); ++iCell)
+        for (int j = 0; j < 5; ++j)
+            CHECK(actual.Block("flow")(iCell, j) == expected.Block("flow")(iCell, j));
+    Remove({path});
+}
+
 TEST_CASE("Implicit restart preserves variable BDF2 history and rebuilds live DITR stage bindings")
 {
     for (const std::string method : {"bdf2", "ditr"})
