@@ -260,6 +260,7 @@ namespace DNDS::Geom::detail
                                   "shared native subentity vertices have inconsistent higher-order nodes or edge roles");
             return true;
         };
+        query.matchExtraSupportsParallelGrouping = true;
         return query;
     }
 

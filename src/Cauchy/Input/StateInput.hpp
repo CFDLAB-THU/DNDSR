@@ -2,7 +2,8 @@
 
 #include "Cauchy/Config/SimulationConfig.hpp"
 #include "Cauchy/Physics/EquationSystem.hpp"
-#include "Cauchy/Physics/PointProperties.hpp"
+
+#include <memory>
 
 namespace DNDS::Cauchy
 {
@@ -16,15 +17,15 @@ namespace DNDS::Cauchy
     /// hidden worker acquisition, collectives or global expression state.
     class PhysicalStateConverter
     {
-        EquationSystem _equation;
-        Physics::ReferenceScales _scales;
-        PointEvaluator _evaluator;
-        std::vector<real> _scalarScales;
-        int _rans, _species;
+        struct Data;
+        std::unique_ptr<Data> _data;
 
     public:
         PhysicalStateConverter(const EquationSystem &equation, const Physics::ReferenceScales &scales,
                                Physics::Chemistry::ChemicalWorkerPool::Lease worker = {});
+        ~PhysicalStateConverter();
+        PhysicalStateConverter(const PhysicalStateConverter &) = delete;
+        PhysicalStateConverter &operator=(const PhysicalStateConverter &) = delete;
         /// Complete schema-order state, in code units with total energy.
         std::vector<real> Conservative(Physics::StateInput input);
         /// Boundary-only totalPT[_phy] vector. Converts p0/T0/scalar units,

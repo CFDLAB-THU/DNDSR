@@ -4,6 +4,24 @@
 
 namespace DNDS::Cauchy
 {
+    struct PhysicalStateConverter::Data
+    {
+        EquationSystem equation;
+        Physics::ReferenceScales scales;
+        PointEvaluator evaluator;
+        std::vector<real> scalarScales;
+        int rans, species;
+
+        Data(const EquationSystem &equationIn, const Physics::ReferenceScales &scalesIn,
+             Physics::Chemistry::ChemicalWorkerPool::Lease worker)
+            : equation(equationIn), scales(scalesIn),
+              evaluator(equation.MakePointEvaluator(std::move(worker), {})),
+              rans(equation.HasRANS() ? equation.RANS().ComponentNumber() : 0),
+              species(equation.HasMixture() ? equation.Mixture().SpeciesNumber() : 0)
+        {
+        }
+    };
+
     Physics::ReferenceScales ResolveReferenceScales(const EquationSettings &settings)
     {
         const auto &old = settings.mixture;
@@ -23,29 +41,31 @@ namespace DNDS::Cauchy
     }
     PhysicalStateConverter::PhysicalStateConverter(const EquationSystem &equation, const Physics::ReferenceScales &scales,
                                                    Physics::Chemistry::ChemicalWorkerPool::Lease worker)
-        : _equation(equation), _scales(scales), _evaluator(equation.MakePointEvaluator(std::move(worker), {})),
-          _rans(equation.HasRANS() ? equation.RANS().ComponentNumber() : 0),
-          _species(equation.HasMixture() ? equation.Mixture().SpeciesNumber() : 0)
+        : _data(std::make_unique<Data>(equation, scales, std::move(worker)))
     {
         scales.Validate();
-        _scalarScales.assign(_rans + (_species ? _species - 1 : 0), 1);
-        if (_rans == 2)
+        _data->scalarScales.assign(_data->rans + (_data->species ? _data->species - 1 : 0), 1);
+        if (_data->rans == 2)
         {
-            _scalarScales[0] = scales.SpecificEnergy();
-            _scalarScales[1] = (equation.RANS().Kind() == Physics::RANS::ModelKind::RealizableKE ? scales.SpecificEnergy() : 1) / scales.Time();
+            _data->scalarScales[0] = scales.SpecificEnergy();
+            _data->scalarScales[1] = (equation.RANS().Kind() == Physics::RANS::ModelKind::RealizableKE ? scales.SpecificEnergy() : 1) / scales.Time();
         }
-        if (_species)
+        if (_data->species)
         {
             const auto &material = equation.Mixture().Scales();
             DNDS_check_throw_info(scales.rho0 == material.rho0 && scales.U0 == material.U0 && scales.L0 == material.L0 && scales.T0 == material.T0,
                                   "state input scales differ from equation material");
         }
     }
+    PhysicalStateConverter::~PhysicalStateConverter() = default;
     std::vector<real> PhysicalStateConverter::TotalCondition(Physics::StateInput parsed)
     {
+        const auto &scales = _data->scales;
+        const auto &scalarScales = _data->scalarScales;
+        const int rans = _data->rans, species = _data->species;
         DNDS_check_throw_info(parsed.form == Physics::StateInput::Form::TotalPT,
                               "totalConditionInlet requires totalPT or totalPT_phy");
-        parsed.ToCodeUnits(_scales, _scalarScales);
+        parsed.ToCodeUnits(scales, scalarScales);
         auto &v = parsed.values;
         DNDS_check_throw_info(std::all_of(v.begin(), v.end(), [](real value)
                                           { return std::isfinite(value); }),
@@ -55,25 +75,28 @@ namespace DNDS::Cauchy
                               "total inlet requires positive total p/T and a finite nonzero direction");
         for (int d = 2; d < 5; ++d)
             v[d] /= norm;
-        for (int j = 0; j < _rans; ++j)
+        for (int j = 0; j < rans; ++j)
             DNDS_check_throw_info(v[5 + j] >= 0, "total inlet requires nonnegative primitive RANS values");
-        if (_species)
+        if (species)
         {
-            std::vector<real> fractions(_species);
-            Physics::Chemistry::RepairMassFractions(1, {v.data() + 5 + _rans, _species - 1},
-                                                    {fractions.data(), _species});
-            for (int k = 0; k < _species - 1; ++k)
-                v[5 + _rans + k] = fractions[k];
+            std::vector<real> fractions(species);
+            Physics::Chemistry::RepairMassFractions(1, {v.data() + 5 + rans, species - 1},
+                                                    {fractions.data(), species});
+            for (int k = 0; k < species - 1; ++k)
+                v[5 + rans + k] = fractions[k];
         }
         return std::move(v);
     }
     std::vector<real> PhysicalStateConverter::Conservative(Physics::StateInput parsed)
     {
         using Form = Physics::StateInput::Form;
+        const auto &equation = _data->equation;
+        const auto &scales = _data->scales;
+        const auto &scalarScales = _data->scalarScales;
+        auto &evaluator = _data->evaluator;
         DNDS_check_throw_info(parsed.form != Form::TotalPT, "totalPT is only valid for a totalConditionInlet boundary");
-        const auto &equation = _equation;
-        const int nr = _rans, ns = _species, ni = ns ? ns - 1 : 0;
-        parsed.ToCodeUnits(_scales, _scalarScales);
+        const int nr = _data->rans, ns = _data->species, ni = ns ? ns - 1 : 0;
+        parsed.ToCodeUnits(scales, scalarScales);
         auto &u = parsed.values;
         DNDS_check_throw_info(std::all_of(u.begin(), u.end(), [](real v)
                                           { return std::isfinite(v); }),
@@ -105,7 +128,7 @@ namespace DNDS::Cauchy
         std::copy_n(u.begin(), 5, flow.begin());
         if (!conservative)
         {
-            flow = _evaluator.FromPrimitive(flow, {rhoY.data(), ni}, parsed.form == Form::RhoT ? u[4] : 0);
+            flow = evaluator.FromPrimitive(flow, {rhoY.data(), ni}, parsed.form == Form::RhoT ? u[4] : 0);
             for (int j = 0; j < nr; ++j)
                 u[5 + j] *= flow[0];
         }
@@ -117,7 +140,7 @@ namespace DNDS::Cauchy
                 flow[4] += flow[0] * fractions[k] * equation.Mixture().BaseSpecificInternalEnergies()[k];
         }
         std::copy(flow.begin(), flow.end(), u.begin());
-        const auto properties = _evaluator.Evaluate(flow, {rhoY.data(), ni});
+        const auto properties = evaluator.Evaluate(flow, {rhoY.data(), ni});
         DNDS_check_throw_info(std::isfinite(properties.thermo.temperature) && properties.thermo.temperature > 0 &&
                                   std::isfinite(properties.thermo.pressure) && properties.thermo.pressure > 0 &&
                                   std::all_of(u.begin(), u.end(), [](real v)
@@ -128,20 +151,25 @@ namespace DNDS::Cauchy
     Physics::StateInput PhysicalStateConverter::Represent(const std::vector<real> &conservative, Physics::StateInput::Form form, bool physical)
     {
         using Form = Physics::StateInput::Form;
+        const auto &equation = _data->equation;
+        const auto &scales = _data->scales;
+        const auto &scalarScales = _data->scalarScales;
+        auto &evaluator = _data->evaluator;
+        const int rans = _data->rans, species = _data->species;
         DNDS_check_throw_info(form != Form::TotalPT, "totalPT is a boundary input, not a conservative-state representation");
-        DNDS_check_throw_info(conservative.size() == 5 + _scalarScales.size() && conservative[0] > 0 &&
+        DNDS_check_throw_info(conservative.size() == 5 + scalarScales.size() && conservative[0] > 0 &&
                                   std::all_of(conservative.begin(), conservative.end(), [](real v)
                                               { return std::isfinite(v); }),
                               "state representation requires a finite complete conservative row with positive density");
         Physics::StateInput result{form, false, conservative};
-        const int ni = _species ? _species - 1 : 0;
+        const int ni = species ? species - 1 : 0;
         FlowState flow;
         std::copy_n(conservative.begin(), 5, flow.begin());
-        const auto point = _evaluator.Evaluate(flow, {conservative.data() + 5 + _rans, ni});
+        const auto point = evaluator.Evaluate(flow, {conservative.data() + 5 + rans, ni});
         auto &values = result.values;
-        if (form == Form::Sensible && _species)
-            for (int k = 0; k < _species; ++k)
-                values[4] -= flow[0] * point.fractions[k] * _equation.Mixture().BaseSpecificInternalEnergies()[k];
+        if (form == Form::Sensible && species)
+            for (int k = 0; k < species; ++k)
+                values[4] -= flow[0] * point.fractions[k] * equation.Mixture().BaseSpecificInternalEnergies()[k];
         if (form != Form::Conservative && form != Form::Sensible)
         {
             for (index j = 1; j < index(values.size()); ++j)
@@ -151,7 +179,7 @@ namespace DNDS::Cauchy
                 values[0] = point.thermo.temperature;
         }
         if (physical)
-            result.ToPhysicalUnits(_scales, _scalarScales);
+            result.ToPhysicalUnits(scales, scalarScales);
         return result;
     }
     ResolvedPhysicalState ResolvePhysicalState(const Json &input, const EquationSystem &equation,

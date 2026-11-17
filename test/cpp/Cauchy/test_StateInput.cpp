@@ -2,6 +2,7 @@
 #include "doctest.h"
 #include "Cauchy/Input/StateInput.hpp"
 #include "Cauchy/Input/InitialField.hpp"
+#include "Cauchy/Physics/PointProperties.hpp"
 #include "Cauchy/Physics/PhysicsResources.hpp"
 #include "Cauchy/State/RANSState.hpp"
 #include "Euler/Physics/PhysicsProperties.hpp"

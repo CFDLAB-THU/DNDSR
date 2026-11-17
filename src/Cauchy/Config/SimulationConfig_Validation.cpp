@@ -2,6 +2,7 @@
 #include "Cauchy/Input/StateInput.hpp"
 #include "DNDS/Config/JsonSchema.hpp"
 #include "DNDS/Algebra/AmgXPreconditioner.hpp"
+#include "Geom/Quadratures/QuadratureBase.hpp"
 #include <set>
 
 namespace DNDS::Cauchy
@@ -36,6 +37,9 @@ namespace DNDS::Cauchy
         if (equation.eos == "perfectGas")
             EquationSystem::Resolve(equation);
         DNDS_check_throw_info(settings.mesh.dimension == 2 || settings.mesh.dimension == 3, "Cauchy geometric dimension must be 2 or 3");
+        DNDS_check_throw_info(settings.initialField.integrationOrder >= 0 &&
+                                  settings.initialField.integrationOrder <= Geom::Elem::INT_ORDER_MAX,
+                              "initialField.integrationOrder must be in the supported range [0,6]");
         DNDS_check_throw_info(std::isfinite(settings.mesh.scale) && settings.mesh.scale > 0 && std::isfinite(settings.mesh.rotationZDegrees),
                               "mesh scale must be positive and mesh rotation must be finite");
         DNDS_check_throw_info(settings.execution.hostThreads >= 0 && settings.execution.hostThreads <= 1024, "invalid CPU worker count");

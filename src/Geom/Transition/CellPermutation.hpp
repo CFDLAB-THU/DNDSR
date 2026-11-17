@@ -6,6 +6,7 @@
 /// and the new ReorderLocalCells (in Mesh_Reorder.cpp).
 
 #include "DNDS/Core/Defines.hpp"
+#include "DNDS/Core/OMP.hpp"
 #include "Geom/Transition/SerialAdjReordering.hpp"
 
 #include <vector>
@@ -150,21 +151,28 @@ namespace DNDS::Geom::detail
             auto localPartEnd = [&](int iPart) -> index
             { return !result.localPartitionStarts.empty() ? result.localPartitionStarts.at(iPart + 1) : nCell; };
 
-            std::vector<index> cellNew2Old_new;
-            cellNew2Old_new.reserve(nCell);
-            for (index i = 0; i < nCell; i++)
-                result.cellOld2New[i] = cellIsNotPrivate(result.cellNew2Old[i]);
-            for (int iPart = 0; iPart < nLocalParts; iPart++)
-            {
-                for (index i = localPartStart(iPart); i < localPartEnd(iPart); i++)
-                    if (!result.cellOld2New[i])
-                        cellNew2Old_new.push_back(result.cellNew2Old[i]);
-                for (index i = localPartStart(iPart); i < localPartEnd(iPart); i++)
-                    if (result.cellOld2New[i])
-                        cellNew2Old_new.push_back(result.cellNew2Old[i]);
-            }
+            std::vector<index> cellNew2OldNew(static_cast<size_t>(nCell));
+            OMP::ForSetupRows(0, nCell, [&](index i)
+                              { result.cellOld2New[size_t(i)] = cellIsNotPrivate(result.cellNew2Old[size_t(i)]); });
+            std::vector<index> privateCounts(static_cast<size_t>(nLocalParts));
+            OMP::ForSetupRows(0, nLocalParts, [&](index iPart)
+                              {
+                index count = 0;
+                for (index i = localPartStart(int(iPart)); i < localPartEnd(int(iPart)); ++i)
+                    count += !result.cellOld2New[size_t(i)];
+                privateCounts[size_t(iPart)] = count; });
+            OMP::ForSetupRows(0, nLocalParts, [&](index iPart)
+                              {
+                const index begin = localPartStart(int(iPart));
+                index privateOutput = begin;
+                index interfaceOutput = begin + privateCounts[size_t(iPart)];
+                for (index i = begin; i < localPartEnd(int(iPart)); ++i)
+                    if (!result.cellOld2New[size_t(i)])
+                        cellNew2OldNew[size_t(privateOutput++)] = result.cellNew2Old[size_t(i)];
+                    else
+                        cellNew2OldNew[size_t(interfaceOutput++)] = result.cellNew2Old[size_t(i)]; });
 
-            result.cellNew2Old = std::move(cellNew2Old_new);
+            result.cellNew2Old = std::move(cellNew2OldNew);
             DNDS_assert(static_cast<index>(result.cellNew2Old.size()) == nCell);
             for (auto v : result.cellNew2Old)
                 DNDS_assert(v < nCell && v >= 0);

@@ -54,6 +54,18 @@ TEST_CASE("Mesh preprocessing is explicit and validates a positive uniform scale
     CHECK(scaled.Domains().front().settings.mesh.rotationZDegrees == 30);
     CHECK_THROWS(C::SimulationConfig::Resolve({{"defaults", {{"mesh", {{"scale", 0}}}}}}, 1));
 }
+TEST_CASE("Programmed initialization preserves order six by default and validates overrides")
+{
+    const auto defaults = C::SimulationConfig::Resolve(C::Json::object(), 1);
+    CHECK(defaults.Domains().front().settings.initialField.integrationOrder == 6);
+    const auto selected = C::SimulationConfig::Resolve(
+        {{"defaults", {{"initialField", {{"integrationOrder", 3}}}}}}, 1);
+    CHECK(selected.Domains().front().settings.initialField.integrationOrder == 3);
+    CHECK_THROWS_WITH(
+        C::SimulationConfig::Resolve(
+            {{"defaults", {{"initialField", {{"integrationOrder", 7}}}}}}, 1),
+        doctest::Contains("initialField.integrationOrder"));
+}
 TEST_CASE("Native AMG is selected independently for reconstruction and flow")
 {
     C::DomainConfig domain;

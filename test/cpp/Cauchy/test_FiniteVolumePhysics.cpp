@@ -432,6 +432,7 @@ TEST_CASE("Spatial initial input averages conservative polynomials on distribute
     settings.initialField.exprtkInitializers.push_back({{"inRegion := 1; UExprtk[0] := 2*(1+x[0]); UExprtk[1] := 3*(2+x[0]);",
                                                          "UExprtk[4] := 18*(1+x[0]^2); 0;"},
                                                         "primRhoP_phy"});
+    settings.initialField.integrationOrder = 2;
     const auto parsed = C::SimulationConfig::ResolveCollective({{"defaults", C::Json(settings)}}, mpi.comm);
     for (const auto *layout : {"aos", "soa", "aosoa32"})
     {

@@ -9,6 +9,7 @@
 #include "Geom/Unstructured/ReaderPartitionGraph.hpp"
 #include "Geom/Transition/NativeMeshPartitionGraph.hpp"
 #include "Geom/Transition/MeshAdjacencyBindings.hpp"
+#include "DNDS/Core/OMP.hpp"
 #include <algorithm>
 #include <limits>
 #include <numeric>
@@ -27,7 +28,7 @@ namespace DNDS::Geom
         {
             return Runtime::BuildArrayRows<index>(rows.size(), [&](size_t row)
                                                   { return rows[row].size(); }, [&](size_t row, auto output)
-                                                  { std::copy(rows[row].begin(), rows[row].end(), output.begin()); });
+                                                  { std::copy(rows[row].begin(), rows[row].end(), output.begin()); }, {}, true);
         }
         template <class T, class MapValue>
         Runtime::Array<T> ReorderOwnedRows(const Runtime::Array<T> &source, const std::vector<index> &oldToNew,
@@ -758,13 +759,21 @@ namespace DNDS::Geom
             DNDS_check_throw_info(view.RowCount() == source.spaces.at(EntityKind::Cell).NumOwned(),
                                   "cached facial graph row count differs from owned cells");
             facial->offsets.resize(view.RowCount() + 1, 0);
-            for (index row = 0; row < view.RowCount(); ++row)
-            {
-                const auto count = view.RowSize(row);
-                DNDS_check_throw_info(facial->offsets[row] <= std::numeric_limits<idx_t>::max() - idx_t(count),
-                                      "cached facial graph adjacency exceeds METIS extent");
-                facial->offsets[row + 1] = facial->offsets[row] + METIS::indexToIdx(count);
-            }
+            OMP::ExclusivePrefixRows(
+                view.RowCount(),
+                [&](index row) -> index
+                {
+                    const auto count = view.RowSize(row);
+                    DNDS_check_throw_info(count <= size_t(std::numeric_limits<idx_t>::max()),
+                                          "cached facial graph row exceeds METIS extent");
+                    return index(count);
+                },
+                [&](index row, index offset)
+                {
+                    DNDS_check_throw_info(offset <= index(std::numeric_limits<idx_t>::max()),
+                                          "cached facial graph adjacency exceeds METIS extent");
+                    facial->offsets[size_t(row)] = METIS::indexToIdx(offset);
+                });
             facial->adjacency.resize(size_t(facial->offsets.back()));
             int invalid = 0;
 #pragma omp parallel for schedule(static) reduction(| : invalid)

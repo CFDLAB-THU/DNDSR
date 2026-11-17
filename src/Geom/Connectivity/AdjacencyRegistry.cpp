@@ -476,7 +476,7 @@ namespace DNDS::Geom
         std::optional<ConnectivityRows::SubEntityRows> rows;
         std::vector<std::vector<NodePeriodicBits>> nodeBits, parentBits;
 
-        std::vector<bool> owned;
+        std::vector<uint8_t> owned;
         std::vector<index> parentGlobal;
         std::vector<MPI_int> parentOwner;
         setup.ValidateCollectively([&]
@@ -556,8 +556,11 @@ namespace DNDS::Geom
             // enumeration; periodic identity still uses the original globals.
             std::vector<size_t> localStarts(size_t(cone.RowCount()) + 1, 0);
             std::vector<index> localNodes;
-            for (index iRow = 0; iRow < cone.RowCount(); ++iRow)
-                localStarts[size_t(iRow) + 1] = CheckedSize::Add(localStarts[size_t(iRow)], size_t(cone._view.RowSize(iRow)));
+            OMP::ExclusivePrefixRows(
+                cone.RowCount(),
+                [&](index row) { return index(cone._view.RowSize(row)); },
+                [&](index row, index offset)
+                { localStarts[size_t(row)] = size_t(offset); });
             localNodes.resize(localStarts.back());
             OMP::ForSetupRows(0, cone.RowCount(), [&](index iRow)
             {
@@ -566,6 +569,7 @@ namespace DNDS::Geom
             });
             SubEntityQueryPbi enumeration = query;
             if (periodic)
+            {
                 enumeration.matchExtra = [&](index parent, int sub, index entity, index originalParent, int originalSub)
                 {
                     if (query.matchExtra && !query.matchExtra(parent, sub, entity, originalParent, originalSub)) return false;
@@ -583,6 +587,9 @@ namespace DNDS::Geom
                     auto current = extract(parent, sub), original = extract(originalParent, originalSub);
                     return bool(NativePeriodicFrame(std::move(current), std::move(original)));
                 };
+                enumeration.matchExtraSupportsParallelGrouping =
+                    !query.matchExtra || query.matchExtraSupportsParallelGrouping;
+            }
             rows.emplace(ConnectivityRows::EnumerateSubEntities([&](index row, int slot)
             {
                 const auto first = localStarts[size_t(row)], end = localStarts[size_t(row) + 1];
@@ -593,7 +600,25 @@ namespace DNDS::Geom
             parentBits.resize(size_t(cone.RowCount()));
             if (periodic)
             {
-                for (index parent = 0; parent < cone.RowCount(); ++parent)
+                OMP::ForSetupRows(0, rows->nEntities, [&](index entity)
+                {
+                    const auto parent = rows->entity2parent[size_t(entity)].front();
+                    const auto &slots = rows->parent2entity[size_t(parent)];
+                    const auto found = std::find(slots.begin(), slots.end(), entity);
+                    DNDS_check_throw_info(found != slots.end(),
+                                          "periodic entity origin is missing from its parent row");
+                    const int sub = int(found - slots.begin());
+                    const auto desc = query.describe(parent, sub);
+                    auto &stored = nodeBits[size_t(entity)];
+                    stored.resize(size_t(desc.nNodes));
+                    query.extractPbi(parent, sub, [&](int slot)
+                    {
+                        DNDS_check_throw_info(slot >= 0 && size_t(slot) < cone.RowSize(parent),
+                                              "periodic extraction slot outside cone");
+                        return (*periodic)(parent, size_t(slot));
+                    }, stored.data());
+                });
+                OMP::ForSetupRows(0, cone.RowCount(), [&](index parent)
                 {
                     parentBits[size_t(parent)].resize(rows->parent2entity[size_t(parent)].size());
                     for (size_t sub = 0; sub < rows->parent2entity[size_t(parent)].size(); ++sub)
@@ -609,8 +634,7 @@ namespace DNDS::Geom
                         }, bits.data());
                         query.extractNodes(parent, int(sub), [&](int slot)
                         { return localIndex(parent, size_t(slot)); }, nodes.data());
-                        auto &stored = nodeBits[size_t(entity)];
-                        if (stored.empty()) stored = bits;
+                        const auto &stored = nodeBits[size_t(entity)];
                         const auto &entityNodes = rows->entity2node[size_t(entity)];
                         DNDS_check_throw_info(entityNodes.size() == nodes.size(), "periodic subentity node count mismatch");
                         std::vector<std::pair<index, uint8_t>> current, original;
@@ -625,22 +649,21 @@ namespace DNDS::Geom
                         DNDS_check_throw_info(uniform, "periodic subentity has nonuniform frame transform");
                         parentBits[size_t(parent)][sub] = NodePeriodicBits{*uniform};
                     }
-                }
+                });
             }
             parentGlobal.resize(size_t(cone.RowCount()));
             parentOwner.resize(size_t(cone.RowCount()));
-            for (index parent = 0; parent < cone.RowCount(); ++parent)
+            OMP::ForSetupRows(0, cone.RowCount(), [&](index parent)
             {
                 parentGlobal[size_t(parent)] = cone.Source().LocalToGlobal(parent);
                 parentOwner[size_t(parent)] = cone.Source().Owner(parentGlobal[size_t(parent)]);
-            }
+            });
             owned.resize(size_t(rows->nEntities));
-            std::vector<MPI_int> ranks;
-            ranks.reserve(4);
-            for (index entity = 0; entity < rows->nEntities; ++entity)
+            OMP::ForSetupRows(0, rows->nEntities, [&](index entity)
             {
                 const auto &parents = rows->entity2parent[size_t(entity)];
-                ranks.clear();
+                std::vector<MPI_int> ranks;
+                ranks.reserve(parents.size());
                 bool anyOwned = false, anyGhost = false;
                 for (auto parent : parents)
                 {
@@ -649,7 +672,7 @@ namespace DNDS::Geom
                     anyGhost = anyGhost || parent >= cone.NumOwned();
                 }
                 owned[size_t(entity)] = anyOwned && (!anyGhost || resolver(parents, ranks, cone.NumOwned()).owned);
-            } });
+            }); });
         int entityKinds[]{int(entityKind), -int(entityKind)};
         MPI_Allreduce(MPI_IN_PLACE, entityKinds, 2, MPI_INT, MPI_MIN, mpi.comm);
         DNDS_check_throw_info(entityKinds[0] == -entityKinds[1], "interpolation entity kind differs between ranks");
@@ -657,10 +680,17 @@ namespace DNDS::Geom
         MPI_Allreduce(MPI_IN_PLACE, periodicFlags, 2, MPI_INT, MPI_MIN, mpi.comm);
         DNDS_check_throw_info(periodicFlags[0] == -periodicFlags[1], "periodic interpolation differs between ranks");
         std::vector<index> oldToOwned(size_t(rows->nEntities), UnInitIndex);
-        index nOwned = 0;
-        for (index entity = 0; entity < rows->nEntities; ++entity)
-            if (owned[size_t(entity)])
-                oldToOwned[size_t(entity)] = nOwned++;
+        const index nOwned = OMP::ExclusivePrefixRows(
+            rows->nEntities,
+            [&](index entity)
+            { return index(bool(owned[size_t(entity)])); },
+            [&](index entity, index offset)
+            {
+                // ExclusivePrefixRows also publishes the terminal total at
+                // entity == nEntities.  It is not an entity row.
+                if (entity < rows->nEntities && owned[size_t(entity)])
+                    oldToOwned[size_t(entity)] = offset;
+            });
         auto entities = MakeSpace(entityKind, nOwned, cone.Source());
         std::vector<std::vector<index>> e2n(static_cast<size_t>(nOwned)), e2p(static_cast<size_t>(nOwned));
         std::vector<std::vector<NodePeriodicBits>> e2nBits(static_cast<size_t>(nOwned));
@@ -727,12 +757,16 @@ namespace DNDS::Geom
         MPI_Alltoallv(outgoing.data(), sendCounts.data(), sendOffsets.data(), DNDS_MPI_INDEX,
                       incoming.data(), receiveCounts.data(), receiveOffsets.data(), DNDS_MPI_INDEX, mpi.comm);
         std::vector<std::vector<index>> p2e(size_t(cone.RowCount()));
-        for (index parent = 0; parent < cone.RowCount(); ++parent)
+        OMP::ForSetupRows(0, cone.RowCount(), [&](index parent)
+                          {
+            auto &outputRow = p2e[size_t(parent)];
+            outputRow.resize(rows->parent2entity[size_t(parent)].size());
+            size_t slot = 0;
             for (auto entity : rows->parent2entity[size_t(parent)])
             {
                 const auto output = oldToOwned[size_t(entity)];
-                p2e[size_t(parent)].push_back(output == UnInitIndex ? UnInitIndex : entities.LocalToGlobal(output));
-            }
+                outputRow[slot++] = output == UnInitIndex ? UnInitIndex : entities.LocalToGlobal(output);
+            } });
         setup.ValidateCollectively([&]
                                    {
             for (size_t peer = 0; peer < size_t(mpi.size); ++peer)

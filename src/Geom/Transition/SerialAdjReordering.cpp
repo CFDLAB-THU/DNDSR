@@ -1,4 +1,5 @@
 #include "Geom/Transition/SerialAdjReordering.hpp"
+#include "DNDS/Core/OMP.hpp"
 
 namespace DNDS::Geom
 {
@@ -158,10 +159,11 @@ namespace DNDS::Geom
         //! Per-partition RCM reordering. Cross-sub-partition edges are trimmed before RCM
         //! since bandwidth reduction only considers intra-partition connectivity.
         //! The reindex step uses (ind_offset + local_offset) as the absolute base.
-        for (int iPart = 0; iPart < nParts; iPart++)
-        {
-            index local_offset = part_start[iPart];
-            index local_nelem = part_start[iPart + 1] - part_start[iPart];
+        std::vector<index> bandwidthOld(size_t(nParts), 0), bandwidthNew(size_t(nParts), 0);
+        OMP::ForSetupRows(0, nParts, [&](index iPart)
+                          {
+            index local_offset = part_start[size_t(iPart)];
+            index local_nelem = part_start[size_t(iPart + 1)] - part_start[size_t(iPart)];
             //! Trim: remove edges outside [ind_offset + local_offset, ind_offset + local_offset + local_nelem)
             for (index iC = 0; iC < local_nelem; iC++)
             {
@@ -177,8 +179,8 @@ namespace DNDS::Geom
                 mat_begin + local_offset + local_nelem,
                 bwOld, bwNew,
                 ind_offset + local_offset);
-            bwNewM = std::max(bwNewM, bwNew);
-            bwOldM = std::max(bwOldM, bwOld);
+            bandwidthNew[size_t(iPart)] = bwNew;
+            bandwidthOld[size_t(iPart)] = bwOld;
 
             tLocalMatStruct new_mat(local_nelem);
             std::vector<index> new_i_new2old(local_nelem);
@@ -196,7 +198,11 @@ namespace DNDS::Geom
             {
                 i_new2old_begin[iC + local_offset] = new_i_new2old[iC]; // composing the oldest mapping
                 mat_begin[iC + local_offset] = std::move(new_mat[iC]);
-            }
+            } });
+        for (int iPart = 0; iPart < nParts; ++iPart)
+        {
+            bwNewM = std::max(bwNewM, bandwidthNew[size_t(iPart)]);
+            bwOldM = std::max(bwOldM, bandwidthOld[size_t(iPart)]);
         }
 
         return part_start;

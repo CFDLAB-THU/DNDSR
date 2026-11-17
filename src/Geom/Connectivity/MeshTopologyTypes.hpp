@@ -207,6 +207,9 @@ namespace DNDS::Geom
     ///   - describe(iParent, iSub):  returns {nVerts, nNodes, faceElemType}
     ///   - extractNodes(iParent, iSub, parentNodes, out): calls ExtractFaceNodes
     ///   - matchExtra (optional): periodic collaborating check
+    /// All callbacks must be deterministic and safe for concurrent const use.
+    /// Scalable setup may evaluate `describe`/`extractNodes` more than once;
+    /// callbacks must not retain scratch or expose observable side effects.
     struct SubEntityQuery
     {
         /// Number of sub-entities for parent iParent.
@@ -241,6 +244,13 @@ namespace DNDS::Geom
                            index iCandEntity,
                            index candidateParent, int candidateSub)>
             matchExtra;
+
+        /// Enables parallel equal-key group resolution when `matchExtra` is an
+        /// equivalence predicate and does not inspect `iCandEntity`. Creating
+        /// parent/subentity pairs and probe order within a key remain stable.
+        /// Custom callbacks default to the append implementation unless they
+        /// explicitly satisfy both requirements and opt in.
+        bool matchExtraSupportsParallelGrouping{false};
     };
 
     // =================================================================
@@ -289,6 +299,8 @@ namespace DNDS::Geom
     /// @param parentRanks   Rank owning each parent (parallel to parents vector).
     /// @return OwnershipDecision: whether this rank owns the entity and which
     ///         peers need it pushed.
+    /// The callback is setup-pure and must be safe for concurrent const calls;
+    /// it must not invoke MPI or retain references to the temporary vectors.
     using OwnershipResolverMulti = std::function<OwnershipDecision(
         const std::vector<index> &parents,
         const std::vector<MPI_int> &parentRanks,

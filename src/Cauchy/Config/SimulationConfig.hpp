@@ -564,12 +564,16 @@ namespace DNDS::Cauchy
     };
     struct InitialFieldSettings
     {
+        /// Volume quadrature order used to conservatively average programmed
+        /// point states into cell means. Six preserves the historical path.
+        int integrationOrder = 6;
         std::vector<BoxInitializer> boxInitializers;
         std::vector<PlaneInitializer> planeInitializers;
         std::vector<ExprtkInitializer> exprtkInitializers;
         bool Empty() const { return boxInitializers.empty() && planeInitializers.empty() && exprtkInitializers.empty(); }
         DNDS_DECLARE_CONFIG(InitialFieldSettings)
         {
+            DNDS_FIELD(integrationOrder, "Cell-average quadrature order in [0,6]; default 6 preserves the historical initialization");
             config.field_array_of<BoxInitializer>(&T::boxInitializers, "boxInitializers", "Ordered quadrature-point overrides; later matches win");
             config.field_array_of<PlaneInitializer>(&T::planeInitializers, "planeInitializers", "Applied after boxes, in list order");
             config.field_array_of<ExprtkInitializer>(&T::exprtkInitializers, "exprtkInitializers", "Applied after planes; inRegion selects the updated point state");
