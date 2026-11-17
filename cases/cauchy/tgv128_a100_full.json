@@ -1,0 +1,84 @@
+{
+  "defaults": {
+    "mesh": {
+      "file": "/mnt/ssd-SATARAID5/harry/mesh/Uniform128_3D_Periodic.cgns",
+      "scale": 6.283185307179586,
+      "dimension": 3,
+      "periodicLengths": [6.283185307179586, 6.283185307179586, 6.283185307179586],
+      "boundaryIds": {
+        "PERIODIC_1": -1, "PERIODIC_1_DONOR": -4,
+        "PERIODIC_2": -2, "PERIODIC_2_DONOR": -5,
+        "PERIODIC_3": -3, "PERIODIC_3_DONOR": -6
+      }
+    },
+    "equation": {
+      "system": "compressible", "eos": "perfectGas",
+      "transport": "NewtonianFourier",
+      "gamma": 1.4, "gasConstant": 1,
+      "viscosityModel": "constant", "viscosity": 0.000625, "prandtl": 0.72
+    },
+    "initialState": {"type": "primRhoP", "state": [1, 0, 0, 0, 71.42857142857143]},
+    "referenceState": {"type": "primRhoP", "state": [1, 0, 0, 0, 71.42857142857143]},
+    "initialField": {
+      "exprtkInitializers": [{
+        "stateType": "primRhoP",
+        "exprs": [
+          "var p := 71.42857142857143 + (cos(2*x[0])+cos(2*x[1]))*(2+cos(2*x[2]))/16;",
+          "UExprtk[0] := 0.014*p; UExprtk[1] := sin(x[0])*cos(x[1])*cos(x[2]);",
+          "UExprtk[2] := -cos(x[0])*sin(x[1])*cos(x[2]); UExprtk[3] := 0; UExprtk[4] := p;",
+          "inRegion := 1; 0;"
+        ]
+      }]
+    },
+    "numerics": {
+      "reconstruction": "variational", "flux": "Roe_M1", "limiter": "none",
+      "positivity": true, "faceFallback": false,
+      "viscousGradient": "polynomial",
+      "reconstructionIterations": 1, "reconstructionTolerance": 0,
+      "cfv": {
+        "maxOrder": 3, "intOrder": 4, "cacheDiffBase": false,
+        "SORInstead": false, "jacobiRelax": 1,
+        "functional": {
+          "dirWeightScheme": "HQM_OPT", "geomWeightScheme": "HQM_SD", "scaleType": "BaryDiff"
+        },
+        "storage": {"representation": "raw", "faceCoupling": true, "inverseTriangle": false}
+      }
+    },
+    "implicit": {
+      "diagonal": "block",
+      "iterations": 240, "minIterations": 1,
+      "relativeTolerance": 0.001, "absoluteTolerance": 1e-12,
+      "normOrder": 1, "residualReference": "runningMaximum", "residualComponents": ["rho"],
+      "pseudoCFL": 50, "maxPseudoCFL": 50, "pseudoGrowth": 1,
+      "collectiveChecks": false,
+      "requireConvergedReconstruction": false, "rejectUnconvergedStages": false,
+      "multigrid": {"levels": 0},
+      "linear": {
+        "method": "jacobi", "preconditioner": "jacobi", "stopping": "fixedCount",
+        "iterations": 8, "relativeTolerance": 0, "absoluteTolerance": 0,
+        "cudaDiagonalInverse": "guardedLU"
+      }
+    },
+    "execution": {
+      "device": "cuda", "deviceOrdinal": 0,
+      "layout": "aos", "fieldGrouping": "coupled",
+      "reconstructionKernel": "fp64Pipelined",
+      "kernels": {"rhsMapping": "ctaSegments", "rhsReduction": "segmented", "rhsBlockSize": 128, "polynomialPPThreads": 512},
+      "overlap": false, "checkAccess": false, "haloFreshnessChecks": false
+    }
+  },
+  "time": {
+    "method": "esdirk4", "steady": false,
+    "dt": 0.025, "steps": 400, "tEnd": 10, "wallSeconds": 0, "maxRetries": 0
+  },
+  "output": {
+    "prefix": "data/outUnsteady/Cauchy/TGV128_RawB_FullAInv/run",
+    "checkpointInterval": 0, "visualizationInterval": 0,
+    "checkpointTimeInterval": 1, "visualizationTimeInterval": 1,
+    "historyInterval": 1, "historySegmentRows": 10000, "historyPrecision": 10,
+    "consoleColor": "always", "consoleBold": "always", "eventLog": true, "hdfDeflateLevel": 5,
+    "checkpointReconstruction": false, "asynchronous": false,
+    "implicit": {"consoleInterval": 1, "historyInterval": 1},
+    "diagnostics": {"allocations": true, "allocationWarmupSteps": 1}
+  }
+}
