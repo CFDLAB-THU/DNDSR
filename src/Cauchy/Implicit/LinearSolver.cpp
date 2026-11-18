@@ -666,6 +666,13 @@ namespace DNDS::Cauchy
             {
                 const TimelineScope preparationTimeline("Cauchy/Linear/InvertDiagonal");
                 auto engine = data.compute.LockEngine();
+                // A second solver can prepare this shared problem on another
+                // stream between solves. Restore this solver's binding before
+                // submission. The common same-stream path reuses its workspace.
+                data.problem->PrepareDiagonalInverse(data.compute.Context(),
+                                                     data.settings.cudaDiagonalInverse == "guardedLU"
+                                                         ? CUDADiagonalInverse::GuardedLU
+                                                         : CUDADiagonalInverse::BatchedSVD);
                 data.problem->SubmitInvertDiagonal(engine, data.compute, data.settings.diagonalInverseRefinement);
                 // Numerical preparation observation, shared by inline/worker
                 // and device execution. The Krylov loop never consumes an

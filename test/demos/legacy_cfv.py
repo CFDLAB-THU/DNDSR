@@ -5,7 +5,7 @@ import json
 import os
 
 
-def test_basic():
+def main():
     print(CFV.tUDof_1)
     # CFV.VariationalReconstruction_2()
 
@@ -127,4 +127,4 @@ def test_basic():
 
 
 if __name__ == "__main__":
-    test_basic()
+    main()

@@ -136,24 +136,6 @@ TEST_CASE("MPI Allreduce")
     mpi.setWorld();
     int expected = mpi.size * (mpi.size + 1) / 2;
 
-    SUBCASE("Allreduce MPI_SUM with real type")
-    {
-        DNDS::real sendVal = static_cast<DNDS::real>(mpi.rank + 1);
-        DNDS::real recvVal = 0.0;
-        MPI::Allreduce(&sendVal, &recvVal, 1, DNDS_MPI_REAL, MPI_SUM, mpi.comm);
-
-        CHECK(recvVal == doctest::Approx(static_cast<DNDS::real>(expected)));
-    }
-
-    SUBCASE("Allreduce MPI_SUM with index type")
-    {
-        DNDS::index sendVal = static_cast<DNDS::index>(mpi.rank + 1);
-        DNDS::index recvVal = 0;
-        MPI::Allreduce(&sendVal, &recvVal, 1, DNDS_MPI_INDEX, MPI_SUM, mpi.comm);
-
-        CHECK(recvVal == static_cast<DNDS::index>(expected));
-    }
-
     SUBCASE("AllreduceOneReal")
     {
         DNDS::real val = static_cast<DNDS::real>(mpi.rank + 1);

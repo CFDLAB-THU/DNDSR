@@ -835,6 +835,12 @@ cfv_add_mpi_test(reconstruction "CFV/test_Reconstruction.cpp" "cfv;geom;dnds")
 cfv_add_mpi_test(fv_facility "CFV/test_FVFacility.cpp" "cfv;geom;dnds")
 cfv_add_mpi_test(distributed_interface_sampling "CFV/test_DistributedInterfaceSampling.cpp" "cfv;geom;dnds")
 cfv_add_mpi_test(reconstruction_overlap "CFV/test_ReconstructionOverlap.cpp" "cfv;geom;dnds")
+# Keep the rank-coverage lane single-threaded even when the runner uses a
+# distributed OpenMP team for the rest of the suite.
+foreach(NP ${DNDS_TEST_NP_LIST})
+    set_property(TEST cfv_reconstruction_overlap_np${NP} APPEND PROPERTY
+        ENVIRONMENT "DNDS_DIST_OMP_NUM_THREADS=1")
+endforeach()
 if(DNDS_USE_OMP AND DNDS_DIST_MT_USE_OMP)
     add_test(NAME cfv_reconstruction_overlap_omp2_np2
         COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
@@ -945,35 +951,18 @@ if(DNDS_USE_CUDA)
             ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/demos/one_rank_per_gpu.py
             $<TARGET_FILE:cfv_test_reconstruction_cuda> ${MPIEXEC_POSTFLAGS})
     set_tests_properties(cfv_reconstruction_cuda_np2 PROPERTIES PROCESSORS 2 TIMEOUT 180 ENVIRONMENT "OMP_NUM_THREADS=1")
-    foreach(_variant tensor nccl nccl_tensor nccl_shared nccl_async)
-        if(_variant MATCHES "nccl" AND NOT DNDS_USE_NCCL)
-            continue()
-        endif()
-        if(_variant MATCHES "tensor|shared|async" AND NOT CMAKE_CUDA_ARCHITECTURES MATCHES "(^|;)(80|90)(-real|-virtual)?(;|$)")
-            continue()
-        endif()
-        set(_environment "OMP_NUM_THREADS=1")
-        if(_variant MATCHES "tensor")
-            list(APPEND _environment "DNDS_TEST_RECONSTRUCTION_KERNEL=tensor")
-        endif()
-        if(_variant MATCHES "shared")
-            list(APPEND _environment "DNDS_TEST_RECONSTRUCTION_KERNEL=shared")
-        endif()
-        if(_variant MATCHES "async")
-            list(APPEND _environment "DNDS_TEST_RECONSTRUCTION_KERNEL=async")
-        endif()
-        if(_variant MATCHES "nccl")
-            list(APPEND _environment "DNDS_TEST_TRANSFER_PROVIDER=nccl")
-        endif()
+    # The default executable already compares every supported sweep kernel.
+    # Repeat only provider-sensitive cases for NCCL.
+    if(DNDS_USE_NCCL)
         foreach(_np 1 2)
-            add_test(NAME cfv_reconstruction_${_variant}_np${_np}
+            add_test(NAME cfv_reconstruction_nccl_np${_np}
                 COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${_np} ${MPIEXEC_PREFLAGS}
                     ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/demos/one_rank_per_gpu.py
-                    $<TARGET_FILE:cfv_test_reconstruction_cuda> ${MPIEXEC_POSTFLAGS})
-            set_tests_properties(cfv_reconstruction_${_variant}_np${_np} PROPERTIES
-                PROCESSORS ${_np} TIMEOUT 180 ENVIRONMENT "${_environment}")
+                    $<TARGET_FILE:cfv_test_reconstruction_cuda> ${MPIEXEC_POSTFLAGS} --test-suite=halo)
+            set_tests_properties(cfv_reconstruction_nccl_np${_np} PROPERTIES PROCESSORS ${_np}
+                TIMEOUT 180 ENVIRONMENT "OMP_NUM_THREADS=1;DNDS_TEST_TRANSFER_PROVIDER=nccl")
         endforeach()
-    endforeach()
+    endif()
     list(APPEND CFV_TEST_TARGETS cfv_test_device_transferable cfv_test_reconstruction_cuda
         cfv_test_limited_vr_cuda cfv_test_characteristic_cuda)
 endif()

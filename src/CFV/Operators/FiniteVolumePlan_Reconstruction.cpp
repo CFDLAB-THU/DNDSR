@@ -644,7 +644,6 @@ namespace DNDS::CFV
                                         work, region, false);
         auto view = retained.Sweep(work.components);
         auto meanOwned = mean.Owned().Read(), recOwned = input.Owned().Read(), boundaryRead = boundary.values.Read();
-        auto next = work.temporary.Owned().Write();
         std::optional<R::Array<real>::ReadLease> meanGhost, recGhost, targetRead, alphaRead;
         if (region != ReconstructionRegion::Core)
         {
@@ -655,7 +654,6 @@ namespace DNDS::CFV
         view.current = recOwned.View<R::UniformTableRows>();
         view.ghost = recGhost ? recGhost->View<R::UniformTableRows>() : ReadRows{};
         view.boundary = boundaryRead.View<R::TableRows>();
-        view.output = next.View<R::UniformTableRows>();
         if (target)
         {
             targetRead.emplace(target->Owned().Read());
@@ -664,6 +662,10 @@ namespace DNDS::CFV
             view.penalty = alphaRead->View<R::UniformTableRows>();
             view.limited = true;
         }
+        // A failed input lease is a rejected launch, so acquire the output
+        // only after every read has been admitted.
+        auto next = work.temporary.Owned().Write();
+        view.output = next.View<R::UniformTableRows>();
         const auto status = CPU::ReconstructionSweep(view, retained.selection);
         DNDS_check_throw_info(status, "reconstruction penalty alpha must be finite and in [0,1]");
     }

@@ -22,7 +22,6 @@ namespace R = DNDS::Runtime;
 namespace G = DNDS::Geom;
 using I = DNDS::index;
 static DNDS::MPIInfo mpi;
-static std::optional<C::ReconstructionDeviceKernel> comparisonKernel;
 static std::shared_ptr<R::NCCLTransferProvider> nccl;
 static R::TransferBinding Halo(const C::VariationalReconstructionPlan &plan, C::FVField &field, R::TransferTransport transport = R::TransferTransport::Direct)
 {
@@ -89,7 +88,7 @@ static void CompareSharedSweep(const C::FiniteVolumePlan &metrics, const C::Vari
         for (auto kernel : {C::ReconstructionDeviceKernel::FP64MatrixShared,
                             C::ReconstructionDeviceKernel::FloatFloatPipelined,
                             C::ReconstructionDeviceKernel::FP64TensorCoreAsync})
-            if ((!comparisonKernel || *comparisonKernel == kernel) && resident.SupportsKernel(kernel))
+            if (resident.SupportsKernel(kernel))
                 kernels.push_back(kernel);
     for (auto kernel : kernels)
         for (bool split : {false, true})
@@ -614,7 +613,7 @@ TEST_CASE("Device publications retain actual mesh metrics and basis with explici
     CHECK_THROWS(minimal.AcquireResidentRead().MetricView());
     CHECK_THROWS(minimal.MeshSnapshot());
 }
-TEST_CASE("Device-only reconstruction placement releases host payloads and remains executable")
+TEST_CASE("Device-only reconstruction placement releases host payloads and remains executable" * doctest::test_suite("halo"))
 {
     auto fixture = G::OverlapTest::BuildNativeFixture(mpi, false);
     auto metrics = C::FiniteVolumePlan::ConstructMetrics(fixture.mesh);
@@ -921,7 +920,7 @@ TEST_CASE("Opt-in FP32 sweep maps retain FP64 coefficients and avoid duplicate d
     }
 }
 
-TEST_CASE("CUDA Jacobi and WBAP agree with CPU for physical DOF layouts and direct MPI split work")
+TEST_CASE("CUDA Jacobi and WBAP agree with CPU for physical DOF layouts and direct MPI split work" * doctest::test_suite("halo"))
 {
     auto fixture = G::OverlapTest::BuildNativeFixture(mpi, false);
     auto metrics = C::FiniteVolumePlan::ConstructMetrics(fixture.mesh);
@@ -1034,7 +1033,7 @@ TEST_CASE("CUDA Jacobi and WBAP agree with CPU for physical DOF layouts and dire
         }
     }
 }
-TEST_CASE("CUDA preserves rotated periodic vectors and axisymmetric prepared operators")
+TEST_CASE("CUDA preserves rotated periodic vectors and axisymmetric prepared operators" * doctest::test_suite("halo"))
 {
     for (bool sector : {true, false})
     {
@@ -1089,7 +1088,7 @@ TEST_CASE("CUDA preserves rotated periodic vectors and axisymmetric prepared ope
         }
     }
 }
-TEST_CASE("CUDA degree three 3D reconstruction supports 37 coupled components and empty peers")
+TEST_CASE("CUDA degree three 3D reconstruction supports 37 coupled components and empty peers" * doctest::test_suite("halo"))
 {
     for (I gridWidth : {I(1), I(3)})
     {
@@ -1149,7 +1148,7 @@ TEST_CASE("CUDA degree three 3D reconstruction supports 37 coupled components an
     }
 }
 
-TEST_CASE("Device errors reject unsupported SOR stale publications and invalid indicators without silent output")
+TEST_CASE("Device errors reject unsupported SOR stale publications and invalid indicators without silent output" * doctest::test_suite("halo"))
 {
     auto fixture = G::OverlapTest::BuildNativeFixture(mpi, false);
     auto metrics = C::FiniteVolumePlan::ConstructMetrics(fixture.mesh);
@@ -1227,14 +1226,6 @@ int main(int argc, char **argv)
 {
     MPI_Init(&argc, &argv);
     mpi = DNDS::MPIInfo(MPI_COMM_WORLD);
-    if (const auto *value = std::getenv("DNDS_TEST_RECONSTRUCTION_KERNEL"))
-    {
-        const std::string name(value);
-        DNDS_check_throw_info(name == "async" || name == "tensor" || name == "shared" || name == "floatFloat", "unknown test reconstruction kernel");
-        comparisonKernel = name == "shared"       ? C::ReconstructionDeviceKernel::FP64MatrixShared
-                           : name == "floatFloat" ? C::ReconstructionDeviceKernel::FloatFloatPipelined
-                                                  : C::ReconstructionDeviceKernel::FP64TensorCoreAsync;
-    }
     if (const auto *value = std::getenv("DNDS_TEST_TRANSFER_PROVIDER"))
     {
         DNDS_check_throw_info(std::string(value) == "nccl", "unknown test transfer provider");

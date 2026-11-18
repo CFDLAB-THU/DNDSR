@@ -218,8 +218,11 @@ def test_reducer_failure_after_posting_aborts_in_child(mode):
     env = {key: value for key, value in os.environ.items()
            if not key.startswith(("OMPI_", "PMIX_", "PMI_"))}
     env["PYTHONPATH"] = os.pathsep.join(sys.path)
+    interpreter = [sys.executable]
+    if sys.flags.no_site:
+        interpreter.append("-S")
     result = subprocess.run(
-        [sys.executable, str(Path(__file__).with_name("runtime_reducer_failure_child.py")), mode],
+        [*interpreter, str(Path(__file__).with_name("runtime_reducer_failure_child.py")), mode],
         env=env, capture_output=True, text=True, timeout=30)
     assert result.returncode != 0, result.stdout + result.stderr
     assert "injected Python reducer reached" in result.stderr

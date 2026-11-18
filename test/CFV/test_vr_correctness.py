@@ -279,37 +279,7 @@ class TestLinearFieldReconstruction:
 
 
 class TestModelEvaluatorRHS:
-    """Verify ModelEvaluator.EvaluateRHS produces finite results."""
-
-    def test_rhs_finite(self, periodic_vfv):
-        mesh, vfv, _ = periodic_vfv
-        u = CFV.tUDof_D()
-        rhs = CFV.tUDof_D()
-        uRec = CFV.tURec_D()
-
-        vfv.BuildUDof_D(u, 1)
-        vfv.BuildUDof_D(rhs, 1)
-        vfv.BuildURec_D(uRec, 1)
-
-        # Set u = sin(2*pi*x/3)
-        for iCell in range(mesh.NumCell()):
-            bary = vfv.GetCellBary(iCell)
-            u_i = np.array(u[iCell], copy=False)
-            u_i[0] = np.sin(2.0 * np.pi * bary[0] / 3.0)
-        u.trans.startPersistentPull()
-        u.trans.waitPersistentPull()
-
-        eval_obj = CFV.ModelEvaluator(
-            mesh, vfv, {"ax": 1.0, "ay": 0.0, "sigma": 0.0}, 1
-        )
-        eval_obj.EvaluateRHS(rhs, u, uRec, 0.0)
-
-        # Check all RHS values are finite
-        for iCell in range(mesh.NumCell()):
-            rhs_i = np.array(rhs[iCell], copy=False)
-            assert np.all(np.isfinite(rhs_i)), (
-                f"Cell {iCell} RHS is not finite: {rhs_i}"
-            )
+    """Check constant and nonuniform advection through the Python binding."""
 
     def test_rhs_nonzero_for_nonuniform_field(self, periodic_vfv):
         """RHS of advection equation should be nonzero for non-constant field."""
@@ -337,6 +307,7 @@ class TestModelEvaluatorRHS:
         rhs_norm = 0.0
         for iCell in range(mesh.NumCell()):
             rhs_i = np.array(rhs[iCell], copy=False)
+            assert np.all(np.isfinite(rhs_i)), f"Cell {iCell} RHS is not finite: {rhs_i}"
             rhs_norm += np.sum(rhs_i ** 2)
         rhs_norm = np.sqrt(rhs_norm)
         assert rhs_norm > 1e-6, f"RHS norm = {rhs_norm}, expected nonzero"

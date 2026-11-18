@@ -328,8 +328,6 @@ MPI tests registered at np=1, np=2, np=4.
 
 ### Convert existing print-only tests to assertion-based tests
 
-- `test/CFV/test_basic_cfv.py`: add assertions on reconstruction
-  coefficient values, metric correctness, RHS conservation
 - `test/CFV/test_basic_fv.py`: add assertions on cell/face metric norms,
   gradient operator accuracy
 - `test/EulerP/test_basic_eulerP.py`: add assertions on primitive variable

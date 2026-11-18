@@ -32,8 +32,12 @@ PYTHONPATH=python pytest test/CFV/ -v
 | — | — | test_fv_correctness.py | pytest |
 | — | — | test_vr_correctness.py | pytest |
 | — | — | test_basic_fv.py | pytest |
-| — | — | test_basic_cfv.py | pytest |
-| — | — | test_cfv_dissdisp.py | pytest |
+| — | — | test_cfv_dissdisp.py::test_native_affine_shear_geometry | pytest |
+
+The print-only legacy reconstruction example runs with
+`PYTHONPATH=python python test/demos/legacy_cfv.py`.
+Run the dispersion study directly with
+`PYTHONPATH=python python test/CFV/test_cfv_dissdisp.py`.
 
 ---
 

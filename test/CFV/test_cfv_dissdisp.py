@@ -657,7 +657,7 @@ def test_native_affine_shear_geometry():
     assert tester.mesh.has_native_state
 
 
-def test():
+def run_wave_demo():
     print(CFV.tUDof_1)
     # CFV.VariationalReconstruction_2()
 
@@ -691,4 +691,4 @@ def test():
 
 
 if __name__ == "__main__":
-    test()
+    run_wave_demo()
