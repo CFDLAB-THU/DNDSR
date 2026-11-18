@@ -1255,6 +1255,7 @@ TEST_CASE("Exact internal checkpoints resume BDF DIRK and DITR nonlinear iterati
             settings.equation.rans.viscosityReference = .01;
             settings.initialRANS = {{"rhoNuTilde", .02}};
             settings.numerics.ransState.referenceConservative = {{"rho", 1}, {"rhoNuTilde", .02}};
+            settings.numerics.viscousGradient = "polynomial";
             settings.implicit.sourceJacobianMode = "rhsQuadrature";
             settings.implicit.diagonal = "block";
         }
