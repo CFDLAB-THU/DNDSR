@@ -189,8 +189,8 @@ Each non-diagonal Jacobian incidence also owns the dense column slot resolved
 when that immutable topology is built; assembled writers index the sparse block
 row directly instead of searching canonical columns on every preparation. The
 generic sparse column table remains authoritative for matrix consumers.
-Direct-FV midpoint source values share the owned mean allocation; source
-derivatives continue to use the limited polynomial sampling facility.
+Direct-FV midpoint source values and gradients borrow the owned cell fields.
+Modal RHS sources evaluate the finalized reconstruction inside the cell loop.
 Direct physical gradients for repeated RANS source preparation carry separate
 owned/ghost ready publications per physical field. Reuse occurs only when the input
 and destination storage, shape and value versions still match. The input read
@@ -1739,17 +1739,14 @@ fixed correction cap and optional profiling use the shared iteration policy.
 The native solver requires the implemented Workspace profile. Operator
 capability resolution selects available fixed-width or general kernels before
 execution and rejects a missing combination explicitly. Its bounded corrections and equation
-application also serve polynomial FAS. It retains actual mean halos
-and high-order source samples from each residual evaluation. Auxiliary
-preparation is stateless with explicit outputs. The default approximate source
-Jacobian uses one cell mean and cell volume, separately from high-order RHS
-source integration. The explicit opt-in
-`implicit.sourceJacobianMode=rhsQuadrature` instead consumes the current
-limited/PP VR values and gradients at the same source quadrature points and
-weights as RHS. It remains a comparison mode; the center mode is the production
-default. RANS consumes current reconstruction gradients sampled at the cell
-center in the default mode; its gradients are retained even on P0. The
-reconstruction publication must remain current in either mode.
+application also serve polynomial FAS. It retains actual mean halos.
+The default source Jacobian uses the cell mean, cell volume and a ready
+physical gradient for RANS. With modal reconstruction this gradient is
+computed independently before the VR sweeps. The `rhsQuadrature` policy
+instead has the source RHS producer return an owned derivative array paired
+with the rate. The point thermodynamics, state, gradient, quadrature weights
+and approximate destruction policy used for these outputs agree. The caller
+keeps the derivative alive until the matrix consumes it.
 The implementation's internal workspace entry is `AddMeanSourceJacobian`;
 the FV wrapper retains the production provenance checks and delegates to it.
 It adds integrated coefficients to an explicitly leased diagonal-line or block
@@ -1985,11 +1982,10 @@ no extra MPI is introduced. This is diagnostic instrumentation, not a clean
 production timing result.
 
 `DNDS_CAUCHY_PROFILE_EQUATION_FV=1` similarly records boundary preparation,
-gradients, VR sweeps, PP, RHS kernels, source sampling, source evaluation and
-complete Evaluate per workspace. Kernel scopes run on their actual CPU worker;
-no extra stream join is inserted. Sampling is nested inside source; cached-rate
-corrections may refresh source outside Evaluate. Hence these counters cannot
-be added as independent pieces of Evaluate. Workspace flags identify mean-only
+gradients, VR sweeps, PP, RHS kernels, volume-source integration and total
+FV evaluation time per workspace. Polynomial source sampling is included
+in the integration kernel. Kernel scopes run on the executing CPU worker.
+Workspace flags identify mean-only
 probes and first-order convection. Existing serialization requirements on a
 workspace apply. Both switches are default-off and query no clocks when off.
 
@@ -2003,15 +1999,12 @@ ILU records additionally retain each rank's factor block count and cumulative
 guarded-inverse fallback count, rather than inferring all-rank behavior from
 rank0's last factorization alone.
 
-Correction auxiliary preparation retains an already published RHS source sample
-when the validated owned means and flux polynomial
-have the same allocation, shape/binding, value generations and physical time.
-Read leases exclude an active producer whose generation has not advanced yet.
-Geometry/schema validation and auxiliary preparation still run, and no MPI or
-stream command is conditionally omitted. Means/polynomial/time changes require
-fresh local sampling. Approximate source matrices are separately refreshed
-from cell means and current center gradients. Chemical source rates are not
-reevaluated by this correction-only preparation.
+Correction auxiliary preparation restores a centered RANS gradient when a
+different stage used its workspace. The mean storage identities, versions,
+time and incoming interface fields distinguish publications. Modal correction
+uses the boundary/gradient prefix. A limited direct-gradient operator must
+also execute its usual limiter and positivity operations. A cached quadrature
+rate supplies its own source derivative and needs no source-point replay.
 
 Equation auxiliary preparation uses the same setup-time exact frame-identity
 predicate as RHS. Ordinary and translational-periodic faces skip identity
@@ -2027,29 +2020,12 @@ and diffusion bound once per call, then faces consume those rows. This explicit
 a separately exchanged payload. Face-average turbulent transport remains a
 distinct point evaluation. General callers can still omit the buffer.
 
-The default approximate RANS source Jacobian consumes physical center gradients.
-For direct FV levels these already live in the gradient field: retain its
-read lease and index direction `component * dimension + direction` directly.
-Do not copy the whole field into one scratch array per direction. Variational
-levels still sample their polynomial at cell centers in the default mode; the
-opt-in rhsQuadrature mode consumes the already published source quadrature
-samples. This view substitution changes neither source gradients nor the
-selected quadrature and preserves strided layouts.
-
-The same direct-gradient borrowing applies to midpoint RHS volume sources
-when setup proves exactly one source point per owned cell in matching order.
-Their source loop retains one read lease per physical gradient field and
-indexes `component * dimension + direction`; it does not allocate or copy one
-sample array per direction. Polynomial and multipoint sources keep sampled
-storage. The explicit gradient refresh and P0 source derivatives remain.
-
-The volume-source gather resolves borrowed value rows and each directional
-gradient row before traversing components. Row spans retain their physical
-element stride, including separate, permuted, SoA and tiled fields. Values
-still enter the existing explicit point scratch; no implicit payload packing
-or new cache is introduced. The enclosing read leases retain the sampled
-buffers through point evaluation. Source quadrature, scalar repair and
-thermodynamic/RANS evaluation are unchanged.
+The source row kernel consumes physical gradients with component indexing
+`j * dimension + d` for direct FV. Modal FV samples each final polynomial
+from owned coefficients and immutable quadrature basis data while integrating
+that cell's source. Worker scratch is independent of the number of points in
+the mesh. The CPU generic path supports segmented, permuted, SoA and tiled
+fields. Combined compact AoS fields have statically shaped point constructors.
 
 Assembled frozen flux blocks resolve the existing exact-identity/full-selection
 predicate before momentum and normal-frame products. Only that proven path
