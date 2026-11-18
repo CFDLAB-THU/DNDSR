@@ -1,4 +1,4 @@
-# Native Cauchy P3 cases
+# Native Cauchy cases
 
 Run from the source root with `build/app/cauchy.exe cases/cauchy/<case>.json`.
 Equation, EOS and transport selection live inside each config. Validate without
@@ -18,6 +18,27 @@ not resumed merely by the continued presence of its template here.
 | `cylinder_re20` | Full D=1, U=1, rho=1, mu=.05, M=.2, adiabatic no-slip | Steady Cd, wake, residual |
 | `cylinder_re200` | Full D=1, U=1, rho=1, mu=.005, M=.2, small transverse wake seed | Transient through t=200, several late CL/CD cycles, St |
 | `dmr_triangular_3wbap` | Mach-10, angle=60 deg, x0=1/6, UniformDM240U triangles, t=.25 | Fully active characteristic descending 3WBAP, shock/reflection morphology |
+| `acm_plate_sa` and `acm_plate_sst` | Coarse TMR plate, 273×193 points, Re=5×10⁶, P1 LSQ, pseudo-CFL cap 100 | Wall friction, layer profiles and nonlinear residual history |
+| `acm_translating_vortex_20` | Constant-density inviscid vortex, periodic [0,10]², t=10, P3, BDF1 | Volume-weighted velocity and gauge-aligned pressure errors, continuity RMS |
+
+The ACM plate cases expect `data/mesh/flatplate_273x193.cgns`. Use the
+273×193 PLOT3D grid from the [TMR flat-plate grids](https://tmbwg.github.io/turbmodels/flatplate.html)
+and the plan repository's `experiments/cauchy-acm/convert_tmr_plate.py` to
+create the CGNS mesh with `WALL`, `INLET`, `SLIP`, `TOP` and `OUTLET` patches.
+Pass an alternative mesh location with `-k /domains/0/settings/mesh/file`.
+Both plate inputs use the default ACM velocity-component rule plus the separate
+continuity tolerance. They limit the steady solve to 10,000 nonlinear
+corrections and write volume and boundary snapshots every 2,500 corrections.
+The last internal snapshot is useful for profile comparisons after a capped
+stage. The solver publishes an accepted steady result only when the configured
+tolerances pass.
+
+The ACM vortex template uses a BDF1 start from the analytic cell averages.
+For ESDIRK4, first project the time-zero field onto the discrete continuity
+constraint using `cauchy_experiment_acm_vortex_projection`. Pass that checkpoint
+with `--restart` and select ESDIRK4 through `/time/method`. The projection tool
+accepts an optional alternative `IV10` Cartesian mesh path after its checkpoint
+argument. Use the same grid for projection and the subsequent solve.
 
 P3 means cubic reconstruction (nominal fourth-order spatial accuracy). The
 vortex uses integrated cell-average initialization and analytic error, not
@@ -50,7 +71,8 @@ condition respects supersonic inflow/outflow and the subsonic incoming component
 count, instead of clamping an outflow to the freestream.
 
 Output is a compact accepted-state history, native persistent-ID restart,
-parallel VTKHDF means and rank-local boundary quadrature CSVs. Histories/output
+and collective volume and boundary VTKHDF. Set `output.boundaryFacialFluxes`
+to include numerical face fluxes. Histories and output
 use separate reconstruction scratch so cadence does not affect the trajectory.
 The C++ frontend uses DNDS MPI initialization/finalization and `argparse`:
 

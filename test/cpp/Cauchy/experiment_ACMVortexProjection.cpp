@@ -1,12 +1,14 @@
-// Qualification-only t=0 projection on the periodic IV10_20 Cartesian lattice.
+// Qualification-only t=0 projection on the periodic IV10 Cartesian lattices.
 // The production Cauchy spatial rate certifies every iterate and the checkpoint.
 #include "Cauchy/Core/Simulation.hpp"
 #include "DNDS/MPI/Failure.hpp"
+#include "DNDS/MPI/MPI.hpp"
 #include <Eigen/Dense>
 #include <complex>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 
 namespace C = DNDS::Cauchy;
 namespace
@@ -14,14 +16,14 @@ namespace
     using Real = DNDS::real;
     using Grid = Eigen::MatrixXd;
     using Spectrum = Eigen::MatrixXcd;
-    constexpr int N = 20;
-    constexpr Real h = .5;
-    constexpr Real volume = h * h;
+    constexpr Real length = 10;
     constexpr int maxIterations = 8;
 
     class PeriodicVortex
     {
         C::Domain &_domain;
+        int _n = 0;
+        Real _volume = 0;
         std::vector<std::array<int, 2>> _xy;
         std::vector<std::array<Real, 4>> _initial;
 
@@ -31,7 +33,14 @@ namespace
             auto metrics = domain.Discretization().Metrics().AcquireRead();
             auto mean = domain.Dofs().CoupledField().Owned().Read();
             const auto view = mean.View();
-            Eigen::MatrixXi membership = Eigen::MatrixXi::Zero(N, N);
+            const auto cells = DNDS::MPI::AllreduceValue<DNDS::MPI::Reduction::Sum>(view.RowCount(), domain.Communicator());
+            DNDS_check_throw_info(cells > 1 && cells <= std::numeric_limits<int>::max(), "invalid IV10 cell count");
+            _n = int(std::llround(std::sqrt(Real(cells))));
+            DNDS_check_throw_info(DNDS::index(_n) * _n == cells,
+                                  "expected a square IV10 lattice with an MPI-sized cell count");
+            const Real h = length / _n;
+            _volume = h * h;
+            Eigen::MatrixXi membership = Eigen::MatrixXi::Zero(_n, _n);
             for (DNDS::index iCell = 0; iCell < view.RowCount(); ++iCell)
             {
                 const auto x = metrics.HostView().GetCellBary(iCell);
@@ -40,27 +49,28 @@ namespace
                 {
                     const int image = int(std::round(x[d] / h - .5));
                     DNDS_check_throw_info(std::abs(x[d] - (image + .5) * h) < 1e-9,
-                                          "expected the periodic IV10_20 cell centers");
-                    ij[d] = (image % N + N) % N;
+                                          "expected the periodic IV10 cell centers");
+                    ij[d] = (image % _n + _n) % _n;
                 }
-                DNDS_check_throw_info(std::abs(metrics.HostView().GetCellVol(iCell) - volume) < 1e-9,
-                                      "expected the uniform IV10_20 cell volumes");
+                DNDS_check_throw_info(std::abs(metrics.HostView().GetCellVol(iCell) - _volume) < 1e-9,
+                                      "expected the uniform IV10 cell volumes");
                 _xy.push_back(ij);
                 _initial.push_back({view(iCell, 0), view(iCell, 1), view(iCell, 2), view(iCell, 3)});
                 ++membership(ij[0], ij[1]);
             }
-            MPI_Allreduce(MPI_IN_PLACE, membership.data(), N * N, MPI_INT, MPI_SUM, _domain.Communicator());
-            DNDS_check_throw_info((membership.array() == 1).all(), "each IV10_20 lattice cell must have exactly one owner");
+            MPI_Allreduce(MPI_IN_PLACE, membership.data(), int(cells), MPI_INT, MPI_SUM, _domain.Communicator());
+            DNDS_check_throw_info((membership.array() == 1).all(), "each IV10 lattice cell must have exactly one owner");
         }
+        int GridSize() const { return _n; }
         /// Integrated continuity -> code-time rate on the uniquely owned grid.
         Grid Rate()
         {
             auto read = _domain.Residual().CoupledField().Owned().Read();
             const auto rate = read.View();
-            Grid g = Grid::Zero(N, N);
+            Grid g = Grid::Zero(_n, _n);
             for (DNDS::index i = 0; i < rate.RowCount(); ++i)
-                g(_xy[i][0], _xy[i][1]) = rate(i, 3) / volume;
-            MPI_Allreduce(MPI_IN_PLACE, g.data(), N * N, MPI_DOUBLE, MPI_SUM, _domain.Communicator());
+                g(_xy[i][0], _xy[i][1]) = rate(i, 3) / _volume;
+            MPI_Allreduce(MPI_IN_PLACE, g.data(), _n * _n, MPI_DOUBLE, MPI_SUM, _domain.Communicator());
             DNDS_check_throw_info(g.allFinite(), "nonfinite native spatial continuity residual");
             return g;
         }
@@ -91,14 +101,17 @@ namespace
         }
     };
 
-    Real RMS(const Grid &g) { return g.norm() / N; }
+    Real RMS(const Grid &g) { return g.norm() / std::sqrt(Real(g.size())); }
 
-    int Project(const DNDS::MPIInfo &mpi, const char *configPath, const char *checkpoint)
+    int Project(const DNDS::MPIInfo &mpi, const char *configPath, const char *checkpoint, const char *meshOverride)
     {
         DNDS_check_throw_info(!std::filesystem::exists(checkpoint), "choose a fresh checkpoint path");
         C::Json input;
         std::ifstream(configPath) >> input;
-        const auto config = C::SimulationConfig::ResolveCollective(input, mpi.comm);
+        std::vector<C::ConfigOverride> overrides;
+        if (meshOverride)
+            overrides.push_back({"/domains/0/settings/mesh/file", meshOverride});
+        const auto config = C::SimulationConfig::ResolveCollective(input, mpi.comm, overrides);
         DNDS_check_throw_info(config.Domains().size() == 1, "expected one vortex domain");
         const auto &settings = config.Domains().front().settings;
         DNDS_check_throw_info(settings.numerics.flux == "rusanov" && settings.numerics.limiter == "none" &&
@@ -111,6 +124,7 @@ namespace
                                   domain.Time() == 0 && !domain.Equation().Viscous(),
                               "expected the inviscid flow4 initial state");
         PeriodicVortex fixture(domain);
+        const int N = fixture.GridSize();
         const Real target = .1 * settings.implicit.algebraicRateTolerance;
         const Real initialRMS = RMS(fixture.Rate());
         Spectrum f(N, N);
@@ -186,8 +200,8 @@ int main(int argc, char **argv)
     try
     {
         const DNDS::MPI::SolverFailureScope failures(mpi.comm);
-        DNDS_check_throw_info(argc == 3, "usage: cauchy_experiment_acm_vortex_projection CONFIG NEW_CHECKPOINT.h5");
-        result = Project(mpi, argv[1], argv[2]);
+        DNDS_check_throw_info(argc == 3 || argc == 4, "usage: cauchy_experiment_acm_vortex_projection CONFIG NEW_CHECKPOINT.h5 [IV10_MESH.cgns]");
+        result = Project(mpi, argv[1], argv[2], argc == 4 ? argv[3] : nullptr);
     }
     catch (const std::exception &error)
     {
