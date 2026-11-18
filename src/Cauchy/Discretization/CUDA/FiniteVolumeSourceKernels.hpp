@@ -50,6 +50,9 @@ namespace DNDS::Cauchy::CUDA
         Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::CSRRows> wallPoints;
         Runtime::ArrayView<const real, false, Runtime::FixedRows<8>> cells;
         Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows> output;
+        /// Optional canonical row-major dense (or diagonal-only) integrated
+        /// contribution for the RHS evaluation. No temporal weight is applied.
+        decltype(output) preparedDerivative;
         SourceStatus status;
         int components = 0, dimension = 0;
         SourceEvaluation evaluation = SourceEvaluation::QuadratureResidual;

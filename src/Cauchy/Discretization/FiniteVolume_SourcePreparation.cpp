@@ -78,10 +78,6 @@ namespace DNDS::Cauchy
         // OptionalRef is an API/lifetime marker. Resolve it once before the
         // quadrature loop so its checked operator-> is not part of the hot
         // point path.
-        const auto means = state.ReadOwned();
-        const auto blocks = BlockViews(state, means);
-        const auto geometry = owner->metrics.AcquireRead();
-        const auto metric = geometry.HostView();
         std::optional<WallDistanceRead> wallRead;
         std::optional<R::Array<real>::ReadLease> lengthRead;
         if (ransFirst >= 0)
@@ -98,10 +94,6 @@ namespace DNDS::Cauchy
         std::vector<EquationBlockLocation> locations;
         for (index iBlock = 0; iBlock < state.BlockNumber(); ++iBlock)
             locations.push_back(state.LocateBlock(iBlock));
-        // The linearization consumer still needs mean pressure and its
-        // conservative derivative. Fill it separately from quadrature
-        // source points so the high-order source path does not silently
-        // replace the mean-state EOS contract.
         std::vector<R::Array<real>::ReadLease> sourceReads;
         sourceReads.reserve(sourceValues.size());
         for (const auto &field : sourceValues)
@@ -120,6 +112,7 @@ namespace DNDS::Cauchy
         for (index iField = 0; iField < index(sourceGradients.size()); ++iField)
             for (int d = 0; d < owner->metrics.Dimension(); ++d)
                 gradients[iField][d] = {gradientReads[iField][d]->View<R::UniformTableRows>(), 1, 0};
+        const auto means = state.ReadOwned();
         const auto ransMean = ransFirst >= 0 ? means.Block("rans") : EquationBlockReadView{};
         const auto offsetRead = sourceOffsets.Read();
         CPU::SourceKernelRequest request;
@@ -139,21 +132,18 @@ namespace DNDS::Cauchy
         request.logicalFirst = logicalFirst.HostView();
         const R::MetadataBuffer<std::array<CPU::SourceGradientView, 3>> gradientMetadata(gradients);
         request.gradients = gradientMetadata.HostView();
-        request.metric = metric;
+
         request.matrix = matrix;
         request.rowMajorBlocks = rowMajorBlocks;
         request.scale = scale;
         request.fullBlock = storage == DiagonalStorage::Block;
-        if (linearization)
-            request.linearization = *linearization;
-        const R::MetadataBuffer<EquationBlockReadView> blockMetadata(blocks);
-        request.blocks = blockMetadata.HostView();
         request.weights = weights;
         request.ransMean = ransMean;
         const R::MetadataBuffer<RHSScalarView> sampleMetadata(samples);
         request.samples = sampleMetadata.HostView();
         RequireNumericalSuccess(PrepareSourceJacobianCPU(request, owner->equation, evaluator, true), "quadrature source Jacobian");
-        return true;
+        // Owned mean pressure/derivatives are prepared by the flux assembler.
+        return false;
     }
 
     /// Add the approximate source matrix to caller-owned output.

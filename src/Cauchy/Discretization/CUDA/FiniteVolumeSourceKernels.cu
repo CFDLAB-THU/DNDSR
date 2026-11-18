@@ -31,7 +31,7 @@ namespace DNDS::Cauchy::CUDA
                     request.status(iCell, 0) = NumericalStatus{NumericalError::InvalidInput}.At(iCell);
                     continue;
                 }
-                std::array<real, Components - flow> source{}, ransMean{};
+                std::array<real, Components - flow> source{}, ransMean{}, destruction{};
                 for (int j = 0; j < Components - flow; ++j)
                     ransMean[j] = request.means(iCell, flow + j);
                 const index begin = mean ? iCell : request.offsets(iCell, 0);
@@ -48,10 +48,23 @@ namespace DNDS::Cauchy::CUDA
                     if (!mean)
                         RANSReconstructionView{physics.rans.kind, Components - flow}.RepairPoint(ransMean, SpanView<real>{point.values.data() + flow, Components - flow});
                     const real wall = mean ? request.wallMean(iCell, 0) : request.wallPoints(iCell, iPoint - begin);
+                    const real weight = mean ? request.cells(iCell, 0) : request.weights(iPoint, 0);
+                    const auto evaluate = [&](const auto &input) -> NumericalResult<std::array<real, 2>>
+                    {
+                        if (request.preparedDerivative.data)
+                        {
+                            const auto derivative = Physics::RANS::TrySource(physics.rans, input, 1);
+                            if (!derivative)
+                                return derivative.status;
+                            for (int j = 0; j < Components - flow; ++j)
+                                destruction[j] += weight * derivative.value[j];
+                        }
+                        return Physics::RANS::TrySource(physics.rans, input, jacobian ? 1 : 0);
+                    };
                     const auto value = [&]() -> NumericalResult<std::array<real, 2>>
                     {
                         if constexpr (Mechanical)
-                            return Physics::RANS::TrySource(physics.rans, point.Turbulence(physics, wall, request.lengths(iCell, 0)), jacobian ? 1 : 0);
+                            return evaluate(point.Turbulence(physics, wall, request.lengths(iCell, 0)));
                         else
                         {
                             if (physics.dimension != request.dimension)
@@ -59,7 +72,7 @@ namespace DNDS::Cauchy::CUDA
                             const auto properties = TryPerfectGasPoint(physics.gas, point.Flow(), true);
                             if (!properties)
                                 return properties.status;
-                            return Physics::RANS::TrySource(physics.rans, point.RANSPoint(properties.value, wall, request.lengths(iCell, 0)), jacobian ? 1 : 0);
+                            return evaluate(point.RANSPoint(properties.value, wall, request.lengths(iCell, 0)));
                         }
                     }();
                     if (!value)
@@ -67,11 +80,21 @@ namespace DNDS::Cauchy::CUDA
                         status = value.status.At(iCell, iPoint);
                         break;
                     }
-                    const real weight = mean ? request.cells(iCell, 0) : request.weights(iPoint, 0);
                     for (int j = 0; j < Components - flow; ++j)
                         source[j] += weight * value.value[j];
                 }
                 request.status(iCell, 0) = status;
+                if (status && request.preparedDerivative.data)
+                {
+                    const bool dense = request.preparedDerivative.Width() == Components * Components;
+                    for (index j = 0; j < request.preparedDerivative.Width(); ++j)
+                        request.preparedDerivative(iCell, j) = 0;
+                    for (int j = 0; j < Components - flow; ++j)
+                    {
+                        const int row = flow + j;
+                        request.preparedDerivative(iCell, dense ? row * Components + row : row) = destruction[j];
+                    }
+                }
                 if (status)
                     for (int j = 0; j < Components - flow; ++j)
                     {
@@ -126,6 +149,14 @@ namespace DNDS::Cauchy::CUDA
                                   std::isfinite(request.scale) && (mechanical ? request.acm.RowCount() : request.parameters.RowCount()) == 1,
                               "unsupported CUDA RANS source shape/policy");
         const index cells = request.means.RowCount();
+        if (request.preparedDerivative.data)
+        {
+            request.preparedDerivative.ValidateDevice(context.device);
+            DNDS_check_throw_info(!mechanical && !jacobian && request.preparedDerivative.RowCount() == cells &&
+                                      (request.preparedDerivative.Width() == request.components ||
+                                       request.preparedDerivative.Width() == request.components * request.components),
+                                  "invalid integrated RANS source derivative destination");
+        }
         CheckTable(request.means, cells, request.components);
         CheckTable(request.output, cells, jacobian && request.fullBlock ? request.components * request.components : request.components);
         // Mesh geometry is a whole owned+ghost publication. Numerical means,
