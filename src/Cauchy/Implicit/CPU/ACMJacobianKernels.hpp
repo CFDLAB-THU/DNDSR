@@ -22,8 +22,6 @@ namespace DNDS::Cauchy::CPU
         Algebra::DofComponentView<const real> input;
         RHSScalarView tau, radius;
         decltype(WallDistanceView::cellMean) wallMean;
-        Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> lengths;
-        Physics::RANS::PointParameters rans;
         Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows> diagonal;
         Algebra::BlockMatrixArrayView<real> offDiagonal;
         real mass, residualScale;

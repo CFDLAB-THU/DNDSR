@@ -40,8 +40,26 @@ namespace DNDS::Cauchy::CUDA
                 for (index iPoint = begin; iPoint < end; ++iPoint)
                 {
                     std::conditional_t<Mechanical, ACM::KernelPoint<Components>, PerfectGasKernelPoint<Components>> point;
+                    const int modes = request.basis.polynomial.size - 1;
+                    real basis[4][19];
+                    if (modes > 0)
+                        request.basis.Fill(iCell, iPoint, 1 + request.dimension, basis);
                     for (int j = 0; j < Components; ++j)
                     {
+                        if (modes > 0)
+                        {
+                            point.values[j] = request.means(iCell, j);
+                            for (int m = 0; m < modes; ++m)
+                                point.values[j] += basis[0][m] * request.coefficients(iCell, j * modes + m);
+                            for (int d = 0; d < request.dimension; ++d)
+                            {
+                                real derivative = 0;
+                                for (int m = 0; m < modes; ++m)
+                                    derivative += basis[1 + d][m] * request.coefficients(iCell, j * modes + m);
+                                point.gradients[j][d] = derivative;
+                            }
+                            continue;
+                        }
                         point.values[j] = (mean || request.cellInputs) ? request.means(iCell, j) : request.samples(iPoint, j);
                         for (int d = 0; d < request.dimension; ++d)
                             point.gradients[j][d] = request.gradients[d](request.cellInputs ? iCell : iPoint, j);
@@ -100,8 +118,12 @@ namespace DNDS::Cauchy::CUDA
                     for (int j = 0; j < Components - flow; ++j)
                     {
                         const int row = flow + j;
-                        request.output(iCell, jacobian && request.fullBlock ? row + Components * row : row) +=
-                            (jacobian ? request.scale : real(1)) * source[j];
+                        auto &entry = request.output(iCell, jacobian && request.fullBlock ? row + Components * row : row);
+                        const real value = (jacobian ? request.scale : real(1)) * source[j];
+                        if (Mechanical && mean)
+                            entry = value;
+                        else
+                            entry += value;
                     }
             }
         }
@@ -182,14 +204,21 @@ namespace DNDS::Cauchy::CUDA
         else
         {
             R::ValidateViewDevices(context.device, request.offsets, request.weights, request.wallPoints);
-            if (!request.cellInputs)
+            if (request.basis.polynomial.size > 1)
+            {
+                const int modes = request.basis.polynomial.size - 1;
+                DNDS_check_throw_info(modes <= 19, "source modal order exceeds P3");
+                R::ValidateViewDevices(context.device, request.coefficients, request.basis.points, request.basis.cached, request.basis.moments, request.basis.geometry);
+                CheckTable(request.coefficients, cells, request.components * modes);
+            }
+            else if (!request.cellInputs)
             {
                 request.samples.ValidateDevice(context.device);
                 CheckTable(request.samples, request.weights.RowCount(), request.components);
             }
             DNDS_check_throw_info(request.offsets.RowCount() == cells + 1 && request.wallPoints.RowCount() >= cells, "CUDA quadrature source geometry differs");
         }
-        for (int d = 0; d < request.dimension; ++d)
+        for (int d = 0; request.basis.polynomial.size <= 1 && d < request.dimension; ++d)
         {
             const auto gradient = request.gradients[d];
             gradient.values.ValidateDevice(context.device);
@@ -216,7 +245,7 @@ namespace DNDS::Cauchy::CUDA
                                      index n, bool full, bool rowMajor, real scale)
     {
         R::ValidateViewDevices(context.device, source, diagonal);
-        DNDS_check_throw_info(source.RowCount() == diagonal.RowCount() && source.Width() == n * n && diagonal.Width() == (full ? n * n : n) && source.data != diagonal.data,
+        DNDS_check_throw_info(source.RowCount() == diagonal.RowCount() && source.Width() == n * n && diagonal.Width() == (full ? n * n : n) && (!source.data || source.data != diagonal.data),
                               "invalid source derivative block placement");
         if (!source.RowCount())
             return;

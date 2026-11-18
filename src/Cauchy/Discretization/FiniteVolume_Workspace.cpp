@@ -52,20 +52,14 @@ namespace DNDS::Cauchy
             // A mean-only forecast suppresses face reconstruction, not the
             // physical derivatives in the RANS source. Keep those gradients
             // and their frozen boundary values in the P0 workspace as well.
-            if ((!meanOnly && data.settings.numerics.reconstruction == "gradient") ||
-                (data.equation.HasRANS() &&
-                 (data.settings.numerics.reconstruction == "constant" ||
-                  (meanOnly && data.settings.numerics.reconstruction == "gradient"))))
+            const auto &numerics = data.settings.numerics;
+            const bool meanSource = data.equation.HasRANS() &&
+                                    (meanOnly || numerics.reconstruction == "constant" ||
+                                     (numerics.reconstruction == "variational" && data.settings.implicit.sourceJacobianMode == "center"));
+            if (meanSource || (!meanOnly && (numerics.reconstruction == "gradient" || data.limitedVRGeometry)))
             {
                 field.gradient.emplace(data.metrics.BuildField(index(physical.Width()) * data.metrics.Dimension()));
-                field.gradientBoundary.emplace(data.settings.numerics.reconstruction == "variational"
-                                                   ? data.gradient.BuildBoundaryValues(index(physical.Width()))
-                                                   : field.boundaryValues);
-            }
-            else if (!meanOnly && data.limitedVRGeometry)
-            {
-                field.gradient.emplace(data.metrics.BuildField(index(physical.Width()) * data.metrics.Dimension()));
-                field.gradientBoundary.emplace(data.settings.numerics.reconstruction == "variational"
+                field.gradientBoundary.emplace(numerics.reconstruction == "variational"
                                                    ? data.gradient.BuildBoundaryValues(index(physical.Width()))
                                                    : field.boundaryValues);
             }
@@ -76,46 +70,18 @@ namespace DNDS::Cauchy
         }
         return result;
     }
-    void FiniteVolume::Workspace::BuildSourceSampling(const EquationDofs &state)
+    void FiniteVolume::Workspace::BuildSourceSampling()
     {
         if (!owner->quadrature.source)
             return;
         // Geometry is frozen once by the plan before placement; workspaces
-        // share it and own only mutable values/gradients. No host mesh access
+        // share its immutable handles. No host mesh access
         // or reconstruction setup is required for a CUDA workspace.
         const auto &prepared = *owner->quadrature.source;
         sourceOffsets = prepared.offsets;
         sourceWeights = prepared.weights;
-        sourceSampling = prepared.sampling;
-        sourceJacobianSampling = prepared.jacobianSampling;
-        const index count = sourceWeights.RowCount();
-        const auto device = owner->metrics.Device();
-        for (index iField = 0; sourceSampling && iField < state.PhysicalFieldNumber(); ++iField)
-        {
-            // Keep source sampling scratch independent of any particular
-            // mean allocation so serialized stage states can reuse it.
-            sourceValues.emplace_back(FiniteVolumeDetail::FieldLayout(state.PhysicalField(iField).Owned().Layout(), count,
-                                                                      index(state.PhysicalField(iField).Width())),
-                                      device);
-            if (owner->equation.HasRANS())
-            {
-                sourceGradients.emplace_back();
-                // One-point direct FV can read its ready physical gradient
-                // field directly; polynomial/multi-point paths own samples.
-                for (int d = 0; d < owner->metrics.Dimension(); ++d)
-                    sourceGradients.back()[d] = R::Array<real>(sourceValues.back().Layout(), device);
-            }
-        }
-        if (sourceJacobianSampling && owner->equation.HasRANS())
-        {
-            const index owned = owner->metrics.NumCell();
-            for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
-            {
-                sourceJacobianGradients.emplace_back();
-                for (int d = 0; d < owner->metrics.Dimension(); ++d)
-                    sourceJacobianGradients.back()[d] = R::Array<real>(FiniteVolumeDetail::FieldLayout(state.PhysicalField(iField).Owned().Layout(), owned, state.PhysicalField(iField).Width()), device);
-            }
-        }
+        if (!meanOnly)
+            sourceSampling = prepared.sampling;
     }
     EquationDofs FiniteVolume::Workspace::BindBoundary(const EquationDofs &state, const std::vector<Field> &fields, index rows)
     {
@@ -222,7 +188,7 @@ namespace DNDS::Cauchy
             else if (owner->reconstruction)
                 flowCharacteristic.emplace(owner->reconstruction->BuildQueuedFaceTransform(flow.firstComponent, 5));
         }
-        if (owner->settings.numerics.reconstruction != "variational")
+        if (owner->settings.numerics.reconstruction != "variational" || (meanOnly && owner->equation.HasRANS()))
         {
             for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
             {
@@ -290,7 +256,7 @@ namespace DNDS::Cauchy
             primitiveGradientExecution.emplace(owner->gradient.BuildWorkspace(5, {1}));
             primitiveGradientHalo.emplace(owner->BindHalo(*primitiveGradient, "cauchy-primitive-gradient"));
         }
-        BuildSourceSampling(state);
+        BuildSourceSampling();
         BuildPreparationStatus();
         BuildCharacteristicStorage();
         BuildDeviceFlux();
@@ -298,16 +264,6 @@ namespace DNDS::Cauchy
         faceFlux.SetName("Cauchy/workspace/faceFlux", DNDS_ALLOCATION_SITE());
         if (lowOrderFaceFlux)
             lowOrderFaceFlux->SetName("Cauchy/workspace/lowOrderFaceFlux", DNDS_ALLOCATION_SITE());
-        for (index iField = 0; iField < index(sourceValues.size()); ++iField)
-        {
-            sourceValues[iField].SetName("Cauchy/source/values/" + std::to_string(iField), DNDS_ALLOCATION_SITE());
-            if (iField < index(sourceGradients.size()))
-                for (int d = 0; d < owner->metrics.Dimension(); ++d)
-                    sourceGradients[iField][d].SetName("Cauchy/source/gradients/" + std::to_string(iField) + "/" + std::to_string(d), DNDS_ALLOCATION_SITE());
-            if (iField < index(sourceJacobianGradients.size()))
-                for (int d = 0; d < owner->metrics.Dimension(); ++d)
-                    sourceJacobianGradients[iField][d].SetName("Cauchy/source/jacobianGradients/" + std::to_string(iField) + "/" + std::to_string(d), DNDS_ALLOCATION_SITE());
-        }
         if (nativeDirectGradient || ransFirst >= 0)
             directGradientPublications.resize(directGradients.size());
     }

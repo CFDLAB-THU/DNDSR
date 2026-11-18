@@ -72,15 +72,16 @@ namespace DNDS::Cauchy
             const auto scratch = work.deviceJacobian;
             auto physics = _data->equation.ACMParameters();
             physics.roe = _data->settings.numerics.flux == "Roe";
-            const auto rans = _data->equation.HasRANS() ? _data->equation.RANS().KernelParameters() : Physics::RANS::PointParameters{};
             std::array<bool, 6> active{};
             const Algebra::ComponentSelection selection(n, controls.updateComponents);
             for (index j = 0; j < n; ++j)
                 active[j] = selection.Includes(j);
             R::SubmitArrays(engine, lane, [](auto where, auto result)
                             { CUDA::ClearNumericalStatus(where, result); }, R::WriteAs<R::FixedRows<1>>(scratch->result));
+            if (n > 4)
+                scratch->SubmitSource(work, engine, lane, state, output.Diagonal(), full, controls.residualScale);
             auto blocks = output.OffDiagonal().Values();
-            R::SubmitArrays(engine, lane, [scratch, physics, rans, active, scale = controls.residualScale, mass = controls.physicalMass, rowMajor = output.RowMajorBlocks()](auto where, auto owned, auto ghost, auto tau, auto radius, auto offsets, auto diagonal, auto blocks, auto status)
+            R::SubmitArrays(engine, lane, [scratch, physics, active, scale = controls.residualScale, mass = controls.physicalMass, rowMajor = output.RowMajorBlocks()](auto where, auto owned, auto ghost, auto tau, auto radius, auto offsets, auto diagonal, auto blocks, auto status)
                             {
                 CUDA::ACMJacobianInput q{};
                 q.input = {owned,ghost};
@@ -91,14 +92,12 @@ namespace DNDS::Cauchy
                 q.tau = tau;
                 q.radius = radius;
                 if (scratch->walls) q.wallMean = scratch->walls->View().cellMean;
-                if (scratch->acmLengths) q.lengths = scratch->acmLengths->View<R::FixedRows<1>>();
-                q.rans = rans;
                 q.diagonal = diagonal;
                 q.offDiagonal = {blocks,offsets,owned.Width(),rowMajor};
                 q.mass = mass;
                 q.residualScale = scale;
                 q.active = active;
-                CUDA::PrepareACMFluxJacobian(where,q,status); }, R::ReadAs<R::TableRows>(field.Owned()), R::ReadAs<R::TableRows>(field.Ghost()), R::ReadAs<R::TableRows>(inversePseudoTime), R::ReadAs<R::TableRows>(*auxiliary.faceSpectralRadius), R::ReadAs<R::FixedRows<1>>(output.OffDiagonal().OffsetArray()), R::WriteAs<R::UniformTableRows>(output.Diagonal()), R::WriteAs<R::UniformTableRows>(blocks), R::WriteAs<R::FixedRows<1>>(scratch->rowsStatus));
+                CUDA::PrepareACMFluxJacobian(where,q,status); }, R::ReadAs<R::TableRows>(field.Owned()), R::ReadAs<R::TableRows>(field.Ghost()), R::ReadAs<R::TableRows>(inversePseudoTime), R::ReadAs<R::TableRows>(*auxiliary.faceSpectralRadius), R::ReadAs<R::FixedRows<1>>(output.OffDiagonal().OffsetArray()), R::ReadWriteAs<R::UniformTableRows>(output.Diagonal()), R::WriteAs<R::UniformTableRows>(blocks), R::WriteAs<R::FixedRows<1>>(scratch->rowsStatus));
             scratch->AppendStatus(engine, lane, scratch->rowsStatus);
             engine.Synchronize();
             const auto result = scratch->result.To(R::Device::Host(), lane.Context());

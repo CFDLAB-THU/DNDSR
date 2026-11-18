@@ -24,11 +24,11 @@ namespace DNDS::Cauchy::CUDA
                                   q.offDiagonal.RowNumber() == cells && q.offDiagonal.values.Width() == width * width &&
                                   q.tau.RowCount() == cells && q.radius.Width() == 2 && q.tau.Width() == 1 &&
                                   status.RowCount() == cells && q.stencil.RowCount() == 1 &&
-                                  (width == 4 || (q.lengths.RowCount() >= cells && q.wallMean.RowCount() >= cells)),
+                                  (width == 4 || q.wallMean.RowCount() >= cells),
                               "invalid CUDA ACM Jacobian layout");
         R::ValidateViewDevices(context.device, q.input.owned, q.input.ghost, q.diagonal, q.offDiagonal, q.radius, q.tau, q.conditions.rows, q.stencil, status);
         if (width > 4)
-            R::ValidateViewDevices(context.device, q.lengths, q.wallMean);
+            R::ValidateViewDevices(context.device, q.wallMean);
         R::CheckKernelArgumentBudget<ACMJacobianInput, ACMJacobianStatusRows>();
         if (!cells)
             return;

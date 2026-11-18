@@ -1,4 +1,5 @@
 #pragma once
+#include "Cauchy/Discretization/VolumeSourceBasis.hpp"
 
 #include "Cauchy/Discretization/PerfectGasKernelPoint.hpp"
 #include "Cauchy/Discretization/ACMKernelPoint.hpp"
@@ -30,20 +31,18 @@ namespace DNDS::Cauchy::CUDA
         MeanDestruction,
         QuadratureDestruction
     };
-    /** Frozen operands of the compressible or ACM RANS volume/source-Jacobian leaf.
-     * means is always cell-sized. samples and gradients are quadrature-sized,
-     * except MeanDestruction's gradients, which are cell-sized. Destruction
-     * adds the Euler positive diagonal approximation to a diagonal-vector or
-     * column-major full block; it is not the exact source Jacobian. Residual
-     * adds the integrated source to the RANS segment of a complete DOF row.
-     * No chemistry, clipping of means, linearization cache or EOS worker is
-     * hidden here. Operators retain all views and initialize accumulators.
+    /** Frozen operands for a single owned-cell source pass. Direct evaluation
+     * borrows means and physical gradients. Modal evaluation reconstructs
+     * from finalized coefficients and the immutable quadrature basis.
+     * The optional output stores the positive RANS destruction approximation.
+     * Standalone comparison fixtures can supply already sampled point views.
      */
     struct SourceRequest
     {
         Runtime::ArrayView<const PerfectGasSpatialParameters, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> parameters;
         Runtime::ArrayView<const ACM::SpatialParameters, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> acm;
-        SourceInput means, samples;
+        SourceInput means, samples, coefficients;
+        VolumeSourceBasis basis;
         std::array<SourceGradient, 3> gradients;
         SourceIndices offsets;
         SourceScalar weights, lengths, wallMean;
@@ -61,6 +60,8 @@ namespace DNDS::Cauchy::CUDA
     };
     /// One independent thread per selected owned cell, quadrature in CPU order.
     /// The numerical source is committed only after all its points succeed.
+    /// TODO: benchmark one CTA per modal cell with one thread per point and
+    /// in-block reductions into the same RHS and optional derivative rows.
     void AddRANSSources(Runtime::ExecutionContext context, SourceRequest request, SourceIndices selected);
 
     void ApplyVolumeSourceDerivative(Runtime::ExecutionContext context, SourceInput source, decltype(SourceRequest::output) diagonal,

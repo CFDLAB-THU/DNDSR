@@ -19,71 +19,30 @@ namespace DNDS::Cauchy
     namespace
     {
         NumericalStatus PrepareSourceJacobianCPU(const CPU::SourceKernelRequest &request,
-                                                 const EquationSystem &equation, PointEvaluator &evaluator, bool quadrature)
+                                                 const EquationSystem &equation, PointEvaluator &evaluator)
         {
             // The caller already holds the mixture lease. Reuse it rather than
             // reserving another bounded-pool worker and risking self-starvation.
             if (equation.HasMixture() || OMP::DistributedThreads() == 1)
-                return quadrature ? CPU::AddQuadratureSourceJacobian(request, equation, evaluator)
-                                  : CPU::AssembleCenterSourceJacobian(request, equation, evaluator);
+                return CPU::AssembleCenterSourceJacobian(request, equation, evaluator);
             auto workers = MakeCPUPointWorkers<CPU::SourceWorkerScratch>(equation, std::nullopt,
                                                                          {request.ransFirst >= 0, false, bool(request.linearization), request.chemical, request.chemical}, request.components);
             const SpanView<CPU::SourceWorkerScratch> slots{workers.data(), index(workers.size())};
-            return quadrature ? CPU::AddQuadratureSourceJacobian(request, equation, slots)
-                              : CPU::AssembleCenterSourceJacobian(request, equation, slots);
+            return CPU::AssembleCenterSourceJacobian(request, equation, slots);
         }
     }
 
-    void FiniteVolume::Workspace::SampleSourceState(const EquationDofs &state, real time)
-    {
-        const PhaseTime timing(*this, SamplingPhase);
-        if (sourceOffsets.RowCount() == 0)
-            return;
-        // P0 face convection/viscosity does not disable these derivatives.
-        // Direct-FV sources consume physical gradients without a basis.
-        if (ransFirst >= 0 && owner->settings.numerics.reconstruction != "variational")
-            RefreshDirectGradients(state, false, time);
-        if (!sourceSampling)
-            return;
-        for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
-        {
-            if (ransFirst < 0)
-                sourceSampling->Evaluate(state.PhysicalField(iField), FluxCoefficients().PhysicalField(iField), sourceValues[iField]);
-            else
-            {
-                CFV::PolynomialSampleOutputs outputs;
-                outputs.values = &sourceValues[iField];
-                for (int d = 0; d < owner->metrics.Dimension(); ++d)
-                    outputs.gradients[d] = &sourceGradients[iField][d];
-                sourceSampling->EvaluateValueGradient(state.PhysicalField(iField), FluxCoefficients().PhysicalField(iField), outputs);
-            }
-        }
-    }
-    /// Add the approximate source matrix to caller-owned output.
-    /// The default is one mean point per cell; rhsQuadrature selects the
-    /// explicit same-quadrature source linearization.
-    /// The controller retains current means/coefficients and ready source
-    /// gradients. Optional linearization outputs consume this same mean
-    /// property evaluation; false means no samples existed and no outputs
-    /// were filled. This entry neither samples RHS quadrature nor publishes
-    /// source freshness; the production wrapper validates its provenance.
+    /// Assemble the centered source approximation from means and the physical
+    /// gradient prepared for this evaluation. For modal RHS the gradient is
+    /// reconstructed independently before VR. Compressible mean properties
+    /// can also be published for the flux matrix in this pass.
     bool FiniteVolume::Workspace::AddMeanSourceJacobian(const EquationDofs &state, const R::Array<real>::WriteLease &diagonal,
                                                         DiagonalStorage storage, real scale, PointEvaluator &evaluator,
                                                         OptionalRef<const MeanLinearizationOutput> linearization, bool rowMajorBlocks) const
     {
         if (sourceOffsets.RowCount() == 0)
             return false;
-        // Resolve the synchronous nullable borrow once; property sampling
-        // below must not pay a checked OptionalRef dereference per cell.
-        // The default approximate source matrix is a one-point,
-        // mean-state operator. The opt-in quadrature path is a separate
-        // branch selected by the explicit implicit source mode.
-        // RANS still consumes the current polynomial's center gradients.
-        std::vector<std::array<std::optional<R::Array<real>::ReadLease>, 3>> gradientReads;
-        // Direct gradients already contain every direction in one physical
-        // field. Retain that allocation's read lease and select the direction
-        // through indexing, rather than copying whole fields into scratch.
-        // Polynomial center sampling keeps its separate per-direction arrays.
+        std::vector<std::optional<R::Array<real>::ReadLease>> gradientReads;
         using CPU::SourceGradientView;
         std::vector<std::array<SourceGradientView, 3>> gradients;
         if (ransFirst >= 0)
@@ -92,29 +51,12 @@ namespace DNDS::Cauchy
             gradients.resize(size_t(state.PhysicalFieldNumber()));
             for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
             {
-                if (owner->settings.numerics.reconstruction != "variational")
-                {
-                    gradientReads[iField][0].emplace(directGradients[iField].Owned().Read());
-                    const auto view = gradientReads[iField][0]->View<R::UniformTableRows>();
-                    for (int d = 0; d < owner->metrics.Dimension(); ++d)
-                        gradients[iField][d] = {view, owner->metrics.Dimension(), d};
-                    continue;
-                }
-                CFV::PolynomialSampleOutputs outputs;
-                // Workspace identity is const; shallow mutable handles
-                // retain its existing scratch allocations for the write.
-                auto scratch = sourceJacobianGradients[iField];
+                const auto &gradient = owner->settings.numerics.reconstruction == "variational"
+                                           ? fields[iField].gradient.value()
+                                           : directGradients[iField];
+                gradientReads[iField].emplace(gradient.Owned().Read());
                 for (int d = 0; d < owner->metrics.Dimension(); ++d)
-                    outputs.gradients[d] = &scratch[d];
-                // One center, gradients only. The sampling facility owns
-                // bounded layout specialization and generic fallback; no
-                // unused sampled-value field is allocated for the matrix.
-                sourceJacobianSampling->EvaluateValueGradient(state.PhysicalField(iField), FluxCoefficients().PhysicalField(iField), outputs);
-                for (int d = 0; d < owner->metrics.Dimension(); ++d)
-                {
-                    gradientReads[iField][d].emplace(sourceJacobianGradients[iField][d].Read());
-                    gradients[iField][d] = {gradientReads[iField][d]->View<R::UniformTableRows>(), 1, 0};
-                }
+                    gradients[iField][d] = {gradientReads[iField]->View<R::UniformTableRows>(), owner->metrics.Dimension(), d};
             }
         }
         const auto means = state.ReadOwned();
@@ -163,7 +105,7 @@ namespace DNDS::Cauchy
             request.linearization = *linearization;
         const R::MetadataBuffer<EquationBlockReadView> blockMetadata(blocks);
         request.blocks = blockMetadata.HostView();
-        RequireNumericalSuccess(PrepareSourceJacobianCPU(request, owner->equation, evaluator, false), "mean source Jacobian");
+        RequireNumericalSuccess(PrepareSourceJacobianCPU(request, owner->equation, evaluator), "mean source Jacobian");
         return true;
     }
 
@@ -197,31 +139,44 @@ namespace DNDS::Cauchy
         }
         if (sourceOffsets.RowCount() == 0)
             return;
-        SampleSourceState(state, time);
+        if (!sourceSampling && ransFirst >= 0)
+            RefreshDirectGradients(state, false, time);
         if (!result)
             return;
-        std::vector<R::Array<real>::ReadLease> sources;
-        for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
-            sources.push_back((sourceSampling ? sourceValues[iField] : state.PhysicalField(iField).Owned()).Read());
-        std::vector<std::array<std::optional<R::Array<real>::ReadLease>, 3>> derivatives(ransFirst >= 0 ? sources.size() : 0);
-        for (index iField = 0; iField < index(derivatives.size()); ++iField)
-            if (!sourceSampling)
-                derivatives[iField][0].emplace(directGradients[iField].Owned().Read());
-            else
+        CPU::SourceKernelRequest request;
+        std::vector<R::Array<real>::ReadLease> sources, coefficientReads, gradientReads, basisReads;
+        std::vector<RHSScalarView> samples, coefficientViews;
+        std::vector<std::array<CPU::SourceGradientView, 3>> gradients;
+        for (index f = 0; f < state.PhysicalFieldNumber(); ++f)
+        {
+            sources.push_back(state.PhysicalField(f).Owned().Read());
+            samples.push_back(sources.back().View<R::UniformTableRows>());
+            if (sourceSampling)
+            {
+                coefficientReads.push_back(FluxCoefficients().PhysicalField(f).Owned().Read());
+                coefficientViews.push_back(coefficientReads.back().View<R::UniformTableRows>());
+            }
+            else if (ransFirst >= 0)
+            {
+                gradientReads.push_back(directGradients[f].Owned().Read());
+                gradients.emplace_back();
                 for (int d = 0; d < owner->metrics.Dimension(); ++d)
-                    derivatives[iField][d].emplace(sourceGradients[iField][d].Read());
-        // Resolve physical layouts once, outside the quadrature loop.
-        using SampleView = R::ArrayView<const real, R::AccessBoundsChecks, R::UniformTableRows>;
-        std::vector<SampleView> samples;
-        using CPU::SourceGradientView;
-        std::vector<std::array<SourceGradientView, 3>> gradients(derivatives.size());
-        for (const auto &read : sources)
-            samples.push_back(read.View<R::UniformTableRows>());
-        for (index iField = 0; iField < index(derivatives.size()); ++iField)
-            for (int d = 0; d < owner->metrics.Dimension(); ++d)
-                gradients[iField][d] = !sourceSampling
-                                           ? SourceGradientView{derivatives[iField][0]->View<R::UniformTableRows>(), owner->metrics.Dimension(), d}
-                                           : SourceGradientView{derivatives[iField][d]->View<R::UniformTableRows>(), 1, 0};
+                    gradients.back()[d] = {gradientReads.back().View<R::UniformTableRows>(), owner->metrics.Dimension(), d};
+            }
+        }
+        if (sourceSampling)
+        {
+            sourceSampling->Validate();
+            auto bind = [&](const R::Array<real> &array)
+            {
+                basisReads.push_back(array.Read());
+                return basisReads.back().View<R::UniformTableRows>();
+            };
+            request.basis = {bind(sourceSampling->PointStorage()), bind(sourceSampling->BasisStorage()),
+                             bind(sourceSampling->MomentStorage()), bind(sourceSampling->CellGeometryStorage()),
+                             sourceSampling->BasisParameters(), sourceSampling->CachedDerivativeNumber()};
+            request.coefficients = {coefficientViews.data(), index(coefficientViews.size())};
+        }
         std::optional<WallDistanceRead> wallRead;
         if (owner->wallDistance)
             wallRead.emplace(owner->wallDistance->AcquireRead());
@@ -244,7 +199,6 @@ namespace DNDS::Cauchy
         for (index iBlock = 0; iBlock < state.BlockNumber(); ++iBlock)
             locations.push_back(state.LocateBlock(iBlock));
         const auto offsetRead = sourceOffsets.Read();
-        CPU::SourceKernelRequest request;
         request.offsets = offsetRead.View<R::FixedRows<1>>();
         request.cells = owner->metrics.NumCell();
         request.components = state.ComponentNumber();

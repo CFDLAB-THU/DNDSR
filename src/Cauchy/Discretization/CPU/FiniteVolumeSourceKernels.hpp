@@ -1,4 +1,5 @@
 #pragma once
+#include "Cauchy/Discretization/VolumeSourceBasis.hpp"
 #include "Cauchy/Discretization/FiniteVolumeViews.hpp"
 #include "Cauchy/Motion/RigidMotion.hpp"
 #include "Cauchy/Discretization/WallDistanceSamples.hpp"
@@ -24,7 +25,8 @@ namespace DNDS::Cauchy::CPU
         SpanView<const EquationBlockReadView> blocks;
         SpanView<const EquationBlockLocation> locations;
         SpanView<const index> logicalFirst;
-        SpanView<const RHSScalarView> samples;
+        SpanView<const RHSScalarView> samples, coefficients;
+        VolumeSourceBasis basis;
         SpanView<const std::array<SourceGradientView, 3>> gradients;
         WallDistanceView walls;
         EquationBlockReadView ransMean;

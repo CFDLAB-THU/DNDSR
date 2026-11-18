@@ -58,7 +58,12 @@ namespace DNDS::Cauchy::CPU
                 for (int j = 0; j < model.ComponentNumber(); ++j)
                 {
                     const index row = request.ransFirst + j;
-                    request.matrix(iCell, request.fullBlock ? row + nv * row : row) += request.scale * volume * destruction.value[j];
+                    auto &entry = request.matrix(iCell, request.fullBlock ? row + nv * row : row);
+                    const real diagonal = request.scale * volume * destruction.value[j];
+                    if (equation.IsACM())
+                        entry = diagonal; // ACM assembles its complete flux/temporal row next.
+                    else
+                        entry += diagonal;
                 }
             }
             if (request.chemical)
@@ -107,24 +112,37 @@ namespace DNDS::Cauchy::CPU
                 std::fill(rowDerivative.begin(), rowDerivative.end(), real(0));
             for (index iPoint = request.offsets(iCell, 0); iPoint < request.offsets(iCell + 1, 0); ++iPoint)
             {
+                const int modes = request.basis.polynomial.size - 1;
+                real basis[4][19];
+                if (modes > 0)
+                    request.basis.Fill(iCell, iPoint, request.ransFirst >= 0 ? dimension + 1 : 1, basis);
                 for (index iBlock = 0; iBlock < request.locations.size(); ++iBlock)
                 {
                     const auto location = request.locations[iBlock];
-                    // Resolve each borrowed row before traversing its
-                    // components. The span retains physical element stride;
-                    // no packing or AoS storage assumption is introduced.
-                    const index inputRow = request.cellInputs ? iCell : iPoint;
+                    const index inputRow = request.cellInputs || modes > 0 ? iCell : iPoint;
                     const auto values = request.samples[location.physicalField][inputRow];
                     for (index j = 0; j < location.componentNumber; ++j)
-                        point.values[request.logicalFirst[iBlock] + j] = values[location.firstComponent + j];
-                    if (request.ransFirst >= 0)
-                        for (int d = 0; d < dimension; ++d)
+                    {
+                        const index logical = request.logicalFirst[iBlock] + j, physical = location.firstComponent + j;
+                        point.values[logical] = values[physical];
+                        if (modes > 0)
                         {
-                            const auto &gradient = request.gradients[location.physicalField][d];
-                            const auto values = gradient.values[inputRow];
-                            for (index j = 0; j < location.componentNumber; ++j)
-                                point.gradient(request.logicalFirst[iBlock] + j, d) = values[(location.firstComponent + j) * gradient.componentStride + gradient.direction];
+                            const auto coefficients = request.coefficients[location.physicalField][iCell];
+                            for (int m = 0; m < modes; ++m)
+                                point.values[logical] += basis[0][m] * coefficients[physical * modes + m];
+                            if (request.ransFirst >= 0)
+                                for (int d = 0; d < dimension; ++d)
+                                {
+                                    real derivative = 0;
+                                    for (int m = 0; m < modes; ++m)
+                                        derivative += basis[1 + d][m] * coefficients[physical * modes + m];
+                                    point.gradient(logical, d) = derivative;
+                                }
                         }
+                        else if (request.ransFirst >= 0)
+                            for (int d = 0; d < dimension; ++d)
+                                point.gradient(logical, d) = request.gradients[location.physicalField][d](inputRow, physical);
+                    }
                 }
                 if (request.ransFirst >= 0)
                 {

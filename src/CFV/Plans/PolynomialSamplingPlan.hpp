@@ -179,6 +179,11 @@ namespace DNDS::CFV
         /// proven row order may share this allocation without another sampler.
         /// Fully cached plans expose an empty point allocation.
         const Runtime::Array<real> &PointStorage() const { return _points; }
+        /// Read operands for consumers aggregating cell-major quadrature on site.
+        /// The caller retains ordered leases and checks plan provenance with Validate().
+        const Runtime::Array<real> &MomentStorage() const { return _moments; }
+        const Runtime::Array<real> &CellGeometryStorage() const { return _cellGeometry; }
+        Math::TaylorBasisParameters BasisParameters() const { return Math::TaylorBasis(_dimension, _degree).KernelParameters(); }
         int CachedDerivativeNumber() const { return _cachedDerivatives; }
         /// Checks geometry/order generations and frozen basis/normalization provenance before
         /// execution. Aliased writes, including queued write intent, invalidate

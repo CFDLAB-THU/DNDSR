@@ -309,3 +309,28 @@ mean-only flux. The face quadrature loop uses the prepared rule in all cases.
 Modal flux may select either face threads or prepared CTA segments. ACM and
 perfect gas have distinct device bodies. The measured perfect-gas launch
 presets and user overrides apply within the eligible modal family.
+
+
+## Volume-source rows and their implicit derivatives
+
+A volume-source evaluation integrates all quadrature points of an owned cell
+in their stored order. For direct reconstruction it borrows the mean and the
+published physical gradient. For modal reconstruction it evaluates the finalized
+polynomial on site using the shared immutable volume quadrature plan. Point
+states and gradients live in worker or thread scratch. The residual and its
+optional derivative are written after every point in the cell has succeeded.
+
+For `rhsQuadrature`, the caller pairs the rate with a separate owned-cell
+array containing the integrated negative source derivative, before multiplying
+by the temporal residual coefficient. Dense records use row-major component
+order. An implicit correction applies its own coefficient when adding that
+record to its selected matrix layout. For RANS the positive destruction
+approximation replaces the exact derivative. With `center`, the source
+linearization instead uses the mean and its independently reconstructed
+gradient. This gradient is prepared before VR and is also available on a
+mean-flux pMG level.
+
+CUDA currently assigns one thread per cell. **TODO** for higher-order modal
+source quadrature: benchmark one CTA per cell with one thread per quadrature
+point and an in-block reduction of the residual and optional derivative.
+Keep the point state and its contributions local throughout that reduction.

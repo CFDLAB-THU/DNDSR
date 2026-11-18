@@ -84,7 +84,7 @@ def main():
         "const Runtime::ExecutionStream &stream,\n"
         "const Runtime::ExecutionStream &communication, real time,\n"
         "OptionalRef<AuxiliaryValues> auxiliary,\n"
-        "OptionalRef<const QueuedEvaluationDependency> dependency) const\n    {")
+        "OptionalRef<const QueuedEvaluationDependency> dependency, OptionalRef<R::Array<real>> sourceDerivative) const\n    {")
     text = insert_after_once(
         text, evaluation,
         "        ::DiagnosticTiming::Level diagnosticLevel(_data->settings.numerics.firstOrderConvection ? 2 : _data->settings.numerics.reconstruction == \"variational\" ? 0 : 1);\n"
@@ -135,26 +135,12 @@ def main():
         "auxiliaryPreparation->Apply(engine, stream, rest); "
         "evaluationTrace.Mark(::DiagnosticTiming::AuxiliaryTrace::ComputeEnd); }")
 
-    refresh = r"if\s*\(work\.SourceSamplesCurrent\(state,\s*time\)\)\s*return;"
-    text, count = re.subn(
-        refresh,
-        lambda match: match.group(0) +
-        "\n                ::DiagnosticTiming::ObserveCorrectionSource(work.sourceValues.empty() ? 0 : work.sourceValues.front().RowCount());",
-        text)
-    if count != 1:
-        raise ValueError(f"expected one correction source refresh guard, got {count}")
-    text = replace_once(
-        text, "if (refreshSource) work.SubmitVolumeSource(engine, stream, state, {}, time);",
-        "if (refreshSource) { ::DiagnosticTiming::ObserveCorrectionSource(work.sourceValues.empty() ? 0 : work.sourceValues.front().RowCount()); "
-        "work.SubmitVolumeSource(engine, stream, state, {}, time); }")
-
     # Matched semantic sites in the active queued path. These remain fail-closed
     # rather than silently timing retired synchronous wrappers from the archive.
     for anchor, block in (
         ("const auto timing = work.BeginQueuedPhase(engine, stream, Workspace::GradientPhase);", "Gradient"),
         ("const auto timing = work.BeginQueuedPhase(engine, stream, Workspace::VRPhase);", "Reconstruction"),
         ("const auto timing = BeginQueuedPhase(engine, stream, RHSPhase);", "FaceRHS"),
-        ("const auto timing = BeginQueuedPhase(engine, stream, SamplingPhase);", "SourceSampling"),
         ("const auto timing = BeginQueuedPhase(engine, stream, SourcePhase);", "VolumeSource"),
     ):
         text = insert_before_once(text, anchor,

@@ -24,17 +24,9 @@ namespace DNDS::Cauchy
             for (index iField = 0; iField < output.PhysicalFieldNumber(); ++iField)
             {
                 const auto &target = output.PhysicalField(iField).Owned();
-                for (const auto &values : sourceValues)
-                    DNDS_check_throw_info(!target.Storage().Overlaps(values.Storage()), "source residual aliases sampling scratch");
-                if (ransFirst >= 0)
-                    for (index iSource = 0; iSource < state.PhysicalFieldNumber(); ++iSource)
-                        if (!sourceSampling)
-                            DNDS_check_throw_info(!target.Storage().Overlaps(directGradients[iSource].Owned().Storage()),
-                                                  "source residual aliases direct gradients");
-                        else
-                            for (int d = 0; d < owner->metrics.Dimension(); ++d)
-                                DNDS_check_throw_info(!target.Storage().Overlaps(sourceGradients[iSource][d].Storage()),
-                                                      "source residual aliases sampled gradients");
+                if (!sourceSampling && ransFirst >= 0)
+                    for (const auto &g : directGradients)
+                        DNDS_check_throw_info(!target.Storage().Overlaps(g.Owned().Storage()), "source residual aliases direct gradients");
             }
         };
         if (sourceDerivative)
@@ -73,12 +65,14 @@ namespace DNDS::Cauchy
             std::shared_ptr<PointEvaluator> evaluator;
             std::optional<Physics::Chemistry::ChemicalWorkerPool> workers;
             Physics::Thermodynamics::MixturePropertyRequest propertyRequest;
-            std::vector<index> meanSlots, sampleSlots, resultSlots;
+            std::vector<index> meanSlots, coefficientSlots, resultSlots;
             std::vector<std::array<index, 3>> gradientSlots;
             std::optional<EquationBlockLocation> ransMean, ransOutput, speciesOutput;
             index components = 0, flowFirst = -1, speciesFirst = -1, ransFirst = -1;
             bool chemical = false, interleavedGradients = false;
             std::optional<index> derivativeSlot;
+            std::array<index, 4> basisSlots{};
+            VolumeSourceBasis basis;
             explicit Inputs(std::shared_ptr<const Data> data)
                 : owner(std::move(data)), geometry(owner->metrics.AcquireMeshRead(bool(owner->wallDistance))) {}
         };
@@ -113,7 +107,8 @@ namespace DNDS::Cauchy
             EndQueuedPhase(engine, stream, timing);
             return;
         }
-        SubmitSourceSamples(engine, stream, state);
+        if (sourceSampling)
+            sourceSampling->Validate();
         if (!result)
         {
             EndQueuedPhase(engine, stream, timing);
@@ -148,24 +143,19 @@ namespace DNDS::Cauchy
         for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
             pin->meanSlots.push_back(read(state.PhysicalField(iField).Owned()));
         if (sourceSampling)
-            for (const auto &array : sourceValues)
-                pin->sampleSlots.push_back(read(array));
-        else
-            pin->sampleSlots = pin->meanSlots;
-        for (index iField = 0; ransFirst >= 0 && iField < state.PhysicalFieldNumber(); ++iField)
         {
-            std::array<index, 3> slots{-1, -1, -1};
-            if (!sourceSampling)
-            {
-                const index slot = read(directGradients[iField].Owned());
-                for (int d = 0; d < owner->metrics.Dimension(); ++d)
-                    slots[d] = slot;
-            }
-            else
-                for (int d = 0; d < owner->metrics.Dimension(); ++d)
-                    slots[d] = read(sourceGradients[iField][d]);
-            pin->gradientSlots.push_back(slots);
+            pin->basis.polynomial = sourceSampling->BasisParameters();
+            pin->basis.cachedDerivatives = sourceSampling->CachedDerivativeNumber();
+            pin->basisSlots = {read(sourceSampling->PointStorage()), read(sourceSampling->BasisStorage()), read(sourceSampling->MomentStorage()), read(sourceSampling->CellGeometryStorage())};
+            for (index f = 0; f < state.PhysicalFieldNumber(); ++f)
+                pin->coefficientSlots.push_back(read(FluxCoefficients().PhysicalField(f).Owned()));
         }
+        else if (ransFirst >= 0)
+            for (const auto &gradient : directGradients)
+            {
+                const index slot = read(gradient.Owned());
+                pin->gradientSlots.push_back({slot, slot, slot});
+            }
         for (index iField = 0; iField < result->PhysicalFieldNumber(); ++iField)
         {
             pin->resultSlots.push_back(index(outputs.size()));
@@ -182,7 +172,7 @@ namespace DNDS::Cauchy
             // Holding it while queueing could starve an earlier auxiliary
             // refresh that shares a one-worker pool.
             std::vector<RHSScalarView> samples;
-            for (const index slot : pin->sampleSlots) samples.push_back(inputs[slot]);
+            for (const index slot : pin->meanSlots) samples.push_back(inputs[slot]);
             std::vector<std::array<CPU::SourceGradientView, 3>> gradients(pin->gradientSlots.size());
             for (index iField = 0; iField < index(pin->gradientSlots.size()); ++iField)
                 for (int d = 0; d < pin->owner->metrics.Dimension(); ++d)
@@ -215,6 +205,16 @@ namespace DNDS::Cauchy
             request.cellInputs = pin->interleavedGradients;
             request.locations = pin->locations.HostView();
             request.logicalFirst = pin->logicalFirst.HostView();
+            std::vector<RHSScalarView> coefficients;
+            for(const index slot:pin->coefficientSlots) coefficients.push_back(inputs[slot]);
+            if(!coefficients.empty())
+            {
+                auto basis=pin->basis;
+                basis.points=inputs[pin->basisSlots[0]]; basis.cached=inputs[pin->basisSlots[1]];
+                basis.moments=inputs[pin->basisSlots[2]]; basis.geometry=inputs[pin->basisSlots[3]];
+                request.basis=basis;
+                request.coefficients={coefficients.data(),index(coefficients.size())};
+            }
             request.samples = {samples.data(), index(samples.size())};
             request.gradients = {gradients.data(), index(gradients.size())};
             const auto outputBlock = [&](EquationBlockLocation location)

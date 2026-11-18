@@ -442,8 +442,12 @@ namespace DNDS::Cauchy
         const bool directGradientWork = (!work.meanOnly && numerics.reconstruction == "gradient") ||
                                         (_data->equation.HasRANS() &&
                                          (numerics.reconstruction == "constant" ||
-                                          (work.meanOnly && numerics.reconstruction == "gradient")));
-        const bool gradientWork = directGradientWork || bool(work.limitedVR) || bool(work.primitiveGradient);
+                                          work.meanOnly));
+        // Center-source linearization borrows this independently reconstructed
+        // mean gradient. LVR consumes the same pre-sweep field when enabled.
+        const bool centerSourceGradient = variational && _data->equation.HasRANS() &&
+                                          _data->settings.implicit.sourceJacobianMode == "center";
+        const bool gradientWork = directGradientWork || centerSourceGradient || bool(work.limitedVR) || bool(work.primitiveGradient);
         if (gradientWork && overlap && !dependency)
             gradient(CFV::ReconstructionRegion::Core);
         if (firstSweep && !dependency)

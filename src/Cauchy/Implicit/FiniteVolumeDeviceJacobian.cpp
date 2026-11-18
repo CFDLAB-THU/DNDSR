@@ -36,8 +36,6 @@ namespace DNDS::Cauchy
         {
             DNDS_check_throw_info(owner->wallDistance, "device RANS Jacobian requires prepared wall distances");
             walls.emplace(owner->wallDistance->AcquireRead({device, nullptr}));
-            if (owner->equation.IsACM())
-                acmLengths.emplace(owner->ransCellLength.Read({device, nullptr}));
         }
         const auto status = [&](index rows, const char *name)
         {
@@ -99,36 +97,21 @@ namespace DNDS::Cauchy
 #ifdef DNDS_USE_CUDA
         if (!owner->equation.HasRANS())
             return;
-        const bool quadrature = owner->settings.implicit.sourceJacobianMode == "rhsQuadrature";
         const bool polynomial = owner->settings.numerics.reconstruction == "variational";
-        DNDS_check_throw_info(!quadrature || polynomial, "quadrature source Jacobian requires variational reconstruction");
         const int dim = owner->metrics.Dimension(), n = int(components);
-        if (!quadrature && polynomial)
-        {
-            DNDS_check_throw_info(work.sourceJacobianSampling && work.sourceJacobianGradients.size() == 1,
-                                  "device center-gradient source sampler is missing");
-            for (int d = 0; d < dim; ++d)
-                work.sourceJacobianSampling->Evaluate(engine, stream, state.CoupledField(), work.FluxCoefficients().CoupledField(),
-                                                      work.sourceJacobianGradients[0][d], 1 + d);
-        }
-        const auto &empty = owner->deviceEmpty;
-        const auto &g0 = quadrature ? work.sourceGradients[0][0] : polynomial ? work.sourceJacobianGradients[0][0]
-                                                                              : work.directGradients[0].Owned();
-        const auto &g1 = quadrature ? work.sourceGradients[0][1] : polynomial ? work.sourceJacobianGradients[0][1]
-                                                                              : work.directGradients[0].Owned();
-        const auto &g2 = dim == 3 ? (quadrature ? work.sourceGradients[0][2] : polynomial ? work.sourceJacobianGradients[0][2]
-                                                                                          : work.directGradients[0].Owned())
-                                  : empty;
+        const auto &gradient = polynomial ? work.fields.front().gradient.value().Owned() : work.directGradients.front().Owned();
         // The enclosing synchronous preparation retains this shared object
         // through its final drain. Numerical scopes are also captured explicitly.
         const auto pin = work.deviceJacobian;
-        R::SubmitArrays(engine, stream, [pin, n, dim, quadrature, polynomial, fullBlock, scale](R::ExecutionContext context, auto means, auto samples, auto g0, auto g1, auto g2, auto offsets, auto weights, auto lengths, auto cells, auto output, auto status)
+        R::SubmitArrays(engine, stream, [pin, n, dim, fullBlock, scale](R::ExecutionContext context, auto means, auto gradient, auto offsets, auto weights, auto lengths, auto cells, auto output, auto status)
                         {
             CUDA::SourceRequest request;
-            request.parameters = {pin->physics.View<PerfectGasSpatialParameters>().data, nullptr, 1, 1, 1, nullptr, R::RowLayoutKind::Table, context.device};
-            request.means = means; request.samples = samples;
-            const std::array<CUDA::SourceInput, 3> gradients{g0, g1, g2};
-            for (int d = 0; d < dim; ++d) request.gradients[d] = {gradients[d], polynomial ? 1 : dim, polynomial ? 0 : d};
+            if (pin->owner->equation.IsACM())
+                request.acm = R::MetadataArrayView(pin->owner->deviceACMPhysics, context.device);
+            else
+                request.parameters = R::MetadataArrayView(pin->owner->devicePhysics, context.device);
+            request.means = means;
+            for (int d = 0; d < dim; ++d) request.gradients[d] = {gradient, dim, d};
             request.offsets = offsets; request.weights = weights; request.lengths = lengths;
             const auto walls = pin->walls->View();
             const auto mean = walls.cellMean;
@@ -137,8 +120,8 @@ namespace DNDS::Cauchy
             request.wallPoints = {points.data, points.offsets, points.rows, points.width, points.stride, points.sizes, points.kind, points.device};
             request.cells = pin->metric.View().cells; request.output = output; request.status = status;
             request.components = n; request.dimension = dim; request.fullBlock = fullBlock; request.scale = scale;
-            request.evaluation = quadrature ? CUDA::SourceEvaluation::QuadratureDestruction : CUDA::SourceEvaluation::MeanDestruction;
-            CUDA::AddRANSSources(context, request, cells); }, R::ReadAs<R::TableRows>(state.CoupledField().Owned()), R::ReadAs<R::TableRows>(quadrature ? work.sourceValues[0] : empty), R::ReadAs<R::TableRows>(g0), R::ReadAs<R::TableRows>(g1), R::ReadAs<R::TableRows>(g2), R::ReadAs<R::FixedRows<1>>(work.sourceOffsets), R::ReadAs<R::FixedRows<1>>(work.sourceWeights), R::ReadAs<R::FixedRows<1>>(owner->ransCellLength), R::ReadAs<R::FixedRows<1>>(work.DeviceCellSelection(CFV::ReconstructionRegion::All)), R::ReadWriteAs<R::UniformTableRows>(diagonal), R::WriteAs<R::FixedRows<1>>(rowsStatus));
+            request.evaluation = CUDA::SourceEvaluation::MeanDestruction;
+            CUDA::AddRANSSources(context, request, cells); }, R::ReadAs<R::TableRows>(state.CoupledField().Owned()), R::ReadAs<R::TableRows>(gradient), R::ReadAs<R::FixedRows<1>>(work.sourceOffsets), R::ReadAs<R::FixedRows<1>>(work.sourceWeights), R::ReadAs<R::FixedRows<1>>(owner->ransCellLength), R::ReadAs<R::FixedRows<1>>(work.DeviceCellSelection(CFV::ReconstructionRegion::All)), R::ReadWriteAs<R::UniformTableRows>(diagonal), R::WriteAs<R::FixedRows<1>>(rowsStatus));
         AppendStatus(engine, stream, rowsStatus);
 #else
         (void)work;
