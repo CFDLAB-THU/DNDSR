@@ -779,16 +779,20 @@ TEST_CASE("ACM BDF2 restart preserves the pressure gauge and differential histor
     C::DomainSettings settings;
     settings.equation.system = "incompressibleACM";
     settings.equation.eos = "none";
+    settings.equation.acmPressureMean = 0;
     settings.equation.referenceScales = {{"rho0", 1}, {"U0", 1}, {"L0", 1}, {"T0", 300}};
     settings.initialState = {{"type", "primUP"}, {"state", {.5, 0, 0, -2}}};
     settings.numerics.reconstruction = "constant";
     settings.implicit.jacobianAction = "assembled";
     settings.implicit.diagonal = "block";
-    settings.implicit.residualComponents = {"u", "v", "p"};
     C::TimeSettings time;
     time.method = "bdf2";
     auto mesh = CauchyTest::PeriodicQuads(mpi, 4);
-    C::Domain direct("acm", mesh, settings, time), resumed("acm", mesh, settings, time);
+    C::Domain direct("acm", mesh, settings, time);
+    REQUIRE(direct.CaptureStateSnapshot(false).PressureGauge() == std::optional<DNDS::real>(0));
+    settings.equation.acmPressureMean.reset();
+    C::Domain resumed("acm", mesh, settings, time);
+    REQUIRE(resumed.CaptureStateSnapshot(false).PressureGauge() == std::optional<DNDS::real>(-2));
     {
         auto write = direct.Dofs().WriteOwned();
         const auto flow = write.Block("flow");
@@ -800,6 +804,7 @@ TEST_CASE("ACM BDF2 restart preserves the pressure gauge and differential histor
     const C::Json metadata{{"case", "ACM restart"}};
     direct.WriteCheckpoint(path, metadata, true);
     resumed.ReadCheckpoint(path, metadata);
+    CHECK(resumed.CaptureStateSnapshot(false).PressureGauge() == std::optional<DNDS::real>(0));
     REQUIRE(resumed.PreviousTimeStep() == .007);
     REQUIRE(direct.Advance(.008).accepted);
     REQUIRE(resumed.Advance(.008).accepted);

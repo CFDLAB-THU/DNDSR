@@ -22,7 +22,8 @@ namespace DNDS::Cauchy
     public:
         /// Settings must be validated and outlive this policy.
         explicit BasicResidualConvergence(const ImplicitSettings &settings, const EquationSchema &schema, Norms prototype = {})
-            : _settings(settings), _initial(prototype), _reference(prototype), _components(schema.ResolveComponents(settings.residualComponents))
+            : _settings(settings), _initial(prototype), _reference(prototype), _components(schema.ResolveComponents(
+                                                                                   settings.ResolveResidualComponents(schema.AccumulationKind() == PhysicalAccumulationKind::ConstantDensityVelocityPressure)))
         {
             index width = 0;
             for (const auto &block : schema.blocks)

@@ -50,7 +50,6 @@ TEST_CASE("Periodic ACM physical step transports velocity and preserves the pres
     settings.numerics.flux = "rusanov";
     settings.implicit.jacobianAction = "assembled";
     settings.implicit.diagonal = "block";
-    settings.implicit.residualComponents = {"u", "v", "p"};
     SUBCASE("single grid") {}
     SUBCASE("same-cell FAS with a gradient coarse level")
     {
@@ -99,6 +98,34 @@ TEST_CASE("Periodic ACM physical step transports velocity and preserves the pres
         CHECK(std::abs(sums[0]) < 1e-12);
         CHECK(sums[1] > 1e-6);
     }
+}
+TEST_CASE("ACM BDF observes continuity separately from named momentum convergence")
+{
+    C::DomainSettings settings;
+    settings.equation.system = "incompressibleACM";
+    settings.equation.eos = "none";
+    settings.equation.referenceScales = {{"rho0", 1}, {"U0", 1}, {"L0", 1}, {"T0", 300}};
+    settings.initialState = {{"type", "primUP"}, {"state", {1., 0., 0., 0.}}};
+    settings.numerics.reconstruction = "constant";
+    settings.implicit.jacobianAction = "assembled";
+    settings.implicit.diagonal = "block";
+    settings.implicit.residualComponents = {"w"};
+    settings.implicit.iterations = 1;
+    settings.implicit.algebraicRateTolerance = 1e-14;
+    settings.implicit.rejectUnconvergedStages = true;
+    C::TimeSettings time;
+    time.method = "bdf1";
+    C::Domain domain("acm", CauchyTest::PeriodicQuads(mpi, 4), settings, time);
+    {
+        auto write = domain.Dofs().WriteOwned();
+        const auto flow = write.Block("flow");
+        for (DNDS::index iCell = 0; iCell < flow.RowCount(); ++iCell)
+            flow(iCell, 0) += .1 * std::sin(2 * 3.141592653589793 * domain.Discretization().Metrics().GetCellCent(iCell)[0]);
+    }
+    CHECK_FALSE(domain.Advance(.01).accepted);
+    REQUIRE_FALSE(domain.LastImplicitStages().empty());
+    CHECK(domain.LastImplicitStages().back().residual[2] == 0);
+    CHECK(domain.LastImplicitStages().back().residualTargetRatio > 1);
 }
 TEST_CASE("Production DITR controller uses common limits unless an override is supplied")
 {

@@ -47,6 +47,7 @@ namespace DNDS::Cauchy
         const std::string &TimeMethod() const;
         const Json &NonlinearState() const;
         const Json &UpdatePolicy() const;
+        std::optional<real> PressureGauge() const;
         bool SourceStrang() const;
     };
 }

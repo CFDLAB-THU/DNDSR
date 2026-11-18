@@ -4,12 +4,20 @@ namespace DNDS::Cauchy::CPU
 {
     NumericalStatus MeasureRateNorm(Algebra::DofComponentView<const real> rate,
                                     Algebra::DofComponentView<const real> reference, CFV::FiniteVolumeHostView metric,
-                                    int normOrder, SpanView<real> sum, SpanView<real> partials) noexcept
+                                    int normOrder, SpanView<real> sum, SpanView<real> partials,
+                                    Algebra::DofComponentView<const real> rawACMRate) noexcept
     {
-        return OMP::SumRows(rate.RowCount(), sum, partials, [&](index iCell, SpanView<real> local) -> NumericalStatus
-                            {
+        const auto accumulate = [&](auto measureContinuity)
+        {
+            return OMP::SumRows(rate.RowCount(), sum, partials, [&](index iCell, SpanView<real> local) -> NumericalStatus
+                                {
             const real volume = metric.GetCellVol(iCell);
             local[rate.ComponentNumber()] += volume;
+            if constexpr (decltype(measureContinuity)::value)
+            {
+                const real continuity = rawACMRate(iCell, 3);
+                local[rate.ComponentNumber() + 1] += volume * continuity * continuity;
+            }
             for (index j = 0; j < rate.ComponentNumber(); ++j)
             {
                 const real value = rate(iCell, j) - (reference.RowCount() ? reference(iCell, j) : 0);
@@ -17,6 +25,8 @@ namespace DNDS::Cauchy::CPU
                 local[j] += normOrder == 1 ? volume * std::abs(value) : volume * value * value;
             }
             return {}; });
+        };
+        return rawACMRate.RowCount() ? accumulate(std::true_type{}) : accumulate(std::false_type{});
     }
     NumericalStatus AssembleDefect(EquationLayoutView<const real> mean, EquationLayoutView<const real> residual,
                                    EquationLayoutView<const real> constant, EquationLayoutView<real> output,

@@ -24,7 +24,7 @@ namespace
     {
         return {fv, state, fv.BuildReconstructionState(state), fv.BuildWorkspace(state), engine, stream, settings,
                 A::ComponentSelection(state.ComponentNumber(),
-                                      state.Schema().ResolveComponents(settings.implicit.residualComponents))};
+                                      state.Schema().ResolveComponents(settings.implicit.ResolveResidualComponents(settings.equation.system == "incompressibleACM")))};
     }
     C::DomainSettings Controls()
     {
@@ -326,7 +326,7 @@ TEST_CASE("FAS consumes the measured finest VR rate once for field and logical e
             C::NonlinearSolver smoother(
                 fine, input, reconstruction, workspace, engine, stream, settings,
                 A::ComponentSelection(input.ComponentNumber(),
-                                      input.Schema().ResolveComponents(settings.implicit.residualComponents)));
+                                      input.Schema().ResolveComponents(settings.implicit.ResolveResidualComponents(settings.equation.system == "incompressibleACM"))));
             C::PolynomialMultigrid solver(mesh, fine, input, smoother, engine, stream, settings);
             if (manual)
             {
@@ -435,7 +435,7 @@ TEST_CASE("Polynomial FAS fixed points and preflight errors preserve fine means"
     C::NonlinearSolver smoother(
         fine, input, reconstruction, workspace, engine, stream, settings,
         A::ComponentSelection(input.ComponentNumber(),
-                              input.Schema().ResolveComponents(settings.implicit.residualComponents)));
+                              input.Schema().ResolveComponents(settings.implicit.ResolveResidualComponents(settings.equation.system == "incompressibleACM"))));
     C::PolynomialMultigrid solver(mesh, fine, input, smoother, engine, stream, settings);
     const auto generation = state.Owned().Version();
     CHECK_THROWS(solver.Solve(input, 10, .5, 0));
@@ -493,7 +493,7 @@ TEST_CASE("Selected pMG recovers nonconstant principal equations while preservin
         C::NonlinearSolver smoother(
             fine, input, reconstruction, workspace, engine, stream, settings,
             A::ComponentSelection(input.ComponentNumber(),
-                                  input.Schema().ResolveComponents(settings.implicit.residualComponents)));
+                                  input.Schema().ResolveComponents(settings.implicit.ResolveResidualComponents(settings.equation.system == "incompressibleACM"))));
         A::Copy(exact, state);
         smoother.EvaluateEquation(input, forcing, 30, .5, .1);
         {
@@ -723,7 +723,7 @@ TEST_CASE("Logical polynomial FAS recovers nonconstant RANS and reacting mixture
         R::EagerEngine engine(scenario ? 2 : 0, std::make_shared<R::AccessTrackingContext>());
         const auto stream = engine.CreateCPUStream();
         C::NonlinearSolver smoother(fine, state, reconstruction, work, engine, stream, settings,
-                                    A::ComponentSelection(state.ComponentNumber(), state.Schema().ResolveComponents(settings.implicit.residualComponents)), setup.workers);
+                                    A::ComponentSelection(state.ComponentNumber(), state.Schema().ResolveComponents(settings.implicit.ResolveResidualComponents(settings.equation.system == "incompressibleACM"))), setup.workers);
         constexpr double mass = 10000, scale = .5;
         smoother.EvaluateEquation(state, source, mass, scale, .1);
         const C::EquationDofOperations::Binding sourceBinding(source);

@@ -22,6 +22,7 @@ TEST_CASE("ACM device correction matches CPU on flow4 and mechanical SA and SST"
         settings.mesh.dimension = 3;
         settings.equation.system = "incompressibleACM";
         settings.equation.eos = "none";
+        settings.equation.acmPressureMean = 0;
         settings.equation.transport = "Newtonian";
         settings.equation.viscosity = .001;
         settings.equation.rans.model = multigrid ? "none" : profile;
@@ -60,10 +61,14 @@ TEST_CASE("ACM device correction matches CPU on flow4 and mechanical SA and SST"
         time.method = "bdf1";
         auto mesh = CFVTest::CartesianHexes(mpi, 3);
         std::optional<R::Array<double>> reference;
-        for (const auto *backend : {"cpu", "cuda"})
+        for (const auto *mapping : {"cpu", "thread", "ctaSegments"})
         {
-            settings.execution.device = backend;
+            const bool cpu = std::string_view(mapping) == "cpu";
+            settings.execution.device = cpu ? "cpu" : "cuda";
+            settings.execution.kernels.rhsMapping = cpu ? "auto" : mapping;
+            settings.execution.reconstructionKernel = !cpu && multigrid ? "fp64Pipelined" : "fp64";
             C::Domain domain("acm", mesh, settings, time);
+            CHECK(domain.CaptureStateSnapshot(false).PressureGauge() == std::optional<DNDS::real>(0));
             REQUIRE(domain.Advance(.0001).accepted);
             REQUIRE_FALSE(domain.LastImplicitStages().empty());
             if (multigrid)

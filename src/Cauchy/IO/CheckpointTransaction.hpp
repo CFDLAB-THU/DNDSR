@@ -11,6 +11,7 @@ namespace DNDS::Cauchy::IO
     struct DomainCheckpointRead
     {
         real time = 0, lastDt = 0;
+        std::optional<real> pressureGauge;
         StateEpoch epoch;
         std::unique_ptr<EquationTimeStepper> stepper;
         std::optional<Runtime::Array<real>> guess, limitedVRHistory;

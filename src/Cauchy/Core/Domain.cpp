@@ -10,6 +10,7 @@
 #include "Cauchy/Physics/PointProperties.hpp"
 #include "Cauchy/Input/StateInput.hpp"
 #include "Cauchy/Operators/Source/ChemicalSource.hpp"
+#include "Cauchy/Implicit/NonlinearOperators.hpp"
 
 namespace DNDS::Cauchy
 {
@@ -37,7 +38,7 @@ namespace DNDS::Cauchy
                 index width = 0;
                 for (const auto &block : setup->equation.Schema().blocks) width += index(block.components.size());
                 settings.implicit.ValidateComponents(width);
-                setup->equation.Schema().ResolveComponents(settings.implicit.residualComponents); });
+                setup->equation.Schema().ResolveComponents(settings.implicit.ResolveResidualComponents(setup->equation.IsACM())); });
             return std::move(*setup);
         }
         ResolvedPhysicalInputs ResolveInputs(const DomainSettings &settings, const PhysicsResources &setup, const MPIInfo &mpi)
@@ -76,6 +77,19 @@ namespace DNDS::Cauchy
         _state.accepted.RequireSchema(_problem.equation.Schema());
         DNDS_check_throw_info(_problem.finiteVolume.Metrics().Dimension() == settings.mesh.dimension, "Cauchy config/mesh dimension differs");
         _problem.admissibility.emplace(_problem.finiteVolume.PrepareAdmissibility(_execution.ChemicalWorkers()));
+        if (_problem.equation.IsACM() && !_problem.finiteVolume.HasPressureBoundary())
+        {
+            auto &engine = _execution.Engine();
+            const auto &lane = _execution.ComputeStream();
+            const NonlinearOperators operators(_problem.finiteVolume.Metrics(), *_problem.admissibility, lane.Context());
+            const auto requested = settings.equation.acmPressureMean;
+            _state.pressureGauge = std::make_shared<real>(requested ? *requested : operators.PressureMean(engine, lane, _state.accepted));
+            if (requested)
+            {
+                operators.ProjectPressureMean(engine, lane, _state.accepted, *requested);
+                EquationDofOperations::Copy(engine, lane, _state.trial, _state.accepted);
+            }
+        }
         DNDS_check_throw_info(Admissible(_state.accepted), "Cauchy initial means violate density or minimum-temperature internal-energy bounds");
         ConfigureTimeStep(time, settings.implicit.positivity.compressionPower);
         InitializeImplicit(settings, time, mesh);

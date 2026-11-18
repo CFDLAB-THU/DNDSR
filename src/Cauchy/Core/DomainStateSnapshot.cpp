@@ -16,6 +16,7 @@ namespace DNDS::Cauchy
         StateEpoch epoch;
         std::string method;
         Json nonlinear, updatePolicy;
+        std::optional<real> pressureGauge;
         bool sourceStrang = false;
 
         Data(std::string domainName, EquationDofs accepted,
@@ -24,7 +25,7 @@ namespace DNDS::Cauchy
              std::optional<EquationDofs> previousState, real acceptedTime,
              real acceptedDt, real historyDt, StateEpoch acceptedEpoch,
              std::string timeMethod, Json nonlinearState, Json policy,
-             bool strang, Runtime::ExecutionContext context)
+             bool strang, std::optional<real> gauge, Runtime::ExecutionContext context)
             : name(std::move(domainName)), means(std::move(accepted)),
               reconstruction(std::move(acceptedReconstruction)),
               previous(std::move(previousState)),
@@ -32,7 +33,7 @@ namespace DNDS::Cauchy
               lastAcceptedDt(acceptedDt), previousDt(historyDt),
               epoch(acceptedEpoch), method(std::move(timeMethod)),
               nonlinear(std::move(nonlinearState)),
-              updatePolicy(std::move(policy)), sourceStrang(strang)
+              updatePolicy(std::move(policy)), pressureGauge(gauge), sourceStrang(strang)
         {
             meanRead.emplace(means.ReadOwned(context));
             if (reconstruction)
@@ -103,6 +104,7 @@ namespace DNDS::Cauchy
             hasHistory ? domain._state.timeStepper->PreviousDt() : 0,
             domain._state.epoch, method, nonlinear,
             domain.UpdatePolicyMetadata(), domain._sourceStrang,
+            domain._state.pressureGauge ? std::optional<real>(*domain._state.pressureGauge) : std::nullopt,
             domain._execution.ComputeStream().Context());
     }
 
@@ -137,11 +139,12 @@ namespace DNDS::Cauchy
         return DomainStateSnapshot(std::make_shared<Data>(source.name, std::move(means),
                                                           std::move(reconstruction), std::move(limitedVR), std::move(previous), source.time,
                                                           source.lastAcceptedDt, source.previousDt, source.epoch, source.method, source.nonlinear,
-                                                          source.updatePolicy, source.sourceStrang, Runtime::ExecutionContext::Host()));
+                                                          source.updatePolicy, source.sourceStrang, source.pressureGauge, Runtime::ExecutionContext::Host()));
     }
 
     const std::string &DomainStateSnapshot::Name() const { return _data->name; }
     const EquationDofs &DomainStateSnapshot::Means() const { return _data->means; }
+    std::optional<real> DomainStateSnapshot::PressureGauge() const { return _data->pressureGauge; }
     OptionalRef<const EquationDofs> DomainStateSnapshot::Reconstruction() const
     {
         return _data->reconstruction

@@ -45,7 +45,7 @@ namespace DNDS::Cauchy
         std::shared_ptr<LinearProblemContext> problem;
         std::unique_ptr<DofLinearSolver> linear;
         bool positivity;
-        bool preservePressureGauge = false;
+        std::shared_ptr<const real> pressureGauge;
         AlphaReduction rhsFPPReduction = AlphaReduction::Cell;
         std::optional<R::Array<real>> cellRHSAlpha;
         real reconstructionTolerance;
@@ -63,6 +63,7 @@ namespace DNDS::Cauchy
             EquationDofs state;
             const EquationDofs source;
             real mass = 0, rhsScale = 1, time = 0;
+            real continuityRatio = 0;
             int stage = 0;
             Algebra::ComponentSelection selection;
             R::MetadataBuffer<uint8_t> activeComponents;
@@ -107,9 +108,6 @@ namespace DNDS::Cauchy
               positivity(controls.numerics.positivity && state.Schema().AccumulationKind() == PhysicalAccumulationKind::Identity), reconstructionTolerance(settings.requireConvergedReconstruction && controls.numerics.reconstruction == "variational" ? controls.numerics.reconstructionTolerance : 0)
         {
             spatial.Fields().SetName("Cauchy/nonlinear/spatial", DNDS_ALLOCATION_SITE());
-            if (fv.Equation().IsACM())
-                preservePressureGauge = std::none_of(controls.boundaries.begin(), controls.boundaries.end(), [](const auto &entry)
-                                                     { return entry.second.kind == "pressureOutlet" || entry.second.kind == "farfield"; });
             defect.Fields().SetName("Cauchy/nonlinear/defect", DNDS_ALLOCATION_SITE());
             candidate.Fields().SetName("Cauchy/nonlinear/candidate", DNDS_ALLOCATION_SITE());
             setup = std::make_unique<NonlinearSolveSetup>(
@@ -233,7 +231,8 @@ namespace DNDS::Cauchy
                                      std::shared_ptr<FiniteVolume::ReconstructionState> reconstruction,
                                      std::shared_ptr<FiniteVolume::Workspace> workspace, Runtime::EagerEngine &engine, Runtime::ExecutionStream stream,
                                      const DomainSettings &settings, const Algebra::ComponentSelection &residualSelection,
-                                     std::optional<Physics::Chemistry::ChemicalWorkerPool> workers)
+                                     std::optional<Physics::Chemistry::ChemicalWorkerPool> workers,
+                                     std::shared_ptr<const real> pressureGauge)
     {
         const MPIInfo mpi(discrete.Metrics().Communicator());
         ImplicitSettings implicit = settings.implicit;
@@ -270,6 +269,17 @@ namespace DNDS::Cauchy
                         { _data = std::make_shared<Data>(discrete, state, std::move(reconstruction), std::move(workspace), engine, std::move(stream), settings, std::move(implicit), std::move(workers)); });
         MPI::LocalStage(mpi, [&]
                         { _data->ValidateMeans(state); });
+        if (discrete.Equation().IsACM() && !discrete.HasPressureBoundary())
+        {
+            if (!pressureGauge)
+            {
+                const auto requested = settings.equation.acmPressureMean;
+                pressureGauge = std::make_shared<real>(requested ? *requested : _data->operators.PressureMean(engine, _data->stream, state));
+                if (requested)
+                    _data->operators.ProjectPressureMean(engine, _data->stream, state, *requested);
+            }
+            _data->pressureGauge = std::move(pressureGauge);
+        }
         _data->PrepareLinear(state, settings.execution.overlap);
     }
 
@@ -278,14 +288,20 @@ namespace DNDS::Cauchy
         std::shared_ptr<FiniteVolume::ReconstructionState> reconstruction,
         std::shared_ptr<FiniteVolume::Workspace> workspace,
         DomainExecutionContext context, const DomainSettings &settings,
-        const Algebra::ComponentSelection &residualSelection)
+        const Algebra::ComponentSelection &residualSelection,
+        std::shared_ptr<const real> pressureGauge)
         : NonlinearSolver(discrete, state, std::move(reconstruction),
                           std::move(workspace), context.Engine(),
                           context.ComputeStream(), settings, residualSelection,
-                          context.ChemicalWorkers())
+                          context.ChemicalWorkers(), std::move(pressureGauge))
     {
         _data->executionOwner.emplace(std::move(context));
         _data->PrepareLinear(state, settings.execution.overlap);
+    }
+
+    std::shared_ptr<const real> NonlinearSolver::PressureGauge() const
+    {
+        return _data->pressureGauge;
     }
 
     NonlinearIterationReport NonlinearSolver::Solve(EquationDofs &state, const EquationDofs &source,
@@ -330,12 +346,12 @@ namespace DNDS::Cauchy
             engine.Synchronize(); });
     }
     std::vector<real> NonlinearSolver::MeasureRateNorm(const EquationDofs &rate, int normOrder,
-                                                       OptionalRef<const EquationDofs> reference) const
+                                                       OptionalRef<const EquationDofs> reference, OptionalRef<const EquationDofs> rawACMRate) const
     {
         DNDS_check_throw_info(_data, "nonlinear session was moved");
         auto session = _data->session.Acquire(_nestedSession.lock());
         auto engine = _data->stream.LockEngine();
-        return _data->operators.MeasureRateNorm(engine, _data->stream, rate, normOrder, reference);
+        return _data->operators.MeasureRateNorm(engine, _data->stream, rate, normOrder, reference, rawACMRate);
     }
 
     NonlinearSession NonlinearSolver::Start(
@@ -420,7 +436,7 @@ namespace DNDS::Cauchy
         {
             auto &data = *active->owner;
             const index nv = active->state.ComponentNumber();
-            std::vector<real> local(size_t(nv + 1));
+            std::vector<real> local;
             data.Stage([&]
                        {
                 auto engine = data.stream.LockEngine();
@@ -428,11 +444,13 @@ namespace DNDS::Cauchy
                     active->source, data.defect, active->mass, active->rhsScale, active->activeComponents.HostView(),
                     data.settings.normOrder, true); });
             MPI::AllreduceInPlace<MPI::Reduction::Sum>(
-                MPI::ContiguousView<real>{local.data(), size_t(nv + 1)},
+                MPI::ContiguousView<real>{local.data(), local.size()},
                 data.mpi.comm);
             DNDS_check_throw_info(std::isfinite(local[size_t(nv)]) &&
                                       local[size_t(nv)] > 0,
                                   "invalid global equation stage volume");
+            if (local.size() == size_t(nv + 2))
+                active->continuityRatio = std::sqrt(local.back() / local[size_t(nv)]) / data.settings.algebraicRateTolerance;
             for (index j = 0; j < nv; ++j)
             {
                 norms[size_t(j)] = data.settings.normOrder == 1
@@ -502,17 +520,16 @@ namespace DNDS::Cauchy
         };
         return NonlinearSession::Prepare(
             setup, stage,
-            {std::move(control), std::move(initial),
-             data.reconstructionTolerance, std::move(evaluate),
-             std::move(measure), std::move(reconstruction),
-             [advance](int coupledStage, auto &report, bool applyCorrection)
+            {std::move(control), std::move(initial), data.reconstructionTolerance, std::move(evaluate), std::move(measure), std::move(reconstruction), [advance](int coupledStage, auto &report, bool applyCorrection)
              {
                  DNDS_check_throw_info(
                      coupledStage == 0,
                      "single-stage nonlinear policy requested another stage");
                  if (applyCorrection)
-                     advance(report);
-             }});
+                     advance(report); },
+             {},
+             [active]
+             { return active->continuityRatio; }});
     }
 
     AuxiliaryValues NonlinearSolver::PreparedAuxValues() const
@@ -778,11 +795,11 @@ namespace DNDS::Cauchy
                 {active.data(), index(active.size())}, {scale, data.settings.positivity.incrementRelax,
                     data.settings.positivity.compressionPower, data.positivity});
             limited = result.alpha.limited; minimum = result.alpha.minimum; frozen = result.frozen; });
-        // An unanchored domain has one arbitrary pressure constant. Restore the
-        // previous volume mean before validating the candidate on this level.
-        if (data.preservePressureGauge && (updateComponents.empty() ||
-                                           std::find(updateComponents.begin(), updateComponents.end(), 3) != updateComponents.end()))
-            data.operators.PreservePressureGauge(engine, data.stream, state, data.candidate);
+        // A free gauge is projected to the domain's fixed mean when this
+        // correction is allowed to change pressure.
+        if (data.pressureGauge && (updateComponents.empty() ||
+                                   std::find(updateComponents.begin(), updateComponents.end(), 3) != updateComponents.end()))
+            data.operators.ProjectPressureMean(engine, data.stream, data.candidate, *data.pressureGauge);
         // Scalar repair may not unfreeze a masked component, even when density changed.
         const auto validateCandidate = [&]
         {

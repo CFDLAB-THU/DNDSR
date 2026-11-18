@@ -47,6 +47,8 @@ namespace DNDS::Cauchy
         DNDS_check_throw_info(flags[0] == -flags[1] && flags[2] == -flags[3] && flags[4] == -flags[5], "checkpoint optional sections differ between ranks");
         Json metadata{{"schema_version", 1}, {"mesh_envelope", 2}, {"flow", EquationMetadata(_problem.equation)}, {"reconstruction", _problem.finiteVolume.ReconstructionMetadata()}, {"time_method", snapshot.TimeMethod()}, {"history", history}, {"limited_vr_history", limitedVRHistory}, {"limited_vr_history_schema", 1}, {"frame", FrameMetadata(_problem.finiteVolume, snapshot.Time())}};
         metadata["restart_scope"] = "accepted_step";
+        if (auto gauge = snapshot.PressureGauge())
+            metadata["acm_pressure_mean"] = *gauge;
         metadata["update_policy"] = snapshot.UpdatePolicy();
         metadata["nonlinear_state"] = snapshot.NonlinearState();
         metadata["state_storage"] = DescribeEquationStorage(snapshot.Means());
@@ -154,6 +156,8 @@ namespace DNDS::Cauchy
         serializer->WriteInt("cauchy_format", 5);
         serializer->WriteInt("cauchy_internal_format", 1);
         serializer->WriteString("resolved_config", resolved.dump());
+        if (auto gauge = acceptedSnapshot.PressureGauge())
+            metadata["acm_pressure_mean"] = *gauge;
         serializer->WriteString("metadata_json", metadata.dump());
         if (!outputController.is_null())
             serializer->WriteString("output_controller_json", outputController.dump());

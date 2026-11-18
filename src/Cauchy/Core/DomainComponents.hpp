@@ -38,6 +38,9 @@ namespace DNDS::Cauchy
     struct DomainState
     {
         EquationDofs accepted, trial, residual, initial;
+        /// Domain-owned pressure target shared with the stage and pMG solvers.
+        /// Only checkpoint publication can change its value after setup.
+        std::shared_ptr<real> pressureGauge;
         std::shared_ptr<FiniteVolume::ReconstructionState> reconstruction;
         std::optional<EquationDofs> reconstructionBackup;
         std::optional<Runtime::Array<real>> limitedVRBackup;

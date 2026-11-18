@@ -678,6 +678,8 @@ namespace DNDS::Cauchy
         /// for a split Domain. Custom controllers copy this for their own
         /// nonlinear/hierarchy controls; changing a copy cannot mutate this plan.
         const DomainSettings &Settings() const;
+        /// Whether an active boundary on any domain rank fixes ACM pressure.
+        bool HasPressureBoundary() const;
         /// Variational-only polynomial publication. P0 and explicit P1 return
         /// an empty borrow and construct no hidden Taylor/VR plan.
         OptionalRef<const CFV::VariationalReconstructionPlan> PolynomialReconstruction() const;

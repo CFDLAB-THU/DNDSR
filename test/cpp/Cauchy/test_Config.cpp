@@ -454,6 +454,9 @@ TEST_CASE("Cauchy implicit controls resolve through the root and reject contradi
 {
     const auto defaults = C::SimulationConfig::Resolve(C::Json::object(), 2);
     CHECK(defaults.Domains()[0].settings.implicit.residualComponents == std::vector<std::string>{"rho"});
+    CHECK(defaults.Domains()[0].settings.numerics.gradient == "greenGauss");
+    CHECK(defaults.Domains()[0].settings.numerics.reconstructionIterations == 1);
+    CHECK(defaults.Domains()[0].settings.numerics.reconstructionTolerance == 0);
     CHECK(defaults.Domains()[0].settings.implicit.linear.stopping == "residual");
     const auto fixed = C::SimulationConfig::Resolve({{"defaults", {{"implicit", {{"linear", {{"method", "ilu"}, {"stopping", "fixedCount"}}}}}}}}, 2);
     CHECK(fixed.Domains()[0].settings.implicit.linear.stopping == "fixedCount");

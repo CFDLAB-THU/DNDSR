@@ -170,7 +170,8 @@ namespace DNDS::Cauchy
                         std::shared_ptr<FiniteVolume::Workspace> workspace,
                         Runtime::EagerEngine &engine, Runtime::ExecutionStream stream, const DomainSettings &settings,
                         const Algebra::ComponentSelection &residualSelection,
-                        std::optional<Physics::Chemistry::ChemicalWorkerPool> workers = std::nullopt);
+                        std::optional<Physics::Chemistry::ChemicalWorkerPool> workers = std::nullopt,
+                        std::shared_ptr<const real> pressureGauge = {});
         /// Solver-orchestration constructor. Retains the complete domain
         /// execution owner so stream/runtime/worker resources outlive every
         /// operation record and any hierarchy alias.
@@ -178,7 +179,10 @@ namespace DNDS::Cauchy
                         std::shared_ptr<FiniteVolume::ReconstructionState> reconstruction,
                         std::shared_ptr<FiniteVolume::Workspace> workspace,
                         DomainExecutionContext context, const DomainSettings &settings,
-                        const Algebra::ComponentSelection &residualSelection);
+                        const Algebra::ComponentSelection &residualSelection,
+                        std::shared_ptr<const real> pressureGauge = {});
+        /// Finest domain's fixed pressure target, reusable on same-volume pMG levels.
+        std::shared_ptr<const real> PressureGauge() const;
         NonlinearIterationReport Solve(EquationDofs &state, const EquationDofs &source, real mass, real rhsScale, real time,
                                        int stage = 0, NonlinearSolveControl control = {});
         /// Prepare one externally phased finest nonlinear solve. The returned
@@ -203,7 +207,7 @@ namespace DNDS::Cauchy
         /// subtracts a same-space rate for FAS. Uses the solver's managed
         /// backend operator; domain MPI reduction remains with the controller.
         std::vector<real> MeasureRateNorm(const EquationDofs &rate, int normOrder,
-                                          OptionalRef<const EquationDofs> reference = {}) const;
+                                          OptionalRef<const EquationDofs> reference = {}, OptionalRef<const EquationDofs> rawACMRate = {}) const;
         /// Frozen auxiliary publication from the last rate/operator evaluation.
         /// A subsequent cached correction preserves it; after a mean update it
         /// describes the previous linearization, not the updated state. Read-only

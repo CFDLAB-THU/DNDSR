@@ -105,6 +105,7 @@ namespace DNDS::Cauchy
     R::TransferBinding FiniteVolume::BindHalo(CFV::FVField &field) const { return _data->BindHalo(field); }
     const EquationSystem &FiniteVolume::Equation() const { return _data->equation; }
     const DomainSettings &FiniteVolume::Settings() const { return _data->settings; }
+    bool FiniteVolume::HasPressureBoundary() const { return _data->hasPressureBoundary; }
     OptionalRef<const CFV::VariationalReconstructionPlan> FiniteVolume::PolynomialReconstruction() const
     {
         return _data->reconstruction ? OptionalRef<const CFV::VariationalReconstructionPlan>(*_data->reconstruction)

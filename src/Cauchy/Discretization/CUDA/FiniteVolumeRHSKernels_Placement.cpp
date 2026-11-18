@@ -72,20 +72,21 @@ namespace DNDS::Cauchy::CUDA
         using P = DNDS::Math::ComputePrecision;
         DNDS_check_throw_info(blockSize == 64 || blockSize == 128 || blockSize == 256 || blockSize == 512, "invalid CUDA RHS block size");
         const bool fp64 = polynomialPrecision == P::FP64 && dissipationPrecision == P::FP64 && fluxPrecision == P::FP64;
+        DNDS_check_throw_info(reduction >= RHSFaceReduction::Serial && reduction <= RHSFaceReduction::Segmented && gridBlocks >= 0,
+                              "invalid CUDA RHS mapping/reduction/grid selector");
+        DNDS_check_throw_info(mapping != RHSFaceMapping::CTASegments || blockSize >= 128,
+                              "segmented RHS supports 128/256/512 threads");
         if (mechanical)
         {
             DNDS_check_throw_info(fp64 && !produceLow && !positivity && !primitiveGradient && !faceFallback &&
-                                      !frame.moving && mapping == RHSFaceMapping::Thread && !doubleBuffer,
+                                      !frame.moving && (mapping == RHSFaceMapping::Thread || mapping == RHSFaceMapping::CTASegments) &&
+                                      reduction == RHSFaceReduction::Serial && !doubleBuffer,
                                   "unsupported CUDA ACM spatial kernel policy");
             return;
         }
         DNDS_check_throw_info(!doubleBuffer, "buffered-face RHS experiment has been retired");
         DNDS_check_throw_info(mapping == (fp64 ? RHSFaceMapping::CTASegments : RHSFaceMapping::Thread),
                               "FP64 CUDA RHS requires CTA segments; reduced-precision comparisons require thread mapping");
-        DNDS_check_throw_info(reduction >= RHSFaceReduction::Serial && reduction <= RHSFaceReduction::Segmented && gridBlocks >= 0,
-                              "invalid CUDA RHS mapping/reduction/grid selector");
-        DNDS_check_throw_info(mapping != RHSFaceMapping::CTASegments || blockSize >= 128,
-                              "segmented RHS uses its own shared staging and 128/256/512 threads");
         P selected = P::FP64;
         for (const auto precision : {polynomialPrecision, dissipationPrecision, fluxPrecision})
         {

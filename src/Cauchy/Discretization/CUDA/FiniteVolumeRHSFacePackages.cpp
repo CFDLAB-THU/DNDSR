@@ -12,12 +12,19 @@ namespace DNDS::Cauchy::CUDA
     {
         RHSFaceStageShape result;
         result.components = controls.components;
+        if (controls.mechanical)
+            return result;
         const bool reconstruct = !controls.firstOrder && (!controls.direct || controls.linear);
         result.reconstruction = reconstruct ? controls.components * (controls.direct ? controls.dimension : controls.modes) : 0;
         result.viscous = controls.primitiveGradient ? 5 * controls.dimension : controls.viscous && controls.distinctViscous ? result.reconstruction
                                                                                                                             : 0;
         result.width = controls.components + result.reconstruction + result.viscous + 4;
         return result;
+    }
+    size_t RHSFacePackages::LaneScratchBytes(const RHSKernelControls &controls)
+    {
+        const auto flux = controls.components * sizeof(real) * (controls.produceLow ? 2 : 1);
+        return flux + (controls.mechanical ? sizeof(NumericalStatus) : 2 * sizeof(int) + 3 * sizeof(index));
     }
     struct RHSFacePackages::Data
     {
@@ -46,12 +53,12 @@ namespace DNDS::Cauchy::CUDA
         view.shape = StageShape(controls);
         // Per lane: high/(optional low) flux, error code/detail/row/point,
         // and integer fallback count. No point state leaves CTA memory.
-        const size_t scratch = size_t(controls.blockSize) * (controls.components * sizeof(real) * (controls.produceLow ? 2 : 1) + 2 * sizeof(int) + 3 * sizeof(index));
+        const size_t scratch = size_t(controls.blockSize) * LaneScratchBytes(controls);
         const size_t stagePerFace = size_t(2 * view.shape.width) * sizeof(real);
         constexpr size_t budget = 48 * 1024;
         DNDS_check_throw_info(scratch < budget && stagePerFace <= budget - scratch,
                               "RHS segment shape/block size exceeds portable 48 KiB shared-memory budget");
-        const int capacity = int((budget - scratch) / stagePerFace);
+        const int capacity = stagePerFace ? int((budget - scratch) / stagePerFace) : controls.blockSize;
         const auto host = selection.To(R::Device::Host(), context);
         const auto selected = host.Read();
         const auto ids = selected.View<R::FixedRows<1>>();

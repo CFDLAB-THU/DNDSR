@@ -195,21 +195,21 @@ namespace DNDS::Cauchy
                                "schema default", data->provenance);
                 level.update(original);
             }
-            if (resolved["settings"]["equation"]["system"] == "incompressibleACM")
+            const bool acm = resolved["settings"]["equation"]["system"] == "incompressibleACM";
+            const auto base = "/domains/" + std::to_string(iDomain) + "/settings/implicit/";
+            auto &implicit = resolved["settings"]["implicit"];
+            if (implicit["residualComponents"] == Json::array({"auto"}))
+            {
+                implicit["residualComponents"] = ImplicitSettings{}.ResolveResidualComponents(acm);
+                Origin(implicit["residualComponents"], base + "residualComponents", "equation convergence defaults", data->provenance);
+            }
+            if (acm)
             {
                 const auto gradientKey = "/domains/" + std::to_string(iDomain) + "/settings/numerics/viscousGradient";
                 if (data->provenance.at(gradientKey) == "schema default")
                 {
                     resolved["settings"]["numerics"]["viscousGradient"] = "polynomial";
                     data->provenance[gradientKey] = "ACM mechanical gradients";
-                }
-                const auto base = "/domains/" + std::to_string(iDomain) + "/settings/implicit/";
-                auto &implicit = resolved["settings"]["implicit"];
-                if (implicit["residualComponents"] == Json::array({"rho"}) &&
-                    data->provenance.at(base + "residualComponents/0") == "schema default")
-                {
-                    implicit["residualComponents"] = {"u", "v", "w", "p"};
-                    Origin(implicit["residualComponents"], base + "residualComponents", "ACM differential and continuity residuals", data->provenance);
                 }
                 if (data->provenance.at(base + "rejectUnconvergedStages") == "schema default")
                 {

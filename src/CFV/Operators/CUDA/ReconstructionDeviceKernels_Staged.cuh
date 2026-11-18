@@ -487,6 +487,8 @@ namespace DNDS::CFV::Detail
         {
             switch (a.mean.owned.Width())
             {
+            case 4:
+                return ProductionShape<N, 4>(a);
             case 5:
                 return ProductionShape<N, 5>(a);
             case 6:

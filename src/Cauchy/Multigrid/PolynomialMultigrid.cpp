@@ -54,10 +54,11 @@ namespace DNDS::Cauchy
             static auto BuildSolver(const FiniteVolume &fv, State &state, std::shared_ptr<ReconstructionState> reconstruction,
                                     std::shared_ptr<Workspace> workspace,
                                     R::EagerEngine &engine, const R::ExecutionStream &stream, const DomainSettings &settings,
-                                    const std::optional<Physics::Chemistry::ChemicalWorkerPool> &workers)
+                                    const std::optional<Physics::Chemistry::ChemicalWorkerPool> &workers,
+                                    std::shared_ptr<const real> pressureGauge)
             {
-                const Algebra::ComponentSelection selection(state.ComponentNumber(), state.Schema().ResolveComponents(settings.implicit.residualComponents));
-                return std::make_unique<Solver>(fv, state, std::move(reconstruction), std::move(workspace), engine, stream, settings, selection, workers);
+                const Algebra::ComponentSelection selection(state.ComponentNumber(), state.Schema().ResolveComponents(settings.implicit.ResolveResidualComponents(fv.Equation().IsACM())));
+                return std::make_unique<Solver>(fv, state, std::move(reconstruction), std::move(workspace), engine, stream, settings, selection, workers, std::move(pressureGauge));
             }
             static void CheckTransfer(const State &a, const State &b)
             {
@@ -129,7 +130,7 @@ namespace DNDS::Cauchy
                 Coarse(ssp<Geom::UnstructuredMesh> mesh, DomainSettings settings, const FiniteVolume &fine,
                        const State &prototype, R::EagerEngine &engine, const R::ExecutionStream &stream,
                        const std::optional<Physics::Chemistry::ChemicalWorkerPool> &workers,
-                       const std::optional<DomainExecutionContext> &context)
+                       const std::optional<DomainExecutionContext> &context, std::shared_ptr<const real> pressureGauge)
                     : discrete(PrepareLevel(std::move(mesh), settings, fine, stream.Context())), state(Profile::NewState(discrete, prototype))
                 {
                     DNDS_check_throw_info(discrete.Metrics().Cells().SameOrder(fine.Metrics().Cells()),
@@ -142,9 +143,9 @@ namespace DNDS::Cauchy
                     workspace = Profile::BuildWorkspace(discrete, state, workers);
                     if (context)
                         solver = std::make_unique<Solver>(discrete, state, reconstruction, workspace, *context, settings,
-                                                          Algebra::ComponentSelection(state.ComponentNumber(), state.Schema().ResolveComponents(settings.implicit.residualComponents)));
+                                                          Algebra::ComponentSelection(state.ComponentNumber(), state.Schema().ResolveComponents(settings.implicit.ResolveResidualComponents(discrete.Equation().IsACM()))), pressureGauge);
                     else
-                        solver = Profile::BuildSolver(discrete, state, reconstruction, workspace, engine, stream, settings, workers);
+                        solver = Profile::BuildSolver(discrete, state, reconstruction, workspace, engine, stream, settings, workers, std::move(pressureGauge));
                 }
             };
             FiniteVolume fine;
@@ -163,6 +164,7 @@ namespace DNDS::Cauchy
             std::vector<Transfer> transferDefinitions;
             std::vector<real> smootherCFL, smootherBaseCFL, smootherMaxCFL;
             real mass = 0, rhsScale = 1, time = 0;
+            real continuityRatio = 0;
             int stage = 0;
             Report *report = nullptr;
             // Opt-in local timings only: no barriers/reductions or clock calls
@@ -347,7 +349,7 @@ namespace DNDS::Cauchy
                     auto lower = PolynomialMultigrid::CoarseSettings(controls, level);
                     smootherBaseCFL.push_back(lower.implicit.pseudoCFL);
                     smootherMaxCFL.push_back(lower.implicit.maxPseudoCFL);
-                    coarse.push_back(std::make_unique<Coarse>(mesh, lower, fine, state, engine, stream, workers, executionOwner));
+                    coarse.push_back(std::make_unique<Coarse>(mesh, lower, fine, state, engine, stream, workers, executionOwner, fineSolver.PressureGauge()));
                     levelDefinitions.push_back(MakeLevel(coarse.back()->state, *coarse.back()->solver, level + 1));
                     // These equations use cell-volume-normalized rates. Every
                     // level has the same schema and cell order. Identity
@@ -387,10 +389,12 @@ namespace DNDS::Cauchy
             {
                 TimedOperator(fineSolver, state, value, mass, 0, fineRate.get());
                 auto norms = Profile::Norms(state);
-                std::vector<real> sum(norms.size() + 1, 0);
+                std::vector<real> sum;
+                const bool acm = fine.Equation().IsACM();
                 const auto accumulate = [&]
                 {
-                    sum = fineSolver.MeasureRateNorm(source, settings.normOrder, std::cref(value));
+                    sum = fineSolver.MeasureRateNorm(source, settings.normOrder, std::cref(value),
+                                                     acm ? OptionalRef<const State>(fineRate->rate) : OptionalRef<const State>{});
                 };
                 // Only the diagnostic preflight is optional. The residual
                 // norm below is a mathematical collective in both modes.
@@ -401,7 +405,10 @@ namespace DNDS::Cauchy
                     accumulate();
                 MPI::AllreduceInPlace<MPI::Reduction::Sum>(
                     MPI::ContiguousView<real>{sum.data(), sum.size()}, mpi.comm);
-                DNDS_check_throw_info(sum.back() > 0 && std::isfinite(sum.back()), "invalid FAS global volume");
+                const real volume = sum[norms.size()];
+                DNDS_check_throw_info(volume > 0 && std::isfinite(volume), "invalid FAS global volume");
+                if (acm)
+                    continuityRatio = std::sqrt(sum.back() / volume) / settings.algebraicRateTolerance;
                 for (index j = 0; j < index(norms.size()); ++j)
                 {
                     norms[j] = settings.normOrder == 1 ? sum[j] : std::sqrt(sum[j]);
@@ -467,9 +474,7 @@ namespace DNDS::Cauchy
                                                 : *nonlinearSetup;
                 auto session = NonlinearSession::Prepare(
                     activeSetup, stage,
-                    {std::move(solveControl), std::move(initial),
-                     fineSolver.ReconstructionTolerance(),
-                     [&]
+                    {std::move(solveControl), std::move(initial), fineSolver.ReconstructionTolerance(), [&]
                      { residual = Measure(source); },
                      [&](auto &norms)
                      { norms = residual; },
@@ -488,7 +493,10 @@ namespace DNDS::Cauchy
                              ApplyCycle(source, mass, rhsScale, time, stage,
                                         total.pseudoCFL,
                                         std::cref(fineRate->rate)));
-                     }});
+                     },
+                     {},
+                     [this]
+                     { return continuityRatio; }});
                 const auto result = SolveNonlinear(session);
                 if (profileEnabled && (!mpi.rank || profileAllRanks))
                 {
@@ -537,7 +545,8 @@ namespace DNDS::Cauchy
                                         total.pseudoCFL,
                                         std::cref(fineRate->rate)));
                      },
-                     std::move(lifetime)});
+                     std::move(lifetime), [this]
+                     { return continuityRatio; }});
             }
             void SetBoundaryInputs(const BoundaryInputs &input)
             {

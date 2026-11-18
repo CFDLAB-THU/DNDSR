@@ -234,6 +234,7 @@ namespace DNDS::Cauchy
     {
         ResolvedPhysicalInputs prepared{settings, {}, {}};
         auto &result = prepared.settings;
+        result.implicit.residualComponents = settings.implicit.ResolveResidualComponents(equation.IsACM());
         const auto scales = ResolveReferenceScales(settings.equation);
         if (equation.IsACM())
         {

@@ -257,5 +257,9 @@ namespace DNDS::Cauchy
         std::vector<int> global(size_t(starts.back()));
         MPI_Allgatherv(zones.data(), localCount, MPI_INT, global.data(), counts.data(), starts.data(), MPI_INT, metrics.Communicator());
         boundary.ValidateUsed(std::set<int>(global.begin(), global.end()));
+        hasPressureBoundary = std::any_of(global.begin(), global.end(), [&](int zone)
+                                          {
+            const auto kind = boundary.At(zone).kind;
+            return kind == BoundaryKind::PressureOutlet || kind == BoundaryKind::Farfield; });
     }
 }

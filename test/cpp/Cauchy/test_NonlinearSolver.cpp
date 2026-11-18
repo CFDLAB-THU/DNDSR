@@ -34,7 +34,7 @@ static C::NonlinearSolver MakeSolver(const C::FiniteVolume &fv, C::EquationDofs 
 {
     return {fv, state, fv.BuildReconstructionState(state), fv.BuildWorkspace(state), engine, stream, settings,
             A::ComponentSelection(state.ComponentNumber(),
-                                  state.Schema().ResolveComponents(settings.implicit.residualComponents))};
+                                  state.Schema().ResolveComponents(settings.implicit.ResolveResidualComponents(settings.equation.system == "incompressibleACM")))};
 }
 namespace
 {
@@ -688,12 +688,12 @@ TEST_CASE("Implicit bad corrections reject without poisoning state and nonlinear
         CHECK_THROWS(C::NonlinearSolver(
             fv, logical, reconstruction, workspace, engine, stream, mismatched,
             A::ComponentSelection(logical.ComponentNumber(),
-                                  logical.Schema().ResolveComponents(mismatched.implicit.residualComponents))));
+                                  logical.Schema().ResolveComponents(mismatched.implicit.ResolveResidualComponents(mismatched.equation.system == "incompressibleACM")))));
     }
     C::NonlinearSolver solver(
         fv, logical, reconstruction, workspace, engine, stream, settings,
         A::ComponentSelection(logical.ComponentNumber(),
-                              logical.Schema().ResolveComponents(settings.implicit.residualComponents)));
+                              logical.Schema().ResolveComponents(settings.implicit.ResolveResidualComponents(settings.equation.system == "incompressibleACM"))));
     const auto generation = state.Owned().Version();
     CHECK_THROWS(solver.Solve(logical, right, 20, 1, .1));
     CHECK(state.Owned().IsValid());

@@ -214,7 +214,9 @@ namespace DNDS::Cauchy::Bindings
                 solver->state.emplace(state);
                 solver->stream = stream;
                 selection.emplace(state.ComponentNumber(),
-                                  state.Schema().ResolveComponents(solver->settings.implicit.residualComponents));
+                                  state.Schema().ResolveComponents(solver->settings.implicit.ResolveResidualComponents(
+                                      state.Schema().AccumulationKind() ==
+                                      PhysicalAccumulationKind::ConstantDensityVelocityPressure)));
             });
             solver->value =
                 std::make_unique<NonlinearSolver>(operators.fv, state, workspace.reconstruction, workspace.value,

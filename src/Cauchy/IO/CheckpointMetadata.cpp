@@ -86,6 +86,10 @@ namespace DNDS::Cauchy::CheckpointMetadata
             if (!domain.contains("settings") || !domain["settings"].is_object())
                 continue;
             auto &settings = domain["settings"];
+            // Gauge agreement is checked against the resolved target stored
+            // in the checkpoint. A mean-only import can choose a new target.
+            if (settings.contains("equation"))
+                settings["equation"].erase("acmPressureMean");
             if (settings.contains("equation") && settings["equation"].value("system", std::string("compressible")) != "incompressibleACM")
             {
                 // These new defaults have no meaning in older compressible files.

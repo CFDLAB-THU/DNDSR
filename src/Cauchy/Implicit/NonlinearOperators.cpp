@@ -94,40 +94,51 @@ namespace DNDS::Cauchy
 #else
         const Unavailable device;
 #endif
-        return _data->Reduce(engine, stream, mean.ComponentNumber(), std::move(inputs), std::move(outputs), host, device).norms;
+        const bool continuity = measureNorm && accumulation == PhysicalAccumulationKind::ConstantDensityVelocityPressure;
+        return _data->Reduce(engine, stream, mean.ComponentNumber() + continuity, std::move(inputs), std::move(outputs), host, device).norms;
     }
-    void NonlinearOperators::PreservePressureGauge(R::EagerEngine &engine, const R::ExecutionStream &stream,
-                                                   const EquationDofs &previous, EquationDofs &candidate) const
+    real NonlinearOperators::PressureMean(R::EagerEngine &engine, const R::ExecutionStream &stream, const EquationDofs &state) const
     {
-        _data->Check(engine, stream, previous);
-        _data->CheckPair(previous, candidate);
+        _data->Check(engine, stream, state);
+        DNDS_check_throw_info(state.Schema().AccumulationKind() == PhysicalAccumulationKind::ConstantDensityVelocityPressure,
+                              "pressure gauge requires an ACM state");
         Inputs reads;
-        const auto old = AddInput(previous, reads), next = AddInput(candidate, reads);
+        const auto pressure = AddInput(state, reads);
         const auto geometry = std::make_shared<CFV::FiniteVolumeRead>(_data->geometry.AcquireRead(stream.Context()));
-        const auto host = [geometry, old, next](auto input, auto, Result &result)
+        const auto host = [geometry, pressure](auto input, auto, Result &result)
         {
-            const auto from = old.Components(input), to = next.Components(input);
+            const auto field = pressure.Components(input);
             const auto metric = geometry->HostView();
-            result.status = OMP::SumRows(from.View().RowCount(), SpanView<real>{result.norms.data(), 2},
+            result.status = OMP::SumRows(field.View().RowCount(), SpanView<real>{result.norms.data(), 2},
                                          {result.workerSums.data(), index(result.workerSums.size())}, [&](index i, SpanView<real> sums) -> NumericalStatus
                                          {
                     const real volume = metric.GetCellVol(i);
-                    sums[0] += volume * (to.View()(i,3) - from.View()(i,3));
+                    sums[0] += volume * field.View()(i, 3);
                     sums[1] += volume;
                     return {}; });
         };
 #ifdef DNDS_USE_CUDA
-        const auto device = [geometry, old, next](auto context, auto input, auto, auto scratch, auto summary)
-        { CUDA::PressureGaugeSum(context, geometry->View().cells, Table(input[old.firstSlot]), Table(input[next.firstSlot]), scratch, summary); };
+        const auto device = [geometry, pressure](auto context, auto input, auto, auto scratch, auto summary)
+        { CUDA::PressureGaugeSum(context, geometry->View().cells, Table(input[pressure.firstSlot]), scratch, summary); };
 #else
         const Unavailable device;
 #endif
         auto sum = _data->Reduce(engine, stream, 1, std::move(reads), {}, host, device).norms;
         MPI::AllreduceInPlace<MPI::Reduction::Sum>(MPI::ContiguousView<real>{sum.data(), 2}, _data->geometry.Communicator());
-        DNDS_check_throw_info(sum[1] > 0 && std::isfinite(sum[0]), "invalid global pressure gauge integral");
+        DNDS_check_throw_info(sum[1] > 0 && std::isfinite(sum[1]) && std::isfinite(sum[0] / sum[1]),
+                              "invalid global pressure gauge integral");
+        return sum[0] / sum[1];
+    }
+    void NonlinearOperators::ProjectPressureMean(R::EagerEngine &engine, const R::ExecutionStream &stream,
+                                                 EquationDofs &candidate, real pressureMean) const
+    {
+        const real shift = PressureMean(engine, stream, candidate) - pressureMean;
+        DNDS_check_throw_info(std::isfinite(shift), "nonfinite pressure gauge shift");
+        if (shift == 0)
+            return;
         Outputs writes;
         const auto target = AddOutput(candidate, writes, true);
-        R::SubmitArrayBatch(engine, stream, [target, shift = sum[0] / sum[1]](R::ExecutionContext ctx, auto, auto output)
+        R::SubmitArrayBatch(engine, stream, [target, shift](R::ExecutionContext ctx, auto, auto output)
                             {
                                 if (ctx.device == R::Device::Host())
                                 {
@@ -163,7 +174,8 @@ namespace DNDS::Cauchy
         return _data->Reduce(engine, stream, mean.ComponentNumber(), std::move(inputs), {}, host, device).norms;
     }
     std::vector<real> NonlinearOperators::MeasureRateNorm(R::EagerEngine &engine, const R::ExecutionStream &stream,
-                                                          const EquationDofs &rate, int normOrder, OptionalRef<const EquationDofs> reference) const
+                                                          const EquationDofs &rate, int normOrder, OptionalRef<const EquationDofs> reference,
+                                                          OptionalRef<const EquationDofs> rawACMRate) const
     {
         _data->Check(engine, stream, rate);
         if (reference)
@@ -171,27 +183,38 @@ namespace DNDS::Cauchy
             _data->Check(engine, stream, *reference);
             rate.RequireCompatible(*reference);
         }
+        if (rawACMRate)
+        {
+            _data->Check(engine, stream, *rawACMRate);
+            rate.RequireCompatible(*rawACMRate);
+            DNDS_check_throw_info(rate.Schema().AccumulationKind() == PhysicalAccumulationKind::ConstantDensityVelocityPressure,
+                                  "independent continuity norm requires ACM");
+        }
         DNDS_check_throw_info(normOrder == 1 || normOrder == 2, "invalid nonlinear rate norm order");
         Inputs inputs;
         const auto u = AddInput(rate, inputs);
         const auto ref = reference ? std::optional(AddInput(*reference, inputs)) : std::nullopt;
+        const auto raw = rawACMRate ? std::optional(AddInput(*rawACMRate, inputs)) : std::nullopt;
         const auto geometry = std::make_shared<CFV::FiniteVolumeRead>(_data->geometry.AcquireRead(stream.Context()));
-        const auto host = [geometry, u, ref, normOrder](auto input, auto, Result &result)
+        const auto host = [geometry, u, ref, raw, normOrder](auto input, auto, Result &result)
         {
             const auto values = u.Components<const real>(input);
             const auto reference = ref ? std::optional(ref->Components<const real>(input)) : std::nullopt;
+            const auto spatial = raw ? std::optional(raw->Components<const real>(input)) : std::nullopt;
             result.status = CPU::MeasureRateNorm(values.View(), reference ? reference->View() : Algebra::DofComponentView<const real>{},
                                                  geometry->HostView(), normOrder, {result.norms.data(), index(result.norms.size())},
-                                                 {result.workerSums.data(), index(result.workerSums.size())});
+                                                 {result.workerSums.data(), index(result.workerSums.size())},
+                                                 spatial ? spatial->View() : Algebra::DofComponentView<const real>{});
         };
 #ifdef DNDS_USE_CUDA
-        const auto device = [geometry, u, ref, normOrder](auto context, auto input, auto, auto scratch, auto summary)
+        const auto device = [geometry, u, ref, raw, normOrder](auto context, auto input, auto, auto scratch, auto summary)
         { CUDA::MeasureRateNorm(context, geometry->View().cells, Table(input[u.firstSlot]),
-                                ref ? Table(input[ref->firstSlot]) : CUDA::LinearReadRows{}, normOrder, scratch, summary); };
+                                ref ? Table(input[ref->firstSlot]) : CUDA::LinearReadRows{}, normOrder, scratch, summary,
+                                raw ? Table(input[raw->firstSlot]) : CUDA::LinearReadRows{}); };
 #else
         const Unavailable device;
 #endif
-        return _data->Reduce(engine, stream, rate.ComponentNumber(), std::move(inputs), {}, host, device).norms;
+        return _data->Reduce(engine, stream, rate.ComponentNumber() + bool(raw), std::move(inputs), {}, host, device).norms;
     }
     void NonlinearOperators::SubmitScaleRate(R::EagerEngine &engine, const R::ExecutionStream &stream,
                                              const EquationDofs &input, EquationDofs &output, bool multiply) const

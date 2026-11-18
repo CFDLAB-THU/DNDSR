@@ -232,7 +232,7 @@ namespace CauchyBenchmark
         C::NonlinearSolver solver(
             fv, trialState, trialReconstruction, work, engine, stream, settings,
             A::ComponentSelection(trialState.ComponentNumber(),
-                                  trialState.Schema().ResolveComponents(settings.implicit.residualComponents)));
+                                  trialState.Schema().ResolveComponents(settings.implicit.ResolveResidualComponents(settings.equation.system == "incompressibleACM"))));
         solver.EvaluateEquation(trialState, sourceState, 1e5, 1, 0);
         C::NonlinearProfile accumulated;
         for (int repetition = 0; repetition < repetitions; ++repetition)

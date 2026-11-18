@@ -49,14 +49,14 @@ namespace DNDS::Cauchy
     public:
         NonlinearOperators(CFV::FiniteVolumePlan, AdmissibilityPolicy, Runtime::ExecutionContext);
         void ValidateMeans(Runtime::EagerEngine &, const Runtime::ExecutionStream &, const EquationDofs &) const;
-        /// Remove the volume-weighted mean pressure correction on a closed
-        /// ACM domain. The current distributed correction explicitly waits for
-        /// two host-visible reduced scalars (integrated change and volume)
-        /// before queueing the shift. The state itself stays resident.
-        void PreservePressureGauge(Runtime::EagerEngine &, const Runtime::ExecutionStream &,
-                                   const EquationDofs &previous, EquationDofs &candidate) const;
+        /// Observe the volume-weighted domain mean of the ACM pressure.
+        real PressureMean(Runtime::EagerEngine &, const Runtime::ExecutionStream &, const EquationDofs &) const;
+        /// Shift the candidate by target minus its current domain pressure mean.
+        /// Only the scalar reduction is observed on the host.
+        void ProjectPressureMean(Runtime::EagerEngine &, const Runtime::ExecutionStream &, EquationDofs &, real target) const;
         /// Integrated residual, with raw L1 or volume-weighted L2 contributions
-        /// followed by volume in the returned vector. An empty selection means
+        /// followed by volume and, when measuring ACM, the squared spatial
+        /// continuity integral independent of stage scaling/history. An empty selection means
         /// every component; otherwise it has exactly the equation width.
         std::vector<real> AssembleDefect(Runtime::EagerEngine &, const Runtime::ExecutionStream &,
                                          const EquationDofs &mean, const EquationDofs &residual, const EquationDofs &constant,
@@ -68,9 +68,11 @@ namespace DNDS::Cauchy
         /// Local volume-weighted norm of a rate (or rate-reference). This is
         /// the DITR stopping residual / finest FAS norm, not a new iteration
         /// loop. Return raw L1 or L2-squared integrals and final volume; the
-        /// caller performs domain MPI aggregation and any square root.
+        /// caller performs domain MPI aggregation and any square root. An
+        /// optional raw ACM rate adds its squared continuity integral after volume.
         std::vector<real> MeasureRateNorm(Runtime::EagerEngine &, const Runtime::ExecutionStream &,
-                                          const EquationDofs &rate, int normOrder, OptionalRef<const EquationDofs> reference = {}) const;
+                                          const EquationDofs &rate, int normOrder, OptionalRef<const EquationDofs> reference = {},
+                                          OptionalRef<const EquationDofs> rawACMRate = {}) const;
         AlphaStatistics PreparePseudoTime(Runtime::EagerEngine &, const Runtime::ExecutionStream &,
                                           const EquationDofs &mean, EquationDofs &defect, const Runtime::Array<real> &spectral,
                                           Runtime::Array<real> &inverse, OptionalRef<Runtime::Array<real>> alpha,

@@ -9,6 +9,7 @@
 #include <set>
 
 #include "Cauchy/IO/CheckpointMetadata.hpp"
+#include "Cauchy/Implicit/NonlinearOperators.hpp"
 
 namespace DNDS::Cauchy
 {
@@ -177,6 +178,26 @@ namespace DNDS::Cauchy
         if (stateArchive)
         {
             stateArchive->Restore(_state.trial, route, context, _execution.ComputeStream().Context());
+            const auto gauge = metadata.find("acm_pressure_mean");
+            if (_state.pressureGauge)
+            {
+                const auto requested = _problem.finiteVolume.Settings().equation.acmPressureMean;
+                auto &engine = _execution.Engine();
+                const auto &lane = _execution.ComputeStream();
+                const NonlinearOperators operators(_problem.finiteVolume.Metrics(), *_problem.admissibility, lane.Context());
+                if (initialMeansOnly || gauge == metadata.end())
+                    checkpoint->pressureGauge = initialMeansOnly && requested ? *requested : operators.PressureMean(engine, lane, _state.trial);
+                else
+                {
+                    DNDS_check_throw_info(gauge->is_number() && std::isfinite(gauge->get<real>()), "invalid checkpoint pressure gauge");
+                    checkpoint->pressureGauge = gauge->get<real>();
+                    DNDS_check_throw_info(!requested || *requested == *checkpoint->pressureGauge, "checkpoint pressure gauge differs from the configured target");
+                }
+                if (initialMeansOnly && requested)
+                    operators.ProjectPressureMean(engine, lane, _state.trial, *requested);
+            }
+            else
+                DNDS_check_throw_info(gauge == metadata.end(), "checkpoint specifies a pressure gauge on an anchored equation");
             DNDS_check_throw_info(Admissible(_state.trial), "Cauchy restart contains inadmissible equation states");
             std::optional<EquationDofs> guess;
             if (_problem.finiteVolume.PolynomialReconstruction())

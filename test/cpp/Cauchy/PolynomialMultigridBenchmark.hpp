@@ -50,7 +50,7 @@ namespace CauchyBenchmark
                 smoother.emplace(
                     fv, trialState, reconstruction, workspace, engine, stream, settings,
                     A::ComponentSelection(trialState.ComponentNumber(),
-                                          trialState.Schema().ResolveComponents(settings.implicit.residualComponents)));
+                                          trialState.Schema().ResolveComponents(settings.implicit.ResolveResidualComponents(settings.equation.system == "incompressibleACM"))));
                 if (variant) multigrid.emplace(mesh, fv, trialState, *smoother, engine, stream, settings); });
             // The target changes density/energy only, so subset and full runs
             // solve the same finest equation from the same initial means.

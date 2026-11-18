@@ -71,6 +71,7 @@ namespace DNDS::Cauchy::CUDA
         /// Central shared-field shape for the CTA-segment kernel. It depends
         /// on semantic operands, not their values or static instantiation.
         static RHSFaceStageShape StageShape(const RHSKernelControls &controls);
+        static size_t LaneScratchBytes(const RHSKernelControls &controls);
         static RHSFacePackages Prepare(const Runtime::Array<index> &selection, SpanView<const index> quadratureCountsByAux,
                                        const RHSKernelControls &controls, Runtime::ExecutionContext context);
         RHSFacePackageView View() const;

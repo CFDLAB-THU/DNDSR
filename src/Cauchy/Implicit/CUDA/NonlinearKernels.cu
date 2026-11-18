@@ -25,7 +25,14 @@ namespace DNDS::Cauchy::CUDA
             {
                 const real volume = cells(iCell, 0);
                 if (measure)
+                {
                     local.norms[n] += volume;
+                    if constexpr (AlgebraicPressure)
+                    {
+                        const real continuity = residual(iCell, 3);
+                        local.norms[n + 1] += continuity * continuity / volume;
+                    }
+                }
                 for (index j = 0; j < n; ++j)
                 {
                     const real value = AlgebraicPressure && j == 3
@@ -40,13 +47,13 @@ namespace DNDS::Cauchy::CUDA
             }
             D::PublishBlock(local, scratch);
         }
-        __global__ void GaugeSum(NonlinearCells cells, LinearReadRows previous, LinearReadRows candidate, NonlinearSummaryOutput scratch)
+        __global__ void GaugeSum(NonlinearCells cells, LinearReadRows candidate, NonlinearSummaryOutput scratch)
         {
             NonlinearSummary local;
-            for (index i = index(blockIdx.x) * blockDim.x + threadIdx.x; i < previous.RowCount(); i += index(gridDim.x) * blockDim.x)
+            for (index i = index(blockIdx.x) * blockDim.x + threadIdx.x; i < candidate.RowCount(); i += index(gridDim.x) * blockDim.x)
             {
                 const real volume = cells(i, 0);
-                local.norms[0] += volume * (candidate(i, 3) - previous(i, 3));
+                local.norms[0] += volume * candidate(i, 3);
                 local.norms[1] += volume;
             }
             D::PublishBlock(local, scratch);
@@ -83,13 +90,19 @@ namespace DNDS::Cauchy::CUDA
                     output(iCell, j) = factor * input(iCell, j);
             }
         }
-        __global__ void RateNorm(NonlinearCells cells, LinearReadRows rate, LinearReadRows reference, int order, NonlinearSummaryOutput scratch)
+        template <bool MeasureContinuity>
+        __global__ void RateNorm(NonlinearCells cells, LinearReadRows rate, LinearReadRows reference, LinearReadRows spatial, int order, NonlinearSummaryOutput scratch)
         {
             NonlinearSummary local;
             for (index iCell = index(blockIdx.x) * blockDim.x + threadIdx.x; iCell < rate.RowCount(); iCell += index(gridDim.x) * blockDim.x)
             {
                 const real volume = cells(iCell, 0);
                 local.norms[rate.Width()] += volume;
+                if constexpr (MeasureContinuity)
+                {
+                    const real continuity = spatial(iCell, 3);
+                    local.norms[rate.Width() + 1] += volume * continuity * continuity;
+                }
                 for (index j = 0; j < rate.Width(); ++j)
                 {
                     const real value = rate(iCell, j) - (reference.RowCount() ? reference(iCell, j) : 0);
@@ -151,14 +164,13 @@ namespace DNDS::Cauchy::CUDA
             launch(std::false_type{});
         D::Finish(context, scratch, result);
     }
-    void PressureGaugeSum(R::ExecutionContext context, NonlinearCells cells, LinearReadRows previous, LinearReadRows candidate,
+    void PressureGaugeSum(R::ExecutionContext context, NonlinearCells cells, LinearReadRows candidate,
                           NonlinearSummaryOutput scratch, NonlinearSummaryOutput result)
     {
-        D::CheckInput(context, previous);
-        D::CheckCells(context, cells, previous.RowCount());
-        D::CheckRows(context, candidate, previous.RowCount(), previous.Width());
-        D::CheckSummary(context, previous.RowCount(), scratch, result);
-        GaugeSum<<<unsigned(scratch.RowCount()), D::Threads, 0, R::CUDAStream(context)>>>(cells, previous, candidate, scratch);
+        D::CheckInput(context, candidate);
+        D::CheckCells(context, cells, candidate.RowCount());
+        D::CheckSummary(context, candidate.RowCount(), scratch, result);
+        GaugeSum<<<unsigned(scratch.RowCount()), D::Threads, 0, R::CUDAStream(context)>>>(cells, candidate, scratch);
         D::Finish(context, scratch, result);
     }
     void ShiftPressure(R::ExecutionContext context, LinearWriteRows target, real shift)
@@ -192,7 +204,7 @@ namespace DNDS::Cauchy::CUDA
         D::CheckLaunch();
     }
     void MeasureRateNorm(R::ExecutionContext context, NonlinearCells cells, LinearReadRows rate,
-                         LinearReadRows reference, int normOrder, NonlinearSummaryOutput scratch, NonlinearSummaryOutput result)
+                         LinearReadRows reference, int normOrder, NonlinearSummaryOutput scratch, NonlinearSummaryOutput result, LinearReadRows rawACMRate)
     {
         D::CheckInput(context, rate);
         D::CheckCells(context, cells, rate.RowCount());
@@ -200,8 +212,15 @@ namespace DNDS::Cauchy::CUDA
         if (reference.RowCount())
             D::CheckRows(context, reference, rate.RowCount(), rate.Width());
         DNDS_check_throw_info(normOrder == 1 || normOrder == 2, "invalid CUDA rate norm order");
-        R::CheckKernelArgumentBudget<NonlinearCells, LinearReadRows, LinearReadRows, int, NonlinearSummaryOutput>();
-        RateNorm<<<unsigned(scratch.RowCount()), D::Threads, 0, ::DNDS::Runtime::CUDAStream(context)>>>(cells, rate, reference, normOrder, scratch);
+        R::CheckKernelArgumentBudget<NonlinearCells, LinearReadRows, LinearReadRows, LinearReadRows, int, NonlinearSummaryOutput>();
+        const auto stream = R::CUDAStream(context);
+        if (rawACMRate.RowCount())
+        {
+            D::CheckRows(context, rawACMRate, rate.RowCount(), rate.Width());
+            RateNorm<true><<<unsigned(scratch.RowCount()), D::Threads, 0, stream>>>(cells, rate, reference, rawACMRate, normOrder, scratch);
+        }
+        else
+            RateNorm<false><<<unsigned(scratch.RowCount()), D::Threads, 0, stream>>>(cells, rate, reference, {}, normOrder, scratch);
         D::Finish(context, scratch, result);
     }
     void AssembleEquation(R::ExecutionContext context, NonlinearCells cells, LinearReadRows mean, LinearReadRows residual,

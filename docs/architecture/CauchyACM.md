@@ -22,11 +22,14 @@ transported primitive scalar contributes `s/beta2` in this column. The
 steady scalar pseudo-equations use the identity scalar diagonal. Use
 `implicit.diagonal = "block"` and `jacobianAction = "assembled"`.
 
-For closed and periodic domains the correction removes its volume-weighted
-mean pressure change, retaining the input or restarted gauge. A pressure
-outlet or far-field boundary supplies the pressure reference. Select `p`
-(the continuity equation) alongside the differential components for nonlinear
-convergence, or select all components. Histories distinguish the normalized
+Closed and periodic domains project pressure to one fixed volume-weighted
+mean. Set `equation.acmPressureMean` to override the initialized mean in
+code units. Accepted and internal checkpoints carry the target. Older
+checkpoints derive it from the loaded accepted field. A pressure outlet
+or farfield zone present on the mesh supplies its own pressure reference.
+The default nonlinear convergence selection is momentum `u,v,w`.
+Continuity also has its own absolute volume-weighted RMS criterion in all
+implicit methods, including steady and BDF. Histories distinguish the normalized
 time-equation residual from `continuity_rms`, the volume-weighted RMS of the
 accepted state's spatial continuity residual. `mean_pressure` records the gauge.
 The default resolved ACM controls reject capped stages. Plain SSPRK3 cannot
@@ -41,8 +44,8 @@ DITR also tests the midpoint and endpoint spatial continuity separately.
 Its combined update residual can otherwise hide cancellation between them.
 A failed starting-state check leaves the accepted state and time unchanged.
 Subtracting a constant pressure changes the gauge and cannot remove a spatial
-continuity residual. BDF1 and BDF2 impose continuity inside the implicit
-equation, so their initial data need no explicit-stage check.
+continuity residual. BDF1 and BDF2 start directly with the implicit solve and
+check continuity there.
 
 For the supplied 20×20 periodic vortex, the separate
 `cauchy_experiment_acm_vortex_projection` target prepares discretely

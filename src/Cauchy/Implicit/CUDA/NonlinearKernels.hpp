@@ -10,6 +10,7 @@ namespace DNDS::Cauchy::CUDA
 
     /** @brief Compact per-block/final nonlinear reduction, never per-cell scratch.
      * @details norms contains raw component integrals and volume at index N.
+     * For ACM defect observation it also contains the raw continuity squared integral.
      * Counts/minimum describe thermal compression, not independent RANS repair.
      * frozen verifies inactive components were not changed by scalar repair.
      * A failed status invalidates all numerical values. Empty ranks contribute
@@ -17,7 +18,7 @@ namespace DNDS::Cauchy::CUDA
      */
     struct NonlinearSummary
     {
-        std::array<real, 8> norms{};
+        std::array<real, 9> norms{};
         index limited = 0;
         real minimum = 1;
         bool frozen = true;
@@ -51,7 +52,7 @@ namespace DNDS::Cauchy::CUDA
     /// Compute the equation-independent inverse pseudo-step using face spectra.
     void PrepareSpectralPseudoTime(Runtime::ExecutionContext, NonlinearCells, LinearReadRows spectral,
                                    LinearWriteRows inverseTau, real cfl);
-    void PressureGaugeSum(Runtime::ExecutionContext, NonlinearCells, LinearReadRows previous, LinearReadRows candidate,
+    void PressureGaugeSum(Runtime::ExecutionContext, NonlinearCells, LinearReadRows candidate,
                           NonlinearSummaryOutput scratch, NonlinearSummaryOutput result);
     void ShiftPressure(Runtime::ExecutionContext, LinearWriteRows candidate, real shift);
     /** @brief Euler-compatible RHS/dTau forecast on combined 5/6/7 states.
@@ -105,5 +106,5 @@ namespace DNDS::Cauchy::CUDA
     /// reference omits subtraction. No payload staging or host observation.
     void MeasureRateNorm(Runtime::ExecutionContext, NonlinearCells, LinearReadRows rate,
                          LinearReadRows reference, int normOrder,
-                         NonlinearSummaryOutput scratch, NonlinearSummaryOutput result);
+                         NonlinearSummaryOutput scratch, NonlinearSummaryOutput result, LinearReadRows rawACMRate = {});
 }

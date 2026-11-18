@@ -82,7 +82,7 @@ namespace DNDS::Cauchy
             const auto solver = std::make_shared<NonlinearSolver>(
                 _problem.finiteVolume, middle, reconstruction, workspace,
                 _execution.Context(), settings,
-                Algebra::ComponentSelection(middle.ComponentNumber(), _ditrComponents));
+                Algebra::ComponentSelection(middle.ComponentNumber(), _ditrComponents), _state.pressureGauge);
             std::shared_ptr<PolynomialMultigrid> multigrid;
             if (settings.implicit.multigrid.levels)
                 multigrid = std::make_shared<PolynomialMultigrid>(
@@ -111,7 +111,7 @@ namespace DNDS::Cauchy
         _execution.implicit = std::make_unique<NonlinearSolver>(
             _problem.finiteVolume, _state.trial, _state.reconstruction, _execution.workspace,
             _execution.Context(), settings,
-            Algebra::ComponentSelection(_state.trial.ComponentNumber(), _ditrComponents));
+            Algebra::ComponentSelection(_state.trial.ComponentNumber(), _ditrComponents), _state.pressureGauge);
         if (settings.implicit.multigrid.levels)
             _execution.multigrid = std::make_unique<PolynomialMultigrid>(
                 mesh, _problem.finiteVolume, _state.trial, *_execution.implicit, _execution.Context(), settings);

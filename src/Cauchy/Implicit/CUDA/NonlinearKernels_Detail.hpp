@@ -12,7 +12,7 @@ namespace DNDS::Cauchy::CUDA::NonlinearDetail
     {
         __device__ NonlinearSummary operator()(NonlinearSummary a, const NonlinearSummary &b) const
         {
-            for (int j = 0; j < 8; ++j)
+            for (int j = 0; j < int(a.norms.size()); ++j)
                 a.norms[j] += b.norms[j];
             a.limited += b.limited;
             a.minimum = std::min(a.minimum, b.minimum);

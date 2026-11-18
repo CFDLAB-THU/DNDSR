@@ -157,7 +157,10 @@ namespace DNDS::Cauchy::CUDA
             return;
         if (controls.mechanical)
         {
-            const Detail::RHSFaceLaunch launch{context, geometry, parameters, controls, fields, output, faces, {}, 0};
+            const auto blocks = controls.mapping == RHSFaceMapping::CTASegments
+                                    ? Detail::ValidateSegmentedFluxFaces(context, geometry, controls, faces, packages)
+                                    : 0;
+            const Detail::RHSFaceLaunch launch{context, geometry, parameters, controls, fields, output, faces, packages, blocks};
             switch (controls.components)
             {
             case 4:

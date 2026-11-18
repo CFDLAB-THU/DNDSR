@@ -57,6 +57,8 @@ namespace DNDS::Cauchy
         if (checkpoint.stepper)
             _state.timeStepper.swap(checkpoint.stepper);
         _state.lastAcceptedDt = checkpoint.lastDt;
+        if (checkpoint.pressureGauge)
+            *_state.pressureGauge = *checkpoint.pressureGauge;
         _state.nextTrial = 0;
     }
     void Domain::CommitInternalCheckpointRead(IO::DomainInternalCheckpointRead &checkpoint)

@@ -64,6 +64,11 @@ namespace DNDS::Cauchy::CPU
             };
             if constexpr (Accumulation == PhysicalAccumulationKind::ConstantDensityVelocityPressure)
             {
+                if (measureNorm)
+                {
+                    const real continuity = residual(iCell, 3);
+                    sum[components + 1] += continuity * continuity / volume;
+                }
                 for (index j = 0; j < 3; ++j)
                     if (const auto status = differential(j); !status)
                         return status;
@@ -82,7 +87,8 @@ namespace DNDS::Cauchy::CPU
         if (!measureNorm)
             return OMP::ForRowsStatus(0, mean.RowCount(), [&](index iCell)
                                       { return row(iCell, {}); });
-        return OMP::SumRows(mean.RowCount(), {norm.data(), components + 1}, partials, row);
+        constexpr bool algebraicPressure = Accumulation == PhysicalAccumulationKind::ConstantDensityVelocityPressure;
+        return OMP::SumRows(mean.RowCount(), {norm.data(), components + 1 + algebraicPressure}, partials, row);
     }
 
     /// Assemble mass*u-rhsScale*R(u)/volume and optionally publish the spatial
@@ -167,7 +173,8 @@ namespace DNDS::Cauchy::CPU
                                                       Algebra::DofComponentView<real> candidate, CorrectionWorkspace) noexcept;
     NumericalStatus MeasureRateNorm(Algebra::DofComponentView<const real> rate,
                                     Algebra::DofComponentView<const real> reference, CFV::FiniteVolumeHostView metric,
-                                    int normOrder, SpanView<real> sum, SpanView<real> partials = {}) noexcept;
+                                    int normOrder, SpanView<real> sum, SpanView<real> partials = {},
+                                    Algebra::DofComponentView<const real> rawACMRate = {}) noexcept;
     NumericalStatus AssembleDefect(EquationLayoutView<const real> mean, EquationLayoutView<const real> residual,
                                    EquationLayoutView<const real> constant, EquationLayoutView<real> output,
                                    CFV::FiniteVolumeHostView metric, PhysicalAccumulationKind accumulation,

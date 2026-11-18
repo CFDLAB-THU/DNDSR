@@ -40,7 +40,7 @@ namespace DNDS::Cauchy
             kernels.rhsMapping = !acm && fp64 ? "ctaSegments" : "thread";
         }
         if (kernels.rhsReduction == "auto")
-            kernels.rhsReduction = kernels.rhsMapping == "ctaSegments" ? "segmented" : "serial";
+            kernels.rhsReduction = !acm && kernels.rhsMapping == "ctaSegments" ? "segmented" : "serial";
         if (execution.reconstructionKernel == "auto")
             // Only the measured A100 case is promoted automatically. The
             // matrix-shared selector is now a fixed comparison fixture, not a

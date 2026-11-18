@@ -100,6 +100,7 @@ namespace DNDS::Cauchy
         /// Jacobians never traverse the RHS quadrature samples above.
         std::shared_ptr<const LinearPatternStorage> jacobianColumns;
         std::vector<int> boundaryZones;
+        bool hasPressureBoundary = false;
         std::vector<int> forceZones;
         std::map<int, index> forceSlots;
         std::shared_ptr<Detail::BoundaryPointLayout> boundaryLayout;
