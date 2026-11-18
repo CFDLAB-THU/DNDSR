@@ -13,7 +13,7 @@ namespace R = DNDS::Runtime;
 using I = DNDS::index;
 static DNDS::MPIInfo mpi;
 
-TEST_CASE("Analytic boundary numerical failures return status through both equation entries")
+TEST_CASE("Analytic boundary numerical failures return status through both equation entries" * doctest::test_suite("rank-local"))
 {
     C::DomainSettings settings;
     auto &input = settings.boundaries["4"];
@@ -40,7 +40,7 @@ TEST_CASE("Analytic boundary numerical failures return status through both equat
     CHECK_THROWS(condition.Exterior(equation.Gas(), inside, normal));
 }
 
-TEST_CASE("DMR bottom producer resolves prescribed and reflecting pieces in world coordinates")
+TEST_CASE("DMR bottom producer resolves prescribed and reflecting pieces in world coordinates" * doctest::test_suite("rank-local"))
 {
     C::DomainSettings settings;
     settings.boundaries["4"].kind = "doubleMachBottom";
@@ -162,7 +162,7 @@ TEST_CASE("VR wall target selection preserves the selected physical boundary equ
     }
 }
 
-TEST_CASE("Total inlet resolves physical vector input and applies static density to SA")
+TEST_CASE("Total inlet resolves physical vector input and applies static density to SA" * doctest::test_suite("rank-local"))
 {
     C::DomainSettings input;
     input.equation.rans.model = "SA";

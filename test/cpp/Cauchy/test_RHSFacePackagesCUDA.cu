@@ -47,12 +47,13 @@ TEST_CASE("Complete-face packages preserve mixed rules tails and bounded point t
         REQUIRE(view.sharedBytes <= 48 * 1024);
         const auto packages = Download<K::RHSFacePackage>(view.packages);
         const auto segments = Download<K::RHSFaceSegment>(view.segments);
-        I seen = 0;
+        I seen = 0, warpContained = 0;
         for (const auto &package : packages)
         {
             CHECK(package.firstSegment == seen);
             CHECK(package.faces > 0);
-            int end = 0, tiles = 0;
+            int end = 0, tiles = 0, maximumLanes = 0;
+            bool contained = true;
             for (int slot = 0; slot < package.faces; ++slot)
             {
                 const auto segment = segments[package.firstSegment + slot];
@@ -62,12 +63,18 @@ TEST_CASE("Complete-face packages preserve mixed rules tails and bounded point t
                 CHECK(segment.lanes > 0);
                 CHECK(segment.firstLane + segment.lanes <= threads);
                 end = segment.firstLane + segment.lanes;
+                contained &= segment.firstLane / 32 == (end - 1) / 32;
+                maximumLanes = std::max(maximumLanes, segment.lanes);
                 tiles = std::max(tiles, int(segment.points / segment.lanes + (segment.points % segment.lanes != 0)));
                 ++seen;
             }
             CHECK(package.tiles == tiles);
+            CHECK(package.maximumLanes == maximumLanes);
+            CHECK(package.warpContained == contained);
+            warpContained += contained;
         }
         CHECK(seen == I(counts.size()));
+        CHECK(view.warpContainedPackages == warpContained);
     }
 }
 

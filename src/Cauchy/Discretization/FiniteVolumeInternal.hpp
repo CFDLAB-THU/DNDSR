@@ -98,6 +98,10 @@ namespace DNDS::Cauchy
         // structure. One rotated image retains the general Jacobian path for
         // the whole plan; ordinary/translated meshes skip identity products.
         bool hasRotatedFrames = false;
+        /// Uniform face point count for launch tuning, or zero for mixed/empty
+        /// worksets. Captured from the host prefix before placement.
+        int rhsUniformFacePoints = 0;
+        bool rhsPeriodic = false;
         /// One oriented mean-geometry face per cell incidence. Approximate
         /// Jacobians never traverse the RHS quadrature samples above.
         std::shared_ptr<const LinearPatternStorage> jacobianColumns;

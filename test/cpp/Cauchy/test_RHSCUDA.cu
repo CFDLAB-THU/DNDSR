@@ -211,7 +211,7 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
 #endif
     };
     constexpr int firstSegmented = int(precisionCases.size());
-    constexpr int experimentalVariants = firstSegmented + 6;
+    constexpr int experimentalVariants = firstSegmented + 11;
     const auto experiments = [&](const std::string &model, int reconstruction)
     {
         std::vector<int> cases{0};
@@ -277,7 +277,7 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
                     if (controls.dissipationPrecision != Precision::FP64)
                         controls.solver = C::Riemann::Solver::Roe_M1;
                     controls.mapping = fp32 || floatFloat ? K::RHSFaceMapping::Thread : K::RHSFaceMapping::CTASegments;
-                    if (experiment >= firstSegmented)
+                    if (experiment >= firstSegmented && experiment < firstSegmented + 6)
                     {
                         const int variant = experiment - firstSegmented;
                         controls.mapping = K::RHSFaceMapping::CTASegments;
@@ -287,6 +287,22 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
                         // 48KiB budget. Qualify that block with high-order output
                         // only, matching the implicit campaign's real contract.
                         controls.produceLow = width == 5 && controls.blockSize != 512;
+                    }
+                    else if (experiment >= firstSegmented + 6)
+                    {
+                        const int variant = experiment - firstSegmented - 6;
+                        if (variant < 2)
+                        {
+                            controls.mapping = K::RHSFaceMapping::Thread;
+                            controls.hoistFaceRows = variant == 1;
+                        }
+                        else
+                        {
+                            controls.blockSize = 64;
+                            controls.gridBlocks = 1;
+                            controls.reduction = variant == 3 ? K::RHSFaceReduction::WarpTree : K::RHSFaceReduction::BoundedTree;
+                            controls.doubleBuffer = variant == 4;
+                        }
                     }
                     // Two points per face exercise idle lanes and both fixed CTA
                     // reductions against the same independent CPU physics oracle.

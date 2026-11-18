@@ -1,4 +1,4 @@
-# CI: configure, build, and run all tests.
+# CI: configure, build, and run the requested cumulative test level.
 #
 # Triggers:
 #   workflow_dispatch            — manual, any branch
@@ -9,7 +9,7 @@
 #   A lightweight "resolve" job picks the runner and feature flags so that
 #   only ONE "build-and-test" job is launched (no wasted matrix entries).
 #
-#   github      — ubuntu-latest, ephemeral, uses actions/setup-python + ccache
+#   github      — Ubuntu 24.04, ephemeral, uses actions/setup-python + ccache
 #   self-hosted — self-hosted Docker container, system python3, no sudo, persistent ccache
 #
 # Test matrix:
@@ -31,10 +31,17 @@ on:
           - github
           - self-hosted
         default: github
+      test_level:
+        description: "Test level (0 critical, 1 extended, 2 full)"
+        type: choice
+        options: ['0', '1', '2']
+        default: '0'
   issue_comment:
     types: [created]
 
 env:
+  # Bump when a workflow or runner change affects dependency or venv artifacts.
+  CI_CACHE_VERSION: v3
   HEADERONLYS_URL: https://github.com/harryzhou2000/cfd_externals_headeronlys/releases/download/v0.3.0/external_headeronlys.tar.gz
   HEADERONLYS_SHA256: 00692e1581f900d76c43432f4712b8dc2a53408d968fbf656bd3dd3561e2514e
   OMPI_MCA_rmaps_base_oversubscribe: "1"
@@ -60,6 +67,8 @@ jobs:
       setup-python: ${{ steps.pick.outputs.setup_python }}
       install-sys-deps: ${{ steps.pick.outputs.install_sys_deps }}
       pr-sha: ${{ steps.pick.outputs.pr_sha }}
+      test-level: ${{ steps.pick.outputs.test_level }}
+      cache-profile: ${{ steps.pick.outputs.cache_profile }}
     steps:
       - name: Check write permission
         if: github.event_name == 'issue_comment'
@@ -82,14 +91,21 @@ jobs:
         with:
           script: |
             let runner = 'github';
+            let testLevel = '0';
             let prSha = '';
 
             if (context.eventName === 'workflow_dispatch') {
-              runner = '${{ inputs.runner }}' || 'github';
-            } else if (context.eventName === 'issue_comment') {
-              const body = context.payload.comment.body || '';
-              if (body.includes('/ci-run-self-hosted')) runner = 'self-hosted';
-              else runner = 'github';
+              runner = context.payload.inputs?.runner || 'github';
+              testLevel = context.payload.inputs?.test_level || '0';
+            } else {
+              const command = (context.payload.comment.body || '').trim();
+              const match = command.match(/^\/ci-run(-self-hosted)?(?:[ \t]+([012]|full))?$/);
+              if (!match) {
+                core.setFailed('Use /ci-run [0|1|2|full] or /ci-run-self-hosted [0|1|2|full].');
+                return;
+              }
+              runner = match[1] ? 'self-hosted' : 'github';
+              testLevel = match[2] === 'full' ? '2' : (match[2] || '0');
 
               // Get the PR head SHA for checkout
               const pr = await github.rest.pulls.get({
@@ -100,6 +116,14 @@ jobs:
               prSha = pr.data.head.sha;
             }
 
+            if (!['github', 'self-hosted'].includes(runner) || !['0', '1', '2'].includes(testLevel)) {
+              core.setFailed('Invalid CI runner or test level.');
+              return;
+            }
+            core.setOutput('test_level', testLevel);
+            core.setOutput('cache_profile', runner === 'github' ? 'ubuntu-24.04-py312' : 'self-hosted-linux');
+            core.notice(`Test level ${testLevel} on ${runner} for ${prSha || context.sha}`);
+
             if (runner === 'self-hosted') {
               core.setOutput('runs_on', '["self-hosted","Linux","X64"]');
               core.setOutput('use_ccache', 'true');
@@ -108,7 +132,7 @@ jobs:
               core.setOutput('setup_python', 'false');
               core.setOutput('install_sys_deps', 'false');
             } else {
-              core.setOutput('runs_on', '"ubuntu-latest"');
+              core.setOutput('runs_on', '"ubuntu-24.04"');
               core.setOutput('use_ccache', 'true');
               core.setOutput('cache_ccache', 'true');
               core.setOutput('ccache_dir', process.env.GITHUB_WORKSPACE + '/.ccache');
@@ -125,6 +149,7 @@ jobs:
     runs-on: ${{ fromJSON(needs.resolve.outputs.runs-on) }}
     env:
       CCACHE_DIR: ${{ needs.resolve.outputs.ccache-dir }}
+      DNDS_CI_LEVEL: ${{ needs.resolve.outputs.test-level }}
     steps:
       # ------------------------------------------------------------------
       # 1. Checkout source
@@ -134,15 +159,8 @@ jobs:
         with:
           ref: ${{ needs.resolve.outputs.pr-sha || '' }}
 
-      - name: Fetch test meshes
-        run: |
-          mkdir -p data/mesh
-          if [ ! -d /tmp/cfd_meshes ]; then
-            git clone --depth=1 https://github.com/harryzhou2000/cfd_meshes.git /tmp/cfd_meshes
-          else
-            git -C /tmp/cfd_meshes pull --ff-only 2>/dev/null || true
-          fi
-          cp /tmp/cfd_meshes/data/mesh/* data/mesh/
+      - name: Stage pinned test meshes
+        run: bash scripts/ci_stage_meshes.sh "$DNDS_CI_LEVEL"
 
       # The submodule commit is tracked by the parent repo's tree object,
       # NOT by .gitmodules (which only stores URL/path).  Capture the
@@ -181,22 +199,17 @@ jobs:
       - name: Clean cached directories
         run: |
           rm -rf external/argparse external/boost external/CGAL \
-                 external/cppcodec external/cpptrace external/doctest \
+                 external/cccl external/cppcodec external/cpptrace external/doctest \
                  external/eigen external/exprtk external/fmt \
                  external/nanoflann external/nlohmann external/pybind11 \
-                 external/pybind11_json
+                 external/pybind11_json external/spdlog external/doxygen-awesome-css
           rm -rf external/cfd_externals/install
 
       # ------------------------------------------------------------------
-      # 4b. Minimal Python venv for cfd_externals build (Cantera deps)
+      # 4b. Fetch the source revision and its dependency requirements
       # ------------------------------------------------------------------
-      - name: Create minimal Python venv
-        run: |
-          git submodule update --init --depth=1 external/cfd_externals
-          python3 -m venv venv
-          source venv/bin/activate
-          pip install --upgrade pip
-          pip install -r external/cfd_externals/requirements.txt
+      - name: Initialize pinned externals
+        run: git submodule update --init --depth=1 external/cfd_externals
 
       # ------------------------------------------------------------------
       # 5. Header-only externals (Eigen, Boost, CGAL, fmt, pybind11, ...)
@@ -213,6 +226,7 @@ jobs:
             external/cppcodec
             external/cpptrace
             external/doctest
+            external/doxygen-awesome-css
             external/eigen
             external/exprtk
             external/fmt
@@ -221,7 +235,7 @@ jobs:
             external/pybind11
             external/pybind11_json
             external/spdlog
-          key: headeronlys-v0.3.0
+          key: headeronlys-${{ env.HEADERONLYS_SHA256 }}
 
       - name: Download and extract header-only externals
         if: steps.cache-headeronlys.outputs.cache-hit != 'true'
@@ -230,8 +244,17 @@ jobs:
           echo "$HEADERONLYS_SHA256  external/external_headeronlys.tar.gz" | sha256sum --check -
           cd external && tar -xzf external_headeronlys.tar.gz
 
+      - name: Verify header-only externals
+        run: |
+          for file in argparse/include/argparse/argparse.hpp boost/boost/version.hpp CGAL/include/CGAL/version.h \
+                      cppcodec/base32_hex.hpp doctest/doctest.h eigen/eigen3.pc.in exprtk/exprtk.hpp fmt/CMakeLists.txt \
+                      nanoflann/nanoflann.hpp nlohmann/nlohmann/json.hpp pybind11/CMakeLists.txt \
+                      pybind11_json/include/pybind11_json/pybind11_json.hpp spdlog/include/spdlog/spdlog.h; do
+            test -s "external/$file"
+          done
+
       - name: Save header-only externals cache
-        if: always()
+        if: steps.cache-headeronlys.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: |
@@ -242,6 +265,7 @@ jobs:
             external/cppcodec
             external/cpptrace
             external/doctest
+            external/doxygen-awesome-css
             external/eigen
             external/exprtk
             external/fmt
@@ -250,7 +274,7 @@ jobs:
             external/pybind11
             external/pybind11_json
             external/spdlog
-          key: headeronlys-v0.3.0
+          key: headeronlys-${{ env.HEADERONLYS_SHA256 }}
 
       # ------------------------------------------------------------------
       # 6. cfd_externals (zlib, hdf5, cgns, parmetis)
@@ -260,28 +284,30 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: external/cfd_externals/install
-          key: cfd-ext-v2-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}
+          key: cfd-ext-${{ env.CI_CACHE_VERSION }}-${{ needs.resolve.outputs.cache-profile }}-${{ steps.submod.outputs.cfd_ext_sha }}
 
-      - name: Build cfd_externals
-        if: steps.cache-cfd-ext.outputs.cache-hit != 'true'
+      - name: Validate or build cfd_externals
         run: |
-          # Double-check: skip if install already restored via prefix match
-          if [ -f external/cfd_externals/install/lib/libcgns.a ]; then
-            echo "cfd_externals install present (cache prefix match), skipping build"
+          prefix="$PWD/external/cfd_externals/install"
+          if bash scripts/verify_ci_externals.sh "$prefix"; then
             exit 0
           fi
-          rm -rf external/cfd_externals
-          git submodule update --init --recursive --depth=1
-          source venv/bin/activate
-          cd external/cfd_externals
-          CC=mpicc CXX=mpicxx python3 cfd_externals_build.py
+          rm -rf -- "$prefix"
+          git submodule update --init --recursive --depth=1 external/cfd_externals
+          bootstrap="$(mktemp -d)"
+          trap 'rm -rf -- "$bootstrap"' EXIT
+          python3 -m venv "$bootstrap/venv"
+          source "$bootstrap/venv/bin/activate"
+          python -m pip install -r external/cfd_externals/requirements.txt
+          (cd external/cfd_externals && CC=mpicc CXX=mpicxx python cfd_externals_build.py --build-root "$bootstrap/build")
+          bash scripts/verify_ci_externals.sh "$prefix"
 
       - name: Save cfd_externals cache
-        if: always()
+        if: steps.cache-cfd-ext.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: external/cfd_externals/install
-          key: cfd-ext-v2-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}
+          key: cfd-ext-${{ env.CI_CACHE_VERSION }}-${{ needs.resolve.outputs.cache-profile }}-${{ steps.submod.outputs.cfd_ext_sha }}
 
       # ------------------------------------------------------------------
       # 7. Full Python environment (h5py against cfd_externals HDF5, etc.)
@@ -291,26 +317,30 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: venv
-          key: venv-ci-v2-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}-${{ hashFiles('requirements.txt', 'external/cfd_externals/requirements.txt', 'scripts/install_python_deps.sh') }}
+          key: venv-ci-${{ env.CI_CACHE_VERSION }}-${{ needs.resolve.outputs.cache-profile }}-${{ steps.submod.outputs.cfd_ext_sha }}-${{ hashFiles('requirements.txt', 'external/cfd_externals/requirements.txt', 'scripts/install_python_deps.sh') }}
 
-      - name: Install Python dependencies (full)
+      - name: Validate or install Python dependencies
         run: |
-          source venv/bin/activate
-          if [ "${{ steps.cache-venv.outputs.cache-hit }}" != "true" ]; then
-            PIP=$PWD/venv/bin/pip ./scripts/install_python_deps.sh
-          elif ! python -m pytest --version >/dev/null 2>&1; then
-            echo "Cached venv is missing pytest; rebuilding Python dependencies"
-            PIP=$PWD/venv/bin/pip ./scripts/install_python_deps.sh
-          else
-            echo "Cached venv contains pytest; keeping restored Python environment"
+          valid_venv() {
+            test -x venv/bin/python &&
+              venv/bin/python -c 'import sys; print(sys.implementation.cache_tag)' | cmp -s - <(python3 -c 'import sys; print(sys.implementation.cache_tag)') &&
+              venv/bin/python -c 'import h5py, pytest, pytest_mpi; from mpi4py import MPI; assert h5py.get_config().mpi'
+          }
+          if ! valid_venv; then
+            rm -rf venv
+            python3 -m venv venv
+            source venv/bin/activate
+            python -m pip install --upgrade pip
+            PIP="$PWD/venv/bin/pip" MPI_CC=mpicc bash scripts/install_python_deps.sh
           fi
+          valid_venv
 
       - name: Save Python venv cache
-        if: always()
+        if: steps.cache-venv.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: venv
-          key: venv-ci-v2-${{ runner.os }}-${{ steps.submod.outputs.cfd_ext_sha }}-${{ hashFiles('requirements.txt', 'external/cfd_externals/requirements.txt', 'scripts/install_python_deps.sh') }}
+          key: venv-ci-${{ env.CI_CACHE_VERSION }}-${{ needs.resolve.outputs.cache-profile }}-${{ steps.submod.outputs.cfd_ext_sha }}-${{ hashFiles('requirements.txt', 'external/cfd_externals/requirements.txt', 'scripts/install_python_deps.sh') }}
 
       # ------------------------------------------------------------------
       # 8. ccache
@@ -321,9 +351,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ needs.resolve.outputs.ccache-dir }}
-          key: ccache-${{ runner.os }}-${{ github.run_id }}
+          key: ccache-${{ env.CI_CACHE_VERSION }}-${{ needs.resolve.outputs.cache-profile }}-${{ github.run_id }}
           restore-keys: |
-            ccache-${{ runner.os }}-
+            ccache-${{ env.CI_CACHE_VERSION }}-${{ needs.resolve.outputs.cache-profile }}-
 
       - name: Configure ccache
         if: needs.resolve.outputs.use-ccache == 'true'
@@ -336,28 +366,26 @@ jobs:
         run: |
           source venv/bin/activate
           CC=mpicc CXX=mpicxx cmake -B build -G Ninja \
-            -DDNDS_BUILD_TESTS=ON \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DDNDS_BUILD_TESTS=ON -DDNDS_USE_CUDA=OFF -DDNDS_USE_CANTERA=ON \
+            -DDNDS_USE_OMP=ON -DDNDS_DIST_MT_USE_OMP=ON \
             -DPython_EXECUTABLE="$VIRTUAL_ENV/bin/python" \
             -DPython3_EXECUTABLE="$VIRTUAL_ENV/bin/python"
         env:
-          DNDS_TEST_MPIEXTRA: "--oversubscribe"
+          DNDS_TEST_MPIEXTRA: "--oversubscribe --bind-to none"
+          DNDS_TEST_NP_LIST: "1;2;4;8"
 
       # ------------------------------------------------------------------
-      # 10. Build C++ tests and solver executables
+      # 10. Build the selected test executables and binding dependencies
       # ------------------------------------------------------------------
-      - name: Build C++ unit tests
-        run: cmake --build build -t all_unit_tests -j$(nproc)
-
-      - name: Build Euler solvers
-        run: cmake --build build -t euler euler3D eulerSA eulerSA3D euler2EQ euler2EQ3D eulerEX eulerEX3D canteraConstVolTrajectory eulerState -j$(nproc)
-
-      # ------------------------------------------------------------------
-      # 11. Build pybind11 targets
-      # ------------------------------------------------------------------
-      - name: Build pybind11 modules
+      - name: Build selected test and Python targets
         run: |
-          source venv/bin/activate
-          cmake --build build -t dnds_pybind11 geom_pybind11 cfv_pybind11 eulerP_pybind11 runtime_array_bridge_test -j$(nproc)
+          if [ "$DNDS_CI_LEVEL" = "0" ]; then
+            cpp_target=ci_critical_tests
+          else
+            cpp_target=all_unit_tests
+          fi
+          cmake --build build --target "$cpp_target" ci_python_tests --parallel "$(nproc)"
 
       - name: Show ccache stats
         if: needs.resolve.outputs.use-ccache == 'true'
@@ -369,34 +397,15 @@ jobs:
           cmake --install build --component py
 
       # ------------------------------------------------------------------
-      # 12. Run C++ tests
+      # 12. Run the selected CTest and pytest lanes once.
       # ------------------------------------------------------------------
-      # Serial extension coverage belongs to the complete pytest step below.
-      - name: Run C++ tests
-        timeout-minutes: 30
-        run: ctest --test-dir build --output-on-failure --timeout 600 -LE python
+      - name: Run selected tests
+        timeout-minutes: 40
+        run: bash scripts/run_ci_tests.sh "$DNDS_CI_LEVEL" build venv/bin/python
         env:
-          DNDS_MECH_PATH: ${{ github.workspace }}/external/cfd_externals/install/data
-          CANTERA_DATA: ${{ github.workspace }}/external/cfd_externals/install/data
-
-      # ------------------------------------------------------------------
-      # 13. Run Python tests
-      # ------------------------------------------------------------------
-      - name: Run Python tests
-        run: |
-          source venv/bin/activate
-          export PYTHONPATH=$PWD/python:$PWD/build/test/cpp
-          python -c 'import runtime_array_bridge_test'
-          python -m pytest test/ \
-            --with-mpi \
-            --timeout=600 \
-            -v
-
-      - name: Run two-rank Runtime integration tests
-        run: |
-          source venv/bin/activate
-          export PYTHONPATH=$PWD/python:$PWD/build/test/cpp
-          mpirun -np 2 python -m pytest test/DNDS/test_runtime_*.py test/demos/test_runtime_solver.py --with-mpi --timeout=600 -v
+          DNDS_DIST_OMP_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "2"
+          OMPI_MCA_hwloc_base_binding_policy: "none"
 
       # ------------------------------------------------------------------
       # Always save ccache regardless of build/test outcome
@@ -409,4 +418,4 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ needs.resolve.outputs.ccache-dir }}
-          key: ccache-${{ runner.os }}-${{ github.run_id }}
+          key: ccache-${{ env.CI_CACHE_VERSION }}-${{ needs.resolve.outputs.cache-profile }}-${{ github.run_id }}

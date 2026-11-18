@@ -97,7 +97,7 @@ namespace DNDS::Cauchy::CUDA
         RHSFaceReduction reduction = RHSFaceReduction::Serial;
         int gridBlocks = 0;
         int blockSize = 128;
-        bool doubleBuffer = false;
+        bool doubleBuffer = false, hoistFaceRows = false;
         bool mechanical = false, captureBoundaryFlux = false;
         void Validate() const;
     };

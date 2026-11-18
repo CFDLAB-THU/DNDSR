@@ -71,9 +71,15 @@ namespace DNDS::Cauchy
             });
             OMP::ForRows(0, distance.RowCount(), [&](index iPoint)
             { distance(iPoint, 0) = 0; });
+            rhsPeriodic = topology.IsPeriodic();
             for (index iAux = 0; iAux < index(activeFaces.size()); ++iAux)
             {
                 const index iFace = activeFaces[iAux];
+                const int points = int(metric.FaceQuadratureEnd(iFace) - metric.FaceQuadratureBegin(iFace));
+                if (iAux == 0)
+                    rhsUniformFacePoints = points;
+                else if (rhsUniformFacePoints != points)
+                    rhsUniformFacePoints = 0;
                 const auto parents = topology.FaceCells(iFace);
                 DNDS_check_throw_info(parents[0] >= 0 && parents[0] < metrics.NumCellProc() &&
                                       (parents[1] == UnInitIndex || (parents[1] >= 0 && parents[1] < metrics.NumCellProc())),

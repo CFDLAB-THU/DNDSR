@@ -262,8 +262,8 @@ TEST_CASE("Automatic A100 kernels advance raw P3 flow with frozen explicit refer
         if (automatic && C::IsA100Device(R::Device::CUDA(0)))
         {
             CHECK(resolved.reconstructionKernel == "fp64Pipelined");
-            CHECK(resolved.kernels.rhsMapping == "ctaSegments");
-            CHECK(resolved.kernels.rhsReduction == "segmented");
+            CHECK(resolved.kernels.rhsMapping == "auto");
+            CHECK(resolved.kernels.rhsReduction == "auto");
             CHECK(resolved.kernels.polynomialPPThreads == 512);
         }
         domain.Dofs().CoupledField().Owned().CopyFrom(initial, {R::Device::CUDA(0), nullptr}).Wait();

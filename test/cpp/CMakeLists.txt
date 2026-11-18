@@ -100,6 +100,7 @@ endfunction()
 # --- helper: add an MPI unit test executable (DNDS) ---
 # MPI tests run all TEST_CASEs together per NP value (avoids mpirun overhead per test case).
 function(dnds_add_mpi_test TEST_NAME SRC_FILE LIBS)
+    cmake_parse_arguments(PARSE_ARGV 3 _test "LOCAL_CASES_ONCE" "" "CRITICAL_NP4")
     set(TARGET_NAME "dnds_test_${TEST_NAME}")
     add_executable(${TARGET_NAME} ${SRC_FILE})
     set_property(GLOBAL APPEND PROPERTY DNDS_CPP_TEST_TARGETS ${TARGET_NAME})
@@ -114,11 +115,37 @@ function(dnds_add_mpi_test TEST_NAME SRC_FILE LIBS)
     set_target_properties(${TARGET_NAME} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
+    # Keep rank-local cases at np1, or at the first configured rank count
+    # when np1 is absent. MPI-dependent cases still run at every count.
+    if(_test_LOCAL_CASES_ONCE AND DNDS_TEST_NP_LIST)
+        if("1" IN_LIST DNDS_TEST_NP_LIST)
+            set(_local_case_np 1)
+        else()
+            list(GET DNDS_TEST_NP_LIST 0 _local_case_np)
+        endif()
+    endif()
     foreach(NP ${DNDS_TEST_NP_LIST})
+        set(_case_filter)
+        if(DEFINED _local_case_np AND NOT NP EQUAL _local_case_np)
+            set(_case_filter --test-suite-exclude=rank-local)
+        endif()
         _dnds_np_timeout(${NP} _TIMEOUT)
+        if(NP EQUAL 4 AND _test_CRITICAL_NP4)
+            list(JOIN _test_CRITICAL_NP4 "," _critical_cases)
+            set(_critical_name dnds_${TEST_NAME}_np4_critical)
+            add_test(NAME ${_critical_name}
+                COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${NP}
+                        ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS}
+                        "--test-case=${_critical_cases}")
+            _dnds_maybe_set_timeout(${_critical_name} ${_TIMEOUT})
+            set_tests_properties(${_critical_name} PROPERTIES PROCESSORS 4
+                ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}" LABELS "mpi-high")
+            set_property(GLOBAL APPEND PROPERTY DNDS_CRITICAL_MPI_TESTS "${_critical_name}:${TARGET_NAME}")
+            list(APPEND _case_filter "--test-case-exclude=${_critical_cases}")
+        endif()
         add_test(NAME dnds_${TEST_NAME}_np${NP}
             COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${NP}
-                    ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
+                    ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS} ${_case_filter})
         _dnds_maybe_set_timeout(dnds_${TEST_NAME}_np${NP} ${_TIMEOUT})
         set_tests_properties(dnds_${TEST_NAME}_np${NP} PROPERTIES
             PROCESSORS ${NP}
@@ -227,11 +254,12 @@ if(DNDS_USE_CANTERA)
     endforeach()
 endif()
 dnds_add_unit_test(cauchy_rigid_motion "Cauchy/test_RigidMotion.cpp" "cauchy;cfv;geom;dnds")
-dnds_add_mpi_test(cauchy_boundary_inputs "Cauchy/test_BoundaryInputs.cpp" "cauchy;cfv;geom;dnds")
+dnds_add_mpi_test(cauchy_boundary_inputs "Cauchy/test_BoundaryInputs.cpp" "cauchy;cfv;geom;dnds" LOCAL_CASES_ONCE)
 dnds_add_mpi_test(cauchy_wall_distance "Cauchy/test_WallDistanceSamples.cpp" "cauchy;cfv;geom;dnds")
 dnds_add_mpi_test(cauchy_rans_fv "Cauchy/test_RANSFiniteVolume.cpp" "cauchy;physics;cfv;geom;dnds")
 dnds_add_mpi_test(cauchy_multidomain_mesh "Cauchy/test_MultidomainMesh.cpp" "cauchy;cfv;geom;dnds")
-dnds_add_mpi_test(cauchy_multidomain "Cauchy/test_Multidomain.cpp" "cauchy;cfv;geom;dnds")
+dnds_add_mpi_test(cauchy_multidomain "Cauchy/test_Multidomain.cpp" "cauchy;cfv;geom;dnds"
+    CRITICAL_NP4 "Multi-domain BDF2 restart reserves every domain and redistributes by persistent IDs")
 # Fixture-only exact predicates use CGAL's header-only Boost backend. Disable
 # automatic GMP selection too: the CORE setting alone leaves that enabled when
 # GMP/MPFR headers happen to exist, introducing an undeclared link dependency.
@@ -293,7 +321,8 @@ foreach(NP ${DNDS_TEST_NP_LIST})
     endif()
 endforeach()
 dnds_add_mpi_test(cauchy_implicit_domain "Cauchy/test_ImplicitDomain.cpp" "cauchy;cfv;geom;dnds")
-dnds_add_mpi_test(cauchy_checkpoint "Cauchy/test_Checkpoint.cpp" "cauchy;cfv;geom;dnds")
+dnds_add_mpi_test(cauchy_checkpoint "Cauchy/test_Checkpoint.cpp" "cauchy;cfv;geom;dnds"
+    CRITICAL_NP4 "Checkpoint changes MPI partition and polynomial degree using persistent cell IDs with cold reconstruction")
 if(DNDS_USE_CANTERA)
     foreach(NP ${DNDS_TEST_NP_LIST})
         set_property(TEST dnds_cauchy_checkpoint_np${NP} APPEND PROPERTY ENVIRONMENT
@@ -345,7 +374,7 @@ target_include_directories(cauchy_experiment_multidomain_iv PRIVATE ${DNDS_EXTER
 target_link_libraries(cauchy_experiment_multidomain_iv PRIVATE cauchy cfv geom dnds ${DNDS_EXTERNAL_LIBS})
 target_compile_definitions(cauchy_experiment_multidomain_iv PRIVATE CGAL_CORE_USE_BOOST_BACKEND=1 CGAL_DISABLE_GMP=1)
 target_compile_definitions(dnds_test_cauchy_checkpoint PRIVATE DNDS_TEST_SOURCE_ROOT="${PROJECT_SOURCE_DIR}")
-dnds_add_mpi_test(cauchy_jacobian "Cauchy/test_Jacobian.cpp" "cauchy;cfv;geom;dnds")
+dnds_add_mpi_test(cauchy_jacobian "Cauchy/test_Jacobian.cpp" "cauchy;cfv;geom;dnds" LOCAL_CASES_ONCE)
 add_custom_target(cauchy_unit_tests)
 if(Python_EXECUTABLE)
     add_dependencies(cauchy_unit_tests cauchy_solver)
@@ -419,13 +448,15 @@ dnds_add_unit_test(csv_log "DNDS/test_CsvLog.cpp" "dnds")
 add_dependencies(dnds_unit_tests dnds_test_csv_log)
 dnds_add_unit_test(hard_eigen "DNDS/test_HardEigen.cpp" "dnds")
 add_dependencies(dnds_unit_tests dnds_test_hard_eigen)
-dnds_add_mpi_test(object_contracts "DNDS/test_ObjectContracts.cpp" "dnds")
+dnds_add_mpi_test(object_contracts "DNDS/test_ObjectContracts.cpp" "dnds" LOCAL_CASES_ONCE)
 target_sources(dnds_test_object_contracts PRIVATE DNDS/test_LocalChecks.cpp)
 
 dnds_add_mpi_test(serializer "DNDS/test_Serializer.cpp" "dnds")
 dnds_add_mpi_test(mpi "DNDS/test_MPI.cpp" "dnds")
 dnds_add_mpi_test(runtime_exchange "DNDS/test_RuntimeExchange.cpp" "dnds")
-dnds_add_mpi_test(runtime_row_transfer "DNDS/test_RuntimeRowTransfer.cpp" "dnds")
+dnds_add_mpi_test(runtime_row_transfer "DNDS/test_RuntimeRowTransfer.cpp" "dnds"
+    CRITICAL_NP4 "Prepared CPU transfer groups retain separate payloads and perform one optional agreement"
+                 "Communication worker preserves repeated packed and direct sparse transfers")
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_executable(dnds_benchmark_transfer_scheduling EXCLUDE_FROM_ALL DNDS/benchmark_TransferScheduling.cpp)
     target_include_directories(dnds_benchmark_transfer_scheduling PRIVATE ${DNDS_EXTERNAL_INCLUDES} ${DNDS_INCLUDES})
@@ -808,6 +839,12 @@ cfv_add_mpi_test(reconstruction "CFV/test_Reconstruction.cpp" "cfv;geom;dnds")
 cfv_add_mpi_test(fv_facility "CFV/test_FVFacility.cpp" "cfv;geom;dnds")
 cfv_add_mpi_test(distributed_interface_sampling "CFV/test_DistributedInterfaceSampling.cpp" "cfv;geom;dnds")
 cfv_add_mpi_test(reconstruction_overlap "CFV/test_ReconstructionOverlap.cpp" "cfv;geom;dnds")
+# Keep the rank-coverage lane single-threaded even when the runner uses a
+# distributed OpenMP team for the rest of the suite.
+foreach(NP ${DNDS_TEST_NP_LIST})
+    set_property(TEST cfv_reconstruction_overlap_np${NP} APPEND PROPERTY
+        ENVIRONMENT "DNDS_DIST_OMP_NUM_THREADS=1")
+endforeach()
 if(DNDS_USE_OMP AND DNDS_DIST_MT_USE_OMP)
     add_test(NAME cfv_reconstruction_overlap_omp2_np2
         COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
@@ -918,35 +955,18 @@ if(DNDS_USE_CUDA)
             ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/demos/one_rank_per_gpu.py
             $<TARGET_FILE:cfv_test_reconstruction_cuda> ${MPIEXEC_POSTFLAGS})
     set_tests_properties(cfv_reconstruction_cuda_np2 PROPERTIES PROCESSORS 2 TIMEOUT 180 ENVIRONMENT "OMP_NUM_THREADS=1")
-    foreach(_variant tensor nccl nccl_tensor nccl_shared nccl_async)
-        if(_variant MATCHES "nccl" AND NOT DNDS_USE_NCCL)
-            continue()
-        endif()
-        if(_variant MATCHES "tensor|shared|async" AND NOT CMAKE_CUDA_ARCHITECTURES MATCHES "(^|;)(80|90)(-real|-virtual)?(;|$)")
-            continue()
-        endif()
-        set(_environment "OMP_NUM_THREADS=1")
-        if(_variant MATCHES "tensor")
-            list(APPEND _environment "DNDS_TEST_RECONSTRUCTION_KERNEL=tensor")
-        endif()
-        if(_variant MATCHES "shared")
-            list(APPEND _environment "DNDS_TEST_RECONSTRUCTION_KERNEL=shared")
-        endif()
-        if(_variant MATCHES "async")
-            list(APPEND _environment "DNDS_TEST_RECONSTRUCTION_KERNEL=async")
-        endif()
-        if(_variant MATCHES "nccl")
-            list(APPEND _environment "DNDS_TEST_TRANSFER_PROVIDER=nccl")
-        endif()
+    # The default executable already compares every supported sweep kernel.
+    # Repeat only provider-sensitive cases for NCCL.
+    if(DNDS_USE_NCCL)
         foreach(_np 1 2)
-            add_test(NAME cfv_reconstruction_${_variant}_np${_np}
+            add_test(NAME cfv_reconstruction_nccl_np${_np}
                 COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${_np} ${MPIEXEC_PREFLAGS}
                     ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/demos/one_rank_per_gpu.py
-                    $<TARGET_FILE:cfv_test_reconstruction_cuda> ${MPIEXEC_POSTFLAGS})
-            set_tests_properties(cfv_reconstruction_${_variant}_np${_np} PROPERTIES
-                PROCESSORS ${_np} TIMEOUT 180 ENVIRONMENT "${_environment}")
+                    $<TARGET_FILE:cfv_test_reconstruction_cuda> ${MPIEXEC_POSTFLAGS} --test-suite=halo)
+            set_tests_properties(cfv_reconstruction_nccl_np${_np} PROPERTIES PROCESSORS ${_np}
+                TIMEOUT 180 ENVIRONMENT "OMP_NUM_THREADS=1;DNDS_TEST_TRANSFER_PROVIDER=nccl")
         endforeach()
-    endforeach()
+    endif()
     list(APPEND CFV_TEST_TARGETS cfv_test_device_transferable cfv_test_reconstruction_cuda
         cfv_test_limited_vr_cuda cfv_test_characteristic_cuda)
 endif()
@@ -1239,3 +1259,11 @@ foreach(_dnds_test IN LISTS _dnds_cpp_tests)
         set_property(TEST ${_dnds_test} APPEND PROPERTY LABELS "mpi-high")
     endif()
 endforeach()
+
+include(${PROJECT_SOURCE_DIR}/cmake/DndsCITestLevels.cmake)
+
+if(DNDS_USE_CUDA)
+    add_executable(cauchy_benchmark_rhs_face_mappings_cuda EXCLUDE_FROM_ALL Cauchy/benchmark_RHSFaceMappingsCUDA.cpp)
+    target_include_directories(cauchy_benchmark_rhs_face_mappings_cuda PRIVATE ${DNDS_EXTERNAL_INCLUDES} ${DNDS_INCLUDES})
+    target_link_libraries(cauchy_benchmark_rhs_face_mappings_cuda PRIVATE cauchy physics cfv geom dnds CUDA::cudart ${DNDS_EXTERNAL_LIBS})
+endif()

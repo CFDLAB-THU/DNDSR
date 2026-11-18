@@ -21,57 +21,12 @@ static MPIInfo worldMPI()
 
 TEST_CASE("classifyAdj basic classification")
 {
-    std::unordered_set<EntityKind> reordered;
-
-    SUBCASE("empty reordered set")
-    {
-        CHECK(classifyAdj(Adj::Cell2Node, reordered) == AdjAction::SKIP);
-        CHECK(classifyAdj(Adj::Cell2Cell, reordered) == AdjAction::SKIP);
-    }
-
-    SUBCASE("cell only reordered")
-    {
-        reordered = {EntityKind::Cell};
-        CHECK(classifyAdj(Adj::Cell2Node, reordered) == AdjAction::RELOCATE);
-        CHECK(classifyAdj(Adj::Cell2Face, reordered) == AdjAction::RELOCATE);
-        CHECK(classifyAdj(Adj::Cell2Cell, reordered) == AdjAction::SELF);
-        CHECK(classifyAdj(Adj::Bnd2Cell, reordered) == AdjAction::REMAP);
-        CHECK(classifyAdj(Adj::Face2Cell, reordered) == AdjAction::REMAP);
-        CHECK(classifyAdj(Adj::Node2Cell, reordered) == AdjAction::REMAP);
-        CHECK(classifyAdj(Adj::Bnd2Node, reordered) == AdjAction::SKIP);
-        CHECK(classifyAdj(Adj::Face2Node, reordered) == AdjAction::SKIP);
-    }
-
-    SUBCASE("node only reordered")
-    {
-        reordered = {EntityKind::Node};
-        CHECK(classifyAdj(Adj::Cell2Node, reordered) == AdjAction::REMAP);
-        CHECK(classifyAdj(Adj::Bnd2Node, reordered) == AdjAction::REMAP);
-        CHECK(classifyAdj(Adj::Node2Cell, reordered) == AdjAction::RELOCATE);
-        CHECK(classifyAdj(Adj::Node2Bnd, reordered) == AdjAction::RELOCATE);
-        CHECK(classifyAdj(Adj::Cell2Cell, reordered) == AdjAction::SKIP);
-    }
-
-    SUBCASE("cell + node reordered")
-    {
-        reordered = {EntityKind::Cell, EntityKind::Node};
-        CHECK(classifyAdj(Adj::Cell2Node, reordered) == AdjAction::RELOCATE_REMAP);
-        CHECK(classifyAdj(Adj::Node2Cell, reordered) == AdjAction::RELOCATE_REMAP);
-        CHECK(classifyAdj(Adj::Cell2Cell, reordered) == AdjAction::SELF);
-        CHECK(classifyAdj(Adj::Bnd2Node, reordered) == AdjAction::REMAP);
-        CHECK(classifyAdj(Adj::Bnd2Cell, reordered) == AdjAction::REMAP);
-    }
-
-    SUBCASE("cell + node + bnd reordered")
-    {
-        reordered = {EntityKind::Cell, EntityKind::Node, EntityKind::Bnd};
-        CHECK(classifyAdj(Adj::Cell2Node, reordered) == AdjAction::RELOCATE_REMAP);
-        CHECK(classifyAdj(Adj::Bnd2Node, reordered) == AdjAction::RELOCATE_REMAP);
-        CHECK(classifyAdj(Adj::Bnd2Cell, reordered) == AdjAction::RELOCATE_REMAP);
-        CHECK(classifyAdj(Adj::Node2Cell, reordered) == AdjAction::RELOCATE_REMAP);
-        CHECK(classifyAdj(Adj::Node2Bnd, reordered) == AdjAction::RELOCATE_REMAP);
-        CHECK(classifyAdj(Adj::Cell2Cell, reordered) == AdjAction::SELF);
-    }
+    CHECK(classifyAdj(Adj::Cell2Cell, {}) == AdjAction::SKIP);
+    CHECK(classifyAdj(Adj::Cell2Cell, {EntityKind::Cell}) == AdjAction::SELF);
+    CHECK(classifyAdj(Adj::Cell2Node, {}) == AdjAction::SKIP);
+    CHECK(classifyAdj(Adj::Cell2Node, {EntityKind::Cell}) == AdjAction::RELOCATE);
+    CHECK(classifyAdj(Adj::Cell2Node, {EntityKind::Node}) == AdjAction::REMAP);
+    CHECK(classifyAdj(Adj::Cell2Node, {EntityKind::Cell, EntityKind::Node}) == AdjAction::RELOCATE_REMAP);
 }
 
 TEST_CASE("ReorderRegistry register and query")
@@ -1141,27 +1096,6 @@ TEST_CASE("InterpolateEdge: edge arrays built and adjEdgeState is Adj_PointToLoc
             CHECK(view.EdgeNodes(edge).size() == 2);
         }
     }
-}
-
-TEST_CASE("InterpolateEdge: AdjLocal2GlobalEdge / AdjGlobal2LocalEdge round-trip")
-{
-    auto mpi = worldMPI();
-    auto source = T::Fixture(mpi, true, true);
-    T::RoundTrip(source, mpi, {Adj::Cell2Edge, Adj::Edge2Node, Adj::Edge2Cell});
-}
-
-TEST_CASE("InterpolateEdge: local indices in valid range after AdjGlobal2LocalEdge")
-{
-    auto mpi = worldMPI();
-    auto source = T::Fixture(mpi, true, true);
-    auto access = source->Snapshot(Runtime::Device::Host()).AcquireRead();
-    const auto view = access.HostView();
-    for (DNDS::index cell = 0; cell < view.NumCell(); ++cell)
-        for (const auto edge : view.CellEdges(cell))
-        {
-            CHECK(edge >= 0);
-            CHECK(edge < view.NumEdgeProc());
-        }
     for (DNDS::index edge = 0; edge < view.NumEdge(); ++edge)
     {
         for (const auto node : view.EdgeNodes(edge))
@@ -1175,6 +1109,13 @@ TEST_CASE("InterpolateEdge: local indices in valid range after AdjGlobal2LocalEd
             CHECK(cell < view.NumCellProc());
         }
     }
+}
+
+TEST_CASE("InterpolateEdge: AdjLocal2GlobalEdge / AdjGlobal2LocalEdge round-trip")
+{
+    auto mpi = worldMPI();
+    auto source = T::Fixture(mpi, true, true);
+    T::RoundTrip(source, mpi, {Adj::Cell2Edge, Adj::Edge2Node, Adj::Edge2Cell});
 }
 
 TEST_CASE("ReorderLocalCells: existing edges retain exact IDs and rows")

@@ -9,7 +9,7 @@ import shutil
 from mpi4py import MPI
 
 
-def get_fv(mpi):
+def get_fv(mpi, bisections):
     print(CFV.tUDof_1)
     # CFV.VariationalReconstruction_2()
     # meshFile = os.path.join(
@@ -32,7 +32,7 @@ def get_fv(mpi):
             "translation1": [1, 0, 0],
             "translation2": [0, 1, 0],
         },
-        meshDirectBisect=4,
+        meshDirectBisect=bisections,
         second_level_parts=16,
     )
     meshBnd, readerBnd = create_bnd_mesh(mesh)
@@ -75,9 +75,8 @@ def get_fv(mpi):
     return mesh, reader, name2Id, meshBnd, readerBnd, fv
 
 
-def test_basic_eulerP(mpi: DNDS.MPIInfo, isCuda=False):
-
-    mesh, reader, name2Id, meshBnd, readerBnd, fv = get_fv(mpi)
+def run_pipeline(mpi: DNDS.MPIInfo, isCuda=False, bisections=4):
+    mesh, reader, name2Id, meshBnd, readerBnd, fv = get_fv(mpi, bisections)
     print(name2Id.n2id_map)
     print(name2Id.n2id_map is name2Id.n2id_map)
     phys_dict = EulerP.Physics().to_dict()
@@ -336,6 +335,11 @@ def test_basic_eulerP(mpi: DNDS.MPIInfo, isCuda=False):
     #         print(f"{iFace} -- {np.asarray(data['uFL'][iFace]).T}")
 
 
+def test_basic_eulerP(mpi: DNDS.MPIInfo):
+    # One refinement level suffices for the binding and VTKHDF smoke.
+    run_pipeline(mpi, bisections=1)
+
+
 if __name__ == "__main__":
     mpi = DNDS.MPIInfo()
     mpi.setWorld()
@@ -345,4 +349,4 @@ if __name__ == "__main__":
     # MPIDebugHold()
 
     # DNDS.Debug.MPIDebugHold(mpi)
-    test_basic_eulerP(mpi, isCuda=False)
+    run_pipeline(mpi, isCuda=False)

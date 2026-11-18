@@ -305,23 +305,27 @@ TEST_CASE("A-weighted limited VR preserves generic components, relaxation and sp
             CHECK(mean.Owned().Version() == meanVersion);
             CHECK(target.Owned().Version() == targetVersion);
             if (metrics.NumCell())
-                for (double invalid : {-1., 1.1, std::numeric_limits<double>::quiet_NaN()})
-                {
-                    {
-                        auto a = alpha.Write();
-                        a.View()(0, 0) = invalid;
-                    }
-                    const auto before = full.temporary.Owned().Version();
-                    CHECK_THROWS_WITH_AS(plan.DoReconstructionIterLimitedTo(mean, input, full, boundary, target, alpha),
-                                         doctest::Contains("alpha must be finite"), std::exception);
-                    CHECK(full.temporary.Owned().Version() == before);
-                }
-            if (metrics.NumCell())
             {
                 auto aliased = target;
                 aliased.Owned() = full.temporary.Owned();
+                const auto before = full.temporary.Owned().Version();
                 CHECK_THROWS_WITH_AS(plan.DoReconstructionIterLimitedTo(mean, input, full, boundary, aliased, alpha),
                                      doctest::Contains("output aliases penalty"), std::exception);
+                CHECK(full.temporary.Owned().Version() == before);
+                CHECK(full.temporary.Owned().IsValid());
+
+                {
+                    // Spread the three guards across layouts instead of
+                    // failing the same output three times per layout.
+                    const double invalid[] = {std::numeric_limits<double>::quiet_NaN(), -1., 1.1};
+                    auto a = alpha.Write();
+                    a.View()(0, 0) = invalid[layout];
+                }
+                CHECK_THROWS_WITH_AS(plan.DoReconstructionIterLimitedTo(mean, input, full, boundary, target, alpha),
+                                     doctest::Contains("alpha must be finite"), std::exception);
+                // A numerical failure after the write lease was issued
+                // quarantines the output. Treating it as current is unsafe.
+                CHECK_FALSE(full.temporary.Owned().IsValid());
             }
         }
 }

@@ -437,19 +437,17 @@ static const char *recMethodName3D(RecMethod3D m)
 }
 
 static Test3DCase g_3dTests[] = {
-    // sinCos3D
+    // Keep equal methods adjacent so they reuse the prepared operator.
     {RecMethod3D::GaussGreen, sinCos3D, "sinCos3D", 1, 0,
      1.5098818118e-03},
-    {RecMethod3D::VFV_P1_HQM, sinCos3D, "sinCos3D", 200, 1e-14,
-     3.2475021825e-03},
-    {RecMethod3D::VFV_P2_HQM, sinCos3D, "sinCos3D", 200, 1e-14,
-     7.4823241394e-05},
-
-    // cosPlusCos3D
     {RecMethod3D::GaussGreen, cosPlusCos3D, "cos+cos3D", 1, 0,
      1.4931684237e-03},
+    {RecMethod3D::VFV_P1_HQM, sinCos3D, "sinCos3D", 200, 1e-14,
+     3.2475021825e-03},
     {RecMethod3D::VFV_P1_HQM, cosPlusCos3D, "cos+cos3D", 200, 1e-14,
      2.4261881197e-03},
+    {RecMethod3D::VFV_P2_HQM, sinCos3D, "sinCos3D", 200, 1e-14,
+     7.4823241394e-05},
     {RecMethod3D::VFV_P2_HQM, cosPlusCos3D, "cos+cos3D", 200, 1e-14,
      3.7014576777e-05},
 };
@@ -459,12 +457,17 @@ static const int g_n3dTests = sizeof(g_3dTests) / sizeof(g_3dTests[0]);
 TEST_CASE("3D: smooth-function golden values, convergence and order" * doctest::test_suite("integration"))
 {
     DNDS::real p1Error = 0, p2Error = 0;
+    ssp<tVR> vr;
     for (int ti = 0; ti < g_n3dTests; ++ti)
     {
         const auto &tc = g_3dTests[ti];
         const std::string label = std::string("3D/") + tc.funcName + "/" + recMethodName3D(tc.method);
         INFO(label);
-        auto vr = buildVR3D(LargeMesh(), tc.method);
+        if (ti == 0 || g_3dTests[ti - 1].method != tc.method)
+        {
+            vr.reset();
+            vr = buildVR3D(LargeMesh(), tc.method);
+        }
         ReconstructionRun3D stats;
         const auto error = runTest3D(vr, tc.method, tc.func, g_zeroBC, tc.maxIters, tc.convTol, false, &stats);
         if (g_mpi.rank == 0)

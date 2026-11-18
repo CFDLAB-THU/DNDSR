@@ -30,7 +30,7 @@ namespace DNDS::Cauchy
                                     execution.layout == "aos" && execution.fieldGrouping == "coupled";
         const bool a100P3 = a100Polynomial && numerics.cfv.maxOrder == 3 && numerics.cfv.intOrder <= 5;
         const bool measuredFlow5 = a100P3 && !acm && withoutRANS && settings.mesh.dimension == 3;
-        if (kernels.rhsMapping == "auto")
+        if (acm && kernels.rhsMapping == "auto")
         {
             const bool fp64 = kernels.polynomialArithmetic == "fp64" && kernels.dissipationArithmetic == "fp64" &&
                               kernels.fluxArithmetic == "fp64";
@@ -39,10 +39,10 @@ namespace DNDS::Cauchy
             const int degree = numerics.cfv.maxOrder, rule = numerics.RHSIntegrationOrder();
             const bool acmCTA = a100Polynomial && settings.mesh.dimension == 3 && !numerics.firstOrderConvection &&
                                 ((degree == 2 && rule >= 4) || (degree == 3 && rule >= 2));
-            kernels.rhsMapping = fp64 && (!acm || acmCTA) ? "ctaSegments" : "thread";
+            kernels.rhsMapping = fp64 && acmCTA ? "ctaSegments" : "thread";
         }
-        if (kernels.rhsReduction == "auto")
-            kernels.rhsReduction = !acm && kernels.rhsMapping == "ctaSegments" ? "segmented" : "serial";
+        if (acm && kernels.rhsReduction == "auto")
+            kernels.rhsReduction = "serial";
         if (execution.reconstructionKernel == "auto")
         {
             // The matrix-shared selector remains a fixed comparison fixture.

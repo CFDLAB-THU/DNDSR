@@ -89,6 +89,21 @@ after building and installing extensions. `harness_tooling` needs no extensions.
 
 ## MPI Test Registration
 
+The CI workflow has three cumulative test levels. Use `/ci-run` for the
+critical gate, `/ci-run 1` for extended coverage, or `/ci-run full` for all
+levels. `/ci-run-self-hosted` accepts the same suffixes. The manual workflow
+uses the numeric level.
+
+From a configured CPU test build, use `ci_critical_tests` and
+`ci_python_tests` to build Level 0. Build `all_unit_tests` and
+`ci_python_tests` for either higher level. Install the `py` component and
+run `bash scripts/run_ci_tests.sh 0 <build> <venv>/bin/python` from this
+checkout. Use the pinned CI meshes when validating a clean checkout.
+The C++ registrations carry their minimum level as a CTest label.
+`ci_critical_tests` builds the executables selected by the `level0` label.
+Some np4 registrations split a named critical case from the rest of the
+executable so the full run executes each case once.
+
 MPI-aware tests are registered at multiple process counts.  The CTest
 name encodes the count:
 

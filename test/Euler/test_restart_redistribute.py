@@ -18,6 +18,9 @@ Usage:
     pytest test/Euler/test_restart_redistribute.py -s
     # or directly:
     python test/Euler/test_restart_redistribute.py
+
+Run the pytest driver with a single process. The tests launch their own
+MPI writers and readers at the rank counts specified below.
 """
 
 import json
@@ -45,6 +48,14 @@ MESH_SMALL = os.path.join(PROJECT_ROOT, "data", "mesh",
                           "IV10_10.cgns")   # 10x10 = 100 cells
 MESH_LARGE = os.path.join(PROJECT_ROOT, "data", "mesh",
                           "IV10_20.cgns")   # 20x20 = 400 cells
+
+
+@pytest.fixture(scope="module", autouse=True)
+def standalone_restart_driver():
+    from mpi4py import MPI
+
+    if MPI.COMM_WORLD.Get_size() != 1:
+        pytest.skip("Run the restart driver once. It launches its own MPI ranks.")
 
 
 def _strip_json_comments(text):
@@ -330,22 +341,25 @@ def work_dir_large():
     shutil.rmtree(d, ignore_errors=True)
 
 
-def test_restart_redistribute_same_np(work_dir):
-    """Write restart at np=2, read at np=2 with different Metis seed."""
+def _prepare_small_restart(work_dir):
     if not os.path.isfile(EULER_EXE):
         pytest.skip(f"euler.exe not found: {EULER_EXE}")
     if not os.path.isfile(MESH_SMALL):
         pytest.skip(f"Mesh file not found: {MESH_SMALL}")
 
-    np_write = 2
+    restart_h5 = _run_step1(work_dir, 2, mesh_file=MESH_SMALL)
+    reference = _run_step2(work_dir, restart_h5, "ref", 2, mesh_file=MESH_SMALL)
+    return restart_h5, reference
 
-    print(f"\n=== Step 1: 20-step run with np={np_write} ===")
-    restart_h5 = _run_step1(work_dir, np_write, mesh_file=MESH_SMALL)
 
-    print(f"\n=== Step 2a: load with np=2, same partition (reference) ===")
-    restart_a = _run_step2(work_dir, restart_h5, "ref",
-                           2, mesh_file=MESH_SMALL)
+@pytest.fixture(scope="module")
+def small_restart(standalone_restart_driver, work_dir):
+    return _prepare_small_restart(work_dir)
 
+
+def test_restart_redistribute_same_np(work_dir, small_restart):
+    """Write restart at np=2, read at np=2 with different Metis seed."""
+    restart_h5, reference = small_restart
     print(f"\n=== Step 2b: load with np=2, different Metis seed ===")
     restart_b = _run_step2(
         work_dir, restart_h5, "reseed", 2,
@@ -354,35 +368,26 @@ def test_restart_redistribute_same_np(work_dir):
     )
 
     print("\n=== Comparing: same-np redistribution ===")
-    _compare_restart_h5(restart_a, restart_b)
+    _compare_restart_h5(reference, restart_b)
     print("=== PASS ===")
 
 
-def test_restart_redistribute_different_np(work_dir):
+def test_restart_redistribute_different_np(work_dir, small_restart):
     """Write restart at np=2, read at np=3 (cross-np redistribution)."""
-    if not os.path.isfile(EULER_EXE):
-        pytest.skip(f"euler.exe not found: {EULER_EXE}")
-
-    # Reuse step1 restart from the same work_dir (written by previous test)
-    restart_h5 = _find_restart_h5(
-        os.path.join(work_dir, "step1"), "step1 (reuse)")
-    print(f"\n  Reusing Step 1 restart: {restart_h5}")
-
-    restart_ref = _find_restart_h5(os.path.join(
-        work_dir, "step2_ref"), "ref (reuse)")
-
+    restart_h5, reference = small_restart
     print(f"\n=== Step 2c: load with np=3 (cross-np redistribution) ===")
     restart_c = _run_step2(work_dir, restart_h5, "np3",
                            3, mesh_file=MESH_SMALL)
 
     print("\n=== Comparing: cross-np redistribution ===")
-    _compare_restart_h5(restart_ref, restart_c)
+    _compare_restart_h5(reference, restart_c)
     print("=== PASS ===")
 
 
 # This integration case launches a writer plus five independent MPI restarts.
 # Bound the complete campaign rather than applying the short unit-test budget.
 @pytest.mark.timeout(300)
+@pytest.mark.level2
 def test_restart_redistribute_large_mesh_multi_np(work_dir_large):
     """Write restart at np=4 with 20x20 mesh, read at np=4..8."""
     if not os.path.isfile(EULER_EXE):
@@ -429,7 +434,8 @@ def test_restart_redistribute_large_mesh_multi_np(work_dir_large):
 
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory(prefix="dnds_test_redist_") as d:
-        test_restart_redistribute_same_np(d)
-        test_restart_redistribute_different_np(d)
+        prepared = _prepare_small_restart(d)
+        test_restart_redistribute_same_np(d, prepared)
+        test_restart_redistribute_different_np(d, prepared)
     with tempfile.TemporaryDirectory(prefix="dnds_test_redist_large_") as d:
         test_restart_redistribute_large_mesh_multi_np(d)

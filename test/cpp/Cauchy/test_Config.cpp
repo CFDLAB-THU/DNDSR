@@ -2,6 +2,7 @@
 #include "doctest.h"
 #include "Cauchy/Config/SimulationConfig.hpp"
 #include "Cauchy/Config/CUDAKernelDefaults.hpp"
+#include "Cauchy/Config/CUDARHSKernelSelector.hpp"
 #include "DNDS/Algebra/AmgXPreconditioner.hpp"
 #include "Cauchy/Multigrid/PolynomialMultigrid.hpp"
 
@@ -15,14 +16,14 @@ TEST_CASE("Automatic CUDA policies select measured A100 kernels and preserve exp
     base.numerics.cfv.intOrder = 5;
     auto a100 = base;
     C::ResolveAutomaticCUDAKernels(a100, true, true);
-    CHECK(a100.execution.kernels.rhsMapping == "ctaSegments");
-    CHECK(a100.execution.kernels.rhsReduction == "segmented");
+    CHECK(a100.execution.kernels.rhsMapping == "auto");
+    CHECK(a100.execution.kernels.rhsReduction == "auto");
     CHECK(a100.execution.reconstructionKernel == "fp64Pipelined");
     CHECK(a100.execution.kernels.polynomialPPThreads == 512);
     CHECK(a100.numerics.cfv.storage.representation == base.numerics.cfv.storage.representation);
     auto other = base;
     C::ResolveAutomaticCUDAKernels(other, false, true);
-    CHECK(other.execution.kernels.rhsMapping == "ctaSegments");
+    CHECK(other.execution.kernels.rhsMapping == "auto");
     CHECK(other.execution.reconstructionKernel == "fp64");
     CHECK(other.execution.kernels.polynomialPPThreads == 128);
     auto explicitPolicy = base;
@@ -63,6 +64,41 @@ TEST_CASE("Automatic CUDA policies select measured A100 kernels and preserve exp
     C::ResolveAutomaticCUDAKernels(base, true, true);
     CHECK(base.execution.kernels.rhsMapping == "thread");
     CHECK(base.execution.reconstructionKernel == "fp64Pipelined");
+}
+
+TEST_CASE("CUDA RHS launch selection respects measured profiles and explicit values")
+{
+    C::KernelExecutionSettings settings;
+    const C::RHSKernelProfile profile{"none", "periodic", 5, 19, 3, 1, 1};
+    const std::string device = "NVIDIA A100 80GB PCIe";
+    const auto preset = C::FindRHSKernelPreset(device, profile);
+    REQUIRE(preset.is_object());
+    const auto chosen = C::ResolveRHSKernelLaunch(settings, false, device, profile);
+    CHECK(chosen.mapping == "thread");
+    CHECK(chosen.hoistFaceRows);
+    CHECK(chosen.blockSize == preset.at("rhsBlockSize").get<int>());
+    CHECK(chosen.gridBlocks == preset.at("rhsGridBlocks").get<int>());
+    CHECK(C::ResolveRHSKernelLaunch(settings, false, "NVIDIA RTX A5000", profile).mapping == "ctaSegments");
+    auto mixedRule = profile;
+    mixedRule.points = 9;
+    CHECK(C::ResolveRHSKernelLaunch(settings, false, device, mixedRule).mapping == "ctaSegments");
+
+    C::Json requested = settings;
+    requested.update({{"rhsBlockSize", 64}, {"rhsGridBlocks", 0}, {"rhsHoistFaceRows", false}});
+    const auto overridden = C::ResolveRHSKernelLaunch(requested.get<C::KernelExecutionSettings>(), false, device, profile);
+    CHECK(overridden.mapping == "thread");
+    CHECK_FALSE(overridden.hoistFaceRows);
+    CHECK(overridden.blockSize == 64);
+    CHECK(overridden.gridBlocks == 0);
+
+    settings.rhsMapping = "ctaSegments";
+    settings.rhsDoubleBuffer = true;
+    CHECK(C::ResolveRHSKernelLaunch(settings, false, device, profile).mapping == "ctaSegments");
+    const auto direct = C::ResolveRHSKernelLaunch(settings, true, device, profile);
+    CHECK(direct.mapping == "thread");
+    CHECK(direct.reduction == "serial");
+    CHECK_FALSE(direct.hoistFaceRows);
+    CHECK_FALSE(direct.doubleBuffer);
 }
 TEST_CASE("Mesh preprocessing is explicit and validates a positive uniform scale")
 {

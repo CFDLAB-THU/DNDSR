@@ -54,8 +54,13 @@ TEST_CASE("Native publication owns semantic queries and current numbering withou
     CHECK_NOTHROW(mesh->PlaceNative(R::Device::Host(), R::ExecutionContext::Host()));
     CHECK_THROWS(mesh->PlaceNative(R::Device::Host(), R::ExecutionContext::CUDA(0)));
     CHECK_THROWS(mesh->PlaceNative(R::Device::CUDA(-1), R::ExecutionContext::CUDA(-1)));
-    int stream = 0;
-    CHECK_THROWS(mesh->PlaceNative(R::Device::Host(), {R::Device::Host(), &stream}));
+    struct WrongDeviceStream final : R::StreamResource
+    {
+        R::Device GetDevice() const noexcept override { return R::Device::CUDA(0); }
+        void SynchronizeBackend() const override {}
+    };
+    CHECK_THROWS(mesh->PlaceNative(
+        R::Device::Host(), {R::Device::Host(), std::make_shared<WrongDeviceStream>()}));
     const auto cells = mesh->Entities(G::EntityKind::Cell);
     const auto nodes = mesh->Entities(G::EntityKind::Node);
     const auto boundary = mesh->Entities(G::EntityKind::Bnd);

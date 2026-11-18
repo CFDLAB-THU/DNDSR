@@ -85,5 +85,6 @@ markers = [
     "mpi: tests requiring mpirun",
     "cuda: tests requiring CUDA device",
     "slow: long-running tests",
+    "level2: qualification beyond routine CI",
 ]
 timeout = 120

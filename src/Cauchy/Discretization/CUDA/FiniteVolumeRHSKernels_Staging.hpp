@@ -30,20 +30,23 @@ namespace DNDS::Cauchy::CUDA::Detail
     /// Shared-memory indexing preserves the same C/M/D operand roles as the
     /// host-projected whole-array views. Physical gradients are never modal
     /// coefficient rows, including the non-VR M=0 path.
-    template <int Components, int Modes, int Dimension>
-    struct StagedFaceFields
+    template <int Components, int Modes, int Dimension, template <int> class Field>
+    struct StaticFaceOperands
     {
         static constexpr int static_modes = Modes, static_dimension = Dimension;
         static constexpr bool separate_roles = true;
-        StagedFaceField<Components> mean;
-        StagedFaceField<Components * Modes> coefficients, viscousCoefficients;
-        StagedFaceField<Components * Dimension> gradients, viscousGradients;
-        StagedFaceField<5 * Dimension> primitiveGradients;
-        StagedFaceField<1> waveJump, pressureMinimum;
-        StagedFaceField<2> preparedMean;
+        Field<Components> mean;
+        Field<Components * Modes> coefficients, viscousCoefficients;
+        Field<Components * Dimension> gradients, viscousGradients;
+        Field<5 * Dimension> primitiveGradients;
+        Field<1> waveJump, pressureMinimum;
+        Field<2> preparedMean;
         Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::FixedRows<Components, Components>> incoming;
         bool hasPreparedMean = false, hasIncoming = false, hasWave = false, hasPressure = false;
     };
+
+    template <int C, int M, int D>
+    using StagedFaceFields = StaticFaceOperands<C, M, D, StagedFaceField>;
 
     template <int C, int M, int D>
     __device__ const real *FaceStageSource(const RHSShapeFields<C, M, D> &fields, const RHSKernelControls &controls,

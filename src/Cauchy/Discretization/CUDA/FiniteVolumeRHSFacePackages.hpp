@@ -16,7 +16,9 @@ namespace DNDS::Cauchy::CUDA
     enum class RHSFaceReduction : uint8_t
     {
         Serial,
-        Segmented
+        Segmented,
+        BoundedTree,
+        WarpTree
     };
     struct RHSKernelControls;
     struct RHSFaceStageShape
@@ -35,7 +37,8 @@ namespace DNDS::Cauchy::CUDA
     struct RHSFacePackage
     {
         index firstSegment = 0;
-        int faces = 0, tiles = 0;
+        int faces = 0, tiles = 0, maximumLanes = 0;
+        bool warpContained = true;
     };
     struct RHSFacePackageView
     {
@@ -45,7 +48,8 @@ namespace DNDS::Cauchy::CUDA
         RHSFaceStageShape shape;
         RHSFaceMapping mapping = RHSFaceMapping::Thread;
         int blockSize = 0, maximumFaces = 0;
-        bool produceLow = false;
+        index warpContainedPackages = 0;
+        bool produceLow = false, doubleBuffer = false;
         size_t sharedBytes = 0;
         void ValidateDevice(Runtime::Device device) const
         {

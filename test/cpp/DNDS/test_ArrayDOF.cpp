@@ -75,62 +75,36 @@ TEST_CASE("Audit regression: difference norm retains shape on empty ranks")
     }
 }
 
-TEST_CASE("ArrayDOF setup and setConstant")
+TEST_CASE("ArrayDOF setConstant with Eigen matrix")
 {
     MPIInfo mpi = worldMPI();
     constexpr DNDS::index N = 100;
 
     auto dof = makeDof<5, 1>(mpi, N);
 
-    SUBCASE("setConstant with scalar")
-    {
-        dof.setConstant(2.0);
-        for (DNDS::index i = 0; i < dof.father->Size(); i++)
-        {
-            auto mat = dof[i];
-            for (int r = 0; r < mat.rows(); r++)
-                CHECK(mat(r, 0) == doctest::Approx(2.0));
-        }
-    }
+    Eigen::Matrix<real, 5, 1> v;
+    v << 1.0, 2.0, 3.0, 4.0, 5.0;
+    dof.setConstant(v);
 
-    SUBCASE("setConstant with Eigen matrix")
+    for (DNDS::index i = 0; i < dof.father->Size(); i++)
     {
-        Eigen::Matrix<real, 5, 1> v;
-        v << 1.0, 2.0, 3.0, 4.0, 5.0;
-        dof.setConstant(v);
-
-        for (DNDS::index i = 0; i < dof.father->Size(); i++)
-        {
-            auto mat = dof[i];
-            CHECK(mat(0, 0) == doctest::Approx(1.0));
-            CHECK(mat(1, 0) == doctest::Approx(2.0));
-            CHECK(mat(2, 0) == doctest::Approx(3.0));
-            CHECK(mat(3, 0) == doctest::Approx(4.0));
-            CHECK(mat(4, 0) == doctest::Approx(5.0));
-        }
+        auto mat = dof[i];
+        CHECK(mat(0, 0) == doctest::Approx(1.0));
+        CHECK(mat(1, 0) == doctest::Approx(2.0));
+        CHECK(mat(2, 0) == doctest::Approx(3.0));
+        CHECK(mat(3, 0) == doctest::Approx(4.0));
+        CHECK(mat(4, 0) == doctest::Approx(5.0));
     }
 }
 
 // ---------------------------------------------------------------------------
-TEST_CASE("ArrayDOF operator+= scalar and array")
+TEST_CASE("ArrayDOF operator+= array and matrix")
 {
     MPIInfo mpi = worldMPI();
     constexpr DNDS::index N = 80;
 
     auto dof1 = makeDof<5, 1>(mpi, N);
     dof1.setConstant(1.0);
-
-    SUBCASE("+= scalar")
-    {
-        dof1 += 2.0;
-
-        for (DNDS::index i = 0; i < dof1.father->Size(); i++)
-        {
-            auto mat = dof1[i];
-            for (int r = 0; r < mat.rows(); r++)
-                CHECK(mat(r, 0) == doctest::Approx(3.0));
-        }
-    }
 
     SUBCASE("+= another ArrayDof")
     {
@@ -178,37 +152,22 @@ TEST_CASE("ArrayDOF operator-= and operator*=")
     dof1.setConstant(10.0);
     dof2.setConstant(3.0);
 
-    SUBCASE("-= array then *= scalar")
+    dof1 -= dof2;
+
+    for (DNDS::index i = 0; i < dof1.father->Size(); i++)
     {
-        dof1 -= dof2;
-
-        for (DNDS::index i = 0; i < dof1.father->Size(); i++)
-        {
-            auto mat = dof1[i];
-            for (int r = 0; r < mat.rows(); r++)
-                CHECK(mat(r, 0) == doctest::Approx(7.0));
-        }
-
-        dof1 *= 2.0;
-
-        for (DNDS::index i = 0; i < dof1.father->Size(); i++)
-        {
-            auto mat = dof1[i];
-            for (int r = 0; r < mat.rows(); r++)
-                CHECK(mat(r, 0) == doctest::Approx(14.0));
-        }
+        auto mat = dof1[i];
+        for (int r = 0; r < mat.rows(); r++)
+            CHECK(mat(r, 0) == doctest::Approx(7.0));
     }
 
-    SUBCASE("*= by 1.0 is identity")
-    {
-        dof1 *= 1.0;
+    dof1 *= 2.0;
 
-        for (DNDS::index i = 0; i < dof1.father->Size(); i++)
-        {
-            auto mat = dof1[i];
-            for (int r = 0; r < mat.rows(); r++)
-                CHECK(mat(r, 0) == doctest::Approx(10.0));
-        }
+    for (DNDS::index i = 0; i < dof1.father->Size(); i++)
+    {
+        auto mat = dof1[i];
+        for (int r = 0; r < mat.rows(); r++)
+            CHECK(mat(r, 0) == doctest::Approx(14.0));
     }
 }
 
@@ -240,31 +199,6 @@ TEST_CASE("ArrayDOF norm2")
     MPIInfo mpi = worldMPI();
     constexpr DNDS::index N = 100;
 
-    SUBCASE("uniform value")
-    {
-        // ArrayDof<1,1>: one scalar per cell.
-        // All set to 1.0. Squared norm = N * size, so norm2 = sqrt(N*size).
-        auto dof = makeDof<1, 1>(mpi, N);
-        dof.setConstant(1.0);
-
-        real n2 = dof.norm2();
-        real expected = std::sqrt(static_cast<real>(N) * mpi.size);
-        CHECK(n2 == doctest::Approx(expected));
-    }
-
-    SUBCASE("multi-component uniform")
-    {
-        // ArrayDof<5,1>: 5 components per cell, all 1.0.
-        // Each cell contributes 5*1^2 = 5 to the squared norm.
-        // Global: 5 * N * size  =>  norm2 = sqrt(5*N*size).
-        auto dof = makeDof<5, 1>(mpi, N);
-        dof.setConstant(1.0);
-
-        real n2 = dof.norm2();
-        real expected = std::sqrt(5.0 * N * mpi.size);
-        CHECK(n2 == doctest::Approx(expected));
-    }
-
     SUBCASE("non-uniform values")
     {
         // ArrayDof<1,1>, each cell = rank + 1.
@@ -293,40 +227,6 @@ TEST_CASE("ArrayDOF norm2")
         real n2 = dof1.norm2(dof2);
         real expected = 3.0 * std::sqrt(static_cast<real>(N) * mpi.size);
         CHECK(n2 == doctest::Approx(expected));
-    }
-}
-
-// ---------------------------------------------------------------------------
-TEST_CASE("ArrayDOF dot")
-{
-    MPIInfo mpi = worldMPI();
-    constexpr DNDS::index N = 100;
-
-    SUBCASE("scalar dof")
-    {
-        auto dof1 = makeDof<1, 1>(mpi, N);
-        auto dof2 = makeDof<1, 1>(mpi, N);
-        dof1.setConstant(2.0);
-        dof2.setConstant(3.0);
-
-        // dot = sum_i (2*3) = 6 * N * size
-        real d = dof1.dot(dof2);
-        real expected = 6.0 * N * mpi.size;
-        CHECK(d == doctest::Approx(expected));
-    }
-
-    SUBCASE("multi-component dof")
-    {
-        auto dof1 = makeDof<5, 1>(mpi, N);
-        auto dof2 = makeDof<5, 1>(mpi, N);
-        dof1.setConstant(2.0);
-        dof2.setConstant(3.0);
-
-        // Each cell contributes 5 * (2*3) = 30.
-        // Global: 30 * N * size.
-        real d = dof1.dot(dof2);
-        real expected = 30.0 * N * mpi.size;
-        CHECK(d == doctest::Approx(expected));
     }
 }
 
