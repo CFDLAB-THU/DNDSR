@@ -2147,7 +2147,7 @@ TEST_CASE("Nonuniform chemical volume sampling agrees with independent Cartesian
     CHECK(signal[3] > 1e-6 * signal[2]); // A quadrature-integrated approximate Jacobian must fail the mean-state oracle above.
     CHECK(quadratureMagnitude > 1e-8);
     CHECK(quadratureError <= 2e-7 * quadratureMagnitude + 1e-10);
-    const auto version = matrixB->Diagonal().Version();
+    const auto centeredDiagonal = matrixB->Diagonal().Clone();
     {
         auto changed = withSource.FluxReconstruction(*reconstructionB, *wb).PhysicalField(0).Owned();
         auto write = changed.Write();
@@ -2155,10 +2155,14 @@ TEST_CASE("Nonuniform chemical volume sampling agrees with independent Cartesian
         if (coefficients.RowCount())
             coefficients(0, 4 * withSource.PolynomialReconstruction()->NRecDOF()) += 1e-8;
     }
-    CHECK_THROWS(withSource.PrepareJacobian(
-        b, auxiliaryB, inverseTau, *matrixB, controls, 0, mixture.workers,
-        C::FiniteVolume::JacobianContext{*reconstructionB, *wb}));
-    CHECK(matrixB->Diagonal().Version() == version);
+    // The centered chemical derivative depends only on the means. Perturbing
+    // a modal energy coefficient must leave every assembled entry unchanged.
+    withSource.PrepareJacobian(b, auxiliaryB, inverseTau, *matrixB, controls, 0, mixture.workers,
+                               C::FiniteVolume::JacobianContext{*reconstructionB, *wb});
+    const auto before = centeredDiagonal.Read(), after = matrixB->Diagonal().Read();
+    for (I iCell = 0; iCell < rows; ++iCell)
+        for (I j = 0; j < nv * nv; ++j)
+            CHECK(before.View()(iCell, j) == after.View()(iCell, j));
 }
 TEST_CASE("Equation P3 positivity protects actual EOS samples and preserves unlimited guesses in split and permuted layouts")
 {
