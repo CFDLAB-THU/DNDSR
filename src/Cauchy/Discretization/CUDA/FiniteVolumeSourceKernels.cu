@@ -41,9 +41,9 @@ namespace DNDS::Cauchy::CUDA
                     std::conditional_t<Mechanical, ACM::KernelPoint<Components>, PerfectGasKernelPoint<Components>> point;
                     for (int j = 0; j < Components; ++j)
                     {
-                        point.values[j] = mean ? request.means(iCell, j) : request.samples(iPoint, j);
+                        point.values[j] = (mean || request.cellInputs) ? request.means(iCell, j) : request.samples(iPoint, j);
                         for (int d = 0; d < request.dimension; ++d)
-                            point.gradients[j][d] = request.gradients[d](iPoint, j);
+                            point.gradients[j][d] = request.gradients[d](request.cellInputs ? iCell : iPoint, j);
                     }
                     if (!mean)
                         RANSReconstructionView{physics.rans.kind, Components - flow}.RepairPoint(ransMean, SpanView<real>{point.values.data() + flow, Components - flow});
@@ -80,13 +80,6 @@ namespace DNDS::Cauchy::CUDA
                             (jacobian ? request.scale : real(1)) * source[j];
                     }
             }
-        }
-        __global__ void Replicate(SourceIndices offsets, SourceInput input, SourceOutput output, int stride, int direction)
-        {
-            for (index iCell = index(blockIdx.x) * blockDim.x + threadIdx.x; iCell + 1 < offsets.RowCount(); iCell += index(gridDim.x) * blockDim.x)
-                for (index iPoint = offsets(iCell, 0); iPoint < offsets(iCell + 1, 0); ++iPoint)
-                    for (index j = 0; j < output.Width(); ++j)
-                        output(iPoint, j) = input(iCell, j * stride + direction);
         }
         __global__ void Rotation(R::ArrayView<const real, false, R::FixedRows<8>> cells,
                                  RigidFrameParameters frame, SourceInput means, SourceOutput output,
@@ -146,8 +139,12 @@ namespace DNDS::Cauchy::CUDA
         }
         else
         {
-            R::ValidateViewDevices(context.device, request.samples, request.offsets, request.weights, request.wallPoints);
-            CheckTable(request.samples, request.weights.RowCount(), request.components);
+            R::ValidateViewDevices(context.device, request.offsets, request.weights, request.wallPoints);
+            if (!request.cellInputs)
+            {
+                request.samples.ValidateDevice(context.device);
+                CheckTable(request.samples, request.weights.RowCount(), request.components);
+            }
             DNDS_check_throw_info(request.offsets.RowCount() == cells + 1 && request.wallPoints.RowCount() >= cells, "CUDA quadrature source geometry differs");
         }
         for (int d = 0; d < request.dimension; ++d)
@@ -155,7 +152,7 @@ namespace DNDS::Cauchy::CUDA
             const auto gradient = request.gradients[d];
             gradient.values.ValidateDevice(context.device);
             DNDS_check_throw_info(gradient.componentStride > 0 && gradient.direction >= 0 && gradient.direction < gradient.componentStride &&
-                                      gradient.values.kind == R::RowLayoutKind::Table && gradient.values.RowCount() == (mean ? cells : request.samples.RowCount()) &&
+                                      gradient.values.kind == R::RowLayoutKind::Table && gradient.values.RowCount() == ((mean || request.cellInputs) ? cells : request.samples.RowCount()) &&
                                       gradient.values.Width() > (request.components - 1) * gradient.componentStride + gradient.direction,
                                   "CUDA source derivative field is incomplete");
         }
@@ -171,20 +168,6 @@ namespace DNDS::Cauchy::CUDA
             Sources<6><<<Blocks(selected.RowCount()), 128, 0, stream>>>(request, selected);
         else
             Sources<7><<<Blocks(selected.RowCount()), 128, 0, stream>>>(request, selected);
-        CheckLaunch();
-    }
-    void ReplicateSourceValues(R::ExecutionContext context, SourceIndices offsets, SourceInput input, SourceOutput output, int stride, int direction)
-    {
-        DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA, "CUDA source replication requires a CUDA context");
-        R::ValidateViewDevices(context.device, offsets, input, output);
-        DNDS_check_throw_info(stride > 0 && direction >= 0 && direction < stride && offsets.RowCount() == input.RowCount() + 1 &&
-                                  input.kind == R::RowLayoutKind::Table && output.kind == R::RowLayoutKind::Table &&
-                                  (!output.Width() || input.Width() > (output.Width() - 1) * stride + direction),
-                              "CUDA source replication shape/direction differs");
-        R::CheckKernelArgumentBudget<SourceIndices, SourceInput, SourceOutput, int, int>();
-        if (!input.RowCount())
-            return;
-        Replicate<<<Blocks(input.RowCount()), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(offsets, input, output, stride, direction);
         CheckLaunch();
     }
     void AddRotationSource(R::ExecutionContext context, R::ArrayView<const real, false, R::FixedRows<8>> cells,

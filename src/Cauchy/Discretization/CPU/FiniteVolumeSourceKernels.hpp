@@ -34,6 +34,7 @@ namespace DNDS::Cauchy::CPU
         index cells = 0, components = 0, flowFirst = -1, speciesFirst = -1, ransFirst = -1;
         int dimension = 0, independentSpecies = 0;
         bool chemical = false, fullBlock = false;
+        bool cellInputs = false; ///< Direct FV takes its mean and physical gradient from the parent cell.
         real scale = 1;
         bool rowMajorBlocks = false;
     };
@@ -48,14 +49,12 @@ namespace DNDS::Cauchy::CPU
         SourceWorkerScratch(PointEvaluator value, index components)
             : evaluator(std::move(value)), point(components) {}
     };
-    NumericalStatus AddMeanSourceJacobian(const SourceKernelRequest &, const EquationSystem &, SpanView<SourceWorkerScratch>) noexcept;
+    NumericalStatus AssembleCenterSourceJacobian(const SourceKernelRequest &, const EquationSystem &, SpanView<SourceWorkerScratch>) noexcept;
     NumericalStatus AddQuadratureSourceJacobian(const SourceKernelRequest &, const EquationSystem &, SpanView<SourceWorkerScratch>) noexcept;
-    NumericalStatus AddVolumeSources(const SourceKernelRequest &, const EquationSystem &, SpanView<SourceWorkerScratch>) noexcept;
-    NumericalStatus AddMeanSourceJacobian(const SourceKernelRequest &, const EquationSystem &, PointEvaluator &) noexcept;
+    NumericalStatus EvaluateVolumeSource(const SourceKernelRequest &, const EquationSystem &, SpanView<SourceWorkerScratch>) noexcept;
+    NumericalStatus AssembleCenterSourceJacobian(const SourceKernelRequest &, const EquationSystem &, PointEvaluator &) noexcept;
     NumericalStatus AddQuadratureSourceJacobian(const SourceKernelRequest &, const EquationSystem &, PointEvaluator &) noexcept;
-    NumericalStatus AddVolumeSources(const SourceKernelRequest &, const EquationSystem &, PointEvaluator &) noexcept;
-    void ReplicateSourceValues(Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> offsets,
-                               RHSScalarView input, RHSOutputView output, int stride = 1, int direction = 0);
+    NumericalStatus EvaluateVolumeSource(const SourceKernelRequest &, const EquationSystem &, PointEvaluator &) noexcept;
     void AddEquationRotationSource(CFV::FiniteVolumeHostView metric, const RigidFrame &frame,
                                    EquationBlockReadView flow, EquationBlockArrayView<real> output,
                                    std::optional<EquationBlockArrayView<real>> lowOutput);

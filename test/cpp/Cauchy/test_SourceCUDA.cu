@@ -33,7 +33,7 @@ TEST_CASE("CUDA RANS quadrature sources and destruction diagonals match generic 
     const auto device = R::Device::CUDA(0);
     const auto context = R::ExecutionContext::CUDA(0);
     for (const std::string model : {"SA", "KOmegaWilcox", "KOmegaSST"})
-        for (int operation = 0; operation < 4; ++operation)
+        for (int operation = 0; operation < 5; ++operation)
         {
             INFO("model=" << model << ", source operation=" << operation);
             C::EquationSettings settings;
@@ -43,7 +43,7 @@ TEST_CASE("CUDA RANS quadrature sources and destruction diagonals match generic 
             settings.rans.viscosityReference = .01;
             const auto equation = C::EquationSystem::Resolve(settings);
             const int width = 5 + equation.RANS().ComponentNumber();
-            const bool mean = operation == 1, jacobian = operation != 0, fullBlock = operation == 3;
+            const bool mean = operation == 1, jacobian = operation > 0 && operation < 4, fullBlock = operation == 3;
             const int outputWidth = fullBlock ? width * width : width;
             const auto parameters = C::PerfectGasSpatialParameters::FromEquation(equation, 2);
             auto parametersArray = Table<C::PerfectGasSpatialParameters>(1, 1, [&](I, I)
@@ -71,12 +71,14 @@ TEST_CASE("CUDA RANS quadrature sources and destruction diagonals match generic 
                 return j < 5 ? flow[j] : j == 5 ? .02 + .001 * iRow
                                                 : .3 + .01 * iRow;
             };
-            auto means = Table<real>(2, width, state), samples = Table<real>(5, width, state);
+            const bool direct = operation == 4;
+            auto means = Table<real>(2, width, state), samples = Table<real>(5, width, [&](I q, I j)
+                                                                             { return state(direct ? (q < 2 ? 0 : 1) : q, j); });
             const I gradientRows = mean ? 2 : 5;
             std::array<R::Array<real>, 3> gradients;
             for (int d = 0; d < 3; ++d)
-                gradients[d] = Table<real>(gradientRows, width, [d](I i, I j)
-                                           { return .001 * (i + 1) * (j + 1) * (d + 1); });
+                gradients[d] = Table<real>(gradientRows, width, [d, direct](I i, I j)
+                                           { return .001 * ((direct ? (i < 2 ? 0 : 1) : i) + 1) * (j + 1) * (d + 1); });
             R::Array<real> wallPoints(R::RowLayout::Ragged({2, 3, 1}));
             {
                 auto wall = wallPoints.Write();
@@ -122,9 +124,9 @@ TEST_CASE("CUDA RANS quadrature sources and destruction diagonals match generic 
                 request.fullBlock = fullBlock;
                 request.scale = .7;
                 auto worker = equation.MakePointEvaluator();
-                const auto status = mean       ? C::CPU::AddMeanSourceJacobian(request, equation, worker)
+                const auto status = mean       ? C::CPU::AssembleCenterSourceJacobian(request, equation, worker)
                                     : jacobian ? C::CPU::AddQuadratureSourceJacobian(request, equation, worker)
-                                               : C::CPU::AddVolumeSources(request, equation, worker);
+                                               : C::CPU::EvaluateVolumeSource(request, equation, worker);
                 REQUIRE(bool(status));
                 std::vector<real> serial(size_t(2 * outputWidth));
                 for (I iCell = 0; iCell < 2; ++iCell)
@@ -137,9 +139,9 @@ TEST_CASE("CUDA RANS quadrature sources and destruction diagonals match generic 
                 for (int iWorker = 0; iWorker < 3; ++iWorker)
                     workers.emplace_back(equation.MakePointEvaluator(), width);
                 const DNDS::SpanView<C::CPU::SourceWorkerScratch> slots{workers.data(), I(workers.size())};
-                const auto threaded = mean       ? C::CPU::AddMeanSourceJacobian(request, equation, slots)
+                const auto threaded = mean       ? C::CPU::AssembleCenterSourceJacobian(request, equation, slots)
                                       : jacobian ? C::CPU::AddQuadratureSourceJacobian(request, equation, slots)
-                                                 : C::CPU::AddVolumeSources(request, equation, slots);
+                                                 : C::CPU::EvaluateVolumeSource(request, equation, slots);
                 REQUIRE(bool(threaded));
                 for (I iCell = 0; iCell < 2; ++iCell)
                     for (I j = 0; j < outputWidth; ++j)
@@ -149,7 +151,10 @@ TEST_CASE("CUDA RANS quadrature sources and destruction diagonals match generic 
             auto offDevice = offsets.To(device);
             std::array<R::Array<real>, 3> derivativeDevice;
             for (int d = 0; d < 3; ++d)
-                derivativeDevice[d] = gradients[d].To(device);
+                derivativeDevice[d] = direct ? Table<real>(2, width, [d](I cell, I j)
+                                                           { return .001 * (cell + 1) * (j + 1) * (d + 1); })
+                                                   .To(device)
+                                             : gradients[d].To(device);
             R::Array<DNDS::NumericalStatus> status(R::RowLayout::Dense(2, 1), device);
             {
                 const auto params = parametersArray.Read(context);
@@ -161,7 +166,9 @@ TEST_CASE("CUDA RANS quadrature sources and destruction diagonals match generic 
                 K::SourceRequest request;
                 request.parameters = params.View<R::FixedRows<1>>();
                 request.means = u.View<R::TableRows>();
-                request.samples = q.View<R::TableRows>();
+                request.cellInputs = direct;
+                if (!direct)
+                    request.samples = q.View<R::TableRows>();
                 request.gradients = {{{g0.View<R::TableRows>(), 1, 0}, {g1.View<R::TableRows>(), 1, 0}, {g2.View<R::TableRows>(), 1, 0}}};
                 request.offsets = off.View<R::FixedRows<1>>();
                 request.weights = w.View<R::FixedRows<1>>();
@@ -193,41 +200,33 @@ TEST_CASE("CUDA RANS quadrature sources and destruction diagonals match generic 
         }
 }
 
-TEST_CASE("CUDA source replication and moving-axis source preserve scalar components")
+TEST_CASE("CUDA moving-axis source preserves scalar components")
 {
     const auto device = R::Device::CUDA(0), host = R::Device::Host();
     const auto context = R::ExecutionContext::CUDA(0);
-    auto input = Table<real>(2, 14, [](I i, I j)
-                             { return 2 + .1 * i + .01 * j; });
     auto mean = Table<real>(2, 7, [](I i, I j)
                             { return 1 + .2 * i + .1 * j; });
     auto geometry = Table<real>(2, 8, [](I i, I j)
                                 { return j == 0 ? 2 + i : 0; });
-    auto offsets = Table<I>(3, 1, [](I i, I)
-                            { return i == 0 ? 0 : i == 1 ? 2
-                                                         : 5; })
-                       .To(device);
     auto selected = Table<I>(2, 1, [](I i, I)
                              { return 1 - i; })
                         .To(device);
-    auto di = input.To(device), dm = mean.To(device), dg = geometry.To(device);
+    auto dm = mean.To(device), dg = geometry.To(device);
     auto output = Table<real>(2, 7, [](I, I)
                               { return .5; })
                       .To(device);
-    R::Array<real> replicated(R::RowLayout::Dense(5, 7), device);
     C::RigidFrame frame;
     frame.moving = true;
     frame.angularVelocity = {.2, -.3, .5};
     {
-        const auto i = di.Read(context), m = dm.Read(context), g = dg.Read(context);
-        const auto off = offsets.Read(context), rows = selected.Read(context);
-        auto q = replicated.Write(context), result = output.Write(context);
-        K::ReplicateSourceValues(context, off.View<R::FixedRows<1>>(), i.View<R::TableRows>(), q.View<R::TableRows>(), 2, 1);
+        const auto m = dm.Read(context), g = dg.Read(context);
+        const auto rows = selected.Read(context);
+        auto result = output.Write(context);
         K::AddRotationSource(context, g.View<R::FixedRows<8>, false>(), frame.KernelParameters(), m.View<R::TableRows>(), result.View<R::TableRows>(), {}, false, rows.View<R::FixedRows<1>>());
         REQUIRE(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)) == cudaSuccess);
     }
-    const auto result = output.To(host), points = replicated.To(host);
-    const auto r = result.Read(), p = points.Read(), m = mean.Read(), i = input.Read(), g = geometry.Read();
+    const auto result = output.To(host);
+    const auto r = result.Read(), m = mean.Read(), g = geometry.Read();
     for (I iCell = 0; iCell < 2; ++iCell)
     {
         C::FlowState state;
@@ -237,7 +236,4 @@ TEST_CASE("CUDA source replication and moving-axis source preserve scalar compon
         for (int j = 0; j < 7; ++j)
             CHECK(r.View()(iCell, j) == doctest::Approx(.5 + (j < 5 ? source[j] * g.View()(iCell, 0) : 0)));
     }
-    for (I iPoint = 0; iPoint < 5; ++iPoint)
-        for (int j = 0; j < 7; ++j)
-            CHECK(p.View()(iPoint, j) == i.View()(iPoint < 2 ? 0 : 1, 2 * j + 1));
 }

@@ -7,8 +7,8 @@
 namespace DNDS::Cauchy::CPU
 {
     using namespace EquationFVDetail;
-    static NumericalStatus AddMeanSourceJacobianRows(const SourceKernelRequest &request, const EquationSystem &equation, PointEvaluator &evaluator,
-                                                     PointScratch &point, index first, index last) noexcept
+    static NumericalStatus AssembleCenterSourceJacobianRows(const SourceKernelRequest &request, const EquationSystem &equation, PointEvaluator &evaluator,
+                                                            PointScratch &point, index first, index last) noexcept
     {
         // Direction descriptors have exactly three entries. Validate once,
         // before both the point scratch fill and any output mutation.
@@ -170,8 +170,8 @@ namespace DNDS::Cauchy::CPU
         }
         return {};
     }
-    static NumericalStatus AddVolumeSourcesRows(const SourceKernelRequest &request, const EquationSystem &equation, PointEvaluator &evaluator,
-                                                PointScratch &point, index first, index last) noexcept
+    static NumericalStatus EvaluateVolumeSourceRows(const SourceKernelRequest &request, const EquationSystem &equation, PointEvaluator &evaluator,
+                                                    PointScratch &point, index first, index last) noexcept
     {
         const int dimension = request.dimension;
         if (dimension < 1 || dimension > 3)
@@ -187,14 +187,15 @@ namespace DNDS::Cauchy::CPU
                     // Resolve each borrowed row before traversing its
                     // components. The span retains physical element stride;
                     // no packing or AoS storage assumption is introduced.
-                    const auto values = request.samples[location.physicalField][iPoint];
+                    const index inputRow = request.cellInputs ? iCell : iPoint;
+                    const auto values = request.samples[location.physicalField][inputRow];
                     for (index j = 0; j < location.componentNumber; ++j)
                         point.values[request.logicalFirst[iBlock] + j] = values[location.firstComponent + j];
                     if (request.ransFirst >= 0)
                         for (int d = 0; d < dimension; ++d)
                         {
                             const auto &gradient = request.gradients[location.physicalField][d];
-                            const auto values = gradient.values[iPoint];
+                            const auto values = gradient.values[inputRow];
                             for (index j = 0; j < location.componentNumber; ++j)
                                 point.gradient(request.logicalFirst[iBlock] + j, d) = values[(location.firstComponent + j) * gradient.componentStride + gradient.direction];
                         }
@@ -256,14 +257,14 @@ namespace DNDS::Cauchy::CPU
             return {};
         }
     }
-    NumericalStatus AddMeanSourceJacobian(const SourceKernelRequest &request, const EquationSystem &equation, PointEvaluator &evaluator) noexcept
+    NumericalStatus AssembleCenterSourceJacobian(const SourceKernelRequest &request, const EquationSystem &equation, PointEvaluator &evaluator) noexcept
     {
         PointScratch point(request.components);
-        return AddMeanSourceJacobianRows(request, equation, evaluator, point, 0, request.cells);
+        return AssembleCenterSourceJacobianRows(request, equation, evaluator, point, 0, request.cells);
     }
-    NumericalStatus AddMeanSourceJacobian(const SourceKernelRequest &request, const EquationSystem &equation, SpanView<SourceWorkerScratch> workers) noexcept
+    NumericalStatus AssembleCenterSourceJacobian(const SourceKernelRequest &request, const EquationSystem &equation, SpanView<SourceWorkerScratch> workers) noexcept
     {
-        return SourceWorkers(request, equation, workers, AddMeanSourceJacobianRows);
+        return SourceWorkers(request, equation, workers, AssembleCenterSourceJacobianRows);
     }
     NumericalStatus AddQuadratureSourceJacobian(const SourceKernelRequest &request, const EquationSystem &equation, PointEvaluator &evaluator) noexcept
     {
@@ -274,23 +275,14 @@ namespace DNDS::Cauchy::CPU
     {
         return SourceWorkers(request, equation, workers, AddQuadratureSourceJacobianRows);
     }
-    NumericalStatus AddVolumeSources(const SourceKernelRequest &request, const EquationSystem &equation, PointEvaluator &evaluator) noexcept
+    NumericalStatus EvaluateVolumeSource(const SourceKernelRequest &request, const EquationSystem &equation, PointEvaluator &evaluator) noexcept
     {
         PointScratch point(request.components);
-        return AddVolumeSourcesRows(request, equation, evaluator, point, 0, request.cells);
+        return EvaluateVolumeSourceRows(request, equation, evaluator, point, 0, request.cells);
     }
-    NumericalStatus AddVolumeSources(const SourceKernelRequest &request, const EquationSystem &equation, SpanView<SourceWorkerScratch> workers) noexcept
+    NumericalStatus EvaluateVolumeSource(const SourceKernelRequest &request, const EquationSystem &equation, SpanView<SourceWorkerScratch> workers) noexcept
     {
-        return SourceWorkers(request, equation, workers, AddVolumeSourcesRows);
-    }
-    void ReplicateSourceValues(Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> offsets,
-                               RHSScalarView input, RHSOutputView output, int stride, int direction)
-    {
-        OMP::ForRows(0, offsets.RowCount() - 1, [&](index iCell)
-                     {
-            for (index iPoint = offsets(iCell, 0); iPoint < offsets(iCell + 1, 0); ++iPoint)
-                for (index j = 0; j < output.Width(); ++j)
-                    output(iPoint, j) = input(iCell, j * stride + direction); });
+        return SourceWorkers(request, equation, workers, EvaluateVolumeSourceRows);
     }
     void AddEquationRotationSource(CFV::FiniteVolumeHostView metric, const RigidFrame &frame,
                                    EquationBlockReadView flow, EquationBlockArrayView<real> output,

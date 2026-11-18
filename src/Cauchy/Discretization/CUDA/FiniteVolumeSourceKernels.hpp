@@ -53,17 +53,12 @@ namespace DNDS::Cauchy::CUDA
         SourceStatus status;
         int components = 0, dimension = 0;
         SourceEvaluation evaluation = SourceEvaluation::QuadratureResidual;
-        bool fullBlock = false;
+        bool fullBlock = false, cellInputs = false;
         real scale = 1;
     };
     /// One independent thread per selected owned cell, quadrature in CPU order.
     /// The numerical source is committed only after all its points succeed.
     void AddRANSSources(Runtime::ExecutionContext context, SourceRequest request, SourceIndices selected);
-
-    /// Repeat a mean or selected directional mean derivative at all cell
-    /// quadrature points. Output must not alias input; no temporary allocation.
-    void ReplicateSourceValues(Runtime::ExecutionContext context, SourceIndices offsets,
-                               SourceInput input, SourceOutput output, int componentStride = 1, int direction = 0);
 
     /// Add the absolute-velocity component-axis rotation source to flow5 only.
     /// Optional low-order output receives the same source. RANS components are

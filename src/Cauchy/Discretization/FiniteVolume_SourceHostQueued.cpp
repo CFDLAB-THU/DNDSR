@@ -27,8 +27,8 @@ namespace DNDS::Cauchy
                 for (const auto &values : sourceValues)
                     DNDS_check_throw_info(!target.Storage().Overlaps(values.Storage()), "source residual aliases sampling scratch");
                 if (ransFirst >= 0)
-                    for (index iSource = 0; iSource < index(sourceGradients.size()); ++iSource)
-                        if (sourceValuesAreMeans)
+                    for (index iSource = 0; iSource < state.PhysicalFieldNumber(); ++iSource)
+                        if (!sourceSampling)
                             DNDS_check_throw_info(!target.Storage().Overlaps(directGradients[iSource].Owned().Storage()),
                                                   "source residual aliases direct gradients");
                         else
@@ -120,7 +120,7 @@ namespace DNDS::Cauchy
         pin->speciesFirst = speciesFirst;
         pin->ransFirst = ransFirst;
         pin->chemical = chemical;
-        pin->interleavedGradients = sourceValuesAreMeans;
+        pin->interleavedGradients = !sourceSampling;
         if (ransFirst >= 0)
         {
             pin->ransMean = state.LocateBlock("rans");
@@ -138,12 +138,15 @@ namespace DNDS::Cauchy
         };
         for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
             pin->meanSlots.push_back(read(state.PhysicalField(iField).Owned()));
-        for (const auto &array : sourceValues)
-            pin->sampleSlots.push_back(read(array));
-        for (index iField = 0; iField < index(sourceGradients.size()); ++iField)
+        if (sourceSampling)
+            for (const auto &array : sourceValues)
+                pin->sampleSlots.push_back(read(array));
+        else
+            pin->sampleSlots = pin->meanSlots;
+        for (index iField = 0; ransFirst >= 0 && iField < state.PhysicalFieldNumber(); ++iField)
         {
             std::array<index, 3> slots{-1, -1, -1};
-            if (sourceValuesAreMeans)
+            if (!sourceSampling)
             {
                 const index slot = read(directGradients[iField].Owned());
                 for (int d = 0; d < owner->metrics.Dimension(); ++d)
@@ -190,6 +193,7 @@ namespace DNDS::Cauchy
             request.ransFirst = pin->ransFirst;
             request.independentSpecies = pin->owner->equation.HasMixture() ? pin->owner->equation.Mixture().SpeciesNumber() - 1 : 0;
             request.chemical = pin->chemical;
+            request.cellInputs = pin->interleavedGradients;
             request.locations = pin->locations.HostView();
             request.logicalFirst = pin->logicalFirst.HostView();
             request.samples = {samples.data(), index(samples.size())};
@@ -207,12 +211,12 @@ namespace DNDS::Cauchy
                                    {{}, location.firstComponent, location.componentNumber}};
             }
             if (pin->evaluator)
-                RequireNumericalSuccess(CPU::AddVolumeSources(request, pin->owner->equation, *pin->evaluator), "queued volume source");
+                RequireNumericalSuccess(CPU::EvaluateVolumeSource(request, pin->owner->equation, *pin->evaluator), "queued volume source");
             else
             {
                 auto workers = MakeCPUPointWorkers<CPU::SourceWorkerScratch>(pin->owner->equation, pin->workers,
                     pin->propertyRequest, pin->components);
-                RequireNumericalSuccess(CPU::AddVolumeSources(request, pin->owner->equation,
+                RequireNumericalSuccess(CPU::EvaluateVolumeSource(request, pin->owner->equation,
                     SpanView<CPU::SourceWorkerScratch>{workers.data(), index(workers.size())}), "queued volume source");
             } }, std::move(inputs), std::move(outputs), std::make_tuple(R::ReadAs<R::FixedRows<1>>(sourceOffsets), R::ReadAs<R::FixedRows<1>>(sourceWeights), R::ReadAs<R::RowLayout>(ransFirst >= 0 ? owner->ransCellLength : owner->deviceEmpty), R::ReadAs<R::RowLayout>(pin->walls ? owner->wallDistance->CellValues() : owner->deviceEmpty), R::ReadAs<R::RowLayout>(pin->walls ? owner->wallDistance->CellMeans() : owner->deviceEmpty)));
         EndQueuedPhase(engine, stream, timing);

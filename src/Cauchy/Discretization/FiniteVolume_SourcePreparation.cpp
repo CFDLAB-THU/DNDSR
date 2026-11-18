@@ -25,12 +25,12 @@ namespace DNDS::Cauchy
             // reserving another bounded-pool worker and risking self-starvation.
             if (equation.HasMixture() || OMP::DistributedThreads() == 1)
                 return quadrature ? CPU::AddQuadratureSourceJacobian(request, equation, evaluator)
-                                  : CPU::AddMeanSourceJacobian(request, equation, evaluator);
+                                  : CPU::AssembleCenterSourceJacobian(request, equation, evaluator);
             auto workers = MakeCPUPointWorkers<CPU::SourceWorkerScratch>(equation, std::nullopt,
                                                                          {request.ransFirst >= 0, false, bool(request.linearization), request.chemical, request.chemical}, request.components);
             const SpanView<CPU::SourceWorkerScratch> slots{workers.data(), index(workers.size())};
             return quadrature ? CPU::AddQuadratureSourceJacobian(request, equation, slots)
-                              : CPU::AddMeanSourceJacobian(request, equation, slots);
+                              : CPU::AssembleCenterSourceJacobian(request, equation, slots);
         }
     }
 
@@ -45,47 +45,19 @@ namespace DNDS::Cauchy
         // Direct-FV sources consume physical gradients without a basis.
         if (ransFirst >= 0 && owner->settings.numerics.reconstruction != "variational")
             RefreshDirectGradients(state, false, time);
+        if (!sourceSampling)
+            return;
         for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
         {
-            if (ransFirst >= 0 && owner->settings.numerics.reconstruction == "variational")
+            if (ransFirst < 0)
+                sourceSampling->Evaluate(state.PhysicalField(iField), FluxCoefficients().PhysicalField(iField), sourceValues[iField]);
+            else
             {
                 CFV::PolynomialSampleOutputs outputs;
                 outputs.values = &sourceValues[iField];
                 for (int d = 0; d < owner->metrics.Dimension(); ++d)
                     outputs.gradients[d] = &sourceGradients[iField][d];
                 sourceSampling->EvaluateValueGradient(state.PhysicalField(iField), FluxCoefficients().PhysicalField(iField), outputs);
-                continue;
-            }
-            if (owner->settings.numerics.reconstruction == "variational")
-                sourceSampling->Evaluate(state.PhysicalField(iField), FluxCoefficients().PhysicalField(iField), sourceValues[iField]);
-            else
-            {
-                // Euler's direct FV source uses the cell mean at its
-                // center, together with the direct gradient. In a curved
-                // or distorted cell the reference center need not be the
-                // volume barycenter: do not add a reconstructed offset.
-                const auto read = state.PhysicalField(iField).Owned().Read();
-                auto write = sourceValues[iField].Write();
-                const auto means = read.View<R::UniformTableRows>();
-                const auto values = write.View<R::UniformTableRows>();
-                const auto offsets = sourceOffsets.Read();
-                CPU::ReplicateSourceValues(offsets.View<R::FixedRows<1>>(), means, values);
-            }
-            if (ransFirst >= 0)
-            {
-                for (int d = 0; d < owner->metrics.Dimension(); ++d)
-                    if (owner->settings.numerics.reconstruction == "variational")
-                        sourceSampling->Evaluate(state.PhysicalField(iField), FluxCoefficients().PhysicalField(iField), sourceGradients[iField][d], 1 + d);
-                    else if (!sourceValuesAreMeans)
-                    {
-                        const auto read = directGradients[iField].Owned().Read();
-                        auto write = sourceGradients[iField][d].Write();
-                        const auto input = read.View<R::UniformTableRows>();
-                        const auto output = write.View<R::UniformTableRows>();
-                        const int dim = owner->metrics.Dimension();
-                        const auto offsets = sourceOffsets.Read();
-                        CPU::ReplicateSourceValues(offsets.View<R::FixedRows<1>>(), input, output, dim, d);
-                    }
             }
         }
     }
@@ -380,11 +352,11 @@ namespace DNDS::Cauchy
         if (!result)
             return;
         std::vector<R::Array<real>::ReadLease> sources;
-        for (const auto &field : sourceValues)
-            sources.push_back(field.Read());
-        std::vector<std::array<std::optional<R::Array<real>::ReadLease>, 3>> derivatives(sourceGradients.size());
-        for (index iField = 0; iField < index(sourceGradients.size()); ++iField)
-            if (sourceValuesAreMeans)
+        for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
+            sources.push_back((sourceSampling ? sourceValues[iField] : state.PhysicalField(iField).Owned()).Read());
+        std::vector<std::array<std::optional<R::Array<real>::ReadLease>, 3>> derivatives(ransFirst >= 0 ? sources.size() : 0);
+        for (index iField = 0; iField < index(derivatives.size()); ++iField)
+            if (!sourceSampling)
                 derivatives[iField][0].emplace(directGradients[iField].Owned().Read());
             else
                 for (int d = 0; d < owner->metrics.Dimension(); ++d)
@@ -398,7 +370,7 @@ namespace DNDS::Cauchy
             samples.push_back(read.View<R::UniformTableRows>());
         for (index iField = 0; iField < index(derivatives.size()); ++iField)
             for (int d = 0; d < owner->metrics.Dimension(); ++d)
-                gradients[iField][d] = sourceValuesAreMeans
+                gradients[iField][d] = !sourceSampling
                                            ? SourceGradientView{derivatives[iField][0]->View<R::UniformTableRows>(), owner->metrics.Dimension(), d}
                                            : SourceGradientView{derivatives[iField][d]->View<R::UniformTableRows>(), 1, 0};
         std::optional<WallDistanceRead> wallRead;
@@ -432,6 +404,7 @@ namespace DNDS::Cauchy
         request.speciesFirst = speciesFirst;
         request.ransFirst = ransFirst;
         request.independentSpecies = independent;
+        request.cellInputs = !sourceSampling;
         request.chemical = chemical;
         request.walls = walls;
         request.lengths = lengths;
@@ -446,6 +419,6 @@ namespace DNDS::Cauchy
         request.samples = sampleMetadata.HostView();
         request.speciesOutput = speciesOutput;
         request.ransOutput = ransOutput;
-        RequireNumericalSuccess(CPU::AddVolumeSources(request, owner->equation, evaluator), "volume source");
+        RequireNumericalSuccess(CPU::EvaluateVolumeSource(request, owner->equation, evaluator), "volume source");
     }
 }

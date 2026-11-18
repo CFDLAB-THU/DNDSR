@@ -35,7 +35,6 @@ namespace DNDS::Cauchy::Detail
         Runtime::Array<index> offsets{Runtime::RowLayout::Dense(0, 1)};
         Runtime::Array<real> weights{Runtime::RowLayout::Dense(0, 1)};
         std::optional<CFV::PolynomialSamplingPlan> sampling, jacobianSampling;
-        bool valuesAreMeans = false;
     };
 
     /// One immutable hot-path publication per spatial plan and placement.

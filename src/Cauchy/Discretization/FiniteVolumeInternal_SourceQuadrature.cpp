@@ -60,11 +60,8 @@ namespace DNDS::Cauchy
                         Geom::Elem::CellJacobianDet(view.Dimension(), coords, shape) * quadrature.GetWeight(iQ);
                 } });
         }
-        if (reconstruction)
+        if (settings.numerics.reconstruction == "variational")
             result->sampling = CFV::PolynomialSamplingPlan(*reconstruction, cells, points, equation.HasRANS()).WithDerivativeOrder(equation.HasRANS() ? 1 : 0).Named("Cauchy/quadrature/volume");
-        result->valuesAreMeans = settings.numerics.reconstruction != "variational" && count == metrics.NumCell();
-        for (index iCell = 0; result->valuesAreMeans && iCell < metrics.NumCell(); ++iCell)
-            result->valuesAreMeans = offsets[iCell] == iCell && offsets[iCell + 1] == iCell + 1;
         if (equation.HasRANS() && reconstruction)
         {
             const index owned = metrics.NumCell();

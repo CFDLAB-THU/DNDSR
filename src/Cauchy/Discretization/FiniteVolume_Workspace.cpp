@@ -88,10 +88,9 @@ namespace DNDS::Cauchy
         sourceWeights = prepared.weights;
         sourceSampling = prepared.sampling;
         sourceJacobianSampling = prepared.jacobianSampling;
-        sourceValuesAreMeans = prepared.valuesAreMeans;
         const index count = sourceWeights.RowCount();
         const auto device = owner->metrics.Device();
-        for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
+        for (index iField = 0; sourceSampling && iField < state.PhysicalFieldNumber(); ++iField)
         {
             // Keep source sampling scratch independent of any particular
             // mean allocation so serialized stage states can reuse it.
@@ -103,12 +102,11 @@ namespace DNDS::Cauchy
                 sourceGradients.emplace_back();
                 // One-point direct FV can read its ready physical gradient
                 // field directly; polynomial/multi-point paths own samples.
-                if (!sourceValuesAreMeans)
-                    for (int d = 0; d < owner->metrics.Dimension(); ++d)
-                        sourceGradients.back()[d] = R::Array<real>(sourceValues.back().Layout(), device);
+                for (int d = 0; d < owner->metrics.Dimension(); ++d)
+                    sourceGradients.back()[d] = R::Array<real>(sourceValues.back().Layout(), device);
             }
         }
-        if (owner->equation.HasRANS())
+        if (sourceJacobianSampling && owner->equation.HasRANS())
         {
             const index owned = owner->metrics.NumCell();
             for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)

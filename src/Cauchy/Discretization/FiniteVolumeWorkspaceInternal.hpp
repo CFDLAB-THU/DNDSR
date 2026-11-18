@@ -355,7 +355,6 @@ namespace DNDS::Cauchy
         R::Array<real> sourceWeights;
         std::optional<CFV::PolynomialSamplingPlan> sourceSampling;
         std::vector<R::Array<real>> sourceValues;
-        bool sourceValuesAreMeans = false;
         std::vector<std::array<R::Array<real>, 3>> sourceGradients;
         // The default approximate source Jacobian uses cell means plus
         // gradients at one cell center. The opt-in rhsQuadrature mode reuses
