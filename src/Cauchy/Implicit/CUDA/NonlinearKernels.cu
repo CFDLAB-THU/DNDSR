@@ -15,12 +15,12 @@ namespace DNDS::Cauchy::CUDA
                 value = D::Merge{}(value, input(i, 0));
             D::PublishBlock(value, output);
         }
-        template <PhysicalAccumulationKind Accumulation>
+        template <PhysicalAccumulationKind Accumulation, int Width>
         __global__ void Defect(NonlinearCells cells, LinearReadRows mean, LinearReadRows residual, LinearReadRows constant,
                                LinearWriteRows output, NonlinearSelection selection, real inverseDt, real rhsScale, int order, bool measure, NonlinearSummaryOutput scratch)
         {
             NonlinearSummary local;
-            const index n = mean.Width();
+            const index n = Width ? Width : mean.Width();
             for (index iCell = index(blockIdx.x) * blockDim.x + threadIdx.x; iCell < mean.RowCount(); iCell += index(gridDim.x) * blockDim.x)
             {
                 const real volume = cells(iCell, 0);
@@ -113,12 +113,12 @@ namespace DNDS::Cauchy::CUDA
             }
             D::PublishBlock(local, scratch);
         }
-        template <StageAssembly Op, PhysicalAccumulationKind Accumulation>
+        template <StageAssembly Op, PhysicalAccumulationKind Accumulation, int Width>
         __global__ void Equation(NonlinearCells cells, LinearReadRows mean, LinearReadRows residual,
                                  LinearWriteRows output, LinearWriteRows rate, real inverseDt, real rhsScale)
         {
             for (index iCell = index(blockIdx.x) * blockDim.x + threadIdx.x; iCell < mean.RowCount(); iCell += index(gridDim.x) * blockDim.x)
-                for (index j = 0; j < mean.Width(); ++j)
+                for (index j = 0; j < (Width ? Width : mean.Width()); ++j)
                 {
                     const real volume = cells(iCell, 0);
                     output(iCell, j) = Accumulation == PhysicalAccumulationKind::ConstantDensityVelocityPressure && j == 3 ? -rhsScale * residual(iCell, j) / volume : inverseDt * mean(iCell, j) - rhsScale * residual(iCell, j) / volume;
@@ -154,12 +154,12 @@ namespace DNDS::Cauchy::CUDA
                               "invalid CUDA defect coefficients or alias");
         R::CheckKernelArgumentBudget<NonlinearCells, LinearReadRows, LinearReadRows, LinearReadRows, LinearWriteRows,
                                      NonlinearSelection, real, real, int, bool, NonlinearSummaryOutput>();
-        const auto launch = [&](auto tag)
+        const auto launch = [&](auto tag, auto width)
         {
-            Defect<decltype(tag)::value><<<unsigned(scratch.RowCount()), D::Threads, 0, R::CUDAStream(context)>>>(
+            Defect<decltype(tag)::value, decltype(width)::value><<<unsigned(scratch.RowCount()), D::Threads, 0, R::CUDAStream(context)>>>(
                 cells, mean, residual, constant, output, selection, inverseDt, rhsScale, normOrder, measureNorm, scratch);
         };
-        DispatchStageAccumulation(accumulation, launch);
+        DispatchStageShape(accumulation, mean.Width(), launch);
         D::Finish(context, scratch, result);
     }
     void PressureGaugeSum(R::ExecutionContext context, NonlinearCells cells, LinearReadRows candidate,
@@ -241,11 +241,11 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<NonlinearCells, LinearReadRows, LinearReadRows, LinearWriteRows, LinearWriteRows, real, real>();
         if (!mean.RowCount())
             return;
-        DispatchStageAccumulation(accumulation, [&](auto kind)
-                                  {
+        DispatchStageShape(accumulation, mean.Width(), [&](auto kind, auto width)
+                           {
             const auto launch = [&](auto operation)
             {
-                Equation<decltype(operation)::value, decltype(kind)::value>
+                Equation<decltype(operation)::value, decltype(kind)::value, decltype(width)::value>
                     <<<unsigned(NonlinearScratchRows(mean.RowCount())), D::Threads, 0, R::CUDAStream(context)>>>(
                         cells, mean, residual, output, rate, inverseDt, rhsScale);
             };

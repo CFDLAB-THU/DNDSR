@@ -36,10 +36,10 @@ namespace DNDS::Cauchy::CPU
     {
         const auto selected = [&](index j)
         { return active.empty() || active[j]; };
-        return DispatchStageAccumulation(accumulation, [&](auto kind)
-                                         { return DispatchCPUEquationLayouts([&](auto u, auto r, auto b, auto y)
-                                                                             { return AssembleDefectRows<decltype(kind)::value>(u, r, b, y, metric, mean.ComponentNumber(),
-                                                                                                                                inverseDt, rhsScale, selected, normOrder, measureNorm, norm, partials); }, mean, residual, constant, output); });
+        return DispatchStageShape(accumulation, mean.ComponentNumber(), [&](auto kind, auto width)
+                                  { return DispatchCPUEquationLayouts([&](auto u, auto r, auto b, auto y)
+                                                                      { return AssembleDefectRows<decltype(kind)::value, decltype(width)::value>(u, r, b, y, metric, mean.ComponentNumber(),
+                                                                                                                                                 inverseDt, rhsScale, selected, normOrder, measureNorm, norm, partials); }, mean, residual, constant, output); });
     }
 
     // Keep these helpers at namespace scope: clangd 21.1.0 and 23.1.0

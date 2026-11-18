@@ -25,4 +25,22 @@ namespace DNDS::Cauchy
         DNDS_assert(kind == PhysicalAccumulationKind::Identity);
         return launch(std::integral_constant<PhysicalAccumulationKind, PhysicalAccumulationKind::Identity>{});
     }
+
+    /// Select supported compact equation widths once before host loops or
+    /// device launches. Width zero preserves the runtime component count.
+    template <class Launch>
+    decltype(auto) DispatchStageShape(PhysicalAccumulationKind kind, index width, Launch &&launch)
+    {
+        return DispatchStageAccumulation(kind, [&](auto mass) -> decltype(auto)
+                                         {
+            if constexpr (decltype(mass)::value == PhysicalAccumulationKind::ConstantDensityVelocityPressure)
+            {
+                if (width == 4) return launch(mass, std::integral_constant<int, 4>{});
+            }
+            else if (width == 7) return launch(mass, std::integral_constant<int, 7>{});
+            if (width == 5) return launch(mass, std::integral_constant<int, 5>{});
+            if (width == 6) return launch(mass, std::integral_constant<int, 6>{});
+            return launch(mass, std::integral_constant<int, 0>{}); });
+    }
+
 }

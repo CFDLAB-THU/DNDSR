@@ -269,16 +269,16 @@ namespace DNDS::Cauchy
             {
                 const auto mean = u.Components<const real>(input), residual = r.Components<const real>(input);
                 const auto target = y.Components<real>(output);
-                DispatchStageAccumulation(accumulation, [&](auto kind)
+                DispatchStageShape(accumulation, index(u.columns.size()), [&](auto kind, auto width)
                 {
                     if (rateBinding)
                     {
                         const auto rate = rateBinding->Components<real>(output);
-                        CPU::AssembleEquationRows<StageAssembly::EquationAndRate, decltype(kind)::value>(
+                        CPU::AssembleEquationRows<StageAssembly::EquationAndRate, decltype(kind)::value, decltype(width)::value>(
                             mean.View(), residual.View(), target.View(), rate.View(), geometry->HostView(), index(u.columns.size()), inverseDt, rhsScale);
                     }
                     else
-                        CPU::AssembleEquationRows<StageAssembly::Equation, decltype(kind)::value>(
+                        CPU::AssembleEquationRows<StageAssembly::Equation, decltype(kind)::value, decltype(width)::value>(
                             mean.View(), residual.View(), target.View(), nullptr, geometry->HostView(), index(u.columns.size()), inverseDt, rhsScale);
                 });
             }
