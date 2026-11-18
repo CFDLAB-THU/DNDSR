@@ -58,6 +58,9 @@ namespace DNDS::Cauchy
                               _algebraicRateComponent = _problem.equation.Schema().ResolveComponents({"p"}).front();
                           _ditrComponents = _problem.equation.Schema().ResolveComponents(settings.implicit.residualComponents);
                           const bool ditr = time.method == "ditr";
+                          if (ditr)
+                              for (auto &slot : _execution.coupledSourceDerivative)
+                                  slot = _problem.finiteVolume.BuildSourceDerivative(_state.trial);
                           if (ditr && _algebraicRateComponent >= 0)
                           {
                               const ODE::DITRCoefficients coefficients(time.ditr.fraction, time.ditr.variant == "U2R1" ? ODE::DITRVariant::U2R1 : ODE::DITRVariant::U2R2);
@@ -89,15 +92,15 @@ namespace DNDS::Cauchy
                     mesh, _problem.finiteVolume, middle, *solver, _execution.Context(), settings);
             return DomainCoupledStageOperator{
                 [this, solver](auto &state, auto &rate, real time, int stage)
-                { SetTimeStage(stage); solver->EvaluateRate(state, rate, time); },
+                { SetTimeStage(stage); solver->EvaluateRate(state, rate, time, _execution.StageDerivative(0)); },
                 [this, solver, multigrid](const auto &equation, const auto &rate, real cfl)
                 {
                     const auto &c = equation.coefficients;
                     _state.progressTime = c.time;
                     SetTimeStage(equation.coupledStage);
-                    return multigrid ? multigrid->ApplyCycle(equation.resOther, c.inverseDt, c.rhsScale, c.time, equation.coupledStage, cfl, std::cref(rate))
+                    return multigrid ? multigrid->ApplyCycle(equation.resOther, c.inverseDt, c.rhsScale, c.time, equation.coupledStage, cfl, std::cref(rate), _execution.StageDerivative(0))
                                      : solver->CorrectOnce(equation.state, equation.resOther, c.inverseDt, c.rhsScale, c.time,
-                                                           equation.coupledStage, {1, cfl}, std::cref(rate));
+                                                           equation.coupledStage, {1, cfl}, std::cref(rate), _execution.StageDerivative(0));
                 },
                 [solver]
                 { return solver->ReconstructionStats(); },
@@ -121,7 +124,7 @@ namespace DNDS::Cauchy
         SetTimeStage(stage);
         DNDS_check_throw_info(_execution.implicit && _execution.workspace.get() == &workspace,
                               "implicit equation rate belongs to another workspace");
-        _execution.implicit->EvaluateRate(state, rate, time);
+        _execution.implicit->EvaluateRate(state, rate, time, _execution.StageDerivative(1));
     }
     bool Domain::RecordImplicitStage(NonlinearIterationReport report)
     {
@@ -203,6 +206,10 @@ namespace DNDS::Cauchy
         {
             if (_problem.finiteVolume.PolynomialReconstruction())
                 _problem.finiteVolume.CopyReconstructionState(*_coupledMiddle->state, *_state.reconstruction, _execution.ComputeStream());
+            // Begin copied the initial rate to both method stages. Seed the
+            // midpoint with the derivative produced by that same evaluation.
+            if (auto middleDerivative = _execution.StageDerivative(0))
+                middleDerivative->CopyFrom(*_execution.StageDerivative(1), _execution.ComputeStream().Context()).Wait();
             _execution.coupledPreparedTrial = _state.trialEpoch.trial;
         }
     }
@@ -279,9 +286,9 @@ namespace DNDS::Cauchy
                     work = _coupledMiddle->correct(equation, *rate, iteration.pseudoCFL);
                 else if (applyCorrection)
                     work = _execution.multigrid ? _execution.multigrid->ApplyCycle(equation.resOther, c.inverseDt, c.rhsScale, c.time,
-                                                               coupledStage, iteration.pseudoCFL, rate)
+                                                               coupledStage, iteration.pseudoCFL, rate, _execution.StageDerivative(1))
                                       : _execution.implicit->CorrectOnce(_state.trial, equation.resOther, c.inverseDt, c.rhsScale, c.time,
-                                                               coupledStage, {1, iteration.pseudoCFL}, rate);
+                                                               coupledStage, {1, iteration.pseudoCFL}, rate, _execution.StageDerivative(1));
                 NonlinearDetail::AccumulateWork(iteration, work);
                 _state.timeStepper->CompleteEquation(
                     *_state.stageGroup, _state.trial,

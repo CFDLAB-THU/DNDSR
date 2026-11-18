@@ -151,6 +151,7 @@ namespace DNDS::Cauchy
                                          real mass, real rhsScale, real time, int stage,
                                          NonlinearSolveControl control, bool singleCorrection,
                                          OptionalRef<const EquationDofs> cachedRate,
+                                         OptionalRef<const Runtime::Array<real>> sourceDerivative = {},
                                          OptionalRef<const NonlinearSolveSetup> setup = {});
         NonlinearSession Start(EquationDofs &state, const EquationDofs &source,
                                real mass, real rhsScale, real time, int stage,
@@ -196,12 +197,15 @@ namespace DNDS::Cauchy
         /// EOS/source/PP dispatch. No nested solve.
         NonlinearIterationReport CorrectOnce(EquationDofs &state, const EquationDofs &source, real mass, real rhsScale, real time,
                                              int stage = 0, NonlinearSolveControl control = {},
-                                             OptionalRef<const EquationDofs> cachedRate = {});
+                                             OptionalRef<const EquationDofs> cachedRate = {},
+                                             OptionalRef<const Runtime::Array<real>> sourceDerivative = {});
         /// Evaluate dU/dt with aux preparation before reconstruction/RHS and
         /// retain that publication for a subsequent cached CorrectOnce.
         /// Pointwise volume normalization writes owned values only. State/rate
         /// must be distinct; caller coordinates state/time/cache usage on ranks.
-        void EvaluateRate(EquationDofs &state, EquationDofs &rate, real time);
+        void EvaluateRate(EquationDofs &state, EquationDofs &rate, real time, OptionalRef<Runtime::Array<real>> derivative = {});
+        /// Allocate a caller-owned integrated quadrature source derivative for one retained rate.
+        std::optional<Runtime::Array<real>> BuildSourceDerivative(const EquationDofs &state) const;
         /// Observe rank-local volume-weighted L1/L2-squared contributions and
         /// final volume for a method's stopping residual. Optional reference
         /// subtracts a same-space rate for FAS. Uses the solver's managed
@@ -217,7 +221,7 @@ namespace DNDS::Cauchy
         /// changing owned means. Polynomial FAS uses this same operator.
         /// Optional rate follows the field adapter's distinct-output contract.
         void EvaluateEquation(EquationDofs &state, EquationDofs &value, real mass, real rhsScale, real time,
-                              OptionalRef<EquationDofs> rate = {});
+                              OptionalRef<EquationDofs> rate = {}, OptionalRef<Runtime::Array<real>> derivative = {});
         /// Caller agrees scale/selection and releases conflicting views before
         /// entry. Candidate EOS/raw-species checks precede any state mutation.
         /// With PP enabled, use Euler relaxed/common increment compression,

@@ -105,6 +105,7 @@ namespace DNDS::Cauchy
                                                              _execution.ComputeStream());
         if (checkpoint.ditr)
         {
+            _execution.coupledSourceDerivative = std::move(checkpoint.coupledSourceDerivative);
             DNDS_check_throw_info(!polynomial || (checkpoint.middleWarm && checkpoint.middleFinal),
                                   "DITR internal checkpoint lacks midpoint reconstruction");
             auto &middle = _state.timeStepper->GroupState(

@@ -115,14 +115,14 @@ namespace DNDS::Cauchy
             result->endpointFinal.emplace(restoreReconstruction("internal_endpoint_final_field_", metadata.at("endpoint_final_storage")));
         }
         const auto entries = serializer->ListCurrentPath();
-        const auto restoreHistory = [&](const std::string &name) -> std::optional<Runtime::Array<real>>
+        const auto restoreCellArray = [&](const std::string &name, index width) -> std::optional<Runtime::Array<real>>
         {
             if (!entries.count(name))
                 return std::nullopt;
             auto source = Runtime::ReadArray<real>(serializer, name, mpi, shard);
             std::optional<Runtime::Array<real>> destination;
             MPI::LocalStage(mpi, [&]
-                            { destination.emplace(Runtime::RowLayout::Dense(_problem.finiteVolume.Metrics().NumCell(), 2)); });
+                            { destination.emplace(Runtime::RowLayout::Dense(_problem.finiteVolume.Metrics().NumCell(), width)); });
             transfer(source, *destination);
             if (_state.trial.Device() != Runtime::Device::Host())
                 MPI::LocalStage(mpi, [&]
@@ -130,13 +130,21 @@ namespace DNDS::Cauchy
             return destination;
         };
         if (polynomial)
-            result->endpointHistory = restoreHistory("internal_endpoint_limited_vr_history");
+            result->endpointHistory = restoreCellArray("internal_endpoint_limited_vr_history", 2);
         result->ditr = result->time.method == "ditr";
+        if (result->ditr)
+            for (int stage = 0; stage < 2; ++stage)
+                if (const auto &required = _execution.coupledSourceDerivative[stage])
+                {
+                    auto &field = result->coupledSourceDerivative[stage];
+                    field = restoreCellArray("internal_source_derivative_" + std::to_string(stage), required->Layout().Width());
+                    DNDS_check_throw_info(field, "exact DITR quadrature-source restart requires a derivative for each retained stage rate");
+                }
         if (polynomial && result->ditr)
         {
             result->middleWarm.emplace(restoreReconstruction("internal_middle_warm_field_", metadata.at("middle_warm_storage")));
             result->middleFinal.emplace(restoreReconstruction("internal_middle_final_field_", metadata.at("middle_final_storage")));
-            result->middleHistory = restoreHistory("internal_middle_limited_vr_history");
+            result->middleHistory = restoreCellArray("internal_middle_limited_vr_history", 2);
         }
         result->nonlinear = NonlinearSolveState::FromJson(metadata.at("nonlinear_state"));
         const auto &epoch = metadata.at("trial_epoch");

@@ -1657,6 +1657,11 @@ TEST_CASE("SA cached corrections retain pre-RHS auxiliary publication across CPU
         settings.numerics.reconstructionIterations = 1;
         settings.numerics.flux = "Roe_M1";
         settings.numerics.ransState.referenceConservative = {{"rho", 1}, {"rhoNuTilde", .02}};
+        SUBCASE("quadrature derivative is explicitly paired with the cached rate")
+        {
+            settings.implicit.sourceJacobianMode = "rhsQuadrature";
+        }
+        SUBCASE("center source Jacobian") { settings.implicit.sourceJacobianMode = "center"; }
         settings.implicit.pseudoCFL = .1;
         settings.implicit.linear.method = "ilu";
         settings.implicit.linear.stopping = "fixedCount";
@@ -1677,14 +1682,19 @@ TEST_CASE("SA cached corrections retain pre-RHS auxiliary publication across CPU
         C::NonlinearSolver a(fv, direct, fv.BuildReconstructionState(direct), fv.BuildWorkspace(direct), engine, stream, settings, A::ComponentSelection(6));
         C::NonlinearSolver b(fv, cached, fv.BuildReconstructionState(cached), fv.BuildWorkspace(cached), engine, stream, settings, A::ComponentSelection(6));
         CHECK_THROWS_WITH(b.PreparedAuxValues(), doctest::Contains("not been prepared"));
-        b.EvaluateRate(cached, rate, .2);
+        auto record = b.BuildSourceDerivative(cached);
+        REQUIRE(bool(record) == (settings.implicit.sourceJacobianMode == "rhsQuadrature"));
+        DNDS::OptionalRef<R::Array<real>> derivative;
+        if (record)
+            derivative.Emplace(*record);
+        b.EvaluateRate(cached, rate, .2, derivative);
         fv.ValidateAuxValues(cached, b.PreparedAuxValues(), .2);
         const auto meanVersion = b.PreparedAuxValues().meanThermodynamics->Version();
         const auto faceVersion = b.PreparedAuxValues().faceSpectralRadius->Version();
         const auto sumVersion = b.PreparedAuxValues().cellSpectralSum->Owned().Version();
         const auto oldOwnedVersion = cached.PhysicalField(0).Owned().Version();
         const auto fresh = a.CorrectOnce(direct, source, 0., 1., .2);
-        const auto reused = b.CorrectOnce(cached, source, 0., 1., .2, 0, {}, std::cref(rate));
+        const auto reused = b.CorrectOnce(cached, source, 0., 1., .2, 0, {}, std::cref(rate), derivative);
         CHECK(fresh.linearIterations == reused.linearIterations);
         CHECK(cached.PhysicalField(0).Owned().Version() > oldOwnedVersion);
         CHECK(b.PreparedAuxValues().meanThermodynamics->Version() == meanVersion);

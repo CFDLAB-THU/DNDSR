@@ -95,7 +95,10 @@ namespace DNDS::Cauchy
                 State rate;
                 std::optional<typename Operations::Binding> stateStamp;
                 real time = 0, scale = 0;
-                explicit SpatialRate(const State &input) : rate(Operations::NewVector(input)) {}
+                std::optional<Runtime::Array<real>> derivative;
+                OptionalRef<const Runtime::Array<real>> publishedDerivative;
+                SpatialRate(const State &input, Solver &solver)
+                    : rate(Operations::NewVector(input)), derivative(solver.BuildSourceDerivative(input)) {}
             };
             static void IdentityTransfer(const State &input, State &output, const MPIInfo &mpi,
                                          const Operations &operations, bool collectiveChecks = true)
@@ -203,7 +206,7 @@ namespace DNDS::Cauchy
                 // rather than performing a second set of configured VR sweeps.
                 // Direct-gradient levels may also reuse their preceding tau
                 // evaluation because they have no iterative VR history.
-                const auto cached = !level || settings.multigrid.reuseCoarseRate ? std::make_shared<SpatialRate>(input) : nullptr;
+                const auto cached = !level || settings.multigrid.reuseCoarseRate ? std::make_shared<SpatialRate>(input, solver) : nullptr;
                 if (cached)
                     cachedRates.push_back(cached);
                 if (!level)
@@ -227,7 +230,7 @@ namespace DNDS::Cauchy
                         if (profileEnabled)
                             control.profile = timing = std::make_shared<NonlinearProfile>();
                         const auto step = relax->CorrectOnce(u, source, mass, rhsScale, time, stage,
-                                                             std::move(control), rate);
+                                                             std::move(control), rate, rate ? cached->publishedDerivative : OptionalRef<const Runtime::Array<real>>{});
                         if (cached)
                             cached->stateStamp.reset();
                         if (profileEnabled)
@@ -260,11 +263,16 @@ namespace DNDS::Cauchy
             void TimedOperator(Solver &solver, State &input, State &output, real equationMass, index level, SpatialRate *cached = nullptr)
             {
                 const real start = profileEnabled ? MPI_Wtime() : 0;
+                OptionalRef<Runtime::Array<real>> destination;
+                if (cached && cached->derivative)
+                    destination.Emplace(*cached->derivative);
                 solver.EvaluateEquation(input, output, equationMass, rhsScale, time,
                                         cached ? OptionalRef<State>(cached->rate)
-                                               : OptionalRef<State>{});
+                                               : OptionalRef<State>{},
+                                        destination);
                 if (cached)
                 {
+                    cached->publishedDerivative = destination;
                     cached->stateStamp.emplace(input);
                     cached->time = time;
                     cached->scale = rhsScale;
@@ -417,7 +425,7 @@ namespace DNDS::Cauchy
                 return norms;
             }
             Report ApplyCycle(const State &source, real mass, real rhsScale, real time, int stage, real pseudoCFL,
-                              OptionalRef<const State> rate = {})
+                              OptionalRef<const State> rate = {}, OptionalRef<const Runtime::Array<real>> derivative = {})
             {
                 BindEquation(source, mass, rhsScale, time, stage, pseudoCFL);
                 if (!cycle)
@@ -432,6 +440,7 @@ namespace DNDS::Cauchy
                         operations.Copy(fineRate->rate, *rate);
                         operations.Synchronize();
                     }
+                    fineRate->publishedDerivative = derivative;
                     fineRate->stateStamp.emplace(state);
                     fineRate->time = time;
                     fineRate->scale = rhsScale;
@@ -492,7 +501,7 @@ namespace DNDS::Cauchy
                              total,
                              ApplyCycle(source, mass, rhsScale, time, stage,
                                         total.pseudoCFL,
-                                        std::cref(fineRate->rate)));
+                                        std::cref(fineRate->rate), fineRate->publishedDerivative));
                      },
                      {},
                      [this]
@@ -543,7 +552,7 @@ namespace DNDS::Cauchy
                              total,
                              ApplyCycle(source, mass, rhsScale, time, stage,
                                         total.pseudoCFL,
-                                        std::cref(fineRate->rate)));
+                                        std::cref(fineRate->rate), fineRate->publishedDerivative));
                      },
                      std::move(lifetime), [this]
                      { return continuityRatio; }});
@@ -628,10 +637,10 @@ namespace DNDS::Cauchy
     }
     NonlinearIterationReport PolynomialMultigrid::ApplyCycle(
         const EquationDofs &source, real mass, real rhsScale, real time, int stage, real pseudoCFL,
-        OptionalRef<const EquationDofs> rate)
+        OptionalRef<const EquationDofs> rate, OptionalRef<const Runtime::Array<real>> derivative)
     {
         auto session = _data->fineSolver.ReserveForMultigrid();
-        return _data->ApplyCycle(source, mass, rhsScale, time, stage, pseudoCFL, rate);
+        return _data->ApplyCycle(source, mass, rhsScale, time, stage, pseudoCFL, rate, derivative);
     }
     void PolynomialMultigrid::SetBoundaryInputs(const BoundaryInputs &input)
     {

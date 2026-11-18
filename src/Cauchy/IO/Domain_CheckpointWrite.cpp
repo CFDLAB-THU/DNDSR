@@ -166,6 +166,10 @@ namespace DNDS::Cauchy
         serializer->WriteReal("last_accepted_dt", acceptedSnapshot.LastAcceptedDt());
         serializer->WriteIndex("accepted_step", index(acceptedSnapshot.Epoch().acceptedStep));
         Runtime::WriteArray(CellIds(*this), serializer, "cell_ids", mpi);
+        if (ditr)
+            for (int stage = 0; stage < 2; ++stage)
+                if (const auto &derivative = _execution.coupledSourceDerivative[stage])
+                    WriteStateArray(*derivative, serializer, "internal_source_derivative_" + std::to_string(stage), mpi, _execution.ComputeStream().Context());
         std::optional<MeshEnvelope> envelope;
         MPI::LocalStage(mpi, [&]
                         { envelope.emplace(DescribeMesh(*this)); });
