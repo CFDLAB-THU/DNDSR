@@ -1202,9 +1202,10 @@ The C++ full-state finite-volume operator accepts SA, Wilcox k-omega, SST and
 realizable k-epsilon, with the existing SA/SST DES formulas. It
 requires the mesh's published nodal wall field and samples it with the configured
 positive `numerics.wallDistanceFloor` (default `1e-10`). RHS sources are
-integrated on cell quadrature. The positive approximate implicit destruction
-diagonal instead uses one cell mean, cell volume, mean wall input and current
-polynomial gradients sampled at the cell center; viscous face
+integrated on cell quadrature. The centered implicit destruction diagonal uses the cell mean, cell volume,
+wall distance and an independently reconstructed physical gradient. With
+compressible `rhsQuadrature`, each volume point instead contributes its
+destruction approximation alongside its spatial source. Viscous face
 fluxes add turbulent stress/heat/species transport and model scalar diffusion.
 Aux diffusion bounds include turbulent transport. Two-equation viscosity uses
 an explicit conservative mean-gradient input, described below.
@@ -1213,11 +1214,11 @@ All physical blocks retain their own Array layouts and halo plans.
 SA no-slip quadrature values use zero physical face value and reflected exterior
 value, including Euler's compile-time zero-interior wall convention for the
 flux. Prescribed boundaries require `ransConservative.rhoNuTilde`; inflow/outflow
-uses velocity relative to the moving boundary. Correction preparation refreshes
-sampled source-state provenance. Approximate source derivatives are evaluated
-from current means and center gradients during Jacobian preparation, so a new
-mean cannot consume an old destruction diagonal. Chemical rates and the RHS
-remain untouched by correction-only preparation.
+uses velocity relative to the moving boundary. For a centered derivative, a correction using a retained rate restores the
+physical gradient when another stage has reused the workspace. For a
+quadrature derivative, the caller supplies the derivative array that belongs
+to the retained rate. The matrix assembler applies its temporal weight to
+that array. Correction-only preparation leaves the spatial rate intact.
 
 `InitializeConstant` accepts a complete named conservative RANS map as its last
 argument, and initializes flow, RANS and species through their logical blocks.
