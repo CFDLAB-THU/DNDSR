@@ -402,7 +402,10 @@ namespace DNDS::CFV
                                                      : R::Detail::ProjectView<const index, false, R::FixedRows<1>>(result->Add("faceOffsets", metric.faceOffsets, context), metric.faceOffsets.Layout());
                 result->basisView = {pointBasis.cached, offsets, host.n, host.cachedDerivatives};
             }
-            if (pointBasis.cachedDerivatives < pointBasis.availableDerivatives)
+            // A face-center trace can be off the cached quadrature rule even
+            // when every face-quadrature derivative is cached. Publish the
+            // retained direct-evaluation operands in the kernel view too.
+            if (options.arbitraryPointSampling || pointBasis.cachedDerivatives < pointBasis.availableDerivatives)
             {
                 if (!result->samplingMoments)
                 {
