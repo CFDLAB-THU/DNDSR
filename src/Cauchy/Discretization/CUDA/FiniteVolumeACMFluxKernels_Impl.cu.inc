@@ -1,4 +1,5 @@
 #include "Cauchy/Discretization/CUDA/FiniteVolumeACMFluxKernels.hpp"
+#include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Inputs.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Reconstruction.hpp"
 #include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
@@ -8,6 +9,17 @@
 namespace DNDS::Cauchy::CUDA::Detail
 {
     using ACMGeometryView = Runtime::ArrayView<const RHSGeometry, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
+
+    template <int C, int M, int D>
+    struct ACMPolynomialFields
+    {
+        static constexpr int static_modes = M, static_dimension = D;
+        static constexpr bool separate_roles = false;
+        template <int Width>
+        using Pair = Runtime::PairReadView<real, Runtime::AccessBoundsChecks, Runtime::FixedRows<Width, Width>>;
+        Pair<C> mean;
+        Pair<C * M> reconstruction, viscousData;
+    };
 
     template <int C, class Fields, class Output>
     __device__ NumericalStatus ACMFacePoint(const RHSGeometry &geometry, const RHSKernelControls &controls,
@@ -91,9 +103,9 @@ namespace DNDS::Cauchy::CUDA::Detail
         return {};
     }
 
-    template <int C>
+    template <int C, class Fields, class Output>
     __device__ NumericalStatus ACMFace(const RHSGeometry &geometry, const RHSKernelControls &controls,
-                                       const RHSFields &fields, const RHSFaceOutputs &output, RHSWallOutput wallShear, index iFace)
+                                       const Fields &fields, const Output &output, RHSWallOutput wallShear, index iFace)
     {
         const auto anchor = geometry.FaceAnchor(iFace);
         const index first = geometry.faceOffsets(anchor.face, 0), end = geometry.faceOffsets(anchor.face + 1, 0);
@@ -112,9 +124,9 @@ namespace DNDS::Cauchy::CUDA::Detail
         return {};
     }
 
-    template <int C>
-    __global__ void ACMFaces(ACMGeometryView geometry, RHSKernelControls controls, RHSFields fields,
-                             RHSFaceOutputs output, RHSIndices selected, RHSWallOutput wallShear)
+    template <int C, class Fields, class Output>
+    __global__ void ACMFaces(ACMGeometryView geometry, RHSKernelControls controls, Fields fields,
+                             Output output, RHSIndices selected, RHSWallOutput wallShear)
     {
         for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
         {
@@ -127,9 +139,9 @@ namespace DNDS::Cauchy::CUDA::Detail
     // The prototype uses the same complete-face packages as the compressible
     // mapping. Each lane evaluates one quadrature point; its segment leader
     // integrates in rule order, preserving the thread-per-face sum.
-    template <int C>
-    __global__ void ACMSegments(ACMGeometryView publication, RHSKernelControls controls, RHSFields fields,
-                                RHSFaceOutputs output, RHSWallOutput wallShear, RHSFacePackageView prepared)
+    template <int C, class Fields, class Output>
+    __global__ void ACMSegments(ACMGeometryView publication, RHSKernelControls controls, Fields fields,
+                                Output output, RHSWallOutput wallShear, RHSFacePackageView prepared)
     {
         extern __shared__ real shared[];
         real *values = shared;
@@ -191,21 +203,54 @@ namespace DNDS::Cauchy::CUDA::Detail
         }
     }
 
+    template <int Dimension>
+    constexpr RHSFaceMapping ACMPolynomialMapping = Dimension == 3 ? RHSFaceMapping::CTASegments : RHSFaceMapping::Thread;
+
+    template <int Components, RHSFaceMapping Mapping, class Fields, class Output>
+    void LaunchACMMapping(const RHSFaceLaunch &launch, RHSWallOutput wallShear, const Fields &fields, const Output &output)
+    {
+        const auto &controls = launch.controls;
+        const auto stream = Runtime::CUDAStream(launch.context);
+        if constexpr (Mapping == RHSFaceMapping::CTASegments)
+        {
+            Runtime::CheckKernelArgumentBudget<ACMGeometryView, RHSKernelControls, Fields, Output, RHSWallOutput, RHSFacePackageView>();
+            ACMSegments<Components><<<launch.segmentBlocks, controls.blockSize, launch.packages.sharedBytes, stream>>>(
+                launch.geometry.View(), controls, fields, output, wallShear, launch.packages);
+        }
+        else
+        {
+            Runtime::CheckKernelArgumentBudget<ACMGeometryView, RHSKernelControls, Fields, Output, RHSIndices, RHSWallOutput>();
+            const unsigned blocks = unsigned(std::min<index>((launch.selected.RowCount() + controls.blockSize - 1) / controls.blockSize,
+                                                             controls.gridBlocks ? controls.gridBlocks : 1024));
+            ACMFaces<Components><<<blocks, controls.blockSize, 0, stream>>>(
+                launch.geometry.View(), controls, fields, output, launch.selected, wallShear);
+        }
+    }
+
     template <int Components>
     void LaunchACMFaces(const RHSFaceLaunch &launch, RHSWallOutput wallShear)
     {
-        Runtime::CheckKernelArgumentBudget<ACMGeometryView, RHSKernelControls, RHSFields, RHSFaceOutputs, RHSIndices, RHSWallOutput>();
-        const auto &controls = launch.controls;
-        if (controls.mapping == RHSFaceMapping::CTASegments)
-        {
-            Runtime::CheckKernelArgumentBudget<ACMGeometryView, RHSKernelControls, RHSFields, RHSFaceOutputs, RHSWallOutput, RHSFacePackageView>();
-            ACMSegments<Components><<<launch.segmentBlocks, controls.blockSize, launch.packages.sharedBytes, Runtime::CUDAStream(launch.context)>>>(
-                launch.geometry.View(), controls, launch.fields, launch.output, wallShear, launch.packages);
-            return;
-        }
-        const unsigned blocks = unsigned(std::min<index>((launch.selected.RowCount() + controls.blockSize - 1) / controls.blockSize,
-                                                         controls.gridBlocks ? controls.gridBlocks : 1024));
-        ACMFaces<Components><<<blocks, controls.blockSize, 0, Runtime::CUDAStream(launch.context)>>>(
-            launch.geometry.View(), controls, launch.fields, launch.output, launch.selected, wallShear);
+        if (launch.controls.mapping == RHSFaceMapping::CTASegments)
+            LaunchACMMapping<Components, RHSFaceMapping::CTASegments>(launch, wallShear, launch.fields, launch.output);
+        else
+            LaunchACMMapping<Components, RHSFaceMapping::Thread>(launch, wallShear, launch.fields, launch.output);
+    }
+
+    template <int C, int M, int D>
+    void LaunchACMRHSShape(const RHSFaceLaunch &launch, RHSWallOutput wallShear)
+    {
+        DNDS_check_throw_info(launch.controls.mechanical && !launch.controls.direct && !launch.controls.firstOrder &&
+                                  launch.controls.components == C && launch.controls.modes == M && launch.controls.dimension == D &&
+                                  launch.controls.mapping == ACMPolynomialMapping<D>,
+                              "ACM RHS static C/M/D launch differs from its prepared profile");
+        using Width = Runtime::FixedRows<C, C>;
+        using Coefficients = Runtime::FixedRows<C * M, C * M>;
+        const ACMPolynomialFields<C, M, D> fields{
+            ProjectRHSField<Width>(launch.fields.mean),
+            ProjectRHSField<Coefficients>(launch.fields.reconstruction),
+            launch.controls.distinctViscous ? ProjectRHSField<Coefficients>(launch.fields.viscousData)
+                                            : typename ACMPolynomialFields<C, M, D>::template Pair<C * M>{}};
+        const auto output = ProjectRHSOutputs<C>(launch.output);
+        LaunchACMMapping<C, ACMPolynomialMapping<D>>(launch, wallShear, fields, output);
     }
 }

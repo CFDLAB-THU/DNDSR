@@ -21,6 +21,10 @@ class RHSCodeGenerationTests(unittest.TestCase):
         manifest = ROOT / "scripts/manifests/cauchy_rhs_shapes.json"
         shapes = GENERATOR.read_shapes(manifest)
         self.assertEqual(len(shapes), 24)
+        acm = GENERATOR.read_shapes(manifest, mechanical=True)
+        self.assertEqual(len(acm), 18)
+        self.assertEqual({c for c, _, _ in acm}, {4, 5, 6})
+        self.assertTrue(all(m > 0 for _, m, _ in acm))
         for components in (5, 6, 7):
             self.assertEqual([(m, d) for c, m, d in shapes if c == components],
                              [(0, 2), (2, 2), (5, 2), (9, 2), (0, 3), (3, 3), (9, 3), (19, 3)])
@@ -30,7 +34,7 @@ class RHSCodeGenerationTests(unittest.TestCase):
                        "--manifest", str(manifest), "--output-dir", str(output)]
             subprocess.run(command, check=True, capture_output=True, text=True, timeout=60)
             before = {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in output.iterdir()}
-            self.assertEqual(len(before), 27)
+            self.assertEqual(len(before), 47)
             subprocess.run(command, check=True, capture_output=True, text=True, timeout=60)
             self.assertEqual(before, {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in output.iterdir()})
 
@@ -75,6 +79,7 @@ file(APPEND "${CMAKE_BINARY_DIR}/configure_count" "configured\\n")
                 # Cover the first and secondary custom-command output, plus
                 # the include and CMake index needed before source compilation.
                 for name in ("FiniteVolumeRHSKernels_Instantiations.cpp", "FiniteVolumeRHSKernels_C7_M19_D3.cu",
+                             "FiniteVolumeACMFluxKernels_C4_M19_D3.cu",
                              "FiniteVolumeRHSKernels_Instantiations.hpp", "FiniteVolumeRHSKernels_Sources.cmake"):
                     (output / name).unlink()
                     run("--build", build, "--parallel", "4")

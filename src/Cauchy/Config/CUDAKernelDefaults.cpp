@@ -37,7 +37,9 @@ namespace DNDS::Cauchy
             // The consolidated FP64 catalog has one mapping for every valid
             // C/M/D shape. This is capability selection; only measuredShape
             // carries the A100 performance evidence used by other defaults.
-            kernels.rhsMapping = !acm && fp64 ? "ctaSegments" : "thread";
+            const bool acmCTA = acm && a100 && settings.mesh.dimension == 3 && numerics.reconstruction == "variational" &&
+                                !numerics.firstOrderConvection;
+            kernels.rhsMapping = fp64 && (!acm || acmCTA) ? "ctaSegments" : "thread";
         }
         if (kernels.rhsReduction == "auto")
             kernels.rhsReduction = !acm && kernels.rhsMapping == "ctaSegments" ? "segmented" : "serial";

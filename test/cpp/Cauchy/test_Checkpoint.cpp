@@ -838,6 +838,47 @@ TEST_CASE("A mean-only initial checkpoint can seed a different nonlinear stage p
             CHECK(actual.Block("flow")(iCell, j) == expected.Block("flow")(iCell, j));
     Remove({path});
 }
+TEST_CASE("ACM internal restart adopts the stored absolute pressure target")
+{
+    C::DomainSettings settings;
+    settings.equation.system = "incompressibleACM";
+    settings.equation.eos = "none";
+    settings.equation.acmPressureMean = 3.25;
+    settings.equation.referenceScales = {{"rho0", 1}, {"U0", 1}, {"L0", 1}, {"T0", 300}};
+    settings.initialState = {{"type", "primUP"}, {"state", {.5, 0., 0., -2.}}};
+    settings.numerics.reconstruction = "constant";
+    settings.implicit.jacobianAction = "assembled";
+    settings.implicit.diagonal = "block";
+    settings.implicit.iterations = settings.implicit.minIterations = 3;
+    C::TimeSettings time;
+    time.method = "bdf1";
+    auto mesh = CauchyTest::PeriodicQuads(mpi, 4);
+    C::Domain direct("acm", mesh, settings, time);
+    const auto path = Path("cauchy-acm-internal-");
+    const C::Json metadata{{"case", "ACM internal restart"}};
+    bool written = false;
+    direct.SetQuiescentObserver([&](const C::NonlinearSolveState &state)
+                                {
+        if (!written && !state.terminal)
+        {
+            direct.WriteInternalCheckpoint(path, metadata, state);
+            written = true;
+        } });
+    REQUIRE(direct.Advance(.01).accepted);
+    REQUIRE(written);
+
+    settings.equation.acmPressureMean.reset();
+    C::Domain resumed("acm", mesh, settings, time);
+    resumed.ReadCheckpoint(path, metadata);
+    CHECK(resumed.CaptureStateSnapshot(false).PressureGauge() == std::optional<DNDS::real>(3.25));
+    REQUIRE(resumed.Advance(.01).accepted);
+    CHECK(direct.Time() == resumed.Time());
+    auto a = direct.Dofs().ReadOwned(), b = resumed.Dofs().ReadOwned();
+    for (DNDS::index iCell = 0; iCell < a.Block("flow").RowCount(); ++iCell)
+        for (int j = 0; j < 4; ++j)
+            CHECK(a.Block("flow")(iCell, j) == b.Block("flow")(iCell, j));
+    Remove({path});
+}
 
 TEST_CASE("Implicit restart preserves variable BDF2 history and rebuilds live DITR stage bindings")
 {
@@ -955,10 +996,23 @@ TEST_CASE("CGNS checkpoint remains physical across independently built MPI parti
     DNDS::MPI::LocalStage(mpi, []
                           { DNDS_check_throw_info(std::filesystem::is_regular_file(std::string(DNDS_TEST_SOURCE_ROOT) + "/data/mesh/IV10_20.cgns"),
                                                   "checkpoint partition test requires data/mesh/IV10_20.cgns"); });
-    const C::Json input{{"defaults", {{"mesh", {{"file", std::string(DNDS_TEST_SOURCE_ROOT) + "/data/mesh/IV10_20.cgns"}, {"dimension", 2}, {"periodicLengths", {10, 10, 0}}, {"boundaryIds", {{"PERIODIC_1", -1}, {"PERIODIC_1_DONOR", -4}, {"PERIODIC_2", -2}, {"PERIODIC_2_DONOR", -5}}}}}, {"numerics", {{"reconstruction", "constant"}, {"cfv", {{"maxOrder", 1}}}}}}}};
-    const auto value = [](const C::Domain &domain, DNDS::index iCell)
+    C::Json input{{"defaults", {{"mesh", {{"file", std::string(DNDS_TEST_SOURCE_ROOT) + "/data/mesh/IV10_20.cgns"}, {"dimension", 2}, {"periodicLengths", {10, 10, 0}}, {"boundaryIds", {{"PERIODIC_1", -1}, {"PERIODIC_1_DONOR", -4}, {"PERIODIC_2", -2}, {"PERIODIC_2_DONOR", -5}}}}}, {"numerics", {{"reconstruction", "constant"}, {"cfv", {{"maxOrder", 1}}}}}}}};
+    bool acm = false;
+    SUBCASE("compressible perfect gas") {}
+    SUBCASE("ACM accepted step with an absolute pressure target")
+    {
+        acm = true;
+        auto &defaults = input["defaults"];
+        defaults["equation"] = {{"system", "incompressibleACM"}, {"eos", "none"}, {"acmPressureMean", 3.25}, {"referenceScales", {{"rho0", 1}, {"U0", 1}, {"L0", 1}, {"T0", 300}}}};
+        defaults["initialState"] = {{"type", "primUP"}, {"state", {.31, -.12, .07, -1}}};
+        defaults["implicit"] = {{"diagonal", "block"}, {"jacobianAction", "assembled"}};
+        input["time"] = {{"method", "bdf1"}};
+    }
+    const auto value = [acm](const C::Domain &domain, DNDS::index iCell)
     {
         const auto id = domain.Discretization().Mesh().OriginalEntityId(DNDS::Geom::EntityKind::Cell, iCell);
+        if (acm)
+            return C::FlowState{.31, -.12, .07, 3.25 + .01 * (id % 5), 0};
         return domain.Equation().Gas().Conservative({1 + .0001 * id, .31, -.12, .07, 1.2});
     };
     MPI_Comm writerComm = MPI_COMM_NULL;
@@ -969,12 +1023,14 @@ TEST_CASE("CGNS checkpoint remains physical across independently built MPI parti
             const auto config = C::SimulationConfig::ResolveCollective(input, writerComm);
             C::Simulation simulation(config, writerComm);
             auto &domain = simulation.GetDomain(0);
+            if (acm)
+                REQUIRE(simulation.Advance(.001).accepted);
             {
                 auto write = domain.Dofs().CoupledField().Owned().Write();
                 for (DNDS::index iCell = 0; iCell < domain.Discretization().Metrics().NumCell(); ++iCell)
                 {
                     const auto expected = value(domain, iCell);
-                    for (int j = 0; j < 5; ++j)
+                    for (int j = 0; j < (acm ? 4 : 5); ++j)
                         write.View()(iCell, j) = expected[j];
                 }
             }
@@ -983,6 +1039,8 @@ TEST_CASE("CGNS checkpoint remains physical across independently built MPI parti
         MPI_Comm_free(&writerComm);
     }
     MPI_Barrier(mpi.comm);
+    if (acm)
+        input["defaults"]["equation"].erase("acmPressureMean");
     const auto config = C::SimulationConfig::ResolveCollective(input, mpi.comm);
     C::Simulation restored(config, mpi.comm);
     restored.ReadCheckpoint(path);
@@ -991,8 +1049,13 @@ TEST_CASE("CGNS checkpoint remains physical across independently built MPI parti
     for (DNDS::index iCell = 0; iCell < domain.Discretization().Metrics().NumCell(); ++iCell)
     {
         const auto expected = value(domain, iCell);
-        for (int j = 0; j < 5; ++j)
+        for (int j = 0; j < (acm ? 4 : 5); ++j)
             CHECK(read.View()(iCell, j) == expected[j]);
+    }
+    if (acm)
+    {
+        CHECK(domain.CaptureStateSnapshot(false).PressureGauge() == std::optional<DNDS::real>(3.25));
+        CHECK(domain.Time() == .001);
     }
     Remove({path});
 }

@@ -18,7 +18,7 @@ namespace DNDS::Cauchy::CUDA
      */
     struct NonlinearSummary
     {
-        std::array<real, 9> norms{};
+        std::array<real, 8> norms{};
         index limited = 0;
         real minimum = 1;
         bool frozen = true;

@@ -88,7 +88,7 @@ namespace DNDS::Cauchy
             DNDS_FIELD(polynomialArithmetic, "Point-local polynomial compute: fp64, fp32 or f32f32; coefficients remain FP64");
             DNDS_FIELD(dissipationArithmetic, "Gas-agnostic Riemann dissipation arithmetic: fp64, fp32 or f32f32");
             DNDS_FIELD(fluxArithmetic, "Point physics and full flux arithmetic: fp64, fp32 or f32f32; residual sums remain FP64");
-            DNDS_FIELD(rhsMapping, "auto selects ctaSegments for FP64 non-species perfect gas; thread is reserved for reduced-precision flow5 comparisons");
+            DNDS_FIELD(rhsMapping, "Auto selects CTA segments for FP64 perfect gas and A100 3D polynomial ACM; ACM also accepts explicit thread or CTA segments");
             DNDS_FIELD(rhsReduction, "auto selects deterministic segmented reduction for automatic CTA mapping; explicit serial or segmented remains available");
             DNDS_FIELD(rhsGridBlocks, "CUDA RHS maximum grid blocks; 0 keeps the mapping default cap");
             DNDS_FIELD(rhsBlockSize, "CUDA RHS runtime threads per block: 128, 256 or 512 for CTA segments; 64 is also available for reduced-precision thread comparisons");

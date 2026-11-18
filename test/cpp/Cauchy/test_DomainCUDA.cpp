@@ -46,16 +46,21 @@ TEST_CASE("ACM device correction matches CPU on flow4 and mechanical SA and SST"
         settings.implicit.linear.stopping = "fixedCount";
         settings.implicit.linear.iterations = 3;
         settings.implicit.iterations = settings.implicit.minIterations = 2;
-        if (multigrid)
+        const bool polynomial = multigrid || settings.equation.rans.model != "none";
+        if (polynomial)
         {
             settings.numerics.reconstruction = "variational";
-            settings.numerics.cfv.maxOrder = 2;
+            settings.numerics.cfv.maxOrder = multigrid ? 2 : profile == "SA" ? 1
+                                                                             : 3;
             settings.numerics.cfv.SORInstead = false;
             settings.numerics.reconstructionIterations = 4;
             settings.numerics.reconstructionTolerance = 0;
             settings.implicit.requireConvergedReconstruction = false;
-            settings.implicit.multigrid.levels = 1;
-            settings.implicit.multigrid.coarseSmooth = 1;
+            if (multigrid)
+            {
+                settings.implicit.multigrid.levels = 1;
+                settings.implicit.multigrid.coarseSmooth = 1;
+            }
         }
         C::TimeSettings time;
         time.method = "bdf1";
@@ -66,7 +71,7 @@ TEST_CASE("ACM device correction matches CPU on flow4 and mechanical SA and SST"
             const bool cpu = std::string_view(mapping) == "cpu";
             settings.execution.device = cpu ? "cpu" : "cuda";
             settings.execution.kernels.rhsMapping = cpu ? "auto" : mapping;
-            settings.execution.reconstructionKernel = !cpu && multigrid ? "fp64Pipelined" : "fp64";
+            settings.execution.reconstructionKernel = !cpu && polynomial ? "fp64Pipelined" : "fp64";
             C::Domain domain("acm", mesh, settings, time);
             CHECK(domain.CaptureStateSnapshot(false).PressureGauge() == std::optional<DNDS::real>(0));
             REQUIRE(domain.Advance(.0001).accepted);

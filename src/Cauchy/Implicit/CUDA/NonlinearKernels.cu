@@ -149,6 +149,7 @@ namespace DNDS::Cauchy::CUDA
         D::CheckRows(context, output, mean.RowCount(), mean.Width());
         D::CheckSummary(context, mean.RowCount(), scratch, result);
         DNDS_check_throw_info(std::isfinite(mass) && mass >= 0 && std::isfinite(rhsScale) && rhsScale >= 0 && (normOrder == 1 || normOrder == 2) &&
+                                  (!algebraicPressure || (mean.Width() >= 4 && mean.Width() <= 6)) &&
                                   (!output.data || (output.data != mean.data && output.data != residual.data && output.data != constant.data && output.data != cells.data)),
                               "invalid CUDA defect coefficients or alias");
         R::CheckKernelArgumentBudget<NonlinearCells, LinearReadRows, LinearReadRows, LinearReadRows, LinearWriteRows,
@@ -168,6 +169,7 @@ namespace DNDS::Cauchy::CUDA
                           NonlinearSummaryOutput scratch, NonlinearSummaryOutput result)
     {
         D::CheckInput(context, candidate);
+        DNDS_check_throw_info(candidate.Width() >= 4 && candidate.Width() <= 6, "CUDA pressure gauge needs an ACM row");
         D::CheckCells(context, cells, candidate.RowCount());
         D::CheckSummary(context, candidate.RowCount(), scratch, result);
         GaugeSum<<<unsigned(scratch.RowCount()), D::Threads, 0, R::CUDAStream(context)>>>(cells, candidate, scratch);
@@ -176,6 +178,7 @@ namespace DNDS::Cauchy::CUDA
     void ShiftPressure(R::ExecutionContext context, LinearWriteRows target, real shift)
     {
         D::CheckInput(context, target.ConstView());
+        DNDS_check_throw_info(target.Width() >= 4 && target.Width() <= 6, "CUDA pressure gauge needs an ACM row");
         if (!target.RowCount())
             return;
         GaugeShift<<<unsigned(NonlinearScratchRows(target.RowCount())), D::Threads, 0, R::CUDAStream(context)>>>(target, shift);
@@ -216,6 +219,7 @@ namespace DNDS::Cauchy::CUDA
         const auto stream = R::CUDAStream(context);
         if (rawACMRate.RowCount())
         {
+            DNDS_check_throw_info(rate.Width() >= 4 && rate.Width() <= 6, "CUDA continuity observation needs an ACM row");
             D::CheckRows(context, rawACMRate, rate.RowCount(), rate.Width());
             RateNorm<true><<<unsigned(scratch.RowCount()), D::Threads, 0, stream>>>(cells, rate, reference, rawACMRate, normOrder, scratch);
         }
