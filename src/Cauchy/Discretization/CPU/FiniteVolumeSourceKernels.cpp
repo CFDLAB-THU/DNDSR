@@ -83,6 +83,132 @@ namespace DNDS::Cauchy::CPU
         }
         return {};
     }
+    namespace
+    {
+        using PointSampler = void (*)(const SourceKernelRequest &, index, index, const real (&)[4][19], PointScratch &);
+        template <int Width>
+        auto CompactRows(RHSScalarView rows)
+        {
+            return Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::FixedRows<Width, Width>>{
+                rows.data, nullptr, rows.rows, Width, Width, nullptr, Runtime::RowLayoutKind::Table, rows.device};
+        }
+        template <int C, int D, int M>
+        void SampleCompactPoint(const SourceKernelRequest &request, index cell, index, const real (&basis)[4][19], PointScratch &point)
+        {
+            const auto mean = CompactRows<C>(request.samples[0])[cell];
+            for (int j = 0; j < C; ++j)
+            {
+                point.values[j] = mean[j];
+                if constexpr (M > 0)
+                {
+                    const auto coefficients = CompactRows<C * M>(request.coefficients[0])[cell];
+                    for (int m = 0; m < M; ++m)
+                        point.values[j] += basis[0][m] * coefficients[j * M + m];
+                    for (int d = 0; d < D; ++d)
+                    {
+                        real value = 0;
+                        for (int m = 0; m < M; ++m)
+                            value += basis[1 + d][m] * coefficients[j * M + m];
+                        point.gradient(j, d) = value;
+                    }
+                }
+                else
+                {
+                    const auto gradient = CompactRows<C * D>(request.gradients[0][0].values)[cell];
+                    for (int d = 0; d < D; ++d)
+                        point.gradient(j, d) = gradient[j * D + d];
+                }
+            }
+        }
+        void SampleGenericPoint(const SourceKernelRequest &request, index iCell, index iPoint, const real (&basis)[4][19], PointScratch &point)
+        {
+            const int modes = request.basis.polynomial.size - 1, dimension = request.dimension;
+            for (index iBlock = 0; iBlock < request.locations.size(); ++iBlock)
+            {
+                const auto location = request.locations[iBlock];
+                const index inputRow = request.cellInputs || modes > 0 ? iCell : iPoint;
+                const auto values = request.samples[location.physicalField][inputRow];
+                for (index j = 0; j < location.componentNumber; ++j)
+                {
+                    const index logical = request.logicalFirst[iBlock] + j, physical = location.firstComponent + j;
+                    point.values[logical] = values[physical];
+                    if (modes > 0)
+                    {
+                        const auto coefficients = request.coefficients[location.physicalField][iCell];
+                        for (int m = 0; m < modes; ++m)
+                            point.values[logical] += basis[0][m] * coefficients[physical * modes + m];
+                        if (request.ransFirst >= 0)
+                            for (int d = 0; d < dimension; ++d)
+                            {
+                                real derivative = 0;
+                                for (int m = 0; m < modes; ++m)
+                                    derivative += basis[1 + d][m] * coefficients[physical * modes + m];
+                                point.gradient(logical, d) = derivative;
+                            }
+                    }
+                    else if (request.ransFirst >= 0)
+                        for (int d = 0; d < dimension; ++d)
+                            point.gradient(logical, d) = request.gradients[location.physicalField][d](inputRow, physical);
+                }
+            }
+        }
+        template <int C, int D>
+        PointSampler SelectModes(int modes)
+        {
+            if (modes == 0)
+                return SampleCompactPoint<C, D, 0>;
+            if (modes == D)
+                return SampleCompactPoint<C, D, D>;
+            if (modes == (D == 2 ? 5 : 9))
+                return SampleCompactPoint < C, D, D == 2 ? 5 : 9 > ;
+            if (modes == (D == 2 ? 9 : 19))
+                return SampleCompactPoint < C, D, D == 2 ? 9 : 19 > ;
+            return SampleGenericPoint;
+        }
+        PointSampler SelectSourcePointSampler(const SourceKernelRequest &r, const EquationSystem &equation)
+        {
+            // Only the common RANS combined AoS layout specializes point
+            // construction. Thermodynamics, cell integration, and matrix
+            // placement still run through the same worker-local arithmetic.
+            if (equation.HasMixture() || r.ransFirst < 0 || r.samples.size() != 1)
+                return SampleGenericPoint;
+            const int c = int(r.components), d = r.dimension, m = std::max(0, r.basis.polynomial.size - 1);
+            const auto compact = [](RHSScalarView a, index w)
+            { return a.kind == Runtime::RowLayoutKind::Table && a.Width() == w && a.stride == w; };
+            if (!compact(r.samples[0], c))
+                return SampleGenericPoint;
+            for (index b = 0; b < r.locations.size(); ++b)
+                if (r.locations[b].physicalField != 0 || r.locations[b].firstComponent != r.logicalFirst[b])
+                    return SampleGenericPoint;
+            if (m > 0)
+            {
+                if (r.coefficients.size() != 1 || !compact(r.coefficients[0], c * m))
+                    return SampleGenericPoint;
+            }
+            else
+            {
+                if (!r.cellInputs || r.gradients.size() != 1)
+                    return SampleGenericPoint;
+                for (int k = 0; k < d; ++k)
+                {
+                    const auto &g = r.gradients[0][k];
+                    if (!compact(g.values, c * d) || g.componentStride != d || g.direction != k || g.values.data != r.gradients[0][0].values.data)
+                        return SampleGenericPoint;
+                }
+            }
+            switch (c)
+            {
+            case 5:
+                return d == 2 ? SelectModes<5, 2>(m) : SelectModes<5, 3>(m);
+            case 6:
+                return d == 2 ? SelectModes<6, 2>(m) : SelectModes<6, 3>(m);
+            case 7:
+                return d == 2 ? SelectModes<7, 2>(m) : SelectModes<7, 3>(m);
+            default:
+                return SampleGenericPoint;
+            }
+        }
+    }
     template <bool ProduceResidual, bool ProduceDerivative>
     static NumericalStatus EvaluateVolumeSourceRows(const SourceKernelRequest &request, const EquationSystem &equation, PointEvaluator &evaluator,
                                                     SourceRowScratch &worker, index first, index last) noexcept
@@ -93,6 +219,7 @@ namespace DNDS::Cauchy::CPU
         const int dimension = request.dimension;
         if (dimension < 1 || dimension > 3)
             return NumericalStatus{NumericalError::InvalidInput};
+        const auto samplePoint = SelectSourcePointSampler(request, equation);
         const index nv = request.components;
         const int independent = request.independentSpecies;
         if constexpr (ProduceDerivative)
@@ -116,34 +243,7 @@ namespace DNDS::Cauchy::CPU
                 real basis[4][19];
                 if (modes > 0)
                     request.basis.Fill(iCell, iPoint, request.ransFirst >= 0 ? dimension + 1 : 1, basis);
-                for (index iBlock = 0; iBlock < request.locations.size(); ++iBlock)
-                {
-                    const auto location = request.locations[iBlock];
-                    const index inputRow = request.cellInputs || modes > 0 ? iCell : iPoint;
-                    const auto values = request.samples[location.physicalField][inputRow];
-                    for (index j = 0; j < location.componentNumber; ++j)
-                    {
-                        const index logical = request.logicalFirst[iBlock] + j, physical = location.firstComponent + j;
-                        point.values[logical] = values[physical];
-                        if (modes > 0)
-                        {
-                            const auto coefficients = request.coefficients[location.physicalField][iCell];
-                            for (int m = 0; m < modes; ++m)
-                                point.values[logical] += basis[0][m] * coefficients[physical * modes + m];
-                            if (request.ransFirst >= 0)
-                                for (int d = 0; d < dimension; ++d)
-                                {
-                                    real derivative = 0;
-                                    for (int m = 0; m < modes; ++m)
-                                        derivative += basis[1 + d][m] * coefficients[physical * modes + m];
-                                    point.gradient(logical, d) = derivative;
-                                }
-                        }
-                        else if (request.ransFirst >= 0)
-                            for (int d = 0; d < dimension; ++d)
-                                point.gradient(logical, d) = request.gradients[location.physicalField][d](inputRow, physical);
-                    }
-                }
+                samplePoint(request, iCell, iPoint, basis, point);
                 if (request.ransFirst >= 0)
                 {
                     const auto &model = equation.RANS();

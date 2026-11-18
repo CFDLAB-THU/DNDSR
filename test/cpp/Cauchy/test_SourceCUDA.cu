@@ -89,6 +89,12 @@ TEST_CASE("CUDA RANS quadrature sources and destruction diagonals match generic 
             auto expected = Table<real>(2, outputWidth, [](I, I)
                                         { return .125; });
             auto actual = expected.To(device);
+            auto derivative = Table<real>(2, width * width, [](I, I)
+                                          { return real(-1); });
+            auto deviceDerivative = derivative.To(device);
+            // For the direct-gradient case compare the fused output with a CPU
+            // quadrature-only reference evaluated from explicitly sampled rows.
+            const bool paired = operation == 4;
             {
                 const auto u = means.Read(), q = samples.Read(), g0 = gradients[0].Read(), g1 = gradients[1].Read(), g2 = gradients[2].Read();
                 const auto w = weights.Read(), len = lengths.Read(), wm = wallMean.Read(), wp = wallPoints.Read(), geo = metric.Read();
@@ -128,6 +134,19 @@ TEST_CASE("CUDA RANS quadrature sources and destruction diagonals match generic 
                                     : jacobian ? C::CPU::AddQuadratureSourceJacobian(request, equation, worker)
                                                : C::CPU::EvaluateVolumeSource(request, equation, worker);
                 REQUIRE(bool(status));
+                if (paired)
+                {
+                    auto record = derivative.Write();
+                    for (I i = 0; i < 2; ++i)
+                        for (I k = 0; k < width * width; ++k)
+                            record.View()(i, k) = 0;
+                    auto reference = request;
+                    reference.matrix = record.View<R::UniformTableRows>();
+                    reference.fullBlock = true;
+                    reference.rowMajorBlocks = true;
+                    reference.scale = 1;
+                    REQUIRE(bool(C::CPU::AddQuadratureSourceJacobian(reference, equation, worker)));
+                }
                 std::vector<real> serial(size_t(2 * outputWidth));
                 for (I iCell = 0; iCell < 2; ++iCell)
                     for (I j = 0; j < outputWidth; ++j)
@@ -163,6 +182,7 @@ TEST_CASE("CUDA RANS quadrature sources and destruction diagonals match generic 
                 const auto off = offDevice.Read(context), rows = selected.Read(context);
                 auto output = actual.Write(context);
                 auto errors = status.Write(context);
+                auto record = deviceDerivative.Write(context);
                 K::SourceRequest request;
                 request.parameters = params.View<R::FixedRows<1>>();
                 request.means = u.View<R::TableRows>();
@@ -178,6 +198,8 @@ TEST_CASE("CUDA RANS quadrature sources and destruction diagonals match generic 
                 request.cells = geo.View<R::FixedRows<8>, false>();
                 request.output = output.View<R::UniformTableRows>();
                 request.status = errors.View<R::FixedRows<1>>();
+                if (paired)
+                    request.preparedDerivative = record.View<R::UniformTableRows>();
                 request.components = width;
                 request.dimension = 2;
                 request.fullBlock = fullBlock;
@@ -186,6 +208,14 @@ TEST_CASE("CUDA RANS quadrature sources and destruction diagonals match generic 
                                                                                             : K::SourceEvaluation::QuadratureResidual;
                 K::AddRANSSources(context, request, rows.View<R::FixedRows<1>>());
                 REQUIRE(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)) == cudaSuccess);
+            }
+            if (paired)
+            {
+                const auto downloadedDerivative = deviceDerivative.To(R::Device::Host());
+                const auto actualRecord = downloadedDerivative.Read(), expectedRecord = derivative.Read();
+                for (I i = 0; i < 2; ++i)
+                    for (I k = 0; k < width * width; ++k)
+                        CHECK(actualRecord.View()(i, k) == doctest::Approx(expectedRecord.View()(i, k)).epsilon(5e-11).scale(1));
             }
             const auto downloaded = actual.To(R::Device::Host());
             const auto errors = status.To(R::Device::Host());
