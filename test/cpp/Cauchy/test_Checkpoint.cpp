@@ -212,22 +212,25 @@ TEST_CASE("Asynchronous HDF output snapshots survive foreground field mutation a
     }
     Remove({plan.CheckpointPath(token), volume + ".vtkhdf", boundary, plan.SnapshotManifestPath(token)});
 }
-TEST_CASE("Boundary snapshot writes native zones and physical flux from the ACM RHS")
+static void CheckViscousWallSnapshot(bool acm)
 {
     const auto prefix = Path("cauchy-boundary-flux-");
     C::DomainSettings settings;
     settings.mesh.dimension = 3;
     settings.mesh.boundaryIds = {{"solid", 7}, {"slip", 8}};
-    settings.equation.system = "incompressibleACM";
-    settings.equation.eos = "none";
-    settings.equation.transport = "Newtonian";
+    settings.equation.system = acm ? "incompressibleACM" : "compressible";
+    settings.equation.eos = acm ? "none" : "perfectGas";
+    settings.equation.transport = acm ? "Newtonian" : "NewtonianFourier";
     settings.equation.viscosity = .01;
     settings.equation.referenceScales = {{"rho0", 1}, {"U0", 1}, {"L0", 1}, {"T0", 300}};
     settings.equation.rans.model = "KOmegaSST";
     settings.boundaries["7"].kind = "noSlipWall";
     settings.boundaries["8"].kind = "slipWall";
-    settings.initialState = {{"type", "primUP"}, {"state", {.1, 0, 0, .7, .03, 2}}};
+    settings.initialState = {{"type", acm ? "primUP" : "cons"},
+                             {"state", acm ? C::Json::array({.1, 0, 0, .7, .03, 2})
+                                           : C::Json::array({1, .1, 0, 0, 1.755, .03, 2})}};
     settings.referenceState = settings.initialState;
+    settings.numerics.faceFallback = false;
     settings.numerics.viscousGradient = "polynomial";
     settings.implicit.diagonal = "block";
     settings.implicit.jacobianAction = "assembled";
@@ -241,8 +244,17 @@ TEST_CASE("Boundary snapshot writes native zones and physical flux from the ACM 
         for (DNDS::index cell = 0; cell < flow.RowCount(); ++cell)
         {
             const auto center = domain.Discretization().Metrics().GetCellCent(cell);
-            flow(cell, 0) = center[1];
-            flow(cell, 3) = .7;
+            if (acm)
+            {
+                flow(cell, 0) = center[1];
+                flow(cell, 3) = .7;
+            }
+            else
+            {
+                const auto state = domain.Equation().Gas().Conservative({1, center[1], 0, 0, .7});
+                for (int j = 0; j < 5; ++j)
+                    flow(cell, j) = state[j];
+            }
             rans(cell, 0) = .03 + .02 * center[1];
         }
     }
@@ -254,7 +266,7 @@ TEST_CASE("Boundary snapshot writes native zones and physical flux from the ACM 
     const auto u = ReadVTKField<double>(boundary, "CellData/u", H5T_NATIVE_DOUBLE);
     const auto normals = ReadVTKField<double>(boundary, "CellData/norm", H5T_NATIVE_DOUBLE);
     const auto force = ReadVTKField<double>(boundary, "CellData/force_tangential", H5T_NATIVE_DOUBLE);
-    const auto fluxV = ReadVTKField<double>(boundary, "CellData/flux_v_facial", H5T_NATIVE_DOUBLE);
+    const auto fluxV = ReadVTKField<double>(boundary, acm ? "CellData/flux_v_facial" : "CellData/flux_rhov_facial", H5T_NATIVE_DOUBLE);
     const auto fluxK = ReadVTKField<double>(boundary, "CellData/flux_rhoK_facial", H5T_NATIVE_DOUBLE);
     REQUIRE(zones.size() == 54);
     REQUIRE(normals.size() == 3 * zones.size());
@@ -267,7 +279,9 @@ TEST_CASE("Boundary snapshot writes native zones and physical flux from the ACM 
             CHECK(normals[3 * iFace + 1] == doctest::Approx(-1. / 9.));
             CHECK(u[iFace] == doctest::Approx(1. / 6.)); // Adjacent cell mean.
             CHECK(std::abs(force[3 * iFace]) < 1e-13);
-            CHECK(fluxV[iFace] == doctest::Approx(.7)); // Pressure only.
+            // Only pressure contributes. The compressible case retains a
+            // reconstructed kinetic/internal energy split at unit density.
+            CHECK(fluxV[iFace] == doctest::Approx(.7).epsilon(acm ? 1e-12 : 2e-2));
             CHECK(std::abs(fluxK[iFace]) < 1e-13);
         }
         else if (std::abs(force[3 * iFace]) > 1e-8)
@@ -275,6 +289,15 @@ TEST_CASE("Boundary snapshot writes native zones and physical flux from the ACM 
     CHECK(slipFaces == 9);
     CHECK(noSlipWithShear > 0);
     Remove({prefix + ".vtkhdf", boundary});
+}
+
+TEST_CASE("Boundary snapshot writes native zones and suppresses viscous slip-wall flux")
+{
+    for (bool acm : {true, false})
+    {
+        CAPTURE(acm);
+        CheckViscousWallSnapshot(acm);
+    }
 }
 
 TEST_CASE("Boundary snapshot follows the face owner when the boundary record is remote")
