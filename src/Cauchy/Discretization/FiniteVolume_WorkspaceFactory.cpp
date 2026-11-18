@@ -174,7 +174,8 @@ namespace DNDS::Cauchy
                                               { result = std::make_shared<Workspace>(_data, state, std::move(workers), meanOnly, options.captureBoundaryFlux); });
         result->BindHalos(state);
         result->genericFluxOracle = options.rhsKernel == RHSKernelPolicy::Generic;
-        if (flow5Profile && state.Device() == R::Device::Host() && options.rhsKernel == RHSKernelPolicy::FixedFlow5)
+        if (flow5Profile && state.Device() == R::Device::Host() &&
+            (options.rhsKernel == RHSKernelPolicy::FixedFlow5 || options.rhsKernel == RHSKernelPolicy::Auto))
             result->fixedFlowRHS.emplace(AcquireRHSOperator());
         auto request = CompleteRHSAuxiliaryRequest({});
         if (request.meanThermodynamics || request.cellWaveJump || request.cellPressureMinimum)

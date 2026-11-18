@@ -148,7 +148,7 @@ TEST_CASE("Equation FV uses the established P3/gradient/WBAP flow5 kernels acros
         auto genericWork = fv.BuildWorkspace(
             generic, std::nullopt,
             C::FiniteVolume::WorkspaceOptions{C::FiniteVolume::RHSKernelPolicy::Generic});
-        auto work = fv.BuildWorkspace(state);
+        auto work = fv.BuildWorkspace(state, std::nullopt, C::FiniteVolume::WorkspaceOptions{C::FiniteVolume::RHSKernelPolicy::Profiled});
         R::EagerEngine engine(variant == 0 ? 0 : 2);
         const auto stream = engine.CreateCPUStream();
         fv.Evaluate(generic, expected, *genericReconstruction, *genericWork, engine, stream);

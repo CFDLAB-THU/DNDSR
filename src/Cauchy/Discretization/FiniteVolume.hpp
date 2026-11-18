@@ -196,14 +196,16 @@ namespace DNDS::Cauchy
         {
             Auto,
             Generic,
-            FixedFlow5
+            FixedFlow5,
+            Profiled
         };
         struct WorkspaceOptions
         {
             /// Resolve once during workspace construction. Generic is the
-            /// layout/physics-general CPU oracle. Auto resolves a compact physical
-            /// shape where all operands qualify. FixedFlow5 compares the prior
-            /// optimized implementation and requires one
+            /// layout/physics-general CPU oracle. Profiled exercises the generated CPU
+            /// model/shape catalog, including Flow5. Auto retains the qualified
+            /// fixed Flow5 leaf where the borrowed RHS requires identical arithmetic
+            /// and uses the catalog elsewhere. FixedFlow5 requires one
             /// perfect-gas flow5 field and never changes the outer schedule.
             RHSKernelPolicy rhsKernel;
             bool captureBoundaryFlux;
