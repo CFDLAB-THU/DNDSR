@@ -1682,7 +1682,7 @@ TEST_CASE("SA cached corrections retain pre-RHS auxiliary publication across CPU
             CHECK_THROWS_WITH(b.PreparedAuxValues(), doctest::Contains("not been prepared"));
             auto record = b.BuildSourceDerivative(cached);
             REQUIRE(bool(record) == (settings.implicit.sourceJacobianMode == "rhsQuadrature"));
-            DNDS::OptionalRef<R::Array<real>> derivative;
+            DNDS::OptionalRef<R::Array<DNDS::real>> derivative;
             if (record)
                 derivative.Emplace(*record);
             b.EvaluateRate(cached, rate, .2, derivative);

@@ -1232,7 +1232,7 @@ TEST_CASE("Rigid motion restart retains absolute-state convention and BDF histor
 TEST_CASE("Exact internal checkpoints resume BDF DIRK and DITR nonlinear iterations")
 {
     const auto metadata = C::Json{{"test", "exact internal nonlinear continuation"}};
-    for (const std::string method : {"bdf2", "esdirk4", "ditr"})
+    for (const std::string method : {"bdf2", "esdirk4", "ditr", "ditr-sa-quadrature"})
     {
         CAPTURE(method);
         const auto path = Path("cauchy-internal-" + method + "-");
@@ -1245,8 +1245,23 @@ TEST_CASE("Exact internal checkpoints resume BDF DIRK and DITR nonlinear iterati
         settings.implicit.relativeTolerance = 1;
         settings.implicit.absoluteTolerance = 0;
         C::TimeSettings time;
-        time.method = method;
+        const bool quadratureSA = method == "ditr-sa-quadrature";
+        time.method = quadratureSA ? "ditr" : method;
+        if (quadratureSA)
+        {
+            settings.equation.transport = "NewtonianFourier";
+            settings.equation.viscosity = .001;
+            settings.equation.rans.model = "SA";
+            settings.equation.rans.viscosityReference = .01;
+            settings.initialRANS = {{"rhoNuTilde", .02}};
+            settings.numerics.ransState.referenceConservative = {{"rho", 1}, {"rhoNuTilde", .02}};
+            settings.implicit.sourceJacobianMode = "rhsQuadrature";
+            settings.implicit.diagonal = "block";
+        }
         const auto mesh = CauchyTest::PeriodicQuads(mpi, 4);
+        if (quadratureSA)
+            mesh->BuildNodeWallDist([](auto)
+                                    { return false; });
         C::Domain uninterrupted("flow", mesh, settings, time);
         Initialize(uninterrupted);
         bool written = false;
