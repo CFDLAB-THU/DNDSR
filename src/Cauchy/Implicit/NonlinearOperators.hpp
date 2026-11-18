@@ -60,7 +60,7 @@ namespace DNDS::Cauchy
         /// every component; otherwise it has exactly the equation width.
         std::vector<real> AssembleDefect(Runtime::EagerEngine &, const Runtime::ExecutionStream &,
                                          const EquationDofs &mean, const EquationDofs &residual, const EquationDofs &constant,
-                                         EquationDofs &output, real mass, real rhsScale, SpanView<const uint8_t> selection,
+                                         EquationDofs &output, real inverseDt, real rhsScale, SpanView<const uint8_t> selection,
                                          int normOrder, bool measureNorm) const;
         /// Raw sums of volume*abs(U_j), then volume. Component normalization
         /// and global agreement are deliberately separate from this operator.
@@ -87,6 +87,6 @@ namespace DNDS::Cauchy
                              const EquationDofs &input, EquationDofs &output, bool multiplyVolume) const;
         void SubmitEquation(Runtime::EagerEngine &, const Runtime::ExecutionStream &,
                             const EquationDofs &mean, const EquationDofs &residual, EquationDofs &output,
-                            OptionalRef<EquationDofs> rate, real mass, real rhsScale) const;
+                            OptionalRef<EquationDofs> rate, real inverseDt, real rhsScale) const;
     };
 }

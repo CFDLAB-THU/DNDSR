@@ -15,9 +15,9 @@ namespace DNDS::Cauchy::CUDA
                 value = D::Merge{}(value, input(i, 0));
             D::PublishBlock(value, output);
         }
-        template <bool AlgebraicPressure>
+        template <PhysicalAccumulationKind Accumulation>
         __global__ void Defect(NonlinearCells cells, LinearReadRows mean, LinearReadRows residual, LinearReadRows constant,
-                               LinearWriteRows output, NonlinearSelection selection, real mass, real rhsScale, int order, bool measure, NonlinearSummaryOutput scratch)
+                               LinearWriteRows output, NonlinearSelection selection, real inverseDt, real rhsScale, int order, bool measure, NonlinearSummaryOutput scratch)
         {
             NonlinearSummary local;
             const index n = mean.Width();
@@ -27,7 +27,7 @@ namespace DNDS::Cauchy::CUDA
                 if (measure)
                 {
                     local.norms[n] += volume;
-                    if constexpr (AlgebraicPressure)
+                    if constexpr (Accumulation == PhysicalAccumulationKind::ConstantDensityVelocityPressure)
                     {
                         const real continuity = residual(iCell, 3);
                         local.norms[n + 1] += continuity * continuity / volume;
@@ -35,9 +35,9 @@ namespace DNDS::Cauchy::CUDA
                 }
                 for (index j = 0; j < n; ++j)
                 {
-                    const real value = AlgebraicPressure && j == 3
+                    const real value = Accumulation == PhysicalAccumulationKind::ConstantDensityVelocityPressure && j == 3
                                            ? rhsScale * residual(iCell, j) + volume * constant(iCell, j)
-                                           : rhsScale * residual(iCell, j) + volume * (constant(iCell, j) - mass * mean(iCell, j));
+                                           : rhsScale * residual(iCell, j) + volume * (constant(iCell, j) - inverseDt * mean(iCell, j));
                     if ((!std::isfinite(value) || !(volume > 0)) && local.status)
                         local.status = NumericalStatus{NumericalError::InvalidState, 1, iCell};
                     output(iCell, j) = selection.active[j] ? value : 0;
@@ -113,16 +113,16 @@ namespace DNDS::Cauchy::CUDA
             }
             D::PublishBlock(local, scratch);
         }
-        template <bool AlgebraicPressure>
+        template <StageAssembly Op, PhysicalAccumulationKind Accumulation>
         __global__ void Equation(NonlinearCells cells, LinearReadRows mean, LinearReadRows residual,
-                                 LinearWriteRows output, LinearWriteRows rate, real mass, real rhsScale)
+                                 LinearWriteRows output, LinearWriteRows rate, real inverseDt, real rhsScale)
         {
             for (index iCell = index(blockIdx.x) * blockDim.x + threadIdx.x; iCell < mean.RowCount(); iCell += index(gridDim.x) * blockDim.x)
                 for (index j = 0; j < mean.Width(); ++j)
                 {
                     const real volume = cells(iCell, 0);
-                    output(iCell, j) = AlgebraicPressure && j == 3 ? -rhsScale * residual(iCell, j) / volume : mass * mean(iCell, j) - rhsScale * residual(iCell, j) / volume;
-                    if (rate.RowCount())
+                    output(iCell, j) = Accumulation == PhysicalAccumulationKind::ConstantDensityVelocityPressure && j == 3 ? -rhsScale * residual(iCell, j) / volume : inverseDt * mean(iCell, j) - rhsScale * residual(iCell, j) / volume;
+                    if constexpr (Op == StageAssembly::EquationAndRate)
                         rate(iCell, j) = residual(iCell, j) / volume;
                 }
         }
@@ -139,8 +139,8 @@ namespace DNDS::Cauchy::CUDA
         CheckLaunch();
     }
     void AssembleDefect(R::ExecutionContext context, NonlinearCells cells, LinearReadRows mean, LinearReadRows residual,
-                        LinearReadRows constant, LinearWriteRows output, NonlinearSelection selection, real mass, real rhsScale,
-                        int normOrder, bool measureNorm, NonlinearSummaryOutput scratch, NonlinearSummaryOutput result, bool algebraicPressure)
+                        LinearReadRows constant, LinearWriteRows output, NonlinearSelection selection, real inverseDt, real rhsScale,
+                        int normOrder, bool measureNorm, NonlinearSummaryOutput scratch, NonlinearSummaryOutput result, PhysicalAccumulationKind accumulation)
     {
         D::CheckInput(context, mean);
         D::CheckCells(context, cells, mean.RowCount());
@@ -148,8 +148,8 @@ namespace DNDS::Cauchy::CUDA
         D::CheckRows(context, constant, mean.RowCount(), mean.Width());
         D::CheckRows(context, output, mean.RowCount(), mean.Width());
         D::CheckSummary(context, mean.RowCount(), scratch, result);
-        DNDS_check_throw_info(std::isfinite(mass) && mass >= 0 && std::isfinite(rhsScale) && rhsScale >= 0 && (normOrder == 1 || normOrder == 2) &&
-                                  (!algebraicPressure || (mean.Width() >= 4 && mean.Width() <= 6)) &&
+        DNDS_check_throw_info(std::isfinite(inverseDt) && inverseDt >= 0 && std::isfinite(rhsScale) && rhsScale >= 0 && (normOrder == 1 || normOrder == 2) &&
+                                  (accumulation == PhysicalAccumulationKind::Identity || (mean.Width() >= 4 && mean.Width() <= 6)) &&
                                   (!output.data || (output.data != mean.data && output.data != residual.data && output.data != constant.data && output.data != cells.data)),
                               "invalid CUDA defect coefficients or alias");
         R::CheckKernelArgumentBudget<NonlinearCells, LinearReadRows, LinearReadRows, LinearReadRows, LinearWriteRows,
@@ -157,12 +157,9 @@ namespace DNDS::Cauchy::CUDA
         const auto launch = [&](auto tag)
         {
             Defect<decltype(tag)::value><<<unsigned(scratch.RowCount()), D::Threads, 0, R::CUDAStream(context)>>>(
-                cells, mean, residual, constant, output, selection, mass, rhsScale, normOrder, measureNorm, scratch);
+                cells, mean, residual, constant, output, selection, inverseDt, rhsScale, normOrder, measureNorm, scratch);
         };
-        if (algebraicPressure)
-            launch(std::true_type{});
-        else
-            launch(std::false_type{});
+        DispatchStageAccumulation(accumulation, launch);
         D::Finish(context, scratch, result);
     }
     void PressureGaugeSum(R::ExecutionContext context, NonlinearCells cells, LinearReadRows candidate,
@@ -228,7 +225,7 @@ namespace DNDS::Cauchy::CUDA
         D::Finish(context, scratch, result);
     }
     void AssembleEquation(R::ExecutionContext context, NonlinearCells cells, LinearReadRows mean, LinearReadRows residual,
-                          LinearWriteRows output, LinearWriteRows rate, real mass, real rhsScale, bool algebraicPressure)
+                          LinearWriteRows output, LinearWriteRows rate, real inverseDt, real rhsScale, PhysicalAccumulationKind accumulation)
     {
         D::CheckInput(context, mean);
         D::CheckCells(context, cells, mean.RowCount());
@@ -236,7 +233,7 @@ namespace DNDS::Cauchy::CUDA
         D::CheckRows(context, output, mean.RowCount(), mean.Width());
         if (rate.RowCount())
             D::CheckRows(context, rate, mean.RowCount(), mean.Width());
-        DNDS_check_throw_info(std::isfinite(mass) && mass >= 0 && std::isfinite(rhsScale) && rhsScale >= 0, "invalid CUDA stage equation coefficients");
+        DNDS_check_throw_info(std::isfinite(inverseDt) && inverseDt >= 0 && std::isfinite(rhsScale) && rhsScale >= 0, "invalid CUDA stage equation coefficients");
         for (const auto target : {output, rate})
             DNDS_check_throw_info(!target.data || (target.data != mean.data && target.data != residual.data && target.data != cells.data),
                                   "CUDA stage equation output aliases input");
@@ -244,15 +241,18 @@ namespace DNDS::Cauchy::CUDA
         R::CheckKernelArgumentBudget<NonlinearCells, LinearReadRows, LinearReadRows, LinearWriteRows, LinearWriteRows, real, real>();
         if (!mean.RowCount())
             return;
-        const auto launch = [&](auto tag)
-        {
-            Equation<decltype(tag)::value><<<unsigned(NonlinearScratchRows(mean.RowCount())), D::Threads, 0, R::CUDAStream(context)>>>(
-                cells, mean, residual, output, rate, mass, rhsScale);
-        };
-        if (algebraicPressure)
-            launch(std::true_type{});
-        else
-            launch(std::false_type{});
+        DispatchStageAccumulation(accumulation, [&](auto kind)
+                                  {
+            const auto launch = [&](auto operation)
+            {
+                Equation<decltype(operation)::value, decltype(kind)::value>
+                    <<<unsigned(NonlinearScratchRows(mean.RowCount())), D::Threads, 0, R::CUDAStream(context)>>>(
+                        cells, mean, residual, output, rate, inverseDt, rhsScale);
+            };
+            if (rate.RowCount())
+                launch(std::integral_constant<StageAssembly, StageAssembly::EquationAndRate>{});
+            else
+                launch(std::integral_constant<StageAssembly, StageAssembly::Equation>{}); });
         D::CheckLaunch();
     }
 }

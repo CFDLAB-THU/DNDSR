@@ -63,14 +63,14 @@ namespace DNDS::Cauchy
 
     std::vector<real> NonlinearOperators::AssembleDefect(R::EagerEngine &engine, const R::ExecutionStream &stream,
                                                          const EquationDofs &mean, const EquationDofs &residual, const EquationDofs &constant, EquationDofs &output,
-                                                         real mass, real rhsScale, SpanView<const uint8_t> active, int normOrder, bool measureNorm) const
+                                                         real inverseDt, real rhsScale, SpanView<const uint8_t> active, int normOrder, bool measureNorm) const
     {
         _data->Check(engine, stream, mean);
         _data->Check(engine, stream, residual);
         _data->Check(engine, stream, constant);
         for (const auto *input : {&mean, &residual, &constant})
             _data->CheckPair(*input, output);
-        DNDS_check_throw_info(std::isfinite(mass) && mass >= 0 && std::isfinite(rhsScale) && rhsScale >= 0 && (normOrder == 1 || normOrder == 2),
+        DNDS_check_throw_info(std::isfinite(inverseDt) && inverseDt >= 0 && std::isfinite(rhsScale) && rhsScale >= 0 && (normOrder == 1 || normOrder == 2),
                               "invalid nonlinear defect coefficients");
         const auto selection = Selection(active, mean.ComponentNumber());
         Inputs inputs;
@@ -78,19 +78,19 @@ namespace DNDS::Cauchy
         const auto u = AddInput(mean, inputs), r = AddInput(residual, inputs), b = AddInput(constant, inputs), y = AddOutput(output, outputs);
         const auto geometry = std::make_shared<CFV::FiniteVolumeRead>(_data->geometry.AcquireRead(stream.Context()));
         const auto accumulation = mean.Schema().AccumulationKind();
-        const auto host = [geometry, u, r, b, y, selection, accumulation, mass, rhsScale, normOrder, measureNorm](auto input, auto output, Result &result)
+        const auto host = [geometry, u, r, b, y, selection, accumulation, inverseDt, rhsScale, normOrder, measureNorm](auto input, auto output, Result &result)
         {
             const auto mean = u.Layout(input), residual = r.Layout(input), constant = b.Layout(input);
             const auto target = y.Layout(output);
             result.status = CPU::AssembleDefect(mean.Descriptor(), residual.Descriptor(), constant.Descriptor(), target.Descriptor(),
-                                                geometry->HostView(), accumulation, mass, rhsScale, selection.HostView(), normOrder, measureNorm,
+                                                geometry->HostView(), accumulation, inverseDt, rhsScale, selection.HostView(), normOrder, measureNorm,
                                                 {result.norms.data(), index(result.norms.size())}, {result.workerSums.data(), index(result.workerSums.size())});
         };
 #ifdef DNDS_USE_CUDA
-        const auto device = [geometry, u, r, b, y, selection, accumulation, mass, rhsScale, normOrder, measureNorm](auto context, auto input, auto output, auto scratch, auto summary)
+        const auto device = [geometry, u, r, b, y, selection, accumulation, inverseDt, rhsScale, normOrder, measureNorm](auto context, auto input, auto output, auto scratch, auto summary)
         { CUDA::AssembleDefect(context, geometry->View().cells, Table(input[u.firstSlot]), Table(input[r.firstSlot]), Table(input[b.firstSlot]),
-                               Table(output[y.firstSlot]), DeviceSelection(selection), mass, rhsScale, normOrder, measureNorm, scratch, summary,
-                               accumulation == PhysicalAccumulationKind::ConstantDensityVelocityPressure); };
+                               Table(output[y.firstSlot]), DeviceSelection(selection), inverseDt, rhsScale, normOrder, measureNorm, scratch, summary,
+                               accumulation); };
 #else
         const Unavailable device;
 #endif
@@ -244,7 +244,7 @@ namespace DNDS::Cauchy
             } }, std::move(inputs), std::move(outputs));
     }
     void NonlinearOperators::SubmitEquation(R::EagerEngine &engine, const R::ExecutionStream &stream,
-                                            const EquationDofs &mean, const EquationDofs &residual, EquationDofs &output, OptionalRef<EquationDofs> rate, real mass, real rhsScale) const
+                                            const EquationDofs &mean, const EquationDofs &residual, EquationDofs &output, OptionalRef<EquationDofs> rate, real inverseDt, real rhsScale) const
     {
         _data->Check(engine, stream, mean);
         _data->Check(engine, stream, residual);
@@ -256,40 +256,38 @@ namespace DNDS::Cauchy
             _data->CheckPair(residual, *rate);
             _data->CheckPair(output, *rate);
         }
-        DNDS_check_throw_info(std::isfinite(mass) && mass >= 0 && std::isfinite(rhsScale) && rhsScale >= 0, "invalid nonlinear equation coefficients");
+        DNDS_check_throw_info(std::isfinite(inverseDt) && inverseDt >= 0 && std::isfinite(rhsScale) && rhsScale >= 0, "invalid nonlinear equation coefficients");
         Inputs inputs;
         Outputs outputs;
         const auto u = AddInput(mean, inputs), r = AddInput(residual, inputs), y = AddOutput(output, outputs);
         const auto rateBinding = rate ? std::optional(AddOutput(*rate, outputs)) : std::nullopt;
         const auto geometry = std::make_shared<CFV::FiniteVolumeRead>(_data->geometry.AcquireRead(stream.Context()));
         const auto accumulation = mean.Schema().AccumulationKind();
-        R::SubmitArrayBatch(engine, stream, [geometry, u, r, y, rateBinding, accumulation, mass, rhsScale](R::ExecutionContext context, auto input, auto output)
+        R::SubmitArrayBatch(engine, stream, [geometry, u, r, y, rateBinding, accumulation, inverseDt, rhsScale](R::ExecutionContext context, auto input, auto output)
                             {
             if (context.device == R::Device::Host())
             {
                 const auto mean = u.Components<const real>(input), residual = r.Components<const real>(input);
                 const auto target = y.Components<real>(output);
-                if (rateBinding)
+                DispatchStageAccumulation(accumulation, [&](auto kind)
                 {
-                    const auto rate = rateBinding->Components<real>(output);
-                    if (accumulation == PhysicalAccumulationKind::Identity)
-                        CPU::AssembleEquationAndRateRows<PhysicalAccumulationKind::Identity>(mean.View(), residual.View(), target.View(), rate.View(), geometry->HostView(),
-                            index(u.columns.size()), mass, rhsScale);
+                    if (rateBinding)
+                    {
+                        const auto rate = rateBinding->Components<real>(output);
+                        CPU::AssembleEquationRows<StageAssembly::EquationAndRate, decltype(kind)::value>(
+                            mean.View(), residual.View(), target.View(), rate.View(), geometry->HostView(), index(u.columns.size()), inverseDt, rhsScale);
+                    }
                     else
-                        CPU::AssembleEquationAndRateRows<PhysicalAccumulationKind::ConstantDensityVelocityPressure>(mean.View(), residual.View(), target.View(), rate.View(), geometry->HostView(),
-                            index(u.columns.size()), mass, rhsScale);
-                }
-                else if (accumulation == PhysicalAccumulationKind::Identity)
-                    CPU::AssembleEquationRows<PhysicalAccumulationKind::Identity>(mean.View(), residual.View(), target.View(), geometry->HostView(), index(u.columns.size()), mass, rhsScale);
-                else
-                    CPU::AssembleEquationRows<PhysicalAccumulationKind::ConstantDensityVelocityPressure>(mean.View(), residual.View(), target.View(), geometry->HostView(), index(u.columns.size()), mass, rhsScale);
+                        CPU::AssembleEquationRows<StageAssembly::Equation, decltype(kind)::value>(
+                            mean.View(), residual.View(), target.View(), nullptr, geometry->HostView(), index(u.columns.size()), inverseDt, rhsScale);
+                });
             }
             else
             {
 #ifdef DNDS_USE_CUDA
                 CUDA::AssembleEquation(context, geometry->View().cells, Table(input[u.firstSlot]), Table(input[r.firstSlot]),
-                    Table(output[y.firstSlot]), rateBinding ? Table(output[rateBinding->firstSlot]) : CUDA::LinearWriteRows{}, mass, rhsScale,
-                    accumulation == PhysicalAccumulationKind::ConstantDensityVelocityPressure);
+                    Table(output[y.firstSlot]), rateBinding ? Table(output[rateBinding->firstSlot]) : CUDA::LinearWriteRows{}, inverseDt, rhsScale,
+                    accumulation);
 #else
                 Unavailable{}();
 #endif

@@ -13,9 +13,31 @@ namespace DNDS::Cauchy
         TimeResidual
     };
 
+    /// Resolve ACM's known row widths before entering a cell loop or launching
+    /// a kernel. Zero denotes the generic width for extended schemas.
+    template <class Launch>
+    void DispatchAccumulationWidth(index width, Launch launch)
+    {
+        switch (width)
+        {
+        case 4:
+            launch(std::integral_constant<int, 4>{});
+            break;
+        case 5:
+            launch(std::integral_constant<int, 5>{});
+            break;
+        case 6:
+            launch(std::integral_constant<int, 6>{});
+            break;
+        default:
+            launch(std::integral_constant<int, 0>{});
+            break;
+        }
+    }
+
     /// One constant-density row. The momentum and turbulence variables carry
     /// physical mass. Continuity retains the spatial rate and source only.
-    template <PhysicalOperation Op, class Out, class X, class Y, class Z>
+    template <PhysicalOperation Op, int Width, class Out, class X, class Y, class Z>
     DNDS_DEVICE_CALLABLE inline void ApplyAccumulatedRow(index row, index width, Out out, X x, Y y, Z z, real a, real b)
     {
         auto differential = [&](index j)
@@ -37,7 +59,7 @@ namespace DNDS::Cauchy
             out(row, 3) = x(row, 3) + b * z(row, 3);
         else if constexpr (Op == PhysicalOperation::StateAndRate)
             out(row, 3) = b * y(row, 3);
-        for (index j = 4; j < width; ++j)
+        for (index j = 4; j < (Width ? Width : width); ++j)
             differential(j);
     }
 

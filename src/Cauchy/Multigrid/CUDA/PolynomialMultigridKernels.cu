@@ -38,13 +38,17 @@ namespace DNDS::Cauchy::CUDA
             if (!threadIdx.x)
                 output(blockIdx.x, 0) = Final && result == INT64_MAX ? -1 : result;
         }
-        __global__ void Selected(FASWrite values, FASRead delta, FASSelection selection, bool add)
+        template <bool Add>
+        __global__ void Selected(FASWrite values, FASRead delta, FASSelection selection)
         {
             for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < values.RowCount(); iRow += index(gridDim.x) * blockDim.x)
                 for (index j = 0; j < values.Width(); ++j)
-                    if (add && selection.active[j] == 1)
-                        values(iRow, j) += delta(iRow, j);
-                    else if (!add && selection.active[j] == 0)
+                    if constexpr (Add)
+                    {
+                        if (selection.active[j] == 1)
+                            values(iRow, j) += delta(iRow, j);
+                    }
+                    else if (selection.active[j] == 0)
                         values(iRow, j) = 0;
         }
         template <class View>
@@ -86,10 +90,15 @@ namespace DNDS::Cauchy::CUDA
                                       (!values.data || values.data != delta.data),
                                   "CUDA FAS selected-add shape or alias differs");
         }
-        R::CheckKernelArgumentBudget<FASWrite, FASRead, FASSelection, bool>();
+        R::CheckKernelArgumentBudget<FASWrite, FASRead, FASSelection>();
         if (!values.RowCount())
             return;
-        Selected<<<unsigned(FrozenCheckScratchRows(values.RowCount())), Threads, 0, ::DNDS::Runtime::CUDAStream(context)>>>(values, delta, selection, add);
+        const auto blocks = unsigned(FrozenCheckScratchRows(values.RowCount()));
+        const auto stream = R::CUDAStream(context);
+        if (add)
+            Selected<true><<<blocks, Threads, 0, stream>>>(values, delta, selection);
+        else
+            Selected<false><<<blocks, Threads, 0, stream>>>(values, delta, selection);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA FAS selected update failed");
     }
 }

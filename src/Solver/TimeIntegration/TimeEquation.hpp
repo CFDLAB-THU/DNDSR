@@ -4,7 +4,9 @@
 
 namespace DNDS::ODE
 {
-    /// Normalized equation r = resOther + rhsScale * F(U,t) - inverseDt * U.
+    /// Normalized equation r = resOther + rhsScale * F(U,t) - inverseDt * (M U).
+    /// inverseDt is the reciprocal physical step (zero for steady or spatial-only
+    /// evaluation). The equation adapter applies M to state operands only.
     /// resOther contains no contribution from this unknown or its current RHS.
     /// Other unknowns/history must remain frozen while this equation is used,
     /// including throughout a spatial FAS cycle. No MPI or physics is hidden here.

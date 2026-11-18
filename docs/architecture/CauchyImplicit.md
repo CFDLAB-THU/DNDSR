@@ -630,8 +630,11 @@ Domain physical trial / time equation
       identity state/residual/correction maps on the same cell identity/order
 ```
 
-Every operator uses `mass*U-rhsScale*R(U)/V`. Consequently all three same-cell
-maps are identity in this normalized convention; an integrated-residual or
+The normalized stage equation is `inverseDt*(M U) - rhsScale*R_integrated(U)/V`.
+The spatial-only FAS evaluation sets `inverseDt = 0`; the smoother and finest
+convergence check use the full time equation. The compressible physical mass
+matrix is the identity. ACM projects out pressure only from the state operand.
+All three same-cell maps are identity in this normalized convention; an integrated-residual or
 different-mesh hierarchy must supply its own transfer. Cell identity/order is
 checked during setup. Means, fine/coarse matrices and mutable auxiliary/gradient
 buffers are distinct. Cauchy defaults to the whole logical equation state.
@@ -1027,8 +1030,9 @@ Krylov/nonlinear drivers remain separate phase items.
 `FiniteVolume::BuildLinearProblem` allocates the cell-face-cell stencil on the
 prototype's existing row space. `PrepareJacobian` fills its explicit numerical
 arrays from frozen means, prepared face spectral radii and an owned scalar
-inverse-pseudo-time array. For integrated residual `R=d(VU)/dt`, its convention
-is `A = V/dTau + physicalMass*V - residualScale*J_R_approx`. No division by cell
+inverse-pseudo-time array. For a cell of volume `V` and integrated spatial residual `R`, its convention
+is `A = V*Gamma/dTau + V*M/dt - residualScale*J_R_approx`.
+Here `Gamma` and `M` are the pseudo-time and physical-time matrices, respectively. No division by cell
 volume is hidden in the action. Diagonal inversion/factorization is a later
 explicit operation.
 

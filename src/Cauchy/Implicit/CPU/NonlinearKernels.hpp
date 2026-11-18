@@ -4,6 +4,7 @@
 #include "DNDS/Core/Errors.hpp"
 #include "DNDS/Core/OMP.hpp"
 #include "Cauchy/State/EquationViews.hpp"
+#include "Cauchy/Implicit/StageAssembly.hpp"
 #include "Cauchy/Physics/ThermalAdmissibility.hpp"
 #include "CFV/Plans/FiniteVolumePlan.hpp"
 #include "Cauchy/Implicit/PositivityReduction.hpp"
@@ -36,11 +37,46 @@ namespace DNDS::Cauchy::CPU
                 output(iCell, j) = inverseVolume * input(iCell, j); });
     }
 
+    /// One cell of the time equation. The physical mass projection applies
+    /// only to the current mean; resOther and the spatial rate keep every row.
+    template <StageAssembly Op, PhysicalAccumulationKind Accumulation, class Mean, class Residual, class Constant, class Rate, class Publish>
+    inline NumericalStatus AssembleStageRow(index iCell, index components, real volume, real inverseDt, real rhsScale,
+                                            Mean mean, Residual residual, Constant constant, Rate rate, Publish publish) noexcept
+    {
+        for (index j = 0; j < components; ++j)
+        {
+            const real integrated = residual(iCell, j);
+            const bool pressure = Accumulation == PhysicalAccumulationKind::ConstantDensityVelocityPressure && j == 3;
+            real value;
+            if constexpr (Op == StageAssembly::Defect)
+            {
+                const real history = constant(iCell, j);
+                value = rhsScale * integrated + volume * (pressure ? history : history - inverseDt * mean(iCell, j));
+            }
+            else
+            {
+                real weightedRate;
+                if constexpr (Op == StageAssembly::EquationAndRate)
+                {
+                    const real normalized = integrated / volume;
+                    rate(iCell, j) = normalized;
+                    weightedRate = rhsScale * normalized;
+                }
+                else
+                    weightedRate = rhsScale * integrated / volume;
+                value = pressure ? -weightedRate : inverseDt * mean(iCell, j) - weightedRate;
+            }
+            if (const auto status = publish(j, value); !status)
+                return status;
+        }
+        return {};
+    }
+
     /// Assemble the implicit stage defect and, when requested, its local norm
     /// contribution. Reduction and stopping decisions remain with the caller.
     template <PhysicalAccumulationKind Accumulation, class Mean, class Residual, class Constant, class Output, class Metric, class Active, class Norm>
     NumericalStatus AssembleDefectRows(Mean mean, Residual residual, Constant constant, Output output,
-                                       const Metric &metric, index components, real mass, real rhsScale, const Active &active,
+                                       const Metric &metric, index components, real inverseDt, real rhsScale, const Active &active,
                                        int normOrder, bool measureNorm, Norm &norm, SpanView<real> partials = {}) noexcept
     {
         const auto row = [&](index iCell, SpanView<real> sum) -> NumericalStatus
@@ -57,32 +93,14 @@ namespace DNDS::Cauchy::CPU
                     sum[j] += normOrder == 1 ? std::abs(value) : value * value / volume;
                 return {};
             };
-            const auto differential = [&](index j)
-            {
-                return publish(j, rhsScale * residual(iCell, j) +
-                                      volume * (constant(iCell, j) - mass * mean(iCell, j)));
-            };
             if constexpr (Accumulation == PhysicalAccumulationKind::ConstantDensityVelocityPressure)
-            {
                 if (measureNorm)
                 {
                     const real continuity = residual(iCell, 3);
                     sum[components + 1] += continuity * continuity / volume;
                 }
-                for (index j = 0; j < 3; ++j)
-                    if (const auto status = differential(j); !status)
-                        return status;
-                if (const auto status = publish(3, rhsScale * residual(iCell, 3) + volume * constant(iCell, 3)); !status)
-                    return status;
-                for (index j = 4; j < components; ++j)
-                    if (const auto status = differential(j); !status)
-                        return status;
-            }
-            else
-                for (index j = 0; j < components; ++j)
-                    if (const auto status = differential(j); !status)
-                        return status;
-            return {};
+            return AssembleStageRow<StageAssembly::Defect, Accumulation>(
+                iCell, components, volume, inverseDt, rhsScale, mean, residual, constant, nullptr, publish);
         };
         if (!measureNorm)
             return OMP::ForRowsStatus(0, mean.RowCount(), [&](index iCell)
@@ -91,56 +109,22 @@ namespace DNDS::Cauchy::CPU
         return OMP::SumRows(mean.RowCount(), {norm.data(), components + 1 + algebraicPressure}, partials, row);
     }
 
-    /// Assemble mass*u-rhsScale*R(u)/volume and optionally publish the spatial
-    /// rate. The two entry points avoid a nullable output inside the hot loop.
-    template <PhysicalAccumulationKind Accumulation, class Mean, class Residual, class Output, class Metric>
-    void AssembleEquationRows(Mean mean, Residual residual, Output output, const Metric &metric,
-                              index components, real mass, real rhsScale)
+    /// Write (M U)/dt - rhsScale * R_int/V. The fused variant also
+    /// publishes R_int/V, including the continuity rate at the pressure row.
+    template <StageAssembly Op, PhysicalAccumulationKind Accumulation, class Mean, class Residual, class Output, class Rate, class Metric>
+    void AssembleEquationRows(Mean mean, Residual residual, Output output, Rate rate, const Metric &metric,
+                              index components, real inverseDt, real rhsScale)
     {
         OMP::ForRows(0, mean.RowCount(), [&](index iCell)
                      {
             const real volume = metric.GetCellVol(iCell);
-            const auto differential = [&](index j)
-            { output(iCell, j) = mass * mean(iCell, j) - rhsScale * residual(iCell, j) / volume; };
-            if constexpr (Accumulation == PhysicalAccumulationKind::ConstantDensityVelocityPressure)
-            {
-                for (index j = 0; j < 3; ++j)
-                    differential(j);
-                output(iCell, 3) = -rhsScale * residual(iCell, 3) / volume;
-                for (index j = 4; j < components; ++j)
-                    differential(j);
-            }
-            else
-                for (index j = 0; j < components; ++j)
-                    output(iCell, j) = mass * mean(iCell, j) - rhsScale * residual(iCell, j) / volume; });
-    }
-
-    template <PhysicalAccumulationKind Accumulation, class Mean, class Residual, class Output, class Rate, class Metric>
-    void AssembleEquationAndRateRows(Mean mean, Residual residual, Output output, Rate rate,
-                                     const Metric &metric, index components, real mass, real rhsScale)
-    {
-        OMP::ForRows(0, mean.RowCount(), [&](index iCell)
-                     {
-            const real volume = metric.GetCellVol(iCell);
-            const auto differential = [&](index j)
-            {
-                const real rateValue = residual(iCell, j) / volume;
-                output(iCell, j) = mass * mean(iCell, j) - rhsScale * rateValue;
-                rate(iCell, j) = rateValue;
-            };
-            if constexpr (Accumulation == PhysicalAccumulationKind::ConstantDensityVelocityPressure)
-            {
-                for (index j = 0; j < 3; ++j)
-                    differential(j);
-                const real pressureRate = residual(iCell, 3) / volume;
-                output(iCell, 3) = -rhsScale * pressureRate;
-                rate(iCell, 3) = pressureRate;
-                for (index j = 4; j < components; ++j)
-                    differential(j);
-            }
-            else
-                for (index j = 0; j < components; ++j)
-                    differential(j); });
+            AssembleStageRow<Op, Accumulation>(
+                iCell, components, volume, inverseDt, rhsScale, mean, residual, nullptr, rate,
+                [&](index j, real value) -> NumericalStatus
+                {
+                    output(iCell, j) = value;
+                    return {};
+                }); });
     }
 
     struct CorrectionControls
@@ -178,7 +162,7 @@ namespace DNDS::Cauchy::CPU
     NumericalStatus AssembleDefect(EquationLayoutView<const real> mean, EquationLayoutView<const real> residual,
                                    EquationLayoutView<const real> constant, EquationLayoutView<real> output,
                                    CFV::FiniteVolumeHostView metric, PhysicalAccumulationKind accumulation,
-                                   real mass, real rhsScale, SpanView<const uint8_t> active,
+                                   real inverseDt, real rhsScale, SpanView<const uint8_t> active,
                                    int normOrder, bool measureNorm, SpanView<real> norm, SpanView<real> partials = {}) noexcept;
 
     struct PseudoTimeRequest

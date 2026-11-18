@@ -98,7 +98,7 @@ namespace DNDS::Cauchy
             const auto mask = ColumnMask(state, iField, components);
             R::SubmitArrays(engine, _data->stream, [mask](R::ExecutionContext context, auto values)
                             {
-                if (context.device == R::Device::Host()) CPU::UpdateSelectedRows(values, values.ConstView(), mask.HostView(), false);
+                if (context.device == R::Device::Host()) CPU::UpdateSelectedRows<false>(values, values.ConstView(), mask.HostView());
                 else
                 {
 #ifdef DNDS_USE_CUDA
@@ -128,7 +128,7 @@ namespace DNDS::Cauchy
             const auto mask = ColumnMask(state, iField, components);
             R::SubmitArrays(engine, _data->stream, [mask](R::ExecutionContext context, auto delta, auto values)
                             {
-                if (context.device == R::Device::Host()) CPU::UpdateSelectedRows(values, delta, mask.HostView(), true);
+                if (context.device == R::Device::Host()) CPU::UpdateSelectedRows<true>(values, delta, mask.HostView());
                 else
                 {
 #ifdef DNDS_USE_CUDA

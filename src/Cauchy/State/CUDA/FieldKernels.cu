@@ -11,12 +11,12 @@ namespace DNDS::Cauchy::CUDA
     namespace
     {
         constexpr int Threads = 128;
-        template <PhysicalOperation Op>
+        template <PhysicalOperation Op, int Width>
         __global__ void AccumulateRows(index width, R::ArrayView<real> out, R::ArrayView<const real> x,
                                        R::ArrayView<const real> y, R::ArrayView<const real> z, real a, real b)
         {
             for (index row = index(blockIdx.x) * Threads + threadIdx.x; row < out.RowCount(); row += index(gridDim.x) * Threads)
-                ApplyAccumulatedRow<Op>(row, width, out, x, y, z, a, b);
+                ApplyAccumulatedRow<Op, Width>(row, width, out, x, y, z, a, b);
         }
         struct Merge
         {
@@ -70,8 +70,10 @@ namespace DNDS::Cauchy::CUDA
         if (out.RowCount() == 0)
             return;
         const auto stream = R::CUDAStream(context);
-        DispatchPhysicalOperation(op, [&](auto tag)
-                                  { AccumulateRows<decltype(tag)::value><<<unsigned(FieldCheckScratchRows(out.RowCount())), Threads, 0, stream>>>(width, out, x, y, z, a, b); });
+        DispatchPhysicalOperation(op, [&](auto operation)
+                                  { DispatchAccumulationWidth(width, [&](auto shape)
+                                                              { AccumulateRows<decltype(operation)::value, decltype(shape)::value>
+                                                                    <<<unsigned(FieldCheckScratchRows(out.RowCount())), Threads, 0, stream>>>(width, out, x, y, z, a, b); }); });
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA accumulation launch failed");
     }
     void CheckFieldRows(R::ExecutionContext context, EquationBlockArrayView<const real> values,

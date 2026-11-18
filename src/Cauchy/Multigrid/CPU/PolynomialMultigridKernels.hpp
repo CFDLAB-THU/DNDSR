@@ -26,14 +26,17 @@ namespace DNDS::Cauchy::CPU
                 }
         return first == values.RowCount() ? -1 : first;
     }
-    template <class View, class Input>
-    void UpdateSelectedRows(View values, Input delta, SpanView<const uint8_t> mask, bool add)
+    template <bool Add, class View, class Input>
+    void UpdateSelectedRows(View values, Input delta, SpanView<const uint8_t> mask)
     {
         OMP::ForRows(0, values.RowCount(), [&](index iRow)
                      {
             for (index j = 0; j < values.Width(); ++j)
-                if (add && mask[j] == 1) values(iRow, j) += delta(iRow, j);
-                else if (!add && mask[j] == 0) values(iRow, j) = 0; });
+                if constexpr (Add)
+                {
+                    if (mask[j] == 1) values(iRow, j) += delta(iRow, j);
+                }
+                else if (mask[j] == 0) values(iRow, j) = 0; });
     }
     NumericalStatus CheckFrozenComponents(Algebra::DofComponentView<const real> values,
                                           Algebra::DofComponentView<const real> saved, SpanView<const uint8_t> active) noexcept;

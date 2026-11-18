@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Cauchy/Implicit/CUDA/LinearBlockKernels.hpp"
+#include "Cauchy/Implicit/StageAssembly.hpp"
 #include "Cauchy/Physics/ThermalAdmissibility.hpp"
 #include "Cauchy/Implicit/PositivityReduction.hpp"
 
@@ -33,14 +34,14 @@ namespace DNDS::Cauchy::CUDA
     {
         std::array<uint8_t, 7> active{1, 1, 1, 1, 1, 1, 1};
     };
-    /// Integrated defect = rhsScale*R + volume*(constant-mass*U).
+    /// Integrated defect = rhsScale*R + volume*(resOther-inverseDt*(M U)).
     /// Norms use the unmasked defect, matching CPU; the output masks inactive
     /// components. L1 sums abs(defect); L2 sums defect^2/volume. No MPI or host
     /// observation is performed, even when measureNorm is enabled.
     void AssembleDefect(Runtime::ExecutionContext, NonlinearCells, LinearReadRows mean,
                         LinearReadRows residual, LinearReadRows constant, LinearWriteRows output,
-                        NonlinearSelection, real mass, real rhsScale, int normOrder, bool measureNorm,
-                        NonlinearSummaryOutput scratch, NonlinearSummaryOutput result, bool algebraicPressure = false);
+                        NonlinearSelection, real inverseDt, real rhsScale, int normOrder, bool measureNorm,
+                        NonlinearSummaryOutput scratch, NonlinearSummaryOutput result, PhysicalAccumulationKind accumulation = PhysicalAccumulationKind::Identity);
 
     struct PseudoTimeParameters
     {
@@ -93,11 +94,11 @@ namespace DNDS::Cauchy::CUDA
     /// false converts an integrated RHS to rate. Geometry is already validated.
     void ScaleRateByVolume(Runtime::ExecutionContext, NonlinearCells, LinearReadRows input,
                            LinearWriteRows output, bool multiply);
-    /// mass*U-rhsScale*R/volume, with optional R/volume publication. An unbound
+    /// inverseDt*(M U)-rhsScale*R/volume, with optional R/volume publication. An unbound
     /// empty rate view omits that output. All provided buffers are distinct.
     void AssembleEquation(Runtime::ExecutionContext, NonlinearCells, LinearReadRows mean,
                           LinearReadRows residual, LinearWriteRows output, LinearWriteRows rate,
-                          real mass, real rhsScale, bool algebraicPressure = false);
+                          real inverseDt, real rhsScale, PhysicalAccumulationKind accumulation = PhysicalAccumulationKind::Identity);
     /// Raw volume-weighted component magnitudes for Euler's GMRES metric.
     /// Momentum/energy normalization and MPI agreement stay on the controller.
     void MeasureMeanState(Runtime::ExecutionContext, NonlinearCells, LinearReadRows mean,

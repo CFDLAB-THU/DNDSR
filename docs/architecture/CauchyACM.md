@@ -14,8 +14,11 @@ constant viscosity. A pressure offset can be negative.
 For state `Q = (u,v,w,p,s₁,…)`, physical accumulation is
 `M Q = (u,v,w,0,s₁,…)`. Cached stage **rates** retain the complete
 spatial continuity residual. In volume-normalized units the nonlinear defect
-is `resOther + a R(Q) - m M Q`. Each approximate correction uses the
-integrated block matrix `V Gamma/dTau + m V M - a dR_integrated/dQ`.
+is `resOther + rhsScale R(Q) - (M Q)/dt`, where `R(Q) = R_integrated(Q)/V`.
+The pressure row retains the continuity rate even when its correction is masked.
+Each approximate correction uses the integrated block matrix
+`V Gamma/dTau + V M/dt - rhsScale dR_integrated/dQ`. The time method supplies
+`inverseDt = 1/dt` for a finite physical step and zero for a steady solve.
 The first three entries of the pressure column of Gamma are
 `(1+alpha) velocity/beta2`, and the fourth is `1/beta2`. In dual time each
 transported primitive scalar contributes `s/beta2` in this column. The

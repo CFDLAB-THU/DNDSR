@@ -31,19 +31,15 @@ namespace DNDS::Cauchy::CPU
     NumericalStatus AssembleDefect(EquationLayoutView<const real> mean, EquationLayoutView<const real> residual,
                                    EquationLayoutView<const real> constant, EquationLayoutView<real> output,
                                    CFV::FiniteVolumeHostView metric, PhysicalAccumulationKind accumulation,
-                                   real mass, real rhsScale, SpanView<const uint8_t> active,
+                                   real inverseDt, real rhsScale, SpanView<const uint8_t> active,
                                    int normOrder, bool measureNorm, SpanView<real> norm, SpanView<real> partials) noexcept
     {
-        const auto identity = [&](auto u, auto r, auto b, auto y) -> NumericalStatus
-        { return AssembleDefectRows<PhysicalAccumulationKind::Identity>(u, r, b, y, metric, mean.ComponentNumber(), mass, rhsScale, [&](index j)
-                                                                        { return active.empty() || active[j]; }, normOrder, measureNorm, norm, partials); };
-        if (accumulation == PhysicalAccumulationKind::Identity)
-            return DispatchCPUEquationLayouts(identity, mean, residual, constant, output);
-        DNDS_assert_info(accumulation == PhysicalAccumulationKind::ConstantDensityVelocityPressure,
-                         "unsupported physical accumulation");
-        return DispatchCPUEquationLayouts([&](auto u, auto r, auto b, auto y) -> NumericalStatus
-                                          { return AssembleDefectRows<PhysicalAccumulationKind::ConstantDensityVelocityPressure>(u, r, b, y, metric, mean.ComponentNumber(), mass, rhsScale, [&](index j)
-                                                                                                                                 { return active.empty() || active[j]; }, normOrder, measureNorm, norm, partials); }, mean, residual, constant, output);
+        const auto selected = [&](index j)
+        { return active.empty() || active[j]; };
+        return DispatchStageAccumulation(accumulation, [&](auto kind)
+                                         { return DispatchCPUEquationLayouts([&](auto u, auto r, auto b, auto y)
+                                                                             { return AssembleDefectRows<decltype(kind)::value>(u, r, b, y, metric, mean.ComponentNumber(),
+                                                                                                                                inverseDt, rhsScale, selected, normOrder, measureNorm, norm, partials); }, mean, residual, constant, output); });
     }
 
     // Keep these helpers at namespace scope: clangd 21.1.0 and 23.1.0
