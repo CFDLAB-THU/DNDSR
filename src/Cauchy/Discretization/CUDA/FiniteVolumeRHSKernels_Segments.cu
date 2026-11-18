@@ -10,9 +10,9 @@ namespace DNDS::Cauchy::CUDA::Detail
         packages.ValidateDevice(context.device);
         const auto shape = RHSFacePackages::StageShape(controls);
         const size_t sharedBytes = size_t(controls.blockSize) * (controls.components * sizeof(real) * (controls.produceLow ? 2 : 1) + 2 * sizeof(int) + 3 * sizeof(index)) +
-                                   size_t(packages.maximumFaces) * 2 * shape.width * sizeof(real);
+                                   size_t(packages.maximumFaces) * 2 * shape.width * sizeof(real) * (controls.doubleBuffer ? 2 : 1);
         DNDS_check_throw_info(packages.mapping == controls.mapping && packages.blockSize == controls.blockSize &&
-                                  packages.produceLow == controls.produceLow && packages.selection.data == selected.data &&
+                                  packages.produceLow == controls.produceLow && packages.doubleBuffer == controls.doubleBuffer && packages.selection.data == selected.data &&
                                   packages.selection.RowCount() == selected.RowCount() && packages.selection.stride == selected.stride &&
                                   packages.shape.components == shape.components && packages.shape.reconstruction == shape.reconstruction && packages.shape.viscous == shape.viscous && packages.shape.width == shape.width &&
                                   packages.sharedBytes == sharedBytes && packages.sharedBytes <= 48 * 1024 && packages.maximumFaces > 0 &&

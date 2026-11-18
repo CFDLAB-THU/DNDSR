@@ -73,7 +73,7 @@ namespace DNDS::Cauchy
         std::string rhsMapping = "auto", rhsReduction = "auto";
         int rhsGridBlocks = 0;
         int rhsBlockSize = 128;
-        bool rhsDoubleBuffer = false;
+        bool rhsDoubleBuffer = false, rhsHoistFaceRows = false;
         int polynomialPPThreads = 0;
         DNDS_DECLARE_CONFIG(KernelExecutionSettings)
         {
@@ -82,18 +82,19 @@ namespace DNDS::Cauchy
             DNDS_FIELD(polynomialArithmetic, "Point-local polynomial compute: fp64, fp32 or f32f32; coefficients remain FP64");
             DNDS_FIELD(dissipationArithmetic, "Gas-agnostic Riemann dissipation arithmetic: fp64, fp32 or f32f32");
             DNDS_FIELD(fluxArithmetic, "Point physics and full flux arithmetic: fp64, fp32 or f32f32; residual sums remain FP64");
-            DNDS_FIELD(rhsMapping, "auto selects ctaSegments for FP64 non-species perfect gas; thread is reserved for reduced-precision flow5 comparisons");
-            DNDS_FIELD(rhsReduction, "auto selects deterministic segmented reduction for automatic CTA mapping; explicit serial or segmented remains available");
+            DNDS_FIELD(rhsMapping, "auto selects ctaSegments for FP64 non-species perfect gas; thread is an explicit comparison");
+            DNDS_FIELD(rhsReduction, "auto selects segmented CTA reduction; explicit serial, segmented, boundedTree, or warpTree with a cross-warp fallback");
             DNDS_FIELD(rhsGridBlocks, "CUDA RHS maximum grid blocks; 0 keeps the mapping default cap");
-            DNDS_FIELD(rhsBlockSize, "CUDA RHS runtime threads per block: 128, 256 or 512 for CTA segments; 64 is also available for reduced-precision thread comparisons");
-            DNDS_FIELD(rhsDoubleBuffer, "Retired buffered-face experiment; must remain false");
+            DNDS_FIELD(rhsBlockSize, "CUDA RHS runtime threads per block: 64, 128, 256 or 512");
+            DNDS_FIELD(rhsDoubleBuffer, "Experimental two-bank FP64 CTA staging");
+            DNDS_FIELD(rhsHoistFaceRows, "Experimental static FP64 face-thread row binding");
             DNDS_FIELD(polynomialPPThreads, "CUDA polynomial PP block size: 0 selects the device/shape default (512 for measured A100 P3 flow5, otherwise 128); explicit 128/256/512 or the existing environment override is preserved");
         }
         bool Default() const
         {
             return stateInputLayout == "aos" && reconstructionInputLayout == "aos" &&
                    polynomialArithmetic == "fp64" && dissipationArithmetic == "fp64" && fluxArithmetic == "fp64" && (rhsMapping == "auto" || rhsMapping == "thread") &&
-                   rhsBlockSize == 128 && !rhsDoubleBuffer && (rhsReduction == "auto" || rhsReduction == "serial") && rhsGridBlocks == 0 && polynomialPPThreads == 0;
+                   rhsBlockSize == 128 && !rhsDoubleBuffer && !rhsHoistFaceRows && (rhsReduction == "auto" || rhsReduction == "serial") && rhsGridBlocks == 0 && polynomialPPThreads == 0;
         }
     };
     struct ExecutionSettings

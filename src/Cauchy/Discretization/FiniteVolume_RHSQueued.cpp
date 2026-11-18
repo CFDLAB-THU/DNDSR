@@ -59,10 +59,14 @@ namespace DNDS::Cauchy
                                : kernelSettings.rhsMapping == "warpSegments" ? CUDA::RHSFaceMapping::WarpSegments
                                : kernelSettings.rhsMapping == "ctaSegments"  ? CUDA::RHSFaceMapping::CTASegments
                                                                              : CUDA::RHSFaceMapping::Thread;
-            controls.reduction = kernelSettings.rhsReduction == "segmented" ? CUDA::RHSFaceReduction::Segmented : CUDA::RHSFaceReduction::Serial;
+            controls.reduction = kernelSettings.rhsReduction == "segmented"     ? CUDA::RHSFaceReduction::Segmented
+                                 : kernelSettings.rhsReduction == "boundedTree" ? CUDA::RHSFaceReduction::BoundedTree
+                                 : kernelSettings.rhsReduction == "warpTree"    ? CUDA::RHSFaceReduction::WarpTree
+                                                                                : CUDA::RHSFaceReduction::Serial;
             controls.gridBlocks = kernelSettings.rhsGridBlocks;
             controls.blockSize = kernelSettings.rhsBlockSize;
             controls.doubleBuffer = kernelSettings.rhsDoubleBuffer;
+            controls.hoistFaceRows = kernelSettings.rhsHoistFaceRows;
             controls.modes = owner->reconstruction ? owner->reconstruction->NRecDOF() : 0;
             controls.direct = n.reconstruction != "variational";
             controls.linear = n.reconstruction == "gradient";

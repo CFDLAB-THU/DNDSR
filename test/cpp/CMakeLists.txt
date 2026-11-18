@@ -1257,3 +1257,9 @@ foreach(_dnds_test IN LISTS _dnds_cpp_tests)
 endforeach()
 
 include(${PROJECT_SOURCE_DIR}/cmake/DndsCITestLevels.cmake)
+
+if(DNDS_USE_CUDA)
+    add_executable(cauchy_benchmark_rhs_face_mappings_cuda EXCLUDE_FROM_ALL Cauchy/benchmark_RHSFaceMappingsCUDA.cpp)
+    target_include_directories(cauchy_benchmark_rhs_face_mappings_cuda PRIVATE ${DNDS_EXTERNAL_INCLUDES} ${DNDS_INCLUDES})
+    target_link_libraries(cauchy_benchmark_rhs_face_mappings_cuda PRIVATE cauchy physics cfv geom dnds CUDA::cudart ${DNDS_EXTERNAL_LIBS})
+endif()

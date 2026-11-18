@@ -93,7 +93,7 @@ namespace DNDS::Cauchy::CUDA
         RHSFaceReduction reduction = RHSFaceReduction::Serial;
         int gridBlocks = 0;
         int blockSize = 128;
-        bool doubleBuffer = false;
+        bool doubleBuffer = false, hoistFaceRows = false;
         void Validate() const;
     };
     static_assert(std::is_trivially_copyable_v<RHSKernelControls>);

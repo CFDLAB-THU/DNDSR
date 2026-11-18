@@ -341,19 +341,19 @@ namespace DNDS::Cauchy
         if (kernels.rhsReduction == "auto")
             kernels.rhsReduction = kernels.rhsMapping == "ctaSegments" ? "segmented" : "serial";
         require(kernels.polynomialPPThreads == 0 || kernels.polynomialPPThreads == 128 || kernels.polynomialPPThreads == 256 || kernels.polynomialPPThreads == 512, "invalid polynomial PP block size");
-        require(!cuda || kernels.rhsMapping == (fp64RHS ? "ctaSegments" : "thread"),
-                "FP64 CUDA RHS requires ctaSegments; reduced-precision comparisons require thread");
+        require(!cuda || kernels.rhsMapping == "thread" || (fp64RHS && kernels.rhsMapping == "ctaSegments"),
+                "CUDA RHS requires thread or FP64 ctaSegments");
         require(kernels.rhsBlockSize == 64 || kernels.rhsBlockSize == 128 || kernels.rhsBlockSize == 256 || kernels.rhsBlockSize == 512, "RHS block size must be 64, 128, 256 or 512");
-        require(!kernels.rhsDoubleBuffer, "buffered-face RHS experiment has been retired");
-        require(kernels.rhsReduction == "serial" || kernels.rhsReduction == "segmented", "unknown RHS face reduction");
+        require(!kernels.rhsHoistFaceRows || (fp64RHS && kernels.rhsMapping == "thread"), "face-row binding requires FP64 thread mapping");
+        require(!kernels.rhsDoubleBuffer || (fp64RHS && kernels.rhsMapping == "ctaSegments"), "double buffering requires FP64 CTA segments");
+        require(kernels.rhsReduction == "serial" || kernels.rhsReduction == "segmented" ||
+                    kernels.rhsReduction == "boundedTree" || kernels.rhsReduction == "warpTree",
+                "unknown RHS face reduction");
         require(kernels.rhsGridBlocks >= 0, "RHS grid block cap cannot be negative");
-        require(kernels.rhsMapping != "ctaSegments" ||
-                    (!kernels.rhsDoubleBuffer && kernels.rhsBlockSize >= 128),
-                "RHS segment mappings require their own staging and 128/256/512 threads");
         for (const auto *layout : {&kernels.stateInputLayout, &kernels.reconstructionInputLayout})
             require(*layout == "aos" || *layout == "aosoa32", "kernel input layout " + *layout);
         require(!cuda || !fp64RHS || (kernels.stateInputLayout == "aos" && kernels.reconstructionInputLayout == "aos"),
-                "FP64 CTA RHS requires compact AoS input fields; tiled shadows are reduced-precision comparison inputs only");
+                "FP64 RHS requires compact AoS input fields; tiled shadows are reduced-precision comparison inputs only");
         for (const auto *precision : {&kernels.polynomialArithmetic, &kernels.dissipationArithmetic, &kernels.fluxArithmetic})
         {
             require(*precision == "fp64" || *precision == "fp32" || *precision == "f32f32", "kernel arithmetic " + *precision);

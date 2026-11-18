@@ -43,11 +43,12 @@ namespace DNDS::Cauchy::CUDA
         view.mapping = controls.mapping;
         view.blockSize = controls.blockSize;
         view.produceLow = controls.produceLow;
+        view.doubleBuffer = controls.doubleBuffer;
         view.shape = StageShape(controls);
         // Per lane: high/(optional low) flux, error code/detail/row/point,
         // and integer fallback count. No point state leaves CTA memory.
         const size_t scratch = size_t(controls.blockSize) * (controls.components * sizeof(real) * (controls.produceLow ? 2 : 1) + 2 * sizeof(int) + 3 * sizeof(index));
-        const size_t stagePerFace = size_t(2 * view.shape.width) * sizeof(real);
+        const size_t stagePerFace = size_t(2 * view.shape.width) * sizeof(real) * (controls.doubleBuffer ? 2 : 1);
         constexpr size_t budget = 48 * 1024;
         DNDS_check_throw_info(scratch < budget && stagePerFace <= budget - scratch,
                               "RHS segment shape/block size exceeds portable 48 KiB shared-memory budget");
@@ -64,6 +65,7 @@ namespace DNDS::Cauchy::CUDA
             if (!current.faces)
                 return;
             view.maximumFaces = std::max(view.maximumFaces, current.faces);
+            view.warpContainedPackages += current.warpContained;
             packages.push_back(current);
             current = {index(segments.size()), 0, 0};
             cursor = 0;
@@ -86,6 +88,8 @@ namespace DNDS::Cauchy::CUDA
             segments.push_back({iAux, points, start, lanes});
             ++current.faces;
             current.tiles = std::max(current.tiles, int(points / lanes + (points % lanes != 0)));
+            current.maximumLanes = std::max(current.maximumLanes, lanes);
+            current.warpContained &= start / 32 == (start + lanes - 1) / 32;
             cursor = start + lanes;
         }
         finish();
