@@ -168,7 +168,21 @@ entry diagonal and assembled or semi-matrix-free off-diagonals, then call
 `prepare_jacobian`. The supplied inverse pseudo-time is an owned scalar Runtime
 array. `JacobianPreparation` describes physical mass, RHS scaling and optional
 named-selection-resolved component indices. Nonconstant chemical reconstruction
-also needs the completed equation workspace as `source_workspace`.
+also needs the equation workspace as `source_workspace`.
+
+With `implicit.sourceJacobianMode = "rhsQuadrature"`, create one derivative
+buffer per retained rate. Keep each pair together until its last matrix
+assembly. Shape-compatible buffers can be reused after that point.
+
+```python
+derivative = operators.build_source_derivative(state)
+operators.evaluate(state, rate, work, engine, stream, time, source_derivative=derivative)
+operators.prepare_correction_aux(state, work, auxiliary, engine, stream, time)
+operators.prepare_jacobian(state, auxiliary, inverse_dt, problem, controls, time,
+                           source_workspace=work, source_derivative=derivative)
+```
+
+For centered linearization, `build_source_derivative` returns `None`.
 
 Preparation is synchronous and local. It consumes ready halos and explicit
 auxiliary data and performs no hidden EOS policy selection or halo exchange.

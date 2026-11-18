@@ -37,14 +37,26 @@ namespace DNDS::Cauchy::Bindings
             return MeanWorkspace{op.fv.BuildMeanWorkspace(u, op.workers)};
         }, py::arg("state"), py::keep_alive<0, 1>(), py::keep_alive<0, 2>(), py::call_guard<py::gil_scoped_release>(),
                  Collective)
+            .def("build_source_derivative",
+                 [](const FiniteVolumeOperators &op, const EquationDofs &state) -> std::optional<R::PythonArray>
+        {
+            const auto record = op.fv.BuildSourceDerivative(state);
+            if (record)
+                return R::PythonArray::Share(*record);
+            return {};
+        }, py::arg("state"),
+                 "Allocate the cell derivative paired with one spatial rate. Centered linearization returns None.")
             .def("evaluate",
                  [](const FiniteVolumeOperators &op, EquationDofs &u, EquationDofs &r, Workspace &w, R::EagerEngine &e,
-                    const R::ExecutionStream &s, real t)
+                    const R::ExecutionStream &s, real t, const std::optional<R::PythonArray> &sourceDerivative)
         {
-            op.fv.Evaluate(u, r, *w.reconstruction, *w.value, e, s, t);
+            auto writable = sourceDerivative ? std::optional(sourceDerivative->AsArray<real>()) : std::nullopt;
+            py::gil_scoped_release release;
+            op.fv.Evaluate(u, r, *w.reconstruction, *w.value, e, s, t,
+                           writable ? OptionalRef<R::Array<real>>(*writable) : OptionalRef<R::Array<real>>{});
         },
                  py::arg("state"), py::arg("residual"), py::arg("workspace"), py::arg("engine"), py::arg("stream"),
-                 py::arg("time") = 0, py::call_guard<py::gil_scoped_release>(), Collective)
+                 py::arg("time") = 0, py::arg("source_derivative") = std::nullopt, Collective)
             .def(
                 "build_face_flux_buffer",
                 [](const FiniteVolumeOperators &op, const EquationDofs &u)
@@ -163,19 +175,25 @@ namespace DNDS::Cauchy::Bindings
             .def("prepare_jacobian",
                  [](const FiniteVolumeOperators &op, const EquationDofs &u, const AuxiliaryValues &a,
                     const R::PythonArray &inverseDt, LinearProblemContext &p, JacobianPreparation c, real t,
-                    const Workspace *w)
+                    const Workspace *w, const std::optional<R::PythonArray> &sourceDerivative)
         {
             // Dtype resolution uses Python. Freeze the native sharing
             // handle before releasing the GIL for numerical execution.
             const auto native = inverseDt.AsArray<real>();
+            const auto record = sourceDerivative ? std::optional(sourceDerivative->AsArray<real>()) : std::nullopt;
+            auto context =
+                w ? std::optional(FiniteVolume::JacobianContext{*w->reconstruction, *w->value}) : std::nullopt;
+            if (record)
+            {
+                DNDS_check_throw_info(context, "a source derivative requires its source workspace");
+                context->sourceDerivative.Emplace(*record);
+            }
             py::gil_scoped_release release;
-            op.fv.PrepareJacobian(u, a, native, p, c, t, op.workers,
-                                  w ? std::optional(FiniteVolume::JacobianContext{*w->reconstruction, *w->value})
-                                    : std::nullopt);
+            op.fv.PrepareJacobian(u, a, native, p, c, t, op.workers, context);
         },
                  py::arg("state"), py::arg("auxiliary"), py::arg("inverse_pseudo_time"), py::arg("output"),
                  py::arg_v("controls", JacobianPreparation{}, "JacobianPreparation()"), py::arg("time") = 0,
-                 py::arg("source_workspace") = nullptr, Local)
+                 py::arg("source_workspace") = nullptr, py::arg("source_derivative") = std::nullopt, Local)
             .def("build_linear_solver",
                  [](const FiniteVolumeOperators &op, std::shared_ptr<LinearProblemContext> p, const EquationDofs &u,
                     LinearSolveSettings settings, LinearExecution execution)

@@ -69,6 +69,8 @@ def test_finite_volume_operator_frontend_composes_native_residual_and_linear_sol
             })
             config["defaults"]["numerics"].update({"viscousGradient": "polynomial", "ransState": {
                 "referenceConservative": {"rho": .8, "rhoNuTilde": .02}}})
+            if overlap:
+                config["defaults"]["implicit"] = {"sourceJacobianMode": "rhsQuadrature"}
         domain = C.Domain(mesh, json.dumps(config))
         operators = C.FiniteVolumeOperators(domain)
         spatial = json.loads(operators.spatial_settings_json)
@@ -112,7 +114,9 @@ def test_finite_volume_operator_frontend_composes_native_residual_and_linear_sol
         with pytest.raises(RuntimeError):
             operators.evaluate(state, state, work, engine, stream)
         assert_state_equal(state, before, rtol=0, atol=0)
-        operators.evaluate(state, residual, work, engine, stream)
+        derivative = operators.build_source_derivative(state)
+        assert (derivative is not None) == (mixture and overlap)
+        operators.evaluate(state, residual, work, engine, stream, source_derivative=derivative)
         assert_state_equal(residual, reference, rtol=3e-10, atol=2e-11)
         flux = state.zeros_like()
         faces = operators.build_face_flux_buffer(state)
@@ -151,7 +155,8 @@ def test_finite_volume_operator_frontend_composes_native_residual_and_linear_sol
             inverse_dt[i_cell, 0] = 1e4
         controls = C.JacobianPreparation()
         controls.physical_mass = 10
-        operators.prepare_jacobian(state, auxiliary, inverse_dt, problem, controls, source_workspace=work)
+        operators.prepare_jacobian(state, auxiliary, inverse_dt, problem, controls, source_workspace=work,
+                                   source_derivative=derivative)
         problem.invert_diagonal()
         exact = state.zeros_like()
         for i_field, name in enumerate(exact.field_names):
