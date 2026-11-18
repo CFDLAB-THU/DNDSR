@@ -1647,66 +1647,64 @@ TEST_CASE("SA cached corrections retain pre-RHS auxiliary publication across CPU
     auto mesh = CauchyTest::PeriodicQuads(mpi, 8);
     mesh->BuildNodeWallDist([](auto)
                             { return false; });
-    for (int workers : {0, 2})
-    {
-        auto settings = Settings();
-        settings.boundaries.clear();
-        settings.execution.overlap = bool(workers);
-        settings.numerics.reconstruction = "variational";
-        settings.numerics.cfv.maxOrder = 3;
-        settings.numerics.reconstructionIterations = 1;
-        settings.numerics.flux = "Roe_M1";
-        settings.numerics.ransState.referenceConservative = {{"rho", 1}, {"rhoNuTilde", .02}};
-        SUBCASE("quadrature derivative is explicitly paired with the cached rate")
+    for (const std::string sourceMode : {"center", "rhsQuadrature"})
+        for (int workers : {0, 2})
         {
-            settings.implicit.sourceJacobianMode = "rhsQuadrature";
+            auto settings = Settings();
+            settings.boundaries.clear();
+            settings.execution.overlap = bool(workers);
+            settings.numerics.reconstruction = "variational";
+            settings.numerics.cfv.maxOrder = 3;
+            settings.numerics.reconstructionIterations = 1;
+            settings.numerics.flux = "Roe_M1";
+            settings.numerics.ransState.referenceConservative = {{"rho", 1}, {"rhoNuTilde", .02}};
+            CAPTURE(sourceMode);
+            settings.implicit.sourceJacobianMode = sourceMode;
+            settings.implicit.pseudoCFL = .1;
+            settings.implicit.linear.method = "ilu";
+            settings.implicit.linear.stopping = "fixedCount";
+            settings.implicit.linear.iterations = 2;
+            settings.implicit.diagonal = "block";
+            C::FiniteVolume fv(mesh, settings, Equation(settings));
+            // Exercise ordered coupled-AoS nonlinear rows against the generic
+            // permuted/split layouts, with identical physical states and controls.
+            auto direct = C::EquationDofs::Coupled(fv.Equation().Schema(), fv.Metrics().BuildField(6));
+            auto cached = State(fv, workers ? 1 : 0);
+            Fill(direct, fv, true);
+            C::EquationDofOperations::Copy(cached, direct);
+            auto source = C::EquationDofOperations::NewVector(direct);
+            auto rate = C::EquationDofOperations::NewVector(cached);
+            C::EquationDofOperations::Fill(source, 0.);
+            R::EagerEngine engine(workers);
+            const auto stream = engine.CreateCPUStream();
+            C::NonlinearSolver a(fv, direct, fv.BuildReconstructionState(direct), fv.BuildWorkspace(direct), engine, stream, settings, A::ComponentSelection(6));
+            C::NonlinearSolver b(fv, cached, fv.BuildReconstructionState(cached), fv.BuildWorkspace(cached), engine, stream, settings, A::ComponentSelection(6));
+            CHECK_THROWS_WITH(b.PreparedAuxValues(), doctest::Contains("not been prepared"));
+            auto record = b.BuildSourceDerivative(cached);
+            REQUIRE(bool(record) == (settings.implicit.sourceJacobianMode == "rhsQuadrature"));
+            DNDS::OptionalRef<R::Array<real>> derivative;
+            if (record)
+                derivative.Emplace(*record);
+            b.EvaluateRate(cached, rate, .2, derivative);
+            fv.ValidateAuxValues(cached, b.PreparedAuxValues(), .2);
+            const auto meanVersion = b.PreparedAuxValues().meanThermodynamics->Version();
+            const auto faceVersion = b.PreparedAuxValues().faceSpectralRadius->Version();
+            const auto sumVersion = b.PreparedAuxValues().cellSpectralSum->Owned().Version();
+            const auto oldOwnedVersion = cached.PhysicalField(0).Owned().Version();
+            const auto fresh = a.CorrectOnce(direct, source, 0., 1., .2);
+            const auto reused = b.CorrectOnce(cached, source, 0., 1., .2, 0, {}, std::cref(rate), derivative);
+            CHECK(fresh.linearIterations == reused.linearIterations);
+            CHECK(cached.PhysicalField(0).Owned().Version() > oldOwnedVersion);
+            CHECK(b.PreparedAuxValues().meanThermodynamics->Version() == meanVersion);
+            CHECK(b.PreparedAuxValues().faceSpectralRadius->Version() == faceVersion);
+            CHECK(b.PreparedAuxValues().cellSpectralSum->Owned().Version() == sumVersion);
+            const auto x = direct.ReadOwned(), y = cached.ReadOwned();
+            const auto xl = x.ComponentLayout(), yl = y.ComponentLayout();
+            const auto xv = xl.View(), yv = yl.View();
+            for (I iCell = 0; iCell < fv.Metrics().NumCell(); ++iCell)
+                for (I j = 0; j < 6; ++j)
+                    CHECK(xv(iCell, j) == doctest::Approx(yv(iCell, j)).epsilon(2e-10).scale(1e-12));
         }
-        SUBCASE("center source Jacobian") { settings.implicit.sourceJacobianMode = "center"; }
-        settings.implicit.pseudoCFL = .1;
-        settings.implicit.linear.method = "ilu";
-        settings.implicit.linear.stopping = "fixedCount";
-        settings.implicit.linear.iterations = 2;
-        settings.implicit.diagonal = "block";
-        C::FiniteVolume fv(mesh, settings, Equation(settings));
-        // Exercise ordered coupled-AoS nonlinear rows against the generic
-        // permuted/split layouts, with identical physical states and controls.
-        auto direct = C::EquationDofs::Coupled(fv.Equation().Schema(), fv.Metrics().BuildField(6));
-        auto cached = State(fv, workers ? 1 : 0);
-        Fill(direct, fv, true);
-        C::EquationDofOperations::Copy(cached, direct);
-        auto source = C::EquationDofOperations::NewVector(direct);
-        auto rate = C::EquationDofOperations::NewVector(cached);
-        C::EquationDofOperations::Fill(source, 0.);
-        R::EagerEngine engine(workers);
-        const auto stream = engine.CreateCPUStream();
-        C::NonlinearSolver a(fv, direct, fv.BuildReconstructionState(direct), fv.BuildWorkspace(direct), engine, stream, settings, A::ComponentSelection(6));
-        C::NonlinearSolver b(fv, cached, fv.BuildReconstructionState(cached), fv.BuildWorkspace(cached), engine, stream, settings, A::ComponentSelection(6));
-        CHECK_THROWS_WITH(b.PreparedAuxValues(), doctest::Contains("not been prepared"));
-        auto record = b.BuildSourceDerivative(cached);
-        REQUIRE(bool(record) == (settings.implicit.sourceJacobianMode == "rhsQuadrature"));
-        DNDS::OptionalRef<R::Array<real>> derivative;
-        if (record)
-            derivative.Emplace(*record);
-        b.EvaluateRate(cached, rate, .2, derivative);
-        fv.ValidateAuxValues(cached, b.PreparedAuxValues(), .2);
-        const auto meanVersion = b.PreparedAuxValues().meanThermodynamics->Version();
-        const auto faceVersion = b.PreparedAuxValues().faceSpectralRadius->Version();
-        const auto sumVersion = b.PreparedAuxValues().cellSpectralSum->Owned().Version();
-        const auto oldOwnedVersion = cached.PhysicalField(0).Owned().Version();
-        const auto fresh = a.CorrectOnce(direct, source, 0., 1., .2);
-        const auto reused = b.CorrectOnce(cached, source, 0., 1., .2, 0, {}, std::cref(rate), derivative);
-        CHECK(fresh.linearIterations == reused.linearIterations);
-        CHECK(cached.PhysicalField(0).Owned().Version() > oldOwnedVersion);
-        CHECK(b.PreparedAuxValues().meanThermodynamics->Version() == meanVersion);
-        CHECK(b.PreparedAuxValues().faceSpectralRadius->Version() == faceVersion);
-        CHECK(b.PreparedAuxValues().cellSpectralSum->Owned().Version() == sumVersion);
-        const auto x = direct.ReadOwned(), y = cached.ReadOwned();
-        const auto xl = x.ComponentLayout(), yl = y.ComponentLayout();
-        const auto xv = xl.View(), yv = yl.View();
-        for (I iCell = 0; iCell < fv.Metrics().NumCell(); ++iCell)
-            for (I j = 0; j < 6; ++j)
-                CHECK(xv(iCell, j) == doctest::Approx(yv(iCell, j)).epsilon(2e-10).scale(1e-12));
-    }
 }
 
 TEST_CASE("P0 jump-only face viscosity retains physical gradients in the SA volume source")
