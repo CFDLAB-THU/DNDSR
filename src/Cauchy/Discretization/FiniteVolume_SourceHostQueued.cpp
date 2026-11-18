@@ -29,19 +29,6 @@ namespace DNDS::Cauchy
                         DNDS_check_throw_info(!target.Storage().Overlaps(g.Owned().Storage()), "source residual aliases direct gradients");
             }
         };
-        if (sourceDerivative)
-        {
-            auto &record = *sourceDerivative;
-            const auto n = state.ComponentNumber();
-            DNDS_check_throw_info(owner->settings.implicit.sourceJacobianMode == "rhsQuadrature" &&
-                                      record.GetDevice() == state.Device() && record.RowCount() == owner->metrics.NumCell() &&
-                                      record.Layout().Kind() == R::RowLayoutKind::Table && record.Layout().Width() == n * n,
-                                  "invalid RHS source derivative destination");
-            for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
-                DNDS_check_throw_info(!record.Storage().Overlaps(state.PhysicalField(iField).Owned().Storage()) &&
-                                          !record.Storage().Overlaps(result.PhysicalField(iField).Owned().Storage()),
-                                      "source derivative aliases state or residual");
-        }
         checkOutput(result);
         if (lowOrder)
         {

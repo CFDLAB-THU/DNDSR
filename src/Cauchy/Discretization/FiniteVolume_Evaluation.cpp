@@ -242,14 +242,14 @@ namespace DNDS::Cauchy
                 return;
             }
         case FiniteVolumeEvaluationMode::ReconstructionOnly:
-            DNDS_check_throw_info(!evaluation.residual && !evaluation.auxiliary,
-                                  "reconstruction-only FV evaluation has no residual or auxiliary output");
+            DNDS_check_throw_info(!evaluation.residual && !evaluation.auxiliary && !evaluation.sourceDerivative,
+                                  "reconstruction-only FV evaluation accepts no spatial outputs");
             EvaluateImpl(state, {}, reconstruction, work, engine, stream,
                          communication, evaluation.time);
             return;
         case FiniteVolumeEvaluationMode::SamplingInputs:
-            DNDS_check_throw_info(!evaluation.residual && !evaluation.auxiliary,
-                                  "sampling-input FV evaluation has no residual or auxiliary output");
+            DNDS_check_throw_info(!evaluation.residual && !evaluation.auxiliary && !evaluation.sourceDerivative,
+                                  "sampling-input FV evaluation accepts no spatial outputs");
             RefreshSamplingInputs(state, reconstruction, work, engine, stream,
                                   communication);
             return;
@@ -344,6 +344,33 @@ namespace DNDS::Cauchy
                 for (index iField = 0; iField < output.PhysicalFieldNumber(); ++iField)
                     output.PhysicalField(iField).Owned().Storage().ValidateReservation(
                         R::AccessMode::Write, Device(), engine.ChecksAccess());
+            }
+            if (sourceDerivative)
+            {
+                const auto &record = *sourceDerivative;
+                const index n = state.ComponentNumber();
+                DNDS_check_throw_info(residual && _data->quadrature.source && _data->settings.implicit.sourceJacobianMode == "rhsQuadrature" &&
+                                          record.GetDevice() == Device() && record.RowCount() == Metrics().NumCell() &&
+                                          record.Layout().Kind() == R::RowLayoutKind::Table && record.Layout().Width() == n * n,
+                                      "invalid RHS source derivative destination");
+                const auto distinct = [&](const EquationDofs &fields)
+                {
+                    for (index field = 0; field < fields.PhysicalFieldNumber(); ++field)
+                    {
+                        const auto &values = fields.PhysicalField(field);
+                        DNDS_check_throw_info(!record.Storage().Overlaps(values.Owned().Storage()) &&
+                                              !record.Storage().Overlaps(values.Ghost().Storage()),
+                                              "source derivative aliases an evaluation field");
+                    }
+                };
+                distinct(state);
+                distinct(*residual);
+                if (reconstruction.coefficients)
+                {
+                    distinct(reconstruction.WarmValues());
+                    distinct(reconstruction.FinalizedValues());
+                }
+                record.Storage().ValidateReservation(R::AccessMode::Write, Device(), engine.ChecksAccess());
             }
             DNDS_check_throw_info(!HasInterfaces() || work.incoming || dependency,
                                   "FV evaluation needs a ready interface packet");
