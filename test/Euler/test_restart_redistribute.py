@@ -383,6 +383,7 @@ def test_restart_redistribute_different_np(work_dir):
 # This integration case launches a writer plus five independent MPI restarts.
 # Bound the complete campaign rather than applying the short unit-test budget.
 @pytest.mark.timeout(300)
+@pytest.mark.level2
 def test_restart_redistribute_large_mesh_multi_np(work_dir_large):
     """Write restart at np=4 with 20x20 mesh, read at np=4..8."""
     if not os.path.isfile(EULER_EXE):
