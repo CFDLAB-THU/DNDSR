@@ -149,7 +149,8 @@ namespace DNDS::Cauchy
         // frozen boundary and independent mean-gradient prefix. A direct
         // correction also requires its normal limiter/PP gradient publication.
         const bool modal = _data->settings.numerics.reconstruction == "variational";
-        EvaluateImpl(state, {}, reconstruction, work, engine, compute, communication, time, {}, {}, {}, modal);
+        EvaluateImpl(state, {}, reconstruction, work, engine, compute, communication, time, {}, {}, {},
+                     modal ? EvaluationPurpose::RestoreModalGradient : EvaluationPurpose::RestoreDirectGradient);
     }
     void FiniteVolume::Evaluate(EquationDofs &state, EquationDofs &residual, ReconstructionState &reconstruction, Workspace &work,
                                 Runtime::EagerEngine &engine, const Runtime::ExecutionStream &stream, real time, OptionalRef<R::Array<real>> sourceDerivative) const
@@ -268,10 +269,11 @@ namespace DNDS::Cauchy
                                     const Runtime::ExecutionStream &stream,
                                     const Runtime::ExecutionStream &communication, real time,
                                     OptionalRef<AuxiliaryValues> auxiliary,
-                                    OptionalRef<const QueuedEvaluationDependency> dependency, OptionalRef<R::Array<real>> sourceDerivative, bool stopAfterGradient) const
+                                    OptionalRef<const QueuedEvaluationDependency> dependency, OptionalRef<R::Array<real>> sourceDerivative, EvaluationPurpose purpose) const
     {
         const TimelineScope timeline("Cauchy/FV/Evaluate");
-        if (!stopAfterGradient && !auxiliary && work.rhsAuxiliary)
+        const bool stopAfterGradient = purpose == EvaluationPurpose::RestoreModalGradient;
+        if (purpose == EvaluationPurpose::Spatial && !auxiliary && work.rhsAuxiliary)
             auxiliary.Emplace(*work.rhsAuxiliary);
         auto reconstructionSession = reconstruction.session.Acquire();
         auto session = work.session.Acquire();
@@ -432,12 +434,22 @@ namespace DNDS::Cauchy
         // Payload operations retain their own inputs; queued callbacks only
         // borrow objects declared before schedule (or capture values explicitly).
         std::vector<Algebra::DofHalo<>::Operation> meanOperations;
-        meanOperations.reserve(reconstruction.meanHalo.size());
-        ++reconstruction.meanEpoch;
-        for (auto &halo : reconstruction.meanHalo)
-            meanOperations.push_back(halo.BeginAfter(
-                reconstruction.meanEpoch, engine, communication, stream.Record(),
-                _data->settings.CheckHaloFreshness()));
+        if (purpose == EvaluationPurpose::Spatial)
+        {
+            meanOperations.reserve(reconstruction.meanHalo.size());
+            ++reconstruction.meanEpoch;
+            for (auto &halo : reconstruction.meanHalo)
+                meanOperations.push_back(halo.BeginAfter(
+                    reconstruction.meanEpoch, engine, communication, stream.Record(),
+                    _data->settings.CheckHaloFreshness()));
+        }
+        else if (_data->settings.CheckHaloFreshness())
+        {
+            // The correction already owns a published mean halo. Starting a
+            // second exchange would invalidate the stage's frozen auxiliary.
+            for (index field = 0; field < state.PhysicalFieldNumber(); ++field)
+                reconstruction.meanHalo[field].RequireCurrent(state.PhysicalField(field), reconstruction.meanEpoch);
+        }
         std::vector<R::TransferOperation> firstCoefficients;
         const auto &numerics = _data->settings.numerics;
         const bool variational = !work.meanOnly && numerics.reconstruction == "variational";

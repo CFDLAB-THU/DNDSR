@@ -841,7 +841,7 @@ namespace DNDS::Cauchy
                                   OptionalRef<const QueuedEvaluationDependency> dependency = {}) const;
         /// A stored rate can outlive the scratch gradient of a coupled stage.
         /// Refresh its centered RANS gradient if another evaluation overwrote
-        /// the workspace. Requires the matching stage's published interface.
+        /// the workspace. Requires the matching stage's published mean halo and interface.
         void EnsureCenterSourceGradient(EquationDofs &state, ReconstructionState &reconstruction, Workspace &workspace,
                                         Runtime::EagerEngine &engine, const Runtime::ExecutionStream &compute,
                                         const Runtime::ExecutionStream &communication, real time) const;
@@ -929,13 +929,19 @@ namespace DNDS::Cauchy
         std::shared_ptr<Workspace> BuildWorkspaceImpl(EquationDofs &state,
                                                       std::optional<Physics::Chemistry::ChemicalWorkerPool> workers,
                                                       bool meanOnly, WorkspaceOptions options = WorkspaceOptions()) const;
+        enum class EvaluationPurpose
+        {
+            Spatial,
+            RestoreModalGradient,
+            RestoreDirectGradient
+        };
         void EvaluateImpl(EquationDofs &state, OptionalRef<EquationDofs> residual,
                           ReconstructionState &reconstruction, Workspace &workspace, Runtime::EagerEngine &engine,
                           const Runtime::ExecutionStream &compute,
                           const Runtime::ExecutionStream &communication, real time,
                           OptionalRef<AuxiliaryValues> auxiliary = {},
                           OptionalRef<const QueuedEvaluationDependency> dependency = {}, OptionalRef<Runtime::Array<real>> sourceDerivative = {},
-                          bool stopAfterGradient = false) const;
+                          EvaluationPurpose purpose = EvaluationPurpose::Spatial) const;
         void ValidateEquationSourceJacobian(const EquationDofs &state,
                                             const JacobianContext &context, real time) const;
         bool AddEquationSourceJacobian(const EquationDofs &state,
