@@ -247,6 +247,9 @@ _dnds_maybe_set_timeout(probe ${{DNDS_TEST_TIMEOUT}})
         self.assertEqual(props["TIMEOUT"], 0)
 
     def test_mpi_release_guard_and_reconfigure(self):
+        # This probe supplies its own MPI headers. The caller's MPI compiler
+        # wrapper can otherwise put the real header ahead of the fixture.
+        self.env.pop("CXX", None)
         self.write("CMakeLists.txt", f'''
 cmake_minimum_required(VERSION 3.21)
 project(MPIVersionProbe CXX)
