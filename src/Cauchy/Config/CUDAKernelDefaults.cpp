@@ -29,17 +29,6 @@ namespace DNDS::Cauchy
                                    numerics.reconstruction == "variational" && numerics.cfv.maxOrder == 3 &&
                                    numerics.cfv.intOrder <= 5 && execution.layout == "aos" &&
                                    execution.fieldGrouping == "coupled";
-        if (kernels.rhsMapping == "auto")
-        {
-            const bool fp64 = kernels.polynomialArithmetic == "fp64" && kernels.dissipationArithmetic == "fp64" &&
-                              kernels.fluxArithmetic == "fp64";
-            // The consolidated FP64 catalog has one mapping for every valid
-            // C/M/D shape. This is capability selection; only measuredShape
-            // carries the A100 performance evidence used by other defaults.
-            kernels.rhsMapping = fp64 ? "ctaSegments" : "thread";
-        }
-        if (kernels.rhsReduction == "auto")
-            kernels.rhsReduction = kernels.rhsMapping == "ctaSegments" ? "segmented" : "serial";
         if (execution.reconstructionKernel == "auto")
             // Only the measured A100 case is promoted automatically. The
             // matrix-shared selector is now a fixed comparison fixture, not a

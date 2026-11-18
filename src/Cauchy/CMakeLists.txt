@@ -17,6 +17,7 @@ set(CPPS
     Config/SimulationConfig_Validation.cpp
     Config/SimulationConfig_Schema.cpp
     Config/CUDAKernelDefaults.cpp
+    Config/CUDARHSKernelSelector.cpp
 
     Physics/EquationSystem.cpp
     Physics/PhysicsResources.cpp

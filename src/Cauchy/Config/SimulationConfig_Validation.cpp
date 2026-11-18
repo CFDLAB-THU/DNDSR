@@ -330,26 +330,30 @@ namespace DNDS::Cauchy
                     reconstructionKernel != CFV::ReconstructionDeviceKernel::FloatFloatPipelined,
                 "float-float reconstruction requires DNDS_USE_CCCL_COMPUTE");
 #endif
-        auto kernels = s.execution.kernels;
+        const auto &kernels = s.execution.kernels;
         require(cuda || kernels.Default(), "operator compute/layout experiments require CUDA");
-        // Resolve capabilities without probing a device during JSON parsing.
-        // CPU kernels retain their ordinary defaults and do not use this map.
+        // Check requested capabilities here. Device and face-rule tuning
+        // resolve the automatic settings at RHS setup.
         const bool fp64RHS = kernels.polynomialArithmetic == "fp64" &&
                              kernels.dissipationArithmetic == "fp64" && kernels.fluxArithmetic == "fp64";
-        if (kernels.rhsMapping == "auto")
-            kernels.rhsMapping = cuda && fp64RHS ? "ctaSegments" : "thread";
-        if (kernels.rhsReduction == "auto")
-            kernels.rhsReduction = kernels.rhsMapping == "ctaSegments" ? "segmented" : "serial";
+        const bool mappingAuto = kernels.rhsMapping == "auto";
+        const bool directGradient = s.numerics.reconstruction == "gradient";
         require(kernels.polynomialPPThreads == 0 || kernels.polynomialPPThreads == 128 || kernels.polynomialPPThreads == 256 || kernels.polynomialPPThreads == 512, "invalid polynomial PP block size");
-        require(!cuda || kernels.rhsMapping == "thread" || (fp64RHS && kernels.rhsMapping == "ctaSegments"),
+        require(!cuda || mappingAuto || kernels.rhsMapping == "thread" || (fp64RHS && kernels.rhsMapping == "ctaSegments"),
                 "CUDA RHS requires thread or FP64 ctaSegments");
-        require(kernels.rhsBlockSize == 64 || kernels.rhsBlockSize == 128 || kernels.rhsBlockSize == 256 || kernels.rhsBlockSize == 512, "RHS block size must be 64, 128, 256 or 512");
-        require(!kernels.rhsHoistFaceRows || (fp64RHS && kernels.rhsMapping == "thread"), "face-row binding requires FP64 thread mapping");
-        require(!kernels.rhsDoubleBuffer || (fp64RHS && kernels.rhsMapping == "ctaSegments"), "double buffering requires FP64 CTA segments");
-        require(kernels.rhsReduction == "serial" || kernels.rhsReduction == "segmented" ||
+        require(!kernels.rhsBlockSize || kernels.rhsBlockSize == 64 || kernels.rhsBlockSize == 128 ||
+                    kernels.rhsBlockSize == 256 || kernels.rhsBlockSize == 512,
+                "RHS block size must be 64, 128, 256 or 512");
+        require(directGradient || !kernels.rhsHoistFaceRows.value_or(false) ||
+                    (fp64RHS && (mappingAuto || kernels.rhsMapping == "thread") && !kernels.rhsDoubleBuffer),
+                "face-row binding requires FP64 thread mapping");
+        require(directGradient || !kernels.rhsDoubleBuffer ||
+                    (fp64RHS && (mappingAuto || kernels.rhsMapping == "ctaSegments")),
+                "double buffering requires FP64 CTA segments");
+        require(kernels.rhsReduction == "auto" || kernels.rhsReduction == "serial" || kernels.rhsReduction == "segmented" ||
                     kernels.rhsReduction == "boundedTree" || kernels.rhsReduction == "warpTree",
                 "unknown RHS face reduction");
-        require(kernels.rhsGridBlocks >= 0, "RHS grid block cap cannot be negative");
+        require(kernels.rhsGridBlocks.value_or(0) >= 0, "RHS grid block cap cannot be negative");
         for (const auto *layout : {&kernels.stateInputLayout, &kernels.reconstructionInputLayout})
             require(*layout == "aos" || *layout == "aosoa32", "kernel input layout " + *layout);
         require(!cuda || !fp64RHS || (kernels.stateInputLayout == "aos" && kernels.reconstructionInputLayout == "aos"),
@@ -399,7 +403,7 @@ namespace DNDS::Cauchy
                                      !s.numerics.cfv.storage.Raw() && s.numerics.limiter != "LVR" &&
                                      s.implicit.multigrid.levels == 0),
                 "comparison reconstruction kernels require single-grid 3D P3 flow5 precomputed non-LVR storage; use fp64/fp64Pipelined for other shapes");
-        require(kernels.rhsMapping == "thread" || !mixture,
+        require(mappingAuto || kernels.rhsMapping == "thread" || !mixture,
                 "cooperative CUDA RHS mappings require perfect-gas non-species physics");
         require(reducedArithmetic.empty() || !extended, "experimental reduced RHS arithmetic requires perfect-gas flow5");
         require(kernels.fluxArithmetic == "fp64" || s.numerics.viscousGradient == "polynomial",

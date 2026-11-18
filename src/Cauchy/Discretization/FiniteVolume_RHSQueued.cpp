@@ -3,6 +3,7 @@
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeStateKernels.hpp"
 #include "Cauchy/Core/NumericalFailure.hpp"
+#include "Cauchy/Config/CUDARHSKernelSelector.hpp"
 #include "DNDS/Runtime/Execution/EagerArray.hpp"
 #include "DNDS/Core/OMP.hpp"
 #include "DNDS/Algebra/ArrayInputCache.hpp"
@@ -55,18 +56,6 @@ namespace DNDS::Cauchy
             controls.polynomialPrecision = precision(kernelSettings.polynomialArithmetic);
             controls.dissipationPrecision = precision(kernelSettings.dissipationArithmetic);
             controls.fluxPrecision = precision(kernelSettings.fluxArithmetic);
-            controls.mapping = kernelSettings.rhsMapping == "warpQuadrature" ? CUDA::RHSFaceMapping::WarpQuadrature
-                               : kernelSettings.rhsMapping == "warpSegments" ? CUDA::RHSFaceMapping::WarpSegments
-                               : kernelSettings.rhsMapping == "ctaSegments"  ? CUDA::RHSFaceMapping::CTASegments
-                                                                             : CUDA::RHSFaceMapping::Thread;
-            controls.reduction = kernelSettings.rhsReduction == "segmented"     ? CUDA::RHSFaceReduction::Segmented
-                                 : kernelSettings.rhsReduction == "boundedTree" ? CUDA::RHSFaceReduction::BoundedTree
-                                 : kernelSettings.rhsReduction == "warpTree"    ? CUDA::RHSFaceReduction::WarpTree
-                                                                                : CUDA::RHSFaceReduction::Serial;
-            controls.gridBlocks = kernelSettings.rhsGridBlocks;
-            controls.blockSize = kernelSettings.rhsBlockSize;
-            controls.doubleBuffer = kernelSettings.rhsDoubleBuffer;
-            controls.hoistFaceRows = kernelSettings.rhsHoistFaceRows;
             controls.modes = owner->reconstruction ? owner->reconstruction->NRecDOF() : 0;
             controls.direct = n.reconstruction != "variational";
             controls.linear = n.reconstruction == "gradient";
@@ -80,6 +69,32 @@ namespace DNDS::Cauchy
             controls.distinctViscous = controls.viscous && !primitiveGradient && !controls.firstOrder &&
                                        (!controls.direct || controls.linear) && !n.viscousLimited &&
                                        (n.limiter == "WBAP" || n.limiter == "LVR" || n.positivity);
+            std::optional<RHSKernelProfile> profile;
+            const bool extrapolation = !owner->boundaryZones.empty() &&
+                                       std::all_of(owner->boundaryZones.begin(), owner->boundaryZones.end(), [&](int zone)
+                                                   { return owner->boundary.At(zone).kind == BoundaryKind::Extrapolate; });
+            if (!controls.direct && !controls.firstOrder && controls.viscous && !controls.primitiveGradient &&
+                !controls.distinctViscous && !controls.produceLow && !n.cfv.cacheDiffBase &&
+                !controls.positivity && !controls.faceFallback &&
+                (!controls.useStencil || (!controls.fluxPolicy.transverseSignal && !controls.fluxPolicy.pressureStencil)) &&
+                controls.solver == Riemann::Solver::Roe_M1 && !owner->hasInterfaces && !owner->hasRotatedFrames &&
+                !owner->motion.At(0).moving && !owner->settings.execution.overlap &&
+                !owner->equation.HasMixture() && owner->mesh->getMPI().size == 1 && owner->rhsUniformFacePoints > 0 &&
+                ((owner->rhsPeriodic && owner->boundaryZones.empty()) || extrapolation))
+                profile.emplace(RHSKernelProfile{owner->settings.equation.rans.model,
+                                                 extrapolation ? "extrapolation" : "periodic", controls.components, controls.modes,
+                                                 controls.dimension, n.RHSIntegrationOrder(), owner->rhsUniformFacePoints});
+            const auto launch = ResolveRHSKernelLaunch(kernelSettings, controls.direct && controls.linear,
+                                                       profile && kernelSettings.rhsMapping == "auto" ? RHSKernelDeviceName(device.ordinal) : std::string{}, profile);
+            controls.mapping = launch.mapping == "ctaSegments" ? CUDA::RHSFaceMapping::CTASegments : CUDA::RHSFaceMapping::Thread;
+            controls.reduction = launch.reduction == "segmented"     ? CUDA::RHSFaceReduction::Segmented
+                                 : launch.reduction == "boundedTree" ? CUDA::RHSFaceReduction::BoundedTree
+                                 : launch.reduction == "warpTree"    ? CUDA::RHSFaceReduction::WarpTree
+                                                                     : CUDA::RHSFaceReduction::Serial;
+            controls.gridBlocks = launch.gridBlocks;
+            controls.blockSize = launch.blockSize;
+            controls.doubleBuffer = launch.doubleBuffer;
+            controls.hoistFaceRows = launch.hoistFaceRows;
             controls.Validate();
             CUDA::RHSGeometry view;
             view.stencil = incidence;
