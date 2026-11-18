@@ -106,6 +106,7 @@ TEST_CASE("ACM polynomial CUDA face mappings match the host on a rotational seam
     settings.numerics.cfv.intOrder = 3;
     settings.numerics.cfv.cacheDiffBase = false;
     settings.numerics.cfv.SORInstead = false;
+    settings.numerics.viscousGradient = "polynomial";
     settings.implicit.jacobianAction = "assembled";
     settings.implicit.diagonal = "block";
     settings.implicit.linear.method = "jacobi";
