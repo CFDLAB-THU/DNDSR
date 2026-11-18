@@ -95,7 +95,7 @@ namespace DNDS::Cauchy::ACM
         std::array<real, C - 4> sourceDiagonal{};
         for (int j = 4; j < C; ++j)
             sourceDiagonal[j - 4] = diagonal(j, j);
-        FillACMTemporalBlock<C>(own, volume, tau, request.mass, request.physics.alpha, request.physics.beta2, diagonal);
+        FillACMTemporalBlock<C>(own, volume, tau, request.physicalInverseDt, request.physics.alpha, request.physics.beta2, diagonal);
         for (index slot = 0; slot < request.offDiagonal.BlockNumber(cell); ++slot)
             for (int k = 0; k < C * C; ++k)
                 request.offDiagonal(cell, slot)[k] = 0;

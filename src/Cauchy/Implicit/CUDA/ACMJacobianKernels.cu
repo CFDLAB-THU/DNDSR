@@ -27,6 +27,10 @@ namespace DNDS::Cauchy::CUDA
                                   (width == 4 || q.wallMean.RowCount() >= cells),
                               "invalid CUDA ACM Jacobian layout");
         R::ValidateViewDevices(context.device, q.input.owned, q.input.ghost, q.diagonal, q.offDiagonal, q.radius, q.tau, q.conditions.rows, q.stencil, status);
+        DNDS_check_throw_info((q.profile == EquationPhysicsProfile::ACM && width == 4) ||
+                                  (q.profile == EquationPhysicsProfile::ACMSA && width == 5) ||
+                                  (q.profile == EquationPhysicsProfile::ACMTwoEquation && width == 6),
+                              "CUDA ACM flux Jacobian component width differs from equation physics");
         if (width > 4)
             R::ValidateViewDevices(context.device, q.wallMean);
         R::CheckKernelArgumentBudget<ACMJacobianInput, ACMJacobianStatusRows>();
@@ -34,9 +38,9 @@ namespace DNDS::Cauchy::CUDA
             return;
         const int blocks = int(std::min<index>(65535, 1 + (cells - 1) / 64));
         const auto stream = R::CUDAStream(context);
-        if (width == 4)
+        if (q.profile == EquationPhysicsProfile::ACM)
             AssembleACMFluxJacobianRows<4><<<blocks, 64, 0, stream>>>(q, status);
-        else if (width == 5)
+        else if (q.profile == EquationPhysicsProfile::ACMSA)
             AssembleACMFluxJacobianRows<5><<<blocks, 64, 0, stream>>>(q, status);
         else
             AssembleACMFluxJacobianRows<6><<<blocks, 64, 0, stream>>>(q, status);

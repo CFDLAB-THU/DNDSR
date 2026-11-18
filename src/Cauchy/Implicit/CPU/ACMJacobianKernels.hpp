@@ -1,4 +1,5 @@
 #pragma once
+#include "Cauchy/Discretization/EquationPhysicsProfile.hpp"
 
 #include "Cauchy/Implicit/ACMJacobianRow.hpp"
 #include "Cauchy/Discretization/FiniteVolumeStencil.hpp"
@@ -24,8 +25,9 @@ namespace DNDS::Cauchy::CPU
         decltype(WallDistanceView::cellMean) wallMean;
         Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows> diagonal;
         Algebra::BlockMatrixArrayView<real> offDiagonal;
-        real mass, residualScale;
+        real physicalInverseDt, residualScale;
         std::array<bool, 6> active;
+        EquationPhysicsProfile profile;
     };
     NumericalStatus PrepareACMFluxJacobian(const ACMJacobianPreparation &) noexcept;
 }

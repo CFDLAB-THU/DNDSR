@@ -81,7 +81,7 @@ namespace DNDS::Cauchy
             if (n > 4)
                 scratch->SubmitSource(work, engine, lane, state, output.Diagonal(), full, controls.residualScale);
             auto blocks = output.OffDiagonal().Values();
-            R::SubmitArrays(engine, lane, [scratch, physics, active, scale = controls.residualScale, mass = controls.physicalMass, rowMajor = output.RowMajorBlocks()](auto where, auto owned, auto ghost, auto tau, auto radius, auto offsets, auto diagonal, auto blocks, auto status)
+            R::SubmitArrays(engine, lane, [scratch, physics, active, profile = ResolveEquationPhysicsProfile(_data->equation), scale = controls.residualScale, mass = controls.physicalMass, rowMajor = output.RowMajorBlocks()](auto where, auto owned, auto ghost, auto tau, auto radius, auto offsets, auto diagonal, auto blocks, auto status)
                             {
                 CUDA::ACMJacobianInput q{};
                 q.input = {owned,ghost};
@@ -94,7 +94,8 @@ namespace DNDS::Cauchy
                 if (scratch->walls) q.wallMean = scratch->walls->View().cellMean;
                 q.diagonal = diagonal;
                 q.offDiagonal = {blocks,offsets,owned.Width(),rowMajor};
-                q.mass = mass;
+                q.physicalInverseDt = mass;
+                q.profile = profile;
                 q.residualScale = scale;
                 q.active = active;
                 CUDA::PrepareACMFluxJacobian(where,q,status); }, R::ReadAs<R::TableRows>(field.Owned()), R::ReadAs<R::TableRows>(field.Ghost()), R::ReadAs<R::TableRows>(inversePseudoTime), R::ReadAs<R::TableRows>(*auxiliary.faceSpectralRadius), R::ReadAs<R::FixedRows<1>>(output.OffDiagonal().OffsetArray()), R::ReadWriteAs<R::UniformTableRows>(output.Diagonal()), R::WriteAs<R::UniformTableRows>(blocks), R::WriteAs<R::FixedRows<1>>(scratch->rowsStatus));
