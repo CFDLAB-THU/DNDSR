@@ -8,7 +8,6 @@
 #include "Cauchy/Discretization/RANSReconstruction.hpp"
 #include "Physics/Incompressible/RANSPoint.hpp"
 #include "Cauchy/Physics/ACMFlux.hpp"
-#include "Cauchy/Physics/RANSFlux.hpp"
 #include "Cauchy/Physics/ViscousFlux.hpp"
 #include "CFV/Math/PeriodicFrame.hpp"
 #include "Cauchy/Riemann/RiemannFluxMath.hpp"
@@ -240,7 +239,9 @@ namespace DNDS::Cauchy::CPU
                     auto params = equation.ACMParameters();
                     params.roe = !rusanovFlux;
                     ACM::NumericalFlux(params, left.values, right.values, sample.normal, flux, int(width));
-                    if (viscous)
+                    // An ACM slip wall has inviscid pressure flux only. The copied
+                    // interior gradient would otherwise leak shear and RANS diffusion.
+                    if (viscous && boundaryKind != BoundaryKind::SlipWall)
                     {
                         for (int j = 0; j < width; ++j)
                         {
@@ -265,18 +266,13 @@ namespace DNDS::Cauchy::CPU
                             mu += transport.value.viscosity;
                         }
                         const auto traction = Physics::Transport::NewtonianTraction(face.gradient, sample.normal, mu);
-                        if (request.wallShear.RowCount() && sample.boundaryPoint != UnInitIndex)
-                        {
-                            const auto shear = Physics::Transport::WallShear(traction, sample.normal);
-                            for (int d = 0; d < 3; ++d)
-                                request.wallShear(sample.boundaryPoint, d) = boundaryKind == BoundaryKind::NoSlipWall ? shear[d] : 0;
-                        }
+                        // Cauchy omits the former isotropic 2*rho*k/3 normal stress.
                         for (int d = 0; d < 3; ++d)
-                            flux[d] -= traction[d] - (width == 6 ? (2. / 3.) * face.values[4] * sample.normal[d] : 0);
+                            flux[d] -= traction[d];
                     }
                     if (sample.boundaryPoint != UnInitIndex)
                         for (int d = 0; d < 3; ++d)
-                            request.wallFlux(sample.boundaryPoint, d) = boundaryKind == BoundaryKind::SlipWall || boundaryKind == BoundaryKind::NoSlipWall ? weight * flux[d] : 0;
+                            request.wallFlux(sample.boundaryPoint, d) = request.captureBoundaryFlux || boundaryKind == BoundaryKind::SlipWall || boundaryKind == BoundaryKind::NoSlipWall ? weight * flux[d] : 0;
                     for (int j = 0; j < width; ++j)
                     {
                         if (!std::isfinite(flux[j]))
@@ -409,15 +405,7 @@ namespace DNDS::Cauchy::CPU
                     if (request.produceLow)
                         lowFlux[request.flowFirst + j] = lowFlowFlux[j];
                 }
-                if (ransModel && ransModel->ComponentNumber() == 2)
-                {
-                    FlowState average;
-                    for (int j = 0; j < 5; ++j)
-                        average[j] = .5 * (leftFlow[j] + rightFlow[j]);
-                    const auto stress = TurbulentNormalFlux(average, wallFluxState ? face.values[request.ransFirst] : .5 * (left.values[request.ransFirst] + right.values[request.ransFirst]), normal);
-                    for (int j = 0; j < 5; ++j)
-                        flux[request.flowFirst + j] += stress[j];
-                }
+                // Cauchy omits the former isotropic 2*rho*k/3 momentum flux and energy work.
                 const bool wall = !internal && boundaryKind == BoundaryKind::NoSlipWall;
                 if (viscous && (internal || wall))
                 {
@@ -567,7 +555,7 @@ namespace DNDS::Cauchy::CPU
                 }
                 if (sample.boundaryPoint != UnInitIndex)
                     for (int d = 0; d < 3; ++d)
-                        request.wallFlux(sample.boundaryPoint, d) = wall || boundaryKind == BoundaryKind::SlipWall
+                        request.wallFlux(sample.boundaryPoint, d) = request.captureBoundaryFlux || wall || boundaryKind == BoundaryKind::SlipWall
                                                                         ? weight * flux[request.flowFirst + 1 + d]
                                                                         : 0;
                 for (index j = 0; j < width; ++j)

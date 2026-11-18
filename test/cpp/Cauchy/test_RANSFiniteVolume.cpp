@@ -1055,15 +1055,15 @@ TEST_CASE("High-order SST auxiliary faces retain quadrature-dependent wall trans
     const auto wallValues = wallRead.HostView();
     const auto read = auxiliary.faceSpectralRadius->Read();
     const auto observed = read.View<R::TableRows>();
-    // Two cells per axis with extrapolated boundary targets give the LS
-    // velocity slope shear/2. SST transport is insensitive to the velocity
-    // offset itself, but depends on this strain and the sampled wall distance.
+    // The least-squares fit omits extrapolation faces. The remaining affine
+    // neighbor differences recover the full velocity slope. SST transport
+    // depends on this strain and the sampled wall distance.
     // Independently reduce all physical samples, not just a face-center value.
     const auto diffusion = [&](double distance)
     {
         DNDS::Physics::RANS::Point point;
         point.state << 1, 0, 0, 0, 2.5, .02, omega;
-        point.gradient(0, 2) = shear / 2;
+        point.gradient(0, 2) = shear;
         point.wallDistance = distance;
         point.molecularViscosity = .001;
         point.cp = 3.5;
@@ -1146,9 +1146,9 @@ TEST_CASE("Two-equation auxiliary viscosity consumes current conservative mean g
                 {
                     DNDS::Physics::RANS::Point point;
                     point.state << 1, 0, shear * fv.Metrics().GetCellCent(iCell)[0], 0, 3, .02, 1e-4;
-                    // Two cells per axis with extrapolated boundary values: LS
-                    // averages the interior slope and the zero boundary slope.
-                    point.gradient(0, 2) = shear / 2;
+                    // Least squares excludes extrapolation faces and uses the
+                    // affine differences between neighboring cell means.
+                    point.gradient(0, 2) = shear;
                     // Hex P1 nodal wall values: one center node at .5, seven zero.
                     point.wallDistance = .5 / 8;
                     point.molecularViscosity = .001;

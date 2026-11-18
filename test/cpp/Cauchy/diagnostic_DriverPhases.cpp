@@ -264,10 +264,9 @@ static void RunBatch(E::EulerSolver<E::NS_SA> &solver, C::DomainSettings setting
                 const auto boundaryRead = work->boundary.ReadOwned();
                 const auto boundaryLayout = boundaryRead.ComponentLayout();
                 const auto boundaryValues = boundaryLayout.View();
-                // Explicit diagnostic-only boundary snapshot. Its point member
-                // is a boundary-local quadrature ordinal, or -1 for centers.
-                const auto pointSnapshot = work->owner->BoundaryTraceSnapshot();
-                const auto pointsRead = pointSnapshot.Read();
+                // Use the matching boundary packet ordering with either the
+                // face-center or quadrature snapshot of the published mesh.
+                const auto pointsRead = stencil.quadratureBoundaryValues ? fv.ReadBoundaryPoints() : fv.ReadBoundaryFaces();
                 const auto points = pointsRead.View<R::FixedRows<1>>();
                 std::ofstream boundaryDump(std::string(prefix) + "-boundary-rank" + std::to_string(mpi.rank) + ".csv");
                 DNDS_check_throw_info(bool(boundaryDump), "cannot open boundary diagnostic dump");
@@ -278,12 +277,12 @@ static void RunBatch(E::EulerSolver<E::NS_SA> &solver, C::DomainSettings setting
                 for (I iPoint = 0; iPoint < points.RowCount(); ++iPoint)
                 {
                     const auto sample = points(iPoint, 0);
-                    const int zone = mesh->GetFaceZone(sample.face);
+                    const int zone = sample.zone;
                     const DNDS::Geom::tPoint normal(sample.normal[0], sample.normal[1], sample.normal[2]);
                     const auto normalBase = DNDS::Geom::NormBuildLocalBaseV<3>(normal);
-                    const DNDS::Geom::tPoint point(sample.location[0], sample.location[1], sample.location[2]);
+                    const DNDS::Geom::tPoint point(sample.point[0], sample.point[1], sample.point[2]);
                     E::EulerEvaluator<E::NS_SA>::TU left = solver.getU()[sample.cell];
-                    const int quadrature = int(sample.point);
+                    const int quadrature = int(sample.quadrature);
                     const auto old = solver.getEval().generateBoundaryValue(
                         left, solver.getU()[sample.cell], sample.cell, sample.face, quadrature,
                         normal, normalBase, point, 0., zone, true, 1);

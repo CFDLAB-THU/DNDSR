@@ -153,8 +153,7 @@ namespace DNDS::Cauchy::CUDA
         {
             const auto &p = s.parameters;
             DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && p.components >= 5 && p.components <= 7 &&
-                                      std::isfinite(p.scale) && p.scale >= 0 && (!p.roe || p.components == 5) &&
-                                      (p.kineticComponent == -1 || (p.components == 7 && p.kineticComponent == 5)),
+                                      std::isfinite(p.scale) && p.scale >= 0 && (!p.roe || p.components == 5),
                                   "unsupported frozen CUDA Jacobian profile");
             s.geometry.ValidateDevice(context.device);
             R::ValidateViewDevices(context.device, s.means, s.pressure, s.pressureDerivative, s.radius, selected, status);

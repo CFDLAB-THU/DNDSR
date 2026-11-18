@@ -1,9 +1,10 @@
 #pragma once
 
+#include "Cauchy/IO/BoundaryOutputGeometry.hpp"
+
 #include "Cauchy/Boundary/BoundaryPointOperator.hpp"
 #include "Cauchy/Boundary/ACMBoundary.hpp"
 #include "Cauchy/Discretization/ACMKernelPoint.hpp"
-#include "Cauchy/Discretization/BoundaryTraceGeometry.hpp"
 #include "Cauchy/Discretization/FiniteVolumeStencil.hpp"
 #include "Cauchy/Discretization/FiniteVolumeKernelPolicy.hpp"
 #include "Cauchy/Discretization/CPU/FiniteVolumeSampleKernels.hpp"
@@ -68,6 +69,7 @@ namespace DNDS::Cauchy
             bool axisymmetric = false;
         };
     }
+    struct BoundaryOutputGeometry;
     struct FiniteVolume::Data
     {
         ssp<Geom::UnstructuredMesh> mesh;
@@ -100,6 +102,9 @@ namespace DNDS::Cauchy
         /// Jacobians never traverse the RHS quadrature samples above.
         std::shared_ptr<const LinearPatternStorage> jacobianColumns;
         std::vector<int> boundaryZones;
+        std::vector<BoundaryOutputRow> boundaryOutputRows;
+        mutable std::shared_ptr<const BoundaryOutputGeometry> boundaryOutputGeometry;
+        std::shared_ptr<const BoundaryOutputGeometry> PrepareBoundaryOutput() const;
         bool hasPressureBoundary = false;
         std::vector<int> forceZones;
         std::map<int, index> forceSlots;
@@ -113,9 +118,6 @@ namespace DNDS::Cauchy
         {
             return stencil.quadratureBoundaryValues ? boundaryLayout->quadratureRows : boundaryFaces.RowCount();
         }
-        /// Caller-owned boundary-only output snapshot. Rebuilds requested
-        /// boundary geometry on the CPU; never downloads the complete mesh.
-        Runtime::Array<BoundaryTraceGeometry> BoundaryTraceSnapshot() const;
         std::vector<BoundaryCondition> boundaryConditions;
         /// Small immutable backend metadata. Numeric boundary kernels consume
         /// these resolved records, never the host condition owners/callbacks.
@@ -188,6 +190,15 @@ namespace DNDS::Cauchy
             options.progress = std::move(progress);
             return options;
         }
+        static std::vector<int> GradientExtrapolatedZones(const DomainSettings &settings)
+        {
+            std::vector<int> zones;
+            if (settings.numerics.gradient == "leastSquares")
+                for (const auto &[zone, condition] : settings.boundaries)
+                    if (condition.kind == "extrapolate")
+                        zones.push_back(std::stoi(zone));
+            return zones;
+        }
         const ThermalBounds &FixedFlowThermalBounds() const
         {
             DNDS_check_throw_info(
@@ -210,7 +221,7 @@ namespace DNDS::Cauchy
                                  : std::nullopt),
               gradient(CFV::GradientPlan::Prepare(*mesh, metrics, settings.numerics.gradient == "greenGauss" ? CFV::GradientMethod::GreenGauss : settings.numerics.gradient == "ggmp" ? CFV::GradientMethod::GGMP
                                                                                                                                                                                       : CFV::GradientMethod::LeastSquares,
-                                                  1e-13, progress)),
+                                                  1e-13, progress, settings.numerics.leastSquares, GradientExtrapolatedZones(settings))),
               partition(metrics.CellWorkPartition())
         {
             if (settings.execution.communicationExecution == "worker")

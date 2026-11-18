@@ -1,5 +1,4 @@
 #include "Cauchy/Implicit/CPU/FiniteVolumeJacobianKernels.hpp"
-#include "Cauchy/Physics/RANSFlux.hpp"
 namespace DNDS::Cauchy::CPU
 {
     void EvaluateEquationJacobianBlock(const EquationJacobianView &snapshot, index iRow, index iBlock, Eigen::Ref<Eigen::MatrixXd> output)
@@ -51,13 +50,7 @@ namespace DNDS::Cauchy::CPU
             }
             const auto grid = snapshot.frame.GridVelocity(point.location);
             auto derivative = PrepareCompressibleFluxDerivative(flow, direction, snapshot.pressure(point.other, 0), dp, point.normal, grid);
-            if (snapshot.kineticFirst >= 0)
-            {
-                const auto stress = TurbulentNormalFluxDerivative(flow, direction, snapshot.means(point.other, snapshot.kineticFirst),
-                                                                  snapshot.active[snapshot.kineticFirst] ? input[snapshot.kineticFirst] : 0, point.normal);
-                for (int j = 0; j < 5; ++j)
-                    derivative[j] += stress[j];
-            }
+            // The former isotropic 2*rho*k/3 stress and work are absent from the residual.
             real speed = 0, deltaSpeed = 0;
             for (int d = 0; d < 3; ++d)
             {

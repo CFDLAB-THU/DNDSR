@@ -207,7 +207,7 @@ PYBIND11_MODULE(cauchy_pybind11, m)
         .def(
             "write_visualization", &C::Domain::WriteVisualization, py::arg("prefix"), py::arg("hdf_deflate_level") = 0,
             py::call_guard<py::gil_scoped_release>(),
-            "Collective accepted-state VTKHDF and boundary CSV output in code units, including all species fields. Uses separate observation reconstruction. Release debug views before calling; pass a common path/compression setting.")
+            "Collective accepted-state volume and boundary VTKHDF output in code units, including all species fields. Uses separate observation reconstruction. Release debug views before calling; pass a common path/compression setting.")
         .def(
             "write_checkpoint",
             [](const C::Domain &domain, const std::string &path, const std::string &resolved, bool reconstruction)

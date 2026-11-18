@@ -1145,12 +1145,9 @@ contains all conservative component names (including transported `rhoY:name`),
 plus `p`, `T`, `u`, `v`, `w`, `Mach` and all `Y:name` fractions, including the
 dependent species. Derived properties are evaluated once per cell into an
 output-only buffer, using the same equation model and explicit worker pool as
-the numerical operators. Output is in code units. Physical surface CSV traces
-evaluate the limited reconstruction at boundary quadrature points and apply
-the equation boundary-value producer; their columns include temperature and
-full species fractions. An inadmissible reconstructed trace falls back to its
-cell mean before applying the BC, as in the existing flow output path.
-Accepted means and the production reconstruction remain unchanged.
+the numerical operators. Output is in code units. The collective boundary
+VTKHDF file uses adjacent-cell volume fields and can include the observed
+face fluxes. See [the output contract](CauchyOutput.md#boundary-visualization).
 
 ## RANS equation descriptor and scalar policy
 
@@ -1311,13 +1308,9 @@ face sees a mutation. Dropping this original interior value removes the wall SA
 diffusive flux. A focused cube test checks its magnitude independently of the
 volume source and verifies that owned means stay unchanged.
 
-`TurbulentNormalFlux` provides Euler's two-equation `2*rhoK/3` isotropic stress
-and pressure work at the arithmetic conservative face state. Energy work uses
-absolute normal velocity in the mesh-bound frame, including ALE. It is added
-outside the Riemann solver, without altering EOS pressure or sound speed.
-Its conservative directional derivative supplies the corresponding neighbor
-coupling in the approximate Jacobian. Point-level finite-difference checks
-cover density, all momenta, energy and both turbulence directions.
+Cauchy's SST-2003m uses turbulent viscosity in momentum and heat transport.
+The isotropic turbulent stress and its energy work are omitted from the mean
+flux and its Jacobian, in both compressible and ACM modes.
 
 ### Explicit mean gradients for auxiliary transport
 
@@ -1327,6 +1320,11 @@ gradient field with columns `component*dimension+direction`. AoS, SoA and tiled
 column-major grouping remain intact. CFV's configured Green-Gauss, least-squares
 or GGMP plan supplies gradients from means and physical boundary values.
 Periodic scalar gradients and vector-gradient tensors rotate at consumption.
+For least squares, `numerics.leastSquares.areaPower` and `distancePower`
+default to 0 and −3. The squared residual uses weight
+`area^areaPower * distance^distancePower`. Physical boundaries and coupled
+interfaces supply face-center values. Pure extrapolation boundaries leave
+their sample out of the fit. CPU and CUDA use the same prepared weights.
 
 The collective `PrepareAuxValues(state, aux, gradients, engine, stream, ...)`
 overload orchestrates the following schedule on either an inline or worker CPU

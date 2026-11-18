@@ -79,11 +79,9 @@ namespace DNDS::Cauchy
                     flowFirst = first;
                 if (block.name == "species")
                     speciesFirst = first;
-                if (block.name == "rans" && fv._data->equation.RANS().ComponentNumber() == 2)
-                    kineticFirst = first;
                 first += index(block.components.size());
             }
-            sixComponentProduct = components == 6 && flowFirst == 0 && kineticFirst < 0 && allComponents;
+            sixComponentProduct = components == 6 && flowFirst == 0 && allComponents;
             if (output.HasAssembledOffDiagonal())
                 return;
             const auto old = std::dynamic_pointer_cast<const JacobianData>(output.PreparedOffDiagonalEvaluator());

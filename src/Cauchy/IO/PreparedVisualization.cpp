@@ -1,48 +1,91 @@
 #include "Cauchy/IO/PreparedVisualization.hpp"
-#include "DNDS/MPI/CollectiveStage.hpp"
-#include <fstream>
 
 namespace DNDS::Cauchy
 {
+    namespace R = Runtime;
+
     struct PreparedVisualization::Data
     {
         std::shared_ptr<Geom::UnstructuredMesh> mesh;
         Geom::MeshReadAccess read;
-        Runtime::Array<real> fields;
+        R::Array<real> fields;
         std::vector<std::string> names;
-        std::string surface;
+        Boundary boundary;
         real time;
         Geom::UnstructuredMesh::HDF5OutSetting settings;
-        Data(std::shared_ptr<Geom::UnstructuredMesh> geometry, Runtime::Array<real> values,
-             std::vector<std::string> labels, std::string csv, real when, int deflate)
-            : mesh(std::move(geometry)), read(mesh->AcquireRead(Geom::MeshReadRequirements::CellFlux())),
-              fields(std::move(values)), names(std::move(labels)), surface(std::move(csv)), time(when),
-              settings(mesh->hdf5OutSetting)
+        Data(std::shared_ptr<Geom::UnstructuredMesh> geometry, R::Array<real> values,
+             std::vector<std::string> labels, Boundary surface, real when, int deflate)
+            : mesh(std::move(geometry)),
+              read(mesh->AcquireRead(Geom::MeshReadRequirements::CellFlux())),
+              fields(std::move(values)), names(std::move(labels)), boundary(std::move(surface)),
+              time(when), settings(mesh->hdf5OutSetting)
         {
             settings.deflateLevel = deflate;
-            DNDS_check_throw_info(fields.GetDevice() == Runtime::Device::Host() &&
-                                      fields.RowCount() == mesh->NumCell() && fields.Layout().Width() == index(names.size()),
+            const index faces = boundary.mesh->NumCell();
+            DNDS_check_throw_info(fields.GetDevice() == R::Device::Host() &&
+                                      fields.RowCount() == mesh->NumCell() && fields.Layout().Width() == index(names.size()) &&
+                                      boundary.fields.GetDevice() == R::Device::Host() &&
+                                      boundary.fields.RowCount() == faces && boundary.fields.Layout().Width() == index(names.size()) &&
+                                      boundary.normals.GetDevice() == R::Device::Host() &&
+                                      boundary.normals.RowCount() == faces && boundary.normals.Layout().Width() == 3 &&
+                                      index(boundary.zones->size()) == faces,
                                   "visualization snapshot fields and mesh differ");
+            DNDS_check_throw_info(!boundary.flux ||
+                                      (boundary.flux->GetDevice() == R::Device::Host() && boundary.flux->RowCount() == faces &&
+                                       boundary.flux->Layout().Width() == index(boundary.fluxNames.size()) + 3),
+                                  "visualization snapshot face flux shape differs");
         }
     };
-    PreparedVisualization::PreparedVisualization(std::shared_ptr<Geom::UnstructuredMesh> mesh, Runtime::Array<real> fields,
-                                                 std::vector<std::string> names, std::string surfaceCSV, real time, int deflate)
-        : _data(std::make_shared<Data>(std::move(mesh), std::move(fields), std::move(names), std::move(surfaceCSV), time, deflate)) {}
-    void PreparedVisualization::Write(const std::string &prefix, std::shared_ptr<Runtime::CommunicationContext> communication) const
+
+    PreparedVisualization::PreparedVisualization(std::shared_ptr<Geom::UnstructuredMesh> mesh, R::Array<real> fields,
+                                                 std::vector<std::string> names, Boundary boundary, real time, int deflate)
+        : _data(std::make_shared<Data>(std::move(mesh), std::move(fields), std::move(names), std::move(boundary), time, deflate))
+    {
+    }
+
+    void PreparedVisualization::Write(const std::string &prefix, std::shared_ptr<R::CommunicationContext> communication) const
     {
         DNDS_check_throw_info(communication, "visualization writer needs a retained I/O communicator");
         const auto &data = *_data;
-        const MPIInfo mpi(communication->Communicator());
+        const auto comm = communication->Communicator();
         const auto read = data.fields.Read();
-        const auto values = read.View<Runtime::TableRows>();
-        data.mesh->PrintParallelVTKHDFDataArray(prefix, "", int(data.names.size()), 0, 0, 0, [&](int i)
-                                                { return data.names.at(i); }, [&](int i, index iCell)
-                                                { return values(iCell, i); }, {}, {}, {}, {}, {}, {}, data.time, mpi.comm, &data.settings);
-        MPI::LocalStage(mpi, [&]
-                        {
-            std::ofstream file(prefix + "_surface_rank" + std::to_string(mpi.rank) + ".csv");
-            file << data.surface;
-            file.close();
-            DNDS_check_throw_info(bool(file), "surface snapshot write failed"); });
+        const auto values = read.View<R::TableRows>();
+        const auto name = [&](int i)
+        { return data.names.at(i); };
+        const auto value = [&](int i, index iCell)
+        { return values(iCell, i); };
+        data.mesh->PrintParallelVTKHDFDataArray(prefix, "", int(data.names.size()), 0, 0, 0,
+                                                name, value, {}, {}, {}, {}, {}, {}, data.time, comm, &data.settings);
+
+        const auto &boundary = data.boundary;
+        const auto faceRead = boundary.fields.Read(), normalRead = boundary.normals.Read();
+        const auto faces = faceRead.View<R::TableRows>();
+        const auto normals = normalRead.View<R::FixedRows<3>>();
+        std::optional<R::Array<real>::ReadLease> fluxRead;
+        if (boundary.flux)
+            fluxRead.emplace(boundary.flux->Read());
+        const auto fluxValues = fluxRead ? fluxRead->View<R::TableRows>() : decltype(faces){};
+        const index nFields = index(data.names.size()), nFlux = index(boundary.fluxNames.size());
+
+        Geom::UnstructuredMesh::VTKHDFExtraFields extra;
+        extra.cellIntegers.push_back({"bnd_zone_id", {boundary.zones->data(), index(boundary.zones->size())}});
+        extra.fieldIntegers.push_back({"bnd_zone_ids", {}});
+        extra.fieldStrings.push_back({"bnd_zone_names", {}});
+        for (const auto &[id, label] : *boundary.zoneNames)
+        {
+            extra.fieldIntegers.front().second.push_back(id);
+            extra.fieldStrings.front().second.push_back(label);
+        }
+        const auto scalarName = [&](int i)
+        { return i < nFields ? data.names.at(i) : boundary.fluxNames.at(i - nFields); };
+        const auto scalarValue = [&](int i, index iFace)
+        { return i < nFields ? faces(iFace, i) : fluxValues(iFace, i - nFields); };
+        const auto vectorName = [](int i) -> std::string
+        { return i == 0 ? "norm" : "force_tangential"; };
+        const auto vectorValue = [&](int i, index iFace, int d)
+        { return i == 0 ? normals(iFace, d) : fluxValues(iFace, nFlux + d); };
+        boundary.mesh->PrintParallelVTKHDFDataArray(prefix + "_bnd", "", int(nFields + nFlux), boundary.flux ? 2 : 1, 0, 0,
+                                                    scalarName, scalarValue, vectorName, vectorValue,
+                                                    {}, {}, {}, {}, data.time, comm, &data.settings, extra);
     }
 }

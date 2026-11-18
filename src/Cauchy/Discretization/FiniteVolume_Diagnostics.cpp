@@ -28,11 +28,17 @@ namespace DNDS::Cauchy
                                               {
             DNDS_check_throw_info(work.owner == _data && work.boundaryMomentumCurrent,
                 "equation boundary force requires a completed RHS evaluation");
+            std::vector<int> walls;
             for (const int zone : zones)
+            {
                 DNDS_check_throw_info(_data->settings.boundaries.count(std::to_string(zone)), "force zone has no boundary condition");
+                const auto kind = _data->boundary.At(zone).kind;
+                if (kind == BoundaryKind::SlipWall || kind == BoundaryKind::NoSlipWall)
+                    walls.push_back(zone);
+            }
             DNDS_check_throw_info(lane.Context().device == Device(), "boundary force needs a matching execution stream");
             if (!work.boundaryForceReduction) work.boundaryForceReduction.emplace(lane.Context());
-            force = work.boundaryForceReduction->Evaluate(engine, lane, _data->stencil, _data->boundaryFaces, work.boundaryMomentumFlux, zones); });
+            force = work.boundaryForceReduction->Evaluate(engine, lane, _data->stencil, _data->boundaryFaces, work.boundaryMomentumFlux, walls); });
         MPI::AllreduceInPlace<MPI::Reduction::Sum>(
             MPI::ContiguousView<real>{force.data(), 3}, mpi.comm);
         return force;

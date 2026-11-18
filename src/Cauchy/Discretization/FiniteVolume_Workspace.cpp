@@ -129,8 +129,8 @@ namespace DNDS::Cauchy
         return FiniteVolumeDetail::BindFieldSchema(state, std::move(bundle), 1);
     }
     FiniteVolume::Workspace::Workspace(std::shared_ptr<const Data> data, EquationDofs &state,
-                                       std::optional<Physics::Chemistry::ChemicalWorkerPool> pool, bool meanTrial)
-        : owner(std::move(data)), meanOnly(meanTrial), componentNumber(state.ComponentNumber()), physicalFieldNumber(state.PhysicalFieldNumber()),
+                                       std::optional<Physics::Chemistry::ChemicalWorkerPool> pool, bool meanTrial, bool capture)
+        : owner(std::move(data)), meanOnly(meanTrial), captureBoundaryFlux(capture), componentNumber(state.ComponentNumber()), physicalFieldNumber(state.PhysicalFieldNumber()),
           fields(BuildFields(*owner, state, meanOnly)),
           boundary(BindBoundary(state, fields, owner->BoundaryValueRows())),
           thermal(owner->equation, owner->settings.numerics.densityFloor, owner->settings.numerics.temperatureFloor,
@@ -142,11 +142,6 @@ namespace DNDS::Cauchy
           faceFlux(R::RowLayout::Dense(owner->stencil.stencilFaces.RowCount(), state.ComponentNumber()), owner->metrics.Device()),
           chemical(owner->settings.equation.source == "chemical")
     {
-        if (owner->equation.IsACM() && owner->equation.Viscous() && !meanOnly)
-        {
-            boundaryWallShear.emplace(R::RowLayout::Dense(owner->BoundaryValueRows(), 3), owner->metrics.Device());
-            boundaryWallShear->SetName("Cauchy/workspace/wallShear", DNDS_ALLOCATION_SITE());
-        }
         index first = 0;
         std::vector<index> blockOffsets, vectorOffsets;
         std::vector<index> physicalFields(size_t(state.ComponentNumber()), -1),

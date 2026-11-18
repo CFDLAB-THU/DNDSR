@@ -54,7 +54,7 @@ namespace DNDS::Physics::RANS
         std::array<real, 2> EvaluateSource(const Point &point, int mode) const;
 
     public:
-        explicit Model(ModelSettings settings = {});
+        explicit Model(ModelSettings settings = {}, SSTProduction sstProduction = SSTProduction::FullStress);
         ModelKind Kind() const { return _kind; }
         const ModelSettings &Settings() const { return _settings; }
         /// Setup-frozen numeric payload. CUDA wrappers reject unsupported kinds

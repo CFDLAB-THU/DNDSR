@@ -1,3 +1,3 @@
 #include "Cauchy/Discretization/CUDA/FiniteVolumeACMFluxKernels_Impl.cu.inc"
 
-template void DNDS::Cauchy::CUDA::Detail::LaunchACMFaces<@acm_width@>(const RHSFaceLaunch &, RHSWallOutput);
+template void DNDS::Cauchy::CUDA::Detail::LaunchACMFaces<@acm_width@>(const RHSFaceLaunch &);

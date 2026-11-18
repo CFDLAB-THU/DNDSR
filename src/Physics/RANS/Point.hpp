@@ -48,6 +48,7 @@ namespace DNDS::Physics::RANS
         SAConfig sa;
         KOmegaConfig kOmega;
         KOmegaSSTConfig sst;
+        SSTProduction sstProduction = SSTProduction::FullStress;
 
         DNDS_DEVICE_CALLABLE bool Supported() const noexcept
         {

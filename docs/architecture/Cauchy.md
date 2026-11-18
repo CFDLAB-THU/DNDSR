@@ -529,8 +529,9 @@ history/output cadence cannot change a fixed-sweep solution. CSV history records
 conservation, minima, accepted-state residual, body force, reconstruction update,
 analytic error and stage fallback counts. Force is the integrated numerical wall
 momentum flux (pressure minus Newtonian traction), with outward fluid normal.
-Final output includes matching-partition restart, native parallel VTKHDF cell
-means and per-rank boundary quadrature CSVs keyed by persistent cell IDs.
+Final output includes a matching-partition restart and collective volume and
+boundary VTKHDF files. The [output contract](CauchyOutput.md) specifies the
+optional boundary flux fields and their signs.
 `output.hdfDeflateLevel` selects VTKHDF compression from0to9; the new frontend
 defaults to0. Per-call Geom output settings leave the shared mesh's defaults
 unchanged and must agree across ranks. The initial cs compressed-output campaign

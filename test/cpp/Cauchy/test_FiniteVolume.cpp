@@ -1621,8 +1621,11 @@ TEST_CASE("Cauchy repeated parallel VTKHDF output preserves topology and noncons
     if (mpi.size > 1)
         CHECK_THROWS(domain.WriteVisualization(prefix, mpi.rank == 0 ? 1 : 0));
     if (mpi.rank == 0)
+    {
         CHECK(std::filesystem::remove(prefix + ".vtkhdf"));
-    CHECK(std::filesystem::remove(prefix + "_surface_rank" + std::to_string(mpi.rank) + ".csv"));
+        CHECK(std::filesystem::remove(prefix + "_bnd.vtkhdf"));
+    }
+    CHECK_FALSE(std::filesystem::exists(prefix + "_surface_rank" + std::to_string(mpi.rank) + ".csv"));
     MPI_Barrier(mpi.comm);
 }
 TEST_CASE("Riemann spatial stencils are computed by owners and exchanged across periodic partitions")

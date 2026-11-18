@@ -81,10 +81,16 @@ namespace DNDS::Cauchy
             scope.lowOrder.emplace(lowOrderResidual->PhysicalField(0).Owned().Write());
             scope.output.lowOrder = scope.lowOrder->View<RHSFlowRows>();
         }
-        if (faceOutput)
+        if (faceOutput || captureBoundaryFlux)
         {
-            scope.face.emplace(faceOutput->Write());
+            scope.face.emplace((faceOutput ? *faceOutput : faceFlux).Write());
             scope.output.faceFlux = scope.face->View<RHSFlowRows>();
+            scope.output.boundaryFacesOnly = !faceOutput;
+        }
+        if (captureBoundaryFlux)
+        {
+            scope.boundaryMomentum.emplace(boundaryMomentumFlux.Write());
+            scope.output.boundaryMomentum = scope.boundaryMomentum->View<R::FixedRows<3>>();
         }
         diagnostics.Merge(fixedFlowRHS->ApplyFluxBorrowedFatal(input, scope.output, region, time));
     }
@@ -254,12 +260,7 @@ namespace DNDS::Cauchy
         request.faceValues = faceValues;
         request.lowFaceValues = lowFaceValues;
         request.wallFlux = wallFlux;
-        std::optional<R::Array<real>::WriteLease> shearWrite;
-        if (boundaryWallShear)
-        {
-            shearWrite.emplace(boundaryWallShear->Write());
-            request.wallShear = shearWrite->View<R::FixedRows<3>>();
-        }
+        request.captureBoundaryFlux = captureBoundaryFlux;
         request.wall = wallRead ? wallRead->HostView() : WallDistanceView{};
         request.thermal = thermal.View();
         request.frame = owner->motion.At(time);

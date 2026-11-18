@@ -93,7 +93,7 @@ namespace DNDS::Cauchy::CUDA
     }
     void EvaluateFluxFaces(R::ExecutionContext context, const RHSGeometryPublication &geometry, ParametersView parameters,
                            RHSKernelControls controls, RHSFields fields, RHSFaceOutputs output, RHSIndices faces, bool requireGhost,
-                           RHSFacePackageView packages, RHSWallOutput wallShear)
+                           RHSFacePackageView packages)
     {
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && geometry.Device() == context.device, "CUDA RHS geometry/stream mismatch");
         controls.Validate();
@@ -104,12 +104,6 @@ namespace DNDS::Cauchy::CUDA
         R::ValidateViewDevices(context.device, fields, output.high, output.status, output.fallbackCounts, faces);
         if (controls.produceLow)
             output.low.ValidateDevice(context.device);
-        if (wallShear.RowCount())
-        {
-            wallShear.ValidateDevice(context.device);
-            DNDS_check_throw_info(controls.mechanical && controls.viscous && wallShear.RowCount() == output.wallForce.RowCount(),
-                                  "CUDA wall shear requires a boundary-sized viscous ACM output");
-        }
         if (output.wallForce.RowCount())
             output.wallForce.ValidateDevice(context.device);
         const index owned = g.stencil.jacobianOffsets.RowCount() - 1, ghost = g.cells.RowCount() - owned, nFaces = g.stencil.stencilFaces.RowCount();
@@ -162,7 +156,7 @@ namespace DNDS::Cauchy::CUDA
                                     ? Detail::ValidateSegmentedFluxFaces(context, geometry, controls, faces, packages)
                                     : 0;
             const Detail::RHSFaceLaunch launch{context, geometry, parameters, controls, fields, output, faces, packages, blocks};
-            if (!controls.direct && !controls.firstOrder && Detail::TryLaunchFP64ACMRHS(launch, wallShear))
+            if (!controls.direct && !controls.firstOrder && Detail::TryLaunchFP64ACMRHS(launch))
             {
                 DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA ACM static polynomial launch failed");
                 return;
@@ -170,13 +164,13 @@ namespace DNDS::Cauchy::CUDA
             switch (controls.components)
             {
             case 4:
-                Detail::LaunchACMFaces<4>(launch, wallShear);
+                Detail::LaunchACMFaces<4>(launch);
                 break;
             case 5:
-                Detail::LaunchACMFaces<5>(launch, wallShear);
+                Detail::LaunchACMFaces<5>(launch);
                 break;
             case 6:
-                Detail::LaunchACMFaces<6>(launch, wallShear);
+                Detail::LaunchACMFaces<6>(launch);
                 break;
             }
             DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA ACM face launch failed");

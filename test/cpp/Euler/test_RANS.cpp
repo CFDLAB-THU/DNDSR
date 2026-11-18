@@ -293,18 +293,46 @@ TEST_CASE("GetSource_SST: omega production blends inner and outer coefficients")
 {
     // Constant-density simple shear removes cross diffusion and isolates gamma.
     const auto U = buildState(1, 1, 0, 0, 1, 1e-4, 2);
-    const auto gradient = buildShearGrad(U, 3);
-    constexpr real gammaInner = 0.075 / 0.09 - 0.5 * 0.41 * 0.41 / 0.3;
-    constexpr real gammaOuter = 0.0828 / 0.09 - 0.856 * 0.41 * 0.41 / 0.3;
+    const auto gradient = buildShearGrad(U, 1);
+    constexpr real gammaInner = 5. / 9.;
+    constexpr real gammaOuter = .44;
     for (const bool inner : {true, false})
     {
         Eigen::Vector<real, nVars> source = Eigen::Vector<real, nVars>::Zero();
         GetSource_SST<dim>(U, gradient, 1e-5, inner ? 1e-5 : 1e6,
                            1e100, source, 0, g_kOmegaSSTConfig);
-        const real expected = (inner ? gammaInner : gammaOuter) * 9 -
+        const real expected = (inner ? gammaInner : gammaOuter) -
                               (inner ? 0.075 : 0.0828) * 4;
         CHECK(source(I4 + 2) == doctest::Approx(expected).epsilon(1e-12));
     }
+}
+
+TEST_CASE("SST-2003 uses strain in transport and one capped production in both equations")
+{
+    const auto state = buildState(1, 0, 0, 0, 1, 1e-4, 2);
+    Eigen::Matrix<real, dim, nVars> gradient = Eigen::Matrix<real, dim, nVars>::Zero();
+    constexpr real strainRate = 10;
+    gradient(0, 1) = strainRate;
+    gradient(1, 2) = -strainRate;
+    const real pureStrainViscosity = GetMut_SST<dim>(state, gradient, 1e-5, 1e-6, g_kOmegaSSTConfig);
+    const real expectedViscosity = .31 * 1e-4 / (2 * strainRate);
+    CHECK(pureStrainViscosity == doctest::Approx(expectedViscosity).epsilon(1e-12));
+
+    Eigen::Vector<real, nVars> source = Eigen::Vector<real, nVars>::Zero();
+    GetSource_SST<dim>(state, gradient, 1e-5, 1e-6, 1e100,
+                       source, 0, g_kOmegaSSTConfig, SSTProduction::StrainSquared);
+    const real destruction = .09 * 1e-4 * 2;
+    CHECK(source(I4 + 1) == doctest::Approx(9 * destruction));
+    CHECK(source(I4 + 2) == doctest::Approx((5. / 9.) * 10 * destruction / expectedViscosity - .075 * 4));
+
+    gradient.setZero();
+    gradient(0, 2) = strainRate;
+    gradient(1, 1) = -strainRate;
+    CHECK(GetMut_SST<dim>(state, gradient, 1e-5, 1e-6, g_kOmegaSSTConfig) == doctest::Approx(1e-4 / 2));
+    GetSource_SST<dim>(state, gradient, 1e-5, 1e-6, 1e100,
+                       source, 0, g_kOmegaSSTConfig);
+    CHECK(source(I4 + 1) == doctest::Approx(-destruction));
+    CHECK(source(I4 + 2) == doctest::Approx(-.075 * 4));
 }
 
 TEST_CASE("GetSource_RealizableKe: shear gradient golden")
@@ -388,7 +416,7 @@ TEST_CASE("SST optional sink diagonal matches frozen-gradient derivatives and pr
             if (j == I4 + 1 || omegaGradient > 0)
                 CHECK(diagonal(j) == doctest::Approx(negativeDerivative).epsilon(1e-8));
             else
-                CHECK(diagonal(j) == original(j)); // destabilizing derivative stays explicit
+                CHECK(diagonal(j) == doctest::Approx(original(j) + .44 * (2. / 3.) * dim * .2));
         }
     }
 }
@@ -541,7 +569,7 @@ TEST_CASE("RANS configs: defaults and JSON round-trip preserve historical limits
     CHECK(g_saConfig.productionLimit == doctest::Approx(1e5));
     CHECK(g_kOmegaConfig.productionLimit == doctest::Approx(20));
     CHECK(g_kOmegaConfig.turbulentViscosityLimit == doctest::Approx(1e5));
-    CHECK(g_kOmegaSSTConfig.productionLimit == doctest::Approx(20));
+    CHECK(g_kOmegaSSTConfig.productionLimit == doctest::Approx(10));
     CHECK(g_kOmegaSSTConfig.turbulentViscosityLimit == doctest::Approx(1e5));
     CHECK(g_rkeConfig.turbulentViscosityLimit == doctest::Approx(1e5));
 
@@ -566,7 +594,7 @@ TEST_CASE("Euler evaluator settings: RANS configs are flat nested sections")
 
     CHECK(j.at("SAConfig").at("productionLimit").get<real>() == doctest::Approx(1e5));
     CHECK(j.at("KOmegaConfig").at("productionLimit").get<real>() == doctest::Approx(20));
-    CHECK(j.at("KOmegaSSTConfig").at("productionLimit").get<real>() == doctest::Approx(20));
+    CHECK(j.at("KOmegaSSTConfig").at("productionLimit").get<real>() == doctest::Approx(10));
     CHECK(j.at("RKEConfig").at("turbulentViscosityLimit").get<real>() == doctest::Approx(1e5));
     CHECK(j.at("RANSTopLimit").get<real>() == doctest::Approx(1e5));
 

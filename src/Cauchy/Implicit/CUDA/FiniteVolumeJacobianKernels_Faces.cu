@@ -209,8 +209,7 @@ namespace DNDS::Cauchy::CUDA
         const auto &p = input.parameters;
         const index rows = diagonal.RowCount(), all = input.means.RowCount();
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && p.components >= 5 && p.components <= 7 &&
-                                  (!p.roe || (p.components == 5 && fullBlock)) && std::isfinite(p.scale) && p.scale >= 0 && std::isfinite(input.time) &&
-                                  (p.kineticComponent == -1 || (p.components == 7 && p.kineticComponent == 5)),
+                                  (!p.roe || (p.components == 5 && fullBlock)) && std::isfinite(p.scale) && p.scale >= 0 && std::isfinite(input.time),
                               "unsupported CUDA Jacobian face request");
         p.gas.Validate();
         using Kind = Physics::RANS::ModelKind;

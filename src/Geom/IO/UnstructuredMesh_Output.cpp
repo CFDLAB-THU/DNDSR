@@ -1394,7 +1394,7 @@ namespace DNDS::Geom
         const tFGetData &dataPoint,
         const tFGetName &vectorNamesPoint,
         const tFGetVecData &vectorDataPoint,
-        double t, MPI_Comm commDup, const HDF5OutSetting *settings)
+        double t, MPI_Comm commDup, const HDF5OutSetting *settings, const VTKHDFExtraFields &extra)
     {
         const Serializer::HDF5Access hdf5Access(Serializer::HDF5Mutex());
         const auto hdf5OutSetting = settings ? *settings : this->hdf5OutSetting;
@@ -1436,6 +1436,11 @@ namespace DNDS::Geom
         const index vtkNNodeGlobal = nativeOutput.globalNodes;
         const index vtkNCellGlobal = nativeOutput.globalCells;
         const index vtkCell2NodeGlobalSiz = nativeOutput.globalConnectivity;
+        if (!extra.cellIntegers.empty())
+            FieldTransferDetail::LocalStage(outputMPI, [&]
+                                            {
+                for (const auto &[name, values] : extra.cellIntegers)
+                    DNDS_check_throw_info(values.size() == outputCellCount, "VTKHDF integer field row count differs"); });
         auto sourcePointRow = [&](index row)
         { return nativeOutput.pointSourceRows.at(size_t(row)); };
 
@@ -1579,6 +1584,10 @@ namespace DNDS::Geom
                                 H5T_NATIVE_DOUBLE, H5T_NATIVE_DOUBLE, plist_id, dcpl_id_3arr, cellDataBuf.data(), 3);
             }
 
+            for (const auto &[name, values] : extra.cellIntegers)
+                H5_WriteDataset(CellData_group_id, name.c_str(), numberOfCells, vtkCellOffset, outputCellCount,
+                                H5T_STD_I32LE, H5T_NATIVE_INT, plist_id, dcpl_id, values.data(), -1);
+
             herr = H5Gclose(CellData_group_id), H5S_Close;
         }
         {
@@ -1617,6 +1626,52 @@ namespace DNDS::Geom
 
         herr = H5Gclose(VTKHDF_group_id), H5S_Close;
         herr = H5Fclose(file_id), H5S_Close;
+
+        if (!extra.fieldIntegers.empty() || !extra.fieldStrings.empty())
+        {
+            // The VTK reader uses variable-length strings. Parallel HDF5
+            // cannot write them, so append the small common dictionary once
+            // all ranks have closed their collective file handles.
+            MPI_Barrier(commDup);
+            FieldTransferDetail::LocalStage(outputMPI, [&]
+                                            {
+                if (mpi.rank != mRank)
+                    return;
+                const hid_t serial = H5Fopen(fname.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+                DNDS_assert_info(serial >= 0, "VTKHDF cannot reopen field metadata");
+                const hid_t group = H5Gcreate(serial, "/VTKHDF/FieldData", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+                DNDS_assert_info(group >= 0, "VTKHDF cannot create FieldData");
+                const auto writeField = [&](const std::string &name, hsize_t count, hid_t fileType, hid_t memoryType, const void *values)
+                {
+                    const hid_t space = H5Screate_simple(1, &count, nullptr);
+                    DNDS_assert(space >= 0);
+                    const hid_t dataset = H5Dcreate(group, name.c_str(), fileType, space, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+                    DNDS_assert(dataset >= 0);
+                    if (count)
+                        herr = H5Dwrite(dataset, memoryType, H5S_ALL, H5S_ALL, H5P_DEFAULT, values), H5SS;
+                    herr = H5Dclose(dataset), H5S_Close;
+                    herr = H5Sclose(space), H5S_Close;
+                };
+                for (const auto &[name, values] : extra.fieldIntegers)
+                    writeField(name, values.size(), H5T_STD_I32LE, H5T_NATIVE_INT, values.data());
+                if (!extra.fieldStrings.empty())
+                {
+                    const hid_t type = H5Tcopy(H5T_C_S1);
+                    DNDS_assert(type >= 0);
+                    herr = H5Tset_size(type, H5T_VARIABLE), H5SS;
+                    for (const auto &[name, values] : extra.fieldStrings)
+                    {
+                        std::vector<const char *> strings;
+                        strings.reserve(values.size());
+                        for (const auto &value : values)
+                            strings.push_back(value.c_str());
+                        writeField(name, strings.size(), type, type, strings.data());
+                    }
+                    herr = H5Tclose(type), H5S_Close;
+                }
+                herr = H5Gclose(group), H5S_Close;
+                herr = H5Fclose(serial), H5S_Close; });
+        }
     }
 
     void UnstructuredMesh::PrintMeshCGNS(std::string fname, const t_FBCID_2_Name &fbcid2name, const std::vector<std::string> &allNames)

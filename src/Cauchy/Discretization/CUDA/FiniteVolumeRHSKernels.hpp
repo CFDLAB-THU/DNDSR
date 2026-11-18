@@ -17,7 +17,6 @@ namespace DNDS::Cauchy::CUDA
     using RHSOutput = Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::TableRows>;
     using RHSField = Runtime::PairReadView<real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows>;
     using RHSIndices = Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
-    using RHSWallOutput = Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::FixedRows<3>>;
     using RHSStatus = Runtime::ArrayView<NumericalStatus, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
 
     /// Immutable borrowed numerical geometry; no field values, physics workers
@@ -99,7 +98,7 @@ namespace DNDS::Cauchy::CUDA
         int gridBlocks = 0;
         int blockSize = 128;
         bool doubleBuffer = false;
-        bool mechanical = false;
+        bool mechanical = false, captureBoundaryFlux = false;
         void Validate() const;
     };
     static_assert(std::is_trivially_copyable_v<RHSKernelControls>);
@@ -161,7 +160,7 @@ namespace DNDS::Cauchy::CUDA
      */
     void EvaluateFluxFaces(Runtime::ExecutionContext context, const RHSGeometryPublication &geometry,
                            Runtime::ArrayView<const RHSKernelParameters, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> parameters,
-                           RHSKernelControls controls, RHSFields fields, RHSFaceOutputs output, RHSIndices faces, bool requireGhost = true, RHSFacePackageView packages = {}, RHSWallOutput wallShear = {});
+                           RHSKernelControls controls, RHSFields fields, RHSFaceOutputs output, RHSIndices faces, bool requireGhost = true, RHSFacePackageView packages = {});
     /// Gather face contributions in canonical cell order. Opposite periodic
     /// faces rotate momentum only, including self-periodic neighbors. Outputs
     /// are integrated residuals (no division by volume). Failed face status

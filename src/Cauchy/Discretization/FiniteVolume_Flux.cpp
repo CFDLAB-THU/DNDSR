@@ -71,5 +71,6 @@ namespace DNDS::Cauchy
                                                             {true, true, true, false, false});
         work.ApplyRHS(state, residual, region, evaluator, time, auxiliary, faceOutput, incoming);
         work.boundaryMomentumCurrent = region == CFV::ReconstructionRegion::All;
+        work.boundaryFacialFluxCurrent = work.boundaryMomentumCurrent && work.captureBoundaryFlux && !faceOutput;
     }
 }

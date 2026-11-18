@@ -76,7 +76,7 @@ namespace DNDS::Cauchy
         DNDS_check_throw_info(!HasRANS(), "RANS is already attached to this equation");
         DNDS_check_throw_info(!IsACM() || !settings.useQCR, "ACM supports the linear eddy-viscosity stress closure only");
         auto result = *this;
-        auto model = std::make_shared<const Physics::RANS::Model>(settings);
+        auto model = std::make_shared<const Physics::RANS::Model>(settings, Physics::RANS::SSTProduction::StrainSquared);
         if (!model->ComponentNumber())
             return result;
         DNDS_check_throw_info(_viscous, "RANS requires molecular viscous transport");

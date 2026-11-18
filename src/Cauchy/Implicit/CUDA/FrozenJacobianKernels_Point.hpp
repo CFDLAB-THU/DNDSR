@@ -2,7 +2,6 @@
 
 #include "Cauchy/Implicit/CUDA/FrozenJacobianKernels.hpp"
 #include "Cauchy/Physics/PhysicalFlux.hpp"
-#include "Cauchy/Physics/RANSFlux.hpp"
 #include "Cauchy/Physics/PerfectGasCharacteristics.hpp"
 
 namespace DNDS::Cauchy::CUDA::Detail
@@ -57,15 +56,7 @@ namespace DNDS::Cauchy::CUDA::Detail
         delta = RotateJacobianFlow(delta, point);
         const auto grid = p.frame.GridVelocity(point.location);
         auto derivative = PrepareCompressibleFluxDerivative(flow, delta, pressure, dp, point.normal, grid);
-        if constexpr (N == 7)
-            if (p.kineticComponent >= 0)
-            {
-                const int k = p.kineticComponent;
-                const auto stress = TurbulentNormalFluxDerivative(flow, delta, state[k],
-                                                                  (!selectComponents || p.active[k]) ? input[k] : 0, point.normal);
-                for (int j = 0; j < 5; ++j)
-                    derivative[j] += stress[j];
-            }
+        // No derivative of the former isotropic 2*rho*k/3 stress or energy work.
         const real lambda = convection + diffusion;
         FlowState dissipation{};
         for (int j = 0; j < 5; ++j)

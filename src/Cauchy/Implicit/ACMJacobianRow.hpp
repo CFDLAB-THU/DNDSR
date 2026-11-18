@@ -106,7 +106,7 @@ namespace DNDS::Cauchy::ACM
             // Freeze the viscous spectral coefficient from aux preparation.
             // Only differential transported variables diffuse. The pressure
             // equation still participates in the complete inviscid flux.
-            const real viscous = .5 * request.radius(sample.auxiliaryFace, 1);
+            const real viscous = boundary && bc.kind == BoundaryKind::SlipWall ? 0 : .5 * request.radius(sample.auxiliaryFace, 1);
             real wallOmega = 0;
             if constexpr (C == 6)
                 if (boundary && bc.kind == BoundaryKind::NoSlipWall)
@@ -141,9 +141,7 @@ namespace DNDS::Cauchy::ACM
                 for (int j = 0; j < C; ++j)
                     if (j != 3)
                         result[j] -= viscous * (right[j] - left[j]);
-                if constexpr (C == 6)
-                    for (int j = 0; j < 3; ++j)
-                        result[j] += (left[4] + right[4]) * sample.normal[j] / 3;
+                // The former isotropic 2*rho*k/3 stress is absent from the ACM residual.
                 return {};
             };
             if constexpr (C > 4)

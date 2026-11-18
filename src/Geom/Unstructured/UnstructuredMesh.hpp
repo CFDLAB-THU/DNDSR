@@ -326,6 +326,14 @@ namespace DNDS::Geom
             const tFGetName &vectorNamesPoint,
             const tFGetVecData &vectorDataPoint,
             double t, MPI_Comm commDup);
+        /// Additional typed arrays. Integer cell rows follow the owned cell
+        /// order; field arrays are identical across the output communicator.
+        struct VTKHDFExtraFields
+        {
+            std::vector<std::pair<std::string, SpanView<const int>>> cellIntegers;
+            std::vector<std::pair<std::string, std::vector<int>>> fieldIntegers;
+            std::vector<std::pair<std::string, std::vector<std::string>>> fieldStrings;
+        };
         /// Per-call settings avoid mutating the shared mesh for independent
         /// output consumers. The historical overload retains its ABI.
         void PrintParallelVTKHDFDataArray(
@@ -335,7 +343,8 @@ namespace DNDS::Geom
             const tFGetName &vectorNames, const tFGetVecData &vectorData,
             const tFGetName &namesPoint, const tFGetData &dataPoint,
             const tFGetName &vectorNamesPoint, const tFGetVecData &vectorDataPoint,
-            double t, MPI_Comm commDup, const HDF5OutSetting *settings);
+            double t, MPI_Comm commDup, const HDF5OutSetting *settings,
+            const VTKHDFExtraFields &extra = {});
         void PrintMeshCGNS(std::string fname, const t_FBCID_2_Name &fbcid2name, const std::vector<std::string> &allNames);
         void SetHDF5OutSetting(size_t chunkSiz, int deflateLevel, bool coll_on_data, bool coll_on_meta)
         {

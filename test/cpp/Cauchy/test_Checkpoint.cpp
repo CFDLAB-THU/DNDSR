@@ -8,6 +8,7 @@
 #include "Physics/Thermodynamics/ConservativeConversion.hpp"
 #include "CartesianFixture.hpp"
 #include "../CFV/ReconstructionFixture.hpp"
+#include "../Geom/InterfaceFixture.hpp"
 #include "DNDS/Runtime/Array/ArrayIO.hpp"
 #include "DNDS/Serializer/SerializerH5.hpp"
 #include "DNDS/MPI/CollectiveStage.hpp"
@@ -43,6 +44,24 @@ namespace
             for (int j = 0; j < 5; ++j)
                 write.View<R::UniformTableRows>()(iCell, j) = value[j];
         }
+    }
+    template <class T>
+    std::vector<T> ReadVTKField(const std::string &path, const std::string &field, hid_t type)
+    {
+        const auto file = H5Fopen(path.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+        REQUIRE(file >= 0);
+        const auto dataset = H5Dopen(file, ("VTKHDF/" + field).c_str(), H5P_DEFAULT);
+        REQUIRE(dataset >= 0);
+        const auto space = H5Dget_space(dataset);
+        const auto count = H5Sget_simple_extent_npoints(space);
+        REQUIRE(count >= 0);
+        std::vector<T> rows(static_cast<size_t>(count));
+        if (count)
+            REQUIRE(H5Dread(dataset, type, H5S_ALL, H5S_ALL, H5P_DEFAULT, rows.data()) >= 0);
+        H5Sclose(space);
+        H5Dclose(dataset);
+        H5Fclose(file);
+        return rows;
     }
     void Remove(const std::vector<std::string> &paths)
     {
@@ -168,20 +187,22 @@ TEST_CASE("Asynchronous HDF output snapshots survive foreground field mutation a
         for (DNDS::index iCell = 0; iCell < flow.owned.RowCount(); ++iCell)
             CHECK(flow(iCell, 0) == 1.3);
     }
-    const auto surface = plan.VisualizationPrefix(0, token) + "_surface_rank" + std::to_string(mpi.rank) + ".csv";
-    std::ifstream rows(surface);
-    std::string line;
-    REQUIRE(bool(std::getline(rows, line)));
-    while (std::getline(rows, line))
+    const auto volume = plan.VisualizationPrefix(0, token);
+    const auto boundary = volume + "_bnd.vtkhdf";
+    const auto rho = ReadVTKField<double>(boundary, "CellData/rho", H5T_NATIVE_DOUBLE);
+    const auto zones = ReadVTKField<int>(boundary, "CellData/bnd_zone_id", H5T_NATIVE_INT);
+    REQUIRE(rho.size() == 24);
+    REQUIRE(zones.size() == rho.size());
+    for (size_t i = 0; i < rho.size(); ++i)
     {
-        std::stringstream fields(line);
-        std::string value;
-        for (int column = 0; column <= 9; ++column)
-            REQUIRE(bool(std::getline(fields, value, ',')));
-        CHECK(std::stod(value) == doctest::Approx(1.3));
+        CHECK(rho[i] == 1.3);
+        CHECK(zones[i] == 7);
     }
-    rows.close();
-    CHECK(std::filesystem::remove(surface));
+    const auto file = H5Fopen(boundary.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+    REQUIRE(file >= 0);
+    CHECK(H5Lexists(file, "VTKHDF/CellData/force_tangential", H5P_DEFAULT) == 0);
+    H5Fclose(file);
+    CHECK_FALSE(std::filesystem::exists(volume + "_surface_rank" + std::to_string(mpi.rank) + ".csv"));
     if (mpi.rank == 0)
     {
         std::ifstream file(plan.SnapshotManifestPath(token));
@@ -189,8 +210,112 @@ TEST_CASE("Asynchronous HDF output snapshots survive foreground field mutation a
         file >> published;
         CHECK(published == marker);
     }
-    Remove({plan.CheckpointPath(token), plan.VisualizationPrefix(0, token) + ".vtkhdf", plan.SnapshotManifestPath(token)});
+    Remove({plan.CheckpointPath(token), volume + ".vtkhdf", boundary, plan.SnapshotManifestPath(token)});
 }
+TEST_CASE("Boundary snapshot writes native zones and physical flux from the ACM RHS")
+{
+    const auto prefix = Path("cauchy-boundary-flux-");
+    C::DomainSettings settings;
+    settings.mesh.dimension = 3;
+    settings.mesh.boundaryIds = {{"solid", 7}, {"slip", 8}};
+    settings.equation.system = "incompressibleACM";
+    settings.equation.eos = "none";
+    settings.equation.transport = "Newtonian";
+    settings.equation.viscosity = .01;
+    settings.equation.referenceScales = {{"rho0", 1}, {"U0", 1}, {"L0", 1}, {"T0", 300}};
+    settings.equation.rans.model = "KOmegaSST";
+    settings.boundaries["7"].kind = "noSlipWall";
+    settings.boundaries["8"].kind = "slipWall";
+    settings.initialState = {{"type", "primUP"}, {"state", {.1, 0, 0, .7, .03, 2}}};
+    settings.referenceState = settings.initialState;
+    settings.numerics.viscousGradient = "polynomial";
+    settings.implicit.diagonal = "block";
+    settings.implicit.jacobianAction = "assembled";
+    settings.boundaryFacialFluxes = true;
+    C::TimeSettings time;
+    time.method = "bdf1";
+    C::Domain domain("acm", CFVTest::CartesianHexes(mpi, 3, true), settings, time);
+    {
+        auto write = domain.Dofs().WriteOwned();
+        auto flow = write.Block("flow"), rans = write.Block("rans");
+        for (DNDS::index cell = 0; cell < flow.RowCount(); ++cell)
+        {
+            const auto center = domain.Discretization().Metrics().GetCellCent(cell);
+            flow(cell, 0) = center[1];
+            flow(cell, 3) = .7;
+            rans(cell, 0) = .03 + .02 * center[1];
+        }
+    }
+    domain.WriteVisualization(prefix, 0);
+    const auto boundary = prefix + "_bnd.vtkhdf";
+    const auto zones = ReadVTKField<int>(boundary, "CellData/bnd_zone_id", H5T_NATIVE_INT);
+    const auto dictionary = ReadVTKField<int>(boundary, "FieldData/bnd_zone_ids", H5T_NATIVE_INT);
+    CHECK(dictionary == std::vector<int>{7, 8});
+    const auto u = ReadVTKField<double>(boundary, "CellData/u", H5T_NATIVE_DOUBLE);
+    const auto normals = ReadVTKField<double>(boundary, "CellData/norm", H5T_NATIVE_DOUBLE);
+    const auto force = ReadVTKField<double>(boundary, "CellData/force_tangential", H5T_NATIVE_DOUBLE);
+    const auto fluxV = ReadVTKField<double>(boundary, "CellData/flux_v_facial", H5T_NATIVE_DOUBLE);
+    const auto fluxK = ReadVTKField<double>(boundary, "CellData/flux_rhoK_facial", H5T_NATIVE_DOUBLE);
+    REQUIRE(zones.size() == 54);
+    REQUIRE(normals.size() == 3 * zones.size());
+    REQUIRE(force.size() == normals.size());
+    int slipFaces = 0, noSlipWithShear = 0;
+    for (size_t iFace = 0; iFace < zones.size(); ++iFace)
+        if (zones[iFace] == 8)
+        {
+            ++slipFaces;
+            CHECK(normals[3 * iFace + 1] == doctest::Approx(-1. / 9.));
+            CHECK(u[iFace] == doctest::Approx(1. / 6.)); // Adjacent cell mean.
+            CHECK(std::abs(force[3 * iFace]) < 1e-13);
+            CHECK(fluxV[iFace] == doctest::Approx(.7)); // Pressure only.
+            CHECK(std::abs(fluxK[iFace]) < 1e-13);
+        }
+        else if (std::abs(force[3 * iFace]) > 1e-8)
+            ++noSlipWithShear;
+    CHECK(slipFaces == 9);
+    CHECK(noSlipWithShear > 0);
+    Remove({prefix + ".vtkhdf", boundary});
+}
+
+TEST_CASE("Boundary snapshot follows the face owner when the boundary record is remote")
+{
+    const auto prefix = Path("cauchy-boundary-remote-");
+    C::DomainSettings settings;
+    settings.mesh.dimension = 3;
+    settings.boundaryFacialFluxes = true;
+    settings.boundaries["7"].kind = "slipWall";
+    settings.numerics.reconstruction = "constant";
+    C::Domain domain("gas", InterfaceFixture::WarpedHexes(mpi), settings, C::TimeSettings{});
+    {
+        const auto state = domain.Equation().Gas().Conservative({1. + mpi.rank, 0, 0, 0, 2. + mpi.rank});
+        auto write = domain.Dofs().CoupledField().Owned().Write();
+        for (int j = 0; j < 5; ++j)
+            write.View()(0, j) = state[j];
+    }
+    domain.WriteVisualization(prefix, 0);
+    const auto boundary = prefix + "_bnd.vtkhdf";
+    const auto rho = ReadVTKField<double>(boundary, "CellData/rho", H5T_NATIVE_DOUBLE);
+    const auto mass = ReadVTKField<double>(boundary, "CellData/flux_rho_facial", H5T_NATIVE_DOUBLE);
+    const auto momentum = ReadVTKField<double>(boundary, "CellData/flux_rhou_facial", H5T_NATIVE_DOUBLE);
+    const auto normal = ReadVTKField<double>(boundary, "CellData/norm", H5T_NATIVE_DOUBLE);
+    REQUIRE(rho.size() == size_t(6 * mpi.size));
+    REQUIRE(momentum.size() == rho.size());
+    REQUIRE(mass.size() == rho.size());
+    REQUIRE(normal.size() == 3 * rho.size());
+    for (int rank = 0; rank < mpi.size; ++rank)
+        for (int slot = 0; slot < 6; ++slot)
+        {
+            const auto row = 6 * rank + slot;
+            const auto owner = (rank + 1) % mpi.size;
+            const double area = std::hypot(normal[3 * row], normal[3 * row + 1], normal[3 * row + 2]);
+            REQUIRE(area > 0);
+            CHECK(rho[row] == 1. + owner);
+            CHECK(std::abs(mass[row]) < 1e-13);
+            CHECK(momentum[row] == doctest::Approx(-(2. + owner) * normal[3 * row] / area).scale(1));
+        }
+    Remove({prefix + ".vtkhdf", boundary});
+}
+
 TEST_CASE("Equation archive remaps coupled and split fields without confusing component ranges")
 {
     const auto mesh = CauchyTest::PeriodicQuads(mpi, 3);
@@ -461,7 +586,7 @@ TEST_CASE("Physical Strang source composes with transport and preserves retry an
         Remove({path});
     }
 }
-TEST_CASE("Mixture visualization writes conservative species and physical boundary traces")
+TEST_CASE("Mixture visualization shares volume species fields with adjacent boundary cells")
 {
     const auto prefix = Path("cauchy-mixture-output-");
     auto settings = MixtureSettings();
@@ -487,29 +612,15 @@ TEST_CASE("Mixture visualization writes conservative species and physical bounda
         H5Dclose(dataset);
     }
     H5Fclose(file);
-    const auto surfacePath = prefix + "_surface_rank" + std::to_string(mpi.rank) + ".csv";
-    std::ifstream surface(surfacePath);
-    std::string line;
-    REQUIRE(bool(std::getline(surface, line)));
-    CHECK(line.find("w,T,Y:H2,") != std::string::npos);
-    DNDS::index rows = 0;
-    while (std::getline(surface, line))
+    const auto boundary = prefix + "_bnd.vtkhdf";
+    for (const auto &field : std::vector<std::pair<std::string, double>>{{"rhoY:H2", .1}, {"Y:H2", .1}, {"T", settings.initialTemperature}})
     {
-        std::istringstream record(line);
-        std::vector<double> values;
-        std::string token;
-        while (std::getline(record, token, ','))
-            values.push_back(std::stod(token));
-        REQUIRE(values.size() == 25);
-        CHECK(values[14] == doctest::Approx(settings.initialTemperature).epsilon(1e-12));
-        CHECK(values[15] == doctest::Approx(.1).epsilon(1e-12));
-        ++rows;
+        const auto values = ReadVTKField<double>(boundary, "CellData/" + field.first, H5T_NATIVE_DOUBLE);
+        REQUIRE(values.size() == 6);
+        for (double value : values)
+            CHECK(value == doctest::Approx(field.second).epsilon(1e-12));
     }
-    MPI_Allreduce(MPI_IN_PLACE, &rows, 1, MPI_INT64_T, MPI_SUM, mpi.comm);
-    CHECK(rows > 0);
-    surface.close();
-    CHECK(std::filesystem::remove(surfacePath));
-    Remove({prefix + ".vtkhdf"});
+    Remove({prefix + ".vtkhdf", boundary});
 }
 #endif
 TEST_CASE("Configured RANS BDF2 restores all fields across layouts and rejects changed model metadata")

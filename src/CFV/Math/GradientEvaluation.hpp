@@ -19,12 +19,16 @@ namespace DNDS::CFV::Math
             const rowsize slot = rowsize(entry - plan.offsets(iCell, 0));
             const index face = plan.topology.CellFaces(iCell)[slot];
             const index other = plan.topology.CellFaceOther(iCell, face, slot);
+            const index boundaryRow = other == UnInitIndex ? plan.boundaryIds(entry, 0) : UnInitIndex;
+            // Pure extrapolation has no prescribed sample or weight in the fit.
+            if (other == UnInitIndex && boundaryRow == UnInitIndex)
+                continue;
             const int side = plan.topology.CellIsFaceBack(iCell, face, slot) ? 0 : 1;
             const bool rotated = other != UnInitIndex && plan.periodic.Rotates(face);
             const auto rotation = rotated ? plan.periodic.OtherRotation(face, side) : Geom::tGPoint::Identity().eval();
             for (index component = 0; component < components; ++component)
             {
-                real value = other == UnInitIndex ? boundary(plan.boundaryIds(entry, 0), component) : mean(other, component);
+                real value = other == UnInitIndex ? boundary(boundaryRow, component) : mean(other, component);
                 const index first = rotated ? vectors.First(component) : -1;
                 if (first >= 0)
                 {

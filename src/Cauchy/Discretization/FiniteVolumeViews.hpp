@@ -168,6 +168,9 @@ namespace DNDS::Cauchy
         /// in the prepared anchor cell's axes. Selected faces are overwritten;
         /// core/dependent sets can overlap. No source term is included.
         std::optional<RHSFlowOutputView> faceFlux;
+        bool boundaryFacesOnly = false;
+        /// Outward momentum flux times quadrature weight. Optional observation output.
+        Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::FixedRows<3>> boundaryMomentum;
         void ValidateDevice(Runtime::Device expected) const
         {
             residual.ValidateDevice(expected);
@@ -175,6 +178,8 @@ namespace DNDS::Cauchy
                 lowOrder->ValidateDevice(expected);
             if (faceFlux)
                 faceFlux->ValidateDevice(expected);
+            if (boundaryMomentum.RowCount())
+                boundaryMomentum.ValidateDevice(expected);
         }
     };
 }

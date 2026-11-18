@@ -163,7 +163,7 @@ namespace DNDS::Cauchy
                 auto checked = _data->equation.MakePointEvaluator(workers->Acquire(), {});
             }
             else DNDS_check_throw_info(!workers, "perfect-gas FV does not require chemistry workers");
-            operationControls = Json{{"meanOnly", meanOnly}, {"rhsKernel", int(options.rhsKernel)},
+            operationControls = Json{{"meanOnly", meanOnly}, {"rhsKernel", int(options.rhsKernel)}, {"boundaryFlux", options.captureBoundaryFlux},
                 {"numerics", _data->settings.numerics}, {"equation", _data->settings.equation},
                 {"motion", _data->settings.motion}, {"boundaries", _data->settings.boundaries}, {"overlap", _data->settings.execution.overlap},
                 {"collectiveChecks", _data->settings.implicit.collectiveChecks}, {"properties", _data->equation.PropertyKey().parameters},
@@ -171,7 +171,7 @@ namespace DNDS::Cauchy
         AgreeEquationBinding(state, mpi.comm, operationControls);
         std::shared_ptr<Workspace> result;
         Metrics().Communication()->LocalStage([&]
-                                              { result = std::make_shared<Workspace>(_data, state, std::move(workers), meanOnly); });
+                                              { result = std::make_shared<Workspace>(_data, state, std::move(workers), meanOnly, options.captureBoundaryFlux); });
         result->BindHalos(state);
         if (flow5Profile && state.Device() == R::Device::Host() && options.rhsKernel != RHSKernelPolicy::Generic)
             result->fixedFlowRHS.emplace(AcquireRHSOperator());

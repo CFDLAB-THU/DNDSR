@@ -377,7 +377,7 @@ namespace DNDS::Cauchy
                     ? boundary->QuadratureValues().CoupledField().Owned() : *incomingCenters);
             }
             _data->partition.Validate();
-            work.boundaryMomentumCurrent = false; });
+            work.boundaryMomentumCurrent = work.boundaryFacialFluxCurrent = false; });
         const bool needsAuxiliaryPreparation = auxiliary && !work.meanGradients;
         if (needsAuxiliaryPreparation)
             local([&]
@@ -737,6 +737,7 @@ namespace DNDS::Cauchy
             local([&]
                   { work.PublishSourceState(state, time); });
         work.boundaryMomentumCurrent = bool(residual);
+        work.boundaryFacialFluxCurrent = bool(residual) && work.captureBoundaryFlux;
         work.rhsState.emplace(state.NumericAlias());
         if (reconstruction.coefficients)
             work.rhsCoefficients.emplace(reconstruction.FinalizedValues());

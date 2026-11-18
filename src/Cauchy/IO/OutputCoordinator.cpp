@@ -14,6 +14,16 @@ namespace DNDS::Cauchy
 {
     namespace
     {
+        Json BoundaryArtifact(const std::string &prefix, bool facialFluxes, real observationTime)
+        {
+            Json artifact{{"kind", "boundary"}, {"path", prefix + "_bnd.vtkhdf"}, {"schema", "dndsr.cauchy.boundary.v1"}, {"facialFluxes", {{"available", facialFluxes}}}};
+            if (facialFluxes)
+                artifact["facialFluxes"].update({{"observationTime", observationTime},
+                                                 {"sign", "negative_outward_rhs_flux"},
+                                                 {"normalization", "rhs_quadrature_area_average"}});
+            return artifact;
+        }
+
         Json GatherJsonArrays(const MPIInfo &mpi, const Json &local)
         {
             const auto encoded = local.dump();
@@ -337,13 +347,6 @@ namespace DNDS::Cauchy
                     nonlinear, CaptureDomainState(iDomain));
             if (simulation.Placement().DomainRank(iDomain) != 0)
                 return;
-            Json surfaces = Json::array();
-            if (visualization)
-                for (int rank = 0;
-                     rank < int(config.Domains()[iDomain].placement.ranks.size());
-                     ++rank)
-                    surfaces.push_back(prefix + "_surface_rank" +
-                                       std::to_string(rank) + ".csv");
             Json artifacts = Json::array();
             if (checkpoint)
                 artifacts.push_back(
@@ -356,10 +359,8 @@ namespace DNDS::Cauchy
                     {{"kind", "volume"},
                      {"path", prefix + ".vtkhdf"},
                      {"schema", "dndsr.cauchy.visualization.v1"}});
-                artifacts.push_back(
-                    {{"kind", "surface"},
-                     {"paths", std::move(surfaces)},
-                     {"schema", "dndsr.cauchy.surface-samples.v1"}});
+                artifacts.push_back(BoundaryArtifact(prefix, output.boundaryFacialFluxes,
+                                                     domain.InternalObservationTime()));
             }
             const Json manifest{
                 {"schema", "dndsr.cauchy.internal-snapshot.v1"},
@@ -525,18 +526,9 @@ namespace DNDS::Cauchy
                          {"domain", iDomain},
                          {"path", prefix + ".vtkhdf"},
                          {"schema", "dndsr.cauchy.visualization.v1"}});
-                    Json shards = Json::array();
-                    for (int rank = 0;
-                         rank < int(config.Domains()[iDomain]
-                                        .placement.ranks.size());
-                         ++rank)
-                        shards.push_back(prefix + "_surface_rank" +
-                                         std::to_string(rank) + ".csv");
-                    artifacts.push_back(
-                        {{"kind", "surface"},
-                         {"domain", iDomain},
-                         {"paths", std::move(shards)},
-                         {"schema", "dndsr.cauchy.surface-samples.v1"}});
+                    auto boundary = BoundaryArtifact(prefix, output.boundaryFacialFluxes, simulation.Time());
+                    boundary["domain"] = iDomain;
+                    artifacts.push_back(std::move(boundary));
                 }
             return Json{{"schema", "dndsr.cauchy.snapshot.v1"},
                         {"step", simulation.Step()},

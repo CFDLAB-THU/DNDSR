@@ -105,6 +105,117 @@ TEST_CASE("Standalone gradients recover linear fields with physical boundary sam
     }
 }
 
+TEST_CASE("Weighted P1 gradient matches independent least-squares fit on a stretched grid")
+{
+    auto mesh = G::OverlapTest::BuildNativeFixture(mpi, false, 8).mesh;
+    mesh->TransformCoords([](const G::tPoint &p) -> G::tPoint
+                          { return {p[0] + .04 * p[1], .1 * p[1], p[2]}; });
+    auto metric = C::FiniteVolumePlan::ConstructMetrics(mesh);
+    const auto meshRead = mesh->AcquireRead(G::MeshReadRequirements::CellFlux());
+    const auto meshView = meshRead.HostView();
+    const auto metricRead = metric.AcquireRead();
+    const auto geometry = metricRead.HostView();
+    const auto polynomial = [](const G::tPoint &p)
+    { return p[0] * p[0] + 2 * p[0] * p[1] + 3 * p[1] * p[1]; };
+    auto mean = metric.BuildField(1), gradient = metric.BuildField(2);
+    {
+        auto write = mean.Owned().Write();
+        for (I cell = 0; cell < metric.NumCell(); ++cell)
+            write.View()(cell, 0) = polynomial(geometry.GetCellBary(cell));
+    }
+    metric.BindHalo(mean).Begin().Wait();
+    for (const C::LeastSquaresWeights weights : {C::LeastSquaresWeights{}, {1, -1}})
+    {
+        auto plan = C::GradientPlan::Prepare(*mesh, metric, C::GradientMethod::LeastSquares, 1e-13, {}, weights);
+        auto boundary = plan.BuildBoundaryValues(1);
+        {
+            auto write = boundary.Write();
+            for (I row = 0; row < plan.NumBoundaryQuadrature(); ++row)
+                write.View()(row, 0) = polynomial(plan.GetBoundaryQuadrature(row).point);
+        }
+        plan.Evaluate(mean, boundary, gradient);
+        const auto result = gradient.Owned().Read();
+        for (I cell = 0; cell < metric.NumCell(); ++cell)
+        {
+            const auto center = geometry.GetCellBary(cell);
+            Eigen::Matrix2d normal = Eigen::Matrix2d::Zero();
+            Eigen::Vector2d right = Eigen::Vector2d::Zero();
+            const auto faces = meshView.CellFaces(cell);
+            for (DNDS::rowsize slot = 0; slot < faces.size(); ++slot)
+            {
+                const I face = faces[slot], neighbor = meshView.CellFaceOther(cell, face, slot);
+                const auto sample = neighbor == DNDS::UnInitIndex ? geometry.GetFaceCent(face) : geometry.GetCellBary(neighbor);
+                const Eigen::Vector2d delta = (sample - center).head<2>();
+                const double weight = std::pow(geometry.GetFaceArea(face), weights.areaPower) *
+                                      std::pow(delta.norm(), weights.distancePower);
+                normal += weight * delta * delta.transpose();
+                right += weight * delta * (polynomial(sample) - polynomial(center));
+            }
+            const Eigen::Vector2d expected = normal.inverse() * right;
+            for (int d = 0; d < 2; ++d)
+                CHECK(result.View()(cell, d) == doctest::Approx(expected[d]).epsilon(2e-11));
+        }
+    }
+}
+
+TEST_CASE("Weighted P1 gradients use the curved triangular boundary sample locations")
+{
+    const bool active = mpi.rank == 0;
+    auto nodes = G::EntitySpace::CreateOwned(G::EntityKind::Node, mpi, active ? 6 : 0);
+    auto cells = nodes.CreateSibling(G::EntityKind::Cell, active ? 1 : 0);
+    auto boundaries = nodes.CreateSibling(G::EntityKind::Bnd, active ? 3 : 0);
+    std::vector<std::vector<I>> cones, faces;
+    if (active)
+    {
+        cones.push_back({0, 1, 2, 3, 4, 5});
+        faces = {{0, 1, 3}, {1, 2, 4}, {2, 0, 5}};
+    }
+    G::NativeMeshInput input{mpi, 2, cells, nodes, boundaries, InterfaceFixture::Rows(cones), InterfaceFixture::Rows(faces),
+                             R::Array<double>(R::RowLayout::Dense(nodes.NumOwned(), 3)),
+                             R::Array<G::ElemInfo>(R::RowLayout::Dense(cells.NumOwned(), 1)),
+                             R::Array<G::ElemInfo>(R::RowLayout::Dense(boundaries.NumOwned(), 1))};
+    if (active)
+    {
+        const std::vector<G::tPoint> points{{0, 0, 0}, {2, 0, 0}, {0, 2, 0}, {1, -.35, 0}, {1, 1, 0}, {0, 1, 0}};
+        auto write = input.coordinates.Write();
+        for (I row = 0; row < nodes.NumOwned(); ++row)
+            for (int d = 0; d < 3; ++d)
+                write.View()(row, d) = points[row][d];
+        input.cellInfo.Write().View()(0, 0) = G::ElemInfo{G::Elem::Tri6, G::INTERNAL_ZONE};
+        auto info = input.boundaryInfo.Write();
+        for (I row = 0; row < boundaries.NumOwned(); ++row)
+            info.View()(row, 0) = G::ElemInfo{G::Elem::Line3, int(7 + row)};
+    }
+    auto mesh = G::UnstructuredMesh::FromNative(mpi, G::ConstructNativeMesh(std::move(input)));
+    mesh->PrepareNativeTopology();
+    auto metric = C::FiniteVolumePlan::ConstructMetrics(mesh);
+    auto plan = C::GradientPlan::Prepare(*mesh, metric, C::GradientMethod::LeastSquares);
+    auto mean = metric.BuildField(1), result = metric.BuildField(2);
+    auto values = plan.BuildBoundaryValues(1);
+    const G::tPoint exact{2, -3, 0};
+    if (active)
+    {
+        mean.Owned().Write().View()(0, 0) = 4 + exact.dot(metric.AcquireRead().HostView().GetCellBary(0));
+        auto write = values.Write();
+        bool curvedPoint = false;
+        for (I iPoint = 0; iPoint < plan.NumBoundaryQuadrature(); ++iPoint)
+        {
+            const auto point = plan.GetBoundaryQuadrature(iPoint).point;
+            curvedPoint = curvedPoint || point[1] < -.1;
+            write.View()(iPoint, 0) = 4 + exact.dot(point);
+        }
+        CHECK(curvedPoint);
+    }
+    metric.BindHalo(mean).Begin().Wait();
+    plan.Evaluate(mean, values, result);
+    if (active)
+    {
+        const auto read = result.Owned().Read();
+        for (int d = 0; d < 2; ++d)
+            CHECK(read.View()(0, d) == doctest::Approx(exact[d]).epsilon(1e-12));
+    }
+}
+
 TEST_CASE("Gradient core phases exclude active MPI ghost writes across table layouts")
 {
     // At np2 both ranks own cells; np4/8 additionally exercise an empty owner.

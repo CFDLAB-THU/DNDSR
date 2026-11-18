@@ -17,6 +17,18 @@ namespace DNDS::CFV
         GGMP
     };
 
+    /// Exponents of the face area and sample distance in the squared-residual objective.
+    struct LeastSquaresWeights
+    {
+        real areaPower = 0, distancePower = -3;
+
+        DNDS_DECLARE_CONFIG(LeastSquaresWeights)
+        {
+            DNDS_FIELD(areaPower, "Face measure exponent in the least-squares squared-residual weight");
+            DNDS_FIELD(distancePower, "Sample distance exponent in the least-squares squared-residual weight");
+        }
+    };
+
     /// Optional equation-variable transform for one-level physical-gradient
     /// WBAP. Spatial gradient-frame rotation remains a separate mesh operation.
     /// `count == 0` is a valid disabled descriptor and owns no matrix buffers.
@@ -54,7 +66,7 @@ namespace DNDS::CFV
     /// face-center values, not reflected ghost states. Each owned cell-face
     /// incidence has one weight and boundary-ID entry, independent of the RHS
     /// quadrature degree. LS minimizes residuals
-    /// with inverse-distance-squared weights using the design matrix SVD (not
+    /// with configurable area and distance weights using the design matrix SVD (not
     /// normal equations). GGMP eliminates face values from the coupled corrected
     /// Green-Gauss equations. No legacy VR owner or boundary callback is used.
     class GradientPlan
@@ -90,7 +102,8 @@ namespace DNDS::CFV
     public:
         static GradientPlan Prepare(Geom::UnstructuredMesh &mesh, FiniteVolumePlan metrics,
                                     GradientMethod method = GradientMethod::LeastSquares, real relativeCutoff = 1e-13,
-                                    Diagnostics::SetupProgress progress = {});
+                                    Diagnostics::SetupProgress progress = {}, LeastSquaresWeights leastSquares = {},
+                                    const std::vector<int> &extrapolatedZones = {});
         Runtime::Device Device() const { return _data->metrics.Device(); }
         /// Synchronous setup placement. The overload accepting placed metrics
         /// shares that publication with the caller instead of duplicating it.

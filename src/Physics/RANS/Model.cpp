@@ -4,7 +4,7 @@
 
 namespace DNDS::Physics::RANS
 {
-    Model::Model(ModelSettings settings) : _settings(std::move(settings)), _kind(ModelKind::None)
+    Model::Model(ModelSettings settings, SSTProduction sstProduction) : _settings(std::move(settings)), _kind(ModelKind::None)
     {
         if (_settings.model == "SA")
             _kind = ModelKind::SA;
@@ -33,7 +33,7 @@ namespace DNDS::Physics::RANS
                               "invalid RANS kernel limit");
         _parameters = {_kind, _settings.viscosityReference, _settings.turbulentPrandtl, _settings.turbulentSchmidt,
                        _settings.desScale, _settings.desMode, _settings.saVersion, _settings.saRotationCorrection,
-                       _settings.sa, _settings.kOmega, _settings.sst};
+                       _settings.sa, _settings.kOmega, _settings.sst, sstProduction};
     }
     std::array<const char *, 2> Model::ComponentNames() const
     {
@@ -156,7 +156,7 @@ namespace DNDS::Physics::RANS
             break;
         case ModelKind::KOmegaSST:
             GetSource_SST<3>(point.state, point.gradient, point.molecularViscosity, point.wallDistance,
-                             point.cellLength * _settings.desScale, source, mode, _settings.sst);
+                             point.cellLength * _settings.desScale, source, mode, _settings.sst, _parameters.sstProduction);
             break;
         case ModelKind::RealizableKE:
             GetSource_RealizableKe<3>(point.state, point.gradient, point.molecularViscosity, point.wallDistance, source, mode, _settings.realizableKE);

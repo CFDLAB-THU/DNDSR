@@ -8,7 +8,8 @@ namespace DNDS::CFV
 {
     GradientPlan GradientPlan::Prepare(Geom::UnstructuredMesh &mesh, FiniteVolumePlan metrics,
                                        GradientMethod method, real relativeCutoff,
-                                       Diagnostics::SetupProgress progress)
+                                       Diagnostics::SetupProgress progress, LeastSquaresWeights leastSquares,
+                                       const std::vector<int> &extrapolatedZones)
     {
         auto setupStage = progress.Stage("FV/gradient");
         namespace R = Runtime;
@@ -16,6 +17,8 @@ namespace DNDS::CFV
         DNDS_check_throw_info(method == GradientMethod::GreenGauss || method == GradientMethod::LeastSquares || method == GradientMethod::GGMP,
                               "unknown FV gradient method");
         DNDS_check_throw_info(std::isfinite(relativeCutoff) && relativeCutoff >= 0, "invalid gradient cutoff");
+        DNDS_check_throw_info(std::isfinite(leastSquares.areaPower) && std::isfinite(leastSquares.distancePower),
+                              "least-squares weight exponents must be finite");
         auto metricRead = metrics.AcquireRead();
         auto meshRead = mesh.AcquireRead(MeshReadRequirements::CellFlux());
         DNDS_check_throw_info(mesh.Entities(EntityKind::Cell).SameOrder(metrics.Cells()), "gradient metrics and mesh orders differ");
@@ -23,6 +26,13 @@ namespace DNDS::CFV
         const auto geometry = metricRead.HostView();
         const int dim = metrics.Dimension();
         auto data = std::make_shared<Data>(metrics);
+        const auto usesBoundaryValue = [&](index iFace)
+        {
+            if (method != GradientMethod::LeastSquares || extrapolatedZones.empty())
+                return true;
+            const int zone = view.GetFaceZone(iFace);
+            return std::find(extrapolatedZones.begin(), extrapolatedZones.end(), zone) == extrapolatedZones.end();
+        };
         // Prefix each cell's incidence and physical-boundary ranges before
         // filling. Per-cell SVD setup then writes disjoint preallocated rows;
         // neither boundary ordering nor incidence summation depends on OMP.
@@ -105,16 +115,28 @@ namespace DNDS::CFV
                     const tPoint displacement = otherCenter - center;
                     const real length = displacement.head(dim).norm();
                     DNDS_check_throw_info(length > 0 && std::isfinite(length), "degenerate FV gradient sample displacement");
-                    const real quadratureScale = std::sqrt(area);
+                    const bool useSample = other != UnInitIndex || usesBoundaryValue(face);
                     if (method == GradientMethod::LeastSquares)
-                        design.row(local) = displacement.head(dim).transpose() / length * quadratureScale;
+                    {
+                        real scale = 0;
+                        if (useSample)
+                        {
+                            const real areaScale = leastSquares.areaPower == 0 ? 1 : std::pow(area, .5 * leastSquares.areaPower);
+                            scale = areaScale * (leastSquares.distancePower == 0 ? 1 : std::pow(length, .5 * leastSquares.distancePower));
+                            DNDS_check_throw_info(std::isfinite(scale) && scale >= 0, "invalid least-squares sample weight");
+                        }
+                        design.row(local) = displacement.head(dim).transpose() * scale;
+                        lengths[local] = scale;
+                    }
                     else
                         design.row(local) = displacement.head(dim).transpose();
-                    lengths[local] = quadratureScale / length;
                     boundaries(next, 0) = UnInitIndex;
                     if (other == UnInitIndex)
                     {
-                        boundaries(next, 0) = nextBoundary;
+                        // Preserve the public center packet order. Excluded
+                        // samples have a zero design row and no numeric input.
+                        if (useSample)
+                            boundaries(next, 0) = nextBoundary;
                         data->boundary[nextBoundary++] = {iCell, face, -1, point, ownNormal};
                     }
                     real fraction = 1;
@@ -152,7 +174,8 @@ namespace DNDS::CFV
             Eigen::MatrixXd inverse;
             if (method == GradientMethod::LeastSquares)
             {
-                HardEigen::EigenSVDInverse(design, inverse, relativeCutoff);
+                const auto diagnostics = HardEigen::EigenSVDInverse(design, inverse, relativeCutoff);
+                DNDS_check_throw_info(diagnostics.rank == dim, "least-squares gradient stencil is rank deficient after boundary exclusions");
                 for (index i = 0; i < count; ++i)
                     initial.col(i) = inverse.col(i) * lengths[i];
             }

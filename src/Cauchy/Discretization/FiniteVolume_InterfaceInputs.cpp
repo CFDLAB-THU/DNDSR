@@ -20,16 +20,14 @@ namespace DNDS::Cauchy
         /// Materialize a requested matching/debug snapshot under its caller's
         /// owner. Ordinary boundary kernels use the compact CFV/face registry;
         /// no persistent duplicate point/normal table belongs to FiniteVolume.
-        template <class Record = BoundaryPoint>
-        R::Array<Record> BoundarySnapshot(Geom::UnstructuredMesh &mesh,
-                                          const Detail::BoundaryPointLayout &layout, bool centers,
-                                          SpanView<const int> zones = {})
+        R::Array<BoundaryPoint> BoundarySnapshot(Geom::UnstructuredMesh &mesh,
+                                                 const Detail::BoundaryPointLayout &layout, bool centers)
         {
             const auto meshRead = mesh.AcquireRead(Geom::MeshReadRequirements::CellFlux());
             const auto topology = meshRead.HostView();
             const auto faceRead = layout.faces.Read();
             const auto faces = faceRead.View<R::FixedRows<1>>();
-            R::Array<Record> result(R::RowLayout::Dense(centers ? faces.RowCount() : layout.quadratureRows, 1));
+            R::Array<BoundaryPoint> result(R::RowLayout::Dense(centers ? faces.RowCount() : layout.quadratureRows, 1));
             auto write = result.Write();
             const auto output = write.template View<R::FixedRows<1>>();
             for (index iBoundary = 0; iBoundary < faces.RowCount(); ++iBoundary)
@@ -41,7 +39,6 @@ namespace DNDS::Cauchy
                 Geom::tSmallCoords coords;
                 topology.GetCoordsOnFace(range.face, coords);
                 Geom::tPoint meanNormal = Geom::tPoint::Zero(), geometricNormal = Geom::tPoint::Zero();
-                real area = 0;
                 const auto normalAt = [&](const auto &shape)
                 {
                     const auto jacobian = Geom::Elem::ShapeJacobianCoordD01Nj(coords, shape);
@@ -55,7 +52,6 @@ namespace DNDS::Cauchy
                         const auto &shape = Geom::Elem::GetCachedShapeAtQuadrature(element.type, layout.meanIntegrationOrder, q);
                         const auto normal = normalAt(shape);
                         const auto point = Geom::Elem::PPhysicsCoordD01Nj(coords, shape);
-                        area += normal.norm() * measure.GetWeight(q) * (layout.axisymmetric ? point[1] : 1.);
                         geometricNormal += normal * measure.GetWeight(q);
                         meanNormal += normal * measure.GetWeight(q) * (layout.axisymmetric ? point[1] : 1.);
                     }
@@ -72,16 +68,7 @@ namespace DNDS::Cauchy
                     const Geom::tPoint normal = centers ? meanNormal : Geom::tPoint(normalAt(shape).normalized());
                     const index row = centers ? iBoundary : range.quadratureBegin + q;
                     const int zone = topology.GetFaceZone(range.face);
-                    if constexpr (std::is_same_v<Record, BoundaryPoint>)
-                        output(row, 0) = {topology.FaceCells(range.face)[0], range.face, centers ? -1 : q, zone, {point[0], point[1], point[2]}, {normal[0], normal[1], normal[2]}, range.interface};
-                    else
-                    {
-                        const auto condition = std::lower_bound(zones.begin(), zones.end(), zone);
-                        DNDS_check_throw_info(condition != zones.end() && *condition == zone, "snapshot boundary condition is absent");
-                        const Geom::Elem::Quadrature rule(element, layout.integrationOrder);
-                        const real weight = centers ? area : normalAt(shape).norm() * rule.GetWeight(q) * (layout.axisymmetric ? point[1] : 1.);
-                        output(row, 0) = {topology.FaceCells(range.face)[0], range.face, centers ? -1 : q, index(condition - zones.begin()), row, 0, {normal[0], normal[1], normal[2]}, {point[0], point[1], point[2]}, weight};
-                    }
+                    output(row, 0) = {topology.FaceCells(range.face)[0], range.face, centers ? -1 : q, zone, {point[0], point[1], point[2]}, {normal[0], normal[1], normal[2]}, range.interface};
                 }
             }
             return result;
@@ -157,12 +144,6 @@ namespace DNDS::Cauchy
         for(index iBnd=0;iBnd<view.NumBnd();++iBnd)
             if(view.GetBndZone(iBnd)==zone) selected.push_back(iBnd); });
         return Geom::BoundaryPatch::Create(_data->mesh, selected);
-    }
-    R::Array<BoundaryTraceGeometry> FiniteVolume::Data::BoundaryTraceSnapshot() const
-    {
-        metrics.Validate();
-        return BoundarySnapshot<BoundaryTraceGeometry>(*mesh, *boundaryLayout, !stencil.quadratureBoundaryValues,
-                                                       {forceZones.data(), index(forceZones.size())});
     }
     std::vector<BoundaryPoint> FiniteVolume::BoundaryPoints() const
     {

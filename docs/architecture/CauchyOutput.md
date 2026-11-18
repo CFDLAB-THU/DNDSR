@@ -21,7 +21,7 @@ run-D<domain>-history_1.csv ...
 run-events-rank<global-rank>.log         # rank 0 and domain progress writers
 run-D<domain>-S<step>.vtkhdf
 run-D<domain>-T<round-trip-time>.vtkhdf
-run-D<domain>-S<step>_surface_rank<domain-rank>.csv
+run-D<domain>-S<step>_bnd.vtkhdf
 run-D<domain>-S<step>_<stage>_<iteration>.vtkhdf
 run-D0-S<step>_<stage>_<iteration>.h5  # exact internal, single domain
 run-S<step>.h5                 # multi-domain simulation archive
@@ -32,7 +32,7 @@ run-summary.json
 
 `-final` replaces the step/time token for the unconditional final checkpoint
 and visualization. A snapshot manifest records the accepted step and time plus
-checkpoint, volume and surface-shard paths. The run manifest records the
+checkpoint, volume and boundary paths. The run manifest records the
 detailed-history schema, status enumeration and logical component names once,
 so CSV rows remain compact numeric data.
 
@@ -70,6 +70,27 @@ Captured rows are emitted at each existing quiescent nonlinear boundary even
 if internal checkpoints/visualizations are disabled. This local publication
 adds no collective; production sink exceptions propagate to the abort handler.
 
+## Boundary visualization
+
+The boundary mesh contains all external patches from the volume mesh, with
+periodic seams omitted. Each boundary element takes its ordinary `CellData`
+fields directly from its adjacent volume cell. `bnd_zone_id` stores the original
+integer zone. The parallel `bnd_zone_ids` and `bnd_zone_names` arrays in
+`FieldData` give the zone dictionary. `norm` is the outward normal scaled by
+the RHS quadrature measure. The extracted boundary mesh keeps the ownership of
+its source boundary records. If those owners differ from the adjacent cell
+owners, a cached sparse route moves only the prepared boundary rows before I/O.
+
+With `output.boundaryFacialFluxes=true`, the observation RHS produces
+`flux_<component>_facial` and the three-component `force_tangential`.
+Both are negative outward flux densities averaged over the RHS quadrature.
+Tangential projection is done before averaging, including on curved faces.
+In ACM the pressure field's flux is the continuity flux. An observation with
+no compatible completed RHS omits the flux and force fields. Snapshot
+manifests identify the boundary file and, when available, the observation
+time and flux convention. The writer consumes prepared host fields and
+works identically in synchronous and asynchronous modes.
+
 ## Controls
 
 The main controls are:
@@ -87,6 +108,7 @@ output.eventLog                          # true by default
 output.historyInterval
 output.historySegmentRows
 output.historyPrecision
+output.boundaryFacialFluxes              # false by default
 output.implicit.consoleInterval
 output.implicit.historyInterval
 output.diagnostics.{perRank,level,maxBytes,rotatedFiles}
@@ -199,7 +221,7 @@ can overlap file writing. Enqueue does not mean the files are complete.
 `PreparedCheckpoint` owns the accepted means, optional reconstruction/history,
 nonlinear/control metadata, persistent IDs and mesh envelope. CPU snapshots
 are independent copies; device payloads use accounted pinned host allocations.
-`PreparedVisualization` owns prepared cell fields and serialized surface rows,
+`PreparedVisualization` owns prepared cell fields and optional reduced face data,
 and retains a mesh read until writing finishes. No live Domain, coefficient
 buffer or physics worker is borrowed by the writer. Mesh mutation or external
 CGNS/HDF5 operations must first drain this service.
@@ -213,7 +235,7 @@ recursive lock, including builds with HDF5 thread safety disabled. This lock
 does not order distributed collectives and does not cover external raw
 HDF5/CGNS calls; callers must respect the drain boundary.
 
-Accepted-step schemas, per-domain shards and naming stay unchanged. The worker
+Each domain writes a collective volume and boundary file for a visualization. The worker
 publishes completion manifests only after every required file has closed
 successfully across its ranks/domains. Exceptions from collective file paths
 trigger an independent abort, with no collective exception recovery. Internal

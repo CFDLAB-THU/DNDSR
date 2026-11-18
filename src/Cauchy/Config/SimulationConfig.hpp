@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CFV/Plans/FiniteVolumePlan.hpp"
+#include "CFV/Plans/GradientPlan.hpp"
 #include "CFV/Math/LimitedVR.hpp"
 #include "Cauchy/Core/DomainPlacement.hpp"
 #include "Cauchy/Riemann/RiemannFlux.hpp"
@@ -213,6 +214,7 @@ namespace DNDS::Cauchy
     struct NumericsSettings
     {
         std::string reconstruction = "gradient", gradient = "greenGauss", flux = "rusanov", limiter = "none";
+        CFV::LeastSquaresWeights leastSquares;
         int reconstructionIterations = 1;
         int reconstructionResidualCheckInterval = 4;
         real reconstructionTolerance = 0;
@@ -248,6 +250,7 @@ namespace DNDS::Cauchy
         {
             DNDS_FIELD(reconstruction, "constant, gradient, or variational reconstruction");
             DNDS_FIELD(gradient, "leastSquares, greenGauss, or ggmp");
+            config.field_section(&T::leastSquares, "leastSquares", "Weights for the P1 weighted least-squares objective");
             DNDS_FIELD(flux, "Numerical inviscid flux family");
             DNDS_FIELD(limiter, "none, direct-gradient Barth, WBAP, or native LVR; positivity is checked separately");
             config.field_section(&T::reconstructionSolver, "reconstructionSolver", "Relaxation or explicit single-device AMG reconstruction solve");
@@ -611,6 +614,8 @@ namespace DNDS::Cauchy
         FlowProfileSettings initialProfile;
         InitialFieldSettings initialField;
         std::map<std::string, BoundarySettings> boundaries;
+        /// Resolved from global output controls by the Simulation frontend.
+        bool boundaryFacialFluxes = false;
         /// Extra halo audits are opt-in and respect the umbrella check switch.
         bool CheckHaloFreshness() const { return execution.haloFreshnessChecks && implicit.collectiveChecks; }
         DNDS_DECLARE_CONFIG(DomainSettings)
@@ -763,6 +768,7 @@ namespace DNDS::Cauchy
         std::string consoleColor = "auto", consoleBold = "auto";
         bool eventLog = true;
         int hdfDeflateLevel = 0;
+        bool boundaryFacialFluxes = false;
         bool checkpointReconstruction = false;
         bool asynchronous = false;
         std::vector<int> forceZones;
@@ -784,6 +790,7 @@ namespace DNDS::Cauchy
             DNDS_FIELD(consoleColor, "Console color policy: auto, always or never");
             DNDS_FIELD(consoleBold, "Console emphasis policy, independent of color: auto, always or never");
             DNDS_FIELD(eventLog, "Write plain-text rotating events-rank<N>.log alongside ordinary CLI progress by default; no tee is needed. Uses diagnostics rotation limits");
+            DNDS_FIELD(boundaryFacialFluxes, "Write observed face-averaged numerical flux and tangential force in boundary VTKHDF");
             DNDS_FIELD(hdfDeflateLevel, "VTKHDF compression level 0..9; uncompressed is the initial portable baseline");
             DNDS_FIELD(checkpointReconstruction, "Store optional compatible polynomial warm guesses for exact finite-sweep continuation; default omits them");
             DNDS_FIELD(asynchronous, "Bounded background accepted-step output; requires MPI_THREAD_MULTIPLE. Internal output and shutdown drain the queue");

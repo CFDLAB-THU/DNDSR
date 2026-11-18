@@ -630,6 +630,10 @@ namespace DNDS::Cauchy
         }
         return result;
     }
+    FiniteVolume::WorkspaceOptions Domain::ObservationWorkspaceOptions() const
+    {
+        return FiniteVolume::WorkspaceOptions(FiniteVolume::RHSKernelPolicy::Auto, _problem.finiteVolume.Settings().boundaryFacialFluxes);
+    }
     void Domain::WriteVisualization(const std::string &prefix, int hdfDeflateLevel)
     {
         PrepareVisualization(hdfDeflateLevel).Write(prefix, _problem.finiteVolume.Metrics().Communication());
@@ -654,7 +658,7 @@ namespace DNDS::Cauchy
                             {
                 _execution.observationInput.emplace(EquationDofOperations::NewVector(_state.trial));
                 _execution.observationState.emplace(EquationDofOperations::NewVector(_state.trial)); });
-            _execution.observationWorkspace = _problem.finiteVolume.BuildWorkspace(*_execution.observationInput, _execution.ChemicalWorkers());
+            _execution.observationWorkspace = _problem.finiteVolume.BuildWorkspace(*_execution.observationInput, _execution.ChemicalWorkers(), ObservationWorkspaceOptions());
             _execution.observationReconstruction = _problem.finiteVolume.BuildReconstructionState(*_execution.observationInput);
             if (_execution.interfaces->active)
                 _problem.finiteVolume.SetBoundaryInputs(*_execution.observationWorkspace, *_execution.interfaces->active);
@@ -688,7 +692,7 @@ namespace DNDS::Cauchy
                             {
                 input.emplace(EquationDofOperations::NewVector(snapshot.Means()));
                 residual.emplace(EquationDofOperations::NewVector(snapshot.Means())); });
-            auto workspace = _problem.finiteVolume.BuildWorkspace(*input, _execution.ChemicalWorkers());
+            auto workspace = _problem.finiteVolume.BuildWorkspace(*input, _execution.ChemicalWorkers(), ObservationWorkspaceOptions());
             auto reconstruction = _problem.finiteVolume.BuildReconstructionState(*input);
             _execution.observationInput = std::move(input);
             _execution.observationState = std::move(residual);

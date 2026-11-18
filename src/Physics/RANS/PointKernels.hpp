@@ -19,14 +19,16 @@ namespace DNDS::Physics::RANS
         if (!(point.state[0] > 0 && point.molecularViscosity > 0 && point.wallDistance > 0) ||
             !std::isfinite(point.molecularViscosity) || !std::isfinite(point.wallDistance) ||
             (!point.incompressible && (!(point.cp > 0 && point.gamma > 1) || !std::isfinite(point.cp) || !std::isfinite(point.gamma))))
-            return {NumericalError::InvalidState};
+            return {NumericalError::InvalidState, 1};
         for (int j = 0; j < 5 + parameters.ComponentNumber(); ++j)
         {
+            if (point.incompressible && j == 4)
+                continue; // The mechanical closure has no energy channel.
             if (!std::isfinite(point.state[j]))
-                return {NumericalError::InvalidState};
+                return {NumericalError::InvalidState, 10 + j};
             for (int d = 0; d < 3; ++d)
                 if (!std::isfinite(point.gradient(d, j)))
-                    return {NumericalError::InvalidState};
+                    return {NumericalError::InvalidState, 20 + 3 * j + d};
         }
         return {};
     }
@@ -59,7 +61,7 @@ namespace DNDS::Physics::RANS
         TurbulentTransport result{viscosity, point.incompressible ? 0 : point.cp * viscosity / parameters.turbulentPrandtl,
                                   point.incompressible ? 0 : viscosity / std::max(point.state[0] * parameters.turbulentSchmidt, verySmallReal)};
         if (!std::isfinite(result.viscosity) || !std::isfinite(result.conductivity) || !std::isfinite(result.speciesDiffusivity))
-            return NumericalStatus{NumericalError::InvalidState};
+            return NumericalStatus{NumericalError::InvalidState, 50};
         return result;
     }
 
@@ -142,7 +144,7 @@ namespace DNDS::Physics::RANS
             break;
         case ModelKind::KOmegaSST:
             GetSource_SST<3>(point.state, point.gradient, point.molecularViscosity, point.wallDistance,
-                             point.cellLength * parameters.desScale, source, mode, parameters.sst);
+                             point.cellLength * parameters.desScale, source, mode, parameters.sst, parameters.sstProduction);
             break;
         default:
             break;

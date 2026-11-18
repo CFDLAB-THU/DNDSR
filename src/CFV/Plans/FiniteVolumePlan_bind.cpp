@@ -280,8 +280,8 @@ namespace DNDS::CFV
             .def_property_readonly("inverse", [](GradientFaceCharacteristicTransform &value)
                                    { return Runtime::PythonArray::Share(value.inverse); });
         py::class_<GradientPlan>(m, "GradientPlan")
-            .def_static("Prepare", [](Geom::UnstructuredMesh &mesh, FiniteVolumePlan metrics, GradientMethod method, real cutoff)
-                        { return GradientPlan::Prepare(mesh, std::move(metrics), method, cutoff); }, py::arg("mesh"), py::arg("metrics"), py::arg("method") = GradientMethod::LeastSquares, py::arg("relativeCutoff") = 1e-13)
+            .def_static("Prepare", [](Geom::UnstructuredMesh &mesh, FiniteVolumePlan metrics, GradientMethod method, real cutoff, real areaPower, real distancePower, const std::vector<int> &extrapolatedZones)
+                        { return GradientPlan::Prepare(mesh, std::move(metrics), method, cutoff, {}, {areaPower, distancePower}, extrapolatedZones); }, py::arg("mesh"), py::arg("metrics"), py::arg("method") = GradientMethod::LeastSquares, py::arg("relativeCutoff") = 1e-13, py::arg("areaPower") = 0, py::arg("distancePower") = -3, py::arg("extrapolatedZones") = std::vector<int>{})
             .def("NumBoundaryQuadrature", &GradientPlan::NumBoundaryQuadrature)
             .def("GetBoundaryQuadrature", &GradientPlan::GetBoundaryQuadrature)
             .def("Device", &GradientPlan::Device)

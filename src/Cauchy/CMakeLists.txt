@@ -151,7 +151,6 @@ set(CPPS
     IO/CheckpointMetadata.cpp
     IO/StateArchive.cpp
     IO/FiniteVolume_FieldOutput.cpp
-    IO/FiniteVolume_SurfaceOutput.cpp
     IO/OutputFields.cpp
     IO/PreparedCheckpoint.cpp
     IO/PreparedVisualization.cpp
@@ -175,7 +174,7 @@ if(DNDS_USE_CUDA)
     list(APPEND CPPS State/CUDA/FieldKernels.cu)
     list(APPEND CPPS State/CUDA/StateDiagnosticsKernels.cu)
     list(APPEND CPPS Discretization/CUDA/BoundaryForceKernels.cu)
-    list(APPEND CPPS IO/CUDA/OutputFieldsKernels.cu)
+    list(APPEND CPPS IO/CUDA/OutputFieldsKernels.cu IO/CUDA/BoundaryOutputGeometry.cu)
     list(APPEND CPPS Implicit/CUDA/LinearDiagonalKernels.cu)
     list(APPEND CPPS Implicit/CUDA/NonlinearKernels.cu Implicit/CUDA/NonlinearKernels_Positivity.cu)
     list(APPEND CPPS Multigrid/CUDA/PolynomialMultigridKernels.cu)

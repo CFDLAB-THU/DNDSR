@@ -3,7 +3,6 @@
 #include "Cauchy/State/RANSState.hpp"
 #include "Cauchy/Discretization/RANSReconstruction.hpp"
 #include "Cauchy/Physics/RANSPoint.hpp"
-#include "Cauchy/Physics/RANSFlux.hpp"
 #include "Cauchy/Boundary/CPU/RANSWallKernels.hpp"
 #include "Cauchy/Boundary/BoundaryPointOperator.hpp"
 #include "Cauchy/Physics/PointProperties.hpp"
@@ -269,33 +268,5 @@ TEST_CASE("RANS no-slip targets retain conservative density and viscosity conven
                                                                                                         : 800 * mu / (.02 * .02);
             CHECK(wall[1] == doctest::Approx(expected));
         }
-    }
-}
-
-TEST_CASE("Two-equation isotropic stress and its conservative derivative preserve pressure work")
-{
-    const C::FlowState state{1.7, .6, -.4, .2, 5.};
-    const C::Vector3 normal{.6, -.8, 0};
-    const double rhoK = .09, eps = 1e-6;
-    const auto flux = C::TurbulentNormalFlux(state, rhoK, normal);
-    CHECK(flux[0] == 0);
-    CHECK(flux[1] == doctest::Approx(.06 * .6));
-    CHECK(flux[2] == doctest::Approx(-.06 * .8));
-    CHECK(flux[4] == doctest::Approx(.06 * (.6 * .6 + .4 * .8) / 1.7));
-    for (int component = 0; component < 7; ++component)
-    {
-        C::FlowState direction{}, plus = state, minus = state;
-        if (component < 5)
-        {
-            direction[component] = 1;
-            plus[component] += eps;
-            minus[component] -= eps;
-        }
-        const double deltaK = component == 5 ? 1 : 0;
-        const auto derivative = C::TurbulentNormalFluxDerivative(state, direction, rhoK, deltaK, normal);
-        const auto a = C::TurbulentNormalFlux(plus, rhoK + eps * deltaK, normal);
-        const auto b = C::TurbulentNormalFlux(minus, rhoK - eps * deltaK, normal);
-        for (int j = 0; j < 5; ++j)
-            CHECK(derivative[j] == doctest::Approx((a[j] - b[j]) / (2 * eps)).epsilon(2e-9).scale(1e-9));
     }
 }

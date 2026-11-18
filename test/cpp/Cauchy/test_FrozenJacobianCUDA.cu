@@ -145,7 +145,6 @@ TEST_CASE("CUDA frozen Jacobians match CPU blocks and actions including ALE peri
             parameters.gas = gas;
             parameters.frame = frame.KernelParameters();
             parameters.components = n;
-            parameters.kineticComponent = n == 7 ? 5 : -1;
             parameters.roe = profile == 50;
             parameters.scale = .73;
             if (subset)
@@ -161,7 +160,6 @@ TEST_CASE("CUDA frozen Jacobians match CPU blocks and actions including ALE peri
             reference.scale = parameters.scale;
             reference.components = n;
             reference.flowFirst = 0;
-            reference.kineticFirst = parameters.kineticComponent;
             reference.allComponents = !subset;
             reference.active = {parameters.active.data(), n};
             A::BlockMatrixStorage expected({2, 1, 0, 1}, n);
@@ -604,7 +602,6 @@ TEST_CASE("managed frozen Jacobian retains real periodic mesh geometry through q
         reference.radius = radiusRead.View<R::TableRows>();
         reference.components = components;
         reference.flowFirst = 0;
-        reference.kineticFirst = 5;
         reference.scale = .73;
         const std::array<uint8_t, components> active{1, 1, 1, 1, 1, 1, 1};
         reference.active = {active.data(), components};
@@ -628,7 +625,6 @@ TEST_CASE("managed frozen Jacobian retains real periodic mesh geometry through q
         C::CUDA::FrozenJacobianParameters parameters;
         parameters.gas = gas;
         parameters.components = components;
-        parameters.kineticComponent = 5;
         parameters.scale = .73;
         provider = std::make_shared<C::FrozenJacobianOperator>(rowSpace->Pin(), publication,
                                                                C::FrozenJacobianOperator::Values{means.To(context.device), pressure.To(context.device), derivative.To(context.device),

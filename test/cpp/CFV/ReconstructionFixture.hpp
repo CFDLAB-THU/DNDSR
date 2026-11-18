@@ -6,7 +6,7 @@ namespace CFVTest
 {
     /// Real connected Hex8 mesh; independent Cartesian node IDs are the oracle.
     /// Only local rows and local boundary faces are constructed on each rank.
-    inline std::shared_ptr<DNDS::Geom::UnstructuredMesh> CartesianHexes(DNDS::MPIInfo mpi, DNDS::index width)
+    inline std::shared_ptr<DNDS::Geom::UnstructuredMesh> CartesianHexes(DNDS::MPIInfo mpi, DNDS::index width, bool separateLowerWall = false)
     {
         namespace G = DNDS::Geom;
         namespace R = DNDS::Runtime;
@@ -57,7 +57,12 @@ namespace CFVTest
             for (I iCell = 0; iCell < cells.NumOwned(); ++iCell)
                 cellInfo.View()(iCell, 0) = {G::Elem::Hex8, G::INTERNAL_ZONE};
             for (I iBnd = 0; iBnd < boundaries.NumOwned(); ++iBnd)
-                boundaryInfo.View()(iBnd, 0) = {G::Elem::Quad4, 7};
+            {
+                const auto &face = faces[iBnd];
+                const bool lowerWall = separateLowerWall && std::all_of(face.begin(), face.end(), [&](I id)
+                                                                        { return (id / plane) % plane == 0; });
+                boundaryInfo.View()(iBnd, 0) = {G::Elem::Quad4, lowerWall ? 8 : 7};
+            }
         }
         auto mesh = G::UnstructuredMesh::FromNative(mpi, G::ConstructNativeMesh(std::move(input)));
         mesh->PrepareNativeTopology();

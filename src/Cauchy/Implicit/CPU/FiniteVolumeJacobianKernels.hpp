@@ -1,5 +1,4 @@
 #pragma once
-#include "Cauchy/Physics/RANSFlux.hpp"
 #include "DNDS/Core/NumericalStatus.hpp"
 #include "Cauchy/Implicit/JacobianGeometry.hpp"
 #include "Cauchy/Physics/PointProperties.hpp"
@@ -25,7 +24,7 @@ namespace DNDS::Cauchy::CPU
         SpanView<const uint8_t> active;
         RigidFrame frame;
         real scale = 1;
-        index components = 0, flowFirst = -1, speciesFirst = -1, kineticFirst = -1;
+        index components = 0, flowFirst = -1, speciesFirst = -1;
         bool allComponents = true, sixComponentProduct = false, sameComponentFrames = true;
     };
     /// Add the frozen directional flux derivative without acquiring storage.
@@ -63,12 +62,7 @@ namespace DNDS::Cauchy::CPU
             // dp/dU is frozen in the stored neighbor's snapshot.frame. Applying
             // its rotated direction to the flux directly composes J*R.
             auto derivative = PrepareCompressibleFluxDerivative(flow, direction, snapshot.pressure(point.other, 0), snapshot.pressureDerivative(point.other, column), point.normal, grid);
-            if (snapshot.kineticFirst >= 0)
-            {
-                const auto stress = TurbulentNormalFluxDerivative(flow, direction, values(point.other, snapshot.kineticFirst), real(column == snapshot.kineticFirst), point.normal);
-                for (int j = 0; j < 5; ++j)
-                    derivative[j] += stress[j];
-            }
+            // No derivative of the former isotropic 2*rho*k/3 stress or energy work.
             real deltaSpeed = 0;
             for (int d = 0; d < 3; ++d)
                 deltaSpeed += (direction[1 + d] - flow[1 + d] / flow[0] * direction[0]) / flow[0] * point.normal[d];
@@ -94,11 +88,6 @@ namespace DNDS::Cauchy::CPU
                                         const JacobianPointValue &point, Output &&output,
                                         const Means &values, bool weighted = true, bool selectComponents = true)
     {
-        if (snapshot.kineticFirst >= 0)
-        {
-            AddEquationJacobianPoint(snapshot, point, output, values, weighted, selectComponents);
-            return;
-        }
         FlowState flow{};
         for (int j = 0; j < 5; ++j)
             flow[j] = values(point.other, snapshot.flowFirst + j);

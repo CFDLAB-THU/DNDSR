@@ -177,6 +177,14 @@ namespace DNDS::Cauchy
                     route.boundaryFace = index(boundaryRanges.size());
                     route.boundaryBegin = stencil.quadratureBoundaryValues ? boundaryLayout->quadratureRows : UnInitIndex;
                     boundaryRanges.push_back({iFace, boundaryLayout->quadratureRows, count, interface});
+                    const index begin = metric.FaceQuadratureBegin(iFace), end = metric.FaceQuadratureEnd(iFace);
+                    const auto normal = metric.GetFaceMeanNorm(iFace);
+                    real area = 0;
+                    for (index iPoint = begin; iPoint < end; ++iPoint)
+                        area += metric.GetFaceWeight(iPoint);
+                    boundaryOutputRows.push_back({iFace, iCell, route.auxiliaryFace, count ? route.boundaryBegin : route.boundaryFace,
+                                                  begin, end - begin, {normal[0], normal[1], normal[2]}, area,
+                                                  topology.GetFaceZone(iFace), !stencil.quadratureBoundaryValues});
                     boundaryLayout->quadratureRows += count;
                     hasLocalInterfaceRows = hasLocalInterfaceRows || interface;
                 }

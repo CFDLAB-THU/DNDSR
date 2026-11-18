@@ -49,13 +49,6 @@
 /** @brief When set to 1, cap turbulent viscosity at 1e5 * mu_laminar for Wilcox k-omega. */
 #define KW_WILCOX_LIMIT_MUT 1
 
-/** @brief When set to 1, cap turbulent viscosity at 1e5 * mu_laminar for SST. */
-#define KW_SST_LIMIT_MUT 1
-/** @brief When set to 1, enable production limiters for SST (CFL3D-style capping). */
-#define KW_SST_PROD_LIMITS 1
-/** @brief Select omega production formulation for SST: 0 = classical, 1 = strain-rate based, 2 = vorticity based. */
-#define KW_SST_PROD_OMEGA_VERSION 1
-
 /** @brief RANS turbulence model functions (eddy viscosity, viscous flux, source terms). */
 namespace DNDS::Physics::RANS
 {
@@ -135,11 +128,18 @@ namespace DNDS::Physics::RANS
         }
     };
 
+    /// Mean-flow stress convention used to form the SST-2003 production.
+    enum class SSTProduction
+    {
+        FullStress,
+        StrainSquared
+    };
+
     /** @brief Menter k-omega SST kernel configuration. */
     struct KOmegaSSTConfig
     {
         real turbulentViscosityLimit = 1e5;   ///< Upper multiplier in mu_t <= limit * mu.
-        real productionLimit = 20;            ///< Upper multiplier in Pk <= limit * betaStar * rho*k*omega.
+        real productionLimit = 10;            ///< Both equations use Pk <= limit * betaStar * rho*k*omega.
         bool implicitAdditionalSinks = false; ///< Include stabilizing frozen-coefficient production/cross-diffusion derivatives; RHS unchanged.
 
         DNDS_DECLARE_CONFIG(KOmegaSSTConfig)
@@ -569,15 +569,39 @@ namespace DNDS::Physics::RANS
         source(I4 + 2) = std::max(source(I4 + 2), 0.) * 10;
     }
 
+    /// SST-2003 shear-stress limiter. The strain magnitude uses the full
+    /// symmetric velocity gradient. The viscosity cap is a numerical bound.
+    DNDS_DEVICE_CALLABLE inline real SSTF2(real k, real omega, real nu, real distance)
+    {
+        return std::tanh(sqr(std::max(2 * std::sqrt(k) / (0.09 * omega * distance),
+                                      500 * nu / (sqr(distance) * omega))));
+    }
+
+    DNDS_DEVICE_CALLABLE inline real SSTViscosityDenominator(real omega, real strain, real F2)
+    {
+        return std::max(omega, strain * F2 / 0.31);
+    }
+
+    /// The cross-diffusion floor is expressed in solver code units.
+    DNDS_DEVICE_CALLABLE inline real SSTF1(real rho, real k, real omega, real nu, real distance, real gradientProduct)
+    {
+        constexpr real sigmaOmega2 = .856;
+        const real crossDiffusion = std::max(2 * rho * sigmaOmega2 / omega * gradientProduct, 1e-10);
+        const real argument = std::min(std::max(std::sqrt(k) / (.09 * omega * distance),
+                                                500 * nu / (sqr(distance) * omega)),
+                                       4 * rho * sigmaOmega2 * k / (crossDiffusion * sqr(distance)));
+        return std::tanh(sqr(sqr(argument)));
+    }
+
     /**
      * @brief Compute turbulent viscosity mu_t from Menter's k-omega SST model.
      *
      * Evaluates the SST eddy viscosity with:
-     * - Vorticity magnitude Omega = ||(grad U)^T - grad U|| / sqrt(2).
+     * - Strain magnitude S = ||grad U + (grad U)^T|| / sqrt(2).
      * - Blending function F2 based on wall distance and turbulent Reynolds number.
-     * - Bradshaw's structural constraint: mu_t = a1 * k / max(Omega * F2, a1 * omega),
+     * - Bradshaw's structural constraint: mu_t = rho * a1 * k / max(S * F2, a1 * omega),
      *   where a1 = 0.31.
-     * - Optional upper bound of 1e5 * mu_laminar when @c KW_SST_LIMIT_MUT is enabled.
+     * - Configurable numerical cap on the turbulent-to-molecular viscosity ratio.
      *
      * @tparam dim     Spatial dimension (2 or 3).
      * @tparam TU      Eigen-compatible type for the conservative state vector.
@@ -592,41 +616,27 @@ namespace DNDS::Physics::RANS
     DNDS_DEVICE_CALLABLE real GetMut_SST(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d, const KOmegaSSTConfig &config)
     {
         const auto I4 = dim + 1;
-        const auto verySmallReal_3 = std::pow(verySmallReal, 1. / 3);
-        const auto verySmallReal_4 = std::pow(verySmallReal, 1. / 4);
-
-        real a1 = 0.31;
-        real betaStar = 0.09;
-        real sigOmega2 = 0.856;
-        real cmu = 0.09;
-        real phi = 2. / 3.;
-        Eigen::Matrix<real, dim, 1> velo = UMeanXy.template segment<dim>(1) / UMeanXy(0);
-        Eigen::Matrix<real, dim, 1> diffRho = DiffUxy.template block<dim, 1>(0, 0);
-        Eigen::Matrix<real, dim, dim> diffRhoU = DiffUxy.template block<dim, dim>(0, 1);
-        Eigen::Matrix<real, dim, dim> diffU = (diffRhoU - diffRho * velo.transpose()) / UMeanXy(0);
-        Eigen::Matrix<real, dim, dim> SR2 = diffU + diffU.transpose();                                                  // 2 times strain rate
-        Eigen::Matrix<real, dim, dim> SS = SR2 - (2. / 3.) * diffU.trace() * Eigen::Matrix<real, dim, dim>::Identity(); // 2 times shear strain rate
-        Eigen::Matrix<real, dim, dim> OmegaM = (diffU.transpose() - diffU) * 0.5;
-        real OmegaMag = OmegaM.norm() * std::sqrt(2);
-        real rho = UMeanXy(0);
-        real k = std::max(UMeanXy(I4 + 1) / rho, verySmallReal_4);
-        real omegaaa = std::max(UMeanXy(I4 + 2) / rho, verySmallReal_4);
-        real S = std::sqrt(SS.squaredNorm() / 2) + verySmallReal_4;
-        real nuPhy = muf / rho;
-        real F2 = std::tanh(sqr(std::max(2 * std::sqrt(k) / (betaStar * omegaaa * d), 500 * nuPhy / (sqr(d) * omegaaa))));
-        // F2 = 0;
-        real mut = a1 * k / std::max(OmegaMag * F2, a1 * omegaaa) * rho;
-#if KW_SST_LIMIT_MUT == 1
-        mut = std::min(mut, config.turbulentViscosityLimit * muf); // CFL3D
-#endif
+        const auto floor = std::pow(verySmallReal, 1. / 4);
+        const real rho = UMeanXy(0);
+        const Eigen::Matrix<real, dim, 1> velocity = UMeanXy.template segment<dim>(1) / rho;
+        const Eigen::Matrix<real, dim, dim> gradU =
+            (DiffUxy.template block<dim, dim>(0, 1) -
+             DiffUxy.template block<dim, 1>(0, 0) * velocity.transpose()) /
+            rho;
+        const real k = std::max(UMeanXy(I4 + 1) / rho, floor);
+        const real omega = std::max(UMeanXy(I4 + 2) / rho, floor);
+        const real strain = std::sqrt((gradU + gradU.transpose()).squaredNorm() / 2);
+        const real F2 = SSTF2(k, omega, muf / rho, d);
+        const real mut = std::min(rho * k / SSTViscosityDenominator(omega, strain, F2),
+                                  config.turbulentViscosityLimit * muf);
 
         if constexpr (Diagnose)
         {
             if (std::isnan(mut) || !std::isfinite(mut))
             {
 #ifndef __CUDA_ARCH__
-                std::cerr << k << " " << omegaaa << " " << mut << " " << S << "\n";
-                std::cerr << SS << std::endl;
+                std::cerr << k << " " << omega << " " << mut << " " << strain << "\n";
+                std::cerr << gradU << std::endl;
 #endif
                 DNDS_HD_assert(false);
             }
@@ -663,48 +673,14 @@ namespace DNDS::Physics::RANS
     DNDS_DEVICE_CALLABLE void GetVisFlux_SST(TU &&UMeanXy, TDiffU &&DiffUxyPrim, TN &&uNorm, real mutIn, real d, real muf, TVFlux &vFlux, const KOmegaSSTConfig &config)
     {
         const auto I4 = dim + 1;
-        const auto verySmallReal_3 = std::pow(verySmallReal, 1. / 3);
-        const auto verySmallReal_4 = std::pow(verySmallReal, 1. / 4);
-
-        real a1 = 0.31;
-        real betaStar = 0.09;
-        real sigK1 = 0.85;
-        real sigK2 = 1;
-        real sigO1 = 0.5;
-        real sigO2 = 0.856;
-        real beta1 = 0.075;
-        real beta2 = 0.0828;
-        real kap = 0.41;
-        real gamma1 = beta1 / betaStar - sigO1 * sqr(kap) / std::sqrt(betaStar);
-        real gamma2 = beta2 / betaStar - sigO2 * sqr(kap) / std::sqrt(betaStar);
-        Eigen::Matrix<real, dim, 1> velo = UMeanXy.template segment<dim>(1) / UMeanXy(0);
-        Eigen::Matrix<real, dim, 1> diffRho = DiffUxyPrim.template block<dim, 1>(0, 0);
-        Eigen::Matrix<real, dim, dim> diffU = DiffUxyPrim.template block<dim, dim>(0, 1);
-        Eigen::Matrix<real, dim, dim> SR2 = diffU + diffU.transpose();                                                  // 2 times strain rate
-        Eigen::Matrix<real, dim, dim> SS = SR2 - (2. / 3.) * diffU.trace() * Eigen::Matrix<real, dim, dim>::Identity(); // 2 times shear strain rate
-        Eigen::Matrix<real, dim, 2> diffKO = DiffUxyPrim.template block<dim, 2>(0, I4 + 1);
-
-        Eigen::Matrix<real, dim, dim> OmegaM = (diffU.transpose() - diffU) * 0.5;
-        real OmegaMag = OmegaM.norm() * std::sqrt(2);
-        real rho = UMeanXy(0);
-        real k = std::max(UMeanXy(I4 + 1) / rho, verySmallReal_4);
-        real omegaaa = std::max(UMeanXy(I4 + 2) / rho, verySmallReal_4);
-        real S = std::sqrt(SS.squaredNorm() / 2) + verySmallReal_4;
-        real nuPhy = muf / rho;
-        real CDKW = std::max(2 * rho * sigO2 / omegaaa * diffKO.col(0).dot(diffKO.col(1)), 1e-10);
-        real F1 = std::tanh(std::pow(
-            std::min(std::max(std::sqrt(k) / (betaStar * omegaaa * d), 500 * nuPhy / (sqr(d) * omegaaa)),
-                     4 * rho * sigO2 * k / (CDKW * sqr(d))),
-            4));
-        real F2 = std::tanh(sqr(std::max(2 * std::sqrt(k) / (betaStar * omegaaa * d), 500 * nuPhy / (sqr(d) * omegaaa))));
-        // F2 = 0;
-        real mut = a1 * k / std::max(OmegaMag * F2, a1 * omegaaa) * rho;
-#if KW_SST_LIMIT_MUT == 1
-        mut = std::min(mut, config.turbulentViscosityLimit * muf); // CFL3D
-#endif
-
-        real sigK = sigK1 * F1 + sigK2 * (1 - F1);
-        real sigO = sigO1 * F1 + sigO2 * (1 - F1);
+        const auto floor = std::pow(verySmallReal, 1. / 4);
+        const real rho = UMeanXy(0);
+        const real k = std::max(UMeanXy(I4 + 1) / rho, floor);
+        const real omega = std::max(UMeanXy(I4 + 2) / rho, floor);
+        const auto diffKO = DiffUxyPrim.template block<dim, 2>(0, I4 + 1);
+        const real F1 = SSTF1(rho, k, omega, muf / rho, d, diffKO.col(0).dot(diffKO.col(1)));
+        const real sigK = .85 * F1 + (1 - F1);
+        const real sigO = .5 * F1 + .856 * (1 - F1);
 
         vFlux(I4 + 1) = diffKO.col(0).dot(uNorm) * (muf + mutIn * sigK);
         vFlux(I4 + 2) = diffKO.col(1).dot(uNorm) * (muf + mutIn * sigO);
@@ -716,10 +692,8 @@ namespace DNDS::Physics::RANS
 #ifndef __CUDA_ARCH__
                 std::cerr << vFlux << "\n";
                 std::cerr << sigK << " " << sigO << "\n";
-                std::cerr << F1 << " " << F2 << "\n";
-                std::cerr << CDKW << "\n";
-                std::cerr << k << " " << omegaaa << "\n";
-                std::cerr << muf << " " << mut << "\n";
+                std::cerr << F1 << " " << k << " " << omega << "\n";
+                std::cerr << muf << " " << mutIn << "\n";
                 std::cerr << std::endl;
 #endif
             }
@@ -733,22 +707,11 @@ namespace DNDS::Physics::RANS
      * the k and omega equations following Menter's SST model.  Supports DES/DDES
      * capability via the RANS-to-LES length scale ratio.
      *
-     * Key terms:
-     * - Production P_k from the Boussinesq Reynolds stress, optionally capped at
-     *   20 * beta* * rho * k * omega (when @c KW_SST_PROD_LIMITS is enabled).
-     * - Omega production P_omega with version-dependent formulation controlled by
-     *   @c KW_SST_PROD_OMEGA_VERSION (0 = classical, 1 = strain-rate, 2 = vorticity).
-     * - Destruction terms: beta* * rho * k * omega for k, beta * rho * omega^2 for omega.
-     * - Cross-diffusion term: 2 * (1 - F1) * rho * sigma_omega2 / omega * grad(k) . grad(omega).
-     * - DES shielding: F_DES = max(1, l_RANS / l_LES * (1 - F2)), reducing the destruction
-     *   of k outside the RANS region.
-     *
-     * When @p mode == 0, the full source vector is returned.
-     * When @p mode == 1, a nonnegative implicit diagonal is returned. It contains
-     * the destruction terms below by default and may include the configured
-     * frozen-coefficient production/cross-diffusion sink approximations:
-     * - source(I4+1) = beta* * omega * F_DES
-     * - source(I4+2) = 2 * beta * omega
+     * SST-2003 uses the same capped production in both equations:
+     * @f$\widetilde P_k = \min(P_k, 10\beta^*\rho k\omega)@f$ and
+     * @f$P_\omega = \gamma\widetilde P_k/\nu_t@f$.
+     * FullStress contracts the Boussinesq stress with the velocity gradient;
+     * StrainSquared uses @f$P_k=\mu_t S^2@f$ (SST-2003m).
      *
      * @tparam dim      Spatial dimension (2 or 3).
      * @tparam TU       Eigen-compatible type for the conservative state vector.
@@ -763,98 +726,80 @@ namespace DNDS::Physics::RANS
      * @param mode      Source computation mode: 0 = full source, 1 = nonnegative implicit diagonal.
      */
     template <int dim, class TU, class TDiffU, class TSource>
-    DNDS_DEVICE_CALLABLE void GetSource_SST(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d, real lLES, TSource &source, int mode, const KOmegaSSTConfig &config)
+    DNDS_DEVICE_CALLABLE void GetSource_SST(TU &&UMeanXy, TDiffU &&DiffUxy, real muf, real d, real lLES,
+                                            TSource &source, int mode, const KOmegaSSTConfig &config,
+                                            SSTProduction production = SSTProduction::FullStress)
     {
         const auto I4 = dim + 1;
-        const auto verySmallReal_3 = std::pow(verySmallReal, 1. / 3);
-        const auto verySmallReal_4 = std::pow(verySmallReal, 1. / 4);
-
-        real a1 = 0.31;
-        real betaStar = 0.09;
-        real sigK1 = 0.85;
-        real sigK2 = 1;
-        real sigO1 = 0.5;
-        real sigO2 = 0.856;
-        real beta1 = 0.075;
-        real beta2 = 0.0828;
-        real kap = 0.41;
-        real gamma1 = beta1 / betaStar - sigO1 * sqr(kap) / std::sqrt(betaStar);
-        real gamma2 = beta2 / betaStar - sigO2 * sqr(kap) / std::sqrt(betaStar);
-        Eigen::Matrix<real, dim, 1> velo = UMeanXy.template segment<dim>(1) / UMeanXy(0);
-        Eigen::Matrix<real, dim, 1> diffRho = DiffUxy.template block<dim, 1>(0, 0);
-        Eigen::Matrix<real, dim, dim> diffRhoU = DiffUxy.template block<dim, dim>(0, 1);
-        Eigen::Matrix<real, dim, dim> diffU = (diffRhoU - diffRho * velo.transpose()) / UMeanXy(0);
-        Eigen::Matrix<real, dim, dim> SR2 = diffU + diffU.transpose();                                                  // 2 times strain rate
-        Eigen::Matrix<real, dim, dim> SS = SR2 - (2. / 3.) * diffU.trace() * Eigen::Matrix<real, dim, dim>::Identity(); // 2 times shear strain rate
-        Eigen::Matrix<real, dim, 2> diffRhoKO = DiffUxy.template block<dim, 2>(0, I4 + 1);
-        Eigen::Matrix<real, dim, 2> diffKO = (diffRhoKO - 1. / UMeanXy(0) * diffRho * UMeanXy.template segment<2>(I4 + 1).transpose()) / UMeanXy(0);
-        Eigen::Matrix<real, dim, dim> OmegaM = (diffU.transpose() - diffU) * 0.5;
-        real OmegaMag = OmegaM.norm() * std::sqrt(2);
-        real rho = UMeanXy(0);
-        real k = std::max(UMeanXy(I4 + 1) / rho, verySmallReal_4);
-        real omegaaa = std::max(UMeanXy(I4 + 2) / rho, verySmallReal_4);
-        real S = std::sqrt(SS.squaredNorm() / 2) + verySmallReal_4;
-        real nuPhy = muf / rho;
-        real CDKW = std::max(2 * rho * sigO2 / omegaaa * diffKO.col(0).dot(diffKO.col(1)), 1e-10);
-        real F1 = std::tanh(std::pow(
-            std::min(std::max(std::sqrt(k) / (betaStar * omegaaa * d), 500 * nuPhy / (sqr(d) * omegaaa)),
-                     4 * rho * sigO2 * k / (CDKW * sqr(d))),
-            4));
-        real F2 = std::tanh(sqr(std::max(2 * std::sqrt(k) / (betaStar * omegaaa * d), 500 * nuPhy / (sqr(d) * omegaaa))));
-        real lRANS = std::sqrt(k) / (betaStar * omegaaa);
-        real FDES = std::max(1.0, lRANS / (lLES + verySmallReal) * (1 - F2));
-        // F2 = 0;
-        real mut = a1 * k / std::max(OmegaMag * F2, a1 * omegaaa) * rho; // use S/OmegaMag for SST: S: CFD++, OmegaMag: Turbulence Modeling Validation, Testing, and Developmen
-#if KW_SST_LIMIT_MUT == 1
-        mut = std::min(mut, config.turbulentViscosityLimit * muf); // CFL3D
-#endif
-        real nutHat = std::max(mut / rho, 1e-8);
-
-        Eigen::Matrix<real, dim, dim> rhoMuiuj = Eigen::Matrix<real, dim, dim>::Identity() * UMeanXy(I4 + 1) * (2. / 3.) - mut * SS;
-        real Pk = -(rhoMuiuj.array() * diffU.array()).sum();
-        real PkTilde = Pk;
-#if KW_SST_PROD_LIMITS == 1
-        // Signed production is intentional: expansion can destroy k. The
-        // original SST limiter is an upper cap, not a positivity clamp.
-        PkTilde = std::min(Pk, config.productionLimit * betaStar * rho * k * omegaaa); // CFD++'s limiting: 10 times
-#endif
-
-        real gammaC = gamma1 * F1 + gamma2 * (1 - F1);
-        real sigK = sigK1 * F1 + sigK2 * (1 - F1);
-        real sigO = sigO1 * F1 + sigO2 * (1 - F1);
-        real beta = beta1 * F1 + beta2 * (1 - F1);
-        real POmega = gammaC / nutHat * Pk;
-#if KW_SST_PROD_OMEGA_VERSION == 1
-        POmega =
-            0.5 * gammaC * rho * ((SR2 - SR2.trace() / 3. * Eigen::Matrix<real, dim, dim>::Identity()).array() * SR2.array()).sum();
-#elif KW_SST_PROD_OMEGA_VERSION == 2
-        POmega =
-            gammaC * rho * sqr(OmegaMag);
-#endif
+        const auto floor = std::pow(verySmallReal, 1. / 4);
+        constexpr real betaStar = .09, sigmaOmega2 = .856;
+        const real rho = UMeanXy(0);
+        const Eigen::Matrix<real, dim, 1> velocity = UMeanXy.template segment<dim>(1) / rho;
+        const Eigen::Matrix<real, dim, 1> diffRho = DiffUxy.template block<dim, 1>(0, 0);
+        const Eigen::Matrix<real, dim, dim> diffU =
+            (DiffUxy.template block<dim, dim>(0, 1) - diffRho * velocity.transpose()) / rho;
+        const Eigen::Matrix<real, dim, 2> diffKO =
+            (DiffUxy.template block<dim, 2>(0, I4 + 1) -
+             diffRho * UMeanXy.template segment<2>(I4 + 1).transpose() / rho) /
+            rho;
+        const Eigen::Matrix<real, dim, dim> twiceStrain = diffU + diffU.transpose();
+        const real strainSquared = twiceStrain.squaredNorm() / 2;
+        const real divergence = diffU.trace();
+        const real rhoK = std::max(UMeanXy(I4 + 1) / rho, floor) * rho;
+        const real k = rhoK / rho;
+        const real omega = std::max(UMeanXy(I4 + 2) / rho, floor);
+        const real gradientProduct = diffKO.col(0).dot(diffKO.col(1));
+        const real nu = muf / rho;
+        const real F1 = SSTF1(rho, k, omega, nu, d, gradientProduct);
+        const real F2 = SSTF2(k, omega, nu, d);
+        const real lRANS = std::sqrt(k) / (betaStar * omega);
+        const real FDES = std::max(1.0, lRANS / (lLES + verySmallReal) * (1 - F2));
+        const real eddyDenominator = SSTViscosityDenominator(omega, std::sqrt(strainSquared), F2);
+        const real modeledMut = rhoK / eddyDenominator;
+        const real mut = std::min(modeledMut, config.turbulentViscosityLimit * muf);
+        const real gamma = (5. / 9.) * F1 + .44 * (1 - F1);
+        const real beta = .075 * F1 + .0828 * (1 - F1);
+        const real crossDiffusion = 2 * (1 - F1) * rho * sigmaOmega2 / omega * gradientProduct;
+        const real cap = config.productionLimit * betaStar * rhoK * omega;
+        const bool fullStress = production == SSTProduction::FullStress;
+        const real dilatation = (2. / 3.) * divergence;
+        const real Pk = fullStress ? mut * (strainSquared - dilatation * divergence) - rhoK * dilatation
+                                   : mut * strainSquared;
         if (mode == 0)
         {
-            source(I4 + 1) = PkTilde - betaStar * rho * k * omegaaa * FDES;
-            source(I4 + 2) = POmega - beta * rho * sqr(omegaaa) +
-                             2 * (1 - F1) * rho * sigO2 / omegaaa * diffKO.col(0).dot(diffKO.col(1));
-            // source(I4 + 2) = POmega - beta * rho * sqr(omegaaa) +
-            //                  2 * (1 - F1) * rho * sigO2 / omegaaa * diffKO.col(0).dot(diffKO.col(1));
+            // Divide by nu_t algebraically. The uncapped viscosity yields
+            // rho*k/mu_t = denominator even in the small-k limit.
+            real omegaProduction = 0;
+            if (mut > 0)
+            {
+                const real rhoKOverMut = mut < modeledMut ? rhoK / mut : eddyDenominator;
+                const real productionOverMut = fullStress
+                                                   ? strainSquared - dilatation * (divergence + rhoKOverMut)
+                                                   : strainSquared;
+                omegaProduction = gamma * rho * std::min(productionOverMut, config.productionLimit * betaStar * omega * rhoKOverMut);
+            }
+            source(I4 + 1) = std::min(Pk, cap) - betaStar * rhoK * omega * FDES;
+            source(I4 + 2) = omegaProduction - beta * rho * sqr(omega) + crossDiffusion;
         }
         else
         {
-            source(I4 + 1) = betaStar * omegaaa * FDES;
-            source(I4 + 2) = 2 * beta * omegaaa;
+            source(I4 + 1) = betaStar * omega * FDES;
+            source(I4 + 2) = 2 * beta * omega;
             if (config.implicitAdditionalSinks)
             {
-                // Return -dS/d(rho*k,rho*omega) with rho, primitive gradients,
-                // mut, F1/F2 and FDES frozen. Keep only extra nonnegative
-                // diagonal terms, so this remains a robust approximation,
-                // not a full SST Jacobian. Positive cross-diffusion C/omega
-                // has a negative derivative; negative C stays explicit.
-                if (Pk < config.productionLimit * betaStar * rho * k * omegaaa)
-                    source(I4 + 1) += std::max((2. / 3.) * diffU.trace(), real(0));
-                const real crossDiffusion = 2 * (1 - F1) * rho * sigO2 / omegaaa *
-                                            diffKO.col(0).dot(diffKO.col(1));
-                source(I4 + 2) += std::max(crossDiffusion, real(0)) / (rho * omegaaa);
+                // Freeze gradients, mu_t, F1/F2 and DES scaling. Retain
+                // only stabilizing diagonal entries. A capped production
+                // contributes a nonnegative derivative and stays explicit.
+                if (fullStress && Pk < cap)
+                {
+                    source(I4 + 1) += std::max(dilatation, real(0));
+                    // In the omega-controlled viscosity branch rho*k/mu_t
+                    // equals omega. The full-stress omega production then
+                    // has a local dilatation sink in expansion.
+                    if (mut > 0 && mut == modeledMut && eddyDenominator == omega)
+                        source(I4 + 2) += gamma * std::max(dilatation, real(0));
+                }
+                source(I4 + 2) += std::max(crossDiffusion, real(0)) / (rho * omega);
             }
         }
     }

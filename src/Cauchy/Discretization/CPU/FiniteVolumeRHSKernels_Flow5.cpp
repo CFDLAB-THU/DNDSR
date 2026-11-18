@@ -155,9 +155,10 @@ namespace DNDS::Cauchy::CPU
                 {
                     const auto sample = FiniteVolumeDetail::ExpandSample(request.stencil.RHSFaceSample(iFace, side, iPoint), request.conditions);
                     const bool internal = sample.other != UnInitIndex;
+                    const bool recordFace = writeFace && (!output.boundaryFacesOnly || !internal);
                     const auto boundaryKind = sample.boundary.kind;
                     const real weight = metric.GetFaceWeight(sample.point);
-                    if (writeFace && sample.point == metric.FaceQuadratureBegin(sample.face))
+                    if (recordFace && sample.point == metric.FaceQuadratureBegin(sample.face))
                         for (int j = 0; j < 5; ++j)
                             (*output.faceFlux)(sample.auxiliaryFace, j) = 0;
                     auto reconstruct = [&](index cell, int parent)
@@ -365,8 +366,11 @@ namespace DNDS::Cauchy::CPU
                     if (sample.forceSlot != UnInitIndex)
                         for (int d = 0; d < 3; ++d)
                             diagnostics.AddBoundaryForce(sample.forceSlot, d, weight * flux[1 + d]);
+                    if (output.boundaryMomentum.RowCount() && sample.boundaryPoint != UnInitIndex)
+                        for (int d = 0; d < 3; ++d)
+                            output.boundaryMomentum(sample.boundaryPoint, d) = weight * flux[1 + d];
                     FlowState canonical{};
-                    if (writeFace)
+                    if (recordFace)
                     {
                         canonical = sample.side == 0 || !sample.changesFrame ? flux : RotateState(flux, sample.rotation.transpose());
                         if (sample.side != 0)
@@ -376,7 +380,7 @@ namespace DNDS::Cauchy::CPU
                     for (int component = 0; component < 5; ++component)
                     {
                         integrated[component] -= weight * flux[component];
-                        if (writeFace)
+                        if (recordFace)
                             (*output.faceFlux)(sample.auxiliaryFace, component) -= weight * canonical[component];
                         if (produceLow)
                             integratedLow[component] -= weight * lowFlux[component];
@@ -398,7 +402,7 @@ namespace DNDS::Cauchy::CPU
         // Optional face diagnostics currently revisit a shared face from both
         // parents. Keep their established serial publication until the common
         // face-owned flux/gather path replaces it; never race those writes.
-        const index threads = writeFace ? 1 : std::min<index>(OMP::DistributedThreads(), std::max<index>(1, count));
+        const index threads = writeFace && !output.boundaryFacesOnly ? 1 : std::min<index>(OMP::DistributedThreads(), std::max<index>(1, count));
         if (workers.diagnostics.size() < threads || workers.status.size() < threads)
             return NumericalStatus{NumericalError::InvalidState, 40, -1};
         if (threads == 1)

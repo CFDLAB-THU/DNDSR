@@ -23,7 +23,7 @@ namespace DNDS::Cauchy::CUDA::Detail
 
     template <int C, class Fields, class Output>
     __device__ NumericalStatus ACMFacePoint(const RHSGeometry &geometry, const RHSKernelControls &controls,
-                                            const Fields &fields, const Output &output, RHSWallOutput wallShear,
+                                            const Fields &fields, const Output &output,
                                             index iFace, index first, index entry, std::array<real, C> &value)
     {
         const auto &physics = geometry.acm(0, 0);
@@ -54,7 +54,8 @@ namespace DNDS::Cauchy::CUDA::Detail
         }
         std::array<real, C> flux{};
         ACM::NumericalFlux(physics.flow, left.values, right.values, sample.normal, flux, C);
-        if (controls.viscous)
+        // Slip walls keep only the inviscid flux, even with a nonzero interior gradient.
+        if (controls.viscous && kind != BoundaryKind::SlipWall)
         {
             ACM::KernelPoint<C> face;
             for (int j = 0; j < C; ++j)
@@ -69,7 +70,8 @@ namespace DNDS::Cauchy::CUDA::Detail
             {
                 const auto at = face.Turbulence(physics, geometry.wallFaces(sample.face, entry - first));
                 const auto transport = Physics::RANS::TryTransport(physics.rans, at);
-                if (!transport) return transport.status.At(sample.cell, entry);
+                if (!transport)
+                    return transport.status.At(sample.cell, entry);
                 const Eigen::Vector3d normal(sample.normal[0], sample.normal[1], sample.normal[2]);
                 const auto diffusion = Physics::RANS::TryDiffusionFlux(physics.rans, at, normal, transport.value.viscosity);
                 if (!diffusion) return diffusion.status.At(sample.cell, entry);
@@ -78,26 +80,18 @@ namespace DNDS::Cauchy::CUDA::Detail
             }
             const auto traction = Physics::Transport::NewtonianTraction(
                 [&](int j, int d) { return face.gradients[j][d]; }, sample.normal, viscosity);
-            if (wallShear.RowCount() && sample.boundaryPoint != UnInitIndex)
-            {
-                const auto shear = Physics::Transport::WallShear(traction, sample.normal);
-                for (int d = 0; d < 3; ++d)
-                    wallShear(sample.boundaryPoint, d) = kind == BoundaryKind::NoSlipWall ? shear[d] : 0;
-            }
+            // Cauchy omits the former isotropic 2*rho*k/3 normal stress.
             for (int d = 0; d < 3; ++d)
-            {
                 flux[d] -= traction[d];
-                if constexpr (C == 6) flux[d] += (2. / 3.) * face.values[4] * sample.normal[d];
-            }
         }
         const real weight = geometry.quadrature(entry, 6);
         if (output.wallForce.RowCount() && sample.boundaryPoint != UnInitIndex)
             for (int d = 0; d < 3; ++d)
                 output.wallForce(sample.boundaryPoint, d) =
-                    kind == BoundaryKind::SlipWall || kind == BoundaryKind::NoSlipWall ? weight * flux[d] : 0;
+                    controls.captureBoundaryFlux || kind == BoundaryKind::SlipWall || kind == BoundaryKind::NoSlipWall ? weight * flux[d] : 0;
         for (int j = 0; j < C; ++j)
         {
-            if (!std::isfinite(flux[j])) return NumericalStatus{NumericalError::InvalidState}.At(sample.cell, entry);
+            if (!std::isfinite(flux[j])) return NumericalStatus{NumericalError::InvalidState, j, sample.cell, entry};
             value[j] = -weight * flux[j];
         }
         return {};
@@ -105,7 +99,7 @@ namespace DNDS::Cauchy::CUDA::Detail
 
     template <int C, class Fields, class Output>
     __device__ NumericalStatus ACMFace(const RHSGeometry &geometry, const RHSKernelControls &controls,
-                                       const Fields &fields, const Output &output, RHSWallOutput wallShear, index iFace)
+                                       const Fields &fields, const Output &output, index iFace)
     {
         const auto anchor = geometry.FaceAnchor(iFace);
         const index first = geometry.faceOffsets(anchor.face, 0), end = geometry.faceOffsets(anchor.face + 1, 0);
@@ -113,7 +107,7 @@ namespace DNDS::Cauchy::CUDA::Detail
         for (index entry = first; entry < end; ++entry)
         {
             std::array<real, C> value{};
-            const auto status = ACMFacePoint<C>(geometry, controls, fields, output, wallShear, iFace, first, entry, value);
+            const auto status = ACMFacePoint<C>(geometry, controls, fields, output, iFace, first, entry, value);
             if (!status)
                 return status;
             for (int j = 0; j < C; ++j)
@@ -126,12 +120,12 @@ namespace DNDS::Cauchy::CUDA::Detail
 
     template <int C, class Fields, class Output>
     __global__ void ACMFaces(ACMGeometryView geometry, RHSKernelControls controls, Fields fields,
-                             Output output, RHSIndices selected, RHSWallOutput wallShear)
+                             Output output, RHSIndices selected)
     {
         for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
         {
             const index iFace = selected(iRow, 0);
-            output.status(iFace, 0) = ACMFace<C>(geometry(0, 0), controls, fields, output, wallShear, iFace);
+            output.status(iFace, 0) = ACMFace<C>(geometry(0, 0), controls, fields, output, iFace);
             output.fallbackCounts(iFace, 0) = 0;
         }
     }
@@ -141,11 +135,17 @@ namespace DNDS::Cauchy::CUDA::Detail
     // integrates in rule order, preserving the thread-per-face sum.
     template <int C, class Fields, class Output>
     __global__ void ACMSegments(ACMGeometryView publication, RHSKernelControls controls, Fields fields,
-                                Output output, RHSWallOutput wallShear, RHSFacePackageView prepared)
+                                Output output, RHSFacePackageView prepared)
     {
         extern __shared__ real shared[];
         real *values = shared;
-        auto *status = reinterpret_cast<NumericalStatus *>(values + C * blockDim.x);
+        static_assert(sizeof(NumericalStatus) == 2 * sizeof(index) + 2 * sizeof(int));
+        // Publish scalar fields explicitly. Keep the status aggregate in
+        // registers and avoid assigning it through a cast of the lane scratch.
+        auto *rows = reinterpret_cast<index *>(values + C * blockDim.x);
+        auto *points = rows + blockDim.x;
+        auto *codes = reinterpret_cast<int *>(points + blockDim.x);
+        auto *details = codes + blockDim.x;
         const auto &geometry = publication(0, 0);
         for (index iPackage = blockIdx.x; iPackage < prepared.packages.RowCount(); iPackage += gridDim.x)
         {
@@ -174,18 +174,21 @@ namespace DNDS::Cauchy::CUDA::Detail
                 NumericalStatus pointStatus;
                 const index q = index(tile) * segment.lanes + lane;
                 if (lane >= 0 && q < segment.points)
-                    pointStatus = ACMFacePoint<C>(geometry, controls, fields, output, wallShear,
+                    pointStatus = ACMFacePoint<C>(geometry, controls, fields, output,
                                                  segment.auxiliaryFace, first, first + q, value);
                 for (int j = 0; j < C; ++j)
                     values[C * threadIdx.x + j] = value[j];
-                status[threadIdx.x] = pointStatus;
+                rows[threadIdx.x] = pointStatus.row;
+                points[threadIdx.x] = pointStatus.point;
+                codes[threadIdx.x] = int(pointStatus.code);
+                details[threadIdx.x] = pointStatus.detail;
                 __syncthreads();
                 if (lane == 0)
                     for (int offset = 0; offset < segment.lanes; ++offset)
                     {
                         const int source = segment.firstLane + offset;
-                        if (faceStatus && !status[source])
-                            faceStatus = status[source];
+                        if (faceStatus && codes[source] != int(NumericalError::None))
+                            faceStatus = {NumericalError(codes[source]), details[source], rows[source], points[source]};
                         for (int j = 0; j < C; ++j)
                             total[j] += values[C * source + j];
                     }
@@ -204,37 +207,37 @@ namespace DNDS::Cauchy::CUDA::Detail
     }
 
     template <int Components, RHSFaceMapping Mapping, class Fields, class Output>
-    void LaunchACMMapping(const RHSFaceLaunch &launch, RHSWallOutput wallShear, const Fields &fields, const Output &output)
+    void LaunchACMMapping(const RHSFaceLaunch &launch, const Fields &fields, const Output &output)
     {
         const auto &controls = launch.controls;
         const auto stream = Runtime::CUDAStream(launch.context);
         if constexpr (Mapping == RHSFaceMapping::CTASegments)
         {
-            Runtime::CheckKernelArgumentBudget<ACMGeometryView, RHSKernelControls, Fields, Output, RHSWallOutput, RHSFacePackageView>();
+            Runtime::CheckKernelArgumentBudget<ACMGeometryView, RHSKernelControls, Fields, Output, RHSFacePackageView>();
             ACMSegments<Components><<<launch.segmentBlocks, controls.blockSize, launch.packages.sharedBytes, stream>>>(
-                launch.geometry.View(), controls, fields, output, wallShear, launch.packages);
+                launch.geometry.View(), controls, fields, output, launch.packages);
         }
         else
         {
-            Runtime::CheckKernelArgumentBudget<ACMGeometryView, RHSKernelControls, Fields, Output, RHSIndices, RHSWallOutput>();
+            Runtime::CheckKernelArgumentBudget<ACMGeometryView, RHSKernelControls, Fields, Output, RHSIndices>();
             const unsigned blocks = unsigned(std::min<index>((launch.selected.RowCount() + controls.blockSize - 1) / controls.blockSize,
                                                              controls.gridBlocks ? controls.gridBlocks : 1024));
             ACMFaces<Components><<<blocks, controls.blockSize, 0, stream>>>(
-                launch.geometry.View(), controls, fields, output, launch.selected, wallShear);
+                launch.geometry.View(), controls, fields, output, launch.selected);
         }
     }
 
     template <int Components>
-    void LaunchACMFaces(const RHSFaceLaunch &launch, RHSWallOutput wallShear)
+    void LaunchACMFaces(const RHSFaceLaunch &launch)
     {
         if (launch.controls.mapping == RHSFaceMapping::CTASegments)
-            LaunchACMMapping<Components, RHSFaceMapping::CTASegments>(launch, wallShear, launch.fields, launch.output);
+            LaunchACMMapping<Components, RHSFaceMapping::CTASegments>(launch, launch.fields, launch.output);
         else
-            LaunchACMMapping<Components, RHSFaceMapping::Thread>(launch, wallShear, launch.fields, launch.output);
+            LaunchACMMapping<Components, RHSFaceMapping::Thread>(launch, launch.fields, launch.output);
     }
 
     template <int C, int M, int D, RHSFaceMapping Mapping>
-    void LaunchACMRHSShape(const RHSFaceLaunch &launch, RHSWallOutput wallShear)
+    void LaunchACMRHSShape(const RHSFaceLaunch &launch)
     {
         static_assert(Mapping == RHSFaceMapping::Thread || Mapping == RHSFaceMapping::CTASegments);
         DNDS_check_throw_info(launch.controls.mechanical && !launch.controls.direct && !launch.controls.firstOrder &&
@@ -249,6 +252,6 @@ namespace DNDS::Cauchy::CUDA::Detail
             launch.controls.distinctViscous ? ProjectRHSField<Coefficients>(launch.fields.viscousData)
                                             : typename ACMPolynomialFields<C, M, D>::template Pair<C * M>{}};
         const auto output = ProjectRHSOutputs<C>(launch.output);
-        LaunchACMMapping<C, Mapping>(launch, wallShear, fields, output);
+        LaunchACMMapping<C, Mapping>(launch, fields, output);
     }
 }

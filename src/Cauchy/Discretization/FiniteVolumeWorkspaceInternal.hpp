@@ -122,6 +122,7 @@ namespace DNDS::Cauchy
             }
         };
         const bool meanOnly;
+        const bool captureBoundaryFlux;
         mutable std::optional<BoundaryForceReduction> boundaryForceReduction;
         index componentNumber = 0, physicalFieldNumber = 0;
         std::vector<Field> fields;
@@ -303,7 +304,7 @@ namespace DNDS::Cauchy
             std::array<FieldRead, FieldCapacity> fields;
             std::optional<R::Array<real>::ReadLease> thermodynamics;
             std::optional<DerivedFields::ReadScope> derivedOwned, derivedGhost;
-            std::optional<R::Array<real>::WriteLease> result, lowOrder, face;
+            std::optional<R::Array<real>::WriteLease> result, lowOrder, face, boundaryMomentum;
             RHSReadViews input;
             RHSWriteViews output;
 
@@ -363,7 +364,6 @@ namespace DNDS::Cauchy
         R::Array<real> boundaryMomentumFlux;
         /// Per-area viscous traction of the fluid on a no-slip wall from the last full RHS.
         /// Its sign uses n outward from the fluid. Other boundary rows are zero.
-        std::optional<R::Array<real>> boundaryWallShear;
         /// Integrated residual contribution in the canonical owned-parent
         /// frame, one row per local stencil face. Refilled on every RHS call.
         R::Array<real> faceFlux;
@@ -372,7 +372,7 @@ namespace DNDS::Cauchy
         /// a second finite-volume frontend or a second reconstruction pass.
         std::optional<EquationDofs> lowOrderResidual;
         std::optional<R::Array<real>> lowOrderFaceFlux;
-        bool boundaryMomentumCurrent = false;
+        bool boundaryMomentumCurrent = false, boundaryFacialFluxCurrent = false;
         std::optional<MeanGradients> meanGradients;
         bool chemical;
         int iterations = 0;
@@ -475,7 +475,7 @@ namespace DNDS::Cauchy
         void BuildSourceSampling(const EquationDofs &state);
         static EquationDofs BindBoundary(const EquationDofs &state, const std::vector<Field> &fields, index rows);
         Workspace(std::shared_ptr<const Data> data, EquationDofs &state,
-                  std::optional<Physics::Chemistry::ChemicalWorkerPool> pool, bool meanTrial);
+                  std::optional<Physics::Chemistry::ChemicalWorkerPool> pool, bool meanTrial, bool capture);
         void BindHalos(EquationDofs &state);
         void RefreshDirectGradients(const EquationDofs &state, bool ghost, real time);
         /// Queue physical-gradient copies/projections without acquiring

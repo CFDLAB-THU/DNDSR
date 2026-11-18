@@ -6,21 +6,15 @@
 
 namespace DNDS::Cauchy
 {
-    /// Transient boundary-point arithmetic, or an explicitly requested output
-    /// snapshot. Production operators derive it from one compact face range
-    /// and the retained CFV publication; no persistent trace table is required.
+    /// Transient boundary-point arithmetic. Operators derive it from one
+    /// compact face range and the retained CFV publication.
     struct BoundaryTraceGeometry
     {
-        /// Numerical transients use the global CFV quadrature row; centers
-        /// use -1. BoundaryTraceSnapshot is an output-only record and uses
-        /// the local face-quadrature ordinal instead. Numerical launchers take
-        /// the compact stencil/ranges, never a snapshot Array of these records.
+        /// Global CFV quadrature row, or -1 for a face-center value.
         index cell = 0, face = 0, point = 0, condition = 0, interfaceRow = 0;
         int side = 0;
         Vector3 normal{}, location{};
-        /// Physical quadrature weight, including the configured axisymmetric
-        /// metric. Output consumes this prepared value without rebuilding or
-        /// downloading the complete volume/face metric publication.
+        /// Physical quadrature weight, including the axisymmetric metric.
         real weight = 0;
     };
     static_assert(std::is_trivially_copyable_v<BoundaryTraceGeometry>);

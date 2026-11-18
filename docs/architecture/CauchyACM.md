@@ -74,13 +74,13 @@ in m²/s. Divide it by `U0 * L0 * viscosityReference` to obtain the stored
 value. Wilcox and SST append `k, omega`, with physical scales `U0²` and
 `U0 / L0`. The velocity gradient drives
 the shared RANS closures with constant density, molecular viscosity and the
-mesh-derived wall distance. The two-equation momentum flux includes the
-isotropic `2 k/3` contribution. At a stationary no-slip wall the trace has
-zero velocity and zero SA working variable or k. Omega uses the existing
-viscosity and cell wall-distance law. The wall shear columns give the
-tangential viscous traction of the fluid on the wall per unit area from the
-last completed full RHS. Summed numerical momentum flux and per-area shear are
-distinct observables.
+mesh-derived wall distance. SST uses SST-2003m production and Cauchy's
+mean momentum flux omits the isotropic `2 k/3` term. Slip walls retain
+inviscid pressure flux with zero viscous and RANS scalar diffusion on CPU
+and CUDA. At a stationary no-slip wall the trace has zero velocity and zero
+SA working variable or k. Omega uses the existing viscosity and cell
+wall-distance law. Opt-in boundary VTKHDF stores the face average of the
+tangential numerical momentum flux from the last observation RHS.
 
 The initial scope uses stationary single domains, unlimited reconstruction
 and FP64 ACM face fluxes. CUDA requires combined AoS and the resident Jacobi

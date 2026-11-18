@@ -10,8 +10,7 @@ namespace DNDS::Cauchy::CUDA
 {
     /** @brief Frozen mathematical choices for the specialized sparse operator.
      * @details Component selection is in the stored equation frame, on both
-     * sides of a periodic rotation. kineticComponent is -1 or the rho*k slot
-     * of the two-equation profile; SA adds scalar convection only. Roe matrix
+     * sides of a periodic rotation. RANS components use scalar convection. Roe matrix
      * dissipation is the existing flow5-only choice. Full equation EOS work is
      * performed by the producer, not by sparse application.
      */
@@ -20,7 +19,7 @@ namespace DNDS::Cauchy::CUDA
         RigidFrameParameters frame;
         PerfectGas gas;
         real scale = 1;
-        int components = 5, kineticComponent = -1;
+        int components = 5;
         bool roe = false;
         std::array<uint8_t, 7> active{1, 1, 1, 1, 1, 1, 1};
     };

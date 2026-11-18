@@ -1,204 +1,251 @@
 #include "Cauchy/Discretization/FiniteVolume.hpp"
-#include "Cauchy/Discretization/RANSReconstruction.hpp"
 #include "Cauchy/Discretization/FiniteVolumeWorkspaceInternal.hpp"
-#include "Cauchy/Discretization/CPU/FiniteVolumePointKernels.hpp"
-#include "Cauchy/Physics/PointProperties.hpp"
-#include "Cauchy/Physics/ThermalAdmissibility.hpp"
+#include "Cauchy/IO/BoundaryOutputGeometry.hpp"
 #include "Cauchy/IO/OutputFields.hpp"
-#include "Cauchy/Core/NumericalFailure.hpp"
 #include "DNDS/Runtime/Execution/CUDAExecution.hpp"
+#include "DNDS/Runtime/Execution/EagerArray.hpp"
+#include "DNDS/Runtime/Communication/RowTransfer.hpp"
 #include "DNDS/MPI/CollectiveStage.hpp"
-#include <sstream>
-#include <iomanip>
+#include <unordered_map>
 
 namespace DNDS::Cauchy
 {
+    namespace R = Runtime;
+
+    struct BoundaryOutputGeometry
+    {
+        std::shared_ptr<Geom::UnstructuredMesh> mesh;
+        // Local fast path stores rows in file order. When ownership differs,
+        // store the compact FV rows and route their payloads to file order.
+        R::Array<BoundaryOutputRow> rows;
+        std::optional<R::RowTransferPlan> route;
+        R::Array<real> normals;
+        std::shared_ptr<const std::vector<int>> zones;
+        std::shared_ptr<const std::vector<std::pair<int, std::string>>> names;
+
+        R::Array<real> InFileOrder(R::Array<real> source) const
+        {
+            if (!route)
+                return source;
+            const MPIInfo mpi(route->Communicator());
+            R::Array<real> destination;
+            MPI::LocalStage(mpi, [&]
+                            { destination = R::Array<real>(R::RowLayout::Dense(route->DestinationRows(), source.Layout().Width())); });
+            R::PayloadPlan payload(*route, source.Layout(), destination.Layout(), R::ElementSchema::For<real>());
+            R::TransferOptions options;
+            options.mode = R::TransferMode::Transient;
+            options.context = route->Context();
+            payload.Bind(source, destination, R::TransferTransport::Direct, options).Begin().Wait();
+            return destination;
+        }
+    };
+
+    std::shared_ptr<const BoundaryOutputGeometry> FiniteVolume::Data::PrepareBoundaryOutput() const
+    {
+        metrics.Validate();
+        if (boundaryOutputGeometry)
+            return boundaryOutputGeometry;
+
+        auto extracted = mesh->ExtractBoundary();
+        const MPIInfo mpi(metrics.Communicator());
+        R::Array<BoundaryOutputRow> rows;
+        std::unordered_map<index, index> byFace;
+        std::vector<R::RowRequest> requests;
+        std::vector<int> zones;
+        std::vector<int> used(forceZones.size(), 0);
+        bool remote = false;
+        index ownedFaces = 0;
+        MPI::LocalStage(mpi, [&]
+                        {
+            byFace.reserve(boundaryOutputRows.size());
+            for (index row = 0; row < index(boundaryOutputRows.size()); ++row)
+                byFace.emplace(boundaryOutputRows[row].face, row);
+            const auto volumeState = mesh->CurrentNativeState();
+            const auto identifiers = volumeState->ReadOriginalEntityIds(Geom::EntityKind::Bnd);
+            DNDS_check_throw_info(identifiers, "volume mesh lacks persistent boundary IDs");
+            auto native = volumeState->Snapshot(R::Device::Host()).AcquireRead();
+            const auto source = native.HostView();
+            const auto faceSpace = volumeState->Entities(Geom::EntityKind::Face);
+            ownedFaces = faceSpace.NumOwned();
+            std::unordered_map<index, index> sourceRows;
+            sourceRows.reserve(mesh->NumBnd());
+            for (index iBnd = 0; iBnd < mesh->NumBnd(); ++iBnd)
+                sourceRows.emplace(identifiers->View()(iBnd, 0), iBnd);
+            const auto extractedState = extracted->CurrentNativeState();
+            const auto &provenance = extractedState->Provenance();
+            DNDS_check_throw_info(provenance, "boundary output requires extraction ancestry");
+            const auto ancestry = provenance->sourceIds.at(Geom::EntityKind::Cell).Read();
+            const auto ids = ancestry.View<R::FixedRows<1>>();
+            requests.reserve(ids.RowCount());
+            zones.reserve(ids.RowCount());
+            for (index iRow = 0; iRow < ids.RowCount(); ++iRow)
+            {
+                const index sourceBnd = sourceRows.at(ids(iRow, 0));
+                const auto faces = source.BoundaryFaces(sourceBnd);
+                DNDS_check_throw_info(faces.size() == 1 && faces[0] >= 0 && faces[0] < faceSpace.NumLocal(),
+                                      "boundary output requires the physical face in the mesh closure");
+                const auto global = faceSpace.LocalToGlobal(faces[0]);
+                const int owner = faceSpace.Owner(global);
+                const int zone = source.GetBndZone(sourceBnd);
+                requests.push_back({owner, faceSpace.OwnerLocalRow(global), iRow});
+                remote = remote || owner != mpi.rank;
+                zones.push_back(zone);
+                used.at(forceSlots.at(zone)) = 1;
+            } });
+        const bool routeRequired = MPI::AllreduceValue<MPI::Reduction::Max>(int(remote), mpi.comm) != 0;
+        std::optional<R::RowTransferPlan> route;
+        if (routeRequired)
+        {
+            auto context = metrics.Communication();
+            R::RowTransferPlan discovery(context, ownedFaces, extracted->NumCell(), requests);
+            std::vector<std::vector<index>> send;
+            MPI::LocalStage(mpi, [&]
+                            {
+                send = discovery.SendRows();
+                for (auto &peer : send)
+                    for (auto &face : peer)
+                        face = byFace.at(face); });
+            route = R::RowTransferPlan::Known(context, index(boundaryOutputRows.size()), extracted->NumCell(),
+                                              std::move(send), discovery.ReceiveRows());
+        }
+        R::Array<real> normals;
+        MPI::LocalStage(mpi, [&]
+                        {
+            const index count = route ? index(boundaryOutputRows.size()) : extracted->NumCell();
+            rows = R::Array<BoundaryOutputRow>(R::RowLayout::Dense(count, 1));
+            normals = R::Array<real>(R::RowLayout::Dense(count, 3));
+            auto writeRows = rows.Write();
+            auto writeNormals = normals.Write();
+            const auto faceOutput = writeRows.View<R::FixedRows<1>>();
+            const auto normalOutput = writeNormals.View<R::FixedRows<3>>();
+            for (index iRow = 0; iRow < count; ++iRow)
+            {
+                const auto &row = boundaryOutputRows.at(route ? iRow : byFace.at(requests[iRow].sourceRow));
+                DNDS_check_throw_info(row.cell < metrics.NumCell() && (route || row.zone == zones[iRow]),
+                                      "boundary output ancestry and face routing disagree");
+                faceOutput(iRow, 0) = row;
+                for (int d = 0; d < 3; ++d)
+                    normalOutput(iRow, d) = row.normal[d] * row.area;
+            } });
+        MPI::AllreduceInPlace<MPI::Reduction::Max>(MPI::ContiguousView<int>{used.data(), used.size()}, mpi.comm);
+        std::vector<std::pair<int, std::string>> names;
+        for (index iZone = 0; iZone < index(used.size()); ++iZone)
+            if (used[iZone])
+            {
+                const auto zone = forceZones[iZone];
+                const auto begin = names.size();
+                for (const auto &[name, id] : settings.mesh.boundaryIds)
+                    if (zone == id)
+                        names.emplace_back(zone, name);
+                if (names.size() == begin)
+                    names.emplace_back(zone, "");
+            }
+        BoundaryOutputGeometry geometry{std::move(extracted), std::move(rows), std::move(route), {}, std::make_shared<const std::vector<int>>(std::move(zones)), std::make_shared<const std::vector<std::pair<int, std::string>>>(std::move(names))};
+        geometry.normals = geometry.InFileOrder(std::move(normals));
+        boundaryOutputGeometry = std::make_shared<const BoundaryOutputGeometry>(std::move(geometry));
+        return boundaryOutputGeometry;
+    }
+
     void FiniteVolume::WriteVisualization(const EquationDofs &state, const ReconstructionState &reconstruction, const Workspace &workspace,
                                           const std::string &prefix, real time, int hdfDeflateLevel,
                                           const std::optional<Physics::Chemistry::ChemicalWorkerPool> &workers) const
     {
         PrepareVisualization(state, reconstruction, workspace, time, hdfDeflateLevel, workers).Write(prefix, Metrics().Communication());
     }
+
     PreparedVisualization FiniteVolume::PrepareVisualization(const EquationDofs &state, const ReconstructionState &reconstruction,
                                                              const Workspace &workspace, real time, int hdfDeflateLevel,
                                                              const std::optional<Physics::Chemistry::ChemicalWorkerPool> &workers) const
     {
-        using namespace EquationFVDetail;
         const MPIInfo mpi(Metrics().Communicator());
         const auto &equation = _data->equation;
-        const int species = equation.HasMixture() ? equation.Mixture().SpeciesNumber() : 0;
-        const int independent = std::max(0, species - 1);
-        std::vector<std::string> names;
-        std::vector<index> first;
-        index flowFirst = -1, speciesFirst = -1, ransFirst = -1;
-        std::optional<PointEvaluator> evaluator;
-        std::optional<ThermalPolicy> thermal;
-        Runtime::Array<real> outputFields;
-        R::EagerEngine outputEngine;
-        R::ExecutionStream outputStream;
-        MPI::LocalStage(mpi, [&]
-                        {
-                            ValidateWorkspace(state, workspace);
-                            DNDS_check_throw_info(hdfDeflateLevel >= 0 && hdfDeflateLevel <= 9, "VTKHDF compression level must be in [0,9]");
-                            for (const auto &block : state.Schema().blocks)
-                            {
-                                first.push_back(index(names.size()));
-                                if (block.name == "flow")
-                                    flowFirst = index(names.size());
-                                if (block.name == "species")
-                                    speciesFirst = index(names.size());
-                                if (block.name == "rans")
-                                    ransFirst = index(names.size());
-                                for (const auto &component : block.components)
-                                    names.push_back(component.name);
-                            }
-                            if (!equation.IsACM())
-                                for (const auto *name : {"p", "T", "u", "v", "w", "Mach"})
-                                    names.push_back(name);
-                            if (species)
-                                for (const auto &name : equation.Mixture().SpeciesNames())
-                                    names.push_back("Y:" + name);
-                            auto sorted = names;
-                            std::sort(sorted.begin(), sorted.end());
-                            DNDS_check_throw_info(std::adjacent_find(sorted.begin(), sorted.end()) == sorted.end(), "ambiguous equation output field names");
-                            if (Device() == R::Device::Host())
-                                outputStream = outputEngine.CreateCPUStream();
-#ifdef DNDS_USE_CUDA
-                            else
-                                outputStream = outputEngine.CreateStream(std::make_shared<R::CUDALauncher>(Device().ordinal));
-#else
-                            else
-                                DNDS_check_throw_info(false, "CUDA visualization is not compiled");
-#endif
-                        });
-        MPI::LocalStage(mpi, [&]
-                        {
-            auto prepared = OutputFields::Submit(outputEngine, outputStream, state, equation, workers);
-            outputEngine.Synchronize();
-            outputFields = prepared.CopyToHost(outputStream.Context()); });
-        if (Device() != R::Device::Host())
+        auto boundary = _data->PrepareBoundaryOutput();
+        std::vector<std::string> names, fluxNames;
+        R::Array<real> outputFields, boundaryFields;
+        std::optional<R::Array<real>> boundaryFluxes;
+        bool compatible = workspace.boundaryFacialFluxCurrent &&
+                          workspace.rhsState && workspace.rhsTime == time;
+        if (compatible)
         {
-            auto surface = PrepareDeviceSurfaceVisualization(state, reconstruction, workspace, time, outputEngine, outputStream);
-            return PreparedVisualization(_data->mesh, std::move(outputFields), std::move(names), std::move(surface), time, hdfDeflateLevel);
+            const auto &binding = *workspace.rhsState;
+            compatible = binding.snapshot.PhysicalFieldNumber() == state.PhysicalFieldNumber();
+            for (index field = 0; compatible && field < state.PhysicalFieldNumber(); ++field)
+            {
+                const auto &owned = state.PhysicalField(field).Owned();
+                compatible = binding.snapshot.PhysicalField(field).Owned().SharedStorage() == owned.SharedStorage() &&
+                             binding.versions[field] == owned.Version();
+            }
         }
-        const auto means = state.ReadOwned();
-        const auto blocks = BlockViews(state, means);
-        PointScratch point(state.ComponentNumber());
-        std::ostringstream surface;
+        const bool capture = MPI::AllreduceValue<MPI::Reduction::Min>(int(compatible), mpi.comm) != 0;
+        R::EagerEngine engine;
+        R::ExecutionStream stream;
         MPI::LocalStage(mpi, [&]
                         {
-            const auto &limits = _data->settings.numerics;
+            ValidateWorkspace(state, workspace);
+            DNDS_check_throw_info(reconstruction.owner == _data, "foreign output reconstruction state");
+            DNDS_check_throw_info(hdfDeflateLevel >= 0 && hdfDeflateLevel <= 9, "VTKHDF compression level must be in [0,9]");
+            for (const auto &block : state.Schema().blocks)
+                for (const auto &component : block.components)
+                {
+                    names.push_back(component.name);
+                    if (capture)
+                        fluxNames.push_back("flux_" + component.name + "_facial");
+                }
             if (!equation.IsACM())
-                thermal.emplace(equation, limits.densityFloor, limits.temperatureFloor, 0, limits.pressureFloor,
-                    workers ? workers->Acquire() : Physics::Chemistry::ChemicalWorkerPool::Lease{});
-            evaluator.emplace(equation.MakePointEvaluator(workers ? workers->Acquire() : Physics::Chemistry::ChemicalWorkerPool::Lease{}, {equation.HasRANS()}));
-            surface << "cell_id,zone,x,y,z,nx,ny,nz,weight";
-            if (equation.IsACM())
-                for (const auto &name : names) surface << ',' << name;
+                for (const auto *name : {"p", "T", "u", "v", "w", "Mach"})
+                    names.push_back(name);
+            if (equation.HasMixture())
+                for (const auto &name : equation.Mixture().SpeciesNames())
+                    names.push_back("Y:" + name);
+            auto sorted = names;
+            std::sort(sorted.begin(), sorted.end());
+            DNDS_check_throw_info(std::adjacent_find(sorted.begin(), sorted.end()) == sorted.end(), "ambiguous equation output field names");
+            if (Device() == R::Device::Host())
+                stream = engine.CreateCPUStream();
+#ifdef DNDS_USE_CUDA
             else
-                surface << ",rho,p,u,v,w,T";
-            if (species) for (const auto &name : equation.Mixture().SpeciesNames()) surface << ",Y:" << name;
-            std::optional<R::Array<real>::ReadLease> shearRead;
-            if (workspace.boundaryMomentumCurrent && workspace.boundaryWallShear)
-            {
-                shearRead.emplace(workspace.boundaryWallShear->Read());
-                surface << ",last_rhs_wall_shear_x,last_rhs_wall_shear_y,last_rhs_wall_shear_z";
-            }
-            surface << '\n' << std::setprecision(17);
-            std::optional<EquationDofs> coefficients;
-            std::optional<EquationDofs::ReadScope> rec;
-            R::MetadataBuffer<EquationBlockReadView> recBlocks;
-            std::optional<CFV::ReconstructionBasisRead> basis;
-            if (_data->reconstruction)
-            {
-                coefficients.emplace(FluxReconstruction(reconstruction, workspace).NumericAlias());
-                rec.emplace(coefficients->ReadOwned());
-                recBlocks = BlockViews(*coefficients, *rec);
-                basis.emplace(_data->reconstruction->AcquireBasisRead());
-            }
-            auto geometry = Metrics().AcquireRead(); const auto metric = geometry.HostView();
-            CFV::Math::SmallMatrix scratch;
-            const int modes = _data->reconstruction ? _data->reconstruction->NRecDOF() : 0;
-            const auto frame = _data->motion.At(time);
-            const auto *ransModel = equation.HasRANS() ? &equation.RANS() : nullptr;
-            const auto ransMean = ransModel ? means.Block("rans") : EquationBlockReadView{};
-            PointScratch cellMean(state.ComponentNumber());
-            std::optional<WallDistanceRead> wallRead;
-            if (ransModel && ransModel->ComponentNumber() == 2) wallRead.emplace(_data->wallDistance->AcquireRead());
-            const auto walls = wallRead ? wallRead->HostView() : WallDistanceView{};
-            std::optional<Runtime::Array<real>::ReadLease> incomingRead;
-            InterfaceBoundaryRows incoming;
-            const auto boundaryInput = PreparedBoundaryInputs(workspace);
-            DNDS_check_throw_info(!HasInterfaces() || boundaryInput,
-                                  "surface output needs a ready interface packet");
-            if (boundaryInput)
-            {
-                ValidateBoundaryInputs(*boundaryInput, time);
-                incomingRead.emplace((_data->stencil.quadratureBoundaryValues ? boundaryInput->QuadratureValues() : boundaryInput->FaceCenterValues())
-                                         .CoupledField()
-                                         .Owned()
-                                         .Read());
-                incoming = incomingRead->View<Runtime::UniformTableRows>();
-            }
-            const auto stencilRead = _data->stencil.Read();
-            const auto stencil = stencilRead.View();
-            const auto boundaryRead = _data->boundaryFaces.Read();
-            const auto ranges = boundaryRead.View<R::FixedRows<1>>();
-            for (index iBoundary = 0; iBoundary < ranges.RowCount(); ++iBoundary)
-            {
-                const auto range = ranges(iBoundary, 0);
-                const index count = stencil.quadratureBoundaryValues ? range.quadratureCount : 1;
-                for (index iLocal = 0; iLocal < count; ++iLocal)
+                stream = engine.CreateStream(std::make_shared<R::CUDALauncher>(Device().ordinal));
+#else
+            else
+                DNDS_check_throw_info(false, "CUDA visualization is not compiled");
+#endif
+            auto prepared = OutputFields::Submit(engine, stream, state, equation, workers);
+            engine.Synchronize();
+            outputFields = prepared.CopyToHost(stream.Context());
+            boundaryFields = R::Array<real>(R::RowLayout::Dense(boundary->rows.RowCount(), outputFields.Layout().Width()));
+            const auto fieldsRead = outputFields.Read();
+            const auto rowsRead = boundary->rows.Read();
+            auto boundaryWrite = boundaryFields.Write();
+            const auto fields = fieldsRead.View<R::TableRows>();
+            const auto rows = rowsRead.View<R::FixedRows<1>>();
+            const auto output = boundaryWrite.View<R::TableRows>();
+            for (index iRow = 0; iRow < output.RowCount(); ++iRow)
+                for (index j = 0; j < output.Width(); ++j)
+                    output(iRow, j) = fields(rows(iRow, 0).cell, j); });
+        if (capture)
+            MPI::LocalStage(mpi, [&]
+                            {
+                auto rows = boundary->rows.To(Device(), stream.Context());
+                R::Array<real> packed(R::RowLayout::Dense(rows.RowCount(), state.ComponentNumber() + 3), Device());
+                R::SubmitArrays(engine, stream, [](R::ExecutionContext context, auto rows, auto flux, auto momentum, auto quadrature, auto output)
                 {
-                const index iPoint = metric.FaceQuadratureBegin(range.face) + iLocal;
-                const auto sample = FiniteVolumeDetail::ExpandSample(stencil.RHSFaceSample(range.face, 0, iPoint),
-                    {_data->boundaryConditions.data(), index(_data->boundaryConditions.size())});
-                Gather(blocks, sample.cell, point);
-                if (basis)
-                {
-                    const auto b = basis->FaceBasis(sample.face, sample.side, sample.point, 0, scratch);
-                    for (index iBlock = 0; iBlock < state.BlockNumber(); ++iBlock)
-                        for (index j = 0; j < blocks[iBlock].ComponentNumber(); ++j)
-                            for (int mode = 0; mode < modes; ++mode)
-                                point.values[first[iBlock] + j] += recBlocks[iBlock](sample.cell, j * modes + mode) * b(0, mode);
-                }
-                if (!equation.IsACM() && !thermal->View().Admissible(point.values)) Gather(blocks, sample.cell, point);
-                if (ransModel)
-                    RANSReconstructionView{ransModel->Kind(), ransModel->ComponentNumber()}.RepairPoint(ransMean[sample.cell], point.values.data() + ransFirst);
-                if (wallRead) Gather(blocks, sample.cell, cellMean);
-                OptionalRef<const std::vector<real>> mean;
-                if (wallRead)
-                    mean.Emplace(cellMean.values);
-                _data->boundaryPoint.Evaluate(
-                    point.values, sample.boundary, sample.boundaryPoint,
-                    {sample.normal[0], sample.normal[1], sample.normal[2]},
-                    {sample.ownPoint[0], sample.ownPoint[1], sample.ownPoint[2]},
-                    *evaluator, frame, time, BoundaryPointStateKind::FaceTrace,
-                    mean, wallRead ? walls.cellMean(sample.cell, 0) : 0,
-                    incoming);
-                surface << Mesh().OriginalEntityId(Geom::EntityKind::Cell, sample.cell) << ',' << sample.zone;
-                for (int d = 0; d < 3; ++d) surface << ',' << sample.ownPoint[d];
-                for (int d = 0; d < 3; ++d) surface << ',' << sample.normal[d];
-                surface << ',' << metric.GetFaceWeight(sample.point);
-                if (equation.IsACM())
-                {
-                    for (auto value : point.values) surface << ',' << value;
-                    if (shearRead)
-                        for (int d = 0; d < 3; ++d)
-                            surface << ',' << shearRead->View<R::FixedRows<3>>()(sample.boundaryPoint, d);
-                    surface << '\n';
-                    continue;
-                }
-                const auto flow = point.Flow(flowFirst);
-                const auto properties = evaluator->Evaluate(flow, point.Species(speciesFirst, independent));
-                surface << ',' << flow[0] << ',' << properties.thermo.pressure;
-                for (int d = 0; d < 3; ++d) surface << ',' << flow[d + 1] / flow[0];
-                surface << ',' << properties.thermo.temperature;
-                for (int k = 0; k < species; ++k) surface << ',' << properties.fractions[k];
-                surface << '\n';
-                }
-            }
-            DNDS_check_throw_info(bool(surface), "equation surface output preparation failed"); });
-        return PreparedVisualization(_data->mesh, std::move(outputFields), std::move(names), surface.str(), time, hdfDeflateLevel);
+#ifdef DNDS_USE_CUDA
+                    if (context.device.space == R::MemorySpace::CUDA)
+                    {
+                        BoundaryOutputDetail::GatherDeviceFaces(context, rows, flux, momentum, quadrature, output);
+                        return;
+                    }
+#endif
+                    for (index iRow = 0; iRow < rows.RowCount(); ++iRow)
+                        BoundaryOutputDetail::GatherFace(rows(iRow, 0), flux, momentum, quadrature, output, iRow);
+                }, R::ReadAs<R::FixedRows<1>>(rows), R::ReadAs<R::TableRows>(workspace.faceFlux),
+                R::ReadAs<R::FixedRows<3>>(workspace.boundaryMomentumFlux), R::ReadAs<R::TableRows>(Metrics().FaceQuadrature()),
+                R::WriteAs<R::TableRows>(packed));
+                engine.Synchronize();
+                boundaryFluxes.emplace(packed.To(R::Device::Host(), stream.Context())); });
+        PreparedVisualization::Boundary surface{boundary->mesh, boundary->InFileOrder(std::move(boundaryFields)), boundary->normals, boundary->zones, boundary->names, {}, std::move(fluxNames)};
+        if (boundaryFluxes)
+            surface.flux.emplace(boundary->InFileOrder(std::move(*boundaryFluxes)));
+        return PreparedVisualization(_data->mesh, std::move(outputFields), std::move(names), std::move(surface), time, hdfDeflateLevel);
     }
 }

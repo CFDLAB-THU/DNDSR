@@ -76,7 +76,7 @@ namespace DNDS::Cauchy::CPU
         const auto time = request.time;
         const index owned = request.owned, all = request.all, nv = snapshot.components;
         const bool sixComponentShape = b && !b->RowMajorBlocks() && !request.rowMajorBlocks && b->ElementStride() == 1 && d.ElementStride() == 1 && nv == 6 && snapshot.flowFirst == 0 &&
-                                       snapshot.allComponents && snapshot.kineticFirst < 0;
+                                       snapshot.allComponents;
         const auto ownedTable = sixComponentShape ? Algebra::TryOwnedTable(inputValues.OwnedPart()) : std::nullopt;
         const auto ghostTable = sixComponentShape ? Algebra::TryGhostTable(inputValues.GhostPart()) : std::nullopt;
         const bool useSixComponentKernel = ownedTable && ghostTable;

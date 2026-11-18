@@ -6,6 +6,7 @@
 #include "../CFV/RotatedSectorFixture.hpp"
 #include "Cauchy/Config/CUDAKernelDefaults.hpp"
 #include <filesystem>
+#include <hdf5.h>
 #include <unistd.h>
 
 namespace C = DNDS::Cauchy;
@@ -69,6 +70,7 @@ TEST_CASE("ACM device correction matches CPU on flow4 and mechanical SA and SST"
         std::optional<R::Array<double>> reference;
         for (const auto *mapping : {"cpu", "thread", "ctaSegments"})
         {
+            CAPTURE(std::string_view(mapping));
             const bool cpu = std::string_view(mapping) == "cpu";
             settings.execution.device = cpu ? "cpu" : "cuda";
             settings.execution.kernels.rhsMapping = cpu ? "auto" : mapping;
@@ -90,6 +92,73 @@ TEST_CASE("ACM device correction matches CPU on flow4 and mechanical SA and SST"
                 for (I j = 0; j < I(initial.size()); ++j)
                     CHECK(actual.View()(iCell, j) == doctest::Approx(expected.View()(iCell, j)).epsilon(1e-8).scale(1));
         }
+    }
+}
+
+TEST_CASE("ACM CUDA exports zero tangential slip-wall flux and nonzero no-slip shear")
+{
+    C::DomainSettings settings;
+    settings.mesh.dimension = 3;
+    settings.equation.system = "incompressibleACM";
+    settings.equation.eos = "none";
+    settings.equation.transport = "Newtonian";
+    settings.equation.viscosity = .01;
+    settings.equation.referenceScales = {{"rho0", 1}, {"U0", 1}, {"L0", 1}, {"T0", 300}};
+    settings.equation.rans.model = "KOmegaSST";
+    settings.boundaries["7"].kind = "noSlipWall";
+    settings.boundaries["8"].kind = "slipWall";
+    settings.initialState = {{"type", "primUP"}, {"state", {.25, 0, 0, .7, .03, 2}}};
+    settings.referenceState = settings.initialState;
+    settings.numerics.reconstruction = "variational";
+    settings.numerics.cfv.maxOrder = 1;
+    settings.numerics.cfv.SORInstead = false;
+    settings.numerics.viscousGradient = "polynomial";
+    settings.execution.device = "cuda";
+    settings.implicit.diagonal = "block";
+    settings.implicit.jacobianAction = "assembled";
+    settings.implicit.linear.method = "jacobi";
+    settings.implicit.linear.stopping = "fixedCount";
+    settings.boundaryFacialFluxes = true;
+    C::TimeSettings time;
+    time.method = "bdf1";
+    C::Domain domain("wall", CFVTest::CartesianHexes(mpi, 3, true), settings, time);
+    int pid = int(getpid());
+    MPI_Bcast(&pid, 1, MPI_INT, 0, mpi.comm);
+    const auto prefix = (std::filesystem::temp_directory_path() / ("cauchy-cuda-wall-" + std::to_string(pid))).string();
+    domain.WriteVisualization(prefix, 0);
+    const auto file = H5Fopen((prefix + "_bnd.vtkhdf").c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+    REQUIRE(file >= 0);
+    std::array<int, 54> zones{};
+    std::array<double, 3 * 54> tangents{};
+    const auto readField = [&](const char *name, hid_t datatype, void *values, size_t count)
+    {
+        const auto data = H5Dopen(file, name, H5P_DEFAULT);
+        REQUIRE(data >= 0);
+        const auto space = H5Dget_space(data);
+        REQUIRE(H5Sget_simple_extent_npoints(space) == DNDS::index(count));
+        REQUIRE(H5Dread(data, datatype, H5S_ALL, H5S_ALL, H5P_DEFAULT, values) >= 0);
+        H5Sclose(space);
+        H5Dclose(data);
+    };
+    readField("VTKHDF/CellData/bnd_zone_id", H5T_NATIVE_INT, zones.data(), zones.size());
+    readField("VTKHDF/CellData/force_tangential", H5T_NATIVE_DOUBLE, tangents.data(), tangents.size());
+    H5Fclose(file);
+    int slip = 0, noSlip = 0;
+    for (size_t iFace = 0; iFace < zones.size(); ++iFace)
+        if (zones[iFace] == 8)
+        {
+            ++slip;
+            CHECK(std::abs(tangents[3 * iFace]) < 1e-13);
+        }
+        else if (std::abs(tangents[3 * iFace]) > 1e-8)
+            ++noSlip;
+    CHECK(slip == 9);
+    CHECK(noSlip > 0);
+    MPI_Barrier(mpi.comm);
+    if (mpi.rank == 0)
+    {
+        CHECK(std::filesystem::remove(prefix + ".vtkhdf"));
+        CHECK(std::filesystem::remove(prefix + "_bnd.vtkhdf"));
     }
 }
 

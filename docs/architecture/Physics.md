@@ -80,6 +80,13 @@ Jacobian or a finite-difference derivative of the entire nonlinear source.
 SA viscosity and diffusion formulas now have shared functions called by Euler
 as well, including the compile-time negative-SA convention.
 
+The shared SST-2003 closure uses full strain magnitude in its eddy-viscosity
+limiter and one capped production in both transport equations. The default
+cap is ten times `betaStar*rho*k*omega`. Euler uses full Boussinesq stress
+production. Cauchy selects SST-2003m strain-squared production and omits the
+isotropic turbulent stress in mean momentum and its work in mean energy.
+Regularization of viscosity and the shear limiter are separate controls.
+
 The caller must provide finite, admissible point values, positive molecular
 viscosity/density/wall distance, a unit normal, common code units
 and a consistent Cartesian frame. Validate batches outside hot loops. The

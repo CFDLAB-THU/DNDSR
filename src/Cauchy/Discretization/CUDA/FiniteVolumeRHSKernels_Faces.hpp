@@ -3,7 +3,6 @@
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Reconstruction.hpp"
 #include "Cauchy/Physics/RiemannPreparation.hpp"
 #include "Cauchy/Physics/PhysicalFlux.hpp"
-#include "Cauchy/Physics/RANSFlux.hpp"
 #include "Cauchy/Riemann/RiemannFluxMath.hpp"
 #include "Cauchy/Riemann/RiemannCompute.hpp"
 #include "Cauchy/Physics/PerfectGasCompute.hpp"
@@ -247,15 +246,7 @@ namespace DNDS::Cauchy::CUDA::Detail
         const real alpha = controls.solver == Riemann::Solver::Rusanov ? .5 * (std::abs(speedLeft) + std::abs(speedRight)) : convection.contact;
         for (int j = 5; j < Components; ++j)
             flux[j] = wallFluxState ? face.values[j] * speedLeft : AdvectedScalarFlux(left.values[j], right.values[j], speedLeft, speedRight, alpha);
-        if constexpr (Components == 7)
-        {
-            FlowState average;
-            for (int j = 0; j < 5; ++j)
-                average[j] = .5 * (leftFlow[j] + rightFlow[j]);
-            const auto stress = TurbulentNormalFlux(average, wallFluxState ? face.values[5] : .5 * (left.values[5] + right.values[5]), sample.normal);
-            for (int j = 0; j < 5; ++j)
-                flux[j] += stress[j];
-        }
+        // Cauchy omits the former isotropic 2*rho*k/3 momentum flux and energy work.
         if (controls.viscous && (internal || wall))
         {
             if (controls.primitiveGradient)
@@ -333,7 +324,7 @@ namespace DNDS::Cauchy::CUDA::Detail
                     return NumericalStatus{NumericalError::InvalidState, 15}.At(sample.cell, sample.point);
         if (output.wallForce.RowCount() && sample.boundaryPoint != UnInitIndex)
             for (int d = 0; d < 3; ++d)
-                output.wallForce(sample.boundaryPoint, d) = wall || condition.kind == BoundaryKind::SlipWall ? weight * flux[1 + d] : 0;
+                output.wallForce(sample.boundaryPoint, d) = controls.captureBoundaryFlux || wall || condition.kind == BoundaryKind::SlipWall ? weight * flux[1 + d] : 0;
         for (int j = 0; j < Components; ++j)
         {
             integrated[j] -= weight * flux[j];

@@ -22,6 +22,7 @@ namespace DNDS::Cauchy
     class Domain
     {
         friend class DomainStateSnapshot;
+        FiniteVolume::WorkspaceOptions ObservationWorkspaceOptions() const;
         DomainProblem _problem;
         DomainState _state;
         DomainExecution _execution;

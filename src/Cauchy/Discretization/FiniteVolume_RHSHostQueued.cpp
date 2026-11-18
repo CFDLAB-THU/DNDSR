@@ -126,9 +126,9 @@ namespace DNDS::Cauchy
             std::optional<DerivedFields> derivedOwned, derivedGhost;
             std::array<int, 5> derivedColumns{0, 1, 2, -1, -1};
             index derivedWidth = 3;
-            index meanThermodynamics = -1, incoming = -1, faces = -1, lowFaces = -1, wallFlux = -1, wallShear = -1;
+            index meanThermodynamics = -1, incoming = -1, faces = -1, lowFaces = -1, wallFlux = -1;
             index flowFirst = -1, speciesFirst = -1, ransFirst = -1, ransBlock = -1;
-            bool meanOnly = false, hasPrimitive = false;
+            bool meanOnly = false, hasPrimitive = false, captureBoundaryFlux = false, boundaryFacesOnly = false;
 
             Inputs(std::shared_ptr<const Data> data, const ThermalPolicy &policy,
                    R::MetadataBuffer<index> offsets, R::MetadataBuffer<index> vectors,
@@ -146,6 +146,8 @@ namespace DNDS::Cauchy
         pin->speciesFirst = speciesFirst;
         pin->ransFirst = ransFirst;
         pin->meanOnly = meanOnly;
+        pin->captureBoundaryFlux = captureBoundaryFlux;
+        pin->boundaryFacesOnly = !faceOutput;
         pin->hasPrimitive = bool(primitiveGradient);
         if (!pin->fixed)
         {
@@ -251,16 +253,16 @@ namespace DNDS::Cauchy
             pin->incoming = addRead(*incoming);
         if (pin->fixed)
         {
-            if (faceOutput)
-                pin->faces = addWrite(*faceOutput);
+            if (faceOutput || captureBoundaryFlux)
+                pin->faces = addWrite(faceOutput ? *faceOutput : faceFlux);
+            if (captureBoundaryFlux)
+                pin->wallFlux = addWrite(boundaryMomentumFlux);
         }
         else
         {
             pin->faces = addWrite(faceOutput ? *faceOutput : faceFlux);
             R::FixedRows<3>::Validate(boundaryMomentumFlux.Layout());
             pin->wallFlux = addWrite(boundaryMomentumFlux);
-            if (boundaryWallShear)
-                pin->wallShear = addWrite(*boundaryWallShear);
             if (pin->lowResult)
             {
                 DNDS_check_throw_info(lowOrderFaceFlux && state.ComponentNumber() == 5 && state.PhysicalFieldNumber() == 1,
@@ -309,6 +311,12 @@ namespace DNDS::Cauchy
                 output.residual = FlowRows(outputs[pin->result.fields.front()]);
                 if (pin->lowResult) output.lowOrder = FlowRows(outputs[pin->lowResult->fields.front()]);
                 if (pin->faces >= 0) output.faceFlux = FlowRows(outputs[pin->faces]);
+                output.boundaryFacesOnly = pin->boundaryFacesOnly;
+                if (pin->wallFlux >= 0)
+                {
+                    const auto wall = outputs[pin->wallFlux];
+                    output.boundaryMomentum = {wall.data, wall.offsets, wall.rows, wall.width, wall.stride, wall.sizes, wall.kind, wall.device};
+                }
                 result->fixedDiagnostics = pin->fixed->ApplyFluxBorrowedFatal(input, output, region, time);
             }
             else
@@ -364,11 +372,7 @@ namespace DNDS::Cauchy
                 const auto wall = outputs[pin->wallFlux];
                 DNDS_check_throw_info(wall.Width() == 3, "queued boundary momentum width differs");
                 request.wallFlux = {wall.data, wall.offsets, wall.rows, wall.width, wall.stride, wall.sizes, wall.kind, wall.device};
-                if (pin->wallShear >= 0)
-                {
-                    const auto shear = outputs[pin->wallShear];
-                    request.wallShear = {shear.data, shear.offsets, shear.rows, shear.width, shear.stride, shear.sizes, shear.kind, shear.device};
-                }
+                request.captureBoundaryFlux = pin->captureBoundaryFlux;
                 if (pin->walls)
                 {
                     request.wall.faces = {wallFaces.data, wallFaces.offsets, wallFaces.rows, wallFaces.width, wallFaces.stride, wallFaces.sizes, wallFaces.kind, wallFaces.device};

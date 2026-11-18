@@ -204,8 +204,9 @@ namespace DNDS::Cauchy
             /// layout/physics-general CPU oracle; FixedFlow5 requires one
             /// perfect-gas flow5 field and never changes the outer schedule.
             RHSKernelPolicy rhsKernel;
-            constexpr explicit WorkspaceOptions(RHSKernelPolicy policy = RHSKernelPolicy::Auto)
-                : rhsKernel(policy) {}
+            bool captureBoundaryFlux;
+            constexpr explicit WorkspaceOptions(RHSKernelPolicy policy = RHSKernelPolicy::Auto, bool capture = false)
+                : rhsKernel(policy), captureBoundaryFlux(capture) {}
         };
         struct Workspace;
         struct MeanWorkspace;
@@ -879,8 +880,6 @@ namespace DNDS::Cauchy
         /// Output adapter: resident boundary tracing/properties, followed by an
         /// explicit host I/O snapshot. Never downloads coefficients for CPU
         /// sampling or evaluates point physics inside the file writer.
-        std::string PrepareDeviceSurfaceVisualization(const EquationDofs &, const ReconstructionState &, const Workspace &,
-                                                      real, Runtime::EagerEngine &, const Runtime::ExecutionStream &) const;
         /// Resolve the retained interface publication after the canonical
         /// equation-level provenance check. Every equation packet uses this one
         /// leaf input.

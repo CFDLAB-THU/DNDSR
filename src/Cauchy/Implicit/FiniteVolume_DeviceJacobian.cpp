@@ -159,7 +159,6 @@ namespace DNDS::Cauchy
         parameters.frame = _data->motion.At(time).KernelParameters();
         parameters.gas = physics.gas;
         parameters.components = int(n);
-        parameters.kineticComponent = n == 7 ? 5 : -1;
         parameters.scale = controls.residualScale;
         parameters.roe = controls.roeDissipation;
         const Algebra::ComponentSelection selection(n, controls.updateComponents);

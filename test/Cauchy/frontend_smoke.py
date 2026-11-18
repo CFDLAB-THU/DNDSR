@@ -82,6 +82,11 @@ def main():
         assert all(None not in row and all(not value or math.isfinite(float(value))
                                           for value in row.values()) for row in rows)
         assert (folder / "first-D0-final.vtkhdf").exists()
+        assert (folder / "first-D0-final_bnd.vtkhdf").exists()
+        snapshot = json.loads((folder / "first-final-manifest.json").read_text())
+        boundary, = (item for item in snapshot["artifacts"] if item["kind"] == "boundary")
+        assert Path(boundary["path"]).name == "first-D0-final_bnd.vtkhdf"
+        assert not boundary["facialFluxes"]["available"]
         run(config, "--restart", folder / "first-D0-final.h5", "-k", "/output/prefix",
             "-v", json.dumps(str(folder / "resumed")), "-k", "/time/steps", "-v", "1")
         resumed = json.loads((folder / "resumed-summary.json").read_text())
@@ -118,9 +123,12 @@ def main():
         run(multi_config)
         for i_domain in range(2):
             assert (folder / f"multi-D{i_domain}-final.vtkhdf").exists()
-            internal = sorted(folder.glob(f"multi-D{i_domain}-S1_0_*.vtkhdf"))
+            internal = sorted(path for path in folder.glob(f"multi-D{i_domain}-S1_0_*.vtkhdf")
+                              if not path.stem.endswith("_bnd"))
             assert internal
             assert all(path.with_name(path.stem + "-manifest.json").is_file()
+                       for path in internal)
+            assert all(path.with_name(path.stem + "_bnd.vtkhdf").is_file()
                        for path in internal)
             with (folder / f"multi-D{i_domain}-history.csv").open() as stream:
                 assert len(list(csv.DictReader(stream))) == 2
