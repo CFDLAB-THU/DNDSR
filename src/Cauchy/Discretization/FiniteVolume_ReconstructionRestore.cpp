@@ -400,8 +400,6 @@ namespace DNDS::Cauchy
             previous->Complete(completed);
         if (alpha)
             alpha->Complete(completed);
-        work.sourceState.reset();
-        work.sourceCoefficients.reset();
         work.rhsState.reset();
         work.rhsCoefficients.reset();
         state.finalizedFrom.reset();

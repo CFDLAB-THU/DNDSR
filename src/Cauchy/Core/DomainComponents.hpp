@@ -130,6 +130,15 @@ namespace DNDS::Cauchy
         Runtime::ArrayStorage::Shared coupledMiddleOwner;
         uint64_t coupledPreparedTrial = std::numeric_limits<uint64_t>::max();
         std::optional<EquationDofs> coupledResidual;
+        /// DITR retains two rates across alternating corrections. Their source
+        /// derivatives have independent storage even when FV scratch is shared.
+        std::array<std::optional<Runtime::Array<real>>, 2> coupledSourceDerivative;
+
+        OptionalRef<Runtime::Array<real>> StageDerivative(int stage)
+        {
+            auto &slot = coupledSourceDerivative.at(stage);
+            return slot ? OptionalRef<Runtime::Array<real>>(*slot) : OptionalRef<Runtime::Array<real>>{};
+        }
         std::unique_ptr<NonlinearSolveSetup> nonlinearSetup;
         DomainExecutionContext context;
 

@@ -1,4 +1,5 @@
 #pragma once
+#include "Cauchy/Discretization/EquationPhysicsProfile.hpp"
 
 #include "Cauchy/Boundary/ACMBoundary.hpp"
 #include "Cauchy/Discretization/FiniteVolumeStencil.hpp"
@@ -28,12 +29,11 @@ namespace DNDS::Cauchy::CUDA
         ACM::Parameters physics;
         LinearReadRows tau, radius;
         decltype(WallDistanceView::cellMean) wallMean;
-        Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> lengths;
-        Physics::RANS::PointParameters rans;
         MatrixWriteRows diagonal;
         Algebra::BlockMatrixArrayView<real> offDiagonal;
-        real mass, residualScale;
+        real physicalInverseDt, residualScale;
         std::array<bool, 6> active;
+        EquationPhysicsProfile profile;
     };
     using ACMJacobianStatusRows = Runtime::ArrayView<NumericalStatus, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
     /// One independent thread assembles one complete owned sparse row in its

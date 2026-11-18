@@ -2,7 +2,6 @@
 #include "Cauchy/Boundary/ACMBoundary.hpp"
 #include "Cauchy/Discretization/FiniteVolumeStencil.hpp"
 #include "DNDS/Algebra/BlockMatrixStorage.hpp"
-#include "Physics/Incompressible/RANSPoint.hpp"
 #include "Physics/RANS/PointKernels.hpp"
 
 namespace DNDS::Cauchy::ACM
@@ -91,8 +90,12 @@ namespace DNDS::Cauchy::ACM
             return NumericalStatus{NumericalError::InvalidState}.At(cell);
         auto diagonal = DenseBlock<C>(request.diagonal[cell], request.offDiagonal.rowMajorBlocks);
         const auto own = read(cell);
-        Eigen::Matrix<real, C, 3> gradient = Eigen::Matrix<real, C, 3>::Zero();
-        FillACMTemporalBlock<C>(own, volume, tau, request.mass, request.physics.alpha, request.physics.beta2, diagonal);
+        // The centered source operator placed the RANS destruction entries in
+        // this row using the mean's phase-owned physical gradient.
+        std::array<real, C - 4> sourceDiagonal{};
+        for (int j = 4; j < C; ++j)
+            sourceDiagonal[j - 4] = diagonal(j, j);
+        FillACMTemporalBlock<C>(own, volume, tau, request.physicalInverseDt, request.physics.alpha, request.physics.beta2, diagonal);
         for (index slot = 0; slot < request.offDiagonal.BlockNumber(cell); ++slot)
             for (int k = 0; k < C * C; ++k)
                 request.offDiagonal(cell, slot)[k] = 0;
@@ -144,20 +147,6 @@ namespace DNDS::Cauchy::ACM
                 // The former isotropic 2*rho*k/3 stress is absent from the ACM residual.
                 return {};
             };
-            if constexpr (C > 4)
-            {
-                // Mean-state, first-order Jacobian. Freeze the velocity
-                // and scalar gradients of this same discretization while
-                // evaluating the closure's positive destruction diagonal.
-                // Subtract the cell mean to retain exact constant gradients.
-                auto right = remote;
-                if (const auto status = exterior(own, right); !status)
-                    return status.At(cell, sample.face);
-                const real gradScale = .5 * metric.GetFaceArea(sample.face) / volume;
-                for (int j = 0; j < C; ++j)
-                    for (int d = 0; d < 3; ++d)
-                        gradient(j, d) += gradScale * (right[j] - own[j]) * sample.normal[d];
-            }
             const auto leftFlux = [&](const State &q, State &out)
             { return flux(q, remote, out); };
             if (const auto status = AddACMFluxDerivative<C>(own, weight, leftFlux, diagonal); !status)
@@ -180,16 +169,8 @@ namespace DNDS::Cauchy::ACM
                     return status.At(cell, sample.face);
             }
         }
-        if constexpr (C > 4)
-        {
-            const auto point = Physics::Incompressible::RANSPoint(own, gradient, C - 4,
-                                                                  request.physics.kinematicViscosity, request.wallMean(cell, 0), request.lengths(cell, 0));
-            const auto source = Physics::RANS::TrySource(request.rans, point, 1);
-            if (!source)
-                return source.status.At(cell);
-            for (int j = 4; j < C; ++j)
-                diagonal(j, j) += request.residualScale * volume * source.value[j - 4];
-        }
+        for (int j = 4; j < C; ++j)
+            diagonal(j, j) += sourceDiagonal[j - 4];
         for (int j = 0; j < C; ++j)
             for (int i = 0; i < C; ++i)
                 if (!request.active[i] || !request.active[j])

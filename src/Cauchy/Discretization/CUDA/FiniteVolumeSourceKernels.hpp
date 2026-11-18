@@ -1,4 +1,5 @@
 #pragma once
+#include "Cauchy/Discretization/VolumeSourceBasis.hpp"
 
 #include "Cauchy/Discretization/PerfectGasKernelPoint.hpp"
 #include "Cauchy/Discretization/ACMKernelPoint.hpp"
@@ -30,41 +31,41 @@ namespace DNDS::Cauchy::CUDA
         MeanDestruction,
         QuadratureDestruction
     };
-    /** Frozen operands of the compressible or ACM RANS volume/source-Jacobian leaf.
-     * means is always cell-sized. samples and gradients are quadrature-sized,
-     * except MeanDestruction's gradients, which are cell-sized. Destruction
-     * adds the Euler positive diagonal approximation to a diagonal-vector or
-     * column-major full block; it is not the exact source Jacobian. Residual
-     * adds the integrated source to the RANS segment of a complete DOF row.
-     * No chemistry, clipping of means, linearization cache or EOS worker is
-     * hidden here. Operators retain all views and initialize accumulators.
+    /** Frozen operands for a single owned-cell source pass. Direct evaluation
+     * borrows means and physical gradients. Modal evaluation reconstructs
+     * from finalized coefficients and the immutable quadrature basis.
+     * The optional output stores the positive RANS destruction approximation.
+     * Standalone comparison fixtures can supply already sampled point views.
      */
     struct SourceRequest
     {
         Runtime::ArrayView<const PerfectGasSpatialParameters, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> parameters;
         Runtime::ArrayView<const ACM::SpatialParameters, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> acm;
-        SourceInput means, samples;
+        SourceInput means, samples, coefficients;
+        VolumeSourceBasis basis;
         std::array<SourceGradient, 3> gradients;
         SourceIndices offsets;
         SourceScalar weights, lengths, wallMean;
         Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::CSRRows> wallPoints;
         Runtime::ArrayView<const real, false, Runtime::FixedRows<8>> cells;
         Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows> output;
+        /// Optional canonical row-major dense (or diagonal-only) integrated
+        /// contribution for the RHS evaluation. No temporal weight is applied.
+        decltype(output) preparedDerivative;
         SourceStatus status;
         int components = 0, dimension = 0;
         SourceEvaluation evaluation = SourceEvaluation::QuadratureResidual;
-        bool fullBlock = false;
+        bool fullBlock = false, cellInputs = false;
         real scale = 1;
     };
     /// One independent thread per selected owned cell, quadrature in CPU order.
     /// The numerical source is committed only after all its points succeed.
+    /// TODO: benchmark one CTA per modal cell with one thread per point and
+    /// in-block reductions into the same RHS and optional derivative rows.
     void AddRANSSources(Runtime::ExecutionContext context, SourceRequest request, SourceIndices selected);
 
-    /// Repeat a mean or selected directional mean derivative at all cell
-    /// quadrature points. Output must not alias input; no temporary allocation.
-    void ReplicateSourceValues(Runtime::ExecutionContext context, SourceIndices offsets,
-                               SourceInput input, SourceOutput output, int componentStride = 1, int direction = 0);
-
+    void ApplyVolumeSourceDerivative(Runtime::ExecutionContext context, SourceInput source, decltype(SourceRequest::output) diagonal,
+                                     index components, bool fullBlock, bool rowMajor, real scale);
     /// Add the absolute-velocity component-axis rotation source to flow5 only.
     /// Optional low-order output receives the same source. RANS components are
     /// unchanged. No field transform or geometry mutation is performed.

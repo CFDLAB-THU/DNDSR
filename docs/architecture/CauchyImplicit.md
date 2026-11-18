@@ -2261,3 +2261,22 @@ solution for coupled 5/6/7-component matrices, inline/worker/CUDA execution,
 Jacobi and left GMRES, compact/padded rows, and optional AmgX. They have not
 yet been built/run. Nonlinear, time, pMG and final application integration
 remain open; no full implicit CUDA qualification is claimed.
+
+### Quadrature source derivatives and retained spatial rates
+
+With `sourceJacobianMode=rhsQuadrature`, an implicit correction consumes
+the integrated source derivative produced with its spatial rate. Each
+cell row stores the dense logical equation block in row-major order,
+before multiplication by the time method's RHS coefficient. A caller
+retaining a rate can allocate its companion with
+`NonlinearSolver::BuildSourceDerivative`, supply it to `EvaluateRate`
+or `EvaluateEquation`, then pass both to `CorrectOnce`. Distinct retained
+evaluations require distinct storage even when they share a state and time.
+
+A pMG level owns its own record when retaining a level rate. DITR's
+initial midpoint and endpoint rates share the same initial evaluation;
+the midpoint receives a copy of that derivative before corrections start.
+Subsequent midpoint and endpoint publications are independent. Exact
+internal DITR checkpoints store and remap both arrays by cell alongside
+the method-owned rates when the selected source policy requires them.
+Older exact checkpoints lacking these arrays cannot resume that combination.

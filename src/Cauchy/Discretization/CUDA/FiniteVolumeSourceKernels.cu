@@ -1,92 +1,24 @@
 #include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeSourceKernels.hpp"
-#include "Cauchy/Discretization/RANSReconstruction.hpp"
+#include "Cauchy/Discretization/CUDA/FiniteVolumeSourceKernels_Launch.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include <cuda_runtime.h>
+#include "DNDS/Algebra/BlockIndex.hpp"
 
 namespace DNDS::Cauchy::CUDA
 {
     namespace R = Runtime;
     namespace
     {
-        template <int Components, bool Mechanical = false>
-        __global__ void Sources(SourceRequest request, SourceIndices selected)
+        __global__ void ApplyDerivative(SourceInput source, decltype(SourceRequest::output) diagonal, index n, bool full, bool rowMajor, real scale)
         {
-            constexpr int flow = Mechanical ? 4 : 5;
-            const auto &physics = [&]() -> const auto &
+            const index width = full ? n * n : n;
+            for (index i = index(blockIdx.x) * blockDim.x + threadIdx.x; i < source.RowCount() * width; i += index(gridDim.x) * blockDim.x)
             {
-                if constexpr (Mechanical)
-                    return request.acm(0, 0);
-                else
-                    return request.parameters(0, 0);
-            }();
-            const bool mean = request.evaluation == SourceEvaluation::MeanDestruction;
-            const bool jacobian = request.evaluation != SourceEvaluation::QuadratureResidual;
-            for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
-            {
-                const index iCell = selected(iRow, 0);
-                NumericalStatus status;
-                if (physics.rans.ComponentNumber() + flow != Components || !physics.rans.Supported())
-                {
-                    request.status(iCell, 0) = NumericalStatus{NumericalError::InvalidInput}.At(iCell);
-                    continue;
-                }
-                std::array<real, Components - flow> source{}, ransMean{};
-                for (int j = 0; j < Components - flow; ++j)
-                    ransMean[j] = request.means(iCell, flow + j);
-                const index begin = mean ? iCell : request.offsets(iCell, 0);
-                const index end = mean ? iCell + 1 : request.offsets(iCell + 1, 0);
-                for (index iPoint = begin; iPoint < end; ++iPoint)
-                {
-                    std::conditional_t<Mechanical, ACM::KernelPoint<Components>, PerfectGasKernelPoint<Components>> point;
-                    for (int j = 0; j < Components; ++j)
-                    {
-                        point.values[j] = mean ? request.means(iCell, j) : request.samples(iPoint, j);
-                        for (int d = 0; d < request.dimension; ++d)
-                            point.gradients[j][d] = request.gradients[d](iPoint, j);
-                    }
-                    if (!mean)
-                        RANSReconstructionView{physics.rans.kind, Components - flow}.RepairPoint(ransMean, SpanView<real>{point.values.data() + flow, Components - flow});
-                    const real wall = mean ? request.wallMean(iCell, 0) : request.wallPoints(iCell, iPoint - begin);
-                    const auto value = [&]() -> NumericalResult<std::array<real, 2>>
-                    {
-                        if constexpr (Mechanical)
-                            return Physics::RANS::TrySource(physics.rans, point.Turbulence(physics, wall, request.lengths(iCell, 0)), jacobian ? 1 : 0);
-                        else
-                        {
-                            if (physics.dimension != request.dimension)
-                                return NumericalStatus{NumericalError::InvalidInput};
-                            const auto properties = TryPerfectGasPoint(physics.gas, point.Flow(), true);
-                            if (!properties)
-                                return properties.status;
-                            return Physics::RANS::TrySource(physics.rans, point.RANSPoint(properties.value, wall, request.lengths(iCell, 0)), jacobian ? 1 : 0);
-                        }
-                    }();
-                    if (!value)
-                    {
-                        status = value.status.At(iCell, iPoint);
-                        break;
-                    }
-                    const real weight = mean ? request.cells(iCell, 0) : request.weights(iPoint, 0);
-                    for (int j = 0; j < Components - flow; ++j)
-                        source[j] += weight * value.value[j];
-                }
-                request.status(iCell, 0) = status;
-                if (status)
-                    for (int j = 0; j < Components - flow; ++j)
-                    {
-                        const int row = flow + j;
-                        request.output(iCell, jacobian && request.fullBlock ? row + Components * row : row) +=
-                            (jacobian ? request.scale : real(1)) * source[j];
-                    }
+                const index cell = i / width, k = i % width;
+                const index row = full ? k / n : k, col = full ? k % n : k;
+                diagonal(cell, full ? Algebra::DenseBlockEntry(row, col, n, rowMajor) : row) += scale * source(cell, row * n + col);
             }
-        }
-        __global__ void Replicate(SourceIndices offsets, SourceInput input, SourceOutput output, int stride, int direction)
-        {
-            for (index iCell = index(blockIdx.x) * blockDim.x + threadIdx.x; iCell + 1 < offsets.RowCount(); iCell += index(gridDim.x) * blockDim.x)
-                for (index iPoint = offsets(iCell, 0); iPoint < offsets(iCell + 1, 0); ++iPoint)
-                    for (index j = 0; j < output.Width(); ++j)
-                        output(iPoint, j) = input(iCell, j * stride + direction);
         }
         __global__ void Rotation(R::ArrayView<const real, false, R::FixedRows<8>> cells,
                                  RigidFrameParameters frame, SourceInput means, SourceOutput output,
@@ -108,6 +40,30 @@ namespace DNDS::Cauchy::CUDA
             }
         }
         unsigned Blocks(index rows) { return unsigned(std::min<index>((rows + 127) / 128, 1024)); }
+        template <Detail::VolumeSourceModel Model, int C, int D>
+        void LaunchCells(cudaStream_t stream, SourceRequest request, SourceIndices rows)
+        {
+            const unsigned blocks = Blocks(rows.RowCount());
+            const int modes = std::max(0, request.basis.polynomial.size - 1);
+            if (modes == 0)
+                Detail::LaunchVolumeSourceCells<Model, C, D, 0>(stream, request, rows, blocks);
+            else if (modes == D)
+                Detail::LaunchVolumeSourceCells<Model, C, D, D>(stream, request, rows, blocks);
+            else if (modes == (D == 2 ? 5 : 9))
+                Detail::LaunchVolumeSourceCells<Model, C, D, D == 2 ? 5 : 9>(stream, request, rows, blocks);
+            else if (modes == (D == 2 ? 9 : 19))
+                Detail::LaunchVolumeSourceCells<Model, C, D, D == 2 ? 9 : 19>(stream, request, rows, blocks);
+            else
+                DNDS_check_throw_info(false, "unsupported modal source dimension or order");
+        }
+        template <Detail::VolumeSourceModel Model, int C>
+        void LaunchCells(cudaStream_t stream, SourceRequest request, SourceIndices rows)
+        {
+            if (request.dimension == 2)
+                LaunchCells<Model, C, 2>(stream, request, rows);
+            else
+                LaunchCells<Model, C, 3>(stream, request, rows);
+        }
         void CheckLaunch() { DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA volume source launch failed"); }
         template <class View>
         void CheckTable(View view, index rows, index width)
@@ -133,7 +89,17 @@ namespace DNDS::Cauchy::CUDA
                                   std::isfinite(request.scale) && (mechanical ? request.acm.RowCount() : request.parameters.RowCount()) == 1,
                               "unsupported CUDA RANS source shape/policy");
         const index cells = request.means.RowCount();
+        if (request.preparedDerivative.data)
+        {
+            request.preparedDerivative.ValidateDevice(context.device);
+            DNDS_check_throw_info(!mechanical && !jacobian && request.preparedDerivative.RowCount() == cells &&
+                                      (request.preparedDerivative.Width() == request.components ||
+                                       request.preparedDerivative.Width() == request.components * request.components),
+                                  "invalid integrated RANS source derivative destination");
+        }
         CheckTable(request.means, cells, request.components);
+        DNDS_check_throw_info(request.means.kind == R::RowLayoutKind::Table && request.means.stride == request.components,
+                              "CUDA volume source requires compact combined AoS means");
         CheckTable(request.output, cells, jacobian && request.fullBlock ? request.components * request.components : request.components);
         // Mesh geometry is a whole owned+ghost publication. Numerical means,
         // status and outputs are owned-only here; do not slice the geometry
@@ -146,16 +112,29 @@ namespace DNDS::Cauchy::CUDA
         }
         else
         {
-            R::ValidateViewDevices(context.device, request.samples, request.offsets, request.weights, request.wallPoints);
-            CheckTable(request.samples, request.weights.RowCount(), request.components);
+            R::ValidateViewDevices(context.device, request.offsets, request.weights, request.wallPoints);
+            if (request.basis.polynomial.size > 1)
+            {
+                const int modes = request.basis.polynomial.size - 1;
+                DNDS_check_throw_info(modes <= 19, "source modal order exceeds P3");
+                R::ValidateViewDevices(context.device, request.coefficients, request.basis.points, request.basis.cached, request.basis.moments, request.basis.geometry);
+                CheckTable(request.coefficients, cells, request.components * modes);
+                DNDS_check_throw_info(request.coefficients.kind == R::RowLayoutKind::Table && request.coefficients.stride == request.coefficients.Width(),
+                                      "CUDA modal source requires compact combined AoS coefficients");
+            }
+            else if (!request.cellInputs)
+            {
+                request.samples.ValidateDevice(context.device);
+                CheckTable(request.samples, request.weights.RowCount(), request.components);
+            }
             DNDS_check_throw_info(request.offsets.RowCount() == cells + 1 && request.wallPoints.RowCount() >= cells, "CUDA quadrature source geometry differs");
         }
-        for (int d = 0; d < request.dimension; ++d)
+        for (int d = 0; request.basis.polynomial.size <= 1 && d < request.dimension; ++d)
         {
             const auto gradient = request.gradients[d];
             gradient.values.ValidateDevice(context.device);
             DNDS_check_throw_info(gradient.componentStride > 0 && gradient.direction >= 0 && gradient.direction < gradient.componentStride &&
-                                      gradient.values.kind == R::RowLayoutKind::Table && gradient.values.RowCount() == (mean ? cells : request.samples.RowCount()) &&
+                                      gradient.values.kind == R::RowLayoutKind::Table && gradient.values.RowCount() == ((mean || request.cellInputs) ? cells : request.samples.RowCount()) &&
                                       gradient.values.Width() > (request.components - 1) * gradient.componentStride + gradient.direction,
                                   "CUDA source derivative field is incomplete");
         }
@@ -164,27 +143,24 @@ namespace DNDS::Cauchy::CUDA
             return;
         const auto stream = ::DNDS::Runtime::CUDAStream(context);
         if (mechanical && request.components == 5)
-            Sources<5, true><<<Blocks(selected.RowCount()), 128, 0, stream>>>(request, selected);
+            LaunchCells<Detail::VolumeSourceModel::ACM, 5>(stream, request, selected);
         else if (mechanical)
-            Sources<6, true><<<Blocks(selected.RowCount()), 128, 0, stream>>>(request, selected);
+            LaunchCells<Detail::VolumeSourceModel::ACM, 6>(stream, request, selected);
         else if (request.components == 6)
-            Sources<6><<<Blocks(selected.RowCount()), 128, 0, stream>>>(request, selected);
+            LaunchCells<Detail::VolumeSourceModel::PerfectGas, 6>(stream, request, selected);
         else
-            Sources<7><<<Blocks(selected.RowCount()), 128, 0, stream>>>(request, selected);
+            LaunchCells<Detail::VolumeSourceModel::PerfectGas, 7>(stream, request, selected);
         CheckLaunch();
     }
-    void ReplicateSourceValues(R::ExecutionContext context, SourceIndices offsets, SourceInput input, SourceOutput output, int stride, int direction)
+    void ApplyVolumeSourceDerivative(R::ExecutionContext context, SourceInput source, decltype(SourceRequest::output) diagonal,
+                                     index n, bool full, bool rowMajor, real scale)
     {
-        DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA, "CUDA source replication requires a CUDA context");
-        R::ValidateViewDevices(context.device, offsets, input, output);
-        DNDS_check_throw_info(stride > 0 && direction >= 0 && direction < stride && offsets.RowCount() == input.RowCount() + 1 &&
-                                  input.kind == R::RowLayoutKind::Table && output.kind == R::RowLayoutKind::Table &&
-                                  (!output.Width() || input.Width() > (output.Width() - 1) * stride + direction),
-                              "CUDA source replication shape/direction differs");
-        R::CheckKernelArgumentBudget<SourceIndices, SourceInput, SourceOutput, int, int>();
-        if (!input.RowCount())
+        R::ValidateViewDevices(context.device, source, diagonal);
+        DNDS_check_throw_info(source.RowCount() == diagonal.RowCount() && source.Width() == n * n && diagonal.Width() == (full ? n * n : n) && (!source.data || source.data != diagonal.data),
+                              "invalid source derivative block placement");
+        if (!source.RowCount())
             return;
-        Replicate<<<Blocks(input.RowCount()), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(offsets, input, output, stride, direction);
+        ApplyDerivative<<<Blocks(source.RowCount() * diagonal.Width()), 128, 0, R::CUDAStream(context)>>>(source, diagonal, n, full, rowMajor, scale);
         CheckLaunch();
     }
     void AddRotationSource(R::ExecutionContext context, R::ArrayView<const real, false, R::FixedRows<8>> cells,

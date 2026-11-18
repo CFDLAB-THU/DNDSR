@@ -35,6 +35,7 @@ namespace DNDS::Cauchy
         EquationDofOperations::Binding binding;
         EquationDofs spatial, defect, candidate;
         R::Array<real> inversePseudoTime;
+        std::optional<R::Array<real>> sourceDerivative;
         AuxiliaryValues auxiliary;
         std::optional<EquationDofOperations::Binding> auxiliaryState;
         std::vector<uint64_t> auxiliaryGhostVersions;
@@ -99,7 +100,7 @@ namespace DNDS::Cauchy
             : discrete(fv), reconstruction(std::move(reconstructionState)), workspace(std::move(work)), stream(std::move(lane)), settings(std::move(implicit)),
               mpi(fv.Metrics().Communicator()), binding(state), spatial(EquationDofOperations::NewVector(state)),
               defect(EquationDofOperations::NewVector(state)), candidate(EquationDofOperations::NewVector(state)),
-              inversePseudoTime(R::RowLayout::Dense(fv.Metrics().NumCell(), 1), state.Device()), workers(std::move(pool)),
+              inversePseudoTime(R::RowLayout::Dense(fv.Metrics().NumCell(), 1), state.Device()), sourceDerivative(fv.BuildSourceDerivative(state)), workers(std::move(pool)),
               admissibility(fv.PrepareAdmissibility(workers)),
               operators(fv.Metrics(), admissibility, stream.Context()),
               problem(fv.BuildLinearProblem(state, settings.diagonal == "block" ? DiagonalStorage::Block : DiagonalStorage::Entries,
@@ -155,17 +156,27 @@ namespace DNDS::Cauchy
             linear = std::make_unique<DofLinearSolver>(problem, state, [&](auto &field)
                                                        { return discrete.BindHalo(field); }, NonlinearDetail::ResolveLinear(settings), execution);
         }
+        OptionalRef<R::Array<real>> CorrectionDerivative()
+        {
+            return sourceDerivative ? OptionalRef<R::Array<real>>(*sourceDerivative) : OptionalRef<R::Array<real>>{};
+        }
+        FiniteVolume::JacobianContext JacobianInput(OptionalRef<const R::Array<real>> derivative) const
+        {
+            FiniteVolume::JacobianContext input{*reconstruction, *workspace, stream};
+            input.sourceDerivative = derivative;
+            return input;
+        }
         void EvaluateSpatial(EquationDofs &state, real time,
-                             R::EagerEngine &fallbackEngine)
+                             R::EagerEngine &fallbackEngine, OptionalRef<R::Array<real>> derivative)
         {
             if (executionOwner)
                 discrete.Execute(state, *reconstruction, *workspace,
                                  *executionOwner,
                                  FiniteVolumeEvaluation::Spatial(spatial, time,
-                                                                 std::ref(auxiliary)));
+                                                                 std::ref(auxiliary), derivative));
             else
                 discrete.Evaluate(state, spatial, *reconstruction, *workspace,
-                                  auxiliary, fallbackEngine, stream, time);
+                                  auxiliary, fallbackEngine, stream, time, derivative);
         }
         void PublishAuxiliary(const EquationDofs &state, real time)
         {
@@ -321,12 +332,16 @@ namespace DNDS::Cauchy
     NonlinearIterationReport NonlinearSolver::CorrectOnce(EquationDofs &state, const EquationDofs &source,
                                                           real mass, real rhsScale, real time, int stage,
                                                           NonlinearSolveControl control,
-                                                          OptionalRef<const EquationDofs> cachedRate)
+                                                          OptionalRef<const EquationDofs> cachedRate, OptionalRef<const R::Array<real>> derivative)
     {
         control.correctionLimit = 1;
-        return Execute(state, source, mass, rhsScale, time, stage, std::move(control), true, cachedRate);
+        return Execute(state, source, mass, rhsScale, time, stage, std::move(control), true, cachedRate, derivative);
     }
-    void NonlinearSolver::EvaluateRate(EquationDofs &state, EquationDofs &rate, real time)
+    std::optional<R::Array<real>> NonlinearSolver::BuildSourceDerivative(const EquationDofs &state) const
+    {
+        return _data->discrete.BuildSourceDerivative(state);
+    }
+    void NonlinearSolver::EvaluateRate(EquationDofs &state, EquationDofs &rate, real time, OptionalRef<R::Array<real>> derivative)
     {
         DNDS_check_throw_info(_data, "nonlinear session was moved");
         auto session = _data->session.Acquire(_nestedSession.lock());
@@ -338,7 +353,7 @@ namespace DNDS::Cauchy
             state.RequireCompatible(rate);
             for (const auto *input : {&state, &data.spatial})
                 EquationDofOperations::RequireDistinct(*input, rate); });
-        data.EvaluateSpatial(state, time, engine);
+        data.EvaluateSpatial(state, time, engine, derivative);
         data.PublishAuxiliary(state, time);
         data.Stage([&]
                    {
@@ -429,7 +444,7 @@ namespace DNDS::Cauchy
         {
             auto &data = *active->owner;
             auto engine = data.stream.LockEngine();
-            data.EvaluateSpatial(active->state, active->time, engine);
+            data.EvaluateSpatial(active->state, active->time, engine, data.CorrectionDerivative());
             data.PublishAuxiliary(active->state, active->time);
         };
         const auto measure = [active](auto &norms)
@@ -489,8 +504,7 @@ namespace DNDS::Cauchy
                                  {active->mass, active->rhsScale, data.settings.roeDissipation,
                                   active->selection.Indices(), data.settings.boundaryJacobian != "eulerScalar"},
                                  active->time, data.workers,
-                                 FiniteVolume::JacobianContext{*data.reconstruction,
-                                                               *data.workspace, data.stream}); });
+                                 data.JacobianInput(data.CorrectionDerivative())); });
             }
             {
                 const NonlinearDetail::PhaseTimer timer(
@@ -541,6 +555,7 @@ namespace DNDS::Cauchy
                                                       real mass, real rhsScale, real time, int stage,
                                                       NonlinearSolveControl control, bool singleCorrection,
                                                       OptionalRef<const EquationDofs> cachedRate,
+                                                      OptionalRef<const R::Array<real>> cachedDerivative,
                                                       OptionalRef<const NonlinearSolveSetup> setup)
     {
         DNDS_check_throw_info(_data, "nonlinear session was moved");
@@ -601,7 +616,7 @@ namespace DNDS::Cauchy
         {
             if (!cachedRate)
             {
-                data.EvaluateSpatial(state, time, engine);
+                data.EvaluateSpatial(state, time, engine, data.CorrectionDerivative());
                 data.PublishAuxiliary(state, time);
                 return;
             }
@@ -629,9 +644,8 @@ namespace DNDS::Cauchy
                         data.auxiliary, engine, data.stream, time);
                 data.PublishAuxiliary(state, time);
             }
-            else
-                data.discrete.RefreshCorrectionSource(state, *data.reconstruction,
-                                                      *data.workspace, engine, data.stream, time);
+            DNDS_check_throw_info(!data.sourceDerivative || cachedDerivative,
+                                  "cached correction rate requires its integrated quadrature source derivative");
             data.Stage([&]
                        { data.operators.SubmitScaleRate(engine, data.stream, *cachedRate, data.spatial, true); });
         };
@@ -669,7 +683,7 @@ namespace DNDS::Cauchy
                     const NonlinearDetail::PhaseTimer timer(profile, NonlinearProfile::Jacobian);
                     data.Stage([&] { data.discrete.PrepareJacobian(state, data.auxiliary, data.inversePseudoTime, *data.problem,
                         {mass, rhsScale, data.settings.roeDissipation, selection.Indices(), data.settings.boundaryJacobian != "eulerScalar"}, time, data.workers,
-                        FiniteVolume::JacobianContext{*data.reconstruction, *data.workspace, data.stream}); });
+                        data.JacobianInput(cachedRate ? cachedDerivative : OptionalRef<const R::Array<real>>(data.CorrectionDerivative()))); });
                 }
                 {
                     const NonlinearDetail::PhaseTimer timer(profile, NonlinearProfile::LinearSolve);
@@ -843,7 +857,7 @@ namespace DNDS::Cauchy
         return {limited, minimum};
     }
     void NonlinearSolver::EvaluateEquation(EquationDofs &state, EquationDofs &value, real mass, real rhsScale, real time,
-                                           OptionalRef<EquationDofs> rate)
+                                           OptionalRef<EquationDofs> rate, OptionalRef<R::Array<real>> derivative)
     {
         DNDS_check_throw_info(_data, "nonlinear session was moved");
         auto session = _data->session.Acquire(_nestedSession.lock());
@@ -861,7 +875,7 @@ namespace DNDS::Cauchy
                 for (const auto *input : {&state, &value, &data.spatial})
                     EquationDofOperations::RequireDistinct(*input, *rate);
             } });
-        data.EvaluateSpatial(state, time, engine);
+        data.EvaluateSpatial(state, time, engine, derivative);
         data.PublishAuxiliary(state, time);
         data.Stage([&]
                    {

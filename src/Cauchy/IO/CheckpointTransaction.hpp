@@ -39,6 +39,7 @@ namespace DNDS::Cauchy::IO
         std::optional<Runtime::Array<real>> endpointHistory;
         std::optional<EquationDofs> middleWarm, middleFinal;
         std::optional<Runtime::Array<real>> middleHistory;
+        std::array<std::optional<Runtime::Array<real>>, 2> coupledSourceDerivative;
         bool ditr = false;
     };
 }

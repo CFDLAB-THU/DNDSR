@@ -219,22 +219,25 @@ namespace DNDS::Cauchy
             for (index j = 0; j < nv; ++j)
                 active[j] = selection.Includes(j);
             std::optional<WallDistanceRead> walls;
-            std::optional<R::Array<real>::ReadLease> lengths;
-            Physics::RANS::PointParameters rans;
             if (nv > 4)
             {
                 DNDS_check_throw_info(_data->wallDistance, "ACM RANS Jacobian requires wall distances");
                 walls.emplace(_data->wallDistance->AcquireRead());
-                lengths.emplace(_data->ransCellLength.Read());
-                rans = _data->equation.RANS().KernelParameters();
             }
             auto diagonal = output.Diagonal().Write();
             std::optional<Algebra::BlockMatrixStorage::WriteAccess> off;
             try
             {
                 off.emplace(output.OffDiagonal().Write());
+                if (nv > 4)
+                {
+                    DNDS_check_throw_info(context, "ACM RANS matrix requires the centered source gradient workspace");
+                    auto evaluator = _data->equation.MakePointEvaluator();
+                    AddEquationSourceJacobian(state, *context, diagonal, output.DiagonalMode(),
+                                              controls.residualScale, evaluator, {}, output.RowMajorBlocks());
+                }
                 RequireNumericalSuccess(CPU::PrepareACMFluxJacobian(
-                                            {physics, stencil.View(), {_data->boundaryConditions.data(), index(_data->boundaryConditions.size())}, layout.View(), tau.View<R::UniformTableRows>(), radius.View<R::UniformTableRows>(), walls ? walls->HostView().cellMean : decltype(WallDistanceView::cellMean){}, lengths ? lengths->View<R::FixedRows<1>>() : decltype(lengths->View<R::FixedRows<1>>()){}, rans, diagonal.View<R::UniformTableRows>(), off->ArrayView(), controls.physicalMass, controls.residualScale, active}),
+                                            {physics, stencil.View(), {_data->boundaryConditions.data(), index(_data->boundaryConditions.size())}, layout.View(), tau.View<R::UniformTableRows>(), radius.View<R::UniformTableRows>(), walls ? walls->HostView().cellMean : decltype(WallDistanceView::cellMean){}, diagonal.View<R::UniformTableRows>(), off->ArrayView(), controls.physicalMass, controls.residualScale, active, ResolveEquationPhysicsProfile(_data->equation)}),
                                         "assemble ACM Jacobian");
             }
             catch (...)

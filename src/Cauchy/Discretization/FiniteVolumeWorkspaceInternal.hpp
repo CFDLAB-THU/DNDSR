@@ -354,14 +354,9 @@ namespace DNDS::Cauchy
         R::Array<index> sourceOffsets{R::RowLayout::Dense(0, 1)};
         R::Array<real> sourceWeights;
         std::optional<CFV::PolynomialSamplingPlan> sourceSampling;
-        std::vector<R::Array<real>> sourceValues;
-        bool sourceValuesAreMeans = false;
-        std::vector<std::array<R::Array<real>, 3>> sourceGradients;
         // The default approximate source Jacobian uses cell means plus
         // gradients at one cell center. The opt-in rhsQuadrature mode reuses
         // the separately published RHS source samples.
-        std::optional<CFV::PolynomialSamplingPlan> sourceJacobianSampling;
-        std::vector<std::array<R::Array<real>, 3>> sourceJacobianGradients;
         R::Array<real> boundaryMomentumFlux;
         /// Per-area viscous traction of the fluid on a no-slip wall from the last full RHS.
         /// Its sign uses n outward from the fluid. Other boundary rows are zero.
@@ -416,9 +411,6 @@ namespace DNDS::Cauchy
                 return true;
             }
         };
-        std::optional<EquationDofOperations::Binding> sourceState;
-        std::optional<WeakPublication> sourceCoefficients;
-        real sourceTime = 0;
         std::optional<EquationDofOperations::Binding> rhsState;
         std::optional<WeakPublication> rhsCoefficients;
         real rhsTime = 0;
@@ -473,7 +465,7 @@ namespace DNDS::Cauchy
         }
 
         static std::vector<Field> BuildFields(const Data &data, const EquationDofs &state, bool meanOnly);
-        void BuildSourceSampling(const EquationDofs &state);
+        void BuildSourceSampling();
         static EquationDofs BindBoundary(const EquationDofs &state, const std::vector<Field> &fields, index rows);
         Workspace(std::shared_ptr<const Data> data, EquationDofs &state,
                   std::optional<Physics::Chemistry::ChemicalWorkerPool> pool, bool meanTrial, bool capture);
@@ -616,38 +608,30 @@ namespace DNDS::Cauchy
                               EquationLayoutView<const real> owned, EquationLayoutView<const real> remote,
                               EquationLayoutView<real> destination, EquationLayoutView<real> lowDestination, bool produceLow,
                               OptionalRef<R::Array<real>> faceOutput, RHSScalarView incoming);
-        void SampleSourceState(const EquationDofs &state, real time);
         /// Queued CPU/CUDA sampling of the finalized reconstruction. Direct
         /// source gradients must already be ready on the supplied stream.
         /// No halo transfer or source-provenance publication is hidden here.
-        void SubmitSourceSamples(R::EagerEngine &, const R::ExecutionStream &, const EquationDofs &);
         /// Device source addition uses owned means and the same source
         /// quadrature as CPU. Errors append to the active preparation segment.
         /// Sampling-only calls omit result; publication follows caller drain.
         void SubmitDeviceVolumeSource(R::EagerEngine &, const R::ExecutionStream &,
                                       const EquationDofs &, OptionalRef<EquationDofs> result, real time,
-                                      OptionalRef<EquationDofs> lowOrder = {});
+                                      OptionalRef<EquationDofs> lowOrder = {}, OptionalRef<R::Array<real>> sourceDerivative = {});
         /// Common CPU/CUDA source addition. Direct RANS gradients must already
         /// be prepared; modal samples are submitted through CFV. Only rigid-
         /// frame flow sources are also added to the explicit lowOrder output,
         /// preserving the synchronous source contract. An optional evaluator
         /// is retained and exclusive to this lane; otherwise a worker from
         /// the retained workspace pool is acquired only during execution.
-        /// Source provenance is published separately after the caller's drain.
+        /// Optional derivative storage belongs to the caller pairing it with this rate.
         void SubmitVolumeSource(R::EagerEngine &, const R::ExecutionStream &,
                                 const EquationDofs &, OptionalRef<EquationDofs> result, real time,
                                 std::shared_ptr<PointEvaluator> evaluator = {},
-                                OptionalRef<EquationDofs> lowOrder = {});
-        bool AddRHSQuadratureSourceJacobian(
-            const EquationDofs &state, const R::Array<real>::WriteLease &diagonal,
-            DiagonalStorage storage, real scale, PointEvaluator &evaluator,
-            OptionalRef<const EquationFVDetail::MeanLinearizationOutput> linearization, bool rowMajorBlocks = false) const;
+                                OptionalRef<EquationDofs> lowOrder = {}, OptionalRef<R::Array<real>> sourceDerivative = {});
         bool AddMeanSourceJacobian(
             const EquationDofs &state, const R::Array<real>::WriteLease &diagonal,
             DiagonalStorage storage, real scale, PointEvaluator &evaluator,
             OptionalRef<const EquationFVDetail::MeanLinearizationOutput> linearization = {}, bool rowMajorBlocks = false) const;
-        void PublishSourceState(const EquationDofs &state, real time);
-        bool SourceSamplesCurrent(const EquationDofs &state, real time) const;
         void PrepareVolumeSource(const EquationDofs &state,
                                  OptionalRef<EquationDofs> result,
                                  PointEvaluator &evaluator, real time = 0,

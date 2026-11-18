@@ -59,7 +59,6 @@ namespace DNDS::Cauchy
             reconstruction.PublishFinalized(); });
         std::optional<AuxiliaryPreparation> preparation;
         std::optional<BoundaryInputs> boundary;
-        bool refreshSource = false;
         local([&]
               {
             ValidateWorkspace(state, work);
@@ -80,8 +79,7 @@ namespace DNDS::Cauchy
                 inputs.boundary.Emplace(*boundary);
             }
             if (!work.meanGradients)
-                preparation.emplace(BeginAuxValues(state, auxiliary, time, work.workers, inputs));
-            refreshSource = !work.SourceSamplesCurrent(state, time); });
+                preparation.emplace(BeginAuxValues(state, auxiliary, time, work.workers, inputs)); });
         OperatorSchedule schedule(engine, stream, communication,
                                   _data->settings.execution.overlap);
         std::vector<Algebra::DofHalo<>::Operation> transfers;
@@ -125,9 +123,6 @@ namespace DNDS::Cauchy
                     engine, stream, communication, time, work.workers, inputs, false));
             }
             else preparation->Apply(engine, stream, rest);
-            // Source sampling consumes the retained current polynomial. No VR
-            // sweep or chemical-rate evaluation is hidden in this refresh.
-            if (refreshSource) work.SubmitVolumeSource(engine, stream, state, {}, time);
             schedule.Join();
             if (work.meanGradients)
                 FinishMeanGradientAuxValues(state, auxiliary, *work.meanGradients, *preparation);
@@ -135,49 +130,22 @@ namespace DNDS::Cauchy
                 if (_data->settings.CheckHaloFreshness())
                     for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
                         reconstruction.meanHalo[iField].RequireCurrent(state.PhysicalField(iField), reconstruction.meanEpoch);
-            if (refreshSource) work.PublishSourceState(state, time);
+
             work.PublishQueuedPhases(); });
     }
-    void FiniteVolume::RefreshCorrectionSource(EquationDofs &state,
-                                               ReconstructionState &reconstruction,
-                                               Workspace &work, R::EagerEngine &engine,
-                                               const R::ExecutionStream &stream, real time) const
-    {
-        auto reconstructionSession = reconstruction.session.Acquire();
-        auto workspaceSession = work.session.Acquire();
-        auto activeReconstruction = work.BindReconstruction(reconstruction);
-        Metrics().Communication()->LocalStage([&]
-                                              {
-            ValidateWorkspace(state, work);
-            reconstruction.binding.Check(state);
-            if (!reconstruction.FinalizedCurrent())
-            {
-                const bool filtered = _data->settings.numerics.limiter == "WBAP" ||
-                                      bool(work.limitedVR) || _data->settings.numerics.positivity;
-                DNDS_check_throw_info(!filtered,
-                                      "source refresh requires a current limited/PP reconstruction publication");
-                reconstruction.PublishFinalized();
-            }
-            if (work.SourceSamplesCurrent(state, time)) return;
-            OperatorSchedule schedule(engine, stream, stream, false);
-            work.SubmitVolumeSource(engine, stream, state, {}, time);
-            schedule.Join();
-            work.PublishQueuedPhases();
-            work.PublishSourceState(state, time); });
-    }
     void FiniteVolume::Evaluate(EquationDofs &state, EquationDofs &residual, ReconstructionState &reconstruction, Workspace &work,
-                                Runtime::EagerEngine &engine, const Runtime::ExecutionStream &stream, real time) const
+                                Runtime::EagerEngine &engine, const Runtime::ExecutionStream &stream, real time, OptionalRef<R::Array<real>> sourceDerivative) const
     {
         EvaluateImpl(state, OptionalRef<EquationDofs>(residual), reconstruction,
-                     work, engine, stream, stream, time);
+                     work, engine, stream, stream, time, {}, {}, sourceDerivative);
     }
     void FiniteVolume::Evaluate(EquationDofs &state, EquationDofs &residual, ReconstructionState &reconstruction, Workspace &work,
                                 AuxiliaryValues &auxiliary, Runtime::EagerEngine &engine,
-                                const Runtime::ExecutionStream &stream, real time) const
+                                const Runtime::ExecutionStream &stream, real time, OptionalRef<R::Array<real>> sourceDerivative) const
     {
         EvaluateImpl(state, OptionalRef<EquationDofs>(residual), reconstruction,
                      work, engine, stream, stream, time,
-                     OptionalRef<AuxiliaryValues>(auxiliary));
+                     OptionalRef<AuxiliaryValues>(auxiliary), {}, sourceDerivative);
     }
     void FiniteVolume::PrepareReconstruction(EquationDofs &state, ReconstructionState &reconstruction, Workspace &work, Runtime::EagerEngine &engine,
                                              const Runtime::ExecutionStream &stream, real time) const
@@ -243,13 +211,15 @@ namespace DNDS::Cauchy
                                  evaluation.time,
                                  OptionalRef<AuxiliaryValues>(*evaluation.auxiliary),
                                  dependency ? OptionalRef<const QueuedEvaluationDependency>(*dependency)
-                                            : OptionalRef<const QueuedEvaluationDependency>{});
+                                            : OptionalRef<const QueuedEvaluationDependency>{},
+                                 evaluation.sourceDerivative);
                 else
                     EvaluateImpl(state, OptionalRef<EquationDofs>(*evaluation.residual),
                                  reconstruction, work, engine, stream, communication,
                                  evaluation.time, {},
                                  dependency ? OptionalRef<const QueuedEvaluationDependency>(*dependency)
-                                            : OptionalRef<const QueuedEvaluationDependency>{});
+                                            : OptionalRef<const QueuedEvaluationDependency>{},
+                                 evaluation.sourceDerivative);
                 return;
             }
         case FiniteVolumeEvaluationMode::ReconstructionOnly:
@@ -280,7 +250,7 @@ namespace DNDS::Cauchy
                                     const Runtime::ExecutionStream &stream,
                                     const Runtime::ExecutionStream &communication, real time,
                                     OptionalRef<AuxiliaryValues> auxiliary,
-                                    OptionalRef<const QueuedEvaluationDependency> dependency) const
+                                    OptionalRef<const QueuedEvaluationDependency> dependency, OptionalRef<R::Array<real>> sourceDerivative) const
     {
         const TimelineScope timeline("Cauchy/FV/Evaluate");
         if (!auxiliary && work.rhsAuxiliary)
@@ -289,8 +259,6 @@ namespace DNDS::Cauchy
         auto session = work.session.Acquire();
         auto activeReconstruction = work.BindReconstruction(reconstruction);
         const Workspace::PhaseTime timing(work, Workspace::TotalPhase);
-        work.sourceState.reset();
-        work.sourceCoefficients.reset();
         work.rhsState.reset();
         work.rhsCoefficients.reset();
         work.relativeUpdate = !work.meanOnly && _data->settings.numerics.reconstruction == "variational" ? std::numeric_limits<real>::infinity() : 0;
@@ -474,8 +442,12 @@ namespace DNDS::Cauchy
         const bool directGradientWork = (!work.meanOnly && numerics.reconstruction == "gradient") ||
                                         (_data->equation.HasRANS() &&
                                          (numerics.reconstruction == "constant" ||
-                                          (work.meanOnly && numerics.reconstruction == "gradient")));
-        const bool gradientWork = directGradientWork || bool(work.limitedVR) || bool(work.primitiveGradient);
+                                          work.meanOnly));
+        // Center-source linearization borrows this independently reconstructed
+        // mean gradient. LVR consumes the same pre-sweep field when enabled.
+        const bool centerSourceGradient = variational && _data->equation.HasRANS() &&
+                                          _data->settings.implicit.sourceJacobianMode == "center";
+        const bool gradientWork = directGradientWork || centerSourceGradient || bool(work.limitedVR) || bool(work.primitiveGradient);
         if (gradientWork && overlap && !dependency)
             gradient(CFV::ReconstructionRegion::Core);
         if (firstSweep && !dependency)
@@ -714,7 +686,7 @@ namespace DNDS::Cauchy
             rhsSubmissions.push_back(work.SubmitRHS(engine, stream, state, *residual,
                                                     rest, time, {}, OptionalRef<const AuxiliaryValues>(auxiliary), {}, incoming));
             work.SubmitVolumeSource(engine, stream, state, residual, time, {},
-                                    work.lowOrderResidual ? OptionalRef<EquationDofs>(*work.lowOrderResidual) : OptionalRef<EquationDofs>{});
+                                    work.lowOrderResidual ? OptionalRef<EquationDofs>(*work.lowOrderResidual) : OptionalRef<EquationDofs>{}, sourceDerivative);
         }
         local([&]
               {
@@ -733,9 +705,6 @@ namespace DNDS::Cauchy
             work.PublishDirectGradients(state, true, time);
             for (const auto &record : rhsSubmissions) work.PublishRHS(record);
             work.PublishQueuedPhases(); });
-        if (residual && (work.chemical || work.ransFirst >= 0) && work.sourceSampling)
-            local([&]
-                  { work.PublishSourceState(state, time); });
         work.boundaryMomentumCurrent = bool(residual);
         work.boundaryFacialFluxCurrent = bool(residual) && work.captureBoundaryFlux;
         work.rhsState.emplace(state.NumericAlias());

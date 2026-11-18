@@ -11,16 +11,23 @@ namespace DNDS::Cauchy::CPU
     }
     NumericalStatus PrepareACMFluxJacobian(const ACMJacobianPreparation &request) noexcept
     {
-        switch (request.input.ComponentNumber())
+        switch (request.profile)
         {
-        case 4:
-            return Assemble<4>(request);
-        case 5:
-            return Assemble<5>(request);
-        case 6:
-            return Assemble<6>(request);
+        case EquationPhysicsProfile::ACM:
+            if (request.input.ComponentNumber() == 4)
+                return Assemble<4>(request);
+            break;
+        case EquationPhysicsProfile::ACMSA:
+            if (request.input.ComponentNumber() == 5)
+                return Assemble<5>(request);
+            break;
+        case EquationPhysicsProfile::ACMTwoEquation:
+            if (request.input.ComponentNumber() == 6)
+                return Assemble<6>(request);
+            break;
         default:
-            return {NumericalError::InvalidInput};
+            break;
         }
+        return {NumericalError::InvalidInput};
     }
 }

@@ -9,7 +9,7 @@ namespace DNDS::Cauchy
     void FiniteVolume::Workspace::SubmitVolumeSource(
         R::EagerEngine &engine, const R::ExecutionStream &stream,
         const EquationDofs &state, OptionalRef<EquationDofs> result, real time,
-        std::shared_ptr<PointEvaluator> evaluator, OptionalRef<EquationDofs> lowOrder)
+        std::shared_ptr<PointEvaluator> evaluator, OptionalRef<EquationDofs> lowOrder, OptionalRef<R::Array<real>> sourceDerivative)
     {
         DNDS_check_throw_info(engine.Owns(stream) && stream.Context().device == owner->metrics.Device() && std::isfinite(time),
                               "source submission stream, placement or time differs");
@@ -24,19 +24,24 @@ namespace DNDS::Cauchy
             for (index iField = 0; iField < output.PhysicalFieldNumber(); ++iField)
             {
                 const auto &target = output.PhysicalField(iField).Owned();
-                for (const auto &values : sourceValues)
-                    DNDS_check_throw_info(!target.Storage().Overlaps(values.Storage()), "source residual aliases sampling scratch");
-                if (ransFirst >= 0)
-                    for (index iSource = 0; iSource < index(sourceGradients.size()); ++iSource)
-                        if (sourceValuesAreMeans)
-                            DNDS_check_throw_info(!target.Storage().Overlaps(directGradients[iSource].Owned().Storage()),
-                                                  "source residual aliases direct gradients");
-                        else
-                            for (int d = 0; d < owner->metrics.Dimension(); ++d)
-                                DNDS_check_throw_info(!target.Storage().Overlaps(sourceGradients[iSource][d].Storage()),
-                                                      "source residual aliases sampled gradients");
+                if (!sourceSampling && ransFirst >= 0)
+                    for (const auto &g : directGradients)
+                        DNDS_check_throw_info(!target.Storage().Overlaps(g.Owned().Storage()), "source residual aliases direct gradients");
             }
         };
+        if (sourceDerivative)
+        {
+            auto &record = *sourceDerivative;
+            const auto n = state.ComponentNumber();
+            DNDS_check_throw_info(result && owner->settings.implicit.sourceJacobianMode == "rhsQuadrature" &&
+                                      record.GetDevice() == state.Device() && record.RowCount() == owner->metrics.NumCell() &&
+                                      record.Layout().Kind() == R::RowLayoutKind::Table && record.Layout().Width() == n * n,
+                                  "invalid RHS source derivative destination");
+            for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
+                DNDS_check_throw_info(!record.Storage().Overlaps(state.PhysicalField(iField).Owned().Storage()) &&
+                                          !record.Storage().Overlaps(result->PhysicalField(iField).Owned().Storage()),
+                                      "source derivative aliases state or residual");
+        }
         if (result)
             checkOutput(*result);
         if (lowOrder)
@@ -44,14 +49,9 @@ namespace DNDS::Cauchy
             checkOutput(*lowOrder);
             EquationDofOperations::RequireDistinct(*result, *lowOrder);
         }
-        if (sourceOffsets.RowCount())
-        {
-            sourceState.reset();
-            sourceCoefficients.reset();
-        }
         if (owner->metrics.Device() != R::Device::Host())
         {
-            SubmitDeviceVolumeSource(engine, stream, state, result, time, lowOrder);
+            SubmitDeviceVolumeSource(engine, stream, state, result, time, lowOrder, sourceDerivative);
             return;
         }
         const auto timing = BeginQueuedPhase(engine, stream, SourcePhase);
@@ -65,11 +65,14 @@ namespace DNDS::Cauchy
             std::shared_ptr<PointEvaluator> evaluator;
             std::optional<Physics::Chemistry::ChemicalWorkerPool> workers;
             Physics::Thermodynamics::MixturePropertyRequest propertyRequest;
-            std::vector<index> meanSlots, sampleSlots, resultSlots;
+            std::vector<index> meanSlots, coefficientSlots, resultSlots;
             std::vector<std::array<index, 3>> gradientSlots;
             std::optional<EquationBlockLocation> ransMean, ransOutput, speciesOutput;
             index components = 0, flowFirst = -1, speciesFirst = -1, ransFirst = -1;
             bool chemical = false, interleavedGradients = false;
+            std::optional<index> derivativeSlot;
+            std::array<index, 4> basisSlots{};
+            VolumeSourceBasis basis;
             explicit Inputs(std::shared_ptr<const Data> data)
                 : owner(std::move(data)), geometry(owner->metrics.AcquireMeshRead(bool(owner->wallDistance))) {}
         };
@@ -77,7 +80,7 @@ namespace DNDS::Cauchy
         pin->evaluator = std::move(evaluator);
         pin->workers = workers;
         const bool viscous = !meanOnly && owner->equation.Viscous();
-        pin->propertyRequest = {viscous || owner->equation.HasRANS(), viscous, viscous, chemical, false};
+        pin->propertyRequest = {viscous || owner->equation.HasRANS(), viscous, viscous, chemical, chemical && bool(sourceDerivative)};
         const auto frame = owner->motion.At(time);
         using Input = R::ArrayOperand<real, false, R::UniformTableRows>;
         using Output = R::ArrayOperand<real, true, R::UniformTableRows>;
@@ -104,7 +107,8 @@ namespace DNDS::Cauchy
             EndQueuedPhase(engine, stream, timing);
             return;
         }
-        SubmitSourceSamples(engine, stream, state);
+        if (sourceSampling)
+            sourceSampling->Validate();
         if (!result)
         {
             EndQueuedPhase(engine, stream, timing);
@@ -120,7 +124,7 @@ namespace DNDS::Cauchy
         pin->speciesFirst = speciesFirst;
         pin->ransFirst = ransFirst;
         pin->chemical = chemical;
-        pin->interleavedGradients = sourceValuesAreMeans;
+        pin->interleavedGradients = !sourceSampling;
         if (ransFirst >= 0)
         {
             pin->ransMean = state.LocateBlock("rans");
@@ -138,26 +142,29 @@ namespace DNDS::Cauchy
         };
         for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
             pin->meanSlots.push_back(read(state.PhysicalField(iField).Owned()));
-        for (const auto &array : sourceValues)
-            pin->sampleSlots.push_back(read(array));
-        for (index iField = 0; iField < index(sourceGradients.size()); ++iField)
+        if (sourceSampling)
         {
-            std::array<index, 3> slots{-1, -1, -1};
-            if (sourceValuesAreMeans)
-            {
-                const index slot = read(directGradients[iField].Owned());
-                for (int d = 0; d < owner->metrics.Dimension(); ++d)
-                    slots[d] = slot;
-            }
-            else
-                for (int d = 0; d < owner->metrics.Dimension(); ++d)
-                    slots[d] = read(sourceGradients[iField][d]);
-            pin->gradientSlots.push_back(slots);
+            pin->basis.polynomial = sourceSampling->BasisParameters();
+            pin->basis.cachedDerivatives = sourceSampling->CachedDerivativeNumber();
+            pin->basisSlots = {read(sourceSampling->PointStorage()), read(sourceSampling->BasisStorage()), read(sourceSampling->MomentStorage()), read(sourceSampling->CellGeometryStorage())};
+            for (index f = 0; f < state.PhysicalFieldNumber(); ++f)
+                pin->coefficientSlots.push_back(read(FluxCoefficients().PhysicalField(f).Owned()));
         }
+        else if (ransFirst >= 0)
+            for (const auto &gradient : directGradients)
+            {
+                const index slot = read(gradient.Owned());
+                pin->gradientSlots.push_back({slot, slot, slot});
+            }
         for (index iField = 0; iField < result->PhysicalFieldNumber(); ++iField)
         {
             pin->resultSlots.push_back(index(outputs.size()));
             outputs.push_back(R::ReadWriteAs<R::UniformTableRows>(result->PhysicalField(iField).Owned()));
+        }
+        if (sourceDerivative)
+        {
+            pin->derivativeSlot = index(outputs.size());
+            outputs.push_back(R::WriteAs<R::UniformTableRows>(*sourceDerivative));
         }
         R::SubmitArrayBatch(engine, stream, [pin](R::ExecutionContext, auto inputs, auto outputs, auto offsets, auto weights, auto lengths, auto wallCells, auto wallMean)
                             {
@@ -165,7 +172,7 @@ namespace DNDS::Cauchy
             // Holding it while queueing could starve an earlier auxiliary
             // refresh that shares a one-worker pool.
             std::vector<RHSScalarView> samples;
-            for (const index slot : pin->sampleSlots) samples.push_back(inputs[slot]);
+            for (const index slot : pin->meanSlots) samples.push_back(inputs[slot]);
             std::vector<std::array<CPU::SourceGradientView, 3>> gradients(pin->gradientSlots.size());
             for (index iField = 0; iField < index(pin->gradientSlots.size()); ++iField)
                 for (int d = 0; d < pin->owner->metrics.Dimension(); ++d)
@@ -190,8 +197,24 @@ namespace DNDS::Cauchy
             request.ransFirst = pin->ransFirst;
             request.independentSpecies = pin->owner->equation.HasMixture() ? pin->owner->equation.Mixture().SpeciesNumber() - 1 : 0;
             request.chemical = pin->chemical;
+            if (pin->derivativeSlot)
+            {
+                request.fullBlock = true;
+                request.preparedDerivative = outputs[*pin->derivativeSlot];
+            }
+            request.cellInputs = pin->interleavedGradients;
             request.locations = pin->locations.HostView();
             request.logicalFirst = pin->logicalFirst.HostView();
+            std::vector<RHSScalarView> coefficients;
+            for(const index slot:pin->coefficientSlots) coefficients.push_back(inputs[slot]);
+            if(!coefficients.empty())
+            {
+                auto basis=pin->basis;
+                basis.points=inputs[pin->basisSlots[0]]; basis.cached=inputs[pin->basisSlots[1]];
+                basis.moments=inputs[pin->basisSlots[2]]; basis.geometry=inputs[pin->basisSlots[3]];
+                request.basis=basis;
+                request.coefficients={coefficients.data(),index(coefficients.size())};
+            }
             request.samples = {samples.data(), index(samples.size())};
             request.gradients = {gradients.data(), index(gradients.size())};
             const auto outputBlock = [&](EquationBlockLocation location)
@@ -207,12 +230,12 @@ namespace DNDS::Cauchy
                                    {{}, location.firstComponent, location.componentNumber}};
             }
             if (pin->evaluator)
-                RequireNumericalSuccess(CPU::AddVolumeSources(request, pin->owner->equation, *pin->evaluator), "queued volume source");
+                RequireNumericalSuccess(CPU::EvaluateVolumeSource(request, pin->owner->equation, *pin->evaluator), "queued volume source");
             else
             {
                 auto workers = MakeCPUPointWorkers<CPU::SourceWorkerScratch>(pin->owner->equation, pin->workers,
                     pin->propertyRequest, pin->components);
-                RequireNumericalSuccess(CPU::AddVolumeSources(request, pin->owner->equation,
+                RequireNumericalSuccess(CPU::EvaluateVolumeSource(request, pin->owner->equation,
                     SpanView<CPU::SourceWorkerScratch>{workers.data(), index(workers.size())}), "queued volume source");
             } }, std::move(inputs), std::move(outputs), std::make_tuple(R::ReadAs<R::FixedRows<1>>(sourceOffsets), R::ReadAs<R::FixedRows<1>>(sourceWeights), R::ReadAs<R::RowLayout>(ransFirst >= 0 ? owner->ransCellLength : owner->deviceEmpty), R::ReadAs<R::RowLayout>(pin->walls ? owner->wallDistance->CellValues() : owner->deviceEmpty), R::ReadAs<R::RowLayout>(pin->walls ? owner->wallDistance->CellMeans() : owner->deviceEmpty)));
         EndQueuedPhase(engine, stream, timing);

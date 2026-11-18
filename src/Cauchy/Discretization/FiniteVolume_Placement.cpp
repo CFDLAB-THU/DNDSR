@@ -164,8 +164,7 @@ namespace DNDS::Cauchy
             source->weights = moveField(source->weights, "sourceWeights");
             if (source->sampling)
                 source->sampling = source->sampling->Placed(samplingPlacement);
-            if (source->jacobianSampling)
-                source->jacobianSampling = source->jacobianSampling->Placed(samplingPlacement);
+
             placed->quadrature.source = std::move(source);
         }
         if (_data->limitedVRGeometry)

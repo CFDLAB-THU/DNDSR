@@ -1,4 +1,5 @@
 #pragma once
+#include "Cauchy/Discretization/VolumeSourceBasis.hpp"
 #include "Cauchy/Discretization/FiniteVolumeViews.hpp"
 #include "Cauchy/Motion/RigidMotion.hpp"
 #include "Cauchy/Discretization/WallDistanceSamples.hpp"
@@ -24,38 +25,54 @@ namespace DNDS::Cauchy::CPU
         SpanView<const EquationBlockReadView> blocks;
         SpanView<const EquationBlockLocation> locations;
         SpanView<const index> logicalFirst;
-        SpanView<const RHSScalarView> samples;
+        SpanView<const RHSScalarView> samples, coefficients;
+        VolumeSourceBasis basis;
         SpanView<const std::array<SourceGradientView, 3>> gradients;
         WallDistanceView walls;
         EquationBlockReadView ransMean;
         EquationBlockArrayView<real> speciesOutput, ransOutput;
         Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows> matrix;
+        /// Optional owned-cell, unscaled matrix-ready contribution. Full records
+        /// use logical row-major order, independent of the linear solver.
+        RHSOutputView preparedDerivative;
         std::optional<EquationFVDetail::MeanLinearizationOutput> linearization;
         index cells = 0, components = 0, flowFirst = -1, speciesFirst = -1, ransFirst = -1;
         int dimension = 0, independentSpecies = 0;
         bool chemical = false, fullBlock = false;
+        bool cellInputs = false; ///< Direct FV takes its mean and physical gradient from the parent cell.
         real scale = 1;
         bool rowMajorBlocks = false;
+    };
+    /// Scratch is private to a worker. No partial row is published on point failure.
+    struct SourceRowScratch
+    {
+        EquationFVDetail::PointScratch point;
+        std::vector<real> rowRHS, rowDerivative;
+        explicit SourceRowScratch(index n) : point(n), rowRHS(n) {}
     };
     /// Exclusive physics worker and point scratch retained by the operator.
     /// Construct before submission with the same property request as the serial
     /// source path; no chemistry state is shared between worker slots.
-    struct SourceWorkerScratch
+    struct SourceWorkerScratch : SourceRowScratch
     {
         PointEvaluator evaluator;
-        EquationFVDetail::PointScratch point;
         NumericalStatus status;
         SourceWorkerScratch(PointEvaluator value, index components)
-            : evaluator(std::move(value)), point(components) {}
+            : SourceRowScratch(components), evaluator(std::move(value)) {}
     };
-    NumericalStatus AddMeanSourceJacobian(const SourceKernelRequest &, const EquationSystem &, SpanView<SourceWorkerScratch>) noexcept;
+    NumericalStatus AssembleCenterSourceJacobian(const SourceKernelRequest &, const EquationSystem &, SpanView<SourceWorkerScratch>) noexcept;
     NumericalStatus AddQuadratureSourceJacobian(const SourceKernelRequest &, const EquationSystem &, SpanView<SourceWorkerScratch>) noexcept;
-    NumericalStatus AddVolumeSources(const SourceKernelRequest &, const EquationSystem &, SpanView<SourceWorkerScratch>) noexcept;
-    NumericalStatus AddMeanSourceJacobian(const SourceKernelRequest &, const EquationSystem &, PointEvaluator &) noexcept;
+    /// Integrate each owned cell in quadrature order. When a derivative output
+    /// is bound, differentiate at the same repaired point state and publish
+    /// the unscaled -dS/dU approximation alongside the spatial rate. Future
+    /// CUDA tuning may assign one lane to each quadrature point within a CTA.
+    NumericalStatus EvaluateVolumeSource(const SourceKernelRequest &, const EquationSystem &, SpanView<SourceWorkerScratch>) noexcept;
+    NumericalStatus AssembleCenterSourceJacobian(const SourceKernelRequest &, const EquationSystem &, PointEvaluator &) noexcept;
     NumericalStatus AddQuadratureSourceJacobian(const SourceKernelRequest &, const EquationSystem &, PointEvaluator &) noexcept;
-    NumericalStatus AddVolumeSources(const SourceKernelRequest &, const EquationSystem &, PointEvaluator &) noexcept;
-    void ReplicateSourceValues(Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> offsets,
-                               RHSScalarView input, RHSOutputView output, int stride = 1, int direction = 0);
+    NumericalStatus EvaluateVolumeSource(const SourceKernelRequest &, const EquationSystem &, PointEvaluator &) noexcept;
+    /// Accumulate a canonical row-major source record in the selected diagonal layout.
+    void ApplyVolumeSourceDerivative(Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::TableRows> source, RHSOutputView diagonal,
+                                     index components, bool fullBlock, bool rowMajor, real scale);
     void AddEquationRotationSource(CFV::FiniteVolumeHostView metric, const RigidFrame &frame,
                                    EquationBlockReadView flow, EquationBlockArrayView<real> output,
                                    std::optional<EquationBlockArrayView<real>> lowOutput);

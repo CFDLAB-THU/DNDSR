@@ -1,0 +1,7 @@
+// Instantiated in the build tree from the Cauchy shape manifest.
+#include "Cauchy/Discretization/CUDA/FiniteVolumeSourceKernels_Cells.cu.inc"
+namespace DNDS::Cauchy::CUDA::Detail
+{
+    template void LaunchVolumeSourceCells<VolumeSourceModel::@source_model@, @source_width@, @source_dim@, @source_modes@>(
+        cudaStream_t, SourceRequest, SourceIndices, unsigned);
+}
