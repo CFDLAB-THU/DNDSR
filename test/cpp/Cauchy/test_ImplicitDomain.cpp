@@ -99,6 +99,31 @@ TEST_CASE("Periodic ACM physical step transports velocity and preserves the pres
         CHECK(sums[1] > 1e-6);
     }
 }
+TEST_CASE("An active ACM pressure outlet suppresses the closed-domain gauge")
+{
+    C::DomainSettings settings;
+    settings.mesh.dimension = 3;
+    settings.equation.system = "incompressibleACM";
+    settings.equation.eos = "none";
+    settings.equation.referenceScales = {{"rho0", 1}, {"U0", 1}, {"L0", 1}, {"T0", 300}};
+    settings.equation.acmPressureMean = 3;
+    settings.initialState = {{"type", "primUP"}, {"state", {0., 0., 0., -.25}}};
+    settings.boundaries["7"].kind = "pressureOutlet";
+    settings.boundaries["7"].state = settings.initialState;
+    settings.numerics.reconstruction = "constant";
+    settings.implicit.jacobianAction = "assembled";
+    settings.implicit.diagonal = "block";
+    C::TimeSettings time;
+    time.method = "bdf1";
+    C::Domain domain("outlet", CFVTest::CartesianHexes(mpi, 4), settings, time);
+    CHECK(domain.Discretization().HasPressureBoundary());
+    CHECK_FALSE(domain.CaptureStateSnapshot(false).PressureGauge().has_value());
+    REQUIRE(domain.Advance(.01).accepted);
+    const auto read = domain.Dofs().CoupledField().Owned().Read();
+    const auto values = read.View<R::FixedRows<4>>();
+    for (DNDS::index iCell = 0; iCell < values.RowCount(); ++iCell)
+        CHECK(values(iCell, 3) == doctest::Approx(-.25));
+}
 TEST_CASE("ACM BDF observes continuity separately from named momentum convergence")
 {
     C::DomainSettings settings;

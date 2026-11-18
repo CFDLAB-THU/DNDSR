@@ -43,6 +43,16 @@ TEST_CASE("Automatic CUDA policies select measured A100 kernels and preserve exp
     CHECK(C::ExecutionSettings{}.ReconstructionKernel() == DNDS::CFV::ReconstructionDeviceKernel::FP64);
     CHECK(C::ResolveAutomaticCUDAInverse("auto", DNDS::Runtime::Device::Host()) == "batchedSVD");
     CHECK(C::ResolveAutomaticCUDAInverse("guardedLU", DNDS::Runtime::Device::Host()) == "guardedLU");
+    base.equation.system = "incompressibleACM";
+    auto acm = base;
+    C::ResolveAutomaticCUDAKernels(acm, true, true);
+    CHECK(acm.execution.kernels.rhsMapping == "ctaSegments");
+    CHECK(acm.execution.kernels.rhsReduction == "serial");
+    CHECK(acm.execution.reconstructionKernel == "fp64Pipelined");
+    base.mesh.dimension = 2;
+    C::ResolveAutomaticCUDAKernels(base, true, true);
+    CHECK(base.execution.kernels.rhsMapping == "thread");
+    CHECK(base.execution.reconstructionKernel == "fp64Pipelined");
 }
 TEST_CASE("Mesh preprocessing is explicit and validates a positive uniform scale")
 {
@@ -572,7 +582,11 @@ TEST_CASE("Cauchy rejects unknown nested keys unused contradictory settings and 
     }
     catch (const std::exception &error)
     {
+#ifdef DNDS_USE_CUDA
+        CHECK(std::string(error.what()).find("CUDA supports perfect-gas") != std::string::npos);
+#else
         CHECK(std::string(error.what()).find("backend cuda") != std::string::npos);
+#endif
         CHECK(std::string(error.what()).find("EOS realGas") != std::string::npos);
     }
 }
