@@ -2147,6 +2147,30 @@ TEST_CASE("Nonuniform chemical volume sampling agrees with independent Cartesian
     CHECK(signal[3] > 1e-6 * signal[2]); // A quadrature-integrated approximate Jacobian must fail the mean-state oracle above.
     CHECK(quadratureMagnitude > 1e-8);
     CHECK(quadratureError <= 2e-7 * quadratureMagnitude + 1e-10);
+    // Same state, time and workspace, but a different polynomial. Each rate
+    // retains its own derivative. Consume the two records in reverse order.
+    const auto originalQuadratureDiagonal = matrixBq->Diagonal().Clone();
+    auto constantDerivative = withSourceQuadrature.BuildSourceDerivative(bq);
+    REQUIRE(constantDerivative);
+    auto guess = withSourceQuadrature.ReconstructionGuess(*reconstructionBq);
+    C::EquationDofOperations::Fill(guess, 0.);
+    withSourceQuadrature.Evaluate(bq, rq, *reconstructionBq, *wbq, auxiliaryBq, engine, stream, 0, std::ref(*constantDerivative));
+    auto constantContext = quadratureContext;
+    constantContext.sourceDerivative.Emplace(*constantDerivative);
+    withSourceQuadrature.PrepareJacobian(bq, auxiliaryBq, inverseTau, *matrixBq, controls, 0, mixture.workers, constantContext);
+    {
+        const auto observed = matrixBq->Diagonal().Read(), center = matrixB->Diagonal().Read();
+        for (I iCell = 0; iCell < rows; ++iCell)
+            for (I j = 0; j < nv * nv; ++j)
+                CHECK(observed.View()(iCell, j) == doctest::Approx(center.View()(iCell, j)).epsilon(2e-7).scale(1e-8));
+    }
+    withSourceQuadrature.PrepareJacobian(bq, auxiliaryBq, inverseTau, *matrixBq, controls, 0, mixture.workers, quadratureContext);
+    {
+        const auto observed = matrixBq->Diagonal().Read(), original = originalQuadratureDiagonal.Read();
+        for (I iCell = 0; iCell < rows; ++iCell)
+            for (I j = 0; j < nv * nv; ++j)
+                CHECK(observed.View()(iCell, j) == original.View()(iCell, j));
+    }
     const auto centeredDiagonal = matrixB->Diagonal().Clone();
     {
         auto changed = withSource.FluxReconstruction(*reconstructionB, *wb).PhysicalField(0).Owned();

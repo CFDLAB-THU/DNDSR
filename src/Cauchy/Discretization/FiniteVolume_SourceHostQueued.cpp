@@ -8,13 +8,13 @@ namespace DNDS::Cauchy
 {
     void FiniteVolume::Workspace::SubmitVolumeSource(
         R::EagerEngine &engine, const R::ExecutionStream &stream,
-        const EquationDofs &state, OptionalRef<EquationDofs> result, real time,
+        const EquationDofs &state, EquationDofs &result, real time,
         std::shared_ptr<PointEvaluator> evaluator, OptionalRef<EquationDofs> lowOrder, OptionalRef<R::Array<real>> sourceDerivative)
     {
         DNDS_check_throw_info(engine.Owns(stream) && stream.Context().device == owner->metrics.Device() && std::isfinite(time),
                               "source submission stream, placement or time differs");
         FiniteVolume(owner).ValidateWorkspace(state, *this);
-        DNDS_check_throw_info(!lowOrder || result, "low-order source output requires the primary residual");
+
         const auto checkOutput = [&](const EquationDofs &output)
         {
             state.RequireCompatible(output);
@@ -33,21 +33,20 @@ namespace DNDS::Cauchy
         {
             auto &record = *sourceDerivative;
             const auto n = state.ComponentNumber();
-            DNDS_check_throw_info(result && owner->settings.implicit.sourceJacobianMode == "rhsQuadrature" &&
+            DNDS_check_throw_info(owner->settings.implicit.sourceJacobianMode == "rhsQuadrature" &&
                                       record.GetDevice() == state.Device() && record.RowCount() == owner->metrics.NumCell() &&
                                       record.Layout().Kind() == R::RowLayoutKind::Table && record.Layout().Width() == n * n,
                                   "invalid RHS source derivative destination");
             for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
                 DNDS_check_throw_info(!record.Storage().Overlaps(state.PhysicalField(iField).Owned().Storage()) &&
-                                          !record.Storage().Overlaps(result->PhysicalField(iField).Owned().Storage()),
+                                          !record.Storage().Overlaps(result.PhysicalField(iField).Owned().Storage()),
                                       "source derivative aliases state or residual");
         }
-        if (result)
-            checkOutput(*result);
+        checkOutput(result);
         if (lowOrder)
         {
             checkOutput(*lowOrder);
-            EquationDofOperations::RequireDistinct(*result, *lowOrder);
+            EquationDofOperations::RequireDistinct(result, *lowOrder);
         }
         if (owner->metrics.Device() != R::Device::Host())
         {
@@ -84,12 +83,12 @@ namespace DNDS::Cauchy
         const auto frame = owner->motion.At(time);
         using Input = R::ArrayOperand<real, false, R::UniformTableRows>;
         using Output = R::ArrayOperand<real, true, R::UniformTableRows>;
-        if (result && frame.moving)
+        if (frame.moving)
         {
-            const auto flow = state.LocateBlock("flow"), target = result->LocateBlock("flow");
+            const auto flow = state.LocateBlock("flow"), target = result.LocateBlock("flow");
             const auto low = lowOrder ? std::optional<EquationBlockLocation>(lowOrder->LocateBlock("flow"))
                                       : std::optional<EquationBlockLocation>{};
-            std::vector<Output> outputs{R::ReadWriteAs<R::UniformTableRows>(result->PhysicalField(target.physicalField).Owned())};
+            std::vector<Output> outputs{R::ReadWriteAs<R::UniformTableRows>(result.PhysicalField(target.physicalField).Owned())};
             if (low)
                 outputs.push_back(R::ReadWriteAs<R::UniformTableRows>(lowOrder->PhysicalField(low->physicalField).Owned()));
             R::SubmitArrayBatch(engine, stream, [pin, flow, target, low, frame](R::ExecutionContext, auto inputs, auto outputs, auto cells)
@@ -109,11 +108,6 @@ namespace DNDS::Cauchy
         }
         if (sourceSampling)
             sourceSampling->Validate();
-        if (!result)
-        {
-            EndQueuedPhase(engine, stream, timing);
-            return;
-        }
         pin->walls = bool(owner->wallDistance);
         pin->logicalFirst = logicalFirst;
         pin->locations = R::MetadataBuffer<EquationBlockLocation>::Generate(state.BlockNumber(),
@@ -128,10 +122,10 @@ namespace DNDS::Cauchy
         if (ransFirst >= 0)
         {
             pin->ransMean = state.LocateBlock("rans");
-            pin->ransOutput = result->LocateBlock("rans");
+            pin->ransOutput = result.LocateBlock("rans");
         }
         if (speciesFirst >= 0)
-            pin->speciesOutput = result->LocateBlock("species");
+            pin->speciesOutput = result.LocateBlock("species");
         std::vector<Input> inputs;
         std::vector<Output> outputs;
         const auto read = [&](const R::Array<real> &array)
@@ -156,10 +150,10 @@ namespace DNDS::Cauchy
                 const index slot = read(gradient.Owned());
                 pin->gradientSlots.push_back({slot, slot, slot});
             }
-        for (index iField = 0; iField < result->PhysicalFieldNumber(); ++iField)
+        for (index iField = 0; iField < result.PhysicalFieldNumber(); ++iField)
         {
             pin->resultSlots.push_back(index(outputs.size()));
-            outputs.push_back(R::ReadWriteAs<R::UniformTableRows>(result->PhysicalField(iField).Owned()));
+            outputs.push_back(R::ReadWriteAs<R::UniformTableRows>(result.PhysicalField(iField).Owned()));
         }
         if (sourceDerivative)
         {

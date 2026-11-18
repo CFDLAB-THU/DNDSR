@@ -7,7 +7,7 @@ namespace DNDS::Cauchy
 {
     void FiniteVolume::Workspace::SubmitDeviceVolumeSource(
         R::EagerEngine &engine, const R::ExecutionStream &stream,
-        const EquationDofs &state, OptionalRef<EquationDofs> result, real time,
+        const EquationDofs &state, EquationDofs &result, real time,
         OptionalRef<EquationDofs> lowOrder, OptionalRef<R::Array<real>> sourceDerivative)
     {
 #ifdef DNDS_USE_CUDA
@@ -17,22 +17,6 @@ namespace DNDS::Cauchy
                                   state.Device() == owner->metrics.Device() && state.Space().Same(owner->metrics.Space()) &&
                                   state.PhysicalFieldNumber() == 1 && std::isfinite(time),
                               "device source requires combined fields and matching stream/placement");
-        if (result)
-        {
-            state.RequireCompatible(*result);
-            EquationDofOperations::RequireDistinct(state, *result);
-            if (activeFluxCoefficients)
-                EquationDofOperations::RequireDistinct(FluxCoefficients(), *result);
-            if (lowOrder)
-            {
-                state.RequireCompatible(*lowOrder);
-                EquationDofOperations::RequireDistinct(state, *lowOrder);
-                EquationDofOperations::RequireDistinct(*result, *lowOrder);
-                if (activeFluxCoefficients)
-                    EquationDofOperations::RequireDistinct(FluxCoefficients(), *lowOrder);
-            }
-        }
-        DNDS_check_throw_info(!lowOrder || result, "low-order source output requires the primary residual");
         struct Inputs
         {
             std::shared_ptr<const Data> owner;
@@ -48,9 +32,9 @@ namespace DNDS::Cauchy
         };
         const auto pin = std::make_shared<Inputs>(owner);
         const auto frame = owner->motion.At(time).KernelParameters();
-        if (result && frame.moving)
+        if (frame.moving)
         {
-            auto &output = result->CoupledField().Owned();
+            auto &output = result.CoupledField().Owned();
             const auto &selection = DeviceCellSelection(CFV::ReconstructionRegion::All);
             if (lowOrder)
                 R::SubmitArrays(engine, stream, [pin, frame](R::ExecutionContext context, auto means, auto output, auto low, auto cells, auto metric)
@@ -65,8 +49,6 @@ namespace DNDS::Cauchy
                               "device volume source requires one combined RANS field");
         if (sourceSampling)
             sourceSampling->Validate();
-        if (!result)
-            return;
         DNDS_check_throw_info(preparationStatus && preparationStatus->pending, "device source requires an active preparation status segment");
         const int dimension = owner->metrics.Dimension(), components = int(state.ComponentNumber());
         const auto &empty = owner->deviceEmpty;
@@ -103,7 +85,7 @@ namespace DNDS::Cauchy
                             R::ReadAs<R::UniformTableRows>(sourceSampling ? sourceSampling->PointStorage() : empty),
                             R::ReadAs<R::UniformTableRows>(sourceSampling ? sourceSampling->BasisStorage() : empty),
                             R::ReadAs<R::UniformTableRows>(sourceSampling ? sourceSampling->MomentStorage() : empty),
-                            R::ReadAs<R::UniformTableRows>(sourceSampling ? sourceSampling->CellGeometryStorage() : empty), R::ReadAs<R::FixedRows<1>>(sourceOffsets), R::ReadAs<R::FixedRows<1>>(sourceWeights), R::ReadAs<R::FixedRows<1>>(owner->ransCellLength), R::ReadAs<R::FixedRows<1>>(DeviceCellSelection(CFV::ReconstructionRegion::All)), R::ReadWriteAs<R::UniformTableRows>(result->CoupledField().Owned()), R::WriteAs<R::FixedRows<1>>(preparationStatus->meanOwned), R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics()), R::ReadAs<R::FixedRows<1>>(owner->wallDistance->CellMeans()), R::ReadAs<R::CSRRows>(owner->wallDistance->CellValues()), record...);
+                            R::ReadAs<R::UniformTableRows>(sourceSampling ? sourceSampling->CellGeometryStorage() : empty), R::ReadAs<R::FixedRows<1>>(sourceOffsets), R::ReadAs<R::FixedRows<1>>(sourceWeights), R::ReadAs<R::FixedRows<1>>(owner->ransCellLength), R::ReadAs<R::FixedRows<1>>(DeviceCellSelection(CFV::ReconstructionRegion::All)), R::ReadWriteAs<R::UniformTableRows>(result.CoupledField().Owned()), R::WriteAs<R::FixedRows<1>>(preparationStatus->meanOwned), R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics()), R::ReadAs<R::FixedRows<1>>(owner->wallDistance->CellMeans()), R::ReadAs<R::CSRRows>(owner->wallDistance->CellValues()), record...);
         };
         if (sourceDerivative)
             submit(R::WriteAs<R::UniformTableRows>(*sourceDerivative));

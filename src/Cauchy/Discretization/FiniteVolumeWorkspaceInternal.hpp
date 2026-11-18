@@ -354,12 +354,9 @@ namespace DNDS::Cauchy
         R::Array<index> sourceOffsets{R::RowLayout::Dense(0, 1)};
         R::Array<real> sourceWeights;
         std::optional<CFV::PolynomialSamplingPlan> sourceSampling;
-        // The default approximate source Jacobian uses cell means plus
-        // gradients at one cell center. The opt-in rhsQuadrature mode reuses
-        // the separately published RHS source samples.
-        R::Array<real> boundaryMomentumFlux;
-        /// Per-area viscous traction of the fluid on a no-slip wall from the last full RHS.
+        /// Per-area viscous traction on a no-slip wall from the last full RHS.
         /// Its sign uses n outward from the fluid. Other boundary rows are zero.
+        R::Array<real> boundaryMomentumFlux;
         /// Integrated residual contribution in the canonical owned-parent
         /// frame, one row per local stencil face. Refilled on every RHS call.
         R::Array<real> faceFlux;
@@ -628,24 +625,20 @@ namespace DNDS::Cauchy
                               EquationLayoutView<const real> owned, EquationLayoutView<const real> remote,
                               EquationLayoutView<real> destination, EquationLayoutView<real> lowDestination, bool produceLow,
                               OptionalRef<R::Array<real>> faceOutput, RHSScalarView incoming);
-        /// Queued CPU/CUDA sampling of the finalized reconstruction. Direct
-        /// source gradients must already be ready on the supplied stream.
-        /// No halo transfer or source-provenance publication is hidden here.
-        /// Device source addition uses owned means and the same source
-        /// quadrature as CPU. Errors append to the active preparation segment.
-        /// Sampling-only calls omit result; publication follows caller drain.
+        /// Integrate sources into owned CUDA residual rows. Numerical failures
+        /// are recorded in the active preparation segment.
         void SubmitDeviceVolumeSource(R::EagerEngine &, const R::ExecutionStream &,
-                                      const EquationDofs &, OptionalRef<EquationDofs> result, real time,
+                                      const EquationDofs &, EquationDofs &result, real time,
                                       OptionalRef<EquationDofs> lowOrder = {}, OptionalRef<R::Array<real>> sourceDerivative = {});
         /// Common CPU/CUDA source addition. Direct RANS gradients must already
-        /// be prepared; modal samples are submitted through CFV. Only rigid-
+        /// be prepared. Modal values use the shared volume basis inside the source kernel. Only rigid-
         /// frame flow sources are also added to the explicit lowOrder output,
         /// preserving the synchronous source contract. An optional evaluator
         /// is retained and exclusive to this lane; otherwise a worker from
         /// the retained workspace pool is acquired only during execution.
         /// Optional derivative storage belongs to the caller pairing it with this rate.
         void SubmitVolumeSource(R::EagerEngine &, const R::ExecutionStream &,
-                                const EquationDofs &, OptionalRef<EquationDofs> result, real time,
+                                const EquationDofs &, EquationDofs &result, real time,
                                 std::shared_ptr<PointEvaluator> evaluator = {},
                                 OptionalRef<EquationDofs> lowOrder = {}, OptionalRef<R::Array<real>> sourceDerivative = {});
         bool AddMeanSourceJacobian(

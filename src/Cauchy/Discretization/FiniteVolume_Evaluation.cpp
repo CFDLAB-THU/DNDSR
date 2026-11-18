@@ -724,7 +724,7 @@ namespace DNDS::Cauchy
         {
             rhsSubmissions.push_back(work.SubmitRHS(engine, stream, state, *residual,
                                                     rest, time, {}, OptionalRef<const AuxiliaryValues>(auxiliary), {}, incoming));
-            work.SubmitVolumeSource(engine, stream, state, residual, time, {},
+            work.SubmitVolumeSource(engine, stream, state, *residual, time, {},
                                     work.lowOrderResidual ? OptionalRef<EquationDofs>(*work.lowOrderResidual) : OptionalRef<EquationDofs>{}, sourceDerivative);
         }
         local([&]
