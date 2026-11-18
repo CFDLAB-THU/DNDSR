@@ -283,3 +283,29 @@ kernel. They reject invalid user input without substituting fallback states.
     callback failure is now checked in a bounded, independent MPI subprocess;
     ordinary successful callback lifetime and repeated waits remain tested.
     No production transfer error policy was changed for these tests.
+
+### Face-flux physics and row shapes
+
+The C++ wrapper resolves the equation model before looking up a row shape.
+Five components can mean compressible laminar flow or ACM with SA. Wilcox
+and SST share the two-equation shape and retain the selected model at each
+point. CPU dispatch selects the compact catalog only for compatible whole
+AoS means, outputs and reconstruction operands. A segmented equation,
+mixed physical layout, mixture, or unlisted shape uses the generic instantiation.
+The generated CPU and CUDA catalogs share the component counts and modal counts
+in `scripts/manifests/cauchy_rhs_shapes.json`. Quadrature order remains an
+independent property of the metric.
+
+Mean-only flux samples the cell average. Direct-gradient flux evaluates the
+physical gradient against the displacement. Modal flux evaluates the selected
+basis and can consume a separate set of viscous coefficients. Each produces
+the same point state for the subsequent boundary, inviscid and viscous flux
+operations. The cell gather follows the face pass for every mapping. The
+explicit CPU `Generic` and historical `FixedFlow5` workspace policies
+provide numerical and timing comparison routes.
+
+The CUDA wrapper selects face threads for direct gradients and the pMG
+mean-only flux. The face quadrature loop uses the prepared rule in all cases.
+Modal flux may select either face threads or prepared CTA segments. ACM and
+perfect gas have distinct device bodies. The measured perfect-gas launch
+presets and user overrides apply within the eligible modal family.

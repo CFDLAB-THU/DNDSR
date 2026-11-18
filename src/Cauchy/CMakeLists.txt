@@ -96,6 +96,7 @@ set(CPPS
     Discretization/CPU/ModalPositivityKernels.cpp
     Discretization/CPU/FiniteVolumePositivityKernels.cpp
     Discretization/CPU/FiniteVolumeRHSKernels_Flow5.cpp
+    Discretization/EquationPhysicsProfile.cpp
     Discretization/CPU/FiniteVolumeRHSKernels_Equation.cpp
     Discretization/CPU/FiniteVolumeSourceKernels.cpp
     Discretization/FiniteVolume_AuxiliaryValues.cpp
@@ -164,6 +165,9 @@ set(CPPS
     IO/OutputCoordinator.cpp
 
     Riemann/RiemannFlux.cpp)
+include("${PROJECT_SOURCE_DIR}/cmake/DndsCauchyRHS.cmake")
+dnds_generate_cauchy_rhs(_cpu_flux_sources _cpu_flux_include _cpu_flux_codegen cauchy_cpu_flux)
+list(APPEND CPPS ${_cpu_flux_sources})
 if(DNDS_USE_CUDA)
     list(APPEND CPPS Interface/CUDA/InterfacePacketKernels.cu)
     list(APPEND CPPS Implicit/CUDA/FrozenJacobianKernels.cu)
@@ -183,8 +187,7 @@ if(DNDS_USE_CUDA)
     list(APPEND CPPS Discretization/CUDA/FiniteVolumeRHSKernels.cu Discretization/CUDA/FiniteVolumeRHSKernels_Placement.cpp)
     # One manifest owns the valid C/M/D catalog. Generate one specialization
     # per CUDA TU in the build tree, shared by static and Python libraries.
-    include("${PROJECT_SOURCE_DIR}/cmake/DndsCauchyRHS.cmake")
-    dnds_generate_cauchy_rhs(_rhs_sources _rhs_include _rhs_codegen)
+    dnds_generate_cauchy_rhs(_rhs_sources _rhs_include _rhs_codegen cauchy_rhs)
     list(APPEND CPPS ${_rhs_sources})
     # Runtime-shaped ACM leaves provide both mappings for direct gradients,
     # first-order convection and polynomial shapes outside the static catalog.
@@ -229,6 +232,10 @@ if(DNDS_USE_CUDA)
 endif()
 dnds_add_lib(cauchy "${CPPS}" "physics;cfv;geom;dnds;${DNDS_EXTERNAL_LIBS}" "${DNDS_PCH_TARGETS_FAST}" OFF ON ON)
 dnds_add_lib(cauchy_shared "${CPPS}" "physics_shared;cfv_shared;geom_shared;dnds_shared;${DNDS_EXTERNAL_LIBS}" "${DNDS_PCH_TARGETS_FAST}" ON ON ON)
+foreach(_consumer cauchy cauchy_shared)
+    target_include_directories(${_consumer} PRIVATE "${_cpu_flux_include}")
+    add_dependencies(${_consumer} ${_cpu_flux_codegen})
+endforeach()
 if(DNDS_USE_CUDA)
     foreach(_rhs_consumer cauchy cauchy_shared)
         target_include_directories(${_rhs_consumer} PRIVATE "${_rhs_include}")

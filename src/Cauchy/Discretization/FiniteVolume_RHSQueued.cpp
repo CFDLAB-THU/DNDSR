@@ -84,7 +84,7 @@ namespace DNDS::Cauchy
                 profile.emplace(RHSKernelProfile{owner->settings.equation.rans.model,
                                                  extrapolation ? "extrapolation" : "periodic", controls.components, controls.modes,
                                                  controls.dimension, n.RHSIntegrationOrder(), owner->rhsUniformFacePoints});
-            const auto launch = ResolveRHSKernelLaunch(kernelSettings, controls.direct && controls.linear,
+            const auto launch = ResolveRHSKernelLaunch(kernelSettings, controls.direct || controls.firstOrder,
                                                        profile && kernelSettings.rhsMapping == "auto" ? RHSKernelDeviceName(device.ordinal) : std::string{}, profile);
             controls.mapping = launch.mapping == "ctaSegments" ? CUDA::RHSFaceMapping::CTASegments : CUDA::RHSFaceMapping::Thread;
             controls.reduction = launch.reduction == "segmented"     ? CUDA::RHSFaceReduction::Segmented

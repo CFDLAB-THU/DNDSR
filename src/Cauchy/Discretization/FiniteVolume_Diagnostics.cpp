@@ -53,7 +53,7 @@ namespace DNDS::Cauchy
             count = MPI::AllreduceValue<MPI::Reduction::Sum>(count, Metrics().Communicator());
             return count;
         }
-        return work.faceFallbacks[0] + work.faceFallbacks[1];
+        return MPI::AllreduceValue<MPI::Reduction::Sum>(work.faceFallbacks[0] + work.faceFallbacks[1], Metrics().Communicator());
     }
 
     index FiniteVolume::LastCharacteristicFallbacks(const Workspace &work) const

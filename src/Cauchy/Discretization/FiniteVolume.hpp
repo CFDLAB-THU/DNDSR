@@ -201,7 +201,9 @@ namespace DNDS::Cauchy
         struct WorkspaceOptions
         {
             /// Resolve once during workspace construction. Generic is the
-            /// layout/physics-general CPU oracle; FixedFlow5 requires one
+            /// layout/physics-general CPU oracle. Auto resolves a compact physical
+            /// shape where all operands qualify. FixedFlow5 compares the prior
+            /// optimized implementation and requires one
             /// perfect-gas flow5 field and never changes the outer schedule.
             RHSKernelPolicy rhsKernel;
             bool captureBoundaryFlux;

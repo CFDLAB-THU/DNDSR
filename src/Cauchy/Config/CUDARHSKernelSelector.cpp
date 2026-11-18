@@ -121,11 +121,11 @@ namespace DNDS::Cauchy
     }
 
     RHSKernelLaunchSelection ResolveRHSKernelLaunch(const KernelExecutionSettings &settings,
-                                                    bool directGradient, std::string_view deviceName,
+                                                    bool nonModal, std::string_view deviceName,
                                                     std::optional<RHSKernelProfile> profile)
     {
         RHSKernelLaunchSelection launch;
-        if (directGradient)
+        if (nonModal)
         {
             launch.mapping = "thread";
             launch.reduction = "serial";

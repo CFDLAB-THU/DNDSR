@@ -18,7 +18,7 @@ namespace DNDS::Cauchy::CUDA::Detail
      * template axis. Shared staging/reduction preserves complete face order.
      */
     template <int Components, int Modes, int Dimension>
-    __global__ __launch_bounds__(512) void PolynomialFaces(
+    __global__ __launch_bounds__(512) void PerfectGasFluxCTASegments(
         RHSGeometryView publication, RHSParametersView parameters, RHSKernelControls controls,
         RHSShapeFields<Components, Modes, Dimension> fields,
         RHSFaceOutputsT<Runtime::FixedRows<Components, Components>> output, RHSFacePackageView prepared)
@@ -301,12 +301,15 @@ namespace DNDS::Cauchy::CUDA::Detail
         return EvaluateFace<C>(geometry, physics, controls, point, output, face, fallbacks);
     }
 
-    template <int Components, int Modes, int Dimension>
-    __global__ void PolynomialFaceThreads(
+    template <int Components, int Modes, int Dimension, ReconstructionForm Form>
+    __global__ void PerfectGasFluxFaceThreads(
         RHSGeometryView publication, RHSParametersView parameters, RHSKernelControls controls,
         RHSShapeFields<Components, Modes, Dimension> fields,
         RHSFaceOutputsT<Runtime::FixedRows<Components, Components>> output, RHSIndices selected)
     {
+        controls.direct = Form != ReconstructionForm::Modal;
+        controls.linear = Form == ReconstructionForm::DirectGradient;
+        controls.firstOrder = Form == ReconstructionForm::MeanOnly;
         const auto &geometry = publication(0, 0);
         const auto &physics = parameters(0, 0);
         const index thread = index(blockIdx.x) * blockDim.x + threadIdx.x;
@@ -346,14 +349,23 @@ namespace DNDS::Cauchy::CUDA::Detail
                                                decltype(fields), decltype(output), RHSIndices>();
             const index blocks = std::min<index>((a.selected.RowCount() + a.controls.blockSize - 1) / a.controls.blockSize,
                                                  a.controls.gridBlocks ? a.controls.gridBlocks : 1024);
-            PolynomialFaceThreads<Components, Modes, Dimension><<<unsigned(blocks), a.controls.blockSize, 0,
-                                                                     ::DNDS::Runtime::CUDAStream(a.context)>>>(
-                a.geometry.View(), a.parameters, a.controls, fields, output, a.selected);
+            const auto run = [&](auto form)
+            {
+                PerfectGasFluxFaceThreads<Components, Modes, Dimension, decltype(form)::value>
+                    <<<unsigned(blocks), a.controls.blockSize, 0, Runtime::CUDAStream(a.context)>>>(
+                        a.geometry.View(), a.parameters, a.controls, fields, output, a.selected);
+            };
+            if constexpr (Modes > 0)
+                run(std::integral_constant<ReconstructionForm, ReconstructionForm::Modal>{});
+            else if (!a.controls.firstOrder && a.controls.linear)
+                run(std::integral_constant<ReconstructionForm, ReconstructionForm::DirectGradient>{});
+            else
+                run(std::integral_constant<ReconstructionForm, ReconstructionForm::MeanOnly>{});
             return;
         }
         Runtime::CheckKernelArgumentBudget<RHSGeometryView, RHSParametersView, RHSKernelControls,
                                            decltype(fields), decltype(output), RHSFacePackageView>();
-        PolynomialFaces<Components, Modes, Dimension><<<a.segmentBlocks, a.controls.blockSize, a.packages.sharedBytes,
+        PerfectGasFluxCTASegments<Components, Modes, Dimension><<<a.segmentBlocks, a.controls.blockSize, a.packages.sharedBytes,
                                                          ::DNDS::Runtime::CUDAStream(a.context)>>>(
             a.geometry.View(), a.parameters, a.controls, fields, output, a.packages);
     }

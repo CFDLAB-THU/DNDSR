@@ -47,7 +47,6 @@ def read_shapes(manifest, mechanical=False):
         for components in sorted(component_counts)
         for dimension in sorted(int(value) for value in modes_by_dimension)
         for modes in sorted(modes_by_dimension[str(dimension)])
-        if modes or not mechanical
     ]
 
 
@@ -97,6 +96,10 @@ namespace DNDS::Cauchy::CUDA::Detail
            arguments="", forward="")
 
 
+def mappings(shape, mechanical):
+    return (ACM_MAPPINGS if shape[1] else ("Thread",)) if mechanical else (None,)
+
+
 def declarations(shapes, mechanical=False):
     arguments = ""
     entry = "bool TryLaunchFP64ACMRHS" if mechanical else "void LaunchFP64RHS"
@@ -113,7 +116,7 @@ def declarations(shapes, mechanical=False):
         f"    {entry}(const RHSFaceLaunch &a{arguments});", "",
     ])
     for shape in shapes:
-        for mapping in ACM_MAPPINGS if mechanical else (None,):
+        for mapping in mappings(shape, mechanical):
             lines.append(f"    void {launch_name(*shape, mapping)}(const RHSFaceLaunch &a{arguments});")
     lines.extend(["}", ""])
     return "\n".join(lines)
@@ -143,7 +146,10 @@ def dispatcher(shapes, mechanical=False):
             for shape in shapes:
                 if shape[0] == components and shape[2] == dimension:
                     lines.append(f"                case {shape[1]}:")
-                    if mechanical:
+                    if mechanical and shape[1] == 0:
+                        lines.extend(["                    if (a.controls.mapping != RHSFaceMapping::Thread) return false;",
+                                      f"                    {launch_name(*shape, 'Thread')}(a);", "                    return true;"])
+                    elif mechanical:
                         thread, cta = (launch_name(*shape, mapping) for mapping in ACM_MAPPINGS)
                         lines.extend(["                    if (a.controls.mapping == RHSFaceMapping::CTASegments)",
                                       f"                        {cta}(a);", "                    else",
@@ -196,7 +202,7 @@ def main():
             shapes = read_shapes(args.manifest, mechanical)
             header = output_directory / (stem + "_Instantiations.hpp")
             dispatch = output_directory / (stem + "_Instantiations.cpp")
-            kernels = [(shape, mapping) for shape in shapes for mapping in (ACM_MAPPINGS if mechanical else (None,))]
+            kernels = [(shape, mapping) for shape in shapes for mapping in mappings(shape, mechanical)]
             cuda_sources = [output_directory / source_name(*shape, mapping) for shape, mapping in kernels]
             sources.extend([dispatch, *cuda_sources])
             headers.append(header)

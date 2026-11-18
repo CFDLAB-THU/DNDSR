@@ -288,6 +288,7 @@ namespace DNDS::Cauchy
         /// Setup-resolved fixed-flow leaf. It owns immutable kernel reads; the
         /// surrounding Workspace still owns the only reconstruction/RHS
         /// schedule and all operand leases.
+        bool genericFluxOracle = false;
         std::optional<RHSOperator> fixedFlowRHS;
         /// One synchronous fixed-flow invocation's leases and plain views.
         /// Capacity is resolved by the prepared operator contract; no heap

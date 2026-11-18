@@ -1,4 +1,5 @@
 #pragma once
+#include "Cauchy/Discretization/EquationPhysicsProfile.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSFacePackages.hpp"
 
 #include "Cauchy/Discretization/PerfectGasKernelPoint.hpp"

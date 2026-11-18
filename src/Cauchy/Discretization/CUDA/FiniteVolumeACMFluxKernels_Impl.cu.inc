@@ -18,7 +18,7 @@ namespace DNDS::Cauchy::CUDA::Detail
         template <int Width>
         using Pair = Runtime::PairReadView<real, Runtime::AccessBoundsChecks, Runtime::FixedRows<Width, Width>>;
         Pair<C> mean;
-        Pair<C * M> reconstruction, viscousData;
+        Pair<C * (M ? M : D)> reconstruction, viscousData;
     };
 
     template <int C, class Fields, class Output>
@@ -118,10 +118,17 @@ namespace DNDS::Cauchy::CUDA::Detail
         return {};
     }
 
-    template <int C, class Fields, class Output>
-    __global__ void ACMFaces(ACMGeometryView geometry, RHSKernelControls controls, Fields fields,
+    template <int C, ReconstructionForm Form, class Fields, class Output>
+    __global__ void ACMFluxFaceThreads(ACMGeometryView geometry, RHSKernelControls controls, Fields fields,
                              Output output, RHSIndices selected)
     {
+        if constexpr (Form != ReconstructionForm::Generic)
+        {
+            controls.direct = Form != ReconstructionForm::Modal;
+            controls.linear = Form == ReconstructionForm::DirectGradient;
+            controls.firstOrder = Form == ReconstructionForm::MeanOnly;
+        }
+
         for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
         {
             const index iFace = selected(iRow, 0);
@@ -134,7 +141,7 @@ namespace DNDS::Cauchy::CUDA::Detail
     // mapping. Each lane evaluates one quadrature point; its segment leader
     // integrates in rule order, preserving the thread-per-face sum.
     template <int C, class Fields, class Output>
-    __global__ void ACMSegments(ACMGeometryView publication, RHSKernelControls controls, Fields fields,
+    __global__ void ACMFluxCTASegments(ACMGeometryView publication, RHSKernelControls controls, Fields fields,
                                 Output output, RHSFacePackageView prepared)
     {
         extern __shared__ real shared[];
@@ -206,7 +213,7 @@ namespace DNDS::Cauchy::CUDA::Detail
         }
     }
 
-    template <int Components, RHSFaceMapping Mapping, class Fields, class Output>
+    template <int Components, RHSFaceMapping Mapping, ReconstructionForm Form = ReconstructionForm::Generic, class Fields, class Output>
     void LaunchACMMapping(const RHSFaceLaunch &launch, const Fields &fields, const Output &output)
     {
         const auto &controls = launch.controls;
@@ -214,7 +221,7 @@ namespace DNDS::Cauchy::CUDA::Detail
         if constexpr (Mapping == RHSFaceMapping::CTASegments)
         {
             Runtime::CheckKernelArgumentBudget<ACMGeometryView, RHSKernelControls, Fields, Output, RHSFacePackageView>();
-            ACMSegments<Components><<<launch.segmentBlocks, controls.blockSize, launch.packages.sharedBytes, stream>>>(
+            ACMFluxCTASegments<Components><<<launch.segmentBlocks, controls.blockSize, launch.packages.sharedBytes, stream>>>(
                 launch.geometry.View(), controls, fields, output, launch.packages);
         }
         else
@@ -222,7 +229,7 @@ namespace DNDS::Cauchy::CUDA::Detail
             Runtime::CheckKernelArgumentBudget<ACMGeometryView, RHSKernelControls, Fields, Output, RHSIndices>();
             const unsigned blocks = unsigned(std::min<index>((launch.selected.RowCount() + controls.blockSize - 1) / controls.blockSize,
                                                              controls.gridBlocks ? controls.gridBlocks : 1024));
-            ACMFaces<Components><<<blocks, controls.blockSize, 0, stream>>>(
+            ACMFluxFaceThreads<Components, Form><<<blocks, controls.blockSize, 0, stream>>>(
                 launch.geometry.View(), controls, fields, output, launch.selected);
         }
     }
@@ -240,18 +247,28 @@ namespace DNDS::Cauchy::CUDA::Detail
     void LaunchACMRHSShape(const RHSFaceLaunch &launch)
     {
         static_assert(Mapping == RHSFaceMapping::Thread || Mapping == RHSFaceMapping::CTASegments);
-        DNDS_check_throw_info(launch.controls.mechanical && !launch.controls.direct && !launch.controls.firstOrder &&
-                                  launch.controls.components == C && launch.controls.modes == M && launch.controls.dimension == D &&
-                                  launch.controls.mapping == Mapping,
-                              "ACM RHS static C/M/D launch differs from its prepared profile");
-        using Width = Runtime::FixedRows<C, C>;
-        using Coefficients = Runtime::FixedRows<C * M, C * M>;
-        const ACMPolynomialFields<C, M, D> fields{
-            ProjectRHSField<Width>(launch.fields.mean),
-            ProjectRHSField<Coefficients>(launch.fields.reconstruction),
-            launch.controls.distinctViscous ? ProjectRHSField<Coefficients>(launch.fields.viscousData)
-                                            : typename ACMPolynomialFields<C, M, D>::template Pair<C * M>{}};
+        const auto &controls = launch.controls;
+        const bool modal = !controls.firstOrder && !controls.direct;
+        DNDS_check_throw_info(controls.mechanical && controls.components == C && controls.dimension == D &&
+                                  controls.mapping == Mapping && (modal ? M > 0 && controls.modes == M : M == 0),
+                              "ACM flux launch differs from its prepared profile");
+        constexpr int W = C * (M ? M : D);
+        using State = Runtime::FixedRows<C, C>;
+        using Coefficients = Runtime::FixedRows<W, W>;
+        ACMPolynomialFields<C, M, D> fields{};
+        fields.mean = ProjectRHSField<State>(launch.fields.mean);
+        if (modal || (!controls.firstOrder && controls.linear))
+        {
+            fields.reconstruction = ProjectRHSField<Coefficients>(launch.fields.reconstruction);
+            if (controls.distinctViscous)
+                fields.viscousData = ProjectRHSField<Coefficients>(launch.fields.viscousData);
+        }
         const auto output = ProjectRHSOutputs<C>(launch.output);
-        LaunchACMMapping<C, Mapping>(launch, fields, output);
+        if constexpr (M > 0)
+            LaunchACMMapping<C, Mapping, ReconstructionForm::Modal>(launch, fields, output);
+        else if (!controls.firstOrder && controls.linear)
+            LaunchACMMapping<C, Mapping, ReconstructionForm::DirectGradient>(launch, fields, output);
+        else
+            LaunchACMMapping<C, Mapping, ReconstructionForm::MeanOnly>(launch, fields, output);
     }
 }

@@ -3,6 +3,7 @@
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Compute.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeRHSKernels_Segments.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
+#include "DNDS/Runtime/Execution/KernelViews.hpp"
 #include "FiniteVolumeRHSKernels_Instantiations.hpp"
 #include "FiniteVolumeACMFluxKernels_Instantiations.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeACMFluxKernels.hpp"
@@ -15,10 +16,10 @@ namespace DNDS::Cauchy::CUDA
     using ParametersView = R::ArrayView<const RHSKernelParameters, R::AccessBoundsChecks, R::FixedRows<1>>;
     namespace
     {
-        template <int Components>
-        __global__ void Cells(GeometryView published, RHSInput faces, RHSInput lowFaces,
-                              R::ArrayView<const NumericalStatus, R::AccessBoundsChecks, R::FixedRows<1>> faceStatus,
-                              RHSOutput output, RHSOutput lowOutput, RHSStatus status, RHSIndices selected, bool produceLow, int momentumFirst)
+        template <int Components, class Input, class Output>
+        __global__ void GatherFluxCellRows(GeometryView published, Input faces, Input lowFaces,
+                                           R::ArrayView<const NumericalStatus, R::AccessBoundsChecks, R::FixedRows<1>> faceStatus,
+                                           Output output, Output lowOutput, RHSStatus status, RHSIndices selected, bool produceLow, int momentumFirst)
         {
             const auto &geometry = published(0, 0);
             for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
@@ -156,7 +157,7 @@ namespace DNDS::Cauchy::CUDA
                                     ? Detail::ValidateSegmentedFluxFaces(context, geometry, controls, faces, packages)
                                     : 0;
             const Detail::RHSFaceLaunch launch{context, geometry, parameters, controls, fields, output, faces, packages, blocks};
-            if (!controls.direct && !controls.firstOrder && Detail::TryLaunchFP64ACMRHS(launch))
+            if (Detail::TryLaunchFP64ACMRHS(launch))
             {
                 DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA ACM static polynomial launch failed");
                 return;
@@ -215,19 +216,30 @@ namespace DNDS::Cauchy::CUDA
         const unsigned blocks = unsigned(std::min<index>((cells.RowCount() + 127) / 128, 1024));
         const auto stream = ::DNDS::Runtime::CUDAStream(context);
         const int momentumFirst = g.acm.RowCount() ? 0 : 1;
+        const auto launch = [&](auto count)
+        {
+            constexpr int C = decltype(count)::value;
+            using Rows = R::FixedRows<C, C>;
+            const auto faces = R::ProjectKernelView<Rows>(highFaces);
+            const auto output = R::ProjectKernelView<Rows>(high);
+            const auto lowFlux = produceLow ? R::ProjectKernelView<Rows>(lowFaces) : decltype(faces){};
+            const auto lowOutput = produceLow ? R::ProjectKernelView<Rows>(low) : decltype(output){};
+            GatherFluxCellRows<C><<<blocks, 128, 0, stream>>>(geometry.View(), faces, lowFlux, faceStatus,
+                                                              output, lowOutput, status, cells, produceLow, momentumFirst);
+        };
         switch (high.Width())
         {
         case 4:
-            Cells<4><<<blocks, 128, 0, stream>>>(geometry.View(), highFaces, lowFaces, faceStatus, high, low, status, cells, produceLow, momentumFirst);
+            launch(std::integral_constant<int, 4>{});
             break;
         case 5:
-            Cells<5><<<blocks, 128, 0, stream>>>(geometry.View(), highFaces, lowFaces, faceStatus, high, low, status, cells, produceLow, momentumFirst);
+            launch(std::integral_constant<int, 5>{});
             break;
         case 6:
-            Cells<6><<<blocks, 128, 0, stream>>>(geometry.View(), highFaces, lowFaces, faceStatus, high, low, status, cells, produceLow, momentumFirst);
+            launch(std::integral_constant<int, 6>{});
             break;
         case 7:
-            Cells<7><<<blocks, 128, 0, stream>>>(geometry.View(), highFaces, lowFaces, faceStatus, high, low, status, cells, produceLow, momentumFirst);
+            launch(std::integral_constant<int, 7>{});
             break;
         }
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA RHS gather launch failed");

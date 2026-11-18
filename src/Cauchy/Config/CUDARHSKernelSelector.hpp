@@ -34,6 +34,6 @@ namespace DNDS::Cauchy
     /// explicit mapping uses that mapping's defaults for any unspecified
     /// fields. A direct-gradient operator always selects the plain thread path.
     RHSKernelLaunchSelection ResolveRHSKernelLaunch(const KernelExecutionSettings &settings,
-                                                    bool directGradient, std::string_view deviceName = {},
+                                                    bool nonModal, std::string_view deviceName = {},
                                                     std::optional<RHSKernelProfile> profile = {});
 }

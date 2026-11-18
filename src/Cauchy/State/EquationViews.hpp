@@ -195,6 +195,27 @@ namespace DNDS::Cauchy
                    _blocks[0].parent.kind == Runtime::RowLayoutKind::TiledColMajorTable &&
                    _blocks[0].parent.stride == tileWidth;
         }
+        /// Compact whole-equation projection is independent of which components
+        /// represent flow. An empty halo may be represented by an absent view.
+        bool CompactHostTable(index width) const
+        {
+            if (!Table() || ComponentNumber() != width)
+                return false;
+            const auto parent = _blocks[0].parent;
+            return (!parent.rows && !parent.data) || (parent.device == Runtime::Device::Host() &&
+                                                      parent.width == width && parent.stride == width);
+        }
+        template <size_t Width>
+        auto CompactRows() const
+        {
+            using Rows = Runtime::FixedRows<Width, Width>;
+            DNDS_assert(CompactHostTable(Width));
+            const auto parent = _blocks[0].parent;
+            return EquationBlockArrayView<T, Runtime::AccessBoundsChecks, Width, Rows>{
+                {parent.data, nullptr, parent.rows, Width, Width, nullptr, Runtime::RowLayoutKind::Table, parent.device},
+                0,
+                Width};
+        }
         index ComponentNumber() const { return _offsets[_offsets.size() - 1]; }
         template <EquationViewKind Kind = EquationViewKind::Generic,
                   size_t Width = Runtime::DynamicExtent,

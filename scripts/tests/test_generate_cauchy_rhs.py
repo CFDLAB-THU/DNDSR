@@ -22,9 +22,9 @@ class RHSCodeGenerationTests(unittest.TestCase):
         shapes = GENERATOR.read_shapes(manifest)
         self.assertEqual(len(shapes), 24)
         acm = GENERATOR.read_shapes(manifest, mechanical=True)
-        self.assertEqual(len(acm), 18)
+        self.assertEqual(len(acm), 24)
         self.assertEqual({c for c, _, _ in acm}, {4, 5, 6})
-        self.assertTrue(all(m > 0 for _, m, _ in acm))
+        self.assertEqual(sum(m == 0 for _, m, _ in acm), 6)
         for components in (5, 6, 7):
             self.assertEqual([(m, d) for c, m, d in shapes if c == components],
                              [(0, 2), (2, 2), (5, 2), (9, 2), (0, 3), (3, 3), (9, 3), (19, 3)])
@@ -34,13 +34,28 @@ class RHSCodeGenerationTests(unittest.TestCase):
                        "--manifest", str(manifest), "--output-dir", str(output)]
             subprocess.run(command, check=True, capture_output=True, text=True, timeout=60)
             before = {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in output.iterdir()}
-            self.assertEqual(len(before), 65)
+            self.assertEqual(len(before), 71)
             for c, m, d in acm:
-                for mapping in ("Thread", "CTASegments"):
+                for mapping in (("Thread", "CTASegments") if m else ("Thread",)):
                     name = f"FiniteVolumeACMFluxKernels_C{c}_M{m}_D{d}_{mapping}.cu"
                     self.assertIn(f"LaunchACMRHSShape<{c}, {m}, {d}, RHSFaceMapping::{mapping}>", before[name][0].decode())
             subprocess.run(command, check=True, capture_output=True, text=True, timeout=60)
             self.assertEqual(before, {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in output.iterdir()})
+
+    def test_cpu_catalog_distinguishes_physics_form_and_width(self):
+        manifest = ROOT / "scripts/manifests/cauchy_rhs_shapes.json"
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            subprocess.run([sys.executable, str(ROOT / "scripts/generate_cauchy_cpu_flux.py"),
+                            "--manifest", str(manifest), "--output-dir", str(output)], check=True)
+            generated = list(output.glob("FiniteVolumeCPUFluxCatalog_Flux_*.cpp"))
+            self.assertEqual(len(generated), 60)
+            for profile in ("ACMSA", "PerfectGas"):
+                for mode, form in ((0, "MeanOnly"), (0, "DirectGradient"), (19, "Modal")):
+                    name = f"FiniteVolumeCPUFluxCatalog_Flux_{profile}_{form}_C5_M{mode}_D3.cpp"
+                    text = (output / name).read_text()
+                    self.assertIn(f"EquationPhysicsProfile::{profile}, ReconstructionForm::{form}, 5, 3, {mode}", text)
+                    self.assertIn("a.remote.CompactRows<5>()", text)
 
     @unittest.skipUnless(shutil.which("cmake"), "CMake is unavailable")
     def test_cmake_tracks_inputs_and_recovers_every_output(self):
@@ -59,7 +74,7 @@ class RHSCodeGenerationTests(unittest.TestCase):
                 (source / "CMakeLists.txt").write_text('''cmake_minimum_required(VERSION 3.21)
 project(RHSCodeGeneration NONE)
 include("${CMAKE_SOURCE_DIR}/cmake/DndsCauchyRHS.cmake")
-dnds_generate_cauchy_rhs(rhs_sources rhs_include rhs_codegen)
+dnds_generate_cauchy_rhs(rhs_sources rhs_include rhs_codegen cauchy_rhs)
 add_custom_target(static_consumer ALL)
 add_custom_target(shared_consumer ALL)
 add_dependencies(static_consumer ${rhs_codegen})

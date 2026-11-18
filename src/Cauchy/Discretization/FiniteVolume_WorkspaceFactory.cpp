@@ -173,7 +173,8 @@ namespace DNDS::Cauchy
         Metrics().Communication()->LocalStage([&]
                                               { result = std::make_shared<Workspace>(_data, state, std::move(workers), meanOnly, options.captureBoundaryFlux); });
         result->BindHalos(state);
-        if (flow5Profile && state.Device() == R::Device::Host() && options.rhsKernel != RHSKernelPolicy::Generic)
+        result->genericFluxOracle = options.rhsKernel == RHSKernelPolicy::Generic;
+        if (flow5Profile && state.Device() == R::Device::Host() && options.rhsKernel == RHSKernelPolicy::FixedFlow5)
             result->fixedFlowRHS.emplace(AcquireRHSOperator());
         auto request = CompleteRHSAuxiliaryRequest({});
         if (request.meanThermodynamics || request.cellWaveJump || request.cellPressureMinimum)

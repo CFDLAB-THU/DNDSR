@@ -261,6 +261,7 @@ namespace DNDS::Cauchy
         request.lowFaceValues = lowFaceValues;
         request.wallFlux = wallFlux;
         request.captureBoundaryFlux = captureBoundaryFlux;
+        request.genericFluxOracle = genericFluxOracle;
         request.wall = wallRead ? wallRead->HostView() : WallDistanceView{};
         request.thermal = thermal.View();
         request.frame = owner->motion.At(time);

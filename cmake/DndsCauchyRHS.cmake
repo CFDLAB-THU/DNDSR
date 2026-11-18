@@ -10,16 +10,17 @@ include_guard(GLOBAL)
 #   add_dependencies(cauchy ${_rhs_codegen})
 #
 # Reuse those three values for cauchy_shared rather than invoking this twice.
-function(dnds_generate_cauchy_rhs out_sources out_include_dir out_target)
-    if(TARGET dnds_cauchy_rhs_codegen)
+function(dnds_generate_cauchy_rhs out_sources out_include_dir out_target family)
+    set(_codegen_target dnds_${family}_codegen)
+    if(TARGET ${_codegen_target})
         message(FATAL_ERROR "dnds_generate_cauchy_rhs must be called once and its outputs shared by consumers")
     endif()
 
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     get_filename_component(_dnds_source_root "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/.." ABSOLUTE)
-    set(_dnds_generator "${_dnds_source_root}/scripts/generate_cauchy_rhs.py")
+    set(_dnds_generator "${_dnds_source_root}/scripts/generate_${family}.py")
     set(_dnds_manifest "${_dnds_source_root}/scripts/manifests/cauchy_rhs_shapes.json")
-    set(_dnds_output_dir "${CMAKE_CURRENT_BINARY_DIR}/generated/cauchy_rhs")
+    set(_dnds_output_dir "${CMAKE_CURRENT_BINARY_DIR}/generated/${family}")
     set(_dnds_index "${_dnds_output_dir}/FiniteVolumeRHSKernels_Sources.cmake")
     set(_dnds_command "${Python3_EXECUTABLE}" "${_dnds_generator}"
         --manifest "${_dnds_manifest}" --output-dir "${_dnds_output_dir}")
@@ -28,7 +29,7 @@ function(dnds_generate_cauchy_rhs out_sources out_include_dir out_target)
     # CMake constructs either Make or Ninja's compilation graph. Included .cmake
     # fragments (this file and the generated index) are also tracked by CMake.
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-        "${_dnds_generator}" "${_dnds_manifest}")
+        "${_dnds_generator}" "${_dnds_source_root}/scripts/generate_cauchy_rhs.py" "${_dnds_manifest}")
     execute_process(COMMAND ${_dnds_command}
         RESULT_VARIABLE _dnds_result
         OUTPUT_VARIABLE _dnds_stdout
@@ -54,12 +55,12 @@ function(dnds_generate_cauchy_rhs out_sources out_include_dir out_target)
     # touch rules for its secondary outputs, which would change generated source
     # timestamps on a no-op build and trigger another configuration. The private
     # CUDA implementation remains a normal compiler include dependency.
-    add_custom_target(dnds_cauchy_rhs_codegen
+    add_custom_target(${_codegen_target}
         DEPENDS ${DNDS_CAUCHY_RHS_GENERATED_OUTPUTS})
     set_source_files_properties(${DNDS_CAUCHY_RHS_GENERATED_SOURCES}
         "${DNDS_CAUCHY_RHS_GENERATED_DECLARATIONS}" PROPERTIES GENERATED TRUE)
 
     set(${out_sources} "${DNDS_CAUCHY_RHS_GENERATED_SOURCES}" PARENT_SCOPE)
     set(${out_include_dir} "${DNDS_CAUCHY_RHS_GENERATED_INCLUDE_DIR}" PARENT_SCOPE)
-    set(${out_target} dnds_cauchy_rhs_codegen PARENT_SCOPE)
+    set(${out_target} ${_codegen_target} PARENT_SCOPE)
 endfunction()

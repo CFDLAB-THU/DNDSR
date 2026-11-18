@@ -128,7 +128,7 @@ namespace DNDS::Cauchy
             index derivedWidth = 3;
             index meanThermodynamics = -1, incoming = -1, faces = -1, lowFaces = -1, wallFlux = -1;
             index flowFirst = -1, speciesFirst = -1, ransFirst = -1, ransBlock = -1;
-            bool meanOnly = false, hasPrimitive = false, captureBoundaryFlux = false, boundaryFacesOnly = false;
+            bool genericFluxOracle = false, meanOnly = false, hasPrimitive = false, captureBoundaryFlux = false, boundaryFacesOnly = false;
 
             Inputs(std::shared_ptr<const Data> data, const ThermalPolicy &policy,
                    R::MetadataBuffer<index> offsets, R::MetadataBuffer<index> vectors,
@@ -139,6 +139,7 @@ namespace DNDS::Cauchy
         };
         auto pin = std::make_shared<Inputs>(owner, thermal, logicalFirst, vectorStarts, std::move(evaluator), state, output);
         pin->fixed = fixedFlowRHS;
+        pin->genericFluxOracle = genericFluxOracle;
         pin->workers = workers;
         const bool viscous = !meanOnly && owner->equation.Viscous();
         pin->properties = {viscous || owner->equation.HasRANS(), viscous, viscous, chemical, false};
@@ -373,6 +374,7 @@ namespace DNDS::Cauchy
                 DNDS_check_throw_info(wall.Width() == 3, "queued boundary momentum width differs");
                 request.wallFlux = {wall.data, wall.offsets, wall.rows, wall.width, wall.stride, wall.sizes, wall.kind, wall.device};
                 request.captureBoundaryFlux = pin->captureBoundaryFlux;
+                request.genericFluxOracle = pin->genericFluxOracle;
                 if (pin->walls)
                 {
                     request.wall.faces = {wallFaces.data, wallFaces.offsets, wallFaces.rows, wallFaces.width, wallFaces.stride, wallFaces.sizes, wallFaces.kind, wallFaces.device};

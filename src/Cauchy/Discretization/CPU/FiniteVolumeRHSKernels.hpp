@@ -64,7 +64,7 @@ namespace DNDS::Cauchy::CPU
         RHSScalarView incoming;
         RHSOutputView faceValues, lowFaceValues;
         Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::FixedRows<3>> wallFlux;
-        bool captureBoundaryFlux = false;
+        bool captureBoundaryFlux = false, genericFluxOracle = false;
         WallDistanceView wall;
         ThermalView thermal;
         RigidFrame frame;
@@ -104,7 +104,7 @@ namespace DNDS::Cauchy::CPU
                                                 SpanView<EquationRHSWorkerScratch>, EquationLayoutView<const real>,
                                                 EquationLayoutView<const real>, EquationLayoutView<real>,
                                                 EquationLayoutView<real>, CFV::ReconstructionRegion) noexcept;
-    /// Shape dispatch and all numeric instantiations stay in the CPU TU.
+    /// Resolve the compact generated catalog or the layout-generic CPU body at entry.
     /// Returns local fallback count; the facade publishes diagnostics afterward.
     NumericalResult<index> EvaluateEquationFlux(const EquationRHSRequest &, const EquationSystem &,
                                                 const BoundaryPointOperator &, const Riemann::RiemannFlux &,
