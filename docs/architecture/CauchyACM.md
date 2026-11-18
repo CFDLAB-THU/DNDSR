@@ -86,8 +86,9 @@ and the [SA](../../cases/cauchy/acm_plate_sa.json) and
 [SST](../../cases/cauchy/acm_plate_sst.json) plate inputs for complete configurations.
 
 BDF1/2, trapezoidal and ESDIRK2/3/4 have completed three-timestep
-translation studies on this mesh. DITR-U2R2 has completed cycles at dt=0.5
-and 0.25 with independent stage-continuity checks. At the default fraction
+translation studies on this mesh. DITR-U2R2 with its default fraction
+gave velocity and pressure self-orders of 3.23 at dt=2/3, 1/3 and 1/6,
+with independent stage-continuity checks. At the default fraction
 and theta, the sequential DITR-U2R1 corrections diverged on this
 fixture even with consistent initial data. The invertibility check on the
 coupled time equations establishes independence of the two constraints.
