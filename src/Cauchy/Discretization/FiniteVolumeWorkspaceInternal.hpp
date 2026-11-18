@@ -411,6 +411,26 @@ namespace DNDS::Cauchy
                 return true;
             }
         };
+        struct CenterGradientInput
+        {
+            WeakPublication mean;
+            std::optional<WeakPublication> boundaryCenters, boundaryQuadrature;
+            real time;
+            CenterGradientInput(const EquationDofs &state, const std::optional<BoundaryInputs> &packet, real t) : mean(state), time(t)
+            {
+                if (packet)
+                {
+                    boundaryCenters.emplace(packet->FaceCenterValues());
+                    boundaryQuadrature.emplace(packet->QuadratureValues());
+                }
+            }
+            bool Current(const EquationDofs &state, const std::optional<BoundaryInputs> &packet, real t) const
+            {
+                return time == t && mean.Current(state) && bool(packet) == bool(boundaryCenters) &&
+                       (!packet || (boundaryCenters->Current(packet->FaceCenterValues()) && boundaryQuadrature->Current(packet->QuadratureValues())));
+            }
+        };
+        std::optional<CenterGradientInput> centerGradientInput;
         std::optional<EquationDofOperations::Binding> rhsState;
         std::optional<WeakPublication> rhsCoefficients;
         real rhsTime = 0;

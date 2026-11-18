@@ -644,6 +644,10 @@ namespace DNDS::Cauchy
                         data.auxiliary, engine, data.stream, time);
                 data.PublishAuxiliary(state, time);
             }
+            else
+                data.discrete.EnsureCenterSourceGradient(state, *data.reconstruction, *data.workspace, engine,
+                                                         data.executionOwner ? data.executionOwner->ComputeStream() : data.stream,
+                                                         data.executionOwner ? data.executionOwner->CommunicationStream() : data.stream, time);
             DNDS_check_throw_info(!data.sourceDerivative || cachedDerivative,
                                   "cached correction rate requires its integrated quadrature source derivative");
             data.Stage([&]

@@ -1678,7 +1678,8 @@ TEST_CASE("SA cached corrections retain pre-RHS auxiliary publication across CPU
             R::EagerEngine engine(workers);
             const auto stream = engine.CreateCPUStream();
             C::NonlinearSolver a(fv, direct, fv.BuildReconstructionState(direct), fv.BuildWorkspace(direct), engine, stream, settings, A::ComponentSelection(6));
-            C::NonlinearSolver b(fv, cached, fv.BuildReconstructionState(cached), fv.BuildWorkspace(cached), engine, stream, settings, A::ComponentSelection(6));
+            auto sharedWorkspace = fv.BuildWorkspace(cached);
+            C::NonlinearSolver b(fv, cached, fv.BuildReconstructionState(cached), sharedWorkspace, engine, stream, settings, A::ComponentSelection(6));
             CHECK_THROWS_WITH(b.PreparedAuxValues(), doctest::Contains("not been prepared"));
             auto record = b.BuildSourceDerivative(cached);
             REQUIRE(bool(record) == (settings.implicit.sourceJacobianMode == "rhsQuadrature"));
@@ -1691,6 +1692,21 @@ TEST_CASE("SA cached corrections retain pre-RHS auxiliary publication across CPU
             const auto faceVersion = b.PreparedAuxValues().faceSpectralRadius->Version();
             const auto sumVersion = b.PreparedAuxValues().cellSpectralSum->Owned().Version();
             const auto oldOwnedVersion = cached.PhysicalField(0).Owned().Version();
+            // A second coupled stage uses the same FV scratch, with a different
+            // shear and scalar field. The first stage still owns its original
+            // rate/auxiliary publication. Its correction must recover its own
+            // centered gradient without overwriting those signals.
+            auto other = C::EquationDofOperations::NewVector(cached);
+            C::EquationDofOperations::Copy(other, cached);
+            {
+                auto write = other.WriteOwned();
+                const auto flow = write.Block("flow");
+                for (I iCell = 0; iCell < fv.Metrics().NumCell(); ++iCell)
+                    flow(iCell, 2) += .1 * std::sin(6.283185307179586 * fv.Metrics().GetCellCent(iCell)[0]);
+            }
+            auto otherReconstruction = fv.BuildReconstructionState(other);
+            auto otherRate = C::EquationDofOperations::NewVector(other);
+            fv.Evaluate(other, otherRate, *otherReconstruction, *sharedWorkspace, engine, stream, .3);
             const auto fresh = a.CorrectOnce(direct, source, 0., 1., .2);
             const auto reused = b.CorrectOnce(cached, source, 0., 1., .2, 0, {}, std::cref(rate), derivative);
             CHECK(fresh.linearIterations == reused.linearIterations);

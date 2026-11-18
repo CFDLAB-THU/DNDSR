@@ -84,7 +84,7 @@ def main():
         "const Runtime::ExecutionStream &stream,\n"
         "const Runtime::ExecutionStream &communication, real time,\n"
         "OptionalRef<AuxiliaryValues> auxiliary,\n"
-        "OptionalRef<const QueuedEvaluationDependency> dependency, OptionalRef<R::Array<real>> sourceDerivative) const\n    {")
+        "OptionalRef<const QueuedEvaluationDependency> dependency, OptionalRef<R::Array<real>> sourceDerivative, bool stopAfterGradient) const\n    {")
     text = insert_after_once(
         text, evaluation,
         "        ::DiagnosticTiming::Level diagnosticLevel(_data->settings.numerics.firstOrderConvection ? 2 : _data->settings.numerics.reconstruction == \"variational\" ? 0 : 1);\n"

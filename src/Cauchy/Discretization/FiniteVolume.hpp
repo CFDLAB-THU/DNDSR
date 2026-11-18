@@ -826,10 +826,9 @@ namespace DNDS::Cauchy
         bool Admissible(const EquationDofs &state,
                         const AdmissibilityPolicy &policy) const;
         index LastFaceFallbacks(const Workspace &workspace) const;
-        /// Full-state variant also refreshes sampled source inputs from the
-        /// retained polynomial before publishing their Jacobian provenance.
-        /// PrepareJacobian separately evaluates the mean-state source matrix;
-        /// this call evaluates neither chemical rates nor the physical RHS.
+        /// Prepare the correction's mean-state signals. For centered RANS,
+        /// restore the gradient when another coupled stage used the workspace.
+        /// Quadrature derivatives stay paired with their original rates.
         /// A supplied interface dependency is imported before boundary reads;
         /// flow/mixture auxiliary core work independent of the interface can
         /// run first. Two-equation gradient/auxiliary work shares the enclosing
@@ -840,12 +839,12 @@ namespace DNDS::Cauchy
                                   Runtime::EagerEngine &engine, const Runtime::ExecutionStream &compute,
                                   const Runtime::ExecutionStream &communication, real time,
                                   OptionalRef<const QueuedEvaluationDependency> dependency = {}) const;
-        /// Rebind and, when needed, resample only the source/Jacobian
-        /// publication from a stage's durable finalized polynomial. This does
-        /// not touch auxiliary face/cell signals, so a DITR endpoint can retain
-        /// its RHS-refined auxiliary packet after another stage used shared
-        /// reconstruction scratch. Sampling is submitted on the supplied
-        /// backend stream, then joined before publishing its provenance.
+        /// A stored rate can outlive the scratch gradient of a coupled stage.
+        /// Refresh its centered RANS gradient if another evaluation overwrote
+        /// the workspace. Requires the matching stage's published interface.
+        void EnsureCenterSourceGradient(EquationDofs &state, ReconstructionState &reconstruction, Workspace &workspace,
+                                        Runtime::EagerEngine &engine, const Runtime::ExecutionStream &compute,
+                                        const Runtime::ExecutionStream &communication, real time) const;
 
         /// Five-component affine bound retained for specialized perfect-gas
         /// flow kernels and their compatibility tests. Complete-equation
@@ -935,7 +934,8 @@ namespace DNDS::Cauchy
                           const Runtime::ExecutionStream &compute,
                           const Runtime::ExecutionStream &communication, real time,
                           OptionalRef<AuxiliaryValues> auxiliary = {},
-                          OptionalRef<const QueuedEvaluationDependency> dependency = {}, OptionalRef<Runtime::Array<real>> sourceDerivative = {}) const;
+                          OptionalRef<const QueuedEvaluationDependency> dependency = {}, OptionalRef<Runtime::Array<real>> sourceDerivative = {},
+                          bool stopAfterGradient = false) const;
         void ValidateEquationSourceJacobian(const EquationDofs &state,
                                             const JacobianContext &context, real time) const;
         bool AddEquationSourceJacobian(const EquationDofs &state,
