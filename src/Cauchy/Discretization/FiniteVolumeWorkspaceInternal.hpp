@@ -411,10 +411,16 @@ namespace DNDS::Cauchy
         struct CenterGradientInput
         {
             WeakPublication mean;
+            // Remote means may change independently of this rank's owned
+            // generation. Every completed halo replacement advances its version.
+            std::vector<uint64_t> ghostVersions;
             std::optional<WeakPublication> boundaryCenters, boundaryQuadrature;
             real time;
             CenterGradientInput(const EquationDofs &state, const std::optional<BoundaryInputs> &packet, real t) : mean(state), time(t)
             {
+                ghostVersions.reserve(state.PhysicalFieldNumber());
+                for (index field = 0; field < state.PhysicalFieldNumber(); ++field)
+                    ghostVersions.push_back(state.PhysicalField(field).Ghost().Version());
                 if (packet)
                 {
                     boundaryCenters.emplace(packet->FaceCenterValues());
@@ -423,8 +429,12 @@ namespace DNDS::Cauchy
             }
             bool Current(const EquationDofs &state, const std::optional<BoundaryInputs> &packet, real t) const
             {
-                return time == t && mean.Current(state) && bool(packet) == bool(boundaryCenters) &&
-                       (!packet || (boundaryCenters->Current(packet->FaceCenterValues()) && boundaryQuadrature->Current(packet->QuadratureValues())));
+                if (time != t || !mean.Current(state) || bool(packet) != bool(boundaryCenters))
+                    return false;
+                for (index field = 0; field < state.PhysicalFieldNumber(); ++field)
+                    if (ghostVersions[field] != state.PhysicalField(field).Ghost().Version())
+                        return false;
+                return !packet || (boundaryCenters->Current(packet->FaceCenterValues()) && boundaryQuadrature->Current(packet->QuadratureValues()));
             }
         };
         std::optional<CenterGradientInput> centerGradientInput;
