@@ -85,16 +85,16 @@ or supported Krylov path. See the periodic [vortex](../../cases/cauchy/acm_trans
 and the [SA](../../cases/cauchy/acm_plate_sa.json) and
 [SST](../../cases/cauchy/acm_plate_sst.json) plate inputs for complete configurations.
 
-BDF1/2, trapezoidal, ESDIRK2 and ESDIRK3 have completed a translation cycle
-on this mesh. DITR-U2R2 has passed the two independent stage-continuity
-checks on a physical step. DITR-U2R1 is experimental for ACM. At the
-default fraction and theta its sequential corrections diverged on this
+BDF1/2, trapezoidal and ESDIRK2/3/4 have completed three-timestep
+translation studies on this mesh. DITR-U2R2 has completed cycles at dt=0.5
+and 0.25 with independent stage-continuity checks. At the default fraction
+and theta, the sequential DITR-U2R1 corrections diverged on this
 fixture even with consistent initial data. The invertibility check on the
 coupled time equations establishes independence of the two constraints.
 Convergence of the alternating corrections requires separate verification.
 For U2R1, setting `time.ditr.fraction` to 1/3 gives the two-stage Radau IIA
-tableau. This choice accepted a vortex step at dt=0.1 with the original
-theta and the same nonlinear tolerances as the default-fraction trial.
+tableau. With the original theta and nonlinear tolerances, the velocity and
+pressure self-orders were both 2.96 over full cycles at dt=0.4, 0.2 and 0.1.
 
 On the supplied stretched plate mesh the SA fixture uses Green–Gauss P1 face
 states. The SST fixture uses cell means at faces and the normal jump for face
