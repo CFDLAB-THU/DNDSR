@@ -23,7 +23,7 @@ if(Python_EXECUTABLE)
     add_test(NAME harness_tooling
         COMMAND ${Python_EXECUTABLE} -m unittest discover -s ${CMAKE_SOURCE_DIR}/scripts/tests -v)
     set_tests_properties(harness_tooling PROPERTIES
-        LABELS "tooling"
+        LABELS "tooling;level0"
         ENVIRONMENT "DNDS_HARNESS_CMAKE=${CMAKE_COMMAND}")
     _dnds_maybe_set_timeout(harness_tooling ${DNDS_TEST_TIMEOUT})
 
@@ -32,13 +32,21 @@ if(Python_EXECUTABLE)
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     _dnds_maybe_set_timeout(pytest_DNDS ${DNDS_TEST_TIMEOUT_PIPELINE})
     set_tests_properties(pytest_DNDS PROPERTIES
-        LABELS "python"
+        LABELS "python;level1"
         ENVIRONMENT "PYTHONPATH=${CMAKE_SOURCE_DIR}/python:$<TARGET_FILE_DIR:runtime_array_bridge_test>;PATH=${_DNDS_PYTHON_BIN_DIR}:$ENV{PATH}")
     add_test(NAME pytest_CFV
         COMMAND ${Python_EXECUTABLE} -m pytest ${CMAKE_SOURCE_DIR}/test/CFV/ -x --timeout=${DNDS_TEST_TIMEOUT}
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     _dnds_maybe_set_timeout(pytest_CFV ${DNDS_TEST_TIMEOUT_PIPELINE})
     set_tests_properties(pytest_CFV PROPERTIES
-        LABELS "python"
+        LABELS "python;level1"
         ENVIRONMENT "PYTHONPATH=${CMAKE_SOURCE_DIR}/python:$<TARGET_FILE_DIR:runtime_array_bridge_test>;PATH=${_DNDS_PYTHON_BIN_DIR}:$ENV{PATH}")
+endif()
+
+if(Python_EXECUTABLE)
+    # Both CI Python lanes exercise the five installed binding packages.
+    # The restart driver launches the Euler executable from this build.
+    add_custom_target(ci_python_tests)
+    add_dependencies(ci_python_tests dnds_pybind11 geom_pybind11 cfv_pybind11
+        eulerP_pybind11 cauchy_pybind11 runtime_array_bridge_test euler)
 endif()

@@ -31,7 +31,8 @@ def main():
         assert (result.returncode == 0) == success, result.stdout
         return result.stdout
 
-    assert "--overwrite_key" in run("--help")
+    if args.np == 1:
+        assert "--overwrite_key" in run("--help")
     with tempfile.TemporaryDirectory(prefix="cauchy-frontend-") as directory:
         folder = Path(directory)
         # Independent tiny input, not a rewrite of any maintained case.
@@ -51,11 +52,12 @@ def main():
             "output": {"prefix": str(folder / "first"), "interval": 0,
                        "historyInterval": 1, "historySegmentRows": 2},
         }))
-        resolved = json.loads(run(config, "--check-config", "-k", "/time/dt", "-v", "2e-5",
-                                  "-k", "/domains/0/settings/execution/overlap", "-v", "false"))
-        assert resolved["time"]["dt"] == 2e-5
-        assert not resolved["domains"][0]["settings"]["execution"]["overlap"]
-        assert "paired" in run(config, "--check-config", "-k", "/time/dt", success=False)
+        if args.np == 1:
+            resolved = json.loads(run(config, "--check-config", "-k", "/time/dt", "-v", "2e-5",
+                                      "-k", "/domains/0/settings/execution/overlap", "-v", "false"))
+            assert resolved["time"]["dt"] == 2e-5
+            assert not resolved["domains"][0]["settings"]["execution"]["overlap"]
+            assert "paired" in run(config, "--check-config", "-k", "/time/dt", success=False)
         run(config)
         first = json.loads((folder / "first-summary.json").read_text())
         assert first["steps"] == 2 and math.isclose(first["time"], 2e-5)

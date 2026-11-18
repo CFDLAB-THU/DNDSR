@@ -100,6 +100,7 @@ endfunction()
 # --- helper: add an MPI unit test executable (DNDS) ---
 # MPI tests run all TEST_CASEs together per NP value (avoids mpirun overhead per test case).
 function(dnds_add_mpi_test TEST_NAME SRC_FILE LIBS)
+    cmake_parse_arguments(PARSE_ARGV 3 _test "LOCAL_CASES_ONCE" "" "CRITICAL_NP4")
     set(TARGET_NAME "dnds_test_${TEST_NAME}")
     add_executable(${TARGET_NAME} ${SRC_FILE})
     set_property(GLOBAL APPEND PROPERTY DNDS_CPP_TEST_TARGETS ${TARGET_NAME})
@@ -116,7 +117,7 @@ function(dnds_add_mpi_test TEST_NAME SRC_FILE LIBS)
         EXCLUDE_FROM_ALL ON)
     # Keep rank-local cases at np1, or at the first configured rank count
     # when np1 is absent. MPI-dependent cases still run at every count.
-    if("LOCAL_CASES_ONCE" IN_LIST ARGN AND DNDS_TEST_NP_LIST)
+    if(_test_LOCAL_CASES_ONCE AND DNDS_TEST_NP_LIST)
         if("1" IN_LIST DNDS_TEST_NP_LIST)
             set(_local_case_np 1)
         else()
@@ -129,6 +130,19 @@ function(dnds_add_mpi_test TEST_NAME SRC_FILE LIBS)
             set(_case_filter --test-suite-exclude=rank-local)
         endif()
         _dnds_np_timeout(${NP} _TIMEOUT)
+        if(NP EQUAL 4 AND _test_CRITICAL_NP4)
+            list(JOIN _test_CRITICAL_NP4 "," _critical_cases)
+            set(_critical_name dnds_${TEST_NAME}_np4_critical)
+            add_test(NAME ${_critical_name}
+                COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${NP}
+                        ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS}
+                        "--test-case=${_critical_cases}")
+            _dnds_maybe_set_timeout(${_critical_name} ${_TIMEOUT})
+            set_tests_properties(${_critical_name} PROPERTIES PROCESSORS 4
+                ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}" LABELS "mpi-high")
+            set_property(GLOBAL APPEND PROPERTY DNDS_CRITICAL_MPI_TESTS "${_critical_name}:${TARGET_NAME}")
+            list(APPEND _case_filter "--test-case-exclude=${_critical_cases}")
+        endif()
         add_test(NAME dnds_${TEST_NAME}_np${NP}
             COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${NP}
                     ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS} ${_case_filter})
@@ -244,7 +258,8 @@ dnds_add_mpi_test(cauchy_boundary_inputs "Cauchy/test_BoundaryInputs.cpp" "cauch
 dnds_add_mpi_test(cauchy_wall_distance "Cauchy/test_WallDistanceSamples.cpp" "cauchy;cfv;geom;dnds")
 dnds_add_mpi_test(cauchy_rans_fv "Cauchy/test_RANSFiniteVolume.cpp" "cauchy;physics;cfv;geom;dnds")
 dnds_add_mpi_test(cauchy_multidomain_mesh "Cauchy/test_MultidomainMesh.cpp" "cauchy;cfv;geom;dnds")
-dnds_add_mpi_test(cauchy_multidomain "Cauchy/test_Multidomain.cpp" "cauchy;cfv;geom;dnds")
+dnds_add_mpi_test(cauchy_multidomain "Cauchy/test_Multidomain.cpp" "cauchy;cfv;geom;dnds"
+    CRITICAL_NP4 "Multi-domain BDF2 restart reserves every domain and redistributes by persistent IDs")
 # Fixture-only exact predicates use CGAL's header-only Boost backend. Disable
 # automatic GMP selection too: the CORE setting alone leaves that enabled when
 # GMP/MPFR headers happen to exist, introducing an undeclared link dependency.
@@ -306,7 +321,8 @@ foreach(NP ${DNDS_TEST_NP_LIST})
     endif()
 endforeach()
 dnds_add_mpi_test(cauchy_implicit_domain "Cauchy/test_ImplicitDomain.cpp" "cauchy;cfv;geom;dnds")
-dnds_add_mpi_test(cauchy_checkpoint "Cauchy/test_Checkpoint.cpp" "cauchy;cfv;geom;dnds")
+dnds_add_mpi_test(cauchy_checkpoint "Cauchy/test_Checkpoint.cpp" "cauchy;cfv;geom;dnds"
+    CRITICAL_NP4 "Checkpoint changes MPI partition and polynomial degree using persistent cell IDs with cold reconstruction")
 if(DNDS_USE_CANTERA)
     foreach(NP ${DNDS_TEST_NP_LIST})
         set_property(TEST dnds_cauchy_checkpoint_np${NP} APPEND PROPERTY ENVIRONMENT
@@ -434,7 +450,9 @@ target_sources(dnds_test_object_contracts PRIVATE DNDS/test_LocalChecks.cpp)
 dnds_add_mpi_test(serializer "DNDS/test_Serializer.cpp" "dnds")
 dnds_add_mpi_test(mpi "DNDS/test_MPI.cpp" "dnds")
 dnds_add_mpi_test(runtime_exchange "DNDS/test_RuntimeExchange.cpp" "dnds")
-dnds_add_mpi_test(runtime_row_transfer "DNDS/test_RuntimeRowTransfer.cpp" "dnds")
+dnds_add_mpi_test(runtime_row_transfer "DNDS/test_RuntimeRowTransfer.cpp" "dnds"
+    CRITICAL_NP4 "Prepared CPU transfer groups retain separate payloads and perform one optional agreement"
+                 "Communication worker preserves repeated packed and direct sparse transfers")
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_executable(dnds_benchmark_transfer_scheduling EXCLUDE_FROM_ALL DNDS/benchmark_TransferScheduling.cpp)
     target_include_directories(dnds_benchmark_transfer_scheduling PRIVATE ${DNDS_EXTERNAL_INCLUDES} ${DNDS_INCLUDES})
@@ -1248,3 +1266,5 @@ foreach(_dnds_test IN LISTS _dnds_cpp_tests)
         set_property(TEST ${_dnds_test} APPEND PROPERTY LABELS "mpi-high")
     endif()
 endforeach()
+
+include(${PROJECT_SOURCE_DIR}/cmake/DndsCITestLevels.cmake)
