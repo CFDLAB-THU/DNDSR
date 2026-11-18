@@ -157,6 +157,18 @@ TEST_CASE("Equation FV uses the established P3/gradient/WBAP flow5 kernels acros
         auto separate = C::EquationDofOperations::NewVector(state);
         auto faceFlux = fv.BuildFaceFluxBuffer(state.ComponentNumber());
         fv.EvaluateFlux(state, separate, *reconstruction, *work, DNDS::CFV::ReconstructionRegion::All, 0, std::ref(faceFlux));
+        auto oracleFaces = fv.BuildFaceFluxBuffer(generic.ComponentNumber());
+        fv.EvaluateFlux(generic, expected, *genericReconstruction, *genericWork,
+                        DNDS::CFV::ReconstructionRegion::All, 0, std::ref(oracleFaces));
+        {
+            const auto actualRead = faceFlux.Read(), oracleRead = oracleFaces.Read();
+            const auto actual = actualRead.View<R::FixedRows<5>>(), oracle = oracleRead.View<R::FixedRows<5>>();
+            REQUIRE(actual.RowCount() == oracle.RowCount());
+            for (I iFace = 0; iFace < actual.RowCount(); ++iFace)
+                for (int j = 0; j < 5; ++j)
+                    CHECK(actual(iFace, j) == doctest::Approx(oracle(iFace, j)).epsilon(2e-12).scale(1));
+        }
+
         fv.AddSource(state, separate, *reconstruction, *work);
         Compare(result, separate, 2e-12);
         if (variant == 0)
