@@ -215,6 +215,60 @@ TEST_CASE("Total inlet resolves physical vector input and applies static density
     CHECK(approximate.isZero());
 }
 
+TEST_CASE("P1 least squares uses affine receiver face-center values from an interface packet")
+{
+    const auto mesh = CFVTest::CartesianHexes(mpi, 3);
+    C::DomainSettings settings;
+    settings.mesh.dimension = 3;
+    settings.boundaries["7"].kind = "interface";
+    settings.numerics.reconstruction = "gradient";
+    settings.numerics.gradient = "leastSquares";
+    const auto equation = C::EquationSystem::Resolve(settings.equation);
+    C::FiniteVolume fv(mesh, settings, equation);
+    const auto &metrics = fv.Metrics();
+    const auto affine = [&](const auto &p)
+    { return equation.Gas().Conservative({1 + .2 * p[0] - .1 * p[1] + .05 * p[2], .3, -.2, .1, 1.}); };
+    auto field = metrics.BuildField(5), residual = metrics.BuildField(5);
+    auto state = C::EquationDofs::Coupled(equation.Schema(), field);
+    auto rhs = C::EquationDofs::Coupled(equation.Schema(), residual);
+    {
+        const auto geometryRead = metrics.AcquireRead();
+        const auto geometry = geometryRead.HostView();
+        auto write = field.Owned().Write();
+        const auto rows = write.View();
+        for (I iCell = 0; iCell < rows.RowCount(); ++iCell)
+        {
+            const auto value = affine(geometry.GetCellBary(iCell));
+            for (int j = 0; j < 5; ++j)
+                rows(iCell, j) = value[j];
+        }
+    }
+    auto packet = fv.BuildBoundaryInputs();
+    {
+        auto write = packet.FaceCenterValues().WriteOwned();
+        const auto rows = write.Block("flow");
+        const auto &faces = fv.BoundaryFaces();
+        REQUIRE(rows.RowCount() == I(faces.size()));
+        for (I iFace = 0; iFace < rows.RowCount(); ++iFace)
+        {
+            const auto value = affine(faces[iFace].point);
+            for (int j = 0; j < 5; ++j)
+                rows(iFace, j) = value[j];
+        }
+    }
+    fv.PublishBoundaryInputs(packet, 0.);
+    auto reconstruction = fv.BuildReconstructionState(state);
+    auto workspace = fv.BuildWorkspace(state);
+    fv.SetBoundaryInputs(*workspace, packet);
+    R::EagerEngine engine;
+    const auto stream = engine.CreateCPUStream();
+    fv.Evaluate(state, rhs, *reconstruction, *workspace, engine, stream);
+    const auto read = residual.Owned().Read();
+    constexpr double densityRhs = -(.3 * .2 + (-.2) * (-.1) + .1 * .05);
+    for (I iCell = 0; iCell < metrics.NumCell(); ++iCell)
+        CHECK(std::abs(read.View()(iCell, 0) - densityRhs * metrics.GetCellVol(iCell)) < 2e-13);
+}
+
 TEST_CASE("Published interface packets reproduce analytic P3 boundaries through auxiliary RHS and frozen Jacobian operators")
 {
     const auto mesh = CFVTest::CartesianHexes(mpi, 3);

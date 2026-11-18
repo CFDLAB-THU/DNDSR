@@ -3,6 +3,7 @@
 #include "CFV/Plans/GradientPlan.hpp"
 #include "../Geom/NativeMeshOverlapFixture.hpp"
 #include "../Geom/InterfaceFixture.hpp"
+#include "RotatedSectorFixture.hpp"
 
 namespace C = DNDS::CFV;
 namespace G = DNDS::Geom;
@@ -156,6 +157,33 @@ TEST_CASE("Weighted P1 gradient matches independent least-squares fit on a stret
                 CHECK(result.View()(cell, d) == doctest::Approx(expected[d]).epsilon(2e-11));
         }
     }
+}
+
+TEST_CASE("Weighted P1 reproduces a rotation-equivariant affine vector across a periodic seam")
+{
+    auto mesh = CFVTest::Sector(mpi);
+    auto metrics = C::FiniteVolumePlan::ConstructMetrics(mesh);
+    auto plan = C::GradientPlan::Prepare(*mesh, metrics, C::GradientMethod::LeastSquares);
+    auto mean = metrics.BuildField(3), gradient = metrics.BuildField(6);
+    auto boundary = plan.BuildBoundaryValues(3);
+    {
+        const auto read = metrics.AcquireRead();
+        const auto geometry = read.HostView();
+        auto owned = mean.Owned().Write(), traces = boundary.Write();
+        for (I iCell = 0; iCell < metrics.NumCell(); ++iCell)
+            for (int j = 0; j < 3; ++j)
+                owned.View()(iCell, j) = geometry.GetCellBary(iCell)[j];
+        for (I iFace = 0; iFace < plan.NumBoundaryQuadrature(); ++iFace)
+            for (int j = 0; j < 3; ++j)
+                traces.View()(iFace, j) = plan.GetBoundaryQuadrature(iFace).point[j];
+    }
+    metrics.BindHalo(mean).Begin().Wait();
+    plan.Evaluate(mean, boundary, gradient, {0});
+    const auto read = gradient.Owned().Read();
+    for (I iCell = 0; iCell < metrics.NumCell(); ++iCell)
+        for (int j = 0; j < 3; ++j)
+            for (int d = 0; d < 2; ++d)
+                CHECK(std::abs(read.View()(iCell, j * 2 + d) - double(d == j)) < 1e-12);
 }
 
 TEST_CASE("Weighted P1 gradients use the curved triangular boundary sample locations")
