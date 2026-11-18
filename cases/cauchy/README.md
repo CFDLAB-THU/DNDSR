@@ -18,7 +18,8 @@ not resumed merely by the continued presence of its template here.
 | `cylinder_re20` | Full D=1, U=1, rho=1, mu=.05, M=.2, adiabatic no-slip | Steady Cd, wake, residual |
 | `cylinder_re200` | Full D=1, U=1, rho=1, mu=.005, M=.2, small transverse wake seed | Transient through t=200, several late CL/CD cycles, St |
 | `dmr_triangular_3wbap` | Mach-10, angle=60 deg, x0=1/6, UniformDM240U triangles, t=.25 | Fully active characteristic descending 3WBAP, shock/reflection morphology |
-| `acm_plate_sa` and `acm_plate_sst` | Coarse TMR plate, 273×193 points, Re=5×10⁶, P1 LSQ, pseudo-CFL cap 100 | Wall friction, layer profiles and nonlinear residual history |
+| `acm_plate_sa` | Coarse TMR plate, 273×193 points, Re=5×10⁶, P1 LSQ, pseudo-CFL cap 20 | Wall friction, layer profiles and nonlinear residual history |
+| `acm_plate_sst` | Same plate and reconstruction, pseudo-CFL cap 100 | Wall friction, layer profiles and nonlinear residual history |
 | `acm_translating_vortex_20` | Constant-density inviscid vortex, periodic [0,10]², t=10, P3, BDF1 | Volume-weighted velocity and gauge-aligned pressure errors, continuity RMS |
 
 The ACM plate cases expect `data/mesh/flatplate_273x193.cgns`. Use the
@@ -27,8 +28,9 @@ and the plan repository's `experiments/cauchy-acm/convert_tmr_plate.py` to
 create the CGNS mesh with `WALL`, `INLET`, `SLIP`, `TOP` and `OUTLET` patches.
 Pass an alternative mesh location with `-k /domains/0/settings/mesh/file`.
 Both plate inputs use the default ACM velocity-component rule plus the separate
-continuity tolerance. They limit the steady solve to 10,000 nonlinear
-corrections and write volume and boundary snapshots every 2,500 corrections.
+continuity tolerance. SA uses GMRES(5) with ILU(2) and allows 50,000 nonlinear
+corrections. SST allows 10,000. Both write volume and boundary snapshots every
+2,500 corrections.
 The last internal snapshot is useful for profile comparisons after a capped
 stage. The solver publishes an accepted steady result only when the configured
 tolerances pass.

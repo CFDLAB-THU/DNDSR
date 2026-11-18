@@ -25,7 +25,7 @@
                  "viscousGradient": "polynomial", "flux": "Roe", "limiter": "none",
                  "positivity": false, "faceFallback": false},
     "implicit": {"diagonal": "block", "jacobianAction": "assembled",
-                 "iterations": 10000, "pseudoCFL": 0.2, "maxPseudoCFL": 100, "pseudoGrowth": 1.005,
+                 "iterations": 50000, "pseudoCFL": 0.2, "maxPseudoCFL": 20, "pseudoGrowth": 1.005,
                  "relativeTolerance": 1e-7, "absoluteTolerance": 1e-11, "algebraicRateTolerance": 1e-8,
                  "rejectUnconvergedStages": true,
                  "linear": {"method": "gmres", "preconditioner": "ilu", "iterations": 5, "subspace": 5,
