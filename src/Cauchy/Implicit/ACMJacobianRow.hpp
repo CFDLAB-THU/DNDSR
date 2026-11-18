@@ -23,11 +23,11 @@ namespace DNDS::Cauchy::ACM
     /// q dp/dTau / beta², matching the continuity pseudo-mass in the Kirabo
     /// ACM formulation. Its physical derivative is still dq/dt.
     template <int C, class State, class Block>
-    DNDS_DEVICE_CALLABLE void FillACMTemporalBlock(const State &state, real volume, real inverseTau, real physicalMass,
+    DNDS_DEVICE_CALLABLE void FillACMTemporalBlock(const State &state, real volume, real inversePseudoTime, real physicalInverseDt,
                                                    real alpha, real beta2, Block &&matrix)
     {
         static_assert(C >= 4 && C <= 6);
-        const real pseudo = volume * inverseTau, mass = volume * physicalMass;
+        const real pseudo = volume * inversePseudoTime, mass = volume * physicalInverseDt;
         for (int j = 0; j < C; ++j)
             for (int i = 0; i < C; ++i)
                 matrix(i, j) = i == j ? pseudo + mass : 0;
@@ -35,7 +35,7 @@ namespace DNDS::Cauchy::ACM
         matrix(3, 3) = pressurePseudo;
         for (int i = 0; i < 3; ++i)
             matrix(i, 3) = pressurePseudo * (1 + alpha) * state[i];
-        if (physicalMass > 0)
+        if (physicalInverseDt > 0)
             for (int i = 4; i < C; ++i)
                 matrix(i, 3) = pressurePseudo * state[i];
     }

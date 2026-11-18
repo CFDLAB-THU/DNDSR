@@ -29,5 +29,5 @@ namespace DNDS::Cauchy::CPU
         real mass, residualScale;
         std::array<bool, 6> active;
     };
-    NumericalStatus PrepareACMJacobian(const ACMJacobianPreparation &) noexcept;
+    NumericalStatus PrepareACMFluxJacobian(const ACMJacobianPreparation &) noexcept;
 }

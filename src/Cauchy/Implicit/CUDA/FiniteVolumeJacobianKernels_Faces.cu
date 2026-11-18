@@ -14,15 +14,15 @@ namespace DNDS::Cauchy::CUDA
     namespace R = Runtime;
     namespace
     {
-        template <int N>
+        template <int N, bool FullBlock, bool Roe>
         __device__ NumericalStatus FaceRow(const JacobianFaceInput &q, index iCell,
-                                           MatrixWriteRows diagonal, bool fullBlock, LinearWriteRows magnitudes)
+                                           MatrixWriteRows diagonal, LinearWriteRows magnitudes)
         {
             const auto &p = q.parameters;
             std::array<real, N * N> own{};
             for (int j = 0; j < N; ++j)
                 for (int i = 0; i < N; ++i)
-                    own[i + N * j] = fullBlock ? diagonal(iCell, Algebra::DenseBlockEntry<N>(i, j, N, q.rowMajorBlocks)) : (i == j ? diagonal(iCell, i) : 0);
+                    own[i + N * j] = FullBlock ? diagonal(iCell, Algebra::DenseBlockEntry<N>(i, j, N, q.rowMajorBlocks)) : (i == j ? diagonal(iCell, i) : 0);
             std::array<real, N> mean{};
             for (int j = 0; j < N; ++j)
                 mean[j] = q.means(iCell, j);
@@ -40,12 +40,12 @@ namespace DNDS::Cauchy::CUDA
                     continue;
                 const real factor = .5 * p.scale * weight, lambda = convection + diffusion;
                 const bool boundary = sample.other == UnInitIndex;
-                if (!p.roe)
+                if (!Roe)
                     for (int i = 0; i < N; ++i)
                         own[i + N * i] += factor * lambda;
-                if (boundary && !p.roe && !q.physicalBoundary)
+                if (boundary && !Roe && !q.physicalBoundary)
                     continue; // Euler scalar approximation does not evaluate BCs.
-                if (!boundary && !p.roe && sample.other != iCell)
+                if (!boundary && !Roe && sample.other != iCell)
                     continue; // Off-diagonal physical work belongs to its own leaf.
 
                 std::array<real, N> right{}, pressureDerivative{};
@@ -96,7 +96,7 @@ namespace DNDS::Cauchy::CUDA
                                                 sample.rotation, weight, !boundary && sample.changesFrame};
                 Vector3 signals{};
                 if constexpr (N == 5)
-                    if (p.roe)
+                    if (Roe)
                     {
                         const auto flow = Detail::RotateJacobianFlow({right[0], right[1], right[2], right[3], right[4]}, point);
                         const auto checked = TryPerfectGasCharacteristics(p.gas, left, flow, sample.normal);
@@ -179,20 +179,20 @@ namespace DNDS::Cauchy::CUDA
                     if (!std::isfinite(own[i + N * j]))
                         return NumericalStatus{NumericalError::InvalidState, 5, iCell};
                 }
-            for (int j = 0; j < (fullBlock ? N * N : N); ++j)
-                diagonal(iCell, fullBlock ? Algebra::DenseBlockEntry<N>(j % N, j / N, N, q.rowMajorBlocks) : j) = fullBlock ? own[j] : own[j + N * j];
+            for (int j = 0; j < (FullBlock ? N * N : N); ++j)
+                diagonal(iCell, FullBlock ? Algebra::DenseBlockEntry<N>(j % N, j / N, N, q.rowMajorBlocks) : j) = FullBlock ? own[j] : own[j + N * j];
             return {};
         }
-        template <int N>
-        __global__ void Faces(JacobianFaceInput input, LinearIndexRows selected, MatrixWriteRows diagonal,
-                              bool fullBlock, LinearWriteRows magnitudes, JacobianStatus status)
+        template <int N, bool FullBlock, bool Roe>
+        __global__ void AssemblePerfectGasFluxJacobianRows(JacobianFaceInput input, LinearIndexRows selected, MatrixWriteRows diagonal,
+                                                           LinearWriteRows magnitudes, JacobianStatus status)
         {
             for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x;
                  iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
             {
                 const index iCell = selected(iRow, 0);
                 if (status(iCell, 0))
-                    status(iCell, 0) = FaceRow<N>(input, iCell, diagonal, fullBlock, magnitudes);
+                    status(iCell, 0) = FaceRow<N, FullBlock, Roe>(input, iCell, diagonal, magnitudes);
             }
         }
         template <class View>
@@ -202,9 +202,9 @@ namespace DNDS::Cauchy::CUDA
                                   "CUDA Jacobian face table shape differs");
         }
     }
-    void AddJacobianFaces(R::ExecutionContext context, const JacobianFaceInput &input,
-                          LinearIndexRows selected, MatrixWriteRows diagonal, bool fullBlock,
-                          LinearWriteRows magnitudes, JacobianStatus status)
+    void AssemblePerfectGasFluxJacobian(R::ExecutionContext context, const JacobianFaceInput &input,
+                                        LinearIndexRows selected, MatrixWriteRows diagonal, bool fullBlock,
+                                        LinearWriteRows magnitudes, JacobianStatus status)
     {
         const auto &p = input.parameters;
         const index rows = diagonal.RowCount(), all = input.means.RowCount();
@@ -259,12 +259,26 @@ namespace DNDS::Cauchy::CUDA
             return;
         const unsigned blocks = unsigned(std::min<index>(65535, (selected.RowCount() + 127) / 128));
         const auto stream = ::DNDS::Runtime::CUDAStream(context);
+        const auto launch = [&](auto width)
+        {
+            constexpr int C = decltype(width)::value;
+            if constexpr (C == 5)
+                if (p.roe)
+                {
+                    AssemblePerfectGasFluxJacobianRows<C, true, true><<<blocks, 128, 0, stream>>>(input, selected, diagonal, magnitudes, status);
+                    return;
+                }
+            if (fullBlock)
+                AssemblePerfectGasFluxJacobianRows<C, true, false><<<blocks, 128, 0, stream>>>(input, selected, diagonal, magnitudes, status);
+            else
+                AssemblePerfectGasFluxJacobianRows<C, false, false><<<blocks, 128, 0, stream>>>(input, selected, diagonal, magnitudes, status);
+        };
         if (p.components == 5)
-            Faces<5><<<blocks, 128, 0, stream>>>(input, selected, diagonal, fullBlock, magnitudes, status);
+            launch(std::integral_constant<int, 5>{});
         else if (p.components == 6)
-            Faces<6><<<blocks, 128, 0, stream>>>(input, selected, diagonal, fullBlock, magnitudes, status);
+            launch(std::integral_constant<int, 6>{});
         else
-            Faces<7><<<blocks, 128, 0, stream>>>(input, selected, diagonal, fullBlock, magnitudes, status);
+            launch(std::integral_constant<int, 7>{});
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA Jacobian face launch failed");
     }
 }

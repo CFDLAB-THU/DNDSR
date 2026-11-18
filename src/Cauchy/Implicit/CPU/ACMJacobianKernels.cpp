@@ -9,7 +9,7 @@ namespace DNDS::Cauchy::CPU
         return OMP::ForRowsStatus(0, request.diagonal.RowCount(), [&](index cell)
                                   { return ACM::AssembleRow<C>(request, request.stencil, cell); });
     }
-    NumericalStatus PrepareACMJacobian(const ACMJacobianPreparation &request) noexcept
+    NumericalStatus PrepareACMFluxJacobian(const ACMJacobianPreparation &request) noexcept
     {
         switch (request.input.ComponentNumber())
         {

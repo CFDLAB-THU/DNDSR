@@ -222,7 +222,7 @@ namespace DNDS::Cauchy::CPU
     };
     void EvaluateFlowJacobianBlock(const FlowJacobianView &, const PerfectGas &, index iRow, index iBlock, Eigen::Ref<Eigen::MatrixXd> output);
     void ApplyFlowJacobianBlock(const FlowJacobianView &, const PerfectGas &, index iRow, index iBlock, JacobianInput input, Eigen::Ref<Eigen::VectorXd> output);
-    NumericalStatus PrepareFlowJacobian(const FlowJacobianPreparation &, const PerfectGas &, const Riemann::RiemannFlux &) noexcept;
+    NumericalStatus PrepareCompressibleFluxJacobian(const FlowJacobianPreparation &, const PerfectGas &, const Riemann::RiemannFlux &) noexcept;
     void FreezeFlowJacobian(RHSFlowFieldView mean, RHSScalarView radius,
                             Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::FixedRows<5>> frozenMean,
                             Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::TableRows> frozenRadius);
@@ -249,7 +249,7 @@ namespace DNDS::Cauchy::CPU
         bool rowMajorBlocks = false;
     };
     /// Initialize mass/rotation and freeze face signals before source addition.
-    NumericalStatus InitializeEquationJacobian(const EquationJacobianPreparation &) noexcept;
+    NumericalStatus InitializeCompressibleFluxJacobian(const EquationJacobianPreparation &) noexcept;
     /// Operator-created private thermodynamics and dense point scratch. No
     /// chemistry worker is acquired, nor scratch resized, inside an OMP team.
     struct EquationJacobianWorker
@@ -263,6 +263,6 @@ namespace DNDS::Cauchy::CPU
     };
     /// Prepare the remaining EOS rows, boundary derivatives and face blocks.
     /// ownedPropertiesPrepared skips only means already emitted by the source kernel.
-    NumericalStatus CompleteEquationJacobian(const EquationJacobianPreparation &, const BoundaryPointOperator &,
-                                             SpanView<EquationJacobianWorker>, bool ownedPropertiesPrepared) noexcept;
+    NumericalStatus PrepareCompressibleFluxJacobian(const EquationJacobianPreparation &, const BoundaryPointOperator &,
+                                                    SpanView<EquationJacobianWorker>, bool ownedPropertiesPrepared) noexcept;
 }

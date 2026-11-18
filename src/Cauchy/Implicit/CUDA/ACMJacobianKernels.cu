@@ -9,13 +9,13 @@ namespace DNDS::Cauchy::CUDA
     namespace
     {
         template <int C>
-        __global__ void Assemble(ACMJacobianInput request, ACMJacobianStatusRows status)
+        __global__ void AssembleACMFluxJacobianRows(ACMJacobianInput request, ACMJacobianStatusRows status)
         {
             for (index cell = index(blockIdx.x) * blockDim.x + threadIdx.x; cell < status.RowCount(); cell += index(blockDim.x) * gridDim.x)
                 status(cell, 0) = ACM::AssembleRow<C>(request, request.stencil(0, 0), cell);
         }
     }
-    void PrepareACMJacobian(R::ExecutionContext context, const ACMJacobianInput &q, ACMJacobianStatusRows status)
+    void PrepareACMFluxJacobian(R::ExecutionContext context, const ACMJacobianInput &q, ACMJacobianStatusRows status)
     {
         const index cells = q.diagonal.RowCount(), width = q.input.owned.Width();
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && width >= 4 && width <= 6 &&
@@ -35,11 +35,11 @@ namespace DNDS::Cauchy::CUDA
         const int blocks = int(std::min<index>(65535, 1 + (cells - 1) / 64));
         const auto stream = R::CUDAStream(context);
         if (width == 4)
-            Assemble<4><<<blocks, 64, 0, stream>>>(q, status);
+            AssembleACMFluxJacobianRows<4><<<blocks, 64, 0, stream>>>(q, status);
         else if (width == 5)
-            Assemble<5><<<blocks, 64, 0, stream>>>(q, status);
+            AssembleACMFluxJacobianRows<5><<<blocks, 64, 0, stream>>>(q, status);
         else
-            Assemble<6><<<blocks, 64, 0, stream>>>(q, status);
+            AssembleACMFluxJacobianRows<6><<<blocks, 64, 0, stream>>>(q, status);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA ACM sparse assembly launch failed");
     }
 }

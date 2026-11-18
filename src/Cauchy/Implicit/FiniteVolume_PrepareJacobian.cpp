@@ -235,7 +235,7 @@ namespace DNDS::Cauchy
         request.evaluated = bool(evaluated);
         request.selected = !selection.All();
         request.active = active;
-        RequireNumericalSuccess(CPU::PrepareFlowJacobian(request, _data->equation.Gas(), _data->flux), "PrepareFlowJacobian");
+        RequireNumericalSuccess(CPU::PrepareCompressibleFluxJacobian(request, _data->equation.Gas(), _data->flux), "PrepareCompressibleFluxJacobian");
         magnitudeWrite.reset();
         diagonal.reset();
         if (evaluated)

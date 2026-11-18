@@ -160,10 +160,10 @@ namespace DNDS::Cauchy::CUDA
         FreezeSignal<<<Blocks(output.RowCount()), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(owned, ghost, output);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA Jacobian signal copy launch failed");
     }
-    void InitializeJacobianDiagonal(R::ExecutionContext context, JacobianCellMetrics cells,
-                                    LinearReadRows inverseTau, MatrixWriteRows diagonal, JacobianStatus status,
-                                    LinearIndexRows selected, const RigidFrameParameters &frame,
-                                    real physicalMass, real scale, int components, bool fullBlock, bool rowMajorBlocks)
+    void InitializePerfectGasFluxJacobianDiagonal(R::ExecutionContext context, JacobianCellMetrics cells,
+                                                  LinearReadRows inverseTau, MatrixWriteRows diagonal, JacobianStatus status,
+                                                  LinearIndexRows selected, const RigidFrameParameters &frame,
+                                                  real physicalMass, real scale, int components, bool fullBlock, bool rowMajorBlocks)
     {
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && components >= 5 && components <= 7 &&
                                   std::isfinite(physicalMass) && physicalMass >= 0 && std::isfinite(scale) && scale >= 0,

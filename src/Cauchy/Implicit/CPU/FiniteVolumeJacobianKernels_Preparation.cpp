@@ -3,13 +3,14 @@
 #include "DNDS/Core/OMP.hpp"
 namespace DNDS::Cauchy::CPU
 {
-    NumericalStatus InitializeEquationJacobian(const EquationJacobianPreparation &request) noexcept
+    template <int C>
+    static NumericalStatus InitializeCompressibleFluxJacobianRows(const EquationJacobianPreparation &request) noexcept
     {
         const auto &snapshot = request.snapshot;
         const auto metric = request.metric;
         const auto tau = request.tau, radius = request.radius;
         const auto d = request.diagonal;
-        const index owned = request.owned, nv = snapshot.components;
+        const index owned = request.owned, nv = C ? C : snapshot.components;
         const auto rotation = snapshot.frame.NegativeSourceJacobian();
         const real rotationBound = Geom::tPoint{snapshot.frame.angularVelocity[0], snapshot.frame.angularVelocity[1], snapshot.frame.angularVelocity[2]}.norm();
         const auto faceStatus = OMP::ForRowsStatus(0, radius.RowCount(), [&](index iFace) -> NumericalStatus
@@ -58,8 +59,9 @@ namespace DNDS::Cauchy::CPU
             } });
         return {};
     }
-    NumericalStatus CompleteEquationJacobian(const EquationJacobianPreparation &request, const BoundaryPointOperator &boundaryOperator,
-                                             SpanView<EquationJacobianWorker> workers, bool ownedPropertiesPrepared) noexcept
+    template <int C>
+    static NumericalStatus PrepareCompressibleFluxJacobianRows(const EquationJacobianPreparation &request, const BoundaryPointOperator &boundaryOperator,
+                                                               SpanView<EquationJacobianWorker> workers, bool ownedPropertiesPrepared) noexcept
     {
         DNDS_assert(!workers.empty());
         const auto &snapshot = request.snapshot;
@@ -74,7 +76,7 @@ namespace DNDS::Cauchy::CPU
         const auto b = request.offDiagonal;
         const auto radius = request.radius;
         const auto time = request.time;
-        const index owned = request.owned, all = request.all, nv = snapshot.components;
+        const index owned = request.owned, all = request.all, nv = C ? C : snapshot.components;
         const bool sixComponentShape = b && !b->RowMajorBlocks() && !request.rowMajorBlocks && b->ElementStride() == 1 && d.ElementStride() == 1 && nv == 6 && snapshot.flowFirst == 0 &&
                                        snapshot.allComponents;
         const auto ownedTable = sixComponentShape ? Algebra::TryOwnedTable(inputValues.OwnedPart()) : std::nullopt;
@@ -319,4 +321,40 @@ namespace DNDS::Cauchy::CPU
             }
         return {}; });
     }
+    // Static component counts are valid only for an exact compact table. A
+    // segmented/strided or extended mixture uses the same row implementation.
+    template <class Kernel>
+    static NumericalStatus WithJacobianShape(const EquationJacobianPreparation &request, Kernel kernel) noexcept
+    {
+        const index width = request.snapshot.components;
+        const auto owned = Algebra::TryOwnedTable(request.input.OwnedPart());
+        const auto ghost = Algebra::TryGhostTable(request.input.GhostPart());
+        if (owned && ghost && owned->stride == width && ghost->stride == width)
+        {
+            switch (width)
+            {
+            case 5:
+                return kernel(std::integral_constant<int, 5>{});
+            case 6:
+                return kernel(std::integral_constant<int, 6>{});
+            case 7:
+                return kernel(std::integral_constant<int, 7>{});
+            }
+        }
+        return kernel(std::integral_constant<int, 0>{});
+    }
+
+    NumericalStatus InitializeCompressibleFluxJacobian(const EquationJacobianPreparation &request) noexcept
+    {
+        return WithJacobianShape(request, [&](auto width)
+                                 { return InitializeCompressibleFluxJacobianRows<decltype(width)::value>(request); });
+    }
+
+    NumericalStatus PrepareCompressibleFluxJacobian(const EquationJacobianPreparation &request, const BoundaryPointOperator &boundaryOperator,
+                                                    SpanView<EquationJacobianWorker> workers, bool ownedPropertiesPrepared) noexcept
+    {
+        return WithJacobianShape(request, [&](auto width)
+                                 { return PrepareCompressibleFluxJacobianRows<decltype(width)::value>(request, boundaryOperator, workers, ownedPropertiesPrepared); });
+    }
+
 }

@@ -323,8 +323,8 @@ TEST_CASE("CUDA diagonal initialization preserves CPU mass and moving-frame bloc
                 // CFV's metric view intentionally has its own unchecked policy.
                 const auto source = cr.View<R::FixedRows<8>>();
                 const C::CUDA::JacobianCellMetrics metric{source.data, nullptr, source.rows, source.width, source.stride, nullptr, source.kind, source.device};
-                C::CUDA::InitializeJacobianDiagonal(context, metric, tr.View<R::TableRows>(), write.View<R::UniformTableRows>(),
-                                                    st.View<R::FixedRows<1>>(), rr.View<R::FixedRows<1>>(), frame.KernelParameters(), .2, .73, n, full);
+                C::CUDA::InitializePerfectGasFluxJacobianDiagonal(context, metric, tr.View<R::TableRows>(), write.View<R::UniformTableRows>(),
+                                                                  st.View<R::FixedRows<1>>(), rr.View<R::FixedRows<1>>(), frame.KernelParameters(), .2, .73, n, full);
                 REQUIRE(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)) == cudaSuccess);
             }
             const auto result = diagonal.To(R::Device::Host());
@@ -465,7 +465,7 @@ TEST_CASE("CUDA centered face diagonal matches CPU wall chains Roe matrices and 
             {
                 auto out = diagonal.Write(context), waves = magnitudes.Write(context);
                 auto st = status.Write(context);
-                C::CUDA::AddJacobianFaces(context, request, selr.View<R::FixedRows<1>>(), out.View<R::UniformTableRows>(), full, waves.View<R::TableRows>(), st.View<R::FixedRows<1>>());
+                C::CUDA::AssemblePerfectGasFluxJacobian(context, request, selr.View<R::FixedRows<1>>(), out.View<R::UniformTableRows>(), full, waves.View<R::TableRows>(), st.View<R::FixedRows<1>>());
                 REQUIRE(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)) == cudaSuccess);
             }
             const auto actual = diagonal.To(R::Device::Host());

@@ -38,5 +38,5 @@ namespace DNDS::Cauchy::CUDA
     using ACMJacobianStatusRows = Runtime::ArrayView<NumericalStatus, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
     /// One independent thread assembles one complete owned sparse row in its
     /// physical component frame. Every operand is resident through completion.
-    void PrepareACMJacobian(Runtime::ExecutionContext, const ACMJacobianInput &, ACMJacobianStatusRows);
+    void PrepareACMFluxJacobian(Runtime::ExecutionContext, const ACMJacobianInput &, ACMJacobianStatusRows);
 }

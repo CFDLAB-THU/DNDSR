@@ -233,7 +233,7 @@ namespace DNDS::Cauchy
             try
             {
                 off.emplace(output.OffDiagonal().Write());
-                RequireNumericalSuccess(CPU::PrepareACMJacobian(
+                RequireNumericalSuccess(CPU::PrepareACMFluxJacobian(
                                             {physics, stencil.View(), {_data->boundaryConditions.data(), index(_data->boundaryConditions.size())}, layout.View(), tau.View<R::UniformTableRows>(), radius.View<R::UniformTableRows>(), walls ? walls->HostView().cellMean : decltype(WallDistanceView::cellMean){}, lengths ? lengths->View<R::FixedRows<1>>() : decltype(lengths->View<R::FixedRows<1>>()){}, rans, diagonal.View<R::UniformTableRows>(), off->ArrayView(), controls.physicalMass, controls.residualScale, active}),
                                         "assemble ACM Jacobian");
             }
@@ -329,13 +329,13 @@ namespace DNDS::Cauchy
         request.rowMajorBlocks = output.RowMajorBlocks();
         try
         {
-            RequireNumericalSuccess(CPU::InitializeEquationJacobian(request), "initialize equation Jacobian");
+            RequireNumericalSuccess(CPU::InitializeCompressibleFluxJacobian(request), "initialize equation Jacobian");
             bool ownedPropertiesPrepared = false;
             if ((chemical || rans) && sourceWorkspace)
                 ownedPropertiesPrepared = AddEquationSourceJacobian(state, *context, *diagonal,
                                                                     output.DiagonalMode(), controls.residualScale, pointWorkers.front().evaluator, std::cref(request.linearization), output.RowMajorBlocks());
-            RequireNumericalSuccess(CPU::CompleteEquationJacobian(request, _data->boundaryPoint,
-                                                                  {pointWorkers.data(), index(pointWorkers.size())}, ownedPropertiesPrepared),
+            RequireNumericalSuccess(CPU::PrepareCompressibleFluxJacobian(request, _data->boundaryPoint,
+                                                                         {pointWorkers.data(), index(pointWorkers.size())}, ownedPropertiesPrepared),
                                     "complete equation Jacobian");
         }
         catch (...)

@@ -97,7 +97,7 @@ namespace DNDS::Cauchy
                 q.mass = mass;
                 q.residualScale = scale;
                 q.active = active;
-                CUDA::PrepareACMJacobian(where,q,status); }, R::ReadAs<R::TableRows>(field.Owned()), R::ReadAs<R::TableRows>(field.Ghost()), R::ReadAs<R::TableRows>(inversePseudoTime), R::ReadAs<R::TableRows>(*auxiliary.faceSpectralRadius), R::ReadAs<R::FixedRows<1>>(output.OffDiagonal().OffsetArray()), R::WriteAs<R::UniformTableRows>(output.Diagonal()), R::WriteAs<R::UniformTableRows>(blocks), R::WriteAs<R::FixedRows<1>>(scratch->rowsStatus));
+                CUDA::PrepareACMFluxJacobian(where,q,status); }, R::ReadAs<R::TableRows>(field.Owned()), R::ReadAs<R::TableRows>(field.Ghost()), R::ReadAs<R::TableRows>(inversePseudoTime), R::ReadAs<R::TableRows>(*auxiliary.faceSpectralRadius), R::ReadAs<R::FixedRows<1>>(output.OffDiagonal().OffsetArray()), R::WriteAs<R::UniformTableRows>(output.Diagonal()), R::WriteAs<R::UniformTableRows>(blocks), R::WriteAs<R::FixedRows<1>>(scratch->rowsStatus));
             scratch->AppendStatus(engine, lane, scratch->rowsStatus);
             engine.Synchronize();
             const auto result = scratch->result.To(R::Device::Host(), lane.Context());
@@ -173,8 +173,8 @@ namespace DNDS::Cauchy
         R::SubmitArrays(engine, stream, [](R::ExecutionContext context, auto input, auto output)
                         { Algebra::ApplyRowViews(context, Algebra::PointwiseOperation::Copy, output.DynamicView(), input.DynamicView()); }, R::ReadAs<R::TableRows>(*auxiliary.faceSpectralRadius), R::WriteAs<R::TableRows>(values.radius));
         R::SubmitArrays(engine, stream, [scratch, parameters, controls, full, rowMajorBlocks = output.RowMajorBlocks()](R::ExecutionContext context, auto tau, auto diagonal, auto status, auto cells)
-                        { CUDA::InitializeJacobianDiagonal(context, scratch->metric.View().cells, tau, diagonal, status, cells,
-                                                           parameters.frame, controls.physicalMass, parameters.scale, parameters.components, full, rowMajorBlocks); }, R::ReadAs<R::TableRows>(inversePseudoTime), R::WriteAs<R::UniformTableRows>(output.Diagonal()), R::WriteAs<R::FixedRows<1>>(scratch->rowsStatus), R::ReadAs<R::FixedRows<1>>(cells));
+                        { CUDA::InitializePerfectGasFluxJacobianDiagonal(context, scratch->metric.View().cells, tau, diagonal, status, cells,
+                                                                         parameters.frame, controls.physicalMass, parameters.scale, parameters.components, full, rowMajorBlocks); }, R::ReadAs<R::TableRows>(inversePseudoTime), R::WriteAs<R::UniformTableRows>(output.Diagonal()), R::WriteAs<R::FixedRows<1>>(scratch->rowsStatus), R::ReadAs<R::FixedRows<1>>(cells));
         scratch->AppendStatus(engine, stream, scratch->rowsStatus);
         scratch->SubmitSource(work, engine, stream, state, output.Diagonal(), full, parameters.scale);
 
@@ -211,7 +211,7 @@ namespace DNDS::Cauchy
             request.solver = scratch->owner->flux.Kind(); request.fluxSettings = scratch->owner->settings.numerics.riemann.KernelSettings();
             request.rowMajorBlocks = rowMajorBlocks;
             request.time = time; request.physicalBoundary = controls.scalarBoundaryDerivative;
-            CUDA::AddJacobianFaces(context, request, cells, diagonal, full, magnitudes, status); }, R::ReadAs<R::UniformTableRows>(values.means), R::ReadAs<R::TableRows>(values.pressure), R::ReadAs<R::TableRows>(values.pressureDerivative), R::ReadAs<R::TableRows>(values.radius), R::ReadAs<R::TableRows>(incoming), R::ReadAs<R::TableRows>(wave ? scratch->waveJump : _data->deviceEmpty), R::ReadAs<R::TableRows>(pressure ? scratch->pressureMinimum : _data->deviceEmpty), R::ReadAs<R::FixedRows<1>>(cells), R::ReadWriteAs<R::UniformTableRows>(output.Diagonal()), R::WriteAs<R::TableRows>(values.magnitudes), R::ReadWriteAs<R::FixedRows<1>>(scratch->rowsStatus));
+            CUDA::AssemblePerfectGasFluxJacobian(context, request, cells, diagonal, full, magnitudes, status); }, R::ReadAs<R::UniformTableRows>(values.means), R::ReadAs<R::TableRows>(values.pressure), R::ReadAs<R::TableRows>(values.pressureDerivative), R::ReadAs<R::TableRows>(values.radius), R::ReadAs<R::TableRows>(incoming), R::ReadAs<R::TableRows>(wave ? scratch->waveJump : _data->deviceEmpty), R::ReadAs<R::TableRows>(pressure ? scratch->pressureMinimum : _data->deviceEmpty), R::ReadAs<R::FixedRows<1>>(cells), R::ReadWriteAs<R::UniformTableRows>(output.Diagonal()), R::WriteAs<R::TableRows>(values.magnitudes), R::ReadWriteAs<R::FixedRows<1>>(scratch->rowsStatus));
         scratch->AppendStatus(engine, stream, scratch->rowsStatus);
         if (output.HasAssembledOffDiagonal())
         {

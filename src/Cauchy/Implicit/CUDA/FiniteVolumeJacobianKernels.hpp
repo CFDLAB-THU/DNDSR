@@ -39,10 +39,10 @@ namespace DNDS::Cauchy::CUDA
      * contributions have been added. Each selected row is overwritten.
      * RANS source destruction is a separate additive volume-source operator.
      */
-    void InitializeJacobianDiagonal(Runtime::ExecutionContext context, JacobianCellMetrics cells,
-                                    LinearReadRows inverseTau, MatrixWriteRows diagonal, JacobianStatus status,
-                                    LinearIndexRows selected, const RigidFrameParameters &frame,
-                                    real physicalMass, real scale, int components, bool fullBlock, bool rowMajorBlocks = false);
+    void InitializePerfectGasFluxJacobianDiagonal(Runtime::ExecutionContext context, JacobianCellMetrics cells,
+                                                  LinearReadRows inverseTau, MatrixWriteRows diagonal, JacobianStatus status,
+                                                  LinearIndexRows selected, const RigidFrameParameters &frame,
+                                                  real physicalMass, real scale, int components, bool fullBlock, bool rowMajorBlocks = false);
 
     /** @brief Frozen centered face inputs of the approximate diagonal.
      * @details Every incidence is visited once, independently of polynomial
@@ -76,7 +76,7 @@ namespace DNDS::Cauchy::CUDA
      * Off-diagonal blocks are filled separately using AssembleFrozenJacobian.
      * Final component projection acts on the complete accumulated diagonal.
      */
-    void AddJacobianFaces(Runtime::ExecutionContext context, const JacobianFaceInput &input,
-                          LinearIndexRows selected, MatrixWriteRows diagonal, bool fullBlock,
-                          LinearWriteRows magnitudes, JacobianStatus status);
+    void AssemblePerfectGasFluxJacobian(Runtime::ExecutionContext context, const JacobianFaceInput &input,
+                                        LinearIndexRows selected, MatrixWriteRows diagonal, bool fullBlock,
+                                        LinearWriteRows magnitudes, JacobianStatus status);
 }

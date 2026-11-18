@@ -124,7 +124,7 @@ namespace DNDS::Cauchy::CPU
             for (int j = 0; j < 2; ++j)
                 frozenRadius(iFace, j) = radius(iFace, j); });
     }
-    NumericalStatus PrepareFlowJacobian(const FlowJacobianPreparation &request, const PerfectGas &gas, const Riemann::RiemannFlux &flux) noexcept
+    NumericalStatus PrepareCompressibleFluxJacobian(const FlowJacobianPreparation &request, const PerfectGas &gas, const Riemann::RiemannFlux &flux) noexcept
     {
         const auto &packet = request.packet;
         const auto &mean = request.mean;
