@@ -583,6 +583,10 @@ namespace DNDS::Cauchy
         // (which retains the face-jump term). Keep reconstruction available
         // for all volume-source gradients, including RANS and chemistry.
         lower.numerics.reconstruction = "gradient";
+        // Both direct-gradient levels assemble their source derivative from
+        // the level's mean and physical gradient. Only the fine VR operator
+        // can own a rate/derivative pair integrated over its modal quadrature.
+        lower.implicit.sourceJacobianMode = "center";
         // The coarse direct-gradient operator has no variational system to
         // solve. Do not inherit the finest VR-only AMG selector; the separate
         // flow linear-solver settings above remain available on every level.

@@ -659,6 +659,12 @@ TEST_CASE("Logical polynomial FAS recovers nonconstant RANS and reacting mixture
         settings.numerics.limiter = "WBAP";
         settings.numerics.viscousGradient = "polynomial";
         settings.implicit.iterations = 40;
+        if (scenario)
+        {
+            settings.implicit.sourceJacobianMode = "rhsQuadrature";
+            for (int level : {0, 1})
+                CHECK(C::PolynomialMultigrid::CoarseSettings(settings, level).implicit.sourceJacobianMode == "center");
+        }
         settings.implicit.multigrid.cycles = 40;
         settings.implicit.multigrid.coarseSmooth = 2;
         settings.implicit.pseudoCFL = settings.implicit.maxPseudoCFL = 100;
