@@ -2031,6 +2031,11 @@ TEST_CASE("Nonuniform chemical volume sampling agrees with independent Cartesian
     CHECK(matrixB->Diagonal().Version() == unpreparedVersion);
     withSource.PrepareJacobian(b, auxiliaryB, inverseTau, *matrixB, controls, 0, mixture.workers,
                                C::FiniteVolume::JacobianContext{*reconstructionB, *wb});
+    auto aliasedContext = quadratureContext;
+    aliasedContext.sourceDerivative.Emplace(matrixBq->Diagonal());
+    const auto beforeAliasCheck = matrixBq->Diagonal().Version();
+    CHECK_THROWS(withSourceQuadrature.PrepareJacobian(bq, auxiliaryBq, inverseTau, *matrixBq, controls, 0, mixture.workers, aliasedContext));
+    CHECK(matrixBq->Diagonal().Version() == beforeAliasCheck);
     withSourceQuadrature.PrepareJacobian(bq, auxiliaryBq, inverseTau, *matrixBq, controls, 0, mixture.workers,
                                          quadratureContext);
 

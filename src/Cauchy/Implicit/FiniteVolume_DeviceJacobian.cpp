@@ -55,6 +55,8 @@ namespace DNDS::Cauchy
                                       (!output.HasAssembledOffDiagonal() || !input.Storage().Overlaps(output.OffDiagonal().Values().Storage())),
                                   "device Jacobian output aliases an input");
         };
+        if (context.sourceDerivative)
+            checkAlias(*context.sourceDerivative);
         checkAlias(field.Owned());
         checkAlias(field.Ghost());
         checkAlias(inversePseudoTime);

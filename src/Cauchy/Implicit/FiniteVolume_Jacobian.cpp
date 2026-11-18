@@ -190,6 +190,8 @@ namespace DNDS::Cauchy
                                       (!output.HasAssembledOffDiagonal() || !Algebra::Detail::Overlaps(input.Storage(), output.OffDiagonal().Values().Storage())),
                                   "equation Jacobian output aliases input");
         };
+        if (context && context->sourceDerivative)
+            checkAlias(*context->sourceDerivative);
         checkAlias(inversePseudoTime);
         for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
             for (const auto *input : {&state.PhysicalField(iField).Owned(), &state.PhysicalField(iField).Ghost()})
@@ -263,8 +265,9 @@ namespace DNDS::Cauchy
         DNDS_check_throw_info(_data->settings.equation.source == "none" || (chemical && _data->equation.HasMixture()), "unsupported equation Jacobian source");
         if (chemical || rans)
         {
-            DNDS_check_throw_info(sourceWorkspace || (!rans && (_data->settings.numerics.reconstruction == "constant" || _data->equation.Mixture().SpeciesNumber() == 1)),
-                                  "RANS or nonconstant chemical Jacobian requires current RHS source reconstruction");
+            DNDS_check_throw_info(sourceWorkspace || (_data->settings.implicit.sourceJacobianMode == "center" && !rans &&
+                                                      (_data->settings.numerics.reconstruction == "constant" || _data->equation.Mixture().SpeciesNumber() == 1)),
+                                  "source Jacobian requires its workspace and the derivative paired with the rate for rhsQuadrature");
             if (sourceWorkspace)
                 ValidateEquationSourceJacobian(state, *context, time);
         }

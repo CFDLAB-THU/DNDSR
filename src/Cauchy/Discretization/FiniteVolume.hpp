@@ -662,11 +662,12 @@ namespace DNDS::Cauchy
         /// The caller completes halos, serializes matrix/input bindings and
         /// coordinates failures. No inverses/factors are updated implicitly.
         /// Output writers are reserved together; partial failure poisons them.
-        /// RANS/source publication requires a JacobianContext containing the
-        /// solver-owned reconstruction state and its scratch workspace from a
-        /// successful Evaluate at this state/time. Values/coefficients
-        /// must remain unchanged. RANS derivatives use its current center
-        /// gradients even on P0; chemical derivatives use the cell mean.
+        /// Centered RANS derivatives use the mean gradient prepared for this
+        /// state and boundary input, including on P0. Centered chemistry
+        /// differentiates at the cell mean. With rhsQuadrature, supply the
+        /// integrated derivative produced with the retained spatial rate
+        /// through JacobianContext. Its storage must be disjoint from all
+        /// matrix outputs. Later polynomial evaluations can use other records.
         void PrepareJacobian(const EquationDofs &state, const AuxiliaryValues &auxiliary,
                              const Runtime::Array<real> &inversePseudoTime, LinearProblemContext &output,
                              JacobianPreparation controls = {}, real time = 0,
