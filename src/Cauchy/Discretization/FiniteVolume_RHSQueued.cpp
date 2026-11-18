@@ -164,6 +164,8 @@ namespace DNDS::Cauchy
             allFaces.SetName("Cauchy/fluxAllFaces", DNDS_ALLOCATION_SITE());
             if (controls.mapping == CUDA::RHSFaceMapping::WarpSegments || controls.mapping == CUDA::RHSFaceMapping::CTASegments)
             {
+                const bool reportSetup = std::getenv("DNDS_CAUCHY_PROFILE_RHS_PACKAGES") != nullptr;
+                const auto started = reportSetup ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
                 // Setup-only rule packaging. Prefixes are authoritative even
                 // when a direct midpoint consumer has a different face rule
                 // from the parent metric/source integration degree. Download
@@ -179,6 +181,12 @@ namespace DNDS::Cauchy
                 packages[0].emplace(CUDA::RHSFacePackages::Prepare(allFaces, ruleCounts, controls, context));
                 packages[1].emplace(CUDA::RHSFacePackages::Prepare(owner->stencil.rhsCoreFaces, ruleCounts, controls, context));
                 packages[2].emplace(CUDA::RHSFacePackages::Prepare(owner->stencil.rhsDependentFaces, ruleCounts, controls, context));
+                if (reportSetup && owner->mesh->getMPI().rank == 0)
+                {
+                    const real seconds = std::chrono::duration<real>(std::chrono::steady_clock::now() - started).count();
+                    std::fprintf(stdout, "CAUCHY_RHS_PACKAGE_SETUP faces=%lld seconds=%.9f\n",
+                                 static_cast<long long>(faces), seconds);
+                }
             }
         }
         auto Parameters() const
