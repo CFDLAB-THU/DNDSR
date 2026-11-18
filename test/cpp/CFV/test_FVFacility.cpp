@@ -84,15 +84,25 @@ TEST_CASE("Midpoint face publication preserves integrated measures and cell metr
         C::FiniteVolumeMetricOptions metricOptions;
         metricOptions.faceIntegrationOrder = 1;
         const auto midpoint = C::FiniteVolumePlan::ConstructMetrics(mesh, metricOptions);
+        const auto fullGeometry = C::FiniteVolumePlan::ConstructMetrics(mesh, Elem::INT_ORDER_MAX);
+        const auto firstOrder = C::FiniteVolumePlan::ConstructMetrics(mesh, 1);
         const auto aRead = full.AcquireRead(), bRead = midpoint.AcquireRead();
         const auto a = aRead.HostView(), b = bRead.HostView();
+        const auto geometryRead = fullGeometry.AcquireRead(), firstOrderRead = firstOrder.AcquireRead();
+        const auto geometry = geometryRead.HostView(), onePoint = firstOrderRead.HostView();
         for (DNDS::index iCell = 0; iCell < full.NumCellProc(); ++iCell)
             for (DNDS::index j = 0; j < 8; ++j)
+            {
                 CHECK(a.cells(iCell, j) == b.cells(iCell, j));
+                CHECK(geometry.cells(iCell, j) == onePoint.cells(iCell, j));
+            }
         int nonplanar = 0;
         for (DNDS::index iFace = 0; iFace < full.NumFaceProc(); ++iFace)
         {
             CHECK(b.FaceQuadratureEnd(iFace) - b.FaceQuadratureBegin(iFace) == 1);
+            CHECK(onePoint.FaceQuadratureEnd(iFace) - onePoint.FaceQuadratureBegin(iFace) == 1);
+            CHECK(onePoint.GetFaceWeight(onePoint.FaceQuadratureBegin(iFace)) == geometry.GetFaceArea(iFace));
+            CHECK((onePoint.GetFaceNorm(onePoint.FaceQuadratureBegin(iFace)) - geometry.GetFaceMeanNorm(iFace)).norm() < 1e-13);
             DNDS::real area = 0;
             tPoint normal = tPoint::Zero();
             for (DNDS::index iPoint = a.FaceQuadratureBegin(iFace); iPoint < a.FaceQuadratureEnd(iFace); ++iPoint)

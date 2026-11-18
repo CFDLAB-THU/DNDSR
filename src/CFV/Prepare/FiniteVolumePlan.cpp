@@ -51,7 +51,7 @@ namespace DNDS::CFV
         // All local allocation/geometry failures agree before the halo collective.
         communication->LocalStage([&]
                                   {
-            DNDS_check_throw_info(intOrder >= 2 && intOrder <= INT_ORDER_MAX, "invalid FV integration order");
+            DNDS_check_throw_info(intOrder >= 1 && intOrder <= INT_ORDER_MAX, "invalid FV integration order");
             DNDS_check_throw_info(faceIntOrder == 1 || faceIntOrder == intOrder, "FV face integration must be midpoint or the metric order");
             auto read = mesh->AcquireRead(MeshReadRequirements::CellFlux());
             const auto view = read.HostView();
@@ -92,7 +92,10 @@ namespace DNDS::CFV
                 tSmallCoords coords;
                 view.GetCoordsOnCell(iCell, coords);
                 const auto element = view.GetCellElement(iCell);
-                Quadrature quadrature(element, intOrder), exact(element, INT_ORDER_MAX);
+                // A midpoint RHS/VR rule does not reduce the geometric
+                // measure and centroid to one sample on a curved cell.
+                const int geometryOrder = intOrder == 1 ? INT_ORDER_MAX : intOrder;
+                Quadrature quadrature(element, geometryOrder), exact(element, INT_ORDER_MAX);
                 real volume = 0.;
                 real plainVolume = 0;
                 tPoint bary = tPoint::Zero(), plainMoment = tPoint::Zero();
@@ -110,7 +113,7 @@ namespace DNDS::CFV
                 }
                 for (int iG = 0; iG < quadrature.GetNumPoints(); ++iG)
                 {
-                    const auto &shape = Geom::Elem::GetCachedShapeAtQuadrature(element.type, intOrder, iG);
+                    const auto &shape = Geom::Elem::GetCachedShapeAtQuadrature(element.type, geometryOrder, iG);
                     const tPoint p = PPhysicsCoordD01Nj(coords, shape);
                     bary += p * CellJacobianDet(view.Dimension(), coords, shape) * quadrature.GetWeight(iG) * (axisymmetric ? p[1] : 1.);
                 }
@@ -177,10 +180,13 @@ namespace DNDS::CFV
                 real integratedArea = 0;
                 tPoint integratedNormal = tPoint::Zero(), geometricNormal = tPoint::Zero();
                 {
-                    const Quadrature measure(element, intOrder);
+                    // With midpoint RHS, put the integrated area and mean
+                    // normal into its one sample, including curved faces.
+                    const int geometryOrder = intOrder == 1 ? INT_ORDER_MAX : intOrder;
+                    const Quadrature measure(element, geometryOrder);
                     for (int iG = 0; iG < measure.GetNumPoints(); ++iG)
                     {
-                        const auto &shape = Geom::Elem::GetCachedShapeAtQuadrature(element.type, intOrder, iG);
+                        const auto &shape = Geom::Elem::GetCachedShapeAtQuadrature(element.type, geometryOrder, iG);
                         const auto jacobian = ShapeJacobianCoordD01Nj(coords, shape);
                         const tPoint normal = view.Dimension() == 2 ? FacialJacobianToNormVec<2>(jacobian) : FacialJacobianToNormVec<3>(jacobian);
                         const auto position = PPhysicsCoordD01Nj(coords, shape);

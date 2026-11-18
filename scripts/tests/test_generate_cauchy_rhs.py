@@ -34,7 +34,11 @@ class RHSCodeGenerationTests(unittest.TestCase):
                        "--manifest", str(manifest), "--output-dir", str(output)]
             subprocess.run(command, check=True, capture_output=True, text=True, timeout=60)
             before = {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in output.iterdir()}
-            self.assertEqual(len(before), 47)
+            self.assertEqual(len(before), 65)
+            for c, m, d in acm:
+                for mapping in ("Thread", "CTASegments"):
+                    name = f"FiniteVolumeACMFluxKernels_C{c}_M{m}_D{d}_{mapping}.cu"
+                    self.assertIn(f"LaunchACMRHSShape<{c}, {m}, {d}, RHSFaceMapping::{mapping}>", before[name][0].decode())
             subprocess.run(command, check=True, capture_output=True, text=True, timeout=60)
             self.assertEqual(before, {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in output.iterdir()})
 
@@ -79,7 +83,8 @@ file(APPEND "${CMAKE_BINARY_DIR}/configure_count" "configured\\n")
                 # Cover the first and secondary custom-command output, plus
                 # the include and CMake index needed before source compilation.
                 for name in ("FiniteVolumeRHSKernels_Instantiations.cpp", "FiniteVolumeRHSKernels_C7_M19_D3.cu",
-                             "FiniteVolumeACMFluxKernels_C4_M19_D3.cu",
+                             "FiniteVolumeACMFluxKernels_C4_M19_D3_Thread.cu",
+                             "FiniteVolumeACMFluxKernels_C4_M19_D3_CTASegments.cu",
                              "FiniteVolumeRHSKernels_Instantiations.hpp", "FiniteVolumeRHSKernels_Sources.cmake"):
                     (output / name).unlink()
                     run("--build", build, "--parallel", "4")

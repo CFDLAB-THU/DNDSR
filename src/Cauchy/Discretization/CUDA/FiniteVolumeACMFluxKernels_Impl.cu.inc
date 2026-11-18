@@ -203,9 +203,6 @@ namespace DNDS::Cauchy::CUDA::Detail
         }
     }
 
-    template <int Dimension>
-    constexpr RHSFaceMapping ACMPolynomialMapping = Dimension == 3 ? RHSFaceMapping::CTASegments : RHSFaceMapping::Thread;
-
     template <int Components, RHSFaceMapping Mapping, class Fields, class Output>
     void LaunchACMMapping(const RHSFaceLaunch &launch, RHSWallOutput wallShear, const Fields &fields, const Output &output)
     {
@@ -236,12 +233,13 @@ namespace DNDS::Cauchy::CUDA::Detail
             LaunchACMMapping<Components, RHSFaceMapping::Thread>(launch, wallShear, launch.fields, launch.output);
     }
 
-    template <int C, int M, int D>
+    template <int C, int M, int D, RHSFaceMapping Mapping>
     void LaunchACMRHSShape(const RHSFaceLaunch &launch, RHSWallOutput wallShear)
     {
+        static_assert(Mapping == RHSFaceMapping::Thread || Mapping == RHSFaceMapping::CTASegments);
         DNDS_check_throw_info(launch.controls.mechanical && !launch.controls.direct && !launch.controls.firstOrder &&
                                   launch.controls.components == C && launch.controls.modes == M && launch.controls.dimension == D &&
-                                  launch.controls.mapping == ACMPolynomialMapping<D>,
+                                  launch.controls.mapping == Mapping,
                               "ACM RHS static C/M/D launch differs from its prepared profile");
         using Width = Runtime::FixedRows<C, C>;
         using Coefficients = Runtime::FixedRows<C * M, C * M>;
@@ -251,6 +249,6 @@ namespace DNDS::Cauchy::CUDA::Detail
             launch.controls.distinctViscous ? ProjectRHSField<Coefficients>(launch.fields.viscousData)
                                             : typename ACMPolynomialFields<C, M, D>::template Pair<C * M>{}};
         const auto output = ProjectRHSOutputs<C>(launch.output);
-        LaunchACMMapping<C, ACMPolynomialMapping<D>>(launch, wallShear, fields, output);
+        LaunchACMMapping<C, Mapping>(launch, wallShear, fields, output);
     }
 }

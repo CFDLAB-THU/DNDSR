@@ -186,8 +186,8 @@ if(DNDS_USE_CUDA)
     include("${PROJECT_SOURCE_DIR}/cmake/DndsCauchyRHS.cmake")
     dnds_generate_cauchy_rhs(_rhs_sources _rhs_include _rhs_codegen)
     list(APPEND CPPS ${_rhs_sources})
-    # One device face kernel per ACM equation width. The runtime basis view
-    # covers direct gradients and polynomial degrees on both mesh dimensions.
+    # Runtime-shaped ACM leaves provide both mappings for direct gradients,
+    # first-order convection and polynomial shapes outside the static catalog.
     foreach(acm_width IN ITEMS 4 5 6)
         set(acm_source "${_rhs_include}/FiniteVolumeACMFluxKernels_C${acm_width}.cu")
         configure_file(Discretization/CUDA/FiniteVolumeACMFluxKernels.cu.in "${acm_source}" @ONLY)

@@ -162,9 +162,7 @@ namespace DNDS::Cauchy::CUDA
                                     ? Detail::ValidateSegmentedFluxFaces(context, geometry, controls, faces, packages)
                                     : 0;
             const Detail::RHSFaceLaunch launch{context, geometry, parameters, controls, fields, output, faces, packages, blocks};
-            const auto polynomialMapping = controls.dimension == 3 ? RHSFaceMapping::CTASegments : RHSFaceMapping::Thread;
-            if (!controls.direct && !controls.firstOrder && controls.mapping == polynomialMapping &&
-                Detail::TryLaunchFP64ACMRHS(launch, wallShear))
+            if (!controls.direct && !controls.firstOrder && Detail::TryLaunchFP64ACMRHS(launch, wallShear))
             {
                 DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA ACM static polynomial launch failed");
                 return;
