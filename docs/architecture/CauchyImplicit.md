@@ -135,11 +135,9 @@ default device context, while every asynchronous action retains the publication
 or scratch owner through its real completion. No default-stream fence is used
 as a substitute for ordering the numerical action on its declared stream.
 
-The Phase C CUDA integration is still in progress: assembled action/Jacobi
-leaves, managed submission and queued inverse preparation have source
-implementations, but evaluated device producers and full solver acceptance
-remain separate requirements. No host fallback is taken for a missing CUDA
-producer. The C source batch has not yet been built or tested.
+The assembled CUDA matrix supports queued inverse preparation, matrix action
+and Jacobi updates. CUDA profile validation rejects unsupported producers at
+setup. The nonlinear solver and pMG use the same operator entry points as CPU.
 
 ### Inverse preparation and observation
 
@@ -2195,13 +2193,9 @@ may require additional slots. Assembled storage can reuse one slot. Initial
 symbolic setup copies only centered stencil records, offsets and areas to
 construct resident geometry, not complete CFV metrics or basis caches.
 
-These additions remain source work pending grouped Phase C validation. The
-full CUDA linear solver and time/pMG integration are still incomplete; this
-producer does not by itself qualify implicit CUDA execution.
+### Shared queued linear solve
 
-### Shared queued linear solve (Phase C source implementation)
-
-`StateGMRES` now accepts a per-instance algebra adapter. Its default adapter
+`StateGMRES` accepts a per-instance algebra adapter. Its default adapter
 preserves existing CPU use. Cauchy supplies `LinearSolverAlgebra`, which binds
 all vector operations to the domain compute lane for inline CPU, worker CPU
 and CUDA. The mathematical GMRES loop is shared; Hessenberg/Givens updates and
@@ -2219,12 +2213,13 @@ SGS and ILU remain CPU-only and cannot silently substitute for CUDA Jacobi.
 GMRES accepts a zero-started one/two-local-sweep Jacobi preconditioner, or
 `amgx` for assembled CUDA matrices. The standalone `amgx` method instead uses
 stationary defect correction. `LocalAMGPreconditioner` retains owned-owned
-coupled 5/6/7 blocks as native block CSR, sorted by cell column; DNDS
-retains off-rank blocks for its full distributed operator. The provider has no
-communicator. Its fixed-cycle configuration has no residual-based inner stop.
-The block pattern is prepared once; numerical values update when the matrix
-mutation epochs change. Compact AoS vectors are borrowed directly; padded AoS
-uses lazily reserved device packing scratch, with no host payload copy.
+coupled 5/6/7 blocks with native int32 CSR indices and compact row-major
+blocks. The flow adapter requires one MPI rank and one device. It passes the
+existing row order, including unsorted neighbor columns. The public AmgX
+upload copies the numeric values into provider storage. With native AmgX
+storage selected, the provider attaches to the existing value allocation.
+Matrix mutation epochs trigger hierarchy updates. RHS and correction vectors
+must have compact AoS rows.
 
 AmgX has an explicit provider boundary: drain the engine (including pending
 host-progressed MPI), then invoke its single-device API and observe its device
@@ -2232,11 +2227,11 @@ completion. Do not enter that boundary with an unrelated host-progressed
 transfer on the same device that requires this controller to advance it.
 This is not a capture-ready or stream-native AMG provider.
 
-Focused distributed source tests use an independently constructed known
-solution for coupled 5/6/7-component matrices, inline/worker/CUDA execution,
-Jacobi and left GMRES, compact/padded rows, and optional AmgX. They have not
-yet been built/run. Nonlinear, time, pMG and final application integration
-remain open; no full implicit CUDA qualification is claimed.
+`test_LinearSolverCUDA.cu` exercises coupled 5/6/7-component Jacobi and
+left GMRES with an independently constructed solution. Its AmgX case runs
+on one rank and covers both public upload and native attachment. A successful
+matrix solve establishes the linear contract. Full pMG convergence additionally
+depends on the nonlinear correction and smoother settings.
 
 ### Quadrature source derivatives and retained spatial rates
 
