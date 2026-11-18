@@ -1998,7 +1998,12 @@ TEST_CASE("Nonuniform chemical volume sampling agrees with independent Cartesian
          auxiliaryBq = withSourceQuadrature.BuildAuxiliaryValues({false, true});
     withoutSource.PrepareAuxValues(a, auxiliaryA, 0, mixture.workers);
     withSource.PrepareAuxValues(b, auxiliaryB, 0, mixture.workers);
-    withSourceQuadrature.PrepareCorrectionAux(bq, *reconstructionBq, *wbq, auxiliaryBq, engine, stream, 0);
+    auto pairedDerivative = withSourceQuadrature.BuildSourceDerivative(bq);
+    REQUIRE(pairedDerivative);
+    auto rq = C::EquationDofOperations::NewVector(bq);
+    withSourceQuadrature.Evaluate(bq, rq, *reconstructionBq, *wbq, auxiliaryBq, engine, stream, 0, std::ref(*pairedDerivative));
+    C::FiniteVolume::JacobianContext quadratureContext{*reconstructionBq, *wbq};
+    quadratureContext.sourceDerivative.Emplace(*pairedDerivative);
     R::Array<double> inverseTau(R::RowLayout::Dense(rows, 1));
     {
         auto write = inverseTau.Write();
@@ -2015,7 +2020,7 @@ TEST_CASE("Nonuniform chemical volume sampling agrees with independent Cartesian
     withSource.PrepareJacobian(b, auxiliaryB, inverseTau, *matrixB, controls, 0, mixture.workers,
                                C::FiniteVolume::JacobianContext{*reconstructionB, *wb});
     withSourceQuadrature.PrepareJacobian(bq, auxiliaryBq, inverseTau, *matrixBq, controls, 0, mixture.workers,
-                                         C::FiniteVolume::JacobianContext{*reconstructionBq, *wbq});
+                                         quadratureContext);
 
     // The fused mean-source producer also freezes the mean snapshot required
     // by evaluated off-diagonal actions. Exercise a nonzero physical vector,

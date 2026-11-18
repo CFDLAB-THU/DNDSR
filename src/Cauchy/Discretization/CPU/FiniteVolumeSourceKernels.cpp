@@ -1,5 +1,6 @@
 #include "Cauchy/Discretization/CPU/FiniteVolumeSourceKernels.hpp"
 #include "Cauchy/State/RANSState.hpp"
+#include "DNDS/Algebra/BlockIndex.hpp"
 #include "DNDS/Core/OMP.hpp"
 #include "Cauchy/Discretization/RANSReconstruction.hpp"
 #include "Physics/Incompressible/RANSPoint.hpp"
@@ -262,6 +263,18 @@ namespace DNDS::Cauchy::CPU
         return request.preparedDerivative.data
                    ? SourceWorkers(request, equation, workers, EvaluateVolumeSourceRows<true, true>)
                    : SourceWorkers(request, equation, workers, EvaluateVolumeSourceRows<true, false>);
+    }
+    void ApplyVolumeSourceDerivative(Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::TableRows> source, RHSOutputView diagonal,
+                                     index n, bool full, bool rowMajor, real scale)
+    {
+        OMP::ForRows(0, source.RowCount(), [&](index cell)
+                     {
+            for (index row=0;row<n;++row)
+                if (full)
+                    for(index col=0;col<n;++col)
+                        diagonal(cell, Algebra::DenseBlockEntry(row,col,n,rowMajor)) += scale*source(cell,row*n+col);
+                else
+                    diagonal(cell,row) += scale*source(cell,row*n+row); });
     }
     void AddEquationRotationSource(CFV::FiniteVolumeHostView metric, const RigidFrame &frame,
                                    EquationBlockReadView flow, EquationBlockArrayView<real> output,

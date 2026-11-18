@@ -136,11 +136,14 @@ namespace DNDS::Cauchy
         OptionalRef<AuxiliaryValues> auxiliary;
         real time = 0;
 
+        /// Optional owned-cell record paired with this spatial rate.
+        OptionalRef<Runtime::Array<real>> sourceDerivative;
+
         static FiniteVolumeEvaluation Spatial(EquationDofs &output, real time = 0,
-                                              OptionalRef<AuxiliaryValues> auxiliary = {})
+                                              OptionalRef<AuxiliaryValues> auxiliary = {}, OptionalRef<Runtime::Array<real>> derivative = {})
         {
             return {FiniteVolumeEvaluationMode::SpatialResidual,
-                    OptionalRef<EquationDofs>(output), auxiliary, time};
+                    OptionalRef<EquationDofs>(output), auxiliary, time, derivative};
         }
         static FiniteVolumeEvaluation Reconstruction(real time = 0)
         {
@@ -261,6 +264,8 @@ namespace DNDS::Cauchy
             /// Optional retained execution lane for this synchronous operator.
             /// CUDA requires it; the context owner manages its engine/resources.
             std::optional<Runtime::ExecutionStream> stream;
+            /// Unscaled integrated source contribution returned alongside the correction rate.
+            OptionalRef<const Runtime::Array<real>> sourceDerivative;
             explicit JacobianContext(Workspace &scratch) : workspace(scratch) {}
             JacobianContext(const ReconstructionState &state, Workspace &scratch)
                 : workspace(scratch), reconstruction(state) {}
@@ -327,6 +332,10 @@ namespace DNDS::Cauchy
         /// constant prescribed and adiabatic/isothermal wall producers use the
         /// actual EOS. Operator-local fixed-flow leaves retain established
         /// flow5 arithmetic without a second workspace or execution loop.
+        /// Allocate an owned, execution-resident derivative record for an RHS
+        /// evaluation whose matching correction uses rhsQuadrature. Each live
+        /// evaluation requiring independent storage must reserve its own record.
+        std::optional<Runtime::Array<real>> BuildSourceDerivative(const EquationDofs &state) const;
         std::shared_ptr<Workspace> BuildWorkspace(EquationDofs &state,
                                                   std::optional<Physics::Chemistry::ChemicalWorkerPool> workers = std::nullopt,
                                                   WorkspaceOptions options = WorkspaceOptions()) const;
@@ -369,7 +378,7 @@ namespace DNDS::Cauchy
         /// the caller's responsibility. Required setup protocols and numerical
         /// reductions remain. Access checking is an independent engine choice.
         void Evaluate(EquationDofs &state, EquationDofs &residual, ReconstructionState &reconstruction, Workspace &workspace,
-                      Runtime::EagerEngine &engine, const Runtime::ExecutionStream &stream, real time = 0) const;
+                      Runtime::EagerEngine &engine, const Runtime::ExecutionStream &stream, real time = 0, OptionalRef<Runtime::Array<real>> sourceDerivative = {}) const;
         /// Prepare the requested auxiliary outputs during the mean exchange,
         /// before reconstruction/RHS. RHS reads this explicit publication;
         /// the caller may then consume its spectra for pseudo-time/Jacobian
@@ -378,7 +387,7 @@ namespace DNDS::Cauchy
         /// this synchronous call. The no-aux overload retains its old scope.
         void Evaluate(EquationDofs &state, EquationDofs &residual, ReconstructionState &reconstruction, Workspace &workspace,
                       AuxiliaryValues &auxiliary, Runtime::EagerEngine &engine,
-                      const Runtime::ExecutionStream &stream, real time = 0) const;
+                      const Runtime::ExecutionStream &stream, real time = 0, OptionalRef<Runtime::Array<real>> sourceDerivative = {}) const;
         /// The same mean/gradient/reconstruction/limiter preparation as Evaluate,
         /// including completed halos, but no flux/source evaluation or dummy
         /// residual allocation. Use before independent EvaluateFlux/AddSource.
@@ -835,9 +844,7 @@ namespace DNDS::Cauchy
         /// its RHS-refined auxiliary packet after another stage used shared
         /// reconstruction scratch. Sampling is submitted on the supplied
         /// backend stream, then joined before publishing its provenance.
-        void RefreshCorrectionSource(EquationDofs &state, ReconstructionState &reconstruction,
-                                     Workspace &workspace, Runtime::EagerEngine &engine,
-                                     const Runtime::ExecutionStream &stream, real time) const;
+
         /// Five-component affine bound retained for specialized perfect-gas
         /// flow kernels and their compatibility tests. Complete-equation
         /// orchestration uses PrepareAdmissibility/Admissible instead.
@@ -926,7 +933,7 @@ namespace DNDS::Cauchy
                           const Runtime::ExecutionStream &compute,
                           const Runtime::ExecutionStream &communication, real time,
                           OptionalRef<AuxiliaryValues> auxiliary = {},
-                          OptionalRef<const QueuedEvaluationDependency> dependency = {}) const;
+                          OptionalRef<const QueuedEvaluationDependency> dependency = {}, OptionalRef<Runtime::Array<real>> sourceDerivative = {}) const;
         void ValidateEquationSourceJacobian(const EquationDofs &state,
                                             const JacobianContext &context, real time) const;
         bool AddEquationSourceJacobian(const EquationDofs &state,

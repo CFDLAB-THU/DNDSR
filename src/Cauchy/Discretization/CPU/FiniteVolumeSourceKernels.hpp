@@ -68,6 +68,9 @@ namespace DNDS::Cauchy::CPU
     NumericalStatus AssembleCenterSourceJacobian(const SourceKernelRequest &, const EquationSystem &, PointEvaluator &) noexcept;
     NumericalStatus AddQuadratureSourceJacobian(const SourceKernelRequest &, const EquationSystem &, PointEvaluator &) noexcept;
     NumericalStatus EvaluateVolumeSource(const SourceKernelRequest &, const EquationSystem &, PointEvaluator &) noexcept;
+    /// Accumulate a canonical row-major source record in the selected diagonal layout.
+    void ApplyVolumeSourceDerivative(Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::TableRows> source, RHSOutputView diagonal,
+                                     index components, bool fullBlock, bool rowMajor, real scale);
     void AddEquationRotationSource(CFV::FiniteVolumeHostView metric, const RigidFrame &frame,
                                    EquationBlockReadView flow, EquationBlockArrayView<real> output,
                                    std::optional<EquationBlockArrayView<real>> lowOutput);

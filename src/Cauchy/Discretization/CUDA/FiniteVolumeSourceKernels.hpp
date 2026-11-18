@@ -63,6 +63,8 @@ namespace DNDS::Cauchy::CUDA
     /// The numerical source is committed only after all its points succeed.
     void AddRANSSources(Runtime::ExecutionContext context, SourceRequest request, SourceIndices selected);
 
+    void ApplyVolumeSourceDerivative(Runtime::ExecutionContext context, SourceInput source, decltype(SourceRequest::output) diagonal,
+                                     index components, bool fullBlock, bool rowMajor, real scale);
     /// Add the absolute-velocity component-axis rotation source to flow5 only.
     /// Optional low-order output receives the same source. RANS components are
     /// unchanged. No field transform or geometry mutation is performed.

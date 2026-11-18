@@ -1,3 +1,4 @@
+#include "Cauchy/Discretization/CUDA/FiniteVolumeSourceKernels.hpp"
 #include "Cauchy/Implicit/FiniteVolumeDeviceJacobian.hpp"
 #include "Cauchy/Implicit/CUDA/ACMJacobianKernels.hpp"
 #include "DNDS/Diagnostics/Timeline.hpp"
@@ -176,7 +177,13 @@ namespace DNDS::Cauchy
                         { CUDA::InitializePerfectGasFluxJacobianDiagonal(context, scratch->metric.View().cells, tau, diagonal, status, cells,
                                                                          parameters.frame, controls.physicalMass, parameters.scale, parameters.components, full, rowMajorBlocks); }, R::ReadAs<R::TableRows>(inversePseudoTime), R::WriteAs<R::UniformTableRows>(output.Diagonal()), R::WriteAs<R::FixedRows<1>>(scratch->rowsStatus), R::ReadAs<R::FixedRows<1>>(cells));
         scratch->AppendStatus(engine, stream, scratch->rowsStatus);
-        scratch->SubmitSource(work, engine, stream, state, output.Diagonal(), full, parameters.scale);
+        if (_data->settings.implicit.sourceJacobianMode == "rhsQuadrature")
+        {
+            R::SubmitArrays(engine, stream, [n, full, rowMajor = output.RowMajorBlocks(), scale = parameters.scale](auto where, auto source, auto diagonal)
+                            { CUDA::ApplyVolumeSourceDerivative(where, source, diagonal, n, full, rowMajor, scale); }, R::ReadAs<R::TableRows>(*context.sourceDerivative), R::ReadWriteAs<R::UniformTableRows>(output.Diagonal()));
+        }
+        else
+            scratch->SubmitSource(work, engine, stream, state, output.Diagonal(), full, parameters.scale);
 
         const auto freezeSignal = [&](const auto &input, R::Array<real> &target, const char *name)
         {

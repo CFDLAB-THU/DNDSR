@@ -415,9 +415,6 @@ namespace DNDS::Cauchy
                 return true;
             }
         };
-        std::optional<EquationDofOperations::Binding> sourceState;
-        std::optional<WeakPublication> sourceCoefficients;
-        real sourceTime = 0;
         std::optional<EquationDofOperations::Binding> rhsState;
         std::optional<WeakPublication> rhsCoefficients;
         real rhsTime = 0;
@@ -625,7 +622,7 @@ namespace DNDS::Cauchy
         /// Sampling-only calls omit result; publication follows caller drain.
         void SubmitDeviceVolumeSource(R::EagerEngine &, const R::ExecutionStream &,
                                       const EquationDofs &, OptionalRef<EquationDofs> result, real time,
-                                      OptionalRef<EquationDofs> lowOrder = {});
+                                      OptionalRef<EquationDofs> lowOrder = {}, OptionalRef<R::Array<real>> sourceDerivative = {});
         /// Common CPU/CUDA source addition. Direct RANS gradients must already
         /// be prepared; modal samples are submitted through CFV. Only rigid-
         /// frame flow sources are also added to the explicit lowOrder output,
@@ -636,17 +633,11 @@ namespace DNDS::Cauchy
         void SubmitVolumeSource(R::EagerEngine &, const R::ExecutionStream &,
                                 const EquationDofs &, OptionalRef<EquationDofs> result, real time,
                                 std::shared_ptr<PointEvaluator> evaluator = {},
-                                OptionalRef<EquationDofs> lowOrder = {});
-        bool AddRHSQuadratureSourceJacobian(
-            const EquationDofs &state, const R::Array<real>::WriteLease &diagonal,
-            DiagonalStorage storage, real scale, PointEvaluator &evaluator,
-            OptionalRef<const EquationFVDetail::MeanLinearizationOutput> linearization, bool rowMajorBlocks = false) const;
+                                OptionalRef<EquationDofs> lowOrder = {}, OptionalRef<R::Array<real>> sourceDerivative = {});
         bool AddMeanSourceJacobian(
             const EquationDofs &state, const R::Array<real>::WriteLease &diagonal,
             DiagonalStorage storage, real scale, PointEvaluator &evaluator,
             OptionalRef<const EquationFVDetail::MeanLinearizationOutput> linearization = {}, bool rowMajorBlocks = false) const;
-        void PublishSourceState(const EquationDofs &state, real time);
-        bool SourceSamplesCurrent(const EquationDofs &state, real time) const;
         void PrepareVolumeSource(const EquationDofs &state,
                                  OptionalRef<EquationDofs> result,
                                  PointEvaluator &evaluator, real time = 0,

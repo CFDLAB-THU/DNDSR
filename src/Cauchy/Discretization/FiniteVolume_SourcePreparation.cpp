@@ -37,8 +37,6 @@ namespace DNDS::Cauchy
     void FiniteVolume::Workspace::SampleSourceState(const EquationDofs &state, real time)
     {
         const PhaseTime timing(*this, SamplingPhase);
-        sourceState.reset();
-        sourceCoefficients.reset();
         if (sourceOffsets.RowCount() == 0)
             return;
         // P0 face convection/viscosity does not disable these derivatives.
@@ -61,91 +59,6 @@ namespace DNDS::Cauchy
             }
         }
     }
-    /// Opt-in source linearization at the already sampled RHS source
-    /// quadrature. This is deliberately separate from the retained
-    /// one-point approximate Jacobian and uses only the current published
-    /// limited/PP polynomial values/gradients.
-    bool FiniteVolume::Workspace::AddRHSQuadratureSourceJacobian(const EquationDofs &state,
-                                                                 const R::Array<real>::WriteLease &diagonal,
-                                                                 DiagonalStorage storage, real scale,
-                                                                 PointEvaluator &evaluator,
-                                                                 OptionalRef<const MeanLinearizationOutput> linearization, bool rowMajorBlocks) const
-    {
-        if (!sourceSampling)
-            return false;
-        if (owner->settings.numerics.reconstruction != "variational")
-            return false;
-        // OptionalRef is an API/lifetime marker. Resolve it once before the
-        // quadrature loop so its checked operator-> is not part of the hot
-        // point path.
-        std::optional<WallDistanceRead> wallRead;
-        std::optional<R::Array<real>::ReadLease> lengthRead;
-        if (ransFirst >= 0)
-        {
-            wallRead.emplace(owner->wallDistance->AcquireRead());
-            lengthRead.emplace(owner->ransCellLength.Read());
-        }
-        const auto walls = wallRead ? wallRead->HostView() : WallDistanceView{};
-        const auto lengths = lengthRead ? lengthRead->View<R::FixedRows<1>>()
-                                        : R::ArrayView<const real, R::AccessBoundsChecks, R::FixedRows<1>>{};
-        const auto matrix = diagonal.View<R::UniformTableRows>();
-        const index nv = state.ComponentNumber();
-        const int independent = owner->equation.HasMixture() ? owner->equation.Mixture().SpeciesNumber() - 1 : 0;
-        std::vector<EquationBlockLocation> locations;
-        for (index iBlock = 0; iBlock < state.BlockNumber(); ++iBlock)
-            locations.push_back(state.LocateBlock(iBlock));
-        std::vector<R::Array<real>::ReadLease> sourceReads;
-        sourceReads.reserve(sourceValues.size());
-        for (const auto &field : sourceValues)
-            sourceReads.push_back(field.Read());
-        std::vector<std::array<std::optional<R::Array<real>::ReadLease>, 3>> gradientReads(sourceGradients.size());
-        for (index iField = 0; iField < index(sourceGradients.size()); ++iField)
-            for (int d = 0; d < owner->metrics.Dimension(); ++d)
-                gradientReads[iField][d].emplace(sourceGradients[iField][d].Read());
-        const auto weightRead = sourceWeights.Read();
-        const auto weights = weightRead.View<R::FixedRows<1>>();
-        std::vector<RHSScalarView> samples;
-        samples.reserve(sourceReads.size());
-        for (const auto &read : sourceReads)
-            samples.push_back(read.View<R::UniformTableRows>());
-        std::vector<std::array<CPU::SourceGradientView, 3>> gradients(sourceGradients.size());
-        for (index iField = 0; iField < index(sourceGradients.size()); ++iField)
-            for (int d = 0; d < owner->metrics.Dimension(); ++d)
-                gradients[iField][d] = {gradientReads[iField][d]->View<R::UniformTableRows>(), 1, 0};
-        const auto means = state.ReadOwned();
-        const auto ransMean = ransFirst >= 0 ? means.Block("rans") : EquationBlockReadView{};
-        const auto offsetRead = sourceOffsets.Read();
-        CPU::SourceKernelRequest request;
-        request.offsets = offsetRead.View<R::FixedRows<1>>();
-        request.cells = owner->metrics.NumCell();
-        request.components = state.ComponentNumber();
-        request.dimension = owner->metrics.Dimension();
-        request.flowFirst = flowFirst;
-        request.speciesFirst = speciesFirst;
-        request.ransFirst = ransFirst;
-        request.independentSpecies = independent;
-        request.chemical = chemical;
-        request.walls = walls;
-        request.lengths = lengths;
-        const R::MetadataBuffer<EquationBlockLocation> locationMetadata(locations);
-        request.locations = locationMetadata.HostView();
-        request.logicalFirst = logicalFirst.HostView();
-        const R::MetadataBuffer<std::array<CPU::SourceGradientView, 3>> gradientMetadata(gradients);
-        request.gradients = gradientMetadata.HostView();
-
-        request.matrix = matrix;
-        request.rowMajorBlocks = rowMajorBlocks;
-        request.scale = scale;
-        request.fullBlock = storage == DiagonalStorage::Block;
-        request.weights = weights;
-        request.ransMean = ransMean;
-        const R::MetadataBuffer<RHSScalarView> sampleMetadata(samples);
-        request.samples = sampleMetadata.HostView();
-        RequireNumericalSuccess(PrepareSourceJacobianCPU(request, owner->equation, evaluator, true), "quadrature source Jacobian");
-        // Owned mean pressure/derivatives are prepared by the flux assembler.
-        return false;
-    }
-
     /// Add the approximate source matrix to caller-owned output.
     /// The default is one mean point per cell; rhsQuadrature selects the
     /// explicit same-quadrature source linearization.
@@ -160,8 +73,6 @@ namespace DNDS::Cauchy
     {
         if (sourceOffsets.RowCount() == 0)
             return false;
-        if (owner->settings.implicit.sourceJacobianMode == "rhsQuadrature")
-            return AddRHSQuadratureSourceJacobian(state, diagonal, storage, scale, evaluator, linearization, rowMajorBlocks);
         // Resolve the synchronous nullable borrow once; property sampling
         // below must not pay a checked OptionalRef dereference per cell.
         // The default approximate source matrix is a one-point,
@@ -256,58 +167,6 @@ namespace DNDS::Cauchy
         return true;
     }
 
-    void FiniteVolume::Workspace::PublishSourceState(const EquationDofs &state, real time)
-    {
-        if (sourceOffsets.RowCount() == 0)
-            return;
-        sourceState.emplace(state.NumericAlias());
-        sourceCoefficients.reset();
-        if (activeFluxCoefficients)
-            sourceCoefficients.emplace(FluxCoefficients());
-        sourceTime = time;
-    }
-    /// ValidateWorkspace has already fixed schema, binding and geometry.
-    /// Source samples depend only on owned means, the published flux
-    /// polynomial and physical time. Ghost refreshes do not change them.
-    /// Reserve readers as well as checking generations: an active writer
-    /// has not published its next generation yet and must still exclude us.
-    bool FiniteVolume::Workspace::SourceSamplesCurrent(const EquationDofs &state, real time) const
-    {
-        if (sourceOffsets.RowCount() == 0)
-            return true;
-        if (!sourceState || sourceTime != time)
-            return false;
-        const auto means = state.ReadOwned({state.Device(), nullptr});
-        std::optional<EquationDofs::ReadScope> coefficients;
-        if (activeFluxCoefficients)
-        {
-            if (!sourceCoefficients)
-                return false;
-            coefficients.emplace(FluxCoefficients().ReadOwned({state.Device(), nullptr}));
-            if (!sourceCoefficients->Current(FluxCoefficients()))
-                return false;
-        }
-        else if (sourceCoefficients)
-            return false;
-        const auto unchanged = [](const EquationDofOperations::Binding &publication, const EquationDofs &values)
-        {
-            if (publication.snapshot.PhysicalFieldNumber() != values.PhysicalFieldNumber())
-                return false;
-            for (index iField = 0; iField < values.PhysicalFieldNumber(); ++iField)
-            {
-                const auto &saved = publication.snapshot.PhysicalField(iField).Owned();
-                const auto &current = values.PhysicalField(iField).Owned();
-                if (saved.SharedStorage() != current.SharedStorage() || saved.ShapeVersion() != current.ShapeVersion() ||
-                    publication.versions[iField] != current.Version())
-                    return false;
-            }
-            return true;
-        };
-        return unchanged(*sourceState, state);
-    }
-    /// High-order RHS source sampling supplies the opt-in quadrature
-    /// source Jacobian or refreshes publication provenance only. The
-    /// default Jacobian continues to sample its own center gradients.
     void FiniteVolume::Workspace::PrepareVolumeSource(const EquationDofs &state,
                                                       OptionalRef<EquationDofs> result,
                                                       PointEvaluator &evaluator, real time,

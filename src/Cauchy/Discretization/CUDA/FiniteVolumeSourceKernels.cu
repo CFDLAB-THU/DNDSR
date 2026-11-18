@@ -3,6 +3,7 @@
 #include "Cauchy/Discretization/RANSReconstruction.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 #include <cuda_runtime.h>
+#include "DNDS/Algebra/BlockIndex.hpp"
 
 namespace DNDS::Cauchy::CUDA
 {
@@ -104,6 +105,16 @@ namespace DNDS::Cauchy::CUDA
                     }
             }
         }
+        __global__ void ApplyDerivative(SourceInput source, decltype(SourceRequest::output) diagonal, index n, bool full, bool rowMajor, real scale)
+        {
+            const index width = full ? n * n : n;
+            for (index i = index(blockIdx.x) * blockDim.x + threadIdx.x; i < source.RowCount() * width; i += index(gridDim.x) * blockDim.x)
+            {
+                const index cell = i / width, k = i % width;
+                const index row = full ? k / n : k, col = full ? k % n : k;
+                diagonal(cell, full ? Algebra::DenseBlockEntry(row, col, n, rowMajor) : row) += scale * source(cell, row * n + col);
+            }
+        }
         __global__ void Rotation(R::ArrayView<const real, false, R::FixedRows<8>> cells,
                                  RigidFrameParameters frame, SourceInput means, SourceOutput output,
                                  SourceOutput low, bool produceLow, SourceIndices selected)
@@ -199,6 +210,17 @@ namespace DNDS::Cauchy::CUDA
             Sources<6><<<Blocks(selected.RowCount()), 128, 0, stream>>>(request, selected);
         else
             Sources<7><<<Blocks(selected.RowCount()), 128, 0, stream>>>(request, selected);
+        CheckLaunch();
+    }
+    void ApplyVolumeSourceDerivative(R::ExecutionContext context, SourceInput source, decltype(SourceRequest::output) diagonal,
+                                     index n, bool full, bool rowMajor, real scale)
+    {
+        R::ValidateViewDevices(context.device, source, diagonal);
+        DNDS_check_throw_info(source.RowCount() == diagonal.RowCount() && source.Width() == n * n && diagonal.Width() == (full ? n * n : n) && source.data != diagonal.data,
+                              "invalid source derivative block placement");
+        if (!source.RowCount())
+            return;
+        ApplyDerivative<<<Blocks(source.RowCount() * diagonal.Width()), 128, 0, R::CUDAStream(context)>>>(source, diagonal, n, full, rowMajor, scale);
         CheckLaunch();
     }
     void AddRotationSource(R::ExecutionContext context, R::ArrayView<const real, false, R::FixedRows<8>> cells,

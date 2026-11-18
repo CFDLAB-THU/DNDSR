@@ -30,7 +30,7 @@ namespace DNDS::Cauchy
     void FiniteVolume::Workspace::SubmitDeviceVolumeSource(
         R::EagerEngine &engine, const R::ExecutionStream &stream,
         const EquationDofs &state, OptionalRef<EquationDofs> result, real time,
-        OptionalRef<EquationDofs> lowOrder)
+        OptionalRef<EquationDofs> lowOrder, OptionalRef<R::Array<real>> sourceDerivative)
     {
 #ifdef DNDS_USE_CUDA
         state.RequireSchema(owner->equation.Schema());
@@ -94,9 +94,10 @@ namespace DNDS::Cauchy
         const auto &g0 = !sourceSampling ? directGradients.front().Owned() : sourceGradients.front()[0];
         const auto &g1 = !sourceSampling ? directGradients.front().Owned() : sourceGradients.front()[1];
         const auto &g2 = dimension == 3 ? (!sourceSampling ? directGradients.front().Owned() : sourceGradients.front()[2]) : empty;
-        R::SubmitArrays(engine, stream, [pin, dimension, components, interleaved = !sourceSampling](R::ExecutionContext context, auto means, auto samples, auto g0, auto g1, auto g2, auto offsets, auto weights, auto lengths, auto selected, auto output, auto status, auto cells, auto wallMean, auto wallPoints)
-                        {
+        auto evaluate = [pin, dimension, components, interleaved = !sourceSampling](R::ExecutionContext context, auto means, auto samples, auto g0, auto g1, auto g2, auto offsets, auto weights, auto lengths, auto selected, auto output, auto status, auto cells, auto wallMean, auto wallPoints, auto... derivative)
+        {
             CUDA::SourceRequest request;
+            ((request.preparedDerivative = derivative), ...);
             if (pin->owner->equation.IsACM())
                 request.acm = R::MetadataArrayView(pin->owner->deviceACMPhysics, context.device);
             else
@@ -111,7 +112,15 @@ namespace DNDS::Cauchy
             request.cells = cells;
             request.output = output; request.status = status;
             request.components = components; request.dimension = dimension;
-            CUDA::AddRANSSources(context, request, selected); }, R::ReadAs<R::TableRows>(state.CoupledField().Owned()), R::ReadAs<R::TableRows>(sourceSampling ? sourceValues.front() : empty), R::ReadAs<R::TableRows>(g0), R::ReadAs<R::TableRows>(g1), R::ReadAs<R::TableRows>(g2), R::ReadAs<R::FixedRows<1>>(sourceOffsets), R::ReadAs<R::FixedRows<1>>(sourceWeights), R::ReadAs<R::FixedRows<1>>(owner->ransCellLength), R::ReadAs<R::FixedRows<1>>(DeviceCellSelection(CFV::ReconstructionRegion::All)), R::ReadWriteAs<R::UniformTableRows>(result->CoupledField().Owned()), R::WriteAs<R::FixedRows<1>>(preparationStatus->meanOwned), R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics()), R::ReadAs<R::FixedRows<1>>(owner->wallDistance->CellMeans()), R::ReadAs<R::CSRRows>(owner->wallDistance->CellValues()));
+            CUDA::AddRANSSources(context, request, selected); };
+        const auto submit = [&](auto... record)
+        {
+            R::SubmitArrays(engine, stream, evaluate, R::ReadAs<R::TableRows>(state.CoupledField().Owned()), R::ReadAs<R::TableRows>(sourceSampling ? sourceValues.front() : empty), R::ReadAs<R::TableRows>(g0), R::ReadAs<R::TableRows>(g1), R::ReadAs<R::TableRows>(g2), R::ReadAs<R::FixedRows<1>>(sourceOffsets), R::ReadAs<R::FixedRows<1>>(sourceWeights), R::ReadAs<R::FixedRows<1>>(owner->ransCellLength), R::ReadAs<R::FixedRows<1>>(DeviceCellSelection(CFV::ReconstructionRegion::All)), R::ReadWriteAs<R::UniformTableRows>(result->CoupledField().Owned()), R::WriteAs<R::FixedRows<1>>(preparationStatus->meanOwned), R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics()), R::ReadAs<R::FixedRows<1>>(owner->wallDistance->CellMeans()), R::ReadAs<R::CSRRows>(owner->wallDistance->CellValues()), record...);
+        };
+        if (sourceDerivative)
+            submit(R::WriteAs<R::UniformTableRows>(*sourceDerivative));
+        else
+            submit();
         AppendPreparationStatus(engine, stream, preparationStatus->meanOwned);
 #else
         DNDS_check_throw_info(false, "CUDA volume sources are not built");

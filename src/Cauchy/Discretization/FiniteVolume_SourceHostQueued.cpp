@@ -9,7 +9,7 @@ namespace DNDS::Cauchy
     void FiniteVolume::Workspace::SubmitVolumeSource(
         R::EagerEngine &engine, const R::ExecutionStream &stream,
         const EquationDofs &state, OptionalRef<EquationDofs> result, real time,
-        std::shared_ptr<PointEvaluator> evaluator, OptionalRef<EquationDofs> lowOrder)
+        std::shared_ptr<PointEvaluator> evaluator, OptionalRef<EquationDofs> lowOrder, OptionalRef<R::Array<real>> sourceDerivative)
     {
         DNDS_check_throw_info(engine.Owns(stream) && stream.Context().device == owner->metrics.Device() && std::isfinite(time),
                               "source submission stream, placement or time differs");
@@ -37,6 +37,19 @@ namespace DNDS::Cauchy
                                                       "source residual aliases sampled gradients");
             }
         };
+        if (sourceDerivative)
+        {
+            auto &record = *sourceDerivative;
+            const auto n = state.ComponentNumber();
+            DNDS_check_throw_info(result && owner->settings.implicit.sourceJacobianMode == "rhsQuadrature" &&
+                                      record.GetDevice() == state.Device() && record.RowCount() == owner->metrics.NumCell() &&
+                                      record.Layout().Kind() == R::RowLayoutKind::Table && record.Layout().Width() == n * n,
+                                  "invalid RHS source derivative destination");
+            for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
+                DNDS_check_throw_info(!record.Storage().Overlaps(state.PhysicalField(iField).Owned().Storage()) &&
+                                          !record.Storage().Overlaps(result->PhysicalField(iField).Owned().Storage()),
+                                      "source derivative aliases state or residual");
+        }
         if (result)
             checkOutput(*result);
         if (lowOrder)
@@ -44,14 +57,9 @@ namespace DNDS::Cauchy
             checkOutput(*lowOrder);
             EquationDofOperations::RequireDistinct(*result, *lowOrder);
         }
-        if (sourceOffsets.RowCount())
-        {
-            sourceState.reset();
-            sourceCoefficients.reset();
-        }
         if (owner->metrics.Device() != R::Device::Host())
         {
-            SubmitDeviceVolumeSource(engine, stream, state, result, time, lowOrder);
+            SubmitDeviceVolumeSource(engine, stream, state, result, time, lowOrder, sourceDerivative);
             return;
         }
         const auto timing = BeginQueuedPhase(engine, stream, SourcePhase);
@@ -70,6 +78,7 @@ namespace DNDS::Cauchy
             std::optional<EquationBlockLocation> ransMean, ransOutput, speciesOutput;
             index components = 0, flowFirst = -1, speciesFirst = -1, ransFirst = -1;
             bool chemical = false, interleavedGradients = false;
+            std::optional<index> derivativeSlot;
             explicit Inputs(std::shared_ptr<const Data> data)
                 : owner(std::move(data)), geometry(owner->metrics.AcquireMeshRead(bool(owner->wallDistance))) {}
         };
@@ -77,7 +86,7 @@ namespace DNDS::Cauchy
         pin->evaluator = std::move(evaluator);
         pin->workers = workers;
         const bool viscous = !meanOnly && owner->equation.Viscous();
-        pin->propertyRequest = {viscous || owner->equation.HasRANS(), viscous, viscous, chemical, false};
+        pin->propertyRequest = {viscous || owner->equation.HasRANS(), viscous, viscous, chemical, chemical && bool(sourceDerivative)};
         const auto frame = owner->motion.At(time);
         using Input = R::ArrayOperand<real, false, R::UniformTableRows>;
         using Output = R::ArrayOperand<real, true, R::UniformTableRows>;
@@ -162,6 +171,11 @@ namespace DNDS::Cauchy
             pin->resultSlots.push_back(index(outputs.size()));
             outputs.push_back(R::ReadWriteAs<R::UniformTableRows>(result->PhysicalField(iField).Owned()));
         }
+        if (sourceDerivative)
+        {
+            pin->derivativeSlot = index(outputs.size());
+            outputs.push_back(R::WriteAs<R::UniformTableRows>(*sourceDerivative));
+        }
         R::SubmitArrayBatch(engine, stream, [pin](R::ExecutionContext, auto inputs, auto outputs, auto offsets, auto weights, auto lengths, auto wallCells, auto wallMean)
                             {
             // Reserve a chemistry worker only after predecessors execute.
@@ -193,6 +207,11 @@ namespace DNDS::Cauchy
             request.ransFirst = pin->ransFirst;
             request.independentSpecies = pin->owner->equation.HasMixture() ? pin->owner->equation.Mixture().SpeciesNumber() - 1 : 0;
             request.chemical = pin->chemical;
+            if (pin->derivativeSlot)
+            {
+                request.fullBlock = true;
+                request.preparedDerivative = outputs[*pin->derivativeSlot];
+            }
             request.cellInputs = pin->interleavedGradients;
             request.locations = pin->locations.HostView();
             request.logicalFirst = pin->logicalFirst.HostView();
