@@ -64,6 +64,8 @@ namespace DNDS::Cauchy
             DNDS_check_throw_info(full && output.HasAssembledOffDiagonal() && n >= 4 && n <= 6 &&
                                       !HasInterfaces() && !_data->motion.At(time).moving,
                                   "CUDA ACM Jacobian requires stationary single-domain full blocks");
+            if (n > 4)
+                ValidateEquationSourceJacobian(state, context, time);
             auto session = work.session.Acquire();
             const auto &lane = *context.stream;
             auto engine = lane.LockEngine();
@@ -123,17 +125,6 @@ namespace DNDS::Cauchy
         if (_data->equation.HasRANS())
             ValidateEquationSourceJacobian(state, context, time);
         auto workspaceSession = work.session.Acquire();
-        std::optional<R::SessionAccess::Lease> reconstructionSession;
-        std::optional<FinalizedReconstruction> finalized;
-        std::optional<Workspace::ActiveReconstruction> active;
-        if (context.reconstruction)
-        {
-            DNDS_check_throw_info(context.reconstruction->owner == _data, "foreign Jacobian reconstruction");
-            reconstructionSession.emplace(context.reconstruction->session.Acquire());
-            if (_data->reconstruction)
-                finalized.emplace(AcquireFinalizedReconstruction(*context.reconstruction));
-            active.emplace(work.BindReconstruction(*context.reconstruction));
-        }
         const auto boundary = PreparedBoundaryInputs(work);
         DNDS_check_throw_info(!HasInterfaces() || boundary, "device interface Jacobian requires its centered boundary publication");
         if (boundary)

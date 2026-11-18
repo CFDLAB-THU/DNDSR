@@ -208,6 +208,11 @@ namespace DNDS::Cauchy
                                   "ACM matrix requires full diagonal and off-diagonal blocks");
             DNDS_check_throw_info(nv >= 4 && nv <= 6 && !HasInterfaces() && !_data->motion.At(time).moving,
                                   "ACM Jacobian requires stationary single-domain flow4, flow4+SA or flow4+2EQ");
+            if (nv > 4)
+            {
+                DNDS_check_throw_info(context, "ACM RANS matrix requires the centered source gradient workspace");
+                ValidateEquationSourceJacobian(state, *context, time);
+            }
             const auto input = state.ReadWithGhost();
             const auto layout = input.ComponentLayout();
             const auto stencil = _data->stencil.Read();
@@ -231,7 +236,6 @@ namespace DNDS::Cauchy
                 off.emplace(output.OffDiagonal().Write());
                 if (nv > 4)
                 {
-                    DNDS_check_throw_info(context, "ACM RANS matrix requires the centered source gradient workspace");
                     auto evaluator = _data->equation.MakePointEvaluator();
                     AddEquationSourceJacobian(state, *context, diagonal, output.DiagonalMode(),
                                               controls.residualScale, evaluator, {}, output.RowMajorBlocks());

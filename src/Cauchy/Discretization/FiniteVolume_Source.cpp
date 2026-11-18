@@ -58,8 +58,9 @@ namespace DNDS::Cauchy
                                       record.Layout().Kind() == R::RowLayoutKind::Table && record.Layout().Width() == n * n,
                                   "source derivative record differs from correction shape or device");
         }
-        else if (context.reconstruction && _data->reconstruction)
-            AcquireFinalizedReconstruction(*context.reconstruction).Validate();
+        else if (_data->equation.HasRANS())
+            DNDS_check_throw_info(work.centerGradientInput && work.centerGradientInput->Current(state, work.incoming, time),
+                                  "centered RANS Jacobian requires this stage's prepared mean gradient");
     }
     bool FiniteVolume::AddEquationSourceJacobian(const EquationDofs &state,
                                                  const JacobianContext &context,
@@ -73,16 +74,8 @@ namespace DNDS::Cauchy
                                              state.ComponentNumber(), storage == DiagonalStorage::Block, rowMajorBlocks, scale);
             return false; // The flux assembler prepares its own mean pressure and derivatives.
         }
-        DNDS_check_throw_info(context.reconstruction,
-                              "source Jacobian context has no reconstruction publication");
-        const auto &reconstruction = *context.reconstruction;
         auto &work = context.workspace.get();
-        auto reconstructionSession = reconstruction.session.Acquire();
         auto workspaceSession = work.session.Acquire();
-        std::optional<FinalizedReconstruction> finalized;
-        if (_data->reconstruction)
-            finalized.emplace(AcquireFinalizedReconstruction(reconstruction));
-        auto activeReconstruction = work.BindReconstruction(reconstruction);
         return work.AddMeanSourceJacobian(state, diagonal, storage, scale, evaluator, linearization, rowMajorBlocks);
     }
 }
