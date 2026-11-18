@@ -12,8 +12,9 @@ namespace DNDS::Cauchy
      * @details Measured A100 P3 flow5 defaults use segmented CTA RHS, the
      * neighbor-pipelined FP64 SIMT VR sweep and warp-per-cell PP with 512
      * threads. Other FP64 shapes use the same CTA RHS catalog and general VR.
-     * Measured A100 P3 ACM uses thread-per-face in 2D, CTA packages in 3D,
-     * and the pipelined VR sweep for its four-component profile.
+     * A100 ACM uses thread-per-face for light rules and measured 2D profiles,
+     * and CTA packages for selected higher-work 3D VR degree/rule pairs.
+     * The measured four-component P3 profile uses the pipelined VR sweep.
      * Reduced-precision RHS comparisons retain thread mapping. Explicit selectors
      * and launch dimensions are preserved; no storage or precision is changed.
      * The hardware flag is separate so policy tests need no CUDA device.

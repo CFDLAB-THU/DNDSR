@@ -84,7 +84,17 @@ distinct observables.
 
 The initial scope uses stationary single domains, unlimited reconstruction
 and FP64 ACM face fluxes. CUDA requires combined AoS and the resident Jacobi
-or supported Krylov path. See the periodic [vortex](../../cases/cauchy/acm_translating_vortex_20.json)
+or supported Krylov path. Both CUDA face mappings have generated polynomial
+specializations for flow4, SA and two-equation profiles, in 2D and 3D for
+degrees 1–3. On A100 the automatic policy uses CTA segments for 3D P2 with
+quadrature order 4 or higher and 3D P3 with order 2 or higher. Other ACM cases
+use one thread per face. The policy is resolved at placement and explicit
+`execution.kernels.rhsMapping` choices take precedence. A CTA workspace
+retains its mesh- and rule-dependent face packages across RHS evaluations.
+An order-one `numerics.cfv.intOrder` sets one-point VR/RHS quadrature while
+retaining integrated cell and face metrics.
+
+See the periodic [vortex](../../cases/cauchy/acm_translating_vortex_20.json)
 and the [SA](../../cases/cauchy/acm_plate_sa.json) and
 [SST](../../cases/cauchy/acm_plate_sst.json) plate inputs for complete configurations.
 

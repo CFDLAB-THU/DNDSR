@@ -26,27 +26,26 @@ namespace DNDS::Cauchy
         auto &kernels = execution.kernels;
         const auto &numerics = settings.numerics;
         const bool acm = settings.equation.system == "incompressibleACM";
-        const bool a100P3 = a100 && numerics.reconstruction == "variational" &&
-                            numerics.cfv.maxOrder == 3 && numerics.cfv.intOrder <= 5 &&
-                            execution.layout == "aos" && execution.fieldGrouping == "coupled";
+        const bool a100Polynomial = a100 && numerics.reconstruction == "variational" &&
+                                    execution.layout == "aos" && execution.fieldGrouping == "coupled";
+        const bool a100P3 = a100Polynomial && numerics.cfv.maxOrder == 3 && numerics.cfv.intOrder <= 5;
         const bool measuredFlow5 = a100P3 && !acm && withoutRANS && settings.mesh.dimension == 3;
         if (kernels.rhsMapping == "auto")
         {
             const bool fp64 = kernels.polynomialArithmetic == "fp64" && kernels.dissipationArithmetic == "fp64" &&
                               kernels.fluxArithmetic == "fp64";
-            // ACM CTA won on the 3D P3 workload. Its 2D polynomial and
-            // stretched-plate gradient workloads favored thread-per-face.
-            const bool acmCTA = a100P3 && settings.mesh.dimension == 3 &&
-                                !numerics.firstOrderConvection;
+            // Low-work 3D profiles tie or favor thread-per-face. Require a
+            // clear warmed-update gain before paying for CTA face packages.
+            const int degree = numerics.cfv.maxOrder, rule = numerics.RHSIntegrationOrder();
+            const bool acmCTA = a100Polynomial && settings.mesh.dimension == 3 && !numerics.firstOrderConvection &&
+                                ((degree == 2 && rule >= 4) || (degree == 3 && rule >= 2));
             kernels.rhsMapping = fp64 && (!acm || acmCTA) ? "ctaSegments" : "thread";
         }
         if (kernels.rhsReduction == "auto")
             kernels.rhsReduction = !acm && kernels.rhsMapping == "ctaSegments" ? "segmented" : "serial";
         if (execution.reconstructionKernel == "auto")
-        // Only the measured A100 case is promoted automatically. The
-        // matrix-shared selector is now a fixed comparison fixture, not a
-        // general fallback for another shape/physics/storage profile.
         {
+            // The matrix-shared selector remains a fixed comparison fixture.
             const bool measuredFlow4 = a100P3 && acm && withoutRANS;
             const bool usePipeline = (measuredFlow5 || measuredFlow4) &&
                                      !numerics.reconstructionSolver.UsesAMG() && numerics.limiter != "LVR";

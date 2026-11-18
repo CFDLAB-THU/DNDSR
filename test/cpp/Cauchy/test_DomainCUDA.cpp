@@ -3,6 +3,7 @@
 #include "Cauchy/Core/Domain.hpp"
 #include "CartesianFixture.hpp"
 #include "../CFV/ReconstructionFixture.hpp"
+#include "../CFV/RotatedSectorFixture.hpp"
 #include "Cauchy/Config/CUDAKernelDefaults.hpp"
 #include <filesystem>
 #include <unistd.h>
@@ -89,6 +90,48 @@ TEST_CASE("ACM device correction matches CPU on flow4 and mechanical SA and SST"
                 for (I j = 0; j < I(initial.size()); ++j)
                     CHECK(actual.View()(iCell, j) == doctest::Approx(expected.View()(iCell, j)).epsilon(1e-8).scale(1));
         }
+    }
+}
+
+TEST_CASE("ACM polynomial CUDA face mappings match the host on a rotational seam")
+{
+    C::DomainSettings settings;
+    settings.equation.system = "incompressibleACM";
+    settings.equation.eos = "none";
+    settings.equation.referenceScales = {{"rho0", 1}, {"U0", 1}, {"L0", 1}, {"T0", 300}};
+    settings.initialState = {{"type", "primUP"}, {"state", {.2, -.03, .04, -.1}}};
+    settings.boundaries["12"].kind = settings.boundaries["13"].kind = "slipWall";
+    settings.numerics.reconstruction = "variational";
+    settings.numerics.cfv.maxOrder = 2;
+    settings.numerics.cfv.intOrder = 3;
+    settings.numerics.cfv.cacheDiffBase = false;
+    settings.numerics.cfv.SORInstead = false;
+    settings.implicit.jacobianAction = "assembled";
+    settings.implicit.diagonal = "block";
+    settings.implicit.linear.method = "jacobi";
+    settings.implicit.linear.stopping = "fixedCount";
+    settings.implicit.linear.iterations = 2;
+    settings.implicit.iterations = settings.implicit.minIterations = 2;
+    settings.implicit.rejectUnconvergedStages = false;
+    const auto mesh = CFVTest::Sector(mpi);
+    C::TimeSettings time;
+    time.method = "bdf1";
+    std::optional<R::Array<double>> reference;
+    for (const std::string mapping : {"cpu", "thread", "ctaSegments"})
+    {
+        CAPTURE(mapping);
+        settings.execution.device = mapping == "cpu" ? "cpu" : "cuda";
+        settings.execution.kernels.rhsMapping = mapping == "cpu" ? "auto" : mapping;
+        C::Domain domain("acm-sector", mesh, settings, time);
+        REQUIRE(domain.Advance(.0001).accepted);
+        const auto values = domain.Dofs().CoupledField().Owned().To(R::Device::Host());
+        if (!reference)
+            reference = values.Clone();
+        const auto actualRead = values.Read(), expectedRead = reference->Read();
+        const auto actual = actualRead.View<R::FixedRows<4>>(), expected = expectedRead.View<R::FixedRows<4>>();
+        for (I iCell = 0; iCell < actual.RowCount(); ++iCell)
+            for (I j = 0; j < 4; ++j)
+                CHECK(actual(iCell, j) == doctest::Approx(expected(iCell, j)).epsilon(1e-8).scale(1));
     }
 }
 

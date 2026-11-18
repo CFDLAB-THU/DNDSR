@@ -49,6 +49,16 @@ TEST_CASE("Automatic CUDA policies select measured A100 kernels and preserve exp
     CHECK(acm.execution.kernels.rhsMapping == "ctaSegments");
     CHECK(acm.execution.kernels.rhsReduction == "serial");
     CHECK(acm.execution.reconstructionKernel == "fp64Pipelined");
+    const std::array<std::array<bool, 3>, 3> acmUsesCTA{{{false, false, false}, {false, false, true}, {false, true, true}}};
+    for (int degree : {1, 2, 3})
+        for (int rule : {1, 3, 5})
+        {
+            auto candidate = base;
+            candidate.numerics.cfv.maxOrder = degree;
+            candidate.numerics.cfv.intOrder = rule;
+            C::ResolveAutomaticCUDAKernels(candidate, true, true);
+            CHECK(candidate.execution.kernels.rhsMapping == (acmUsesCTA[degree - 1][(rule - 1) / 2] ? "ctaSegments" : "thread"));
+        }
     base.mesh.dimension = 2;
     C::ResolveAutomaticCUDAKernels(base, true, true);
     CHECK(base.execution.kernels.rhsMapping == "thread");
