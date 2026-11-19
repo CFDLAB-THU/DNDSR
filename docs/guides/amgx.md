@@ -393,3 +393,15 @@ truncated blocks). This uses the row-scaled residual norm for a singular
 system. An entirely zero block gives zero correction. Nonfinite input,
 nonconvergence or unrepresentable output fails setup. This provider boundary
 is synchronous on the GPU.
+
+The application registers a stateless host callback before creating the AmgX
+solver. Each setup/resetup supplies device pointers to block values, diagonal
+indices and the level-owned inverse. One CUDA thread inverts one complete
+cell block, with 128 threads per CTA. Row normalization, condition estimation,
+LU, and the exceptional SVD execute in the same thread. The three sm_80
+kernels compiled with CUDA 13.2 use 128, 184 and 220 registers per thread for
+widths 4, 5 and 6 respectively (compiler resource report). They use no shared
+matrix scratch. A device integer flags numerical failures; its synchronous
+host read is part of inverse setup. The subsequent relaxation sweeps read the
+prepared inverse. The device numerical routines are fixed-size DNDSR templates
+and have no Eigen, cuBLAS, or cuSOLVER dependency.
