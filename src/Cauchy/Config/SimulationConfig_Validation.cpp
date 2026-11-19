@@ -162,6 +162,7 @@ namespace DNDS::Cauchy
     void ImplicitSettings::ValidateComponents(index components) const
     {
         DNDS_check_throw_info(components > 0 && components < INT_MAX, "invalid implicit equation dimension");
+        DNDS_check_throw_info(nIterCellSmoothScale >= 0, "nIterCellSmoothScale must be nonnegative");
         DNDS_check_throw_info(linear.amgxAggregateSize == 0 || linear.amgxAggregateSize == 2 || linear.amgxAggregateSize == 4 || linear.amgxAggregateSize == 8, "amgxAggregateSize must be 0, 2, 4 or 8");
         const auto validMatrixTable = [](const ImplicitMatrixTableSettings &table)
         {

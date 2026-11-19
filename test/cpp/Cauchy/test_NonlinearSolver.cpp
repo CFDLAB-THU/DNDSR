@@ -4,6 +4,7 @@
 #include "Cauchy/Implicit/PositivityReduction.hpp"
 #include "Cauchy/Implicit/ResidualConvergence.hpp"
 #include "Cauchy/Implicit/NonlinearIteration.hpp"
+#include "Cauchy/Implicit/NonlinearOperators.hpp"
 #include "Cauchy/Implicit/NonlinearSolve.hpp"
 #include "Cauchy/Implicit/UpdatePolicy.hpp"
 #include "Cauchy/Implicit/LinearScaling.hpp"
@@ -35,6 +36,66 @@ static C::NonlinearSolver MakeSolver(const C::FiniteVolume &fv, C::EquationDofs 
     return {fv, state, fv.BuildReconstructionState(state), fv.BuildWorkspace(state), engine, stream, settings,
             A::ComponentSelection(state.ComponentNumber(),
                                   state.Schema().ResolveComponents(settings.implicit.ResolveResidualComponents(settings.equation.system == "incompressibleACM")))};
+}
+TEST_CASE("Cell geometry reduces pseudo-time in larger cells across periodic and MPI faces")
+{
+    using DNDS::index;
+    const auto mesh = CauchyTest::PeriodicQuads(mpi, 3, 1, 1. / 6);
+    C::DomainSettings settings;
+    CHECK(settings.implicit.nIterCellSmoothScale == 15);
+    settings.implicit.nIterCellSmoothScale = 1;
+    const auto scale = [](DNDS::real width)
+    {
+        const DNDS::real height = 1. / 3;
+        return width * height / (2 * (width + height));
+    };
+    const DNDS::real h[]{scale(1. / 2), scale(1. / 6), scale(1. / 3)};
+    for (const bool acm : {false, true})
+    {
+        auto controls = settings;
+        if (acm)
+        {
+            controls.equation.system = "incompressibleACM";
+            controls.equation.eos = "none";
+        }
+        const auto equation = C::EquationSystem::Resolve(controls.equation);
+        const C::FiniteVolume fv(mesh, controls, equation);
+        const auto &metrics = fv.Metrics();
+        const auto factors = metrics.CellSmoothScaleFactors().Read();
+        auto mean = Bind(fv, metrics.BuildField(acm ? 4 : 5));
+        auto defect = Bind(fv, metrics.BuildField(acm ? 4 : 5));
+        constexpr DNDS::real spectrum = 2, cfl = 3;
+        R::Array<DNDS::real> spectral(R::RowLayout::Dense(metrics.NumCell(), 1));
+        R::Array<DNDS::real> inverse(spectral.Layout());
+        {
+            auto write = spectral.Write();
+            const auto view = write.View<R::FixedRows<1>>();
+            for (index iCell = 0; iCell < metrics.NumCell(); ++iCell)
+                view(iCell, 0) = spectrum;
+        }
+        R::EagerEngine engine;
+        const auto stream = engine.CreateCPUStream();
+        const auto &n = controls.numerics;
+        C::NonlinearOperators operators(metrics,
+                                         C::AdmissibilityPolicy(equation, n.densityFloor, n.temperatureFloor,
+                                                                 n.sensibleEnergyFloor, n.pressureFloor),
+                                         stream.Context());
+        operators.PreparePseudoTime(engine, stream, mean, defect, spectral, inverse, {}, {cfl});
+        const auto time = inverse.Read();
+        for (index iCell = 0; iCell < metrics.NumCell(); ++iCell)
+        {
+            const DNDS::real x = metrics.GetCellCent(iCell)[0];
+            const int column = x < 0.5 ? 0 : x < 2. / 3 ? 1 : 2;
+            const DNDS::real neighborMean = (2 * h[column] + h[(column + 1) % 3] + h[(column + 2) % 3]) / 4;
+            const DNDS::real expected = std::min(h[column], (h[column] + neighborMean) / 2) / h[column];
+            CHECK(factors.View<R::FixedRows<1>>()(iCell, 0) == doctest::Approx(expected));
+            CHECK(time.View<R::FixedRows<1>>()(iCell, 0) ==
+                  doctest::Approx(spectrum / (cfl * metrics.GetCellVol(iCell) * expected)));
+        }
+    }
+    settings.implicit.nIterCellSmoothScale = 0;
+    const C::FiniteVolume disabled(mesh, settings, C::EquationSystem::Resolve(settings.equation));
+    CHECK(disabled.Metrics().CellSmoothScaleFactors().RowCount() == 0);
 }
 namespace
 {

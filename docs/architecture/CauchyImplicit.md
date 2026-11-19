@@ -1555,6 +1555,17 @@ candidate. Root `implicit` settings separate nonlinear, linear, SGS, ILU and PP
 choices. CPU backend selection is explicit. Exact constructor control agreement
 prevents rank-dependent iteration/PP branches from mismatching MPI calls.
 
+`implicit.nIterCellSmoothScale` defaults to 15, matching Euler. FV setup
+starts with each cell's `h = V / sum(face areas)`. At each pass it exchanges
+the current scales, then updates each cell to the minimum of its current
+scale and the equally weighted average of its scale and its face neighbors'
+mean scale. Physical boundary faces contribute area and supply no neighbor
+scale. A cell without neighbors keeps its initial scale. The plan retains
+the owned ratios `h_smoothed / h_initial`, which multiply the local
+pseudo-step on CPU and CUDA before any positivity compression. Setting the
+pass count to zero skips smoothing and its halo exchanges. The physical CFL
+step uses the original spectral estimate.
+
 For `numerics.positivity`, the implicit path uses Euler's RHS compression or
 dTau compression, relaxed delta compression and final flow5 increment repair.
 Convergence always uses the uncompressed defect. Reconstruction quadrature PP

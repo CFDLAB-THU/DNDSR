@@ -8,7 +8,8 @@ namespace CauchyTest
     /// Independently numbered Cartesian torus. Endpoints use distinct periodic
     /// image bits but the same canonical node IDs; construction is distributed
     /// from owned primary rows, including empty ranks, never a global bitmap.
-    inline std::shared_ptr<DNDS::Geom::UnstructuredMesh> PeriodicQuads(const DNDS::MPIInfo &mpi, DNDS::index width, DNDS::real length = 1)
+    inline std::shared_ptr<DNDS::Geom::UnstructuredMesh> PeriodicQuads(
+        const DNDS::MPIInfo &mpi, DNDS::index width, DNDS::real length = 1, DNDS::real firstInteriorXShift = 0)
     {
         namespace G = DNDS::Geom;
         namespace R = DNDS::Runtime;
@@ -59,6 +60,8 @@ namespace CauchyTest
             {
                 const I global = range.first + iNode;
                 coords.View()(iNode, 0) = length * double(global % width) / width;
+                if (global % width == 1)
+                    coords.View()(iNode, 0) += firstInteriorXShift;
                 coords.View()(iNode, 1) = length * double(global / width) / width;
             }
             for (I iCell = 0; iCell < cells.NumOwned(); ++iCell)

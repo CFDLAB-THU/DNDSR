@@ -31,6 +31,7 @@ namespace DNDS::CFV::Detail
         bool axisymmetric;
         // Cell table: volume, center[3], barycenter[3], isotropic half-box scale.
         Runtime::Array<real> cell;
+        Runtime::Array<real> cellSmoothScaleFactors; // owned cells only
         // Integral (x-bary_r)*dA divided by radial volume, used by the weighted
         // divergence identity in axisymmetric Green-Gauss. Zero otherwise.
         Runtime::Array<real> radialMoment;
@@ -60,7 +61,8 @@ namespace DNDS::CFV::Detail
             : mesh(source.mesh), stamp(source.stamp), cells(source.cells), communication(source.communication),
               dofs(source.dofs), halo(source.halo), workPartition(source.workPartition),
               dim(source.dim), intOrder(source.intOrder), axisymmetric(source.axisymmetric),
-              cell(source.cell.To(device, context)), radialMoment(source.radialMoment.To(device, context)),
+              cell(source.cell.To(device, context)), cellSmoothScaleFactors(source.cellSmoothScaleFactors.To(device, context)),
+              radialMoment(source.radialMoment.To(device, context)),
               faceQuadrature(source.faceQuadrature.To(device, context)), faceMean(source.faceMean.To(device, context)),
               faceOffsets(source.faceOffsets.To(device, context)),
               facePeriodicCodes(source.facePeriodicCodes.To(device, context)),
@@ -69,6 +71,7 @@ namespace DNDS::CFV::Detail
               topology(source.topology->Placed(device, context))
         {
             cell.SetName("CFV/metrics/cell", DNDS_ALLOCATION_SITE());
+            cellSmoothScaleFactors.SetName("CFV/metrics/cellSmoothScaleFactors", DNDS_ALLOCATION_SITE());
             radialMoment.SetName("CFV/metrics/radialMoment", DNDS_ALLOCATION_SITE());
             faceQuadrature.SetName("CFV/metrics/faceQuadrature", DNDS_ALLOCATION_SITE());
             faceMean.SetName("CFV/metrics/faceMean", DNDS_ALLOCATION_SITE());

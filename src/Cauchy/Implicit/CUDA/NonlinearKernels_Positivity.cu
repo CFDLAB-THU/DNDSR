@@ -30,26 +30,28 @@ namespace DNDS::Cauchy::CUDA
             if (summary.status)
                 summary.status = {NumericalError::InvalidState, detail, row};
         }
-        __global__ void SpectralPseudoTime(NonlinearCells cells, LinearReadRows spectral, LinearWriteRows inverse, real cfl)
+        __global__ void SpectralPseudoTime(NonlinearCells cells, LinearReadRows spectral, LinearReadRows smoothScale, LinearWriteRows inverse, real cfl)
         {
             for (index row = index(blockIdx.x) * blockDim.x + threadIdx.x; row < inverse.RowCount(); row += index(gridDim.x) * blockDim.x)
             {
                 const real volume = cells(row, 0);
-                const real value = spectral(row, 0) / (volume * cfl);
+                const real factor = smoothScale.RowCount() ? smoothScale(row, 0) : 1;
+                const real value = spectral(row, 0) / (volume * cfl * factor);
                 inverse(row, 0) = volume > 0 && value > 0 && std::isfinite(value)
                                       ? value
                                       : std::numeric_limits<real>::quiet_NaN();
             }
         }
         __global__ void PseudoTime(NonlinearCells cells, LinearReadRows mean, LinearWriteRows defect,
-                                   LinearReadRows spectral, LinearWriteRows inverseTau, LinearWriteRows alpha,
+                                   LinearReadRows spectral, LinearReadRows smoothScale, LinearWriteRows inverseTau, LinearWriteRows alpha,
                                    PseudoTimeParameters parameters, NonlinearSummaryOutput scratch)
         {
             NonlinearSummary local;
             for (index iCell = index(blockIdx.x) * blockDim.x + threadIdx.x; iCell < mean.RowCount(); iCell += index(gridDim.x) * blockDim.x)
             {
                 const real volume = cells(iCell, 0);
-                real inverse = spectral(iCell, 0) / (parameters.pseudoCFL * volume);
+                const real factor = smoothScale.RowCount() ? smoothScale(iCell, 0) : 1;
+                real inverse = spectral(iCell, 0) / (parameters.pseudoCFL * volume * factor);
                 if (!(std::isfinite(inverse) && inverse > 0 && volume > 0))
                 {
                     Fail(local, iCell, 1);
@@ -188,21 +190,23 @@ namespace DNDS::Cauchy::CUDA
             D::PublishBlock(local, scratch);
         }
     }
-    void PrepareSpectralPseudoTime(R::ExecutionContext context, NonlinearCells cells, LinearReadRows spectral,
+    void PrepareSpectralPseudoTime(R::ExecutionContext context, NonlinearCells cells, LinearReadRows spectral, LinearReadRows smoothScale,
                                    LinearWriteRows inverse, real cfl)
     {
         const index rows = spectral.RowCount();
         D::CheckCells(context, cells, rows);
         D::CheckRows(context, spectral, rows, 1);
+        if (smoothScale.RowCount())
+            D::CheckRows(context, smoothScale, rows, 1);
         D::CheckRows(context, inverse, rows, 1);
         if (rows)
         {
-            SpectralPseudoTime<<<unsigned(NonlinearScratchRows(rows)), D::Threads, 0, R::CUDAStream(context)>>>(cells, spectral, inverse, cfl);
+            SpectralPseudoTime<<<unsigned(NonlinearScratchRows(rows)), D::Threads, 0, R::CUDAStream(context)>>>(cells, spectral, smoothScale, inverse, cfl);
             D::CheckLaunch();
         }
     }
     void PreparePseudoTime(R::ExecutionContext context, NonlinearCells cells, LinearReadRows mean,
-                           LinearWriteRows defect, LinearReadRows spectral, LinearWriteRows inverseTau,
+                           LinearWriteRows defect, LinearReadRows spectral, LinearReadRows smoothScale, LinearWriteRows inverseTau,
                            LinearWriteRows alpha, PseudoTimeParameters parameters,
                            NonlinearSummaryOutput scratch, NonlinearSummaryOutput result)
     {
@@ -210,6 +214,8 @@ namespace DNDS::Cauchy::CUDA
         D::CheckCells(context, cells, mean.RowCount());
         D::CheckRows(context, defect, mean.RowCount(), mean.Width());
         D::CheckRows(context, spectral, mean.RowCount(), 1);
+        if (smoothScale.RowCount())
+            D::CheckRows(context, smoothScale, mean.RowCount(), 1);
         D::CheckRows(context, inverseTau, mean.RowCount(), 1);
         D::CheckSummary(context, mean.RowCount(), scratch, result);
         if (parameters.positivity)
@@ -221,15 +227,15 @@ namespace DNDS::Cauchy::CUDA
                                   std::isfinite(parameters.relax) && parameters.relax >= 0 && parameters.relax <= 1 && parameters.compressionPower > 0,
                               "invalid nonlinear CUDA pseudo-time policy");
         for (const auto target : {defect, inverseTau, parameters.deferAlpha ? alpha : LinearWriteRows{}})
-            DNDS_check_throw_info(!target.data || (target.data != mean.data && target.data != cells.data && target.data != spectral.data),
+            DNDS_check_throw_info(!target.data || (target.data != mean.data && target.data != cells.data && target.data != spectral.data && target.data != smoothScale.data),
                                   "CUDA pseudo-time output aliases input");
         DNDS_check_throw_info(!defect.data || (defect.data != inverseTau.data && (!parameters.deferAlpha ||
                                                                                   (alpha.data != inverseTau.data && alpha.data != defect.data))),
                               "CUDA pseudo-time outputs alias");
-        R::CheckKernelArgumentBudget<NonlinearCells, LinearReadRows, LinearWriteRows, LinearReadRows,
+        R::CheckKernelArgumentBudget<NonlinearCells, LinearReadRows, LinearWriteRows, LinearReadRows, LinearReadRows,
                                      LinearWriteRows, LinearWriteRows, PseudoTimeParameters, NonlinearSummaryOutput>();
         PseudoTime<<<unsigned(scratch.RowCount()), D::Threads, 0, ::DNDS::Runtime::CUDAStream(context)>>>(
-            cells, mean, defect, spectral, inverseTau, alpha, parameters, scratch);
+            cells, mean, defect, spectral, smoothScale, inverseTau, alpha, parameters, scratch);
         D::Finish(context, scratch, result);
     }
     void ApplyAgreedRHSAlpha(R::ExecutionContext context, LinearReadRows alpha, LinearWriteRows inverseTau,

@@ -13,6 +13,82 @@ namespace DNDS::CFV
     const Algebra::DofSpace &FiniteVolumePlan::Space() const { return _data->dofs; }
     std::shared_ptr<R::CommunicationContext> FiniteVolumePlan::Communication() const { return _data->communication; }
 
+    namespace
+    {
+        void ConstructCellSmoothScale(const FiniteVolumePlan &plan, R::Array<real> &factors, int iterations)
+        {
+            const auto communication = plan.Communication();
+            const index ownedCount = plan.NumCell(), localCount = plan.NumCellProc();
+            std::optional<FiniteVolumeTopologyRead> topology;
+            std::optional<FVField> scale;
+            std::vector<real> next;
+            communication->LocalStage([&]
+                                      {
+                factors.SetName("CFV/metrics/cellSmoothScaleFactors", DNDS_ALLOCATION_SITE());
+                scale.emplace(plan.Space(), factors.Layout(), R::Device::Host());
+                next.resize(ownedCount);
+                topology.emplace(plan.AcquireTopologyRead());
+                const auto mesh = topology->View();
+                const auto geometry = plan.AcquireRead();
+                const auto metric = geometry.HostView();
+                auto scaleWrite = scale->Owned().Write();
+                auto factorWrite = factors.Write();
+                const auto current = scaleWrite.View<R::FixedRows<1>>();
+                const auto initial = factorWrite.View<R::FixedRows<1>>();
+                OMP::ForSetupRows(0, ownedCount, [&](index iCell)
+                                  {
+                    real area = 0;
+                    for (const auto iFace : mesh.CellFaces(iCell))
+                        area += metric.GetFaceArea(iFace);
+                    const real h = metric.GetCellVol(iCell) / (area + verySmallReal);
+                    initial(iCell, 0) = current(iCell, 0) = h; }); });
+
+            const auto halo = plan.BindHalo(*scale);
+            const auto mesh = topology->View();
+            for (int pass = 0; pass < iterations; ++pass)
+            {
+                halo.Begin().Wait();
+                communication->LocalStage([&]
+                                          {
+                    {
+                        const auto ownedRead = scale->Owned().Read();
+                        const auto ghostRead = scale->Ghost().Read();
+                        const auto owned = ownedRead.View<R::FixedRows<1>>();
+                        const auto ghost = ghostRead.View<R::FixedRows<1>>();
+                        OMP::ForSetupRows(0, ownedCount, [&](index iCell)
+                                          {
+                            const auto faces = mesh.CellFaces(iCell);
+                            real sum = 0, count = 0;
+                            for (rowsize slot = 0; slot < faces.size(); ++slot)
+                            {
+                                const index iOther = mesh.CellFaceOther(iCell, faces[slot], slot);
+                                if (iOther == UnInitIndex)
+                                    continue;
+                                DNDS_check_throw_info(iOther >= 0 && iOther < localCount,
+                                                      "FV smoothing needs complete face-neighbor closure");
+                                sum += iOther < ownedCount ? owned(iOther, 0) : ghost(iOther - ownedCount, 0);
+                                ++count;
+                            }
+                            const real h = owned(iCell, 0);
+                            // Euler's min-filter with weight 1 for the cell and all its neighbors combined.
+                            next[iCell] = count ? std::min(h, (sum + count * h) / (2 * count)) : h; });
+                    }
+                    auto scaleWrite = scale->Owned().Write();
+                    const auto current = scaleWrite.View<R::FixedRows<1>>();
+                    OMP::ForSetupRows(0, ownedCount, [&](index iCell)
+                                      { current(iCell, 0) = next[iCell]; }); });
+            }
+            communication->LocalStage([&]
+                                      {
+                const auto scaleRead = scale->Owned().Read();
+                auto factorWrite = factors.Write();
+                const auto smoothed = scaleRead.View<R::FixedRows<1>>();
+                const auto ratio = factorWrite.View<R::FixedRows<1>>();
+                OMP::ForSetupRows(0, ownedCount, [&](index iCell)
+                                  { ratio(iCell, 0) = smoothed(iCell, 0) / ratio(iCell, 0); }); });
+        }
+    }
+
     void ReconstructionSettings::Validate() const
     {
         functional.Validate();
@@ -53,6 +129,7 @@ namespace DNDS::CFV
                                   {
             DNDS_check_throw_info(intOrder >= 1 && intOrder <= INT_ORDER_MAX, "invalid FV integration order");
             DNDS_check_throw_info(faceIntOrder == 1 || faceIntOrder == intOrder, "FV face integration must be midpoint or the metric order");
+            DNDS_check_throw_info(options.nIterCellSmoothScale >= 0, "negative FV cell smooth scale iteration count");
             auto read = mesh->AcquireRead(MeshReadRequirements::CellFlux());
             const auto view = read.HostView();
             DNDS_check_throw_info(view.Dimension() == 2 || view.Dimension() == 3, "FV requires 2D/3D geometry");
@@ -70,6 +147,8 @@ namespace DNDS::CFV
             data = std::make_shared<Detail::FiniteVolumeData>(mesh, intOrder, axisymmetric, communication);
             data->cell = R::Array<real>(R::RowLayout::Dense(view.NumCellProc(), 8));
             data->cell.SetName("CFV/metrics/cell", DNDS_ALLOCATION_SITE());
+            const index scaleRows = options.nIterCellSmoothScale ? view.NumCell() : 0;
+            data->cellSmoothScaleFactors = R::Array<real>(R::RowLayout::Dense(scaleRows, 1));
             data->radialMoment = R::Array<real>(R::RowLayout::Dense(view.NumCellProc(), 3));
             auto radialWrite = data->radialMoment.Write();
             const auto radial = radialWrite.View<R::FixedRows<3>>();
@@ -229,8 +308,18 @@ namespace DNDS::CFV
                     point(iPoint, 6) = integratedArea;
                 }
             }); });
+        // Smoothing determines how many halo exchanges will be posted.
+        if (options.collectivePreflight)
+        {
+            std::array<int, 2> passExtrema{options.nIterCellSmoothScale, -options.nIterCellSmoothScale};
+            MPI::AllreduceInPlace<MPI::Reduction::Max>(passExtrema, mpi.comm);
+            DNDS_check_throw_info(passExtrema[0] == -passExtrema[1], "FV smoothing pass counts differ across ranks");
+        }
         data->halo.emplace(data->cells.BuildRowTransferPlan(communication));
-        return FiniteVolumePlan(std::move(data));
+        FiniteVolumePlan plan(data);
+        if (options.nIterCellSmoothScale)
+            ConstructCellSmoothScale(plan, data->cellSmoothScaleFactors, options.nIterCellSmoothScale);
+        return plan;
     }
     void FiniteVolumePlan::Validate() const
     {
@@ -262,6 +351,7 @@ namespace DNDS::CFV
         return FiniteVolumeRead(_data, context);
     }
     const R::Array<real> &FiniteVolumePlan::CellMetrics() const { return _data->cell; }
+    const R::Array<real> &FiniteVolumePlan::CellSmoothScaleFactors() const { return _data->cellSmoothScaleFactors; }
     const R::Array<real> &FiniteVolumePlan::FaceQuadrature() const { return _data->faceQuadrature; }
     const R::Array<real> &FiniteVolumePlan::FaceMetrics() const { return _data->faceMean; }
     const R::Array<real> &FiniteVolumePlan::RadialMoments() const { return _data->radialMoment; }

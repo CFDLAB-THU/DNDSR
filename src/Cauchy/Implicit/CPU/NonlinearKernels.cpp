@@ -241,6 +241,7 @@ namespace DNDS::Cauchy::CPU
         real rhsAlpha = 1;
         const auto metric = request.metric;
         const auto spectral = request.spectral;
+        const auto smoothScale = request.smoothScale;
         const auto inverse = request.inverse;
         const auto means = request.means;
         const auto defect = request.defect;
@@ -256,7 +257,8 @@ namespace DNDS::Cauchy::CPU
         for (index iCell = 0; iCell < inverse.RowCount(); ++iCell)
         {
             const real volume = metric.GetCellVol(iCell);
-            real value = spectral(iCell, 0) / (request.pseudoCFL * volume);
+            const real factor = smoothScale.RowCount() ? smoothScale(iCell, 0) : 1;
+            real value = spectral(iCell, 0) / (request.pseudoCFL * volume * factor);
             if (!(std::isfinite(value) && value > 0))
             {
                 firstBadTime = std::min(firstBadTime, iCell);

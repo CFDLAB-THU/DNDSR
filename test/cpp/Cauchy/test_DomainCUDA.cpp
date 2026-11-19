@@ -283,7 +283,8 @@ TEST_CASE("Automatic A100 kernels advance raw P3 flow with frozen explicit refer
 
 TEST_CASE("Device domains advance nonuniform implicit flow through single grid and pMG with restart")
 {
-    const auto mesh = CauchyTest::PeriodicQuads(mpi, 6);
+    // Unequal cell widths also exercise geometric pseudo-time smoothing.
+    const auto mesh = CauchyTest::PeriodicQuads(mpi, 6, 1, 1. / 12);
     const auto metrics = DNDS::CFV::FiniteVolumePlan::ConstructMetrics(mesh);
     C::DomainSettings settings;
     settings.numerics.reconstruction = "variational";

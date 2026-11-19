@@ -171,6 +171,7 @@ namespace DNDS::Cauchy::CPU
         Algebra::DofComponentView<const real> means;
         Algebra::DofComponentView<real> defect;
         Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows> spectral;
+        Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows> smoothScale;
         Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows> inverse;
         std::optional<Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows>> alphas;
         ThermalView bounds;
@@ -181,12 +182,13 @@ namespace DNDS::Cauchy::CPU
     /// Uncompressed pseudo-time. Invalid spectra publish NaN, detected by
     /// matrix preparation alongside verification of the other assembled data.
     template <class Read, class Write>
-    void PrepareSpectralPseudoTime(CFV::FiniteVolumeHostView metric, Read spectral, Write inverse, real cfl) noexcept
+    void PrepareSpectralPseudoTime(CFV::FiniteVolumeHostView metric, Read spectral, Read smoothScale, Write inverse, real cfl) noexcept
     {
         OMP::ForRows(0, inverse.RowCount(), [&](index iCell)
                      {
             const real volume = metric.GetCellVol(iCell);
-            const real value = spectral(iCell, 0) / (volume * cfl);
+            const real factor = smoothScale.RowCount() ? smoothScale(iCell, 0) : 1;
+            const real value = spectral(iCell, 0) / (volume * cfl * factor);
             inverse(iCell, 0) = volume > 0 && value > 0 && std::isfinite(value)
                                     ? value : std::numeric_limits<real>::quiet_NaN(); });
     }

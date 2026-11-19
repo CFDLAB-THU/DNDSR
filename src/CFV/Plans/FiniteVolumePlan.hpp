@@ -211,6 +211,9 @@ namespace DNDS::CFV
         bool axisymmetric = false;
         bool collectivePreflight = true;
         Diagnostics::SetupProgress progress;
+        /// Geometry-only pseudo-time smoothing passes, collectively the same on every rank.
+        /// Zero skips smoothing and publishes an empty factor array.
+        int nIterCellSmoothScale = 0;
     };
 
     /// Immutable metric publication; copies share Runtime buffers and mesh/order
@@ -248,6 +251,8 @@ namespace DNDS::CFV
         /// arrays with Runtime::ReadAs; keep a mesh-generation guard through
         /// operation completion. A returned handle is not an access grant.
         const Runtime::Array<real> &CellMetrics() const;
+        /// Owned-cell ratios of smoothed to initial V/sum(face areas), or zero rows for unity.
+        const Runtime::Array<real> &CellSmoothScaleFactors() const;
         const Runtime::Array<real> &FaceQuadrature() const;
         const Runtime::Array<real> &FaceMetrics() const;
         const Runtime::Array<real> &RadialMoments() const;

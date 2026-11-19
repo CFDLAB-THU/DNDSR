@@ -191,6 +191,7 @@ namespace DNDS::Cauchy
             options.integrationOrder = settings.numerics.cfv.intOrder;
             options.faceIntegrationOrder = settings.numerics.RHSIntegrationOrder();
             options.collectivePreflight = settings.implicit.collectiveChecks;
+            options.nIterCellSmoothScale = settings.implicit.nIterCellSmoothScale;
             options.progress = std::move(progress);
             return options;
         }

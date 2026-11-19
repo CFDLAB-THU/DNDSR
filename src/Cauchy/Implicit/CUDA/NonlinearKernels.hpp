@@ -50,8 +50,8 @@ namespace DNDS::Cauchy::CUDA
         int compressionPower = 1;
         bool positivity = false, compressRHS = false, deferAlpha = false;
     };
-    /// Compute the equation-independent inverse pseudo-step using face spectra.
-    void PrepareSpectralPseudoTime(Runtime::ExecutionContext, NonlinearCells, LinearReadRows spectral,
+    /// Compute the inverse pseudo-step using face spectra and the optional owned geometry factors.
+    void PrepareSpectralPseudoTime(Runtime::ExecutionContext, NonlinearCells, LinearReadRows spectral, LinearReadRows smoothScale,
                                    LinearWriteRows inverseTau, real cfl);
     void PressureGaugeSum(Runtime::ExecutionContext, NonlinearCells, LinearReadRows candidate,
                           NonlinearSummaryOutput scratch, NonlinearSummaryOutput result);
@@ -64,7 +64,7 @@ namespace DNDS::Cauchy::CUDA
      * This is a forecast, not final mean acceptance or increment repair.
      */
     void PreparePseudoTime(Runtime::ExecutionContext, NonlinearCells, LinearReadRows mean,
-                           LinearWriteRows defect, LinearReadRows spectral, LinearWriteRows inverseTau,
+                           LinearWriteRows defect, LinearReadRows spectral, LinearReadRows smoothScale, LinearWriteRows inverseTau,
                            LinearWriteRows alpha, PseudoTimeParameters,
                            NonlinearSummaryOutput scratch, NonlinearSummaryOutput result);
     void ApplyAgreedRHSAlpha(Runtime::ExecutionContext, LinearReadRows alpha, LinearWriteRows inverseTau,

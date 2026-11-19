@@ -499,6 +499,7 @@ namespace DNDS::Cauchy
             return acm ? std::vector<std::string>{"u", "v", "w"} : std::vector<std::string>{"rho"};
         }
         real pseudoCFL = 10, maxPseudoCFL = 1e4, pseudoGrowth = 1.3, relaxation = 1;
+        int nIterCellSmoothScale = 15;
         bool roeDissipation = false, collectiveChecks = true;
         bool requireConvergedReconstruction = false;
         bool rejectUnconvergedStages = false;
@@ -535,6 +536,7 @@ namespace DNDS::Cauchy
             DNDS_FIELD(pseudoCFL, "Initial local pseudo-time CFL for each stage");
             DNDS_FIELD(maxPseudoCFL, "Maximum pseudo-time CFL");
             DNDS_FIELD(pseudoGrowth, "CFL growth factor after each nonlinear correction");
+            DNDS_FIELD(nIterCellSmoothScale, "Euler geometric pseudo-time smoothing passes at FV setup; zero disables it");
             DNDS_FIELD(relaxation, "Multiplier on each computed correction in (0,1]");
             DNDS_FIELD(roeDissipation, "Use full equation-owned characteristic dissipation; requires block diagonal");
             DNDS_FIELD(collectiveChecks, "Optional solver and Runtime halo safety agreements, default on; false also disables extra halo freshness audits. Routing/protocol and numerical collectives remain. Runtime local launch failure then aborts instead of rank-asymmetric recovery");

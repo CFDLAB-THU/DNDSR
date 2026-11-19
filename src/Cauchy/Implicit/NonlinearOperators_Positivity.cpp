@@ -18,22 +18,23 @@ namespace DNDS::Cauchy
         DNDS_check_throw_info(std::isfinite(controls.cfl) && controls.cfl > 0 && std::isfinite(controls.forecastScale) && controls.forecastScale >= 0 &&
                                   std::isfinite(controls.relax) && controls.relax >= 0 && controls.relax <= 1 && controls.compressionPower > 0,
                               "invalid nonlinear pseudo-time controls");
+        const auto &smoothScale = _data->geometry.CellSmoothScaleFactors();
         if (mean.Schema().AccumulationKind() == PhysicalAccumulationKind::ConstantDensityVelocityPressure)
         {
             DNDS_check_throw_info(!controls.positivity && !alpha, "ACM pseudo-time uses uncompressed spectral steps");
             const auto geometry = std::make_shared<CFV::FiniteVolumeRead>(_data->geometry.AcquireRead(stream.Context()));
-            R::SubmitArrays(engine, stream, [geometry, cfl = controls.cfl](R::ExecutionContext context, auto spectrum, auto step)
+            R::SubmitArrays(engine, stream, [geometry, cfl = controls.cfl](R::ExecutionContext context, auto spectrum, auto scale, auto step)
                             {
                 if (context.device == R::Device::Host())
-                    CPU::PrepareSpectralPseudoTime(geometry->HostView(), spectrum, step, cfl);
+                    CPU::PrepareSpectralPseudoTime(geometry->HostView(), spectrum, scale, step, cfl);
                 else
                 {
 #ifdef DNDS_USE_CUDA
-                    CUDA::PrepareSpectralPseudoTime(context, geometry->View().cells, Table(spectrum), Table(step), cfl);
+                    CUDA::PrepareSpectralPseudoTime(context, geometry->View().cells, Table(spectrum), Table(scale), Table(step), cfl);
 #else
                     Unavailable{}();
 #endif
-                } }, R::ReadAs<R::UniformTableRows>(spectral), R::WriteAs<R::UniformTableRows>(inverse));
+                } }, R::ReadAs<R::UniformTableRows>(spectral), R::ReadAs<R::UniformTableRows>(smoothScale), R::WriteAs<R::UniformTableRows>(inverse));
             // CPU assembly takes immediate read access. Device assembly imports
             // this lane order and validates the inverse step in its own kernel.
             if (stream.Context().device == R::Device::Host())
@@ -45,17 +46,19 @@ namespace DNDS::Cauchy
         const auto u = AddInput(mean, inputs), d = AddOutput(defect, outputs, true);
         const index spectralSlot = index(inputs.size()), inverseSlot = index(outputs.size());
         inputs.push_back(R::ReadAs<R::UniformTableRows>(spectral));
+        const index scaleSlot = index(inputs.size());
+        inputs.push_back(R::ReadAs<R::UniformTableRows>(smoothScale));
         outputs.push_back(R::WriteAs<R::UniformTableRows>(inverse));
         const index alphaSlot = alpha ? index(outputs.size()) : -1;
         if (alpha)
             outputs.push_back(R::WriteAs<R::UniformTableRows>(*alpha));
         const auto geometry = std::make_shared<CFV::FiniteVolumeRead>(_data->geometry.AcquireRead(stream.Context()));
         const auto retained = _data;
-        const auto host = [retained, geometry, u, d, spectralSlot, inverseSlot, alphaSlot, controls](auto input, auto output, Result &result)
+        const auto host = [retained, geometry, u, d, spectralSlot, scaleSlot, inverseSlot, alphaSlot, controls](auto input, auto output, Result &result)
         {
             const auto mean = u.Components<const real>(input);
             const auto defect = d.Components<real>(output);
-            const auto statistics = CPU::PreparePseudoTime({geometry->HostView(), mean.View(), defect.View(), input[spectralSlot], output[inverseSlot],
+            const auto statistics = CPU::PreparePseudoTime({geometry->HostView(), mean.View(), defect.View(), input[spectralSlot], input[scaleSlot], output[inverseSlot],
                                                             alphaSlot >= 0 ? std::optional(output[alphaSlot]) : std::nullopt, retained->policy.View().thermal,
                                                             controls.cfl, controls.forecastScale, controls.relax, real(controls.compressionPower), controls.positivity, controls.compressRHS});
             result.status = statistics.status;
@@ -63,11 +66,11 @@ namespace DNDS::Cauchy
                 result.alpha = statistics.value;
         };
 #ifdef DNDS_USE_CUDA
-        const auto device = [retained, geometry, u, d, spectralSlot, inverseSlot, alphaSlot, controls](auto context, auto input, auto output, auto scratch, auto summary)
+        const auto device = [retained, geometry, u, d, spectralSlot, scaleSlot, inverseSlot, alphaSlot, controls](auto context, auto input, auto output, auto scratch, auto summary)
         {
             const CUDA::PseudoTimeParameters parameters{retained->policy.View().thermal, controls.cfl, controls.forecastScale, controls.relax,
                                                         controls.compressionPower, controls.positivity, controls.compressRHS, alphaSlot >= 0};
-            CUDA::PreparePseudoTime(context, geometry->View().cells, Table(input[u.firstSlot]), Table(output[d.firstSlot]), Table(input[spectralSlot]),
+            CUDA::PreparePseudoTime(context, geometry->View().cells, Table(input[u.firstSlot]), Table(output[d.firstSlot]), Table(input[spectralSlot]), Table(input[scaleSlot]),
                                     Table(output[inverseSlot]), alphaSlot >= 0 ? Table(output[alphaSlot]) : CUDA::LinearWriteRows{}, parameters, scratch, summary);
         };
 #else
