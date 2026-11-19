@@ -293,7 +293,11 @@ TEST_CASE("Native matrix attachment shares values with fixed-cycle upload equiva
             }
             const auto device = R::Device::CUDA(0);
             const auto context = R::ExecutionContext::CUDA(0);
-            auto values = host.To(device), rhs = hostRhs.To(device);
+            const auto bytes = host.Storage().Bytes();
+            auto backing = R::Buffer::Allocate(bytes + sizeof(double), device);
+            auto values = R::Array<double>::FromStorage(host.Layout(), backing.Subspan(0, bytes));
+            values.CopyFrom(host, context).Wait();
+            auto rhs = hostRhs.To(device);
             R::Array<double> expected(hostRhs.Layout(), device), actual(hostRhs.Layout(), device);
             DNDS::Algebra::AmgXSettings settings;
             settings.geometricAggregation = separate;
@@ -326,6 +330,11 @@ TEST_CASE("Native matrix attachment shares values with fixed-cycle upload equiva
                 upload.UpdateValuesBorrowed(context, a, separate ? std::optional<decltype(diagonal)>(diagonal) : std::nullopt);
             }
             attached.AttachValues(context, values);
+            if (width == 5 && separate)
+            {
+                auto shifted = R::Array<double>::FromStorage(host.Layout(), backing.Subspan(sizeof(double), bytes));
+                CHECK_THROWS(attached.AttachValues(context, shifted));
+            }
             if (width == 5 && !separate)
                 CHECK_THROWS(attached.SetPattern(offsets, columns, int(width), separate));
             const auto apply = [&](auto &provider, auto &output)

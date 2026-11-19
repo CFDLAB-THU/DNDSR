@@ -405,8 +405,8 @@ namespace DNDS::Algebra
         DNDS_check_throw_info(values.GetDevice() == GetDevice() && layout.Kind() == Runtime::RowLayoutKind::Table &&
                                   layout.Stride() == layout.Width() && layout.RowCount() * layout.Width() == elements,
                               "AmgX attachment requires one compatible compact native values allocation");
-        DNDS_check_throw_info(!_state->geometricAggregation || !_state->nativeValues || values.Identity() == _state->nativeValues->Identity(),
-                              "geometric AmgX refresh requires the original native coefficient allocation");
+        DNDS_check_throw_info(!_state->geometricAggregation || !_state->nativeValues || (values.Identity() == _state->nativeValues->Identity() && values.Storage().SameRange(_state->nativeValues->Storage())),
+                              "geometric AmgX refresh requires the originally attached coefficient range");
         _state->ready = false;
         auto read = values.Read(context);
         // Retain before entering the provider so failed setup cannot leave a
