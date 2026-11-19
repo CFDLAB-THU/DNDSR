@@ -40,7 +40,10 @@ TEST_CASE("Native flow-five AMG preserves an uncoupled zero transverse equation"
     }
     const auto device = R::Device::CUDA(0);
     const auto context = R::ExecutionContext::CUDA(0);
-    DNDS::Algebra::AmgXPreconditioner provider(device);
+    DNDS::Algebra::AmgXSettings settings;
+    SUBCASE("2D flow aggregate size") { settings.aggregateSize = 4; }
+    SUBCASE("3D flow aggregate size") { settings.aggregateSize = 8; }
+    DNDS::Algebra::AmgXPreconditioner provider(device, settings);
     const auto o = offsets.Read(), c = columns.Read();
     provider.SetPattern(offsets, columns, int(width));
     REQUIRE(provider.RowNumber() == rows * width);

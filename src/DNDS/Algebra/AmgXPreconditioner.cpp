@@ -93,7 +93,7 @@ namespace DNDS::Algebra
             text << R"({"config_version":2,"determinism_flag":1,"block_format":")"
                  << (s.blockFormat == AmgXBlockFormat::ColumnMajor ? "COL_MAJOR" : "ROW_MAJOR")
                  << R"(","solver":{"solver":"AMG",)"
-                 << R"("algorithm":"AGGREGATION","selector":"SIZE_2","cycle":"V",)"
+                 << R"("algorithm":"AGGREGATION","selector":"SIZE_)" << s.aggregateSize << R"(","cycle":"V",)"
                  << R"("smoother":{"solver":"BLOCK_JACOBI","monitor_residual":0,"print_solve_stats":0,"relaxation_factor":)"
                  << s.relaxation << R"(},"coarse_solver":"NOSOLVER","monitor_residual":0,)"
                  << R"("print_solve_stats":0,"print_grid_stats":0,"max_iters":)" << s.cycles
@@ -213,6 +213,7 @@ namespace DNDS::Algebra
     {
         DNDS_check_throw_info(Available(), "AmgX requested but DNDS_USE_AMGX is disabled");
         DNDS_check_throw_info(device.IsValid() && device.space == Runtime::MemorySpace::CUDA, "AmgX needs one CUDA device");
+        DNDS_check_throw_info(settings.aggregateSize == 2 || settings.aggregateSize == 4 || settings.aggregateSize == 8, "AmgX aggregate size must be 2, 4 or 8");
         DNDS_check_throw_info(settings.cycles > 0 && settings.preSweeps >= 0 && settings.postSweeps >= 0 &&
                                   settings.coarseSweeps > 0 && settings.maxLevels > 0 && settings.minCoarseRows > 0 &&
                                   std::isfinite(settings.relaxation) && settings.relaxation > 0 && settings.relaxation <= 1,

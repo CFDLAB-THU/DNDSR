@@ -22,6 +22,7 @@ namespace DNDS::Algebra
         /// Applied explicitly in the Jacobi smoother scope, including coarsest sweeps.
         real relaxation = 0.75;
         AmgXBlockFormat blockFormat = AmgXBlockFormat::RowMajor;
+        int aggregateSize = 2;
     };
 
     /// Provider-owned capacities exclude borrowed finest values and allocator reserve.

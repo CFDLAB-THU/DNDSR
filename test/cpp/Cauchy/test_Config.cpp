@@ -5,6 +5,7 @@
 #include "Cauchy/Config/CUDARHSKernelSelector.hpp"
 #include "DNDS/Algebra/AmgXPreconditioner.hpp"
 #include "Cauchy/Multigrid/PolynomialMultigrid.hpp"
+#include "Cauchy/Implicit/NonlinearIteration.hpp"
 
 namespace C = DNDS::Cauchy;
 TEST_CASE("Automatic CUDA policies select measured A100 kernels and preserve explicit overrides")
@@ -132,6 +133,9 @@ TEST_CASE("Native AMG is selected independently for reconstruction and flow")
     settings.numerics.reconstructionSolver.method = "amgx";
     settings.numerics.reconstructionSolver.amgxCycles = 2;
     settings.implicit.linear.method = "amgx";
+    CHECK(C::NonlinearDetail::ResolveLinear(settings.implicit, 2).amgxAggregateSize == 4);
+    CHECK(C::NonlinearDetail::ResolveLinear(settings.implicit, 3).amgxAggregateSize == 8);
+    settings.implicit.linear.amgxAggregateSize = 2;
     settings.implicit.linear.stopping = "fixedCount";
     settings.implicit.linear.matrixStorage.amgxStorage = "native";
     const auto restored = C::Json(settings).get<C::DomainSettings>();
@@ -139,6 +143,7 @@ TEST_CASE("Native AMG is selected independently for reconstruction and flow")
     CHECK(restored.numerics.reconstructionSolver.amgxStorage == "native");
     CHECK(restored.numerics.reconstructionSolver.amgxCycles == 2);
     CHECK(restored.implicit.linear.matrixStorage.amgxStorage == "native");
+    CHECK(C::NonlinearDetail::ResolveLinear(restored.implicit, 3).amgxAggregateSize == 2);
     for (DNDS::index level = 0; level < 2; ++level)
     {
         const auto lower = C::PolynomialMultigrid::CoarseSettings(settings, level);

@@ -21,6 +21,13 @@ Krylov solver. `method="gmres", preconditioner="amgx"` remains a distinct,
 explicitly requested algorithm. The `preconditioner` string is unused by
 stationary methods.
 
+For flow AmgX, `implicit.linear.amgxAggregateSize` defaults to 0, which selects
+`SIZE_4` on 2D meshes and `SIZE_8` on 3D meshes. Set 2, 4 or 8 to select a
+target explicitly. This is an aggregation target in cells per coarse unknown.
+All equation components stay together in the coarse block. The current provider
+scores edges using matrix coefficients and refreshes the hierarchy when the
+assembled coefficient epochs change.
+
 `DNDS_CAUCHY_DIAG_LINEAR=1` emits one `CAUCHY_LINEAR_REPORT` JSON record per
 completed solve on the domain master (all ranks only when
 `DNDS_CAUCHY_PROFILE_ALL_RANKS` is set). It exposes the already-computed

@@ -369,6 +369,7 @@ namespace DNDS::Cauchy
         index residualCheckInterval = 1;
         int subspace = 10;
         int jacobiLocalSweeps = 1;
+        int amgxAggregateSize = 0;
         int diagonalInverseRefinement = 0;
         std::string cudaDiagonalInverse = "auto";
         std::string cudaJacobiMapping = "thread";
@@ -377,6 +378,7 @@ namespace DNDS::Cauchy
         DNDS_DECLARE_CONFIG(ImplicitLinearSettings)
         {
             DNDS_FIELD(method, "sgs or jacobi stationary sweeps, ilu or amgx stationary defect correction, or restarted left-gmres; amgx requires assembled CUDA storage");
+            DNDS_FIELD(amgxAggregateSize, "Flow AmgX target aggregate size: 0 selects 4 in 2D or 8 in 3D. Explicit choices are 2, 4 and 8.");
             DNDS_FIELD(jacobiLocalSweeps, "One or two local Jacobi sweeps per iteration; two freezes remote iterate values between sweeps, with one input exchange");
             DNDS_FIELD(diagonalInverseRefinement, "Optional guarded block-inverse corrections: 0 (default) preserves the existing inversion, 1..3 refines within retained SVD subspaces without changing the cutoff. Requires block-diagonal SGS/Jacobi; unavailable for ILU/AmgX.");
             DNDS_FIELD(cudaDiagonalInverse, "auto selects guardedLU on A100 and batchedSVD elsewhere; explicit providers are preserved. Guarded 5/6/7 LU retains the CPU condition guard and filtered SVD fallback. CPU inversion is unchanged");

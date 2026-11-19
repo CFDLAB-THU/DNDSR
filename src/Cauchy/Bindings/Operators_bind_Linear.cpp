@@ -113,6 +113,7 @@ namespace DNDS::Cauchy::Bindings
             .def_readwrite("residual_check_interval", &LinearSolveSettings::residualCheckInterval)
             .def_readwrite("subspace", &LinearSolveSettings::subspace)
             .def_readwrite("sgs_sweeps", &LinearSolveSettings::sgsSweeps)
+            .def_readwrite("amgx_aggregate_size", &LinearSolveSettings::amgxAggregateSize)
             .def_readwrite("jacobi_local_sweeps", &LinearSolveSettings::jacobiLocalSweeps)
             .def_readwrite("diagonal_inverse_refinement", &LinearSolveSettings::diagonalInverseRefinement)
             .def_readwrite("cuda_diagonal_inverse", &LinearSolveSettings::cudaDiagonalInverse)
