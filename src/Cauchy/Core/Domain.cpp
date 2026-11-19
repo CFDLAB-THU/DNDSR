@@ -657,7 +657,9 @@ namespace DNDS::Cauchy
             MPI::LocalStage(mpi, [&]
                             {
                 _execution.observationInput.emplace(EquationDofOperations::NewVector(_state.trial));
-                _execution.observationState.emplace(EquationDofOperations::NewVector(_state.trial)); });
+                _execution.observationState.emplace(EquationDofOperations::NewVector(_state.trial));
+                _execution.observationInput->Fields().SetName(_problem.name + "/observation/means", DNDS_ALLOCATION_SITE());
+                _execution.observationState->Fields().SetName(_problem.name + "/observation/residual", DNDS_ALLOCATION_SITE()); });
             _execution.observationWorkspace = _problem.finiteVolume.BuildWorkspace(*_execution.observationInput, _execution.ChemicalWorkers(), ObservationWorkspaceOptions());
             _execution.observationReconstruction = _problem.finiteVolume.BuildReconstructionState(*_execution.observationInput);
             if (_execution.interfaces->active)
@@ -691,7 +693,9 @@ namespace DNDS::Cauchy
             MPI::LocalStage(MPIInfo(_problem.finiteVolume.Metrics().Communicator()), [&]
                             {
                 input.emplace(EquationDofOperations::NewVector(snapshot.Means()));
-                residual.emplace(EquationDofOperations::NewVector(snapshot.Means())); });
+                residual.emplace(EquationDofOperations::NewVector(snapshot.Means()));
+                input->Fields().SetName(_problem.name + "/observation/means", DNDS_ALLOCATION_SITE());
+                residual->Fields().SetName(_problem.name + "/observation/residual", DNDS_ALLOCATION_SITE()); });
             auto workspace = _problem.finiteVolume.BuildWorkspace(*input, _execution.ChemicalWorkers(), ObservationWorkspaceOptions());
             auto reconstruction = _problem.finiteVolume.BuildReconstructionState(*input);
             _execution.observationInput = std::move(input);

@@ -31,6 +31,14 @@ namespace DNDS::Cauchy
     public:
         QueuedEquationOperations() = default;
         explicit QueuedEquationOperations(Runtime::ExecutionStream stream) : _stream(std::move(stream)) {}
+        using EquationDofOperations::NewVector;
+        /// Give time-method storage a stable allocation label at setup.
+        static State NewVector(const State &prototype, const char *name)
+        {
+            auto field = EquationDofOperations::NewVector(prototype);
+            field.Fields().SetName(std::string("Cauchy/time/") + name, DNDS_ALLOCATION_SITE());
+            return field;
+        }
         /// Binding identity and submitted-write epochs, not only completed
         /// host-visible versions. A method may freeze resOther immediately
         /// after enqueueing its producer: completion of that already-declared

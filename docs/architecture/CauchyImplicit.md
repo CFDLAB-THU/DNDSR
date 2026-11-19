@@ -1997,12 +1997,18 @@ ILU records additionally retain each rank's factor block count and cumulative
 guarded-inverse fallback count, rather than inferring all-rank behavior from
 rank0's last factorization alone.
 
-Correction auxiliary preparation restores a centered RANS gradient when a
-different stage used its workspace. The mean storage identities, versions,
-time and incoming interface fields distinguish publications. Modal correction
-uses the boundary/gradient prefix. A limited direct-gradient operator must
-also execute its usual limiter and positivity operations. A cached quadrature
-rate supplies its own source derivative and needs no source-point replay.
+The unlimited physical gradient is reconstructed once from cell means and
+mean-based face-center boundary values. One workspace field supplies LVR, the
+centered source Jacobian, and direct P1 reconstruction. SST auxiliary
+preparation also uses that field to form the diffusion contribution to
+pseudo-time. A direct P1 limiter may write a separate final RHS field. Modal
+RHS volume quadrature still samples the VR polynomial and its derivatives.
+
+The centered source Jacobian never depends on VR coefficients or a gradient
+limiter. If another coupled stage used the shared slot, reconstruct only the
+mean gradient for the correction's state and interface publication. The
+frozen auxiliary outputs and rate stay valid for their original stage. A
+cached quadrature rate carries its own integrated source derivative.
 
 Equation auxiliary preparation uses the same setup-time exact frame-identity
 predicate as RHS. Ordinary and translational-periodic faces skip identity

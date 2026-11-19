@@ -45,6 +45,9 @@ namespace DNDS::Cauchy
         data->cells = R::Array<real>(R::RowLayout::Ragged(cellSizes));
         data->faces = R::Array<real>(R::RowLayout::Ragged(faceSizes));
         data->mean = R::Array<real>(R::RowLayout::Dense(view.NumCellProc(), 1));
+        data->cells.SetName("Cauchy/wallDistance/cellQuadrature", DNDS_ALLOCATION_SITE());
+        data->faces.SetName("Cauchy/wallDistance/faceQuadrature", DNDS_ALLOCATION_SITE());
+        data->mean.SetName("Cauchy/wallDistance/cellMean", DNDS_ALLOCATION_SITE());
         auto cellWrite = data->cells.Write(), faceWrite = data->faces.Write(), meanWrite = data->mean.Write();
         const auto cells = cellWrite.View<R::CSRRows>(), faces = faceWrite.View<R::CSRRows>();
         const auto mean = meanWrite.View<R::FixedRows<1>>();

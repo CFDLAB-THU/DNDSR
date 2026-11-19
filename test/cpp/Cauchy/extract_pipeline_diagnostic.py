@@ -57,7 +57,7 @@ def main():
     text = insert_after_once(
         text, correction,
         "        ::DiagnosticTiming::Scope diagnosticAuxiliary(::DiagnosticTiming::Block::Auxiliary);\n"
-        "        ::DiagnosticTiming::AuxiliaryTrace correctionTrace(!work.meanGradients, 1, ::DiagnosticTiming::currentLevel);\n")
+        "        ::DiagnosticTiming::AuxiliaryTrace correctionTrace(!(_data->equation.HasRANS() && _data->equation.RANS().ComponentNumber() == 2), 1, ::DiagnosticTiming::currentLevel);\n")
     text = insert_before_once(
         text, "        for (auto &halo : reconstruction.meanHalo)\n"
               "            transfers.push_back(halo.BeginAfter(reconstruction.meanEpoch, engine, communication, stream.Record(),\n"
@@ -71,8 +71,8 @@ def main():
         "        correctionTrace.Mark(::DiagnosticTiming::AuxiliaryTrace::WaitBegin);\n")
     text = insert_before_once(
         text, "        transfers.clear();",
-        "                correctionTrace.Mark(::DiagnosticTiming::AuxiliaryTrace::WaitEnd);\n"
-        "                correctionTrace.Mark(::DiagnosticTiming::AuxiliaryTrace::ComputeBegin);\n")
+        "            correctionTrace.Mark(::DiagnosticTiming::AuxiliaryTrace::WaitEnd);\n"
+        "            correctionTrace.Mark(::DiagnosticTiming::AuxiliaryTrace::ComputeBegin);\n")
     text = insert_after_once(
         text, "            else preparation->Finish(auxiliary);",
         "                correctionTrace.Mark(::DiagnosticTiming::AuxiliaryTrace::ComputeEnd);\n")
@@ -84,12 +84,14 @@ def main():
         "const Runtime::ExecutionStream &stream,\n"
         "const Runtime::ExecutionStream &communication, real time,\n"
         "OptionalRef<AuxiliaryValues> auxiliary,\n"
-        "OptionalRef<const QueuedEvaluationDependency> dependency, OptionalRef<R::Array<real>> sourceDerivative, bool stopAfterGradient) const\n    {")
+        "OptionalRef<const QueuedEvaluationDependency> dependency, OptionalRef<R::Array<real>> sourceDerivative) const\n    {")
     text = insert_after_once(
         text, evaluation,
         "        ::DiagnosticTiming::Level diagnosticLevel(_data->settings.numerics.firstOrderConvection ? 2 : _data->settings.numerics.reconstruction == \"variational\" ? 0 : 1);\n"
-        "        ::DiagnosticTiming::Scope diagnosticFV(::DiagnosticTiming::Block::Spatial);\n"
-        "        ::DiagnosticTiming::AuxiliaryTrace evaluationTrace(auxiliary && !work.meanGradients, 0, ::DiagnosticTiming::currentLevel);\n")
+        "        ::DiagnosticTiming::Scope diagnosticFV(::DiagnosticTiming::Block::Spatial);\n")
+    text = insert_after_once(
+        text, "const bool needsAuxiliaryPreparation = auxiliary && !gradientAuxiliary;",
+        "        ::DiagnosticTiming::AuxiliaryTrace evaluationTrace(needsAuxiliaryPreparation, 0, ::DiagnosticTiming::currentLevel);\n")
     text = replace_once(
         text,
         "                      auxiliaryPreparation.emplace(BeginAuxValues(state, *auxiliary, time, work.workers, inputs)); });",

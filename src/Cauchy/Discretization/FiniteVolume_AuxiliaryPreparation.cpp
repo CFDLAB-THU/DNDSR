@@ -570,7 +570,10 @@ namespace DNDS::Cauchy
         _state->scratchWrite.reset();
         auto origin = std::make_shared<AuxiliaryValues::EquationOrigin>(_state->data, _state->source, output, _state->time,
                                                                         _state->boundary);
-        if (_state->gradients)
+        // FV-owned gradients are reusable scratch. The queued reads and their
+        // completion checks protect this evaluation; the frozen auxiliary
+        // outputs can survive subsequent scratch uses by another stage.
+        if (_state->gradients && _state->gradients->_data->stateBinding)
             for (const auto &field : _state->gradients->fields)
                 for (const auto *array : {&field.Owned(), &field.Ghost()})
                 {

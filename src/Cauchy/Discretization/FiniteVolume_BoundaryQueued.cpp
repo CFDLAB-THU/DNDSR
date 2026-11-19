@@ -139,9 +139,7 @@ namespace DNDS::Cauchy
 #ifdef DNDS_USE_CUDA
         const auto device = owner->metrics.Device();
         const index quadrature = owner->BoundaryValueRows();
-        const bool centered = primitiveBoundary || std::any_of(fields.begin(), fields.end(), [](const auto &field)
-                                                               { return field.gradientBoundary && field.gradientBoundary->SharedStorage() != field.boundaryValues.SharedStorage(); });
-        const index primitive = centered ? owner->boundaryFaces.RowCount() : 0;
+        const index primitive = primitiveBoundary ? owner->boundaryFaces.RowCount() : 0;
         const bool gradientPP = nativeDirectGradient && owner->settings.numerics.positivity;
         const index owned = primitiveGradient || owner->equation.HasRANS() ? owner->metrics.NumCell() : 0;
         const index ghost = primitiveGradient ? owner->metrics.NumCellProc() - owner->metrics.NumCell() : 0;
@@ -209,13 +207,6 @@ namespace DNDS::Cauchy
                                   field.boundaryValues, preparationStatus->quadrature,
                                   {BoundaryTarget::Quadrature, mirrored, true, time}, incoming);
         AppendPreparationStatus(engine, stream, preparationStatus->quadrature);
-        if (field.gradientBoundary && field.gradientBoundary->SharedStorage() != field.boundaryValues.SharedStorage())
-        {
-            plan.SubmitBoundaryValues(engine, stream, state, coefficients,
-                                      *field.gradientBoundary, preparationStatus->primitive,
-                                      {BoundaryTarget::Gradient, false, true, time}, incomingCenters);
-            AppendPreparationStatus(engine, stream, preparationStatus->primitive);
-        }
         if (primitiveBoundary)
         {
             plan.SubmitBoundaryValues(engine, stream, state, {}, *primitiveBoundary, preparationStatus->primitive,

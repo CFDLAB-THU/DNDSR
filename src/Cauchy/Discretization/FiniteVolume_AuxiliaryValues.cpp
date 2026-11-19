@@ -4,6 +4,7 @@
 #include "Cauchy/Discretization/CPU/FiniteVolumeStateKernels.hpp"
 #include "DNDS/MPI/Failure.hpp"
 #include "Cauchy/Discretization/FiniteVolumeAuxiliaryInternal.hpp"
+#include "Cauchy/Discretization/FiniteVolumeWorkspaceInternal.hpp"
 #include "Cauchy/State/EquationDofAlgebra.hpp"
 #include "Cauchy/Physics/PointProperties.hpp"
 #include "DNDS/MPI/CollectiveStage.hpp"
@@ -16,19 +17,31 @@ namespace DNDS::Cauchy
     using AuxiliaryDetail::EquationAuxiliaryArrays;
     MeanGradients FiniteVolume::BuildMeanGradients(EquationDofs &state) const
     {
+        return BuildMeanGradientsImpl(state, {});
+    }
+    MeanGradients FiniteVolume::BuildMeanGradientsImpl(EquationDofs &state, OptionalRef<Workspace> workspace) const
+    {
         MeanGradients result;
-        const MPIInfo mpi(Metrics().Communicator());
         Metrics().Communication()->LocalStage([&]
                                               {
             state.RequireSchema(_data->equation.Schema());
             DNDS_check_throw_info(state.Space().Same(Metrics().Space()) && state.Device() == Device(), "mean gradient state space/backend differs");
-            result._data = std::make_shared<MeanGradients::Data>(_data, state);
+            result._data = std::make_shared<MeanGradients::Data>(_data);
             auto &work = *result._data;
+            if (!workspace)
+                work.stateBinding.emplace(state);
             for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
             {
                 const auto &field = state.PhysicalField(iField);
-                result.fields.push_back(Metrics().BuildField(FiniteVolumeDetail::FieldLayout(field.Owned().Layout(), Metrics().NumCell(), field.Width() * Metrics().Dimension()), Device()));
+                if (workspace && workspace->fields[iField].gradient)
+                    result.fields.push_back(*workspace->fields[iField].gradient);
+                else
+                    result.fields.push_back(Metrics().BuildField(FiniteVolumeDetail::FieldLayout(field.Owned().Layout(), Metrics().NumCell(), field.Width() * Metrics().Dimension()), Device()));
                 work.boundary.push_back(_data->gradient.BuildBoundaryValues(field.Width()));
+                const auto name = "Cauchy/gradient/mean/" + state.Fields().Name(iField);
+                result.fields.back().Owned().SetName(name + "/owned", DNDS_ALLOCATION_SITE());
+                result.fields.back().Ghost().SetName(name + "/ghost", DNDS_ALLOCATION_SITE());
+                work.boundary.back().SetName(name + "/boundaryValues", DNDS_ALLOCATION_SITE());
                 work.vectors.emplace_back();
                 for (index iBlock = 0; iBlock < state.BlockNumber(); ++iBlock)
                 {
@@ -37,10 +50,13 @@ namespace DNDS::Cauchy
                         for (auto first : state.Schema().blocks[iBlock].vectorStarts)
                             work.vectors.back().push_back(location.firstComponent + first);
                 }
-                work.execution.push_back(_data->gradient.BuildWorkspace(field.Width(), work.vectors.back()));
+                if (workspace && workspace->fields[iField].gradientExecution)
+                    work.execution.push_back(*workspace->fields[iField].gradientExecution);
+                else
+                    work.execution.push_back(_data->gradient.BuildWorkspace(field.Width(), work.vectors.back()));
             }
             work.fields = result.fields;
-            if (Device().space == R::MemorySpace::CUDA)
+            if (Device().space == R::MemorySpace::CUDA && _data->boundaryFaces.RowCount())
             {
 #ifdef DNDS_USE_CUDA
                 const index rows = _data->boundaryFaces.RowCount();
@@ -58,10 +74,26 @@ namespace DNDS::Cauchy
             } });
         for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
         {
-            result._data->meanHalo.push_back(BindHalo(state.PhysicalField(iField)));
-            result._data->gradientHalo.push_back(BindHalo(result.fields[iField]));
+            if (!workspace)
+                result._data->meanHalo.push_back(BindHalo(state.PhysicalField(iField)));
+            if (!workspace || (_data->equation.HasRANS() && _data->equation.RANS().ComponentNumber() == 2))
+                result._data->gradientHalo.push_back(BindHalo(result.fields[iField]));
         }
         return result;
+    }
+    void FiniteVolume::EnsureMeanGradientWorkspace(EquationDofs &state, Workspace &work) const
+    {
+        if (!work.meanGradients)
+            work.meanGradients.emplace(BuildMeanGradientsImpl(state, OptionalRef<Workspace>(work)));
+    }
+    void FiniteVolume::SubmitMeanGradientRows(R::EagerEngine &engine, const R::ExecutionStream &stream,
+                                              const EquationDofs &state, MeanGradients &gradients,
+                                              CFV::ReconstructionRegion region) const
+    {
+        auto &work = *gradients._data;
+        for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
+            _data->gradient.Evaluate(engine, stream, state.PhysicalField(iField), work.boundary[iField],
+                                     gradients.fields[iField], work.execution[iField], region);
     }
     void FiniteVolume::PrepareAuxValues(EquationDofs &state, AuxiliaryValues &output, MeanGradients &gradients,
                                         Runtime::EagerEngine &engine, const Runtime::ExecutionStream &stream, real time,
@@ -95,7 +127,6 @@ namespace DNDS::Cauchy
         AuxiliaryInputs inputs, bool exchangeMeans) const
     {
         using namespace EquationFVDetail;
-        const MPIInfo mpi(Metrics().Communicator());
         const bool overlap = _data->settings.execution.overlap;
         const auto stage = [&](auto &&action)
         {
@@ -112,7 +143,10 @@ namespace DNDS::Cauchy
                                       engine.Owns(stream) && engine.Owns(communication) &&
                                       stream.Context().device == Device() && communication.Context().device == Device(),
                                   "foreign mean gradient workspace or execution streams");
-            gradients._data->binding.Check(state);
+            if (exchangeMeans)
+                DNDS_check_throw_info(gradients._data->stateBinding, "standalone mean-gradient preparation needs a bound mean halo");
+            if (gradients._data->stateBinding)
+                gradients._data->stateBinding->Check(state);
             state.RequireSchema(_data->equation.Schema());
             DNDS_check_throw_info(gradients.fields.size() == gradients._data->fields.size(), "mean gradient fields replaced");
             for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
@@ -136,9 +170,7 @@ namespace DNDS::Cauchy
         work.ghostsReady = false;
         const auto gradient = [&](CFV::ReconstructionRegion region)
         {
-            for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
-                _data->gradient.Evaluate(engine, stream, state.PhysicalField(iField), work.boundary[iField],
-                                         gradients.fields[iField], work.execution[iField], region);
+            SubmitMeanGradientRows(engine, stream, state, gradients, region);
         };
         std::optional<AuxiliaryPreparation> preparation;
         // These closures and the retained preparation must outlive exceptional
@@ -190,8 +222,7 @@ namespace DNDS::Cauchy
             throw;
         }
     }
-    void FiniteVolume::FinishMeanGradientAuxValues(const EquationDofs &state, AuxiliaryValues &output,
-                                                   MeanGradients &gradients, AuxiliaryPreparation &preparation) const
+    void FiniteVolume::CheckMeanGradientBoundary(const MeanGradients &gradients) const
     {
         DNDS_check_throw_info(gradients._data && gradients._data->owner.lock() == _data,
                               "foreign mean-gradient publication");
@@ -201,7 +232,12 @@ namespace DNDS::Cauchy
             const auto status = work.deviceBoundaryStatus->result.To(R::Device::Host());
             RequireNumericalSuccess(status.Read().View()(0, 0), "mean-gradient boundary");
         }
-        work.PublishQueued(state);
+    }
+    void FiniteVolume::FinishMeanGradientAuxValues(const EquationDofs &state, AuxiliaryValues &output,
+                                                   MeanGradients &gradients, AuxiliaryPreparation &preparation) const
+    {
+        CheckMeanGradientBoundary(gradients);
+        gradients._data->PublishQueued(state);
         preparation.Finish(output);
     }
     real FiniteVolume::StableStep(const EquationDofs &state, const AuxiliaryValues &values, real cfl, real time) const

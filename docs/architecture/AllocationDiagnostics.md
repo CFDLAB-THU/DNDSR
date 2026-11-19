@@ -63,6 +63,14 @@ returned to the pool. Pending read/write counts cover retained Runtime uses.
 The solver-level warm-up report labels provider-private memory as unknown.
 Array totals are never a substitute for independent device-memory measurements.
 
+For AmgX, set `DNDS_AMGX_FLOW_DIAGNOSTICS=1` to log the separate per-level
+matrix, pattern, inverse, transfer and workspace counts at provider setup and
+apply. Set `AMGX_TRACK_ALLOCATIONS=1` before resource creation to also obtain
+allocator live and peak requested bytes. The allocator and per-level readings
+overlap. A borrowed level-zero matrix is counted under its DNDS Array name,
+and pool reservation is an independent capacity measure. These readings belong
+beside the Runtime snapshot when comparing total memory.
+
 Python exposes `Runtime.enable_allocation_diagnostics()`,
 `Runtime.allocation_snapshot()` and `array.name`. Snapshots expose allocation
 identity, device, capacity, labels, source site and activity; they contain no

@@ -154,20 +154,30 @@ namespace DNDS::Geom
                 pair->ghost = cellPairTable(std::move(pair->ghost));
             }
         state->relations = std::move(data.relations);
-        auto adopt = [&](auto &destination, auto &source)
-        { checkPair(source); destination = std::move(source); };
-        adopt(state->coords, data.coords);
-        adopt(state->nodeWallDist, data.nodeWallDist);
-        adopt(state->cellInfo, data.cellInfo);
-        adopt(state->bndInfo, data.bndInfo);
-        adopt(state->faceInfo, data.faceInfo);
-        adopt(state->edgeInfo, data.edgeInfo);
-        adopt(state->cellNodesPbi, data.cellNodesPbi);
-        adopt(state->bndNodesPbi, data.bndNodesPbi);
-        adopt(state->cellFacesPbi, data.cellFacesPbi);
-        adopt(state->faceNodesPbi, data.faceNodesPbi);
-        adopt(state->cellEdgesPbi, data.cellEdgesPbi);
-        adopt(state->edgeNodesPbi, data.edgeNodesPbi);
+        const bool trackAllocations = Runtime::AllocationDiagnostics::Enabled();
+        auto adopt = [&](auto &destination, auto &source, const char *name)
+        {
+            checkPair(source);
+            if (trackAllocations && source)
+            {
+                const auto path = std::string("Geom/mesh/") + name;
+                source->owned.SetName(path + "/owned", DNDS_ALLOCATION_SITE());
+                source->ghost.SetName(path + "/ghost", DNDS_ALLOCATION_SITE());
+            }
+            destination = std::move(source);
+        };
+        adopt(state->coords, data.coords, "coordinates");
+        adopt(state->nodeWallDist, data.nodeWallDist, "nodeWallDistance");
+        adopt(state->cellInfo, data.cellInfo, "cellInfo");
+        adopt(state->bndInfo, data.bndInfo, "boundaryInfo");
+        adopt(state->faceInfo, data.faceInfo, "faceInfo");
+        adopt(state->edgeInfo, data.edgeInfo, "edgeInfo");
+        adopt(state->cellNodesPbi, data.cellNodesPbi, "cellNodesPbi");
+        adopt(state->bndNodesPbi, data.bndNodesPbi, "boundaryNodesPbi");
+        adopt(state->cellFacesPbi, data.cellFacesPbi, "cellFacesPbi");
+        adopt(state->faceNodesPbi, data.faceNodesPbi, "faceNodesPbi");
+        adopt(state->cellEdgesPbi, data.cellEdgesPbi, "cellEdgesPbi");
+        adopt(state->edgeNodesPbi, data.edgeNodesPbi, "edgeNodesPbi");
         UnstructuredMeshSnapshot result(state);
         auto read = std::make_shared<MeshReadAccess>(result.AcquireRead());
         read->Validate(requirements, state->audit);

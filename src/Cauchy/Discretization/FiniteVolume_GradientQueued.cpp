@@ -5,8 +5,8 @@
 
 namespace DNDS::Cauchy
 {
-    void FiniteVolume::Workspace::SubmitGradients(R::EagerEngine &engine, const R::ExecutionStream &stream,
-                                                  const EquationDofs &state, CFV::ReconstructionRegion region)
+    void FiniteVolume::Workspace::SubmitPrimitiveGradients(R::EagerEngine &engine, const R::ExecutionStream &stream,
+                                                           const EquationDofs &state, CFV::ReconstructionRegion region)
     {
         DNDS_check_throw_info(engine.Owns(stream) && stream.Context().device == owner->metrics.Device() && state.Device() == owner->metrics.Device(),
                               "gradient submission backend or stream differs");
@@ -16,13 +16,6 @@ namespace DNDS::Cauchy
                               "invalid gradient submission region");
         DNDS_check_throw_info(state.Space().Same(owner->metrics.Space()) && state.PhysicalFieldNumber() == index(fields.size()),
                               "gradient submission row space/grouping differs");
-        for (index iField = 0; iField < index(fields.size()); ++iField)
-            if (auto &field = fields[iField]; field.gradient)
-            {
-                DNDS_check_throw_info(field.gradientBoundary && field.gradientExecution, "gradient execution workspace is missing");
-                owner->gradient.Evaluate(engine, stream, state.PhysicalField(iField), *field.gradientBoundary,
-                                         *field.gradient, *field.gradientExecution, region);
-            }
         if (!primitiveGradient)
             return;
         DNDS_check_throw_info(primitive && primitiveBoundary && primitiveGradientExecution && state.PhysicalFieldNumber() == 1,

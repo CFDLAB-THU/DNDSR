@@ -16,7 +16,8 @@ namespace DNDS::Cauchy
                                   engine.Owns(stream) && stream.Context().device == Device(),
                               "mean-gradient boundary workspace/stream differs");
         auto &work = *gradients._data;
-        work.binding.Check(state);
+        if (work.stateBinding)
+            work.stateBinding->Check(state);
         DNDS_check_throw_info(!_data->hasLocalInterfaceRows || incoming,
                               "mean gradient requires its face-center interface section");
         if (incoming)

@@ -468,16 +468,30 @@ namespace DNDS::Geom
             localized.emplace(key, result);
             return result;
         };
+        const bool trackAllocations = Runtime::AllocationDiagnostics::Enabled();
+        const auto label = [&](const Runtime::ArrayPair<index> &rows, const AdjacencyDescriptor &descriptor)
+        {
+            const auto name = "Geom/adjacency/" + adjKindName(descriptor);
+            rows.owned.SetName(name + "/owned", DNDS_ALLOCATION_SITE());
+            rows.ghost.SetName(name + "/ghost", DNDS_ALLOCATION_SITE());
+        };
         owned.LocalStage(mpi, [&]
                          {
             for (size_t slot = 0; slot < owned.relations.size(); ++slot)
                 if (owned.relations[slot])
                 {
                     data.relations[slot] = localRows(publication.relations.at(FacadeKey(slot)));
+                    if (trackAllocations)
+                        label(*data.relations[slot], Bindings()[slot]);
                 }
             for (const auto &[key, unused] : owned.namedRelations)
                 if (key != NativeSetupFacialCellNeighborsKey())
-                    data.namedRelations.emplace(key, NativeNamedRelation{localRows(publication.relations.at(key)), Adj_PointToLocal}); });
+                {
+                    auto rows = localRows(publication.relations.at(key));
+                    if (trackAllocations)
+                        label(rows, key);
+                    data.namedRelations.emplace(key, NativeNamedRelation{std::move(rows), Adj_PointToLocal});
+                } });
         auto companion = [&](auto &destination, const auto &values, EntityKind kind, const Runtime::ElementSchema &schema)
         { if (values) destination = Ghost(*values, kind, publication, schema); };
         companion(data.coords, owned.coords, EntityKind::Node, Runtime::ElementSchema::Arithmetic<real>());

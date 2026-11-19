@@ -828,7 +828,7 @@ namespace DNDS::Cauchy
                         const AdmissibilityPolicy &policy) const;
         index LastFaceFallbacks(const Workspace &workspace) const;
         /// Prepare the correction's mean-state signals. For centered RANS,
-        /// restore the gradient when another coupled stage used the workspace.
+        /// prepare the common mean gradient used by dTau and the source Jacobian.
         /// Quadrature derivatives stay paired with their original rates.
         /// A supplied interface dependency is imported before boundary reads;
         /// flow/mixture auxiliary core work independent of the interface can
@@ -843,6 +843,7 @@ namespace DNDS::Cauchy
         /// A stored rate can outlive the scratch gradient of a coupled stage.
         /// Refresh its centered RANS gradient if another evaluation overwrote
         /// the workspace. Requires the matching stage's published mean halo and interface.
+        /// The gradient is reconstructed solely from current means.
         void EnsureCenterSourceGradient(EquationDofs &state, ReconstructionState &reconstruction, Workspace &workspace,
                                         Runtime::EagerEngine &engine, const Runtime::ExecutionStream &compute,
                                         const Runtime::ExecutionStream &communication, real time) const;
@@ -899,6 +900,11 @@ namespace DNDS::Cauchy
         /// Reconstruction-independent trace producer. Retains immutable
         /// geometry and physics while reserving mutable payloads at submission;
         /// numerical CPU/CUDA dispatch does not alter the enclosing schedule.
+        MeanGradients BuildMeanGradientsImpl(EquationDofs &, OptionalRef<Workspace>) const;
+        void EnsureMeanGradientWorkspace(EquationDofs &, Workspace &) const;
+        void SubmitMeanGradientRows(Runtime::EagerEngine &, const Runtime::ExecutionStream &,
+                                    const EquationDofs &, MeanGradients &, CFV::ReconstructionRegion) const;
+        void CheckMeanGradientBoundary(const MeanGradients &) const;
         void SubmitMeanGradientBoundary(Runtime::EagerEngine &, const Runtime::ExecutionStream &,
                                         const EquationDofs &, MeanGradients &, real time,
                                         std::optional<Physics::Chemistry::ChemicalWorkerPool>,
@@ -930,19 +936,12 @@ namespace DNDS::Cauchy
         std::shared_ptr<Workspace> BuildWorkspaceImpl(EquationDofs &state,
                                                       std::optional<Physics::Chemistry::ChemicalWorkerPool> workers,
                                                       bool meanOnly, WorkspaceOptions options = WorkspaceOptions()) const;
-        enum class EvaluationPurpose
-        {
-            Spatial,
-            RestoreModalGradient,
-            RestoreDirectGradient
-        };
         void EvaluateImpl(EquationDofs &state, OptionalRef<EquationDofs> residual,
                           ReconstructionState &reconstruction, Workspace &workspace, Runtime::EagerEngine &engine,
                           const Runtime::ExecutionStream &compute,
                           const Runtime::ExecutionStream &communication, real time,
                           OptionalRef<AuxiliaryValues> auxiliary = {},
-                          OptionalRef<const QueuedEvaluationDependency> dependency = {}, OptionalRef<Runtime::Array<real>> sourceDerivative = {},
-                          EvaluationPurpose purpose = EvaluationPurpose::Spatial) const;
+                          OptionalRef<const QueuedEvaluationDependency> dependency = {}, OptionalRef<Runtime::Array<real>> sourceDerivative = {}) const;
         void ValidateEquationSourceJacobian(const EquationDofs &state,
                                             const JacobianContext &context, real time) const;
         bool AddEquationSourceJacobian(const EquationDofs &state,

@@ -68,6 +68,27 @@ namespace DNDS::Cauchy
         if ((request.cellSpectralSum && !request.faceSpectralRadius) || (request.cellWaveJump && !request.faceWaveJump) ||
             (request.cellPressureMinimum && !request.facePressureMinimum))
             values._faceScratch.emplace(R::RowLayout::Dense(faces, 3), Device());
+        const auto label = [](const auto &array, const char *name)
+        {
+            if (array)
+                array->SetName(std::string("Cauchy/auxiliary/") + name, DNDS_ALLOCATION_SITE());
+        };
+        label(values.meanThermodynamics, "meanThermodynamics");
+        label(values.faceSpectralRadius, "faceSpectralRadius");
+        label(values.faceWaveJump, "faceWaveJump");
+        label(values.facePressureMinimum, "facePressureMinimum");
+        label(values._faceScratch, "faceScratch");
+        const auto labelCells = [](const auto &field, const char *name)
+        {
+            if (!field)
+                return;
+            const auto path = std::string("Cauchy/auxiliary/") + name;
+            field->Owned().SetName(path + "/owned", DNDS_ALLOCATION_SITE());
+            field->Ghost().SetName(path + "/ghost", DNDS_ALLOCATION_SITE());
+        };
+        labelCells(values.cellSpectralSum, "cellSpectralSum");
+        labelCells(values.cellWaveJump, "cellWaveJump");
+        labelCells(values.cellPressureMinimum, "cellPressureMinimum");
         return values;
     }
     AuxiliaryRequest FiniteVolume::CompleteRHSAuxiliaryRequest(AuxiliaryRequest request) const

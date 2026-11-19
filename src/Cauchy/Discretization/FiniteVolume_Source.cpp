@@ -59,7 +59,8 @@ namespace DNDS::Cauchy
                                   "source derivative record differs from correction shape or device");
         }
         else if (_data->equation.HasRANS())
-            DNDS_check_throw_info(work.centerGradientInput && work.centerGradientInput->Current(state, work.incoming, time),
+            DNDS_check_throw_info(work.meanGradients && work.centerGradientInput &&
+                                      work.centerGradientInput->Current(state, work.incoming, time),
                                   "centered RANS Jacobian requires this stage's prepared mean gradient");
     }
     bool FiniteVolume::AddEquationSourceJacobian(const EquationDofs &state,

@@ -35,9 +35,7 @@ namespace DNDS::Cauchy
                                       "boundary interface section shape or placement differs from selected location");
         };
         validatePacket(incoming, owner->BoundaryValueRows(), owner->hasLocalInterfaceRows);
-        const bool independentCenters = primitiveBoundary || std::any_of(fields.begin(), fields.end(), [](const auto &field)
-                                                                         { return field.gradientBoundary && field.gradientBoundary->SharedStorage() != field.boundaryValues.SharedStorage(); });
-        validatePacket(incomingCenters, owner->boundaryFaces.RowCount(), independentCenters && owner->hasLocalInterfaceRows);
+        validatePacket(incomingCenters, owner->boundaryFaces.RowCount(), primitiveBoundary && owner->hasLocalInterfaceRows);
         const auto timing = BeginQueuedPhase(engine, stream, BoundaryPhase);
         struct Inputs
         {
@@ -50,7 +48,6 @@ namespace DNDS::Cauchy
             bool walls = false, mirrored = false;
             std::vector<EquationBlockLocation> means, coefficients, targets;
             std::optional<EquationBlockLocation> ransMean;
-            std::vector<index> gradientOutputs;
             index fieldNumber = 0, componentNumber = 0;
             index primitiveOutput = -1, incomingInput = -1, centerInput = -1, coefficientFirst = -1;
             index ransFirst = -1, flowFirst = -1;
@@ -101,18 +98,6 @@ namespace DNDS::Cauchy
         pin->centerInput = addPacket(incomingCenters);
         for (index iField = 0; iField < pin->fieldNumber; ++iField)
             outputs.push_back(R::WriteAs<R::UniformTableRows>(boundary.PhysicalField(iField).Owned()));
-        for (auto &field : fields)
-        {
-            if (!field.gradientBoundary)
-                pin->gradientOutputs.push_back(-1);
-            else if (field.gradientBoundary->SharedStorage() == field.boundaryValues.SharedStorage())
-                pin->gradientOutputs.push_back(index(pin->gradientOutputs.size())); // same center read role
-            else
-            {
-                pin->gradientOutputs.push_back(index(outputs.size()));
-                outputs.push_back(R::WriteAs<R::UniformTableRows>(*field.gradientBoundary));
-            }
-        }
         if (primitiveBoundary)
         {
             pin->primitiveOutput = index(outputs.size());
@@ -187,24 +172,6 @@ namespace DNDS::Cauchy
             };
             request.stateKind = pin->mirrored ? BoundaryPointStateKind::ExteriorState : BoundaryPointStateKind::FaceTrace;
             fill();
-            const bool gradient = std::any_of(pin->gradientOutputs.begin(), pin->gradientOutputs.end(), [&](index i) { return i >= pin->fieldNumber; });
-            if (gradient)
-            {
-                // A center trace is an independent evaluation of point physics,
-                // not a quadrature-row copy or an effective mirrored cell.
-                targets.clear();
-                for (const auto &location : pin->targets)
-                {
-                    const index output = pin->gradientOutputs[location.physicalField];
-                    DNDS_assert(output >= 0);
-                    targets.push_back({outputs[output], location.firstComponent, location.componentNumber});
-                }
-                request.output = {targets.data(), index(targets.size())};
-                request.centers = true;
-                request.stateKind = BoundaryPointStateKind::FaceTrace;
-                request.incoming = pin->centerInput >= 0 ? InterfaceBoundaryRows(inputs[pin->centerInput]) : InterfaceBoundaryRows{};
-                fill();
-            }
             if (pin->primitiveOutput >= 0)
             {
                 CPU::PrimitiveBoundaryRequest primitive;

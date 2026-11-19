@@ -97,9 +97,8 @@ namespace DNDS::Cauchy
 #ifdef DNDS_USE_CUDA
         if (!owner->equation.HasRANS())
             return;
-        const bool polynomial = owner->settings.numerics.reconstruction == "variational";
         const int dim = owner->metrics.Dimension(), n = int(components);
-        const auto &gradient = polynomial ? work.fields.front().gradient.value().Owned() : work.directGradients.front().Owned();
+        const auto &gradient = work.meanGradients->fields.front().Owned();
         // The enclosing synchronous preparation retains this shared object
         // through its final drain. Numerical scopes are also captured explicitly.
         const auto pin = work.deviceJacobian;

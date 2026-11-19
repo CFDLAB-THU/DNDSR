@@ -183,8 +183,9 @@ namespace DNDS::Cauchy
             request.meanThermodynamics = true;
             result->rhsAuxiliary.emplace(BuildAuxiliaryValues(request));
         }
-        if (!meanOnly && _data->equation.HasRANS() && _data->equation.RANS().ComponentNumber() == 2)
-            result->meanGradients.emplace(BuildMeanGradients(state));
+        if (std::any_of(result->fields.begin(), result->fields.end(), [](const auto &field)
+                        { return bool(field.gradient); }))
+            EnsureMeanGradientWorkspace(state, *result);
         return result;
     }
 }

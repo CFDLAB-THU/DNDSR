@@ -10,7 +10,10 @@ namespace DNDS::Cauchy
     struct MeanGradients::Data
     {
         std::weak_ptr<const void> owner;
-        EquationDofOperations::Binding binding;
+        // A standalone producer owns a halo bound to one state. The FV
+        // workspace borrows the enclosing schedule's state halo and can serve
+        // either coupled stage. The issued arrays still pin the runtime input.
+        std::optional<EquationDofOperations::Binding> stateBinding;
         std::optional<EquationDofOperations::Binding> origin;
         std::vector<CFV::FVField> fields;
         std::vector<R::Array<real>> boundary;
@@ -44,7 +47,7 @@ namespace DNDS::Cauchy
         std::vector<std::array<IssuedArray, 3>> queuedOwned;
         std::vector<IssuedArray> queuedGhost;
         real queuedTime = 0;
-        Data(std::weak_ptr<const void> plan, const EquationDofs &state) : owner(std::move(plan)), binding(state) {}
+        explicit Data(std::weak_ptr<const void> plan) : owner(std::move(plan)) {}
         void CheckQueued(const EquationDofs &state, const std::vector<CFV::FVField> &values,
                          const std::shared_ptr<const void> &plan, real atTime, bool ghosts) const
         {
@@ -53,7 +56,8 @@ namespace DNDS::Cauchy
                 Check(state, values, plan, atTime, ghosts);
                 return;
             }
-            binding.Check(state);
+            if (stateBinding)
+                stateBinding->Check(state);
             DNDS_check_throw_info(owner.lock() == plan && queuedTime == atTime && values.size() == fields.size() &&
                                       queuedOwned.size() == fields.size() && (!ghosts || queuedGhost.size() == fields.size()),
                                   "queued mean gradient provenance or halo intent is missing");
@@ -72,7 +76,8 @@ namespace DNDS::Cauchy
         }
         void RecordQueued(const EquationDofs &state, real atTime, bool ghosts)
         {
-            binding.Check(state);
+            if (stateBinding)
+                stateBinding->Check(state);
             if (!ghosts)
             {
                 DNDS_check_throw_info(!queuedSource, "mean gradient segment already pending");

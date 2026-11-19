@@ -79,6 +79,75 @@ namespace
     }
 }
 
+TEST_CASE("Centered SST source Jacobian is independent of the VR polynomial")
+{
+    auto mesh = CFVTest::CartesianHexes(mpi, 2);
+    mesh->BuildNodeWallDist([](auto zone)
+                            { return zone == 7; });
+    auto settings = Settings();
+    settings.mesh.dimension = 3;
+    settings.numerics.reconstruction = "variational";
+    settings.numerics.cfv.maxOrder = 1;
+    settings.numerics.reconstructionIterations = 0;
+    settings.numerics.reconstructionBoundaryFromPolynomial = true;
+    settings.numerics.wallDistanceFloor = 4;
+    settings.numerics.positivity = false;
+    settings.implicit.sourceJacobianMode = "center";
+    auto model = Equation(settings).RANS().Settings();
+    model.model = "KOmegaSST";
+    const auto equation = C::EquationSystem::Resolve(settings.equation).WithRANS(model);
+    C::FiniteVolume fv(mesh, settings, equation);
+    auto state = C::EquationDofs::Coupled(equation.Schema(), fv.Metrics().BuildField(7));
+    Fill(state, fv, true, .5);
+    auto residual = C::EquationDofOperations::NewVector(state);
+    auto reconstruction = fv.BuildReconstructionState(state);
+    auto work = fv.BuildWorkspace(state);
+    auto auxiliary = fv.BuildAuxiliaryValues({true, true});
+    auto firstMatrix = fv.BuildLinearProblem(state, C::DiagonalStorage::Block);
+    auto secondMatrix = fv.BuildLinearProblem(state, C::DiagonalStorage::Block);
+    R::Array<double> tau(R::RowLayout::Dense(fv.Metrics().NumCell(), 1));
+    {
+        auto write = tau.Write();
+        for (I cell = 0; cell < tau.RowCount(); ++cell)
+            write.View()(cell, 0) = 2;
+    }
+    R::EagerEngine engine;
+    const auto stream = engine.CreateCPUStream();
+    const auto evaluate = [&](C::LinearProblemContext &matrix)
+    {
+        fv.Evaluate(state, residual, *reconstruction, *work, auxiliary, engine, stream);
+        fv.PrepareJacobian(state, auxiliary, tau, matrix, {3, .7, false}, 0, {},
+                           C::FiniteVolume::JacobianContext{*reconstruction, *work});
+    };
+    evaluate(*firstMatrix);
+    auto firstResidual = residual.Clone();
+    auto guess = fv.ReconstructionGuess(*reconstruction);
+    {
+        auto write = guess.WriteOwned();
+        const auto flow = write.Block("flow");
+        const auto rans = write.Block("rans");
+        const auto modes = fv.PolynomialReconstruction()->NRecDOF();
+        for (I cell = 0; cell < flow.RowCount(); ++cell)
+        {
+            flow(cell, 2 * modes) = .08;
+            rans(cell, 0) = .015;
+            rans(cell, modes) = .3;
+        }
+    }
+    evaluate(*secondMatrix);
+    const auto a = firstMatrix->Diagonal().Read(), b = secondMatrix->Diagonal().Read();
+    for (I cell = 0; cell < tau.RowCount(); ++cell)
+        for (I j = 0; j < a.View().Width(); ++j)
+            CHECK(a.View()(cell, j) == b.View()(cell, j));
+    const auto before = firstResidual.ReadOwned(), after = residual.ReadOwned();
+    const auto u = before.Block("flow"), v = after.Block("flow");
+    double difference = 0;
+    for (I cell = 0; cell < u.RowCount(); ++cell)
+        difference += std::abs(u(cell, 2) - v(cell, 2));
+    MPI_Allreduce(MPI_IN_PLACE, &difference, 1, MPI_DOUBLE, MPI_SUM, mpi.comm);
+    CHECK(difference > 1e-6);
+}
+
 TEST_CASE("Finite-volume admissibility includes the prepared RANS mean policy")
 {
     auto mesh = CFVTest::CartesianHexes(mpi, 2);

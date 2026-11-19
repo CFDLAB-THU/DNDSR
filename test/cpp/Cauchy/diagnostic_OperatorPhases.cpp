@@ -224,6 +224,15 @@ int main(int argc, char **argv)
         };
         haloNative();
         haloLegacy();
+        if (operation == "source" || operation == "composed")
+        {
+            // Keep the independently frozen centered-source oracle even
+            // when the FV RHS uses modal reconstruction.
+            if (!workspace->meanGradients)
+                workspace->meanGradients.emplace(fv.BuildMeanGradients(state));
+            for (auto &field : workspace->meanGradients->fields)
+                DNDS::Algebra::Fill(field, 0.);
+        }
         if (degree != 3)
         {
             // This phase comparison freezes zero physical gradients, matching

@@ -54,14 +54,16 @@ namespace DNDS::Cauchy
             // and their frozen boundary values in the P0 workspace as well.
             const auto &numerics = data.settings.numerics;
             const bool meanSource = data.equation.HasRANS() &&
-                                    (meanOnly || numerics.reconstruction == "constant" ||
-                                     (numerics.reconstruction == "variational" && data.settings.implicit.sourceJacobianMode == "center"));
+                                    (meanOnly || numerics.reconstruction == "constant");
             if (meanSource || (!meanOnly && (numerics.reconstruction == "gradient" || data.limitedVRGeometry)))
             {
-                field.gradient.emplace(data.metrics.BuildField(index(physical.Width()) * data.metrics.Dimension()));
-                field.gradientBoundary.emplace(numerics.reconstruction == "variational"
-                                                   ? data.gradient.BuildBoundaryValues(index(physical.Width()))
-                                                   : field.boundaryValues);
+                field.gradient.emplace(data.metrics.BuildField(
+                    FiniteVolumeDetail::FieldLayout(physical.Owned().Layout(), data.metrics.NumCell(),
+                                                    index(physical.Width()) * data.metrics.Dimension()),
+                    data.metrics.Device()));
+                const auto name = "Cauchy/gradient/mean/" + state.Fields().Name(iField);
+                field.gradient->Owned().SetName(name + "/owned", DNDS_ALLOCATION_SITE());
+                field.gradient->Ghost().SetName(name + "/ghost", DNDS_ALLOCATION_SITE());
             }
             if (field.gradient)
                 field.gradientExecution.emplace(data.gradient.BuildWorkspace(index(physical.Width()), vectors,

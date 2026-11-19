@@ -307,7 +307,9 @@ namespace DNDS::Cauchy
         const auto status = s->scratch->result.To(R::Device::Host());
         RequireNumericalSuccess(status.Read().View<R::FixedRows<1>>()(0, 0), "queued auxiliary preparation");
         auto origin = std::make_shared<AuxiliaryValues::EquationOrigin>(s->data, s->source, output, s->time, s->boundary);
-        if (s->gradients)
+        // Internal FV scratch may be reused after completion. External
+        // publications retain their explicit input-generation check.
+        if (s->gradients && s->gradients->_data->stateBinding)
             for (const auto &field : s->gradients->fields)
                 for (const auto *array : {&field.Owned(), &field.Ghost()})
                 {

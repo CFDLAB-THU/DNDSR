@@ -32,9 +32,9 @@ namespace DNDS::Cauchy
         }
     }
 
-    /// Assemble the centered source approximation from means and the physical
-    /// gradient prepared for this evaluation. For modal RHS the gradient is
-    /// reconstructed independently before VR. Compressible mean properties
+    /// Assemble the centered source approximation from means and their common
+    /// unlimited physical gradient, independent of the modal or limited RHS.
+    /// Compressible mean properties
     /// can also be published for the flux matrix in this pass.
     bool FiniteVolume::Workspace::AddMeanSourceJacobian(const EquationDofs &state, const R::Array<real>::WriteLease &diagonal,
                                                         DiagonalStorage storage, real scale, PointEvaluator &evaluator,
@@ -47,13 +47,12 @@ namespace DNDS::Cauchy
         std::vector<std::array<SourceGradientView, 3>> gradients;
         if (ransFirst >= 0)
         {
+            DNDS_check_throw_info(meanGradients, "centered source Jacobian has no mean gradient");
             gradientReads.resize(size_t(state.PhysicalFieldNumber()));
             gradients.resize(size_t(state.PhysicalFieldNumber()));
             for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
             {
-                const auto &gradient = owner->settings.numerics.reconstruction == "variational"
-                                           ? fields[iField].gradient.value()
-                                           : directGradients[iField];
+                const auto &gradient = meanGradients->fields[iField];
                 gradientReads[iField].emplace(gradient.Owned().Read());
                 for (int d = 0; d < owner->metrics.Dimension(); ++d)
                     gradients[iField][d] = {gradientReads[iField]->View<R::UniformTableRows>(), owner->metrics.Dimension(), d};

@@ -19,10 +19,26 @@ namespace DNDS::ODE
         real _previousDt = 0;
         bool _history = false;
 
+        // Backends may attach allocation names without changing the field
+        // interface. The history storage slots can exchange roles on commit.
+        template <class Ops>
+        static auto NewStorage(const State &prototype, const char *name, int)
+            -> decltype(Ops::NewVector(prototype, name))
+        {
+            return Ops::NewVector(prototype, name);
+        }
+        template <class Ops>
+        static State NewStorage(const State &prototype, const char *, long)
+        {
+            return Ops::NewVector(prototype);
+        }
+
     public:
         BDFMethod(const State &prototype, int order, Operations operations = {})
-            : _operations(std::move(operations)), _order(order), _initial(Operations::NewVector(prototype)),
-              _previous(Operations::NewVector(prototype)), _source(Operations::NewVector(prototype))
+            : _operations(std::move(operations)), _order(order),
+              _initial(NewStorage<Operations>(prototype, "BDF/stateSlot0", 0)),
+              _previous(NewStorage<Operations>(prototype, "BDF/stateSlot1", 0)),
+              _source(NewStorage<Operations>(prototype, "BDF/resOther", 0))
         {
             DNDS_check_throw_info(order == 1 || order == 2, "unsupported BDF order");
         }

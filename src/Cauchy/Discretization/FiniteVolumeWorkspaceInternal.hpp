@@ -59,7 +59,6 @@ namespace DNDS::Cauchy
             Runtime::Array<real> boundaryValues;
             std::optional<CFV::FVField> gradient;
             std::optional<CFV::GradientWorkspace> gradientExecution;
-            std::optional<R::Array<real>> gradientBoundary;
             std::vector<index> vectorStarts;
         };
         std::shared_ptr<const Data> owner;
@@ -534,7 +533,7 @@ namespace DNDS::Cauchy
         /// Queued CFV gradient construction uses the same entry for CPU/CUDA.
         /// Primitive conversion is an operator-local backend dispatch; neither
         /// this entry nor CFV hides halo communication or host observation.
-        void SubmitGradients(R::EagerEngine &, const R::ExecutionStream &, const EquationDofs &, CFV::ReconstructionRegion);
+        void SubmitPrimitiveGradients(R::EagerEngine &, const R::ExecutionStream &, const EquationDofs &, CFV::ReconstructionRegion);
         void BuildCharacteristicStorage();
         /// Mean-based flow-five producer; scalar extension equations remain
         /// untouched. CPU consumes inline gas or declared cached mixture
