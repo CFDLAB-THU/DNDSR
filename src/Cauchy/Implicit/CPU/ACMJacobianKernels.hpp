@@ -28,6 +28,7 @@ namespace DNDS::Cauchy::CPU
         real physicalInverseDt, residualScale;
         std::array<bool, 6> active;
         EquationPhysicsProfile profile;
+        bool physicalBoundary = true;
     };
     NumericalStatus PrepareACMFluxJacobian(const ACMJacobianPreparation &) noexcept;
 }

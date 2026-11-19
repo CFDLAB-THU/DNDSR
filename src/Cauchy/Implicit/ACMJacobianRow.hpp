@@ -104,8 +104,18 @@ namespace DNDS::Cauchy::ACM
             const auto sample = stencil.JacobianSample(cell, entry);
             const auto &bc = request.conditions[sample.condition];
             const bool boundary = sample.other == UnInitIndex;
-            const auto remote = boundary ? State{} : read(sample.other);
             const real weight = request.residualScale * metric.GetFaceArea(sample.face);
+            if (boundary && !request.physicalBoundary)
+            {
+                // Euler's non-Roe boundary approximation is a scalar spectral
+                // term on the full block diagonal. It does not perturb the
+                // exterior state, including the reflected wall omega.
+                const real spectral = .5 * weight * (request.radius(sample.auxiliaryFace, 0) + request.radius(sample.auxiliaryFace, 1));
+                for (int j = 0; j < C; ++j)
+                    diagonal(j, j) += spectral;
+                continue;
+            }
+            const auto remote = boundary ? State{} : read(sample.other);
             // Freeze the viscous spectral coefficient from aux preparation.
             // Only differential transported variables diffuse. The pressure
             // equation still participates in the complete inviscid flux.

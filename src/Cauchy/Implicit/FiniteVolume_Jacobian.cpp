@@ -257,7 +257,11 @@ namespace DNDS::Cauchy
                                               controls.residualScale, evaluator, {}, output.RowMajorBlocks());
                 }
                 RequireNumericalSuccess(CPU::PrepareACMFluxJacobian(
-                                            {physics, stencil.View(), {_data->boundaryConditions.data(), index(_data->boundaryConditions.size())}, layout.View(), tau.View<R::UniformTableRows>(), radius.View<R::UniformTableRows>(), walls ? walls->HostView().cellMean : decltype(WallDistanceView::cellMean){}, diagonal.View<R::UniformTableRows>(), off->ArrayView(), controls.physicalMass, controls.residualScale, active, ResolveEquationPhysicsProfile(_data->equation)}),
+                                            {physics, stencil.View(), {_data->boundaryConditions.data(), index(_data->boundaryConditions.size())},
+                                             layout.View(), tau.View<R::UniformTableRows>(), radius.View<R::UniformTableRows>(),
+                                             walls ? walls->HostView().cellMean : decltype(WallDistanceView::cellMean){},
+                                             diagonal.View<R::UniformTableRows>(), off->ArrayView(), controls.physicalMass, controls.residualScale, active,
+                                             ResolveEquationPhysicsProfile(_data->equation), controls.scalarBoundaryDerivative}),
                                         "assemble ACM Jacobian");
             }
             catch (...)

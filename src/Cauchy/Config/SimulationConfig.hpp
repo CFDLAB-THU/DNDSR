@@ -526,7 +526,7 @@ namespace DNDS::Cauchy
             DNDS_FIELD(diagonal, "entries or full block diagonal storage");
             DNDS_FIELD(jacobianAction, "assembled (canonical) or directEvaluated off-diagonal Ax; semiMatrixFree is a compatibility spelling. Diagonal blocks and ILU factors remain explicit");
             DNDS_FIELD(sourceJacobianMode, "center: retained one-point mean source linearization; rhsQuadrature: opt-in variational source derivatives at the RHS source quadrature");
-            DNDS_FIELD(boundaryJacobian, "Scalar-dissipation boundary diagonal: physical composes the frozen exterior-state derivative; eulerScalar keeps only the spectral diagonal, matching Euler useRoeJacobian=false. Roe dissipation retains its own boundary linearization");
+            DNDS_FIELD(boundaryJacobian, "Physical or Euler spectral-only boundary linearization for ACM and compressible scalar dissipation. Compressible Roe retains its own boundary linearization");
             DNDS_FIELD(updatePolicy, "Registered update policy name; auto resolves singleStageImplicit or ditrSequential2Stage from the time method");
             DNDS_FIELD(iterations, "Maximum nonlinear corrections per physical stage");
             DNDS_FIELD(minIterations, "Minimum corrections before accepting a stage");

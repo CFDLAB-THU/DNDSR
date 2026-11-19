@@ -16,10 +16,11 @@ static DNDS::MPIInfo mpi;
 
 TEST_CASE("ACM device correction matches CPU on flow4 and mechanical SA and SST")
 {
-    for (const std::string profile : {"none", "SA", "KOmegaSST", "flow4-pMG"})
+    for (const std::string profile : {"none", "SA", "KOmegaSST", "SST-eulerScalar", "flow4-pMG"})
     {
         CAPTURE(profile);
         const bool multigrid = profile == "flow4-pMG";
+        const bool eulerScalar = profile == "SST-eulerScalar";
         C::DomainSettings settings;
         settings.mesh.dimension = 3;
         settings.equation.system = "incompressibleACM";
@@ -27,7 +28,7 @@ TEST_CASE("ACM device correction matches CPU on flow4 and mechanical SA and SST"
         settings.equation.acmPressureMean = 0;
         settings.equation.transport = "Newtonian";
         settings.equation.viscosity = .001;
-        settings.equation.rans.model = multigrid ? "none" : profile;
+        settings.equation.rans.model = multigrid ? "none" : eulerScalar ? "KOmegaSST" : profile;
         settings.equation.rans.viscosityReference = .001;
         settings.equation.referenceScales = {{"rho0", 1}, {"U0", 1}, {"L0", 1}, {"T0", 300}};
         std::vector<double> initial{.2, -.03, .04, -.1};
@@ -44,6 +45,7 @@ TEST_CASE("ACM device correction matches CPU on flow4 and mechanical SA and SST"
         settings.implicit.residualComponents.clear();
         settings.implicit.diagonal = "block";
         settings.implicit.jacobianAction = "assembled";
+        settings.implicit.boundaryJacobian = eulerScalar ? "eulerScalar" : "physical";
         settings.implicit.linear.method = "jacobi";
         settings.implicit.linear.stopping = "fixedCount";
         settings.implicit.linear.iterations = 3;

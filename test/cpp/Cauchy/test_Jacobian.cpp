@@ -46,6 +46,61 @@ TEST_CASE("ACM temporal Jacobian distinguishes pressure pseudo mass from differe
     CHECK(block(5, 5) == 12.);
 }
 
+TEST_CASE("ACM Euler scalar wall mode adds only the prepared spectral diagonal" * doctest::test_suite("rank-local"))
+{
+    auto mesh = CFVTest::CartesianHexes(mpi, 1);
+    C::DomainSettings settings;
+    settings.mesh.dimension = 3;
+    settings.equation.system = "incompressibleACM";
+    settings.equation.eos = "none";
+    settings.equation.transport = "Newtonian";
+    settings.equation.viscosity = .015;
+    settings.equation.acmBeta2 = 4;
+    settings.numerics.reconstruction = "constant";
+    settings.numerics.viscousGradient = "polynomial";
+    settings.numerics.flux = "Roe";
+    settings.boundaries["7"].kind = "noSlipWall";
+    C::FiniteVolume fv(mesh, settings, C::EquationSystem::Resolve(settings.equation));
+    auto state = Bind(fv, fv.Metrics().BuildField(4));
+    {
+        auto write = state.WriteOwned();
+        for (int j = 0; j < 4; ++j)
+            write.Block("flow")(0, j) = j == 3 ? 1 : 0;
+    }
+    C::AuxiliaryRequest auxRequest;
+    auxRequest.faceSpectralRadius = true;
+    auto auxiliary = fv.BuildAuxiliaryValues(auxRequest);
+    fv.PrepareAuxValues(state, auxiliary);
+    R::Array<double> inverseTau(R::RowLayout::Dense(1, 1));
+    inverseTau.Write().View()(0, 0) = 2;
+    auto matrix = fv.BuildLinearProblem(state, C::DiagonalStorage::Block, C::OffDiagonalStorage::Assembled);
+
+    C::JacobianPreparation controls;
+    controls.physicalMass = 5;
+    controls.residualScale = .7;
+    fv.PrepareJacobian(state, auxiliary, inverseTau, *matrix, controls);
+    const double pressurePseudoMass = .5;
+    CHECK(matrix->Diagonal().Read().View()(0, 15) == doctest::Approx(pressurePseudoMass));
+
+    controls.scalarBoundaryDerivative = false;
+    fv.PrepareJacobian(state, auxiliary, inverseTau, *matrix, controls);
+    const auto radiusRead = auxiliary.faceSpectralRadius->Read();
+    const auto radius = radiusRead.View();
+    REQUIRE(radius.RowCount() == 6);
+    // The unit cube has six unit-area walls and one unit-volume cell.
+    double spectral = 0;
+    for (DNDS::index face = 0; face < radius.RowCount(); ++face)
+        spectral += .5 * controls.residualScale * (radius(face, 0) + radius(face, 1));
+    CHECK(spectral > 0);
+    const auto diagonal = matrix->Diagonal().Read();
+    for (int j = 0; j < 4; ++j)
+        for (int i = 0; i < 4; ++i)
+        {
+            const double expected = i == j ? spectral + (i == 3 ? pressurePseudoMass : 7.) : 0.;
+            CHECK(diagonal.View()(0, i + 4 * j) == doctest::Approx(expected));
+        }
+}
+
 TEST_CASE("Scheme A characteristic action reproduces the differentiated mechanical flux")
 {
     C::ACM::Parameters parameters;

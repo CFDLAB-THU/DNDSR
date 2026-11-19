@@ -88,7 +88,8 @@ namespace DNDS::Cauchy
         /// False reproduces Euler's non-Roe boundary approximation: retain
         /// only 0.5*residualScale*faceArea*lambda on the diagonal, with no
         /// exterior-state chain rule. Interior/source blocks are unchanged.
-        /// This switch does not alter Roe boundary linearization or RHS BCs.
+        /// ACM applies it to the boundary part of its assembled Jacobian.
+        /// Compressible Roe linearization and RHS BCs are independent of it.
         bool scalarBoundaryDerivative = true;
     };
 

@@ -85,6 +85,15 @@ SA working variable or k. Omega uses the existing viscosity and cell
 wall-distance law. Opt-in boundary VTKHDF stores the face average of the
 tangential numerical momentum flux from the last observation RHS.
 
+The default `implicit.boundaryJacobian = "physical"` differentiates the
+mean-state ACM flux with the boundary exterior-state rule included.
+`"eulerScalar"` instead contributes half the face area times the sum of
+the prepared convective and viscous spectral radii, scaled by the residual
+coefficient, to each diagonal entry. This changes the approximate matrix
+at physical boundary faces on CPU and CUDA. It keeps the full ACM time
+block, the interior face linearization, and the centered source diagonal.
+The RHS and its wall states use the same flux in both modes.
+
 With variational reconstruction, `numerics.ransP1Overlay` replaces the
 RANS values and physical gradients at volume points with a linear field
 from the current means and the configured `numerics.gradient` scheme.
