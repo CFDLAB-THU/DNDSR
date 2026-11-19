@@ -85,6 +85,16 @@ SA working variable or k. Omega uses the existing viscosity and cell
 wall-distance law. Opt-in boundary VTKHDF stores the face average of the
 tangential numerical momentum flux from the last observation RHS.
 
+With variational reconstruction, `numerics.ransP1Overlay` replaces the
+RANS values and physical gradients at volume points with a linear field
+from the current means and the configured `numerics.gradient` scheme.
+The VR solve still updates every component. The overlay leaves the flow
+polynomial, quadrature and the centered source Jacobian unchanged. With
+`ransMeanFaceValues: false`, the same linear field supplies RANS face
+values and gradients before applying boundary and periodic frame rules.
+With `ransMeanFaceValues: true`, face fluxes retain mean RANS values and
+the configured face derivatives. Both switches default to `false`.
+
 The initial scope uses stationary single domains, unlimited reconstruction
 and FP64 ACM face fluxes. CUDA requires combined AoS and the resident Jacobi
 or supported Krylov path. Both CUDA face mappings have generated polynomial

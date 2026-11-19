@@ -31,6 +31,39 @@ namespace DNDS::Cauchy
             }
         }
 
+        /// Replace only the RANS point values and derivatives. Displacement
+        /// is measured from the cell barycenter in the parent cell frame.
+        template <class Mean, class Offset, class ReadGradient, class WriteGradient, class Row>
+        DNDS_DEVICE_CALLABLE void OverlayP1(int dimension, const Mean &mean, const Offset &dx,
+                                           ReadGradient gradient, WriteGradient setGradient, Row &&values) const noexcept
+        {
+            for (int j = 0; j < components; ++j)
+            {
+                real value = mean[j];
+                for (int d = 0; d < dimension; ++d)
+                {
+                    const real slope = gradient(j, d);
+                    value += slope * dx[d];
+                    setGradient(j, d, slope);
+                }
+                values[j] = value;
+            }
+        }
+
+        /// Select the interior RANS face trace before applying face-frame
+        /// transforms and boundary conditions. Derivatives live separately.
+        template <class Mean, class Row>
+        DNDS_DEVICE_CALLABLE void ApplyFacePoint(const Mean &mean, Row &&values, bool useMean) const
+        {
+            if (useMean)
+            {
+                for (int j = 0; j < components; ++j)
+                    values[j] = mean[j];
+            }
+            else
+                RepairPoint(mean, values);
+        }
+
         /// mean(q,j) must return the cell mean for every q. Active scalar
         /// limiting requires finite nonnegative means and finite point values.
         /// SA is untouched unless USE_NS_SA_NUT_REDUCED_ORDER is enabled.

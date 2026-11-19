@@ -129,6 +129,13 @@ namespace DNDS::Cauchy::CUDA
             }
             DNDS_check_throw_info(request.offsets.RowCount() == cells + 1 && request.wallPoints.RowCount() >= cells, "CUDA quadrature source geometry differs");
         }
+        if (request.ransP1Overlay)
+        {
+            DNDS_check_throw_info(!mean && request.basis.polynomial.size > 1, "RANS P1 source overlay requires volume quadrature");
+            R::ValidateViewDevices(context.device, request.ransP1Gradients, request.cells);
+            DNDS_check_throw_info(request.cells.RowCount() >= cells, "RANS P1 source overlay needs cell scaling");
+            CheckTable(request.ransP1Gradients, cells, request.components * request.dimension);
+        }
         for (int d = 0; request.basis.polynomial.size <= 1 && d < request.dimension; ++d)
         {
             const auto gradient = request.gradients[d];

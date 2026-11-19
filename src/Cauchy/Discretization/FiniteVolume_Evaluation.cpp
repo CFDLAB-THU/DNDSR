@@ -2,6 +2,7 @@
 #include "DNDS/Diagnostics/Timeline.hpp"
 #include "Cauchy/State/CPU/FieldKernels.hpp"
 #include "Cauchy/Discretization/FiniteVolumeWorkspaceInternal.hpp"
+#include "Cauchy/Discretization/FiniteVolumeAuxiliaryInternal.hpp"
 #include "DNDS/Runtime/Execution/SessionAccess.hpp"
 #include "DNDS/MPI/Failure.hpp"
 #include "DNDS/Algebra/DofHalo.hpp"
@@ -294,6 +295,7 @@ namespace DNDS::Cauchy
                                        _data->equation.RANS().ComponentNumber() == 2;
         const bool centerSourceGradient = auxiliary && _data->equation.HasRANS() &&
                                           _data->settings.implicit.sourceJacobianMode == "center";
+        const bool ransP1Overlay = !work.meanOnly && _data->settings.numerics.ransP1Overlay;
         auto reconstructionSession = reconstruction.session.Acquire();
         auto session = work.session.Acquire();
         auto activeReconstruction = work.BindReconstruction(reconstruction);
@@ -413,7 +415,7 @@ namespace DNDS::Cauchy
             }
             _data->partition.Validate();
             work.boundaryMomentumCurrent = work.boundaryFacialFluxCurrent = false; });
-        if (gradientAuxiliary || centerSourceGradient)
+        if (gradientAuxiliary || centerSourceGradient || ransP1Overlay)
             EnsureMeanGradientWorkspace(state, work);
         const bool needsAuxiliaryPreparation = auxiliary && !gradientAuxiliary;
         if (needsAuxiliaryPreparation)
@@ -517,7 +519,7 @@ namespace DNDS::Cauchy
         // The unlimited mean gradient has one producer. Direct P1, LVR, SST
         // auxiliary properties and the centered source Jacobian share it.
         const bool separateMeanGradient = !gradientAuxiliary &&
-                                          (directGradientWork || centerSourceGradient || bool(work.limitedVR));
+                                          (directGradientWork || centerSourceGradient || ransP1Overlay || bool(work.limitedVR));
         const bool gradientWork = separateMeanGradient || bool(work.primitiveGradient);
         const auto gradientBoundary = [&]
         {
@@ -588,6 +590,11 @@ namespace DNDS::Cauchy
                 else if (_data->reconstruction)
                     Algebra::Fill(engine, stream, reconstruction.WarmValues().PhysicalField(iField), 0.);
             }
+        // SST auxiliary preparation already publishes this halo. A source-only
+        // overlay reads owned gradients and needs no additional exchange.
+        std::vector<R::TransferOperation> ransP1Gradients;
+        if (!gradientAuxiliary && work.UseRANSP1FaceOverlay())
+            ransP1Gradients = schedule.BeginAfterCompute(work.meanGradients->_data->gradientHalo);
         std::optional<R::TransferOperation> primitiveGradientOperation;
         if (work.primitiveGradientHalo)
             primitiveGradientOperation.emplace(schedule.BeginAfterCompute(*work.primitiveGradientHalo));
@@ -757,6 +764,7 @@ namespace DNDS::Cauchy
         schedule.Await(operations);
         schedule.Await(unlimitedViscousOperations);
         schedule.Await(directViscousOperations);
+        schedule.Await(ransP1Gradients);
         if (primitiveGradientOperation)
             schedule.Await(*primitiveGradientOperation);
         work.SubmitDirectGradients(engine, stream, state, true);

@@ -14,6 +14,9 @@ namespace DNDS::Cauchy
         CFV::Math::TaylorBasisParameters polynomial;
         int cachedDerivatives = 0;
 
+        /// The first dimension modes are the linear displacement from the
+        /// cell barycenter divided by the cell scale. Source overlays use
+        /// these values in cached and uncached modes alike.
         /// At most P3 in three dimensions. Reuse each derivative's mode values
         /// across every equation component at this quadrature point.
         DNDS_DEVICE_CALLABLE void Fill(index cell, index point, int derivatives, real (&values)[4][19]) const noexcept

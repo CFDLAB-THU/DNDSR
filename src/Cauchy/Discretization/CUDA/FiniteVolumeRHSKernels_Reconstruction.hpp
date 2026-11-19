@@ -119,25 +119,35 @@ namespace DNDS::Cauchy::CUDA::Detail
                     point.gradients[j][d] = DNDS::Math::ScalarCast<real>(gradients[j][d]);
             }
         }
+        const auto prepareRans = [&](auto firstComponent, Physics::RANS::ModelKind kind)
+        {
+            constexpr int first = decltype(firstComponent)::value;
+            std::array<real, Components - first> mean;
+            for (int j = 0; j < Components - first; ++j)
+                mean[j] = fields.mean(iCell, first + j);
+            const RANSReconstructionView rans{kind, Components - first};
+            const SpanView<real> values{point.values.data() + first, Components - first};
+            if (controls.ransP1Overlay)
+            {
+                auto dx = ParentPoint(geometry, sample, other);
+                for (int d = 0; d < dimension; ++d)
+                    dx[d] -= geometry.cells(iCell, 4 + d);
+                const auto gradient = fields.ransP1Gradients[iCell];
+                rans.OverlayP1(dimension, mean, dx,
+                               [&](int j, int d) { return gradient[(first + j) * dimension + d]; },
+                               [&](int j, int d, real slope) { point.gradients[first + j][d] = slope; }, values);
+            }
+            rans.ApplyFacePoint(mean, values, controls.ransMeanFaceValues);
+        };
         if constexpr (std::is_same_v<Point, ACM::KernelPoint<Components>>)
         {
             if constexpr (Components > 4)
-            {
-                std::array<real, Components - 4> mean;
-                for (int j = 0; j < Components - 4; ++j)
-                    mean[j] = fields.mean(iCell, 4 + j);
-                RANSReconstructionView{parameters.rans.kind, Components - 4}.RepairPoint(mean, SpanView<real>{point.values.data() + 4, Components - 4});
-            }
+                prepareRans(std::integral_constant<int, 4>{}, parameters.rans.kind);
         }
         else
         {
             if constexpr (Components > 5)
-            {
-                std::array<real, Components - 5> mean;
-                for (int j = 0; j < Components - 5; ++j)
-                    mean[j] = fields.mean(iCell, 5 + j);
-                RANSReconstructionView{parameters.physics.rans.kind, Components - 5}.RepairPoint(mean, SpanView<real>{point.values.data() + 5, Components - 5});
-            }
+                prepareRans(std::integral_constant<int, 5>{}, parameters.physics.rans.kind);
             if (controls.primitiveGradient)
                 for (int j = 0; j < 5; ++j)
                     for (int d = 0; d < dimension; ++d)

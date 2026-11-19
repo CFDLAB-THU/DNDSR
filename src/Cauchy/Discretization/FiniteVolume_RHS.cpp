@@ -149,9 +149,9 @@ namespace DNDS::Cauchy
             meanProperties.emplace(auxiliary->meanThermodynamics->Read());
             preparedMean.emplace(meanProperties->View<R::UniformTableRows>());
         }
-        std::array<std::optional<R::Array<real>::ReadLease>, 4> stencilReads;
+        std::array<std::optional<R::Array<real>::ReadLease>, 6> stencilReads;
         RHSFieldView waveJump, pressureMinimum;
-        const auto readStencil = [&](const std::optional<CFV::FVField> &field, int slot, RHSFieldView &view)
+        const auto readStencil = [&](OptionalRef<const CFV::FVField> field, int slot, RHSFieldView &view)
         {
             if (!field)
                 return;
@@ -163,8 +163,8 @@ namespace DNDS::Cauchy
         };
         if (auxiliary)
         {
-            readStencil(auxiliary->cellWaveJump, 0, waveJump);
-            readStencil(auxiliary->cellPressureMinimum, 2, pressureMinimum);
+            readStencil(auxiliary->cellWaveJump ? OptionalRef<const CFV::FVField>(*auxiliary->cellWaveJump) : OptionalRef<const CFV::FVField>{}, 0, waveJump);
+            readStencil(auxiliary->cellPressureMinimum ? OptionalRef<const CFV::FVField>(*auxiliary->cellPressureMinimum) : OptionalRef<const CFV::FVField>{}, 2, pressureMinimum);
         }
         std::optional<EquationDofs::ReadScope> rec, viscousRec;
         R::MetadataBuffer<EquationBlockReadView> recBlocks, viscousRecBlocks;
@@ -252,6 +252,13 @@ namespace DNDS::Cauchy
         request.vectorStarts = vectorStarts.HostView();
         if (owner->equation.HasRANS())
             request.ransMean = mean.Block("rans");
+        if (UseRANSP1FaceOverlay())
+        {
+            DNDS_check_throw_info(meanGradients, "RANS P1 face overlay requires mean gradients");
+            const auto location = state.LocateBlock("rans");
+            readStencil(std::cref(meanGradients->fields[location.physicalField]), 4, request.ransP1Gradients);
+            request.ransP1First = location.firstComponent;
+        }
         request.preparedMean = preparedMean;
         request.waveJump = waveJump;
         request.pressureMinimum = pressureMinimum;
@@ -278,6 +285,7 @@ namespace DNDS::Cauchy
         request.direct = direct;
         request.linear = settings.reconstruction == "gradient";
         request.firstOrder = meanOnly || settings.firstOrderConvection;
+        request.ransMeanFaceValues = settings.ransMeanFaceValues;
         request.viscous = !meanOnly && owner->equation.Viscous();
         request.primitiveGradient = bool(primitiveGradient);
         request.hasWall = bool(wallRead);

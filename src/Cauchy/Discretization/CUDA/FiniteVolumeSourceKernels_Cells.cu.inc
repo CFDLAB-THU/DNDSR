@@ -69,7 +69,21 @@ namespace DNDS::Cauchy::CUDA::Detail
                             point.gradients[j][d] = request.gradients[d](request.cellInputs ? iCell : iPoint, j);
                     }
                     if (!mean)
-                        RANSReconstructionView{physics.rans.kind, Components - flow}.RepairPoint(ransMean, SpanView<real>{point.values.data() + flow, Components - flow});
+                    {
+                        const RANSReconstructionView rans{physics.rans.kind, Components - flow};
+                        const SpanView<real> values{point.values.data() + flow, Components - flow};
+                        if constexpr (Modes > 0)
+                            if (request.ransP1Overlay)
+                            {
+                                std::array<real, D> dx;
+                                for (int d = 0; d < D; ++d)
+                                    dx[d] = request.cells(iCell, 7) * basis[0][d];
+                                rans.OverlayP1(D, ransMean, dx,
+                                               [&](int j, int d) { return request.ransP1Gradients(iCell, (flow + j) * D + d); },
+                                               [&](int j, int d, real value) { point.gradients[flow + j][d] = value; }, values);
+                            }
+                        rans.RepairPoint(ransMean, values);
+                    }
                     const real wall = mean ? request.wallMean(iCell, 0) : request.wallPoints(iCell, iPoint - begin);
                     const real weight = mean ? request.cells(iCell, 0) : request.weights(iPoint, 0);
                     const auto evaluate = [&](const auto &input) -> NumericalResult<std::array<real, 2>>

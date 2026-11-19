@@ -520,6 +520,8 @@ namespace DNDS::Cauchy
         require(s.initialField.Empty() || s.initialProfile.kind == "constant", "spatial overrides require a constant background profile");
         require(Riemann::RiemannFlux::Available(s.numerics.flux), "numerical flux " + s.numerics.flux);
         require(s.numerics.reconstruction == "constant" || s.numerics.reconstruction == "gradient" || s.numerics.reconstruction == "variational", "reconstruction " + s.numerics.reconstruction);
+        require(!s.numerics.ransP1Overlay || (rans && s.numerics.reconstruction == "variational"),
+                "RANS P1 overlay requires RANS and variational reconstruction");
         require(s.implicit.sourceJacobianMode == "center" || s.implicit.sourceJacobianMode == "rhsQuadrature", "source Jacobian mode " + s.implicit.sourceJacobianMode);
         require(s.implicit.sourceJacobianMode != "rhsQuadrature" || s.numerics.reconstruction == "variational", "rhsQuadrature source Jacobian requires variational reconstruction");
         require(s.implicit.sourceJacobianMode != "rhsQuadrature" || s.equation.source != "none" || rans, "rhsQuadrature source Jacobian requires an active volume source");

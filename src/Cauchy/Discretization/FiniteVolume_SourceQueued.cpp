@@ -52,14 +52,17 @@ namespace DNDS::Cauchy
         DNDS_check_throw_info(preparationStatus && preparationStatus->pending, "device source requires an active preparation status segment");
         const int dimension = owner->metrics.Dimension(), components = int(state.ComponentNumber());
         const auto &empty = owner->deviceEmpty;
-        const auto &grad = sourceSampling ? empty : directGradients.front().Owned();
+        const bool ransP1 = sourceSampling && owner->settings.numerics.ransP1Overlay;
+        DNDS_check_throw_info(!ransP1 || meanGradients, "device RANS P1 source overlay requires mean gradients");
+        const auto &grad = ransP1 ? meanGradients->fields.front().Owned()
+                                 : sourceSampling ? empty : directGradients.front().Owned();
         VolumeSourceBasis basis;
         if (sourceSampling)
         {
             basis.polynomial = sourceSampling->BasisParameters();
             basis.cachedDerivatives = sourceSampling->CachedDerivativeNumber();
         }
-        auto evaluate = [pin, dimension, components, basis](R::ExecutionContext context, auto means, auto coefficients, auto grad, auto points, auto cached, auto moments, auto geometry, auto offsets, auto weights, auto lengths, auto selected, auto output, auto status, auto cells, auto wallMean, auto wallPoints, auto... derivative)
+        auto evaluate = [pin, dimension, components, basis, ransP1](R::ExecutionContext context, auto means, auto coefficients, auto grad, auto points, auto cached, auto moments, auto geometry, auto offsets, auto weights, auto lengths, auto selected, auto output, auto status, auto cells, auto wallMean, auto wallPoints, auto... derivative)
         {
             CUDA::SourceRequest request;
             ((request.preparedDerivative = derivative), ...);
@@ -69,6 +72,9 @@ namespace DNDS::Cauchy
                 request.parameters = R::MetadataArrayView(pin->owner->devicePhysics, context.device);
             request.means = means; request.cellInputs=basis.polynomial.size==0;
             request.coefficients=coefficients;
+            request.ransP1Overlay = ransP1;
+            if (ransP1)
+                request.ransP1Gradients = grad;
             request.basis=basis;
             request.basis.points=points; request.basis.cached=cached; request.basis.moments=moments; request.basis.geometry=geometry;
             for(int d=0; d<dimension; ++d) request.gradients[d]={grad,dimension,d};

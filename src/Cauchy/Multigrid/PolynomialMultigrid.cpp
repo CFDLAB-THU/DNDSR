@@ -583,6 +583,7 @@ namespace DNDS::Cauchy
         // (which retains the face-jump term). Keep reconstruction available
         // for all volume-source gradients, including RANS and chemistry.
         lower.numerics.reconstruction = "gradient";
+        lower.numerics.ransP1Overlay = false;
         // Both direct-gradient levels assemble their source derivative from
         // the level's mean and physical gradient. Only the fine VR operator
         // can own a rate/derivative pair integrated over its modal quadrature.

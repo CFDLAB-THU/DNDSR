@@ -60,6 +60,7 @@ namespace DNDS::Cauchy
             controls.direct = n.reconstruction != "variational";
             controls.linear = n.reconstruction == "gradient";
             controls.firstOrder = meanOnly || n.firstOrderConvection;
+            controls.ransMeanFaceValues = n.ransMeanFaceValues;
             controls.viscous = !meanOnly && owner->equation.Viscous();
             controls.primitiveGradient = primitiveGradient;
             controls.positivity = !controls.mechanical && n.positivity;
@@ -299,6 +300,10 @@ namespace DNDS::Cauchy
         controls.time = time;
         controls.frame = owner->motion.At(time).KernelParameters();
         controls.captureBoundaryFlux = captureBoundaryFlux;
+        controls.ransP1Overlay = UseRANSP1FaceOverlay();
+        DNDS_check_throw_info(!controls.ransP1Overlay || meanGradients, "device RANS P1 face overlay requires mean gradients");
+        const auto &ransP1Owned = controls.ransP1Overlay ? meanGradients->fields.front().Owned() : empty;
+        const auto &ransP1Ghost = controls.ransP1Overlay && ghosts ? meanGradients->fields.front().Ghost() : empty;
         if (!controls.firstOrder && (!controls.direct || controls.linear))
         {
             if (controls.direct)
@@ -331,7 +336,7 @@ namespace DNDS::Cauchy
         const auto &pressureGhost = auxiliary && auxiliary->cellPressureMinimum && ghosts ? auxiliary->cellPressureMinimum->Ghost() : empty;
         const auto &packet = incoming ? *incoming : empty;
         for (const auto *input : {&mean.Owned(), &mean.Ghost(), &recOwned, &recGhost, &visOwned, &visGhost,
-                                  &prepared, &wave, &waveGhost, &pressure, &pressureGhost, &packet})
+                                  &prepared, &wave, &waveGhost, &pressure, &pressureGhost, &packet, &ransP1Owned, &ransP1Ghost})
         {
             DNDS_check_throw_info(!output.CoupledField().Owned().Storage().Overlaps(input->Storage()),
                                   "device residual aliases a flux input");
@@ -356,16 +361,17 @@ namespace DNDS::Cauchy
         // Inactive low-order outputs alias their primary arrays deliberately;
         // the leaf never accesses them. Tracking merges their access footprints.
         R::SubmitArrays(engine, stream, [pin, controls, ghosts, hasMean, hasIncoming, hasWave, hasPressure, packageSlot = region == CFV::ReconstructionRegion::All ? 0 : region == CFV::ReconstructionRegion::Core ? 1
-                                                                                                                                                                                                                   : 2](R::ExecutionContext context, auto u, auto ug, auto rec, auto recg, auto vis, auto visg, auto prepared, auto packet, auto wave, auto waveg, auto pressure, auto pressureg, auto high, auto low, auto force, auto status, auto counts, auto selected)
+                                                                                                                                                                                                                   : 2](R::ExecutionContext context, auto u, auto ug, auto rec, auto recg, auto vis, auto visg, auto prepared, auto packet, auto wave, auto waveg, auto pressure, auto pressureg, auto rans, auto ransg, auto high, auto low, auto force, auto status, auto counts, auto selected)
                         {
                 CUDA::RHSFields fields;
                 fields.mean = {u, ug}; fields.reconstruction = {rec, recg}; fields.viscousData = {vis, visg};
                 fields.preparedMean = prepared; fields.incoming = packet;
                 fields.waveJump = {wave, waveg}; fields.pressureMinimum = {pressure, pressureg};
+                fields.ransP1Gradients = {rans, ransg};
                 fields.hasPreparedMean = hasMean; fields.hasIncoming = hasIncoming; fields.hasWave = hasWave; fields.hasPressure = hasPressure;
                 CUDA::EvaluateFluxFaces(context, *pin->geometry, pin->Parameters(), controls, fields, {high, low, force, status, counts}, selected, ghosts,
                     pin->packages[packageSlot] ? pin->packages[packageSlot]->View() : CUDA::RHSFacePackageView{}); },
-                        R::ReadAs<R::UniformTableRows>(meanInput), R::ReadAs<R::UniformTableRows>(meanGhostInput), R::ReadAs<R::UniformTableRows>(recInput), R::ReadAs<R::UniformTableRows>(recGhostInput), R::ReadAs<R::UniformTableRows>(visInput), R::ReadAs<R::UniformTableRows>(visGhostInput), R::ReadAs<R::TableRows>(prepared), R::ReadAs<R::TableRows>(packet), R::ReadAs<R::UniformTableRows>(wave), R::ReadAs<R::UniformTableRows>(waveGhost), R::ReadAs<R::UniformTableRows>(pressure), R::ReadAs<R::UniformTableRows>(pressureGhost), R::WriteAs<R::TableRows>(faceFlux), R::WriteAs<R::TableRows>(lowFace), R::WriteAs<R::FixedRows<3>>(boundaryMomentumFlux), R::WriteAs<R::FixedRows<1>>(pin->faceStatus), R::WriteAs<R::FixedRows<1>>(pin->fallbackCounts), R::ReadAs<R::FixedRows<1>>(faces));
+                        R::ReadAs<R::UniformTableRows>(meanInput), R::ReadAs<R::UniformTableRows>(meanGhostInput), R::ReadAs<R::UniformTableRows>(recInput), R::ReadAs<R::UniformTableRows>(recGhostInput), R::ReadAs<R::UniformTableRows>(visInput), R::ReadAs<R::UniformTableRows>(visGhostInput), R::ReadAs<R::TableRows>(prepared), R::ReadAs<R::TableRows>(packet), R::ReadAs<R::UniformTableRows>(wave), R::ReadAs<R::UniformTableRows>(waveGhost), R::ReadAs<R::UniformTableRows>(pressure), R::ReadAs<R::UniformTableRows>(pressureGhost), R::ReadAs<R::UniformTableRows>(ransP1Owned), R::ReadAs<R::UniformTableRows>(ransP1Ghost), R::WriteAs<R::TableRows>(faceFlux), R::WriteAs<R::TableRows>(lowFace), R::WriteAs<R::FixedRows<3>>(boundaryMomentumFlux), R::WriteAs<R::FixedRows<1>>(pin->faceStatus), R::WriteAs<R::FixedRows<1>>(pin->fallbackCounts), R::ReadAs<R::FixedRows<1>>(faces));
         R::SubmitArrays(engine, stream, [pin, low = controls.produceLow](R::ExecutionContext context, auto highFaces, auto lowFaces, auto faceStatus, auto high, auto lowValues, auto status, auto cells)
                         { CUDA::GatherFluxCells(context, *pin->geometry, highFaces, lowFaces, faceStatus, high, lowValues, status, cells, low); }, R::ReadAs<R::TableRows>(faceFlux), R::ReadAs<R::TableRows>(lowFace), R::ReadAs<R::FixedRows<1>>(pin->faceStatus), R::WriteAs<R::TableRows>(output.CoupledField().Owned()), R::WriteAs<R::TableRows>(lowOutput), R::WriteAs<R::FixedRows<1>>(pin->cellStatus), R::ReadAs<R::FixedRows<1>>(cells));
         R::SubmitArrays(engine, stream, [pin](R::ExecutionContext context, auto status, auto partial, auto result)

@@ -52,6 +52,7 @@ namespace DNDS::Cauchy::CUDA::Detail
         Reconstruction reconstruction;
         ViscousInput viscous;
         Pair<1> waveJump, pressureMinimum;
+        RHSField ransP1Gradients;
         Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::FixedRows<2>> preparedMean;
         Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::FixedRows<Components, Components>> incoming;
         bool hasPreparedMean = false, hasIncoming = false, hasWave = false, hasPressure = false;
@@ -96,6 +97,7 @@ namespace DNDS::Cauchy::CUDA::Detail
             result.waveJump = ProjectRHSField<Runtime::FixedRows<1, 1>>(fields.waveJump);
         if (fields.hasPressure)
             result.pressureMinimum = ProjectRHSField<Runtime::FixedRows<1, 1>>(fields.pressureMinimum);
+        result.ransP1Gradients = fields.ransP1Gradients;
         result.hasPreparedMean = fields.hasPreparedMean;
         result.hasIncoming = fields.hasIncoming;
         result.hasWave = fields.hasWave;

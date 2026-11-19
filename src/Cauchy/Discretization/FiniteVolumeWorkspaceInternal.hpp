@@ -366,6 +366,12 @@ namespace DNDS::Cauchy
         std::optional<R::Array<real>> lowOrderFaceFlux;
         bool boundaryMomentumCurrent = false, boundaryFacialFluxCurrent = false;
         std::optional<MeanGradients> meanGradients;
+        bool UseRANSP1FaceOverlay() const
+        {
+            const auto &settings = owner->settings.numerics;
+            return settings.ransP1Overlay && settings.reconstruction == "variational" && !settings.ransMeanFaceValues &&
+                   !meanOnly && !settings.firstOrderConvection;
+        }
         bool chemical;
         int iterations = 0;
         real relativeUpdate = 0;

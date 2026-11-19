@@ -228,6 +228,8 @@ namespace DNDS::Cauchy
         /// states retain their own contracts; interface samples are unchanged.
         std::string vrBoundaryValue = "physicalTrace";
         bool firstOrderConvection = false;
+        bool ransMeanFaceValues = false;
+        bool ransP1Overlay = false;
         std::string viscousGradient = "primitive";
         bool viscousLimited = true, noGRPOnWall = false, noRsOnWall = false;
         bool positivity = false;
@@ -265,6 +267,8 @@ namespace DNDS::Cauchy
             DNDS_FIELD(reconstructionBoundaryFromPolynomial, "Project current face polynomial through BC each VR sweep; false uses mean-based boundary values");
             DNDS_FIELD(vrBoundaryValue, "VR-only boundary target: physicalTrace or physicalMirrored (Euler reflected-state target); interface values remain prescribed samples");
             DNDS_FIELD(firstOrderConvection, "P0 face operator: cell means and jump-only normal viscosity; separate reconstruction remains available for RANS/volume sources. Used by bottom pMG");
+            DNDS_FIELD(ransMeanFaceValues, "Use cell-mean RANS scalars in face fluxes while retaining face gradients, flow/species reconstruction, and physical or interface exterior states");
+            DNDS_FIELD(ransP1Overlay, "Use the configured mean-gradient reconstruction for RANS volume points and for RANS face points when ransMeanFaceValues is off. The full VR sweep remains active");
             DNDS_FIELD(viscousGradient, "primitive retains the cell-gradient scheme; polynomial uses cached polynomial derivatives and Euler's normal face-jump penalty");
             DNDS_FIELD(viscousLimited, "Use the filtered flux polynomial for polynomial viscosity; false uses the unlimited VR guess");
             DNDS_FIELD(noGRPOnWall, "Disable the polynomial normal jump penalty on no-slip walls, retaining the polynomial gradient");

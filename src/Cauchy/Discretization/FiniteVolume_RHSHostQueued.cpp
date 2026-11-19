@@ -122,7 +122,8 @@ namespace DNDS::Cauchy
             std::optional<ReadEquation> coefficients, viscousCoefficients;
             std::optional<WriteEquation> lowResult;
             std::vector<PairSlots> gradients, viscousGradients;
-            PairSlots primitive, waveJump, pressureMinimum, derived;
+            PairSlots primitive, waveJump, pressureMinimum, derived, ransP1;
+            index ransP1First = 0;
             std::optional<DerivedFields> derivedOwned, derivedGhost;
             std::array<int, 5> derivedColumns{0, 1, 2, -1, -1};
             index derivedWidth = 3;
@@ -215,6 +216,13 @@ namespace DNDS::Cauchy
         // first-order convective trial, matching its original input contract.
         if (pin->fixed && !modal && separateViscous && pin->viscousGradients.empty() && !directViscousGradients.empty())
             pin->viscousGradients.push_back(addField(directViscousGradients.front()));
+        if (UseRANSP1FaceOverlay())
+        {
+            DNDS_check_throw_info(meanGradients, "RANS P1 face overlay requires mean gradients");
+            const auto location = state.LocateBlock("rans");
+            pin->ransP1 = addField(meanGradients->fields[location.physicalField]);
+            pin->ransP1First = location.firstComponent;
+        }
         if (primitiveGradient)
             pin->primitive = addField(*primitiveGradient);
         if (auxiliary)
@@ -367,6 +375,8 @@ namespace DNDS::Cauchy
                 request.waveJump = pin->waveJump.View(inputs);
                 request.pressureMinimum = pin->pressureMinimum.View(inputs);
                 request.primitiveGradientValues = pin->primitive.View(inputs);
+                request.ransP1Gradients = pin->ransP1.View(inputs);
+                request.ransP1First = pin->ransP1First;
                 if (pin->incoming >= 0) request.incoming = inputs[pin->incoming];
                 request.faceValues = outputs[pin->faces];
                 if (pin->lowFaces >= 0) request.lowFaceValues = outputs[pin->lowFaces];
@@ -395,6 +405,7 @@ namespace DNDS::Cauchy
                 request.direct = settings.reconstruction != "variational";
                 request.linear = settings.reconstruction == "gradient";
                 request.firstOrder = pin->meanOnly || settings.firstOrderConvection;
+                request.ransMeanFaceValues = settings.ransMeanFaceValues;
                 request.viscous = !pin->meanOnly && pin->owner->equation.Viscous();
                 request.primitiveGradient = pin->hasPrimitive;
                 request.hasWall = bool(pin->walls);

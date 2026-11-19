@@ -165,7 +165,20 @@ namespace DNDS::Cauchy::CPU
                 }
             }
             if (ransModel)
-                RANSReconstructionView{ransModel->Kind(), ransModel->ComponentNumber()}.RepairPoint(ransMean[iCell], point.values.data() + request.ransFirst);
+            {
+                const RANSReconstructionView rans{ransModel->Kind(), ransModel->ComponentNumber()};
+                const auto mean = ransMean[iCell];
+                auto *values = point.values.data() + request.ransFirst;
+                if (request.ransP1Gradients.owned.data)
+                {
+                    const auto dx = FiniteVolumeDetail::DirectFVDisplacement(metric, sample, iCell != sample.cell || side != sample.side);
+                    const auto gradient = request.ransP1Gradients[iCell];
+                    rans.OverlayP1(dim, mean, dx,
+                                   [&](int j, int d) { return gradient[(request.ransP1First + j) * dim + d]; },
+                                   [&](int j, int d, real slope) { point.gradient(request.ransFirst + j, d) = slope; }, values);
+                }
+                rans.ApplyFacePoint(mean, values, request.ransMeanFaceValues);
+            }
             if (request.primitiveGradient)
             {
                 const auto row = primitiveGradients[iCell];

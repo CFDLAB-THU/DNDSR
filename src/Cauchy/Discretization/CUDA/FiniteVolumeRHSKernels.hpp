@@ -100,6 +100,7 @@ namespace DNDS::Cauchy::CUDA
         int blockSize = 128;
         bool doubleBuffer = false, hoistFaceRows = false;
         bool mechanical = false, captureBoundaryFlux = false;
+        bool ransMeanFaceValues = false, ransP1Overlay = false;
         void Validate() const;
     };
     static_assert(std::is_trivially_copyable_v<RHSKernelControls>);
@@ -120,13 +121,13 @@ namespace DNDS::Cauchy::CUDA
         Runtime::PairReadView<real, Runtime::AccessBoundsChecks, MeanPolicy> mean;
         Runtime::PairReadView<real, Runtime::AccessBoundsChecks, CoefficientPolicy> reconstruction;
         Runtime::PairReadView<real, Runtime::AccessBoundsChecks, ViscousPolicy> viscousData;
-        RHSField waveJump, pressureMinimum;
+        RHSField waveJump, pressureMinimum, ransP1Gradients;
         RHSInput preparedMean;
         Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, IncomingPolicy> incoming;
         bool hasPreparedMean = false, hasIncoming = false, hasWave = false, hasPressure = false;
         void ValidateDevice(Runtime::Device device) const
         {
-            Runtime::ValidateViewDevices(device, mean, reconstruction, viscousData);
+            Runtime::ValidateViewDevices(device, mean, reconstruction, viscousData, ransP1Gradients);
             if (hasPreparedMean)
                 preparedMean.ValidateDevice(device);
             if (hasIncoming)

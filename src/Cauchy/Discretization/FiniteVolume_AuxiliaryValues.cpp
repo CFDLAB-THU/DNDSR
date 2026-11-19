@@ -72,11 +72,12 @@ namespace DNDS::Cauchy
                 DNDS_check_throw_info(false, "CUDA mean gradients are not built");
 #endif
             } });
+        const index overlayField = workspace && workspace->UseRANSP1FaceOverlay() ? state.LocateBlock("rans").physicalField : -1;
         for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
         {
             if (!workspace)
                 result._data->meanHalo.push_back(BindHalo(state.PhysicalField(iField)));
-            if (!workspace || (_data->equation.HasRANS() && _data->equation.RANS().ComponentNumber() == 2))
+            if (!workspace || (_data->equation.HasRANS() && _data->equation.RANS().ComponentNumber() == 2) || iField == overlayField)
                 result._data->gradientHalo.push_back(BindHalo(result.fields[iField]));
         }
         return result;

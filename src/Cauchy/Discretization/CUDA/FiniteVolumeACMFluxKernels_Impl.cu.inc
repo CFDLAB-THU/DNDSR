@@ -19,6 +19,7 @@ namespace DNDS::Cauchy::CUDA::Detail
         using Pair = Runtime::PairReadView<real, Runtime::AccessBoundsChecks, Runtime::FixedRows<Width, Width>>;
         Pair<C> mean;
         Pair<C * (M ? M : D)> reconstruction, viscousData;
+        RHSField ransP1Gradients;
     };
 
     template <int C, class Fields, class Output>
@@ -257,6 +258,7 @@ namespace DNDS::Cauchy::CUDA::Detail
         using Coefficients = Runtime::FixedRows<W, W>;
         ACMPolynomialFields<C, M, D> fields{};
         fields.mean = ProjectRHSField<State>(launch.fields.mean);
+        fields.ransP1Gradients = launch.fields.ransP1Gradients;
         if (modal || (!controls.firstOrder && controls.linear))
         {
             fields.reconstruction = ProjectRHSField<Coefficients>(launch.fields.reconstruction);

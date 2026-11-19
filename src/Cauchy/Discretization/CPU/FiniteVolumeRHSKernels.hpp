@@ -60,7 +60,8 @@ namespace DNDS::Cauchy::CPU
         SpanView<const index> logicalFirst, vectorStarts;
         EquationBlockReadView ransMean;
         std::optional<RHSScalarView> preparedMean;
-        RHSFieldView waveJump, pressureMinimum, primitiveGradientValues;
+        RHSFieldView waveJump, pressureMinimum, primitiveGradientValues, ransP1Gradients;
+        index ransP1First = 0;
         RHSScalarView incoming;
         RHSOutputView faceValues, lowFaceValues;
         Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::FixedRows<3>> wallFlux;
@@ -73,6 +74,7 @@ namespace DNDS::Cauchy::CPU
         int dimension = 0, modes = 0, species = 0;
         bool direct = false, linear = false, firstOrder = false, viscous = false;
         bool primitiveGradient = false, hasWall = false, positivity = false, faceFallback = false;
+        bool ransMeanFaceValues = false;
         bool useStencil = false, preparedWaveJump = false, preparedPressureMinimum = false, produceLow = false;
         real time = 0;
     };
