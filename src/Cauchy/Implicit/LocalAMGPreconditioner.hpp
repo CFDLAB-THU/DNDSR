@@ -15,6 +15,8 @@ namespace DNDS::Cauchy
      * aliases, retaining its owner and checking versions across provider calls. Incompatible layouts or
      * off-rank principal extraction fail explicitly. No DNDS packing, sorting,
      * transposition or index conversion is hidden in this adapter.
+     * The aggregation graph uses one immutable area/distance strength per
+     * off-diagonal block. Its pattern and strengths are attached together.
      * Pattern preparation is once per solver; values update when the frozen
      * matrix changes. Provider cycles are fixed, zero-started and linear.
      * Update/Apply drain the supplied engine before entering the provider:

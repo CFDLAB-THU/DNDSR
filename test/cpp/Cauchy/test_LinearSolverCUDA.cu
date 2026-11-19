@@ -292,7 +292,7 @@ TEST_CASE("Copy-free local AmgX consumes native int32 unsorted row-major blocks"
         columns[iCell] = {(iCell + 1) % rows, (iCell + rows - 1) % rows};
     std::vector<I> core(rows);
     std::iota(core.begin(), core.end(), I(0));
-    for (const int n : {5, 6, 7})
+    for (const int n : {4, 5, 6, 7})
         for (const bool native : {false, true})
         {
             CAPTURE(n);
@@ -305,6 +305,15 @@ TEST_CASE("Copy-free local AmgX consumes native int32 unsorted row-major blocks"
                                                                           C::OffDiagonalStorage::Assembled, device, C::LinearSweepPartitions{}, options);
             auto &problem = *problemOwner;
             CHECK(problem.HostPattern().UsesInt32());
+            // Synthetic ring with unit face areas and center spacing. There
+            // is no FV geometry for this algebra-level problem to inherit.
+            R::Array<real> strength(R::RowLayout::Dense(2 * rows, 1));
+            {
+                auto write = strength.Write();
+                for (I iEdge = 0; iEdge < strength.RowCount(); ++iEdge)
+                    write.View()(iEdge, 0) = 1;
+            }
+            problem.SetGeometricWeights(strength.To(device, {device, nullptr}));
             R::Array<real> diagonal(R::RowLayout::Dense(rows, n * n)), rhs(R::RowLayout::Dense(rows, n));
             A::BlockMatrixStorage blocks(std::vector<I>(rows, 2), n, R::Device::Host(), {}, true);
             const auto exact = [](I iCell, I j)
@@ -378,6 +387,11 @@ TEST_CASE("Copy-free local AmgX consumes native int32 unsorted row-major blocks"
             R::Array<real> padded(R::RowLayout::Dense(rows, n, n + 1), device);
             CHECK_THROWS(preconditioner.Apply(engine, stream, padded, output));
             C::DomainSettings domain;
+            if (n == 4)
+            {
+                domain.equation.system = "incompressibleACM";
+                domain.equation.eos = "none";
+            }
             if (n > 5)
             {
                 domain.equation.transport = "NewtonianFourier";

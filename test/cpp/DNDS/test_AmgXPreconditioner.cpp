@@ -295,9 +295,27 @@ TEST_CASE("Native matrix attachment shares values with fixed-cycle upload equiva
             const auto context = R::ExecutionContext::CUDA(0);
             auto values = host.To(device), rhs = hostRhs.To(device);
             R::Array<double> expected(hostRhs.Layout(), device), actual(hostRhs.Layout(), device);
-            DNDS::Algebra::AmgXPreconditioner upload(device), attached(device);
+            DNDS::Algebra::AmgXSettings settings;
+            settings.geometricAggregation = separate;
+            settings.aggregateSize = 4;
+            settings.minCoarseRows = 3;
+            DNDS::Algebra::AmgXPreconditioner upload(device, settings), attached(device, settings);
             upload.SetPattern(offsets, columns, int(width), separate);
             attached.SetPattern(offsets, columns, int(width), separate);
+            if (separate)
+            {
+                R::Array<double> weights(R::RowLayout::Dense(entries, 1));
+                {
+                    auto a = weights.Write();
+                    const auto o = offsets.Read(), c = columns.Read();
+                    for (I row = 0; row < rows; ++row)
+                        for (I j = o.View()(row, 0); j < o.View()(row + 1, 0); ++j)
+                            a.View()(j, 0) = 1.0 + std::min<I>(row, c.View()(j, 0)) % 3;
+                }
+                const auto placed = weights.To(device);
+                attached.SetGeometricWeights(placed);
+                upload.SetGeometricWeights(placed);
+            }
             {
                 const auto read = values.Read(context);
                 auto a = read.View();
@@ -353,6 +371,14 @@ TEST_CASE("Native matrix attachment shares values with fixed-cycle upload equiva
                 x.CancelUnmodified();
             }
             attached.AttachValues(context, values);
+            if (separate)
+            {
+                const auto refreshed = attached.MemorySnapshot();
+                CHECK(refreshed.copies.numericRefreshes == 1);
+                CHECK(refreshed.copies.patternHostToDevice == memory.copies.patternHostToDevice);
+                CHECK(refreshed.levels.size() == memory.levels.size());
+                CHECK(refreshed.levels.size() > 1);
+            }
             apply(attached, actual);
             {
                 const auto after = actual.To(R::Device::Host());

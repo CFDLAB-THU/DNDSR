@@ -9,7 +9,7 @@ the build recipe; an enabled dependency is not evidence of a completed solver
 adapter or numerical validation.
 
 The canonical `cfd_externals` package now builds the modified AmgX fork, pinned
-by `dependency_versions.json` (currently `cf13c94`, native storage API 1).
+by `dependency_versions.json` (native storage, diagnostics and geometric aggregation API version 1).
 CCCL 3.7 headers are supplied by `cfd_externals_headeronlys` v0.3.0, and
 Caliper is built by the binary dependency helper. For a CUDA-enabled local
 package, reuse existing MPI/HDF5/CGNS/Cantera and build only the added libraries:
@@ -31,7 +31,7 @@ Explicit `DNDS_AMGX_ROOT` and `caliper_DIR` overrides remain available. When
 moving an existing build to a new prefix, also clear or update cached
 `DNDS_AMGX_INCLUDE_DIR` / `DNDS_AMGX_LIBRARY` entries.
 
-The following independent recipe is retained only to reproduce the historical
+The following independent recipe belongs to older DNDSR revisions and their
 pre-package evidence. It patches upstream v2.5.0
 (`cc1cebdbb32b14d33762d4ddabcb2e23c1669f47`):
 
@@ -58,7 +58,7 @@ Runtime adapter calls must order input readiness and output completion according
 to AmgX's actual API, without assuming it uses the application's stream.
 
 `DNDS::Algebra::AmgXPreconditioner` accepts native block CSR for
-native block widths 1/2/3/4/5/6/7/8/9/19 (and the retained width-10 reference); Cauchy flow5/SA/2EQ remain 5/6/7 and never expand into scalar rows.
+native block widths 1/2/3/4/5/6/7/8/9/19 (and the retained width-10 reference); Cauchy ACM uses 4/5/6 components and compressible flow uses 5/6/7 and never expand into scalar rows.
 The bundled [provider patch](../../scripts/patches/README.amgx.md) enables the modal widths 9/19 throughout the selected AMG path and retains the corrected 6/7 large-block kernels.
 Genuinely scalar DNDS matrices may still use width one. `SetPattern` shares the
 caller's compact host `Runtime::Array<int>` offsets/columns and retains read
@@ -101,6 +101,30 @@ the provider mathematics, not validation of this newer copy-free boundary.
 Focused tests exercise native unsorted int32 patterns, separate row-major
 nonsymmetric 5/6/7 blocks and fixed-count solver semantics. No arbitrary
 nonsymmetric-system or all-component RANS convergence guarantee is implied.
+
+## Flow aggregation and coefficient updates
+
+Cauchy supplies one geometric edge strength for each local off-diagonal CSR
+slot. Its value is the sum of face areas divided by the corresponding
+cell-center distances. Periodic centers are evaluated in one frame. Reciprocal
+edges are checked when the linear problem is created. The physical coupled
+blocks supply the V-cycle operator. Equation ordering, individual block
+entries and changing pseudo-time steps do not change the matching weights.
+
+The flow selector targets four cells per aggregate in 2D and eight in 3D.
+At each coarser level the provider sums all fine strengths crossing between
+the same two aggregates. Subsequent coefficient updates on the same linear
+problem preserve the aggregate maps, transfers and CSR slot order. A numeric
+resetup recomputes the physical coarse blocks and block-Jacobi inverses.
+Changing connectivity, ordering or relative geometry requires a newly
+prepared spatial operator and linear problem. Each pMG level owns its own
+linear system. CFV reconstruction AMG retains its algebraic matching policy.
+
+For a single-device diagnostic, set `DNDS_AMGX_FLOW_DIAGNOSTICS=1`.
+The emitted report includes initial setup and numeric refresh times. The first
+application measures the largest absolute correction component and the true
+linear defect `max(abs(b - A x))`, along with `max(abs(b))` for scale. Those
+measurements require an extra matrix action and completed reductions.
 
 ## Caller-stream extension investigation
 

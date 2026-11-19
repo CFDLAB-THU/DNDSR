@@ -8,6 +8,9 @@
 #include "Cauchy/Physics/PhysicalFlux.hpp"
 #include "Cauchy/Implicit/CPU/FiniteVolumeJacobianKernels.hpp"
 #include "Cauchy/Implicit/CPU/ACMJacobianKernels.hpp"
+#ifdef DNDS_USE_CUDA
+#    include "Cauchy/Implicit/CUDA/AMGGeometry.hpp"
+#endif
 #include "Cauchy/Physics/PointWorkerContexts.hpp"
 #include "Cauchy/Discretization/FiniteVolumeInternal.hpp"
 
@@ -152,8 +155,19 @@ namespace DNDS::Cauchy
                 partitions.starts.push_back(Mesh().LocalPartStart(part));
             partitions.starts.push_back(Mesh().LocalPartEnd(Mesh().NLocalParts() - 1));
         }
-        return std::make_shared<LinearProblemContext>(prototype.Space(), prototype.ComponentNumber(),
-                                                      _data->jacobianColumns->CopyColumns(), _data->partition.Core(), diagonal, offDiagonal, prototype.Device(), std::move(partitions), storage);
+        auto problem = std::make_shared<LinearProblemContext>(prototype.Space(), prototype.ComponentNumber(),
+                                                              _data->jacobianColumns->CopyColumns(), _data->partition.Core(), diagonal, offDiagonal, prototype.Device(), std::move(partitions), storage);
+#ifdef DNDS_USE_CUDA
+        if (prototype.Device().space == R::MemorySpace::CUDA && storage.rowMajorBlocks &&
+            storage.indices == LinearIndexStorage::Int32 && offDiagonal == OffDiagonalStorage::Assembled &&
+            (!prototype.Space().Distributed() || MPIInfo(prototype.Space().Communicator()).size == 1))
+        {
+            const R::ExecutionContext context{prototype.Device(), nullptr};
+            const auto stencil = _data->stencil.Read(context);
+            problem->SetGeometricWeights(CUDA::BuildAMGGeometricWeights(context, stencil, problem->ResidentPattern()));
+        }
+#endif
+        return problem;
     }
     void FiniteVolume::PrepareJacobian(const EquationDofs &state, const AuxiliaryValues &auxiliary, const R::Array<real> &inversePseudoTime,
                                        LinearProblemContext &output, JacobianPreparation controls, real time, std::optional<Physics::Chemistry::ChemicalWorkerPool> workers,

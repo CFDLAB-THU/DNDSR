@@ -17,6 +17,7 @@
 #include "DNDS/Runtime/Execution/CUDAExecution.hpp"
 #include "../CFV/ReconstructionFixture.hpp"
 #include "CompactManagedStencilFixture.hpp"
+#include "CartesianFixture.hpp"
 
 namespace C = DNDS::Cauchy;
 namespace R = DNDS::Runtime;
@@ -39,6 +40,37 @@ namespace
                 CHECK(std::isfinite(b.View()(iCell, j)));
                 CHECK(b.View()(iCell, j) == doctest::Approx(a.View()(iCell, j)).epsilon(3e-8).scale(1));
             }
+    }
+}
+
+TEST_CASE("Flow AmgX matches periodic images and sums faces in the native CSR slots")
+{
+    if (mpi.size != 1)
+        return;
+    const auto device = R::Device::CUDA(0);
+    for (const I width : {2, 3})
+    {
+        CAPTURE(width);
+        C::DomainSettings settings;
+        settings.mesh.dimension = 2;
+        settings.numerics.reconstruction = "constant";
+        const auto equation = C::EquationSystem::Resolve(settings.equation);
+        const C::FiniteVolume cpu(CauchyTest::PeriodicQuads(mpi, width), settings, equation);
+        const auto plan = cpu.Placed(device, {device, nullptr});
+        const auto state = C::EquationDofs::Coupled(equation.Schema(), plan.Metrics().BuildField(5));
+        C::LinearMatrixOptions storage;
+        storage.rowMajorBlocks = true;
+        storage.indices = C::LinearIndexStorage::Int32;
+        const auto problem = plan.BuildLinearProblem(state, C::DiagonalStorage::Block, C::OffDiagonalStorage::Assembled, storage);
+        const auto weights = problem->GeometricWeights().To(R::Device::Host(), {device, nullptr});
+        const auto read = weights.Read();
+        // Every square has four faces with S/d=1. On the 2x2 torus each
+        // opposite pair reaches one cell and shares its off-diagonal block.
+        // On the 3x3 torus the wrapped physical centers are two spacings apart.
+        const I neighbors = width == 2 ? 2 : 4;
+        REQUIRE(weights.RowCount() == width * width * neighbors);
+        for (I slot = 0; slot < weights.RowCount(); ++slot)
+            CHECK(read.View()(slot, 0) == doctest::Approx(4. / neighbors));
     }
 }
 

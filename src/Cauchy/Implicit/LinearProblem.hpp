@@ -132,6 +132,7 @@ namespace DNDS::Cauchy
         bool _rowMajorBlocks;
         Runtime::Array<real> _diagonal, _inverse;
         std::optional<Runtime::Array<real>> _nativeAMGXValues;
+        std::optional<Runtime::Array<real>> _geometricWeights;
         OffDiagonalStorage _offDiagonalStorage;
         std::optional<Algebra::BlockMatrixStorage> _offDiagonal;
         std::shared_ptr<const OffDiagonalEvaluator> _offDiagonalEvaluator;
@@ -190,6 +191,14 @@ namespace DNDS::Cauchy
         index Components() const { return _components; }
         bool RowMajorBlocks() const { return _rowMajorBlocks; }
         bool HasNativeAMGXValues() const { return bool(_nativeAMGXValues); }
+        /// Publish one immutable strength per off-diagonal CSR slot at setup.
+        /// Synthetic operators without an FV mesh must supply their graph weights explicitly.
+        void SetGeometricWeights(Runtime::Array<real> weights);
+        const Runtime::Array<real> &GeometricWeights() const
+        {
+            DNDS_check_throw_info(_geometricWeights, "flow AmgX requires geometric strengths matching its native CSR pattern");
+            return *_geometricWeights;
+        }
         const Runtime::Array<real> &NativeAMGXValues() const
         {
             DNDS_check_throw_info(_nativeAMGXValues, "linear matrix has no native AmgX packed allocation");
@@ -212,6 +221,7 @@ namespace DNDS::Cauchy
         /// Native host symbolic publication, shared with a compatible provider.
         /// No index conversion, sorting or rank-local filtering is performed.
         const LinearPatternStorage &HostPattern() const { return Layout().hostRows ? *Layout().hostRows : Layout().rows; }
+        const LinearPatternStorage &ResidentPattern() const { return Layout().rows; }
         /// Validate an immutable producer stencil once, then compare identity.
         /// Caller serializes preparation with context use. Retaining the token
         /// prevents address reuse; a new mesh/order supplies a new token.

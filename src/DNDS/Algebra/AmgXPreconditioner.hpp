@@ -23,6 +23,11 @@ namespace DNDS::Algebra
         real relaxation = 0.75;
         AmgXBlockFormat blockFormat = AmgXBlockFormat::RowMajor;
         int aggregateSize = 2;
+        /// Freeze aggregation from supplied face conductances and refresh only
+        /// numeric coarse operators and smoother data on coefficient changes.
+        bool geometricAggregation = false;
+        /// Measure the true residual and correction on the first fixed-cycle application.
+        bool measureFirstCorrection = false;
     };
 
     /// Provider-owned capacities exclude borrowed finest values and allocator reserve.
@@ -36,7 +41,13 @@ namespace DNDS::Algebra
     {
         uint64_t patternHostToDevice = 0, matrixDeviceToDevice = 0;
         uint64_t rhsDeviceToDevice = 0, resultDeviceToDevice = 0;
-        uint64_t setups = 0, applications = 0;
+        uint64_t setups = 0, applications = 0, numericRefreshes = 0;
+        double hierarchySetupSeconds = 0, numericRefreshSeconds = 0;
+        struct FirstCorrection
+        {
+            real rhsMax, correctionMax, defectMax;
+        };
+        std::optional<FirstCorrection> firstCorrection;
     };
     /** @brief Explicit completed provider diagnostic snapshot.
      * @details requestedLive/Peak are AmgX allocator requests, enabled by
@@ -109,6 +120,10 @@ namespace DNDS::Algebra
         /// provider for a replacement pattern. This is checked before mutation.
         void SetPattern(const Runtime::Array<int> &offsets,
                         const Runtime::Array<int> &columns, int blockSize = 1, bool separateDiagonal = false);
+        /// Supply one immutable CUDA FP64 conductance per CSR slot, after SetPattern
+        /// and before the first setup. The fork consumes a copy at first setup.
+        /// A new geometry, numbering or connectivity requires a new provider.
+        void SetGeometricWeights(const Runtime::Array<real> &weights);
         /// Device values ordered by CSR entry, then configured block order,
         /// stored as a compact scalar table. Upload/rebuild is outside
         /// the Krylov solve. Repeated calls reuse the matrix's published pattern.

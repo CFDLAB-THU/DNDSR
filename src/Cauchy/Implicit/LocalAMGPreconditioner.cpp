@@ -48,8 +48,8 @@ namespace DNDS::Cauchy
     {
         problem.Validate();
         DNDS_check_throw_info(problem.Device().space == R::MemorySpace::CUDA && problem.HasAssembledOffDiagonal() &&
-                                  problem.DiagonalMode() == DiagonalStorage::Block && problem.RowMajorBlocks() && problem.OffDiagonal().RowMajorBlocks() && problem.Components() >= 5 && problem.Components() <= 7,
-                              "local AmgX requires native row-major assembled CUDA full 5/6/7 blocks");
+                                  problem.DiagonalMode() == DiagonalStorage::Block && problem.RowMajorBlocks() && problem.OffDiagonal().RowMajorBlocks() && problem.Components() >= 4 && problem.Components() <= 7,
+                              "local AmgX requires native row-major assembled CUDA full 4/5/6/7 blocks");
         DNDS_check_throw_info(!problem.Space().Distributed() || MPIInfo(problem.Space().Communicator()).size == 1,
                               "copy-free local AmgX currently requires one rank; native principal-matrix partitions are future work");
         const index rows = index(problem.Space().OwnedRows()), n = problem.Components();
@@ -67,8 +67,12 @@ namespace DNDS::Cauchy
         // native DNDS blocks. It copies into its private provider storage; DNDS
         // neither assembles another matrix nor transposes, filters or converts.
         settings.blockFormat = Algebra::AmgXBlockFormat::RowMajor;
+        const auto &weights = problem.GeometricWeights();
+        settings.geometricAggregation = true;
+        settings.measureFirstCorrection = data.diagnostics;
         data.provider = std::make_shared<Algebra::AmgXPreconditioner>(problem.Device(), settings);
         data.provider->SetPattern(pattern.Offsets32(), pattern.Columns32(), int(n), true);
+        data.provider->SetGeometricWeights(weights);
         data.Report("provider_created", 0, uint64_t(rows + problem.OffDiagonal().Values().RowCount()) * n * n * sizeof(real));
     }
     void LocalAMGPreconditioner::Update(R::EagerEngine &engine, const R::ExecutionStream &stream, const LinearProblemContext &problem)

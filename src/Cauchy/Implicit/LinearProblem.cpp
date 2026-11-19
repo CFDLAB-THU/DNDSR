@@ -137,6 +137,15 @@ namespace DNDS::Cauchy
             _offDiagonalStoragePin = _offDiagonal->Values().SharedStorage();
         PrepareActionWorkspace();
     }
+    void LinearProblemContext::SetGeometricWeights(R::Array<real> weights)
+    {
+        DNDS_check_throw_info(!_geometricWeights && HasAssembledOffDiagonal() && ResidentPattern().UsesInt32() &&
+                                  weights.GetDevice() == Device() && weights.Layout().Kind() == R::RowLayoutKind::Table &&
+                                  weights.Layout().Width() == 1 && weights.Layout().Stride() == 1 &&
+                                  weights.RowCount() == ResidentPattern().Columns32().RowCount(),
+                              "geometric strengths need a fresh compact scalar field in native CSR order");
+        _geometricWeights.emplace(std::move(weights));
+    }
     void LinearProblemContext::ValidateMatrix() const
     {
         Layout();

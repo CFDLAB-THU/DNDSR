@@ -2,6 +2,7 @@
 #include "DNDS/Algebra/AmgXPreconditioner.hpp"
 #include "DNDS/Runtime/Array/Array.hpp"
 #include <cmath>
+#include <chrono>
 #include <limits>
 #include <mutex>
 #include <sstream>
@@ -10,6 +11,7 @@
 #ifdef DNDS_USE_AMGX
 #    include <amgx_c.h>
 #    include <cuda_runtime_api.h>
+#    include <cublas_v2.h>
 #endif
 
 namespace DNDS::Algebra
@@ -49,6 +51,18 @@ namespace DNDS::Algebra
         void CheckCUDA(cudaError_t code)
         {
             DNDS_check_throw_info(code == cudaSuccess, std::string("AmgX CUDA boundary: ") + cudaGetErrorString(code));
+        }
+        // First-apply diagnostic only. Reduce on the device so a large case
+        // copies just one selected scalar per vector to the controller.
+        real MaximumMagnitude(const real *data, int count, cublasHandle_t handle)
+        {
+            int oneBased = 0;
+            DNDS_check_throw_info(cublasIdamax(handle, count, data, 1, &oneBased) == CUBLAS_STATUS_SUCCESS &&
+                                      oneBased >= 1 && oneBased <= count,
+                                  "AmgX diagnostic maximum failed");
+            real value;
+            CheckCUDA(cudaMemcpy(&value, data + oneBased - 1, sizeof(value), cudaMemcpyDeviceToHost));
+            return std::abs(value);
         }
         void ReadAllocatorMemory(AmgXMemorySnapshot &output)
         {
@@ -93,6 +107,8 @@ namespace DNDS::Algebra
             text << R"({"config_version":2,"determinism_flag":1,"block_format":")"
                  << (s.blockFormat == AmgXBlockFormat::ColumnMajor ? "COL_MAJOR" : "ROW_MAJOR")
                  << R"(","solver":{"solver":"AMG",)"
+                 << (s.measureFirstCorrection ? R"("norm":"LMAX","use_scalar_norm":1,)" : "")
+                 << (s.geometricAggregation ? R"("weight_formula":2,"structure_reuse_levels":-1,)" : "")
                  << R"("algorithm":"AGGREGATION","selector":"SIZE_)" << s.aggregateSize << R"(","cycle":"V",)"
                  << R"("smoother":{"solver":"BLOCK_JACOBI","monitor_residual":0,"print_solve_stats":0,"relaxation_factor":)"
                  << s.relaxation << R"(},"coarse_solver":"NOSOLVER","monitor_residual":0,)"
@@ -159,7 +175,9 @@ namespace DNDS::Algebra
         Runtime::Device device;
         Runtime::Array<int> offsets, columns;
         std::optional<Runtime::Array<int>::ReadLease> offsetRead, columnRead;
-        bool separateDiagonal = false;
+        bool separateDiagonal = false, geometricAggregation = false, measureFirstCorrection = false;
+        std::optional<Runtime::Array<real>> geometricWeights;
+        uint64_t weightEpoch = 0;
         index rows = 0, entries = 0;
         int blockSize = 1;
         bool pattern = false, uploaded = false, ready = false;
@@ -172,6 +190,37 @@ namespace DNDS::Algebra
         AMGX_matrix_handle matrix = nullptr;
         AMGX_vector_handle rhs = nullptr, solution = nullptr;
         AMGX_solver_handle solver = nullptr;
+        // Native values may already be attached. Reattaching them would reset
+        // provider structure and copy indices on every nonlinear iteration.
+        void SetupOrRefresh(Runtime::ExecutionContext context)
+        {
+            const auto start = std::chrono::steady_clock::now();
+            const bool refresh = geometricAggregation && uploaded;
+            if (refresh)
+            {
+                Check(AMGX_solver_resetup(solver, matrix));
+                ++copies.numericRefreshes;
+            }
+            else
+            {
+                if (geometricAggregation)
+                {
+                    DNDS_check_throw_info(geometricWeights.has_value(), "geometric AmgX needs weights before matrix setup");
+                    auto read = geometricWeights->Read(context);
+                    DNDS_check_throw_info(geometricWeights->MutationEpoch() == weightEpoch, "AmgX geometric weights changed before setup");
+                    Check(AMGX_matrix_attach_edge_weights(matrix, int(entries), read.View().data));
+                    CheckCUDA(cudaDeviceSynchronize());
+                }
+                Check(AMGX_solver_setup(solver, matrix));
+            }
+            CheckCUDA(cudaDeviceSynchronize());
+            const auto seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+            if (refresh)
+                copies.numericRefreshSeconds += seconds;
+            else
+                copies.hierarchySetupSeconds += seconds;
+            ++copies.setups;
+        }
         ~State()
         {
             if (!provider)
@@ -221,6 +270,8 @@ namespace DNDS::Algebra
         DNDS_check_throw_info(settings.blockFormat == AmgXBlockFormat::RowMajor,
                               "the selected AmgX BLOCK_JACOBI hierarchy requires native row-major blocks; transposition is not implemented");
         _state->device = device;
+        _state->geometricAggregation = settings.geometricAggregation;
+        _state->measureFirstCorrection = settings.measureFirstCorrection;
 #ifdef DNDS_USE_AMGX
         std::lock_guard<std::mutex> lock(Provider().mutex);
         DeviceScope scope(device.ordinal);
@@ -239,7 +290,7 @@ namespace DNDS::Algebra
     void AmgXPreconditioner::SetPattern(const Runtime::Array<int> &offsetArray, const Runtime::Array<int> &columnArray,
                                         int blockSize, bool separateDiagonal)
     {
-        DNDS_check_throw_info(!_state->nativeValues,
+        DNDS_check_throw_info(!_state->nativeValues && !(_state->geometricAggregation && _state->uploaded),
                               "AmgX native attachment freezes the pattern; create another provider for a new pattern");
         DNDS_check_throw_info((blockSize >= 1 && blockSize <= 10) || blockSize == 19, "unsupported AmgX native block width");
         auto offsetRead = offsetArray.Read(), columnRead = columnArray.Read();
@@ -279,6 +330,7 @@ namespace DNDS::Algebra
             DNDS_check_throw_info(separateDiagonal ? !diagonal : diagonal,
                                   "AmgX diagonal presence differs from its declared native representation");
         }
+        _state->geometricWeights.reset();
         _state->offsetRead.reset();
         _state->columnRead.reset();
         _state->offsets = offsetArray;
@@ -291,6 +343,18 @@ namespace DNDS::Algebra
         _state->separateDiagonal = separateDiagonal;
         _state->pattern = true;
         _state->uploaded = _state->ready = false;
+    }
+
+    void AmgXPreconditioner::SetGeometricWeights(const Runtime::Array<real> &weights)
+    {
+        DNDS_check_throw_info(_state->geometricAggregation && _state->pattern && !_state->uploaded,
+                              "supply geometric weights after setting the pattern and before setup");
+        const auto layout = weights.Layout();
+        DNDS_check_throw_info(weights.GetDevice() == GetDevice() && layout.Kind() == Runtime::RowLayoutKind::Table &&
+                                  layout.Width() == 1 && layout.Stride() == 1 && layout.RowCount() == _state->entries,
+                              "AmgX geometry requires one device scalar per CSR slot");
+        _state->geometricWeights = weights;
+        _state->weightEpoch = weights.MutationEpoch();
     }
 
     void AmgXPreconditioner::UpdateValuesBorrowed(Runtime::ExecutionContext context, Runtime::ArrayView<const real> values,
@@ -326,9 +390,7 @@ namespace DNDS::Algebra
             if (!_state->uploaded)
                 _state->copies.patternHostToDevice += uint64_t(sizeof(int)) * (_state->rows + 1 + _state->entries);
             _state->copies.matrixDeviceToDevice += uint64_t(sizeof(real)) * (_state->entries + (_state->separateDiagonal ? _state->rows : 0)) * _state->blockSize * _state->blockSize;
-            ++_state->copies.setups;
-            Check(AMGX_solver_setup(_state->solver, _state->matrix));
-            CheckCUDA(cudaDeviceSynchronize());
+            _state->SetupOrRefresh(context);
         }
         _state->uploaded = _state->ready = true;
 #endif
@@ -343,6 +405,8 @@ namespace DNDS::Algebra
         DNDS_check_throw_info(values.GetDevice() == GetDevice() && layout.Kind() == Runtime::RowLayoutKind::Table &&
                                   layout.Stride() == layout.Width() && layout.RowCount() * layout.Width() == elements,
                               "AmgX attachment requires one compatible compact native values allocation");
+        DNDS_check_throw_info(!_state->geometricAggregation || !_state->nativeValues || values.Identity() == _state->nativeValues->Identity(),
+                              "geometric AmgX refresh requires the original native coefficient allocation");
         _state->ready = false;
         auto read = values.Read(context);
         // Retain before entering the provider so failed setup cannot leave a
@@ -356,18 +420,19 @@ namespace DNDS::Algebra
         {
             // Matrix owns only a non-owning numeric view; this retained Array
             // owns the actual allocation until after provider destruction.
-            Check(AMGX_matrix_attach_device_values(_state->matrix, int(_state->rows), int(_state->entries), _state->blockSize,
-                                                   _state->offsetRead->View().data, _state->columnRead->View().data,
-                                                   const_cast<real *>(read.View().data), size_t(elements), _state->separateDiagonal));
-            _state->copies.patternHostToDevice += uint64_t(sizeof(int)) * (_state->rows + 1 + _state->entries);
+            if (!_state->geometricAggregation || !_state->uploaded)
+            {
+                Check(AMGX_matrix_attach_device_values(_state->matrix, int(_state->rows), int(_state->entries), _state->blockSize,
+                                                       _state->offsetRead->View().data, _state->columnRead->View().data,
+                                                       const_cast<real *>(read.View().data), size_t(elements), _state->separateDiagonal));
+                _state->copies.patternHostToDevice += uint64_t(sizeof(int)) * (_state->rows + 1 + _state->entries);
+            }
             if (!_state->uploaded)
             {
                 Check(AMGX_vector_bind(_state->rhs, _state->matrix));
                 Check(AMGX_vector_bind(_state->solution, _state->matrix));
             }
-            Check(AMGX_solver_setup(_state->solver, _state->matrix));
-            ++_state->copies.setups;
-            CheckCUDA(cudaDeviceSynchronize());
+            _state->SetupOrRefresh(context);
         }
 #endif
         _state->nativeEpoch = values.MutationEpoch();
@@ -452,6 +517,20 @@ namespace DNDS::Algebra
         DNDS_check_throw_info(status == AMGX_SOLVE_SUCCESS || status == AMGX_SOLVE_NOT_CONVERGED,
                               "AmgX fixed-cycle preconditioner failed or diverged");
         Check(AMGX_vector_download(_state->solution, correction.data));
+        if (_state->measureFirstCorrection && !_state->copies.firstCorrection)
+        {
+            CheckCUDA(cudaDeviceSynchronize());
+            AmgXCopyStatistics::FirstCorrection first{};
+            Check(AMGX_solver_calculate_residual_norm(_state->solver, _state->matrix, _state->rhs, _state->solution, &first.defectMax));
+            cublasHandle_t handle;
+            DNDS_check_throw_info(cublasCreate(&handle) == CUBLAS_STATUS_SUCCESS, "AmgX diagnostic BLAS handle creation failed");
+            const auto release = [](cublasContext *h)
+            { if (cublasDestroy(h) != CUBLAS_STATUS_SUCCESS) std::abort(); };
+            const std::unique_ptr<cublasContext, decltype(release)> owner(handle, release);
+            first.rhsMax = MaximumMagnitude(residual.data, int(RowNumber()), handle);
+            first.correctionMax = MaximumMagnitude(correction.data, int(RowNumber()), handle);
+            _state->copies.firstCorrection = first;
+        }
         ++_state->copies.applications;
         _state->copies.rhsDeviceToDevice += uint64_t(sizeof(real)) * RowNumber();
         _state->copies.resultDeviceToDevice += uint64_t(sizeof(real)) * RowNumber();
