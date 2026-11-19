@@ -16,6 +16,9 @@
 
 namespace DNDS::Algebra
 {
+#ifdef DNDS_USE_AMGX
+    int ComputeAmgXBlockInverse(int rows, int width, const int *diag, const double *values, double *inverse);
+#endif
     namespace
     {
         template <class T>
@@ -277,6 +280,11 @@ namespace DNDS::Algebra
         DeviceScope scope(device.ordinal);
         _state->provider = AcquireResources(device);
         Check(AMGX_config_create(&_state->config, Configuration(settings).c_str()));
+        if (settings.robustACMInverse)
+        {
+            static const AMGX_block_inverse inverse{ComputeAmgXBlockInverse};
+            Check(AMGX_config_set_block_inverse(_state->config, &inverse));
+        }
         Check(AMGX_matrix_create(&_state->matrix, _state->provider->handle, AMGX_mode_dDDI));
         Check(AMGX_vector_create(&_state->rhs, _state->provider->handle, AMGX_mode_dDDI));
         Check(AMGX_vector_create(&_state->solution, _state->provider->handle, AMGX_mode_dDDI));

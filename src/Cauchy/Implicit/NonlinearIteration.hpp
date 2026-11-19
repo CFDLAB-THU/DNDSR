@@ -55,7 +55,7 @@ namespace DNDS::Cauchy::NonlinearDetail
         result.amgxNativeStorage = settings.matrixStorage.amgxStorage == "native";
         return result;
     }
-    inline LinearSolveSettings ResolveLinear(const ImplicitSettings &settings, int dimension)
+    inline LinearSolveSettings ResolveLinear(const ImplicitSettings &settings, int dimension, bool acm = false)
     {
         LinearSolveSettings result;
         result.method = settings.linear.method;
@@ -67,6 +67,7 @@ namespace DNDS::Cauchy::NonlinearDetail
         result.relativeTolerance = settings.linear.relativeTolerance;
         result.absoluteTolerance = settings.linear.absoluteTolerance;
         result.sgsSweeps = settings.sgs.sweeps;
+        result.robustACMInverse = acm;
         result.amgxAggregateSize = settings.linear.amgxAggregateSize ? settings.linear.amgxAggregateSize : (dimension == 3 ? 8 : 4);
         result.jacobiLocalSweeps = settings.linear.jacobiLocalSweeps;
         result.diagonalInverseRefinement = settings.linear.diagonalInverseRefinement;

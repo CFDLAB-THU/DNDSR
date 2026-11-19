@@ -401,3 +401,75 @@ TEST_CASE("Native matrix attachment shares values with fixed-cycle upload equiva
             apply(attached, actual);
         }
 }
+
+TEST_CASE("ACM block Jacobi preserves a null component through every geometric level and numeric refresh")
+{
+    constexpr int cells = 64;
+    const auto device = R::Device::CUDA(0);
+    const auto context = R::ExecutionContext::CUDA(0);
+    for (const int width : {4, 5, 6})
+    {
+        CAPTURE(width);
+        R::Array<int> offsets(R::RowLayout::Dense(cells + 1, 1)), columns(R::RowLayout::Dense(2 * cells, 1));
+        R::Array<double> weights(columns.Layout()), rhs(R::RowLayout::Dense(cells * width, 1));
+        {
+            auto o = offsets.Write(), c = columns.Write();
+            auto w = weights.Write(), r = rhs.Write();
+            for (int i = 0; i < cells; ++i)
+            {
+                o.View()(i, 0) = 2 * i;
+                c.View()(2 * i, 0) = std::min((i + 1) % cells, (i + cells - 1) % cells);
+                c.View()(2 * i + 1, 0) = std::max((i + 1) % cells, (i + cells - 1) % cells);
+                w.View()(2 * i, 0) = w.View()(2 * i + 1, 0) = 1;
+                for (int j = 0; j < width; ++j)
+                    r.View()(i * width + j, 0) = j + 1;
+            }
+            o.View()(cells, 0) = 2 * cells;
+        }
+        DNDS::Algebra::AmgXSettings settings;
+        settings.robustACMInverse = true;
+        settings.geometricAggregation = true;
+        settings.minCoarseRows = 2;
+        settings.relaxation = 1;
+        DNDS::Algebra::AmgXPreconditioner provider(device, settings);
+        provider.SetPattern(offsets, columns, width, true);
+        provider.SetGeometricWeights(weights.To(device));
+        R::Array<double> host(R::RowLayout::Dense(3 * cells * width * width, 1));
+        auto values = host.To(device), b = rhs.To(device);
+        R::Array<double> x(rhs.Layout(), device);
+        for (int scale : {1, 2})
+        {
+            {
+                auto v = host.Write();
+                for (int k = 0; k < 3 * cells; ++k)
+                    for (int i = 0; i < width; ++i)
+                        for (int j = 0; j < width; ++j)
+                        {
+                            // Swap two axes (zero diagonal), leave the last row and
+                            // column null. Different coefficients on each refresh.
+                            const double entry = i < 2 ? (j == 1 - i ? i + 1 : 0) : double(i == j && i < width - 1);
+                            v.View()((k * width + i) * width + j, 0) = (k < 2 * cells ? -.01 : 1.02) * scale * entry;
+                        }
+            }
+            values.CopyFrom(host, context).Wait();
+            provider.AttachValues(context, values);
+            {
+                const auto br = b.Read(context);
+                auto xw = x.Write(context);
+                provider.ApplyBorrowed(context, br.View(), xw.View());
+            }
+            const auto snapshot = provider.MemorySnapshot();
+            CHECK(snapshot.levels.size() > 1);
+            CHECK(snapshot.copies.numericRefreshes == scale - 1);
+            const auto result = x.To(R::Device::Host());
+            const auto read = result.Read();
+            for (int cell = 0; cell < cells; ++cell)
+                for (int j = 0; j < width; ++j)
+                {
+                    const double expected = j == width - 1 ? 0. : j < 2 ? 1.
+                                                                        : double(j + 1);
+                    CHECK(read.View()(cell * width + j, 0) == doctest::Approx(expected / scale).epsilon(1e-4));
+                }
+        }
+    }
+}

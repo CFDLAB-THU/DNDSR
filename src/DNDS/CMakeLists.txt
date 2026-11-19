@@ -82,6 +82,9 @@ Legacy/ArrayDOF_inst/ArrayDOF_op_I.cpp
 )
 
 if (DNDS_USE_CUDA)
+    if(DNDS_USE_AMGX)
+        list(APPEND CPPS Algebra/AmgXPreconditioner_Inverse.cu)
+    endif()
     list(APPEND CPPS Algebra/DofAlgebra_CUDA.cu)
     list(APPEND CPPS Algebra/LocalProducts_CUDA.cu)
     list(APPEND CPPS Runtime/Communication/RowTransfer_CUDA.cu)
@@ -128,7 +131,7 @@ if(DNDS_USE_AMGX)
     # Other native dependencies may expose an older amgx_c.h earlier on the
     # include path. Use the selected provider's header only in its adapter TU.
     set_property(SOURCE Algebra/AmgXPreconditioner.cpp APPEND PROPERTY COMPILE_DEFINITIONS
-        "DNDS_AMGX_C_HEADER=\"${DNDS_AMGX_INCLUDE_DIR}/amgx_c.h\"")
+        "DNDS_AMGX_C_HEADER=\"${DNDS_AMGX_INCLUDE_DIR}/amgx_block_inverse.h\"")
     target_link_libraries(${LIBNAME} PRIVATE DNDS::AmgX)
     target_link_libraries(${LIBNAME}_shared PRIVATE DNDS::AmgX)
     get_filename_component(_DNDS_AMGX_LIBRARY_DIR "${DNDS_AMGX_LIBRARY}" DIRECTORY)

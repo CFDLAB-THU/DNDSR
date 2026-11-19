@@ -339,6 +339,7 @@ namespace DNDS::Cauchy
                 if (UsesAMG(settings))
                 {
                     Algebra::AmgXSettings amgx;
+                    amgx.robustACMInverse = settings.robustACMInverse;
                     amgx.aggregateSize = settings.amgxAggregateSize;
                     localAMG = std::make_unique<LocalAMGPreconditioner>(*problem, amgx);
                 }
@@ -885,7 +886,7 @@ namespace DNDS::Cauchy
                                   "invalid linear solver controls");
             DNDS_check_throw_info(!((UsesILU(settings) || UsesAMG(settings) || settings.method == "jacobi" || (settings.method == "gmres" && settings.preconditioner == "jacobi")) && settings.exchangeBetweenSweeps),
                                   "local ILU/Jacobi has no inter-scan exchange"); });
-            const std::array<int64_t, 22> integers{settings.method == "gmres" ? 1 : settings.method == "ilu"  ? 2
+            const std::array<int64_t, 23> integers{settings.method == "gmres" ? 1 : settings.method == "ilu"  ? 2
                                                                                 : settings.method == "jacobi" ? 3
                                                                                 : settings.method == "amgx"   ? 4
                                                                                                               : 0,
@@ -894,7 +895,7 @@ namespace DNDS::Cauchy
                                                                                                                               : 0,
                                                    settings.maxIterations, settings.subspace,
                                                    settings.sgsSweeps, settings.iluFill, settings.iluCoreFirst, settings.exchangeBetweenSweeps,
-                                                   execution.overlap, execution.collectiveChecks, problem->Components(), int(problem->OffDiagonalMode()), settings.stopping == "fixedCount", settings.iluOrdering == "rcm", settings.iluPreconditionerCorrections, settings.jacobiLocalSweeps, settings.residualCheckInterval, int(prototype.Device().space), settings.diagonalInverseRefinement, settings.cudaDiagonalInverse == "guardedLU", settings.cudaJacobiMapping == "componentGroup", settings.amgxAggregateSize};
+                                                   execution.overlap, execution.collectiveChecks, problem->Components(), int(problem->OffDiagonalMode()), settings.stopping == "fixedCount", settings.iluOrdering == "rcm", settings.iluPreconditionerCorrections, settings.jacobiLocalSweeps, settings.residualCheckInterval, int(prototype.Device().space), settings.diagonalInverseRefinement, settings.cudaDiagonalInverse == "guardedLU", settings.cudaJacobiMapping == "componentGroup", settings.amgxAggregateSize, settings.robustACMInverse};
             auto lowest = integers, highest = integers;
             const std::array<real, 2> tolerances{settings.relativeTolerance, settings.absoluteTolerance};
             auto lowTolerance = tolerances, highTolerance = tolerances;

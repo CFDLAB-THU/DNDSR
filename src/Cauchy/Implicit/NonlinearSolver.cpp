@@ -154,7 +154,7 @@ namespace DNDS::Cauchy
             LinearExecution execution{overlap, settings.collectiveChecks};
             execution.streams = LinearExecution::Streams{stream, executionOwner ? executionOwner->CommunicationStream() : stream};
             linear = std::make_unique<DofLinearSolver>(problem, state, [&](auto &field)
-                                                       { return discrete.BindHalo(field); }, NonlinearDetail::ResolveLinear(settings, discrete.Metrics().Dimension()), execution);
+                                                       { return discrete.BindHalo(field); }, NonlinearDetail::ResolveLinear(settings, discrete.Metrics().Dimension(), discrete.Equation().IsACM()), execution);
         }
         OptionalRef<R::Array<real>> CorrectionDerivative()
         {

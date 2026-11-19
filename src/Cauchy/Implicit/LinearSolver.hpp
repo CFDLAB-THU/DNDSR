@@ -34,6 +34,7 @@ namespace DNDS::Cauchy
         /// from zero; no preconditioner halo is needed in that mode.
         int jacobiLocalSweeps = 1;
         int amgxAggregateSize = 2;
+        bool robustACMInverse = false;
         /// Optional block-inverse residual corrections: 0 preserves the
         /// original policy, 1..3 preserves the SVD cutoff/retained subspace.
         /// Applies to SGS/Jacobi, not ILU or provider-owned AMG inverses.

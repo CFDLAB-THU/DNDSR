@@ -23,6 +23,9 @@ namespace DNDS::Algebra
         real relaxation = 0.75;
         AmgXBlockFormat blockFormat = AmgXBlockFormat::RowMajor;
         int aggregateSize = 2;
+        /// Use DNDSR's row-scaled partial-pivot LU / filtered SVD for every
+        /// FP64 ACM block-Jacobi level, including coefficient-only refresh.
+        bool robustACMInverse = false;
         /// Freeze aggregation from supplied face conductances and refresh only
         /// numeric coarse operators and smoother data on coefficient changes.
         bool geometricAggregation = false;

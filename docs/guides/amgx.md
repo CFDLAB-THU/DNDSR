@@ -373,3 +373,23 @@ exactly. Solving the base equation and blending its final solution is generally
 not equivalent. Do not replace the LVR residual by the base residual when
 checking convergence. A finest-level LVR-aware smoother is a possible later
 extension, not an implemented capability.
+
+### Incompressible ACM flow diagonal inverse
+
+Cauchy registers the DNDSR inverse with every block-Jacobi smoother in an
+ACM flow hierarchy (4, 5 or 6 coupled equations). Initial setup and numeric
+refresh both read the level's current diagonal blocks. The physical matrix
+and geometric aggregates remain unchanged by inversion. The compressible
+and reconstruction AMG profiles retain the provider's own inverse.
+
+For a block D, form B = S D by dividing each row by its signed diagonal.
+When that divisor is zero, its reciprocal overflows, or the normalized row
+would overflow, divide by the row's maximum absolute entry. Use a divisor
+of one for a zero row. Try partial-pivot LU on B with the DNDSR reciprocal
+condition threshold of 1e-7. On rejection use the filtered SVD of B, retaining
+singular values strictly above machine epsilon times its largest singular
+value. Apply the inverse as B-inverse times S (B-pseudoinverse times S for
+truncated blocks). This uses the row-scaled residual norm for a singular
+system. An entirely zero block gives zero correction. Nonfinite input,
+nonconvergence or unrepresentable output fails setup. This provider boundary
+is synchronous on the GPU.
