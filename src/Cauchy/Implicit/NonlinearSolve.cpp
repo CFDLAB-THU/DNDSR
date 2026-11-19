@@ -285,7 +285,8 @@ namespace DNDS::Cauchy
             data.report.reconstructionIterations,
             data.report.reconstructionRelativeUpdate,
             data.report.reconstructionUpdateMeasured,
-            std::chrono::duration<real>(std::chrono::steady_clock::now() - data.iterationStarted).count()};
+            std::chrono::duration<real>(std::chrono::steady_clock::now() - data.iterationStarted).count(),
+            data.convergence.RelativeRatio()};
         if (data.problem.control.progress && !initialBeforeUpdate)
             data.problem.control.progress(progress);
         if (coordinatedTerminal)

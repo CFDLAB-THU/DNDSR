@@ -17,7 +17,7 @@ namespace DNDS::Cauchy
         Norms _initial{}, _reference{};
         std::vector<index> _components;
         bool _started = false, _accepted = false;
-        real _ratio = 0;
+        real _ratio = 0, _relativeRatio = 0;
 
     public:
         /// Settings must be validated and outlive this policy.
@@ -42,7 +42,7 @@ namespace DNDS::Cauchy
                     _reference[j] = std::max(_reference[j], residual[j]);
             _started = true;
             _accepted = true;
-            _ratio = 0;
+            _ratio = _relativeRatio = 0;
             const index count = _components.empty() ? index(residual.size()) : index(_components.size());
             for (index iComponent = 0; iComponent < count; ++iComponent)
             {
@@ -51,9 +51,15 @@ namespace DNDS::Cauchy
                 _accepted = _accepted && residual[j] <= target;
                 // A zero requested tolerance means exact zero. Keep diagnostics
                 // finite rather than serializing an infinity as JSON null.
-                const real ratio = target > 0 ? residual[j] / target : residual[j] == 0 ? 0
-                                                                                        : std::numeric_limits<real>::max();
-                _ratio = std::max(_ratio, std::min(ratio, std::numeric_limits<real>::max()));
+                const auto ratio = [value = residual[j]](real denominator)
+                {
+                    constexpr real limit = std::numeric_limits<real>::max();
+                    if (denominator > 0)
+                        return std::min(value / denominator, limit);
+                    return value == 0 ? real(0) : limit;
+                };
+                _ratio = std::max(_ratio, ratio(target));
+                _relativeRatio = std::max(_relativeRatio, ratio(_reference[j]));
             }
         }
         void Restore(const Norms &initial, const Norms &reference)
@@ -68,12 +74,14 @@ namespace DNDS::Cauchy
             _reference = reference;
             _started = true;
             _accepted = false;
-            _ratio = 0;
+            _ratio = _relativeRatio = 0;
         }
         const Norms &Initial() const { return _initial; }
         const Norms &Reference() const { return _reference; }
         bool Accepted() const { return _started && _accepted; }
         real TargetRatio() const { return _ratio; }
+        /// Maximum current/reference norm ratio over the acceptance components.
+        real RelativeRatio() const { return _relativeRatio; }
     };
     using ResidualConvergence = BasicResidualConvergence<FlowState>;
 }

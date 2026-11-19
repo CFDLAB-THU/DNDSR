@@ -60,7 +60,7 @@ namespace DNDS::Cauchy
     public:
         struct TerminalStyle
         {
-            std::string bold, red, green, yellow, cyan, reset;
+            std::string bold, red, green, yellow, orange, cyan, reset;
         };
 
     private:

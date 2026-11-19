@@ -323,6 +323,7 @@ TEST_CASE("Implicit convergence retains initial and running references without h
         CHECK(policy.Reference()[0] == (running ? 4 : 2));
         CHECK(policy.Accepted() == running);
         CHECK(policy.TargetRatio() == doctest::Approx(running ? .75 : 1.5));
+        CHECK(policy.RelativeRatio() == doctest::Approx(running ? .075 : .15));
         CHECK_THROWS(policy.Observe({0, -1, 0, 0, 0}));
     }
     C::ImplicitSettings exact;

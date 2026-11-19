@@ -52,6 +52,8 @@ namespace DNDS::Cauchy
         /// Local wall duration of the completed nonlinear iteration. This is
         /// sink-only telemetry, not restart state or a collective maximum.
         real iterationWallSeconds = 0;
+        /// Worst selected component's norm divided by its own reference.
+        real relativeConverged = 0;
     };
     /// Optional CPU profile. Values are local wall seconds, not
     /// reduced across ranks. Total encloses the disjoint named sections;

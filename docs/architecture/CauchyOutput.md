@@ -161,6 +161,14 @@ triggers at the same accepted state are coalesced into one snapshot bundle.
 
 ## Internal-iteration boundary
 
+Console `res` prints the raw norms used by the selected implicit residual
+policy in equation order. `conv [target_ratio, relative_converged]` prints the
+largest ratio to the configured acceptance threshold, including applicable
+algebraic constraints, followed by the largest current/reference norm ratio
+over the selected equation components. The reference follows the configured
+initial or running-maximum policy. A zero residual with zero reference
+contributes zero. Color-enabled output shows the convergence pair in orange.
+
 Iteration and stage progress are fully represented in the detailed history and
 console. A positive `output.implicit.visualizationInterval` writes the current
 trial at a quiescent nonlinear observation boundary. The observer copies the

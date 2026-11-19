@@ -91,6 +91,7 @@ namespace DNDS::Cauchy
             _style.red = color ? "\033[31m" : "";
             _style.green = color ? "\033[32m" : "";
             _style.yellow = color ? "\033[33m" : "";
+            _style.orange = color ? "\033[38;5;208m" : "";
             _style.cyan = color ? "\033[36m" : "";
             _style.reset = color || bold ? "\033[0m" : "";
 #endif
@@ -280,13 +281,16 @@ namespace DNDS::Cauchy
         std::string status;
         if (progress.terminal)
             status = progress.converged ? "converged" : "capped";
-        const auto plain = fmt::format("{}   res {}   {}   {}   {}   linear [{}]   Time [{:.3f} s/iter avg]{}{}",
-                                       identity, residual, physical, positivity, vr, progress.linearIterations,
+        const auto convergence = fmt::format("conv [{:.3e}, {:.3e}]",
+                                             progress.residualTargetRatio, progress.relativeConverged);
+        const auto plain = fmt::format("{}   res {}   {}   {}   {}   {}   linear [{}]   Time [{:.3f} s/iter avg]{}{}",
+                                       identity, residual, convergence, physical, positivity, vr, progress.linearIterations,
                                        stageAverage, status.empty() ? "" : "   ", status);
         const auto &style = _logger->Style();
-        const auto styled = fmt::format("{}{}{}   res {}{}{}   {}{}{}   {}{}{}   {}   linear [{}]   {}Time [{:.3f} s/iter avg]{}{}{}{}",
+        const auto styled = fmt::format("{}{}{}   res {}{}{}   {}{}{}   {}{}{}   {}{}{}   {}   linear [{}]   {}Time [{:.3f} s/iter avg]{}{}{}{}",
                                         style.bold, identity, style.reset,
                                         style.red, residual, style.reset,
+                                        style.orange, convergence, style.reset,
                                         style.green, physical, style.reset,
                                         (progress.rhsLimited || progress.incrementLimited) ? style.yellow : "", positivity,
                                         (progress.rhsLimited || progress.incrementLimited) ? style.reset : "",
