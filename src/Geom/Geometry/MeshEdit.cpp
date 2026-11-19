@@ -77,7 +77,6 @@ namespace DNDS::Geom
             data.relations = state.relations;
             data.coords = ClonePair(*state.coords);
             data.cellInfo = ClonePair(*state.cellInfo);
-            data.relations[size_t(MeshRelation::CellCells)] = ClonePair(*state.relations[size_t(MeshRelation::CellCells)]);
             data.nodeWallDist = state.nodeWallDist;
             data.bndInfo = state.bndInfo;
             data.faceInfo = state.faceInfo;
@@ -151,6 +150,8 @@ namespace DNDS::Geom
         CheckRow(row, NumCell());
         auto &array = _nativeCandidate->relations[size_t(MeshRelation::CellCells)]->owned;
         DNDS_check_throw_info(slot >= 0 && size_t(slot) < array.Layout().RowSize(size_t(row)), "mesh neighbor slot outside row");
+        if (!(_changes & NeighborOrder))
+            array = CloneArray(array);
         array.Write().View()(size_t(row), size_t(slot)) = value;
         _changes |= NeighborOrder;
     }

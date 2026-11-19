@@ -399,6 +399,23 @@ namespace DNDS::Geom
                 return found->second;
             }
         };
+        const AdjacencyDescriptor &CanonicalCellNeighbors()
+        {
+            static const auto key = AdjacencyDescriptor::Composition(Adj::Cell2Node, Adj::Cell2Node.Inverted(), RelationSelection::Any, true);
+            return key;
+        }
+
+        // Builder-produced CellCells is a facade for the sorted node-star graph.
+        // MeshEdit can detach its slots. Only an existing storage alias follows
+        // the canonical sort, including after a collectively agreed row transfer.
+        bool SortRemappedNeighbors(const AdjacencyDescriptor &key, const RArray &rows, const RArray *canonical)
+        {
+            static const auto facade = FacadeKey(size_t(MeshRelation::CellCells));
+            return key.order == RelationOrder::SortedUnique ||
+                   (canonical && (key == facade || key == Adj::Cell2Cell) &&
+                    rows.SharedStorage() == canonical->SharedStorage());
+        }
+
         /// Most aliases remain ordered after numbering changes. Preserve their
         /// shared payload when possible; otherwise sort an independent receiver
         /// copy so topological slot order is never modified through an alias.
@@ -503,11 +520,12 @@ namespace DNDS::Geom
             // transformation, then let aliases retain the same result handle.
             using ReorderKey = std::tuple<uintptr_t, bool, bool, bool>;
             std::map<ReorderKey, RArray> reordered;
+            const auto canonical = source.namedRelations.find(CanonicalCellNeighbors());
             auto reorder = [&](const RArray &rows, const AdjacencyDescriptor &key) -> RArray
             {
                 const bool sourceCell = key.from == EntityKind::Cell;
                 const bool targetCell = key.to == EntityKind::Cell;
-                const bool sorted = key.order == RelationOrder::SortedUnique;
+                const bool sorted = SortRemappedNeighbors(key, rows, canonical == source.namedRelations.end() ? nullptr : &canonical->second);
                 const ReorderKey identity{reinterpret_cast<uintptr_t>(rows.SharedStorage().get()),
                                           sourceCell, targetCell, sorted};
                 auto found = reordered.find(identity);
@@ -1318,8 +1336,12 @@ namespace DNDS::Geom
         FinishMoves(pendingMoves);
         source.LocalStage(mpi, [&]
                           {
+            const auto foundCanonical = movedRelations.find(CanonicalCellNeighbors());
+            // Hold the original handle while entries are replaced in map order.
+            const std::optional<RArray> canonical = foundCanonical == movedRelations.end()
+                ? std::nullopt : std::optional<RArray>(foundCanonical->second);
             for (auto &[key, moved] : movedRelations)
-                if (key.order == RelationOrder::SortedUnique)
+                if (SortRemappedNeighbors(key, moved, canonical ? &*canonical : nullptr))
                 {
                     const auto storage = reinterpret_cast<uintptr_t>(moved.SharedStorage().get());
                     auto found = sortedPayloads.find(storage);

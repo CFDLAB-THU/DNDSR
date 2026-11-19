@@ -24,6 +24,11 @@ the caller's actual kernel I/O, freshness of BC values or safety of writes to
 owned rows that are active direct MPI sends. Pure geometry changes preserve the
 work sets. No per-element generation checks are needed in the numerical loop.
 
+The ordinary `Cell2Cell(Node)` facade shares the node-star composition’s
+owned and ghost rows. Transitions retain the composition’s ordering by current
+global target ID. An explicit neighbor-slot permutation through `MeshEdit`
+can give the facade a separately ordered payload.
+
 ## Explicit local ordering
 
 `LocalCellOrderingSettings` selects subregions, optional conservative node-star

@@ -361,6 +361,15 @@ TEST_CASE("Primary local reorder matches full facial graph permutation and final
                 for (I row = 0; row < actual.state->NumOwned(kind); ++row)
                     CHECK(actual.state->OriginalEntityId(kind, row) == reference.state->OriginalEntityId(kind, row));
             }
+            const auto nodeStar = G::AdjacencyDescriptor::Composition(G::Adj::Cell2Node, G::Adj::Cell2Node.Inverted(), G::RelationSelection::Any, true);
+            for (const auto &state : {actual.state, reference.state})
+            {
+                const auto facade = state->BorrowHostView();
+                const auto canonical = state->Relation(nodeStar);
+                for (I cell = 0; cell < canonical.RowCount(); ++cell)
+                    if (canonical.RowSize(cell))
+                        CHECK(&facade.CellCells(cell)[0] == canonical.View().Row(cell));
+            }
             const auto actualView = actual.state->BorrowHostView();
             const auto referenceView = reference.state->BorrowHostView();
             for (I cell = 0; cell < actual.state->NumOwned(G::EntityKind::Cell); ++cell)

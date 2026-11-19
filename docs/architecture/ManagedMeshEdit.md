@@ -2,8 +2,8 @@
 
 `MeshEdit::Begin(shared_mesh, ghostLayers)` and Python
 `mesh.edit(ghost_layers=1)` collectively stage an existing native publication.
-The stage clones coordinates, cell metadata and editable CellCells rows; other
-topology, companions, identity and provenance remain retained native data. No
+The stage clones coordinates and cell metadata. It shares CellCells rows until
+the first neighbor setter on that rank detaches the owned array. No
 legacy candidate, global topology staging, or mode conversion is involved.
 Owned/ghost order and canonical maps remain unchanged.
 
