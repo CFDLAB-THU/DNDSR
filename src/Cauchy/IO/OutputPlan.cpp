@@ -64,6 +64,15 @@ namespace DNDS::Cauchy
                                   _settings.endpointSnapRelativeTolerance >= 0,
                               "invalid resolved Cauchy output plan");
     }
+    OutputPlan::SnapshotSelection OutputPlan::SelectedSnapshots(uint64_t step, index stage, index iteration) const
+    {
+        const auto matches = [step, stage, iteration](const OutputSnapshotLocation &location)
+        {
+            return uint64_t(location.step) == step && location.stage == stage && location.iteration == iteration;
+        };
+        return {std::any_of(_settings.checkpointSnapshots.begin(), _settings.checkpointSnapshots.end(), matches),
+                std::any_of(_settings.visualizationSnapshots.begin(), _settings.visualizationSnapshots.end(), matches)};
+    }
     std::string OutputPlan::DomainPrefix(index domain) const
     {
         DNDS_check_throw_info(domain >= 0 && domain < _domains, "output domain index is out of range");

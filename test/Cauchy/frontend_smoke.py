@@ -112,6 +112,34 @@ def main():
         exact_resumed = json.loads((folder / "exact_resumed-summary.json").read_text())
         assert exact_resumed["steps"] == 1 and math.isclose(exact_resumed["time"], 1e-5)
         assert exact_resumed["status"] == "target-reached"
+        selected = json.loads(exact_config.read_text())
+        selected["defaults"]["implicit"] = {"minIterations": 3, "iterations": 3}
+        selected["output"].update({
+            "prefix": str(folder / "selected"),
+            "implicit": {"checkpointInterval": 2, "visualizationInterval": 0},
+            "checkpointSnapshots": [{"step": 1, "stage": 0, "iteration": 1},
+                                    {"step": 1, "stage": 0, "iteration": 2}],
+            "visualizationSnapshots": [{"step": 1, "stage": 0, "iteration": 2},
+                                       {"step": 1, "stage": -1, "iteration": -1}],
+        })
+        selected_config = folder / "selected.json"
+        selected_config.write_text(json.dumps(selected))
+        run(selected_config)
+        assert {path.name for path in folder.glob("selected-D0-S*.h5")} == {
+            "selected-D0-S1_0_1.h5", "selected-D0-S1_0_2.h5"}
+        assert {path.name for path in folder.glob("selected-D0-S*.vtkhdf")} == {
+            "selected-D0-S1_0_2.vtkhdf", "selected-D0-S1_0_2_bnd.vtkhdf",
+            "selected-D0-S1.vtkhdf", "selected-D0-S1_bnd.vtkhdf"}
+        for iteration, kinds in ((1, ["checkpoint"]), (2, ["checkpoint", "volume", "boundary"])):
+            manifest = json.loads((folder / f"selected-D0-S1_0_{iteration}-manifest.json").read_text())
+            assert (manifest["step"], manifest["stage"], manifest["iteration"]) == (1, 0, iteration)
+            assert manifest["restartScope"] == "exact_internal"
+            assert [artifact["kind"] for artifact in manifest["artifacts"]] == kinds
+        if args.np == 1:
+            invalid = run(selected_config, "--check-config",
+                          "-k", "/output/checkpointSnapshots/0/iteration",
+                          "-v", "0", success=False)
+            assert "output.checkpointSnapshots" in invalid
         # Exercise the same physical frontend with all-rank sharing followed by
         # disjoint rank groups. The existing single-domain files remain valid.
         multi = json.loads(config.read_text())

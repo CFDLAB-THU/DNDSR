@@ -39,12 +39,19 @@ namespace DNDS::Cauchy
             real dt = 0;
             std::optional<real> exactTime;
         };
+        struct SnapshotSelection
+        {
+            bool checkpoint = false, visualization = false;
+        };
 
         OutputPlan(OutputSettings settings, index domains);
         const OutputSettings &Settings() const { return _settings; }
         index DomainNumber() const { return _domains; }
         index VisualizationInterval() const { return _visualizationInterval; }
         real VisualizationTimeInterval() const { return _visualizationTimeInterval; }
+        /// Test the exact requested location. Omit stage and iteration to
+        /// match the accepted step.
+        SnapshotSelection SelectedSnapshots(uint64_t step, index stage = -1, index iteration = -1) const;
         OutputControllerState InitialState(real time) const;
         /// Restore scheduling/history continuation when the output prefix and
         /// resolved cadence are unchanged. A deliberately new prefix starts a

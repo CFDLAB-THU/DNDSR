@@ -317,16 +317,12 @@ namespace DNDS::Cauchy
             const index completedIteration =
                 ditr || nonlinear.terminal ? nonlinear.iteration
                                            : nonlinear.iteration + 1;
-            if (completedIteration <= 0)
-                return;
-            const bool checkpoint = internalCheckpointInterval > 0 &&
-                                    completedIteration %
-                                            internalCheckpointInterval ==
-                                        0;
-            const bool visualization = internalVisualizationInterval > 0 &&
-                                       completedIteration %
-                                               internalVisualizationInterval ==
-                                           0;
+            const auto step = simulation.Step() + 1;
+            const auto selected = plan.SelectedSnapshots(step, nonlinear.stage, completedIteration);
+            const auto intervalDue = [completedIteration](index interval)
+            { return completedIteration > 0 && interval > 0 && completedIteration % interval == 0; };
+            const bool checkpoint = selected.checkpoint || intervalDue(internalCheckpointInterval);
+            const bool visualization = selected.visualization || intervalDue(internalVisualizationInterval);
             if (!checkpoint && !visualization)
                 return;
             // Internal checkpoints may contain active coupled stages. Keep the
@@ -335,8 +331,7 @@ namespace DNDS::Cauchy
             if (asynchronous)
                 asynchronous->Drain();
             auto &domain = simulation.GetDomain(iDomain);
-            const auto token = OutputPlan::InternalToken(
-                simulation.Step() + 1, nonlinear.stage, completedIteration);
+            const auto token = OutputPlan::InternalToken(step, nonlinear.stage, completedIteration);
             const auto prefix = plan.VisualizationPrefix(iDomain, token);
             if (visualization)
                 domain.WriteInternalVisualization(prefix,
@@ -573,9 +568,10 @@ namespace DNDS::Cauchy
             const bool visualizationStepDue =
                 plan.VisualizationInterval() > 0 &&
                 simulation.Step() % uint64_t(plan.VisualizationInterval()) == 0;
-            const bool checkpoint = checkpointTimeDue || checkpointStepDue;
+            const auto selected = plan.SelectedSnapshots(simulation.Step());
+            const bool checkpoint = checkpointTimeDue || checkpointStepDue || selected.checkpoint;
             const bool visualization =
-                visualizationTimeDue || visualizationStepDue;
+                visualizationTimeDue || visualizationStepDue || selected.visualization;
             if (checkpoint || visualization)
             {
                 const auto token = checkpointTimeDue || visualizationTimeDue

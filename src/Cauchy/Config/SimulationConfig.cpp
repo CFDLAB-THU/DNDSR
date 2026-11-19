@@ -352,9 +352,26 @@ namespace DNDS::Cauchy
         const auto internalVisualization = data->output.implicit.visualizationInterval < 0
                                                ? data->output.implicit.checkpointInterval
                                                : data->output.implicit.visualizationInterval;
-        DNDS_check_throw_info(data->output.implicit.checkpointInterval == 0 || data->domains.size() == 1,
+        const auto hasInternalSnapshots = [](const auto &locations, const char *field)
+        {
+            bool internal = false;
+            for (const auto &location : locations)
+            {
+                const bool acceptedStep = location.stage == -1 && location.iteration == -1;
+                const bool nonlinearUpdate = location.stage >= 0 && location.iteration > 0;
+                DNDS_check_throw_info(location.step > 0 && (acceptedStep || nonlinearUpdate),
+                                      std::string(field) + " requires a positive step and either stage=iteration=-1 or stage>=0 and iteration>0");
+                internal = internal || nonlinearUpdate;
+            }
+            return internal;
+        };
+        const bool selectedInternalCheckpoint = hasInternalSnapshots(data->output.checkpointSnapshots, "output.checkpointSnapshots");
+        const bool selectedInternalVisualization = hasInternalSnapshots(data->output.visualizationSnapshots, "output.visualizationSnapshots");
+        const bool internalCheckpointEnabled = data->output.implicit.checkpointInterval > 0 || selectedInternalCheckpoint;
+        const bool internalVisualizationEnabled = internalVisualization > 0 || selectedInternalVisualization;
+        DNDS_check_throw_info(!internalCheckpointEnabled || data->domains.size() == 1,
                               "exact internal checkpoints currently require one domain");
-        DNDS_check_throw_info((data->output.implicit.checkpointInterval == 0 && internalVisualization == 0) ||
+        DNDS_check_throw_info((!internalCheckpointEnabled && !internalVisualizationEnabled) ||
                                   data->time.steady || data->time.method != "ssprk3",
                               "internal-iteration output requires an implicit method");
         return SimulationConfig(std::move(data));

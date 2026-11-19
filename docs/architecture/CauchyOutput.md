@@ -159,6 +159,35 @@ to `target`, rather than incremented. If an unsnapped `t+dt` cannot advance the
 floating-point clock, the frontend fails explicitly. Step- and time-based
 triggers at the same accepted state are coalesced into one snapshot bundle.
 
+## Requested snapshot locations
+
+Set `output.checkpointSnapshots` and `output.visualizationSnapshots` to
+request additional snapshots independently of the periodic schedules. For
+example, this saves a checkpoint and visualization after nonlinear update 4
+of stage 0 in step 12, and a visualization when step 12 is accepted.
+
+```json
+{
+  "output": {
+    "checkpointSnapshots": [{"step": 12, "stage": 0, "iteration": 4}],
+    "visualizationSnapshots": [
+      {"step": 12, "stage": 0, "iteration": 4},
+      {"step": 12, "stage": -1, "iteration": -1}
+    ]
+  }
+}
+```
+
+Steps and completed nonlinear updates are one-based. Implicit stage indices
+are zero-based and follow the existing progress and snapshot labels. Set
+both `stage` and `iteration` to `-1` to select an accepted
+step. Locations that the solve never reaches produce no files. Coincident
+requests and periodic triggers at the same boundary use the same output
+bundle. Internal requests use the existing quiescent writers and require an
+implicit solve. Exact internal checkpoints require a single domain. The
+configured locations are used on restart with the restored step and
+nonlinear counters.
+
 ## Internal-iteration boundary
 
 Console `res` prints the raw norms used by the selected implicit residual

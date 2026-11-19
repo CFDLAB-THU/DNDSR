@@ -760,6 +760,18 @@ namespace DNDS::Cauchy
             DNDS_FIELD(rotatedFiles, "Number of rotated per-rank diagnostic files retained");
         }
     };
+    /// A completed time step or a completed nonlinear update within a step.
+    struct OutputSnapshotLocation
+    {
+        index step = 0, stage = -1, iteration = -1;
+
+        DNDS_DECLARE_CONFIG(OutputSnapshotLocation)
+        {
+            DNDS_FIELD(step, "One-based simulation step");
+            DNDS_FIELD(stage, "Zero-based implicit stage; -1 selects an accepted step");
+            DNDS_FIELD(iteration, "One-based completed nonlinear update; -1 selects an accepted step");
+        }
+    };
     struct OutputSettings
     {
         std::string prefix = "cauchy";
@@ -768,6 +780,8 @@ namespace DNDS::Cauchy
         index interval = -1;
         index checkpointInterval = 1;
         index visualizationInterval = -1;
+        std::vector<OutputSnapshotLocation> checkpointSnapshots;
+        std::vector<OutputSnapshotLocation> visualizationSnapshots;
         real checkpointTimeInterval = 0;
         real visualizationTimeInterval = -1;
         real endpointSnapRelativeTolerance = smallReal;
@@ -790,6 +804,8 @@ namespace DNDS::Cauchy
             DNDS_FIELD(interval, "Deprecated alias for checkpointInterval; leave at -1 in new inputs");
             DNDS_FIELD(checkpointInterval, "Accepted-step checkpoint cadence; zero disables periodic checkpoints");
             DNDS_FIELD(visualizationInterval, "Accepted-step visualization cadence; -1 inherits checkpointInterval and zero disables it");
+            config.field_array_of<OutputSnapshotLocation>(&T::checkpointSnapshots, "checkpointSnapshots", "Extra checkpoint locations independent of periodic cadence");
+            config.field_array_of<OutputSnapshotLocation>(&T::visualizationSnapshots, "visualizationSnapshots", "Extra visualization locations independent of periodic cadence");
             DNDS_FIELD(checkpointTimeInterval, "Physical-time checkpoint cadence; zero disables it");
             DNDS_FIELD(visualizationTimeInterval, "Physical-time visualization cadence; -1 inherits checkpointTimeInterval and zero disables it");
             DNDS_FIELD(endpointSnapRelativeTolerance, "Relative dt tolerance for snapping physical steps to output times; Euler default is 1e-10");
