@@ -125,6 +125,10 @@ if(DNDS_USE_CUDA)
     set_property(TARGET ${LIBNAME}_shared APPEND PROPERTY INSTALL_RPATH "${_DNDS_CUDA_RUNTIME_DIR}")
 endif()
 if(DNDS_USE_AMGX)
+    # Other native dependencies may expose an older amgx_c.h earlier on the
+    # include path. Use the selected provider's header only in its adapter TU.
+    set_property(SOURCE Algebra/AmgXPreconditioner.cpp APPEND PROPERTY COMPILE_DEFINITIONS
+        "DNDS_AMGX_C_HEADER=\"${DNDS_AMGX_INCLUDE_DIR}/amgx_c.h\"")
     target_link_libraries(${LIBNAME} PRIVATE DNDS::AmgX)
     target_link_libraries(${LIBNAME}_shared PRIVATE DNDS::AmgX)
     get_filename_component(_DNDS_AMGX_LIBRARY_DIR "${DNDS_AMGX_LIBRARY}" DIRECTORY)

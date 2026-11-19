@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <vector>
 #ifdef DNDS_USE_AMGX
-#    include <amgx_c.h>
+#    include DNDS_AMGX_C_HEADER
 #    include <cuda_runtime_api.h>
 #    include <cublas_v2.h>
 #endif
