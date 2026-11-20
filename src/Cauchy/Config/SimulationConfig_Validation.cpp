@@ -1,3 +1,4 @@
+#include "Cauchy/Config/LinearProvider.hpp"
 #include "Cauchy/Config/SimulationConfig.hpp"
 #include "Cauchy/Input/StateInput.hpp"
 #include "DNDS/Config/JsonSchema.hpp"
@@ -174,7 +175,7 @@ namespace DNDS::Cauchy
             return (table.layout == "aos" || table.layout == "soa" || table.layout == "aosoa32") && table.rowPaddingMultiple > 0 &&
                    table.rowStridePaddingMultiple > 0 && (!alignment || !(alignment & (alignment - 1)));
         };
-        const bool usesAMG = linear.method == "amgx" || (linear.method == "gmres" && linear.preconditioner == "amgx");
+        const bool usesAMG = EffectiveLinearProvider(linear) == "amgx";
         DNDS_check_throw_info(validMatrixTable(linear.matrixStorage.diagonal) && validMatrixTable(linear.matrixStorage.inverse) &&
                                   validMatrixTable(linear.matrixStorage.offDiagonal) &&
                                   (linear.matrixStorage.indices == "auto" || linear.matrixStorage.indices == "int32" || linear.matrixStorage.indices == "int64"),
@@ -220,17 +221,16 @@ namespace DNDS::Cauchy
                                   (linear.cudaDiagonalInverse == "auto" || linear.cudaDiagonalInverse == "batchedSVD" || linear.cudaDiagonalInverse == "guardedLU") &&
                                   linear.diagonalInverseRefinement >= 0 && linear.diagonalInverseRefinement <= 3 &&
                                   (!linear.diagonalInverseRefinement ||
-                                   (diagonal == "block" && (linear.method == "sgs" || linear.method == "jacobi" ||
-                                                            (linear.method == "gmres" && (linear.preconditioner == "sgs" || linear.preconditioner == "jacobi"))))),
+                                   (diagonal == "block" && (EffectiveLinearProvider(linear) == "sgs" || EffectiveLinearProvider(linear) == "jacobi"))),
                               "block-inverse refinement requires 0..3 corrections and block-diagonal SGS/Jacobi");
-        DNDS_check_throw_info((linear.method == "sgs" || linear.method == "jacobi" || linear.method == "ilu" || linear.method == "amgx" || linear.method == "amg" || linear.method == "gmres") && (linear.preconditioner == "sgs" || linear.preconditioner == "ilu" || linear.preconditioner == "jacobi" || linear.preconditioner == "amgx" || linear.preconditioner == "amg") &&
+        DNDS_check_throw_info((KnownLinearProvider(linear.method) || linear.method == "gmres") && KnownLinearProvider(linear.preconditioner) &&
                                   linear.jacobiLocalSweeps >= 1 && linear.jacobiLocalSweeps <= 2 &&
                                   (linear.componentScaling == "none" || linear.componentScaling == "meanState") &&
                                   (linear.stopping == "residual" || (linear.stopping == "fixedCount" && linear.method != "gmres")) &&
                                   linear.iterations > 0 && linear.residualCheckInterval > 0 && linear.subspace > 0 && linear.subspace < INT_MAX &&
                                   nonnegative(linear.relativeTolerance) && nonnegative(linear.absoluteTolerance) && sgs.sweeps > 0 && ilu.fill >= -1 && ilu.fill <= 5 && ilu.preconditionerCorrections > 0 &&
                                   (ilu.ordering == "natural" || ilu.ordering == "rcm") &&
-                                  !((linear.method == "ilu" || linear.method == "amgx" || linear.method == "amg" || linear.method == "jacobi" || (linear.method == "gmres" && (linear.preconditioner == "ilu" || linear.preconditioner == "jacobi" || linear.preconditioner == "amgx" || linear.preconditioner == "amg"))) && sgs.exchangeBetweenSweeps),
+                                  (!sgs.exchangeBetweenSweeps || EffectiveLinearProvider(linear) == "sgs"),
                               "invalid implicit linear/SGS/ILU controls");
         DNDS_check_throw_info((positivity.rhsFPPMode == "none" || positivity.rhsFPPMode == "rhs" || positivity.rhsFPPMode == "dTau") &&
                                   (positivity.rhsFPPReduction == "cell" || positivity.rhsFPPReduction == "minimumLimited" || positivity.rhsFPPReduction == "minimumAll") &&
@@ -449,12 +449,10 @@ namespace DNDS::Cauchy
             require(solver >= Riemann::Solver::Roe && solver <= Riemann::Solver::Roe_M9,
                     "reduced dissipation currently requires the Roe family");
         }
-        const auto usesAMGX = [](const ImplicitSettings &implicit)
-        { return implicit.linear.method == "amgx" || (implicit.linear.method == "gmres" && implicit.linear.preconditioner == "amgx"); };
         const auto requireAMGX = [&](const ImplicitSettings &implicit, const std::string &level)
         {
-            require(!usesAMGX(implicit) || (cuda && implicit.jacobianAction == "assembled" && Algebra::AmgXPreconditioner::Available() &&
-                                            domain.placement.ranks.size() == 1),
+            require(EffectiveLinearProvider(implicit.linear) != "amgx" || (cuda && implicit.jacobianAction == "assembled" && Algebra::AmgXPreconditioner::Available() &&
+                                                                           domain.placement.ranks.size() == 1),
                     level + " AmgX requires assembled CUDA storage, one rank and the single-device provider in this build");
         };
         requireAMGX(s.implicit, "finest");
@@ -480,9 +478,7 @@ namespace DNDS::Cauchy
             const auto requireLinear = [&](const ImplicitSettings &implicit, const std::string &level)
             {
                 const auto &linear = implicit.linear;
-                const bool amgx = usesAMGX(implicit);
-                require(linear.method == "jacobi" || linear.method == "amgx" ||
-                            (linear.method == "gmres" && (linear.preconditioner == "jacobi" || amgx)),
+                require(DeviceLinearProvider(EffectiveLinearProvider(linear)),
                         level + " CUDA linear solve requires Jacobi, AmgX defect correction or GMRES with Jacobi/AmgX");
             };
             requireLinear(s.implicit, "finest");

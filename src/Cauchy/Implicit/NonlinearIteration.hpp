@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Cauchy/Config/LinearProvider.hpp"
 #include "Cauchy/Implicit/NonlinearSolver.hpp"
 #include "Cauchy/Implicit/ResidualConvergence.hpp"
 #include "DNDS/MPI/CollectiveStage.hpp"
@@ -40,7 +41,7 @@ namespace DNDS::Cauchy::NonlinearDetail
         DNDS_check_throw_info(settings.matrixStorage.indices == "auto" || settings.matrixStorage.indices == "int32" ||
                                   settings.matrixStorage.indices == "int64",
                               "invalid matrix index storage");
-        const bool amg = settings.method == "amgx" || (settings.method == "gmres" && settings.preconditioner == "amgx");
+        const bool amg = EffectiveLinearProvider(settings) == "amgx";
         LinearMatrixOptions result;
         result.diagonal = table(settings.matrixStorage.diagonal);
         result.inverse = table(settings.matrixStorage.inverse);
@@ -49,7 +50,7 @@ namespace DNDS::Cauchy::NonlinearDetail
                              ? LinearIndexStorage::Int32
                              : LinearIndexStorage::Int64;
         result.rowMajorBlocks = amg;
-        result.cpuAMG = settings.method == "amg" || (settings.method == "gmres" && settings.preconditioner == "amg");
+        result.cpuAMG = EffectiveLinearProvider(settings) == "amg";
         DNDS_check_throw_info(settings.matrixStorage.amgxStorage == "upload" ||
                                   (amg && settings.matrixStorage.amgxStorage == "native"),
                               "invalid AmgX numeric storage mode");

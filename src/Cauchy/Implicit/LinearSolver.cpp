@@ -1,3 +1,4 @@
+#include "Cauchy/Config/LinearProvider.hpp"
 #include "Cauchy/Implicit/LinearSolver.hpp"
 #include "Cauchy/Config/CUDAKernelDefaults.hpp"
 #include "DNDS/Diagnostics/Timeline.hpp"
@@ -107,15 +108,15 @@ namespace DNDS::Cauchy
         };
         bool UsesILU(const LinearSolveSettings &settings)
         {
-            return settings.method == "ilu" || (settings.method == "gmres" && settings.preconditioner == "ilu");
+            return EffectiveLinearProvider(settings) == "ilu";
         }
         bool UsesAMG(const LinearSolveSettings &settings)
         {
-            return settings.method == "amgx" || (settings.method == "gmres" && settings.preconditioner == "amgx");
+            return EffectiveLinearProvider(settings) == "amgx";
         }
         bool UsesCPUAMG(const LinearSolveSettings &settings)
         {
-            return settings.method == "amg" || (settings.method == "gmres" && settings.preconditioner == "amg");
+            return EffectiveLinearProvider(settings) == "amg";
         }
         struct FieldLinearOperations : Linear::FieldKrylovOperations
         {
@@ -884,7 +885,7 @@ namespace DNDS::Cauchy
             if (prototype.Device() != R::Device::Host())
             {
                 DNDS_check_throw_info(prototype.Device().space == R::MemorySpace::CUDA &&
-                    (settings.method == "jacobi" || settings.method == "amgx" || (settings.method == "gmres" && (settings.preconditioner == "jacobi" || settings.preconditioner == "amgx"))),
+                    DeviceLinearProvider(EffectiveLinearProvider(settings)),
                     "CUDA linear profile requires Jacobi, AmgX defect correction or GMRES with Jacobi/AmgX; SGS/ILU have no device fallback");
                 DNDS_check_throw_info(Ops::Width(prototype) >= 4 && Ops::Width(prototype) <= 7 &&
                     Ops::Owned(prototype).Layout().Kind() == R::RowLayoutKind::Table, "CUDA linear profile requires combined AoS with 4 to 7 components");
@@ -892,9 +893,9 @@ namespace DNDS::Cauchy
             DNDS_check_throw_info(!UsesAMG(settings) || (problem->Device().space == R::MemorySpace::CUDA &&
                 problem->HasAssembledOffDiagonal() && Algebra::AmgXPreconditioner::Available()),
                 "AmgX requires the compiled single-device provider and an assembled CUDA matrix");
-            DNDS_check_throw_info(bindHalo && (settings.method == "sgs" || settings.method == "jacobi" || settings.method == "ilu" || settings.method == "amgx" || settings.method == "amg" || settings.method == "gmres") &&
+            DNDS_check_throw_info(bindHalo && (KnownLinearProvider(settings.method) || settings.method == "gmres") &&
                                       (settings.stopping == "residual" || (settings.stopping == "fixedCount" && settings.method != "gmres")) &&
-                                      (settings.preconditioner == "sgs" || settings.preconditioner == "ilu" || settings.preconditioner == "jacobi" || settings.preconditioner == "amgx" || settings.preconditioner == "amg") && settings.maxIterations >= 0 && settings.residualCheckInterval > 0 &&
+                                      KnownLinearProvider(settings.preconditioner) && settings.maxIterations >= 0 && settings.residualCheckInterval > 0 &&
                                       settings.subspace > 0 && settings.subspace < INT_MAX && settings.sgsSweeps > 0 && settings.iluFill >= -1 && settings.iluFill <= 5 &&
                                       settings.iluPreconditionerCorrections > 0 &&
                                       settings.jacobiLocalSweeps >= 1 && settings.jacobiLocalSweeps <= 2 &&
@@ -907,8 +908,8 @@ namespace DNDS::Cauchy
                                       std::isfinite(settings.relativeTolerance) && settings.relativeTolerance >= 0 &&
                                       std::isfinite(settings.absoluteTolerance) && settings.absoluteTolerance >= 0,
                                   "invalid linear solver controls");
-            DNDS_check_throw_info(!((UsesILU(settings) || UsesAMG(settings) || UsesCPUAMG(settings) || settings.method == "jacobi" || (settings.method == "gmres" && settings.preconditioner == "jacobi")) && settings.exchangeBetweenSweeps),
-                                  "local ILU/Jacobi has no inter-scan exchange"); });
+            DNDS_check_throw_info((!settings.exchangeBetweenSweeps || EffectiveLinearProvider(settings) == "sgs"),
+                                  "inter-scan exchange requires SGS"); });
             const std::array<int64_t, 23> integers{settings.method == "gmres" ? 1 : settings.method == "ilu"  ? 2
                                                                                 : settings.method == "jacobi" ? 3
                                                                                 : settings.method == "amgx"   ? 4
@@ -954,7 +955,7 @@ namespace DNDS::Cauchy
                 bind(*data->solution);
             if (settings.method == "jacobi")
                 bind(data->next);
-            if (settings.method == "sgs" || (settings.method == "gmres" && settings.preconditioner == "sgs"))
+            if (EffectiveLinearProvider(settings) == "sgs")
             {
                 bind(data->old);
                 bind(data->forward);
