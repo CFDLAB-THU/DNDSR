@@ -53,21 +53,18 @@ namespace DNDS::Cauchy
     }
     R::Array<real> OutputFields::CopyToHost(R::ExecutionContext context) const
     {
+        OutputStaging local;
+        OutputStaging::Batch batch(local);
+        return CopyToHost(context, batch);
+    }
+    R::Array<real> OutputFields::CopyToHost(R::ExecutionContext context, OutputStaging::Batch &batch) const
+    {
         DNDS_check_throw_info(_values.Storage().IsIdle() && _status.Storage().IsIdle(), "output fields require completed production before host observation");
-        const auto hostStatus = _status.To(R::Device::Host(), context);
+        const auto hostStatus = batch.HostValues(_status, context, "fieldStatus");
         const auto read = hostStatus.Read();
         const auto status = read.View<R::FixedRows<1>>();
         for (index iRow = 0; iRow < status.RowCount(); ++iRow)
             RequireNumericalSuccess(status(iRow, 0), "output point properties");
-        // CPU production already wrote a distinct immutable output allocation;
-        // share that owner, never a live solution buffer or a redundant copy.
-        if (_values.GetDevice() == R::Device::Host())
-            return _values;
-        const auto layout = _values.Layout();
-        auto host = R::Array<real>::FromStorage(layout,
-                                                R::Buffer::AllocatePinnedHost(CheckedSize::Multiply(layout.Elements(), sizeof(real))));
-        host.SetName("output/pinnedFields", DNDS_ALLOCATION_SITE());
-        host.CopyFrom(_values, context).Wait();
-        return host;
+        return batch.HostValues(_values, context, "volumeFields");
     }
 }

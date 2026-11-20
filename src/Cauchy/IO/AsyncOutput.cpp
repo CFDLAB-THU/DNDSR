@@ -3,6 +3,7 @@
 #    include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #endif
 #include "Cauchy/IO/OutputQueue.hpp"
+#include "Cauchy/IO/OutputStaging.hpp"
 #include "Cauchy/Core/Simulation.hpp"
 #include "DNDS/MPI/CollectiveStage.hpp"
 #include "DNDS/MPI/Failure.hpp"
@@ -76,6 +77,7 @@ namespace DNDS::Cauchy
         std::shared_ptr<Runtime::CommunicationContext> control;
         std::vector<std::shared_ptr<Runtime::CommunicationContext>> domains;
         std::vector<Runtime::ExecutionContext> writerCopy;
+        std::shared_ptr<OutputStaging> staging = std::make_shared<OutputStaging>();
         // Destroy/join worker before releasing its MPI ordering contexts.
         std::unique_ptr<OutputQueue> queue;
         explicit Data(Simulation &simulation)
@@ -134,12 +136,13 @@ namespace DNDS::Cauchy
             {
                 files.visualizationPrefix = plan.VisualizationPrefix(iDomain, token);
                 files.visualization.emplace(domain.CaptureInternalVisualization(config.Output().hdfDeflateLevel));
-                files.visualization->BindWriterCopy(_data->writerCopy[iDomain]);
+                files.visualization->BindWriter(_data->writerCopy[iDomain], _data->staging);
             }
             if (checkpoint)
             {
                 files.checkpointPath = plan.InternalCheckpointPath(iDomain, token);
                 files.checkpoint.emplace(domain.CaptureInternalCheckpoint(files.communication, state, true, _data->writerCopy[iDomain]));
+                files.checkpoint->BindWriter(_data->staging);
             }
             batch->domains.push_back(std::move(files));
             return [batch] { batch->Write(); }; });
@@ -195,13 +198,14 @@ namespace DNDS::Cauchy
                 if (checkpoint)
                 {
                     files.checkpoint.emplace(domain.CaptureCheckpoint(files.communication, {config.Output().checkpointReconstruction, true}, _data->writerCopy[iDomain]));
+                    files.checkpoint->BindWriter(_data->staging);
                     files.checkpointPath = batch->direct ? batch->checkpointPath
                         : (archive.parent_path() / batch->domainPaths[iDomain]["file"].get<std::string>()).string();
                 }
                 if (visualization)
                 {
                     files.visualization.emplace(domain.PrepareVisualization(config.Output().hdfDeflateLevel));
-                    files.visualization->BindWriterCopy(_data->writerCopy[iDomain]);
+                    files.visualization->BindWriter(_data->writerCopy[iDomain], _data->staging);
                     files.visualizationPrefix = plan.VisualizationPrefix(iDomain, token);
                 }
                 batch->domains.push_back(std::move(files));

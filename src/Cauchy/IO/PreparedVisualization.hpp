@@ -7,6 +7,7 @@ namespace DNDS::Cauchy
 {
     struct BoundaryOutputGeometry;
     class OutputFields;
+    class OutputStaging;
     /** @brief Detached numerical output with a retained immutable mesh read.
      * @details Owns detached resident cell fields and optional parent-face flux rows. It
      * retains no solution/reconstruction/workspace or physics worker. Geometry
@@ -18,7 +19,7 @@ namespace DNDS::Cauchy
     {
         friend class FiniteVolume;
         friend class AsyncOutput;
-        void BindWriterCopy(Runtime::ExecutionContext);
+        void BindWriter(Runtime::ExecutionContext, std::shared_ptr<OutputStaging>);
         struct Data;
         std::shared_ptr<Data> _data;
         PreparedVisualization(std::shared_ptr<Geom::UnstructuredMesh>, OutputFields,

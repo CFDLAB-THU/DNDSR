@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Cauchy/IO/OutputStaging.hpp"
 #include "Cauchy/State/EquationDofs.hpp"
 #include "Cauchy/Physics/EquationSystem.hpp"
 #include "DNDS/Runtime/Execution/EagerEngine.hpp"
@@ -18,6 +19,8 @@ namespace DNDS::Cauchy
      */
     class OutputFields
     {
+        friend class PreparedVisualization;
+        Runtime::Array<real> CopyToHost(Runtime::ExecutionContext, OutputStaging::Batch &) const;
         Runtime::Array<real> _values;
         Runtime::Array<NumericalStatus> _status;
 

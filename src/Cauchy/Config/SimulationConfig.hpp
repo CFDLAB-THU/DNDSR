@@ -848,7 +848,7 @@ namespace DNDS::Cauchy
             DNDS_FIELD(boundaryFacialFluxes, "Write observed face-averaged numerical flux and tangential force in boundary VTKHDF");
             DNDS_FIELD(hdfDeflateLevel, "VTKHDF compression level 0..9; uncompressed is the initial portable baseline");
             DNDS_FIELD(checkpointReconstruction, "Store optional compatible polynomial warm guesses for exact finite-sweep continuation; default omits them");
-            DNDS_FIELD(asynchronous, "Bounded background accepted-step output; requires MPI_THREAD_MULTIPLE. Internal output and shutdown drain the queue");
+            DNDS_FIELD(asynchronous, "Bounded background accepted-step and internal output with MPI_THREAD_MULTIPLE. Final output and shutdown drain the queue");
             DNDS_FIELD(forceZones, "Boundary zones on which pressure and viscous body force are integrated");
             config.field_section(&T::implicit, "implicit", "Nonlinear iteration history, console and internal artifact cadence");
             config.field_section(&T::diagnostics, "diagnostics", "Operational logging sinks independent of scientific history");

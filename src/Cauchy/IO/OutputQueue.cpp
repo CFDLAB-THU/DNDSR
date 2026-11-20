@@ -1,3 +1,4 @@
+#include "Cauchy/IO/OutputMeasurement.hpp"
 #include "Cauchy/IO/OutputQueue.hpp"
 #include "DNDS/Core/Errors.hpp"
 #include <condition_variable>
@@ -94,8 +95,12 @@ namespace DNDS::Cauchy
         DNDS_check_throw_info(prepare, "output queue has no snapshot producer");
         {
             std::unique_lock<std::mutex> lock(data.mutex);
-            data.changed.wait(lock, [&]
-                              { return data.closing || data.pending.size() + unsigned(data.running) < data.capacity; });
+            if (!data.closing && data.pending.size() + unsigned(data.running) >= data.capacity)
+            {
+                const OutputMeasurement wait("queue_full_wait");
+                data.changed.wait(lock, [&]
+                                  { return data.closing || data.pending.size() + unsigned(data.running) < data.capacity; });
+            }
             if (data.failure)
                 std::rethrow_exception(data.failure);
             DNDS_check_throw_info(!data.closing, "output queue is closed");
@@ -106,7 +111,11 @@ namespace DNDS::Cauchy
             explicit PreparationScope(bool &flag) : active(flag) { active = true; }
             ~PreparationScope() { active = false; }
         } preparation(data.preparing);
-        auto action = prepare();
+        Action action;
+        {
+            const OutputMeasurement capture("capture");
+            action = prepare();
+        }
         DNDS_check_throw_info(action, "output snapshot producer returned no writer");
         {
             std::lock_guard<std::mutex> lock(data.mutex);
@@ -122,6 +131,7 @@ namespace DNDS::Cauchy
         auto &data = *_data;
         data.CheckController();
         DNDS_check_throw_info(!data.preparing, "output snapshot preparation cannot drain its queue");
+        const OutputMeasurement drain("drain");
         std::unique_lock<std::mutex> lock(data.mutex);
         data.changed.wait(lock, [&]
                           { return !data.running && data.pending.empty(); });
@@ -139,7 +149,10 @@ namespace DNDS::Cauchy
         }
         data.changed.notify_all();
         if (data.worker.joinable())
+        {
+            const OutputMeasurement drain("shutdown_drain");
             data.worker.join();
+        }
         // The explicit observation reports failures. A second Close (including
         // destruction after a UT caught it) only joins and releases resources.
     }

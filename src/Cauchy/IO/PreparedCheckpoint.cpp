@@ -1,7 +1,9 @@
+#include "Cauchy/IO/OutputMeasurement.hpp"
 #include "Cauchy/IO/PreparedCheckpoint.hpp"
 #include "Cauchy/IO/StateArchive.hpp"
-#include "Cauchy/State/EquationDofAlgebra.hpp"
+#include "Cauchy/IO/OutputStaging.hpp"
 #include "DNDS/Serializer/SerializerH5.hpp"
+#include "DNDS/MPI/CollectiveStage.hpp"
 
 namespace DNDS::Cauchy
 {
@@ -12,6 +14,7 @@ namespace DNDS::Cauchy
         Runtime::Array<index> ids;
         CheckpointMetadata::MeshEnvelope mesh;
         std::shared_ptr<Runtime::CommunicationContext> communication;
+        std::shared_ptr<OutputStaging> staging;
         bool detached;
         Runtime::ExecutionContext writerCopy;
         std::optional<InternalFields> internal;
@@ -31,36 +34,47 @@ namespace DNDS::Cauchy
                               "prepared checkpoint requires an I/O communicator and host fields or a detached device snapshot with a copy stream");
     }
     bool PreparedCheckpoint::Detached() const { return _data->detached; }
+    void PreparedCheckpoint::BindWriter(std::shared_ptr<OutputStaging> staging)
+    {
+        DNDS_check_throw_info(_data.unique(), "bind the file writer before sharing a checkpoint");
+        _data->staging = std::move(staging);
+    }
     void PreparedCheckpoint::Write(const std::string &path, const Json &resolved, const Json &outputController) const
     {
         const auto &data = *_data;
-        std::optional<DomainStateSnapshot> staged;
-        std::optional<InternalFields> stagedInternal;
-        if (data.writerCopy.device != Runtime::Device::Host())
-        {
-            staged.emplace(data.snapshot.DetachedHost(data.writerCopy));
+        const auto &snapshot = data.snapshot;
+        const MPIInfo mpi(data.communication->Communicator());
+        OutputStaging local;
+        OutputStaging::Batch batch(data.staging ? *data.staging : local);
+        std::vector<std::pair<std::string, Runtime::Array<real>>> fields;
+        MPI::LocalStage(mpi, [&]
+                        {
+            const auto add = [&](const auto &array, const std::string &name)
+            { fields.emplace_back(name, batch.HostValues(array, data.writerCopy, name)); };
+            const auto equation = [&](const EquationDofs &state, const std::string &prefix)
+            {
+                for (index i = 0; i < state.PhysicalFieldNumber(); ++i)
+                    add(state.PhysicalField(i).Owned(), prefix + std::to_string(i));
+            };
+            equation(snapshot.Means(), "state_field_");
+            if (snapshot.Reconstruction())
+                equation(*snapshot.Reconstruction(), "reconstruction_field_");
+            if (snapshot.LimitedVRHistory())
+                add(*snapshot.LimitedVRHistory(), "limited_vr_history");
+            if (snapshot.PreviousState())
+                equation(*snapshot.PreviousState(), "history_field_");
             if (data.internal)
             {
-                stagedInternal.emplace();
-                for (const auto &[key, field] : data.internal->equations)
-                    stagedInternal->equations.emplace_back(key, EquationDofOperations::CopyOwnedTo(field, Runtime::Device::Host(), data.writerCopy, {true}));
-                for (const auto &[key, field] : data.internal->arrays)
-                {
-                    const auto layout = field.Layout();
-                    auto host = Runtime::Array<real>::FromStorage(layout, Runtime::Buffer::AllocatePinnedHost(CheckedSize::Multiply(layout.Elements(), sizeof(real))));
-                    host.SetName(field.Name(), DNDS_ALLOCATION_SITE());
-                    host.CopyFrom(field, data.writerCopy).Wait();
-                    stagedInternal->arrays.emplace_back(key, std::move(host));
-                }
-            }
-        }
-        const auto &snapshot = staged ? *staged : data.snapshot;
-        const auto &internal = staged ? stagedInternal : data.internal;
-        const MPIInfo mpi(data.communication->Communicator());
+                for (const auto &[key, values] : data.internal->equations)
+                    equation(values, key);
+                for (const auto &[key, values] : data.internal->arrays)
+                    add(values, key);
+            } });
+        const OutputMeasurement file("checkpoint_file");
         auto serializer = std::make_shared<Serializer::SerializerH5>(mpi);
         serializer->OpenFile(path, false);
         serializer->WriteInt("cauchy_format", 5);
-        if (internal)
+        if (data.internal)
             serializer->WriteInt("cauchy_internal_format", 1);
         serializer->WriteString("resolved_config", resolved.dump());
         serializer->WriteString("metadata_json", data.metadata.dump());
@@ -74,23 +88,10 @@ namespace DNDS::Cauchy
         Runtime::WriteArray(data.mesh.topology, serializer, "mesh_topology", mpi);
         Runtime::WriteArray(data.mesh.coordinates, serializer, "mesh_coordinates", mpi);
         Runtime::WriteArray(data.mesh.periodicTransforms, serializer, "periodic_transforms", mpi);
-        WriteEquationArrays(snapshot.Means(), serializer, "state_field_", mpi);
-        if (snapshot.Reconstruction())
-            WriteEquationArrays(*snapshot.Reconstruction(), serializer, "reconstruction_field_", mpi);
-        if (snapshot.LimitedVRHistory())
-            WriteStateArray(*snapshot.LimitedVRHistory(), serializer, "limited_vr_history", mpi, Runtime::ExecutionContext::Host());
         if (snapshot.PreviousState())
-        {
             serializer->WriteReal("history_dt", snapshot.PreviousDt());
-            WriteEquationArrays(*snapshot.PreviousState(), serializer, "history_field_", mpi);
-        }
-        if (internal)
-        {
-            for (const auto &[key, values] : internal->equations)
-                WriteEquationArrays(values, serializer, key, mpi);
-            for (const auto &[key, values] : internal->arrays)
-                WriteStateArray(values, serializer, key, mpi, Runtime::ExecutionContext::Host());
-        }
+        for (const auto &[key, values] : fields)
+            Runtime::WriteArray(values, serializer, key, mpi);
         serializer->CloseFile();
     }
 }

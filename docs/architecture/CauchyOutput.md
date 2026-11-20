@@ -293,6 +293,10 @@ and retains a mesh read until writing finishes. No live Domain, coefficient
 buffer or physics worker is borrowed by the writer. Mesh mutation or external
 CGNS/HDF5 operations must first drain this service.
 
+One writer owns the page-locked staging slots. Checkpoint staging visits owned field allocations in archive order, including time-history and internal-stage arrays. A subsequent file can reuse each slot after the previous write has returned. A slot grows when the next payload needs more bytes. The writer retains its high-water allocation until shutdown.
+
+Set `DNDS_CAUCHY_OUTPUT_PROFILE=1` to emit process-local timings in seconds for controller capture, D2H, file writes, queue-full waits and drains. The `bytes` value on `pinned_reserve` is the current total reserved pinned payload in bytes. Its maximum is the writer's pinned high-water mark. The file timers cover HDF5 writes and close. The D2H timers include the host wait for the copy. Controller and worker times can overlap.
+
 The current backend is parallel HDF5 and **requires MPI_THREAD_MULTIPLE**.
 FUNNELED/SERIALIZED configurations reject this option explicitly. Dedicated
 congruent control/domain communicators are duplicated once at service setup

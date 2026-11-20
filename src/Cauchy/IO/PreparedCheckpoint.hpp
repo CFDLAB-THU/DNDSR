@@ -6,6 +6,7 @@
 
 namespace DNDS::Cauchy
 {
+    class OutputStaging;
     struct CheckpointPreparation
     {
         bool includeReconstruction = false;
@@ -26,13 +27,15 @@ namespace DNDS::Cauchy
     class PreparedCheckpoint
     {
         friend class Domain;
+        friend class AsyncOutput;
+        void BindWriter(std::shared_ptr<OutputStaging>);
         struct InternalFields
         {
             std::vector<std::pair<std::string, EquationDofs>> equations;
             std::vector<std::pair<std::string, Runtime::Array<real>>> arrays;
         };
         struct Data;
-        std::shared_ptr<const Data> _data;
+        std::shared_ptr<Data> _data;
         PreparedCheckpoint(DomainStateSnapshot, Json metadata, Runtime::Array<index> ids,
                            CheckpointMetadata::MeshEnvelope,
                            std::shared_ptr<Runtime::CommunicationContext>, bool detached, std::optional<InternalFields> internal, Runtime::ExecutionContext writerCopy);
