@@ -32,7 +32,10 @@ namespace DNDS::Cauchy
         const std::vector<std::vector<index>> &columns,
         const std::vector<index> &order, const std::vector<index> &position,
         const std::vector<index> &core, const std::vector<index> &dependent, LinearIndexStorage indices)
-        : _order(Publish(order, "Cauchy/linear/pattern/order")), _position(Publish(position, "Cauchy/linear/pattern/position")),
+        : _selections{Runtime::RowSelectionShape::FromIndices(order, columns.size()),
+                      Runtime::RowSelectionShape::FromIndices(core, columns.size()),
+                      Runtime::RowSelectionShape::FromIndices(dependent, columns.size())},
+          _order(Publish(order, "Cauchy/linear/pattern/order")), _position(Publish(position, "Cauchy/linear/pattern/position")),
           _core(Publish(core, "Cauchy/linear/pattern/core")), _dependent(Publish(dependent, "Cauchy/linear/pattern/dependent"))
     {
         DNDS_check_throw_info(indices == LinearIndexStorage::Int64 || indices == LinearIndexStorage::Int32,
@@ -79,6 +82,7 @@ namespace DNDS::Cauchy
     LinearPatternStorage LinearPatternStorage::Placed(Runtime::Device device, Runtime::ExecutionContext context) const
     {
         LinearPatternStorage result;
+        result._selections = _selections;
         result._columns = _columns.To(device, context);
         if (_offsets32)
         {

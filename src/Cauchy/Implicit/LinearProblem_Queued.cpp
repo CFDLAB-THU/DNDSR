@@ -195,6 +195,7 @@ namespace DNDS::Cauchy
             DNDS_check_throw_info(_offDiagonalEvaluator && _offDiagonalEvaluator->Device() == Device(),
                                   "queued evaluated Jacobian is missing or belongs to another device");
             EvaluatedLinearAction action;
+            action.selection = _pattern->rows.Selections().For(region);
             action.rows = region == LinearRegion::All    ? _pattern->rows.OrderArray()
                           : region == LinearRegion::Core ? _pattern->rows.CoreArray()
                                                          : _pattern->rows.DependentArray();
@@ -268,11 +269,11 @@ namespace DNDS::Cauchy
         const bool fullDiagonal = _diagonalStorage == DiagonalStorage::Block;
         const auto submit = [&](auto symbolic)
         {
-            R::SubmitArrayBatch(engine, stream, [evaluator, right, source, destination, components, fullDiagonal, region, diagonalSlot, blocksSlot, jacobi, zero, options, rowMajorBlocks = _rowMajorBlocks, ownedRows = _space.OwnedRows()](R::ExecutionContext context, SpanView<const ReadRows> values, SpanView<const WriteRows> outputs, auto order, auto position, auto core, auto dependent, auto offsets, auto... symbolicViews)
+            R::SubmitArrayBatch(engine, stream, [evaluator, right, source, destination, components, fullDiagonal, region, diagonalSlot, blocksSlot, jacobi, zero, options, rowMajorBlocks = _rowMajorBlocks, ownedRows = _space.OwnedRows(), selections = patternArrays.Selections()](R::ExecutionContext context, SpanView<const ReadRows> values, SpanView<const WriteRows> outputs, auto order, auto position, auto core, auto dependent, auto offsets, auto... symbolicViews)
                                 {
             const auto symbolicColumns = SymbolicColumns(symbolicViews...);
-            const LinearPatternView pattern{symbolicColumns, order, position, core, dependent, index(ownedRows)};
-            const auto rows = region == LinearRegion::All ? pattern.order : region == LinearRegion::Core ? pattern.core : pattern.dependent;
+            const LinearPatternView pattern{symbolicColumns, order, position, core, dependent, index(ownedRows), selections};
+            const auto rows = pattern.Rows(region);
             A::BlockMatrixArrayView<const real> blocks;
             if (blocksSlot >= 0)
                 blocks = {values[blocksSlot], offsets, components, rowMajorBlocks};

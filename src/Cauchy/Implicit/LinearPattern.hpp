@@ -1,10 +1,30 @@
 #pragma once
 
 #include "DNDS/Runtime/Array/Array.hpp"
+#include "DNDS/Runtime/Array/RowSelection.hpp"
 #include <optional>
 
 namespace DNDS::Cauchy
 {
+    enum class LinearRegion
+    {
+        All,
+        Core,
+        HaloDependent
+    };
+    /// Compress the existing logical scan order once. A permutation with more
+    /// than two runs keeps its original order through the published index table.
+    struct LinearRowSelections
+    {
+        Runtime::RowSelectionShape all, core, dependent;
+
+        Runtime::RowSelectionShape For(LinearRegion region) const
+        {
+            return region == LinearRegion::All ? all : region == LinearRegion::Core ? core
+                                                                                    : dependent;
+        }
+    };
+
     enum class LinearIndexStorage
     {
         Int64,
@@ -119,6 +139,13 @@ namespace DNDS::Cauchy
         LinearColumnsView columns;
         Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> order, position, core, dependent;
         index ownedRows = 0;
+        LinearRowSelections selections;
+
+        Runtime::RowSelection Rows(LinearRegion region) const
+        {
+            return {selections.For(region), region == LinearRegion::All ? order : region == LinearRegion::Core ? core
+                                                                                                               : dependent};
+        }
         /// C++ launcher check; no residency branches inside row arithmetic.
         void ValidateDevice(Runtime::Device device) const
         {
@@ -134,6 +161,7 @@ namespace DNDS::Cauchy
      */
     class LinearPatternStorage
     {
+        LinearRowSelections _selections;
         Runtime::Array<index> _columns{Runtime::RowLayout::Ragged({})};
         std::optional<Runtime::Array<int>> _offsets32, _columns32;
         Runtime::Array<index> _order{Runtime::RowLayout::Dense(0, 1)};
@@ -144,12 +172,13 @@ namespace DNDS::Cauchy
     public:
         class ReadAccess
         {
+            LinearRowSelections _selections;
             Runtime::Array<index>::ReadLease _columns, _order, _position, _core, _dependent;
             std::optional<Runtime::Array<int>::ReadLease> _offsets32, _columns32;
 
         public:
             explicit ReadAccess(const LinearPatternStorage &storage, Runtime::ExecutionContext context)
-                : _columns(storage._columns.Read(context)), _order(storage._order.Read(context)),
+                : _selections(storage._selections), _columns(storage._columns.Read(context)), _order(storage._order.Read(context)),
                   _position(storage._position.Read(context)), _core(storage._core.Read(context)),
                   _dependent(storage._dependent.Read(context))
             {
@@ -164,7 +193,7 @@ namespace DNDS::Cauchy
                 const auto columns = _offsets32 ? LinearColumnsView{_offsets32->View<Runtime::FixedRows<1>>(), _columns32->View<Runtime::FixedRows<1>>()} : LinearColumnsView{_columns.View<Runtime::CSRRows>()};
                 return {columns, _order.View<Runtime::FixedRows<1>>(),
                         _position.View<Runtime::FixedRows<1>>(), _core.View<Runtime::FixedRows<1>>(),
-                        _dependent.View<Runtime::FixedRows<1>>(), columns.RowCount()};
+                        _dependent.View<Runtime::FixedRows<1>>(), columns.RowCount(), _selections};
             }
         };
         LinearPatternStorage() = default;
@@ -184,6 +213,7 @@ namespace DNDS::Cauchy
             DNDS_check_throw_info(!UsesInt32(), "int32 linear pattern has no int64 column mirror");
             return _columns;
         }
+        LinearRowSelections Selections() const { return _selections; }
         bool UsesInt32() const { return bool(_columns32); }
         const Runtime::Array<int> &Offsets32() const
         {

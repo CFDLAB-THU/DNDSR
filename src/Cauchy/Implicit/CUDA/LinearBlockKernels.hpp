@@ -10,7 +10,6 @@ namespace DNDS::Cauchy::CUDA
     using VectorReadRows = Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows>;
     using MatrixReadRows = Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows>;
     using MatrixWriteRows = Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows>;
-    using LinearIndexRows = Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
 
     /** @brief Frozen assembled operator for a selected set of independent rows.
      * @details columns and blocks have identical sparse incidence ordering.
@@ -24,7 +23,7 @@ namespace DNDS::Cauchy::CUDA
     {
         Algebra::BlockMatrixArrayView<const real> blocks;
         Columns columns;
-        LinearIndexRows rows;
+        Runtime::RowSelection rows;
         MatrixReadRows diagonal;
         index ownedRows = 0;
         int components = 0;

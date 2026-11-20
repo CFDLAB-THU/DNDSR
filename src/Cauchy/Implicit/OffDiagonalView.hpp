@@ -1,5 +1,6 @@
 #pragma once
 #include "DNDS/Algebra/BlockMatrixStorage.hpp"
+#include "DNDS/Runtime/Array/RowSelection.hpp"
 #include "DNDS/Algebra/DofField.hpp"
 #include "DNDS/Core/NumericalStatus.hpp"
 #include <memory>
@@ -24,6 +25,7 @@ namespace DNDS::Cauchy
     struct EvaluatedLinearAction
     {
         Runtime::Array<index> rows;
+        Runtime::RowSelectionShape selection;
         Runtime::Array<real> diagonal, owned, output;
         std::optional<Runtime::Array<real>> rhs, ghost;
         Runtime::Array<NumericalStatus> status;

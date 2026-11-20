@@ -17,12 +17,6 @@
 namespace DNDS::Cauchy
 {
     class EquationDofs;
-    enum class LinearRegion
-    {
-        All,
-        Core,
-        HaloDependent
-    };
     enum class LinearInputLayout
     {
         Native,

@@ -66,7 +66,7 @@ namespace DNDS::Cauchy
         }
         template <bool Upper, class Forward>
         void Scan(Forward forwardValues, Algebra::DofComponentView<real> destination, Algebra::DofComponentView<const real> ghost,
-                  Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> rows)
+                  Runtime::RowSelection rows)
         {
             const auto b = rhsRead.ComponentLayout();
             std::optional<Algebra::DofComponentLayout<const real>> old;
@@ -120,8 +120,7 @@ namespace DNDS::Cauchy
         if (state.inputAllRead)
             ghost.emplace(state.inputAllRead->ComponentLayout());
         const auto target = state.forwardWrite->ComponentLayout();
-        const auto &rows = region == LinearRegion::All ? state.patternView.order : region == LinearRegion::Core ? state.patternView.core
-                                                                                                                : state.patternView.dependent;
+        const auto rows = state.patternView.Rows(region);
         state.Scan<false>(target.View(), target.View(), ghost ? ghost->View().GhostPart() : Algebra::DofComponentView<const real>{}, rows);
         state.lower = region == LinearRegion::Core ? 1 : 2;
         if (state.lower == 2)
@@ -152,8 +151,7 @@ namespace DNDS::Cauchy
             ghost.emplace(state.inputAllRead->ComponentLayout());
         const auto forward = state.forwardRead->ComponentLayout();
         const auto target = state.outputWrite->ComponentLayout();
-        const auto &rows = region == LinearRegion::All ? state.patternView.order : region == LinearRegion::Core ? state.patternView.core
-                                                                                                                : state.patternView.dependent;
+        const auto rows = state.patternView.Rows(region);
         state.Scan<true>(forward.View(), target.View(), ghost ? ghost->View().GhostPart() : Algebra::DofComponentView<const real>{}, rows);
         state.upper = region == LinearRegion::HaloDependent ? 1 : 2;
     }

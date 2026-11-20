@@ -18,7 +18,7 @@ namespace DNDS::Cauchy::CUDA
             for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x;
                  iRow < request.rows.RowCount(); iRow += index(gridDim.x) * blockDim.x)
             {
-                const index iCell = request.rows(iRow, 0);
+                const index iCell = request.rows.RowAt(iRow);
                 const auto diagonal = request.diagonal[iCell];
                 real value[N]{};
                 if constexpr (Jacobi)
@@ -85,7 +85,7 @@ namespace DNDS::Cauchy::CUDA
             const index group = index(blockIdx.x) * (blockDim.x / lanes) + threadIdx.x / lanes;
             for (index iRow = group; iRow < request.rows.RowCount(); iRow += index(gridDim.x) * (blockDim.x / lanes))
             {
-                const index iCell = request.rows(iRow, 0);
+                const index iCell = request.rows.RowAt(iRow);
                 const auto diagonal = request.diagonal[iCell];
                 real value = component < N ? rhs(iCell, component) : 0;
                 if constexpr (!Zero)

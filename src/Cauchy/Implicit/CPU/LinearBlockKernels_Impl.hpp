@@ -26,7 +26,7 @@ namespace DNDS::Cauchy::CPU
     /// per row. Static zero-start removes all off-diagonal/input accesses.
     template <bool Zero, class RHS, class Owned, class Ghost, class Output, class Inverse, class Blocks>
     void JacobiRows(RHS rhs, Owned owned, Ghost ghost, Output output, Inverse inverse,
-                    const Blocks &blocks, LinearPatternView pattern, Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> rows,
+                    const Blocks &blocks, LinearPatternView pattern, Runtime::RowSelection rows,
                     index components, bool fullDiagonal)
     {
         constexpr bool segmented = std::is_same_v<Output, Algebra::DofComponentView<real>>;
@@ -50,7 +50,7 @@ namespace DNDS::Cauchy::CPU
           auto &neighbor = scratch[part][2], &product = scratch[part][3];
           for (index iRow = rows.RowCount() * part / parts; iRow < rows.RowCount() * (part + 1) / parts; ++iRow)
           {
-            const index iCell = rows(iRow, 0);
+            const index iCell = rows.RowAt(iRow);
             copyRow(rhs, iCell, value);
             if constexpr (!Zero)
                 for (index j = 0; j < index(pattern.columns[iCell].size()); ++j)
@@ -77,7 +77,7 @@ namespace DNDS::Cauchy::CPU
     /// read output. No ownership/communication or per-row allocation here.
     template <bool Upper, int Size, bool ZeroInput = false, class RHS, class Old, class Forward, class Output, class Ghost, class Inverse, class Blocks>
     void ScanSGSRows(RHS rhs, Old old, Forward forward, Output output, Ghost ghost, Inverse inverse, const Blocks &blocks,
-                     LinearPatternView pattern, Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> rows, index components, bool fullDiagonal,
+                     LinearPatternView pattern, Runtime::RowSelection rows, index components, bool fullDiagonal,
                      SpanView<const WorkerRowRanges> partitions = {}, std::optional<WorkerRowRanges> worker = {})
     {
         constexpr bool scratch = std::is_same_v<Output, Algebra::DofComponentView<real>>;
@@ -140,7 +140,7 @@ namespace DNDS::Cauchy::CPU
         const index ownedRows = pattern.ownedRows;
         for (index scan = 0; scan < rows.RowCount(); ++scan)
         {
-            const index iCell = rows(Upper ? rows.RowCount() - 1 - scan : scan, 0);
+            const index iCell = rows.RowAt(Upper ? rows.RowCount() - 1 - scan : scan);
             if (worker && !worker->Contains(iCell))
                 continue;
             value = readRow(rhs, iCell);
@@ -209,7 +209,7 @@ namespace DNDS::Cauchy::CPU
     /// only separate logical fields need one-row scratch, allocated before loops.
     template <int Size = Eigen::Dynamic, class Owned, class Ghost, class Output, class Diagonal, class Blocks>
     void ApplyBlockRows(Owned owned, Ghost ghost, Output output, Diagonal diagonal, const Blocks &blocks,
-                        LinearPatternView pattern, Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> rows, index components, bool fullDiagonal)
+                        LinearPatternView pattern, Runtime::RowSelection rows, index components, bool fullDiagonal)
     {
         constexpr bool scratch = std::is_same_v<Output, Algebra::DofComponentView<real>>;
         if constexpr (scratch && std::is_same_v<Owned, Algebra::DofComponentView<const real>> &&
@@ -269,7 +269,7 @@ namespace DNDS::Cauchy::CPU
           auto &product = buffers[part].product;
           for (index iRow = rows.RowCount() * part / parts; iRow < rows.RowCount() * (part + 1) / parts; ++iRow)
           {
-            const index iCell = rows(iRow, 0);
+            const index iCell = rows.RowAt(iRow);
             auto result = [&]
             {
                 if constexpr (scratch)

@@ -10,7 +10,6 @@ namespace DNDS::Cauchy::CPU
 {
     using LinearReadRows = Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows>;
     using LinearWriteRows = Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows>;
-    using LinearIndexRows = Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
     using LinearDiagonalRows = Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows>;
     using LinearDofRead = Algebra::DofComponentView<const real>;
     using LinearDofWrite = Algebra::DofComponentView<real>;
@@ -24,7 +23,7 @@ namespace DNDS::Cauchy::CPU
     {
         OffDiagonalView blocks;
         LinearPatternView pattern;
-        LinearIndexRows rows;
+        Runtime::RowSelection rows;
         LinearDiagonalRows diagonal;
         index components;
         bool fullDiagonal;

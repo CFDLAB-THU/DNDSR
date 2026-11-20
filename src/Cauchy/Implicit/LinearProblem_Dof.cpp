@@ -28,8 +28,7 @@ namespace DNDS::Cauchy
         const auto patternRead = _pattern->rows.Read();
         const auto pattern = patternRead.View();
         const auto blocks = ReadOffDiagonal();
-        const auto &rows = region == LinearRegion::All ? pattern.order : region == LinearRegion::Core ? pattern.core
-                                                                                                      : pattern.dependent;
+        const auto rows = pattern.Rows(region);
         try
         {
             CPU::JacobiLinearRows({blocks.View(), pattern, rows, inverse.View<R::UniformTableRows>(), _components, _diagonalStorage == DiagonalStorage::Block, {}, _rowMajorBlocks},
@@ -80,8 +79,7 @@ namespace DNDS::Cauchy
         const auto patternRead = _pattern->rows.Read();
         const auto pattern = patternRead.View();
         const auto offDiagonal = ReadOffDiagonal();
-        const auto rows = region == LinearRegion::All ? pattern.order : region == LinearRegion::Core ? pattern.core
-                                                                                                     : pattern.dependent;
+        const auto rows = pattern.Rows(region);
         CPU::ApplyLinearRows({offDiagonal.View(), pattern, rows, diagonal.View<R::UniformTableRows>(), _components, _diagonalStorage == DiagonalStorage::Block, {}, _rowMajorBlocks},
                              source.View().OwnedPart(),
                              source.View().GhostPart(), destination.View());

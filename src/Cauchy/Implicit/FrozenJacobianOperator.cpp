@@ -78,11 +78,11 @@ namespace DNDS::Cauchy
         for (const auto *input : {&_values.means, &_values.pressure, &_values.pressureDerivative, &_values.radius, &_values.magnitudes})
             check(*input);
         const auto retained = shared_from_this();
-        R::SubmitArrays(engine, stream, [retained, jacobi, full, rowMajorBlocks](R::ExecutionContext context, auto means, auto pressure, auto derivative, auto radius, auto magnitudes, auto diagonal, auto rhs, auto owned, auto ghost, auto rows, auto output, auto status)
+        R::SubmitArrays(engine, stream, [retained, jacobi, full, rowMajorBlocks, selection = action.selection](R::ExecutionContext context, auto means, auto pressure, auto derivative, auto radius, auto magnitudes, auto diagonal, auto rhs, auto owned, auto ghost, auto rows, auto output, auto status)
                         {
 #ifdef DNDS_USE_CUDA
                             const CUDA::FrozenJacobianInput snapshot{retained->_geometry->_residentRead.View(), means, pressure, derivative, radius, magnitudes, retained->_parameters};
-                            CUDA::ApplyFrozenJacobian(context, snapshot, rows, diagonal, full, rhs, owned, ghost, output, status, jacobi, rowMajorBlocks);
+                            CUDA::ApplyFrozenJacobian(context, snapshot, {selection, rows}, diagonal, full, rhs, owned, ghost, output, status, jacobi, rowMajorBlocks);
 #else
                             DNDS_check_throw_info(false, "frozen CUDA Jacobian provider is not compiled");
 #endif
