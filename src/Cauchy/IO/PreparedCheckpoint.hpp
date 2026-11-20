@@ -14,7 +14,7 @@ namespace DNDS::Cauchy
         bool detached = true;
     };
 
-    /** @brief Complete accepted-step archive input, with no live Domain borrow.
+    /** @brief Frozen accepted-step or internal-stage archive input, with no live Domain borrow.
      * @details Owns matching field/history/control values, persistent cell IDs,
      * mesh envelope, physics/frame metadata and a shared I/O communicator.
      * Write preserves the existing v5 domain HDF schema and performs no point
@@ -26,11 +26,16 @@ namespace DNDS::Cauchy
     class PreparedCheckpoint
     {
         friend class Domain;
+        struct InternalFields
+        {
+            std::vector<std::pair<std::string, EquationDofs>> equations;
+            std::vector<std::pair<std::string, Runtime::Array<real>>> arrays;
+        };
         struct Data;
         std::shared_ptr<const Data> _data;
         PreparedCheckpoint(DomainStateSnapshot, Json metadata, Runtime::Array<index> ids,
                            CheckpointMetadata::MeshEnvelope,
-                           std::shared_ptr<Runtime::CommunicationContext>, bool detached);
+                           std::shared_ptr<Runtime::CommunicationContext>, bool detached, std::optional<InternalFields> internal = {});
 
     public:
         bool Detached() const;

@@ -331,22 +331,8 @@ namespace DNDS::Cauchy
                                          : checkpoint                ? "checkpoint"
                                                                      : "visualization",
                                          iDomain, token));
-            // Internal checkpoints may contain active coupled stages. Keep the
-            // exact existing synchronous writer, after all older background
-            // transactions finish; never share its HDF/MPI sequence with them.
-            if (asynchronous)
-                asynchronous->Drain();
             auto &domain = simulation.GetDomain(iDomain);
             const auto prefix = plan.VisualizationPrefix(iDomain, token);
-            if (visualization)
-                domain.WriteInternalVisualization(prefix,
-                                                  output.hdfDeflateLevel);
-            if (checkpoint)
-                domain.WriteInternalCheckpoint(
-                    plan.InternalCheckpointPath(iDomain, token), config.Root(),
-                    nonlinear, CaptureDomainState(iDomain));
-            if (!writer)
-                return;
             Json artifacts = Json::array();
             if (checkpoint)
                 artifacts.push_back(
@@ -373,6 +359,19 @@ namespace DNDS::Cauchy
                 {"iteration", completedIteration},
                 {"time", domain.InternalObservationTime()},
                 {"artifacts", std::move(artifacts)}};
+            auto controller = checkpoint ? CaptureDomainState(iDomain) : Json();
+            if (asynchronous)
+            {
+                asynchronous->SubmitInternal(simulation, config, plan, iDomain, token, nonlinear,
+                                             checkpoint, visualization, std::move(controller), manifest);
+                return;
+            }
+            if (visualization)
+                domain.WriteInternalVisualization(prefix, output.hdfDeflateLevel);
+            if (checkpoint)
+                domain.WriteInternalCheckpoint(plan.InternalCheckpointPath(iDomain, token), config.Root(), nonlinear, controller);
+            if (!writer)
+                return;
             std::ofstream file(plan.InternalSnapshotManifestPath(iDomain, token));
             file << manifest.dump(2) << '\n';
             DNDS_check_throw_info(bool(file),

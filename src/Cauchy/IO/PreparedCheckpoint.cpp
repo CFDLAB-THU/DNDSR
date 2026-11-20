@@ -12,16 +12,17 @@ namespace DNDS::Cauchy
         CheckpointMetadata::MeshEnvelope mesh;
         std::shared_ptr<Runtime::CommunicationContext> communication;
         bool detached;
+        std::optional<InternalFields> internal;
         Data(DomainStateSnapshot state, Json description, Runtime::Array<index> cellIds,
              CheckpointMetadata::MeshEnvelope envelope,
-             std::shared_ptr<Runtime::CommunicationContext> context, bool copied)
+             std::shared_ptr<Runtime::CommunicationContext> context, bool copied, std::optional<InternalFields> active)
             : snapshot(std::move(state)), metadata(std::move(description)), ids(std::move(cellIds)),
-              mesh(std::move(envelope)), communication(std::move(context)), detached(copied) {}
+              mesh(std::move(envelope)), communication(std::move(context)), detached(copied), internal(std::move(active)) {}
     };
     PreparedCheckpoint::PreparedCheckpoint(DomainStateSnapshot snapshot, Json metadata, Runtime::Array<index> ids,
-                                           CheckpointMetadata::MeshEnvelope mesh, std::shared_ptr<Runtime::CommunicationContext> communication, bool detached)
+                                           CheckpointMetadata::MeshEnvelope mesh, std::shared_ptr<Runtime::CommunicationContext> communication, bool detached, std::optional<InternalFields> internal)
         : _data(std::make_shared<Data>(std::move(snapshot), std::move(metadata), std::move(ids),
-                                       std::move(mesh), std::move(communication), detached))
+                                       std::move(mesh), std::move(communication), detached, std::move(internal)))
     {
         DNDS_check_throw_info(_data->communication && _data->snapshot.Means().Device() == Runtime::Device::Host(),
                               "prepared checkpoint requires host fields and an owned communicator context");
@@ -35,6 +36,8 @@ namespace DNDS::Cauchy
         auto serializer = std::make_shared<Serializer::SerializerH5>(mpi);
         serializer->OpenFile(path, false);
         serializer->WriteInt("cauchy_format", 5);
+        if (data.internal)
+            serializer->WriteInt("cauchy_internal_format", 1);
         serializer->WriteString("resolved_config", resolved.dump());
         serializer->WriteString("metadata_json", data.metadata.dump());
         if (!outputController.is_null())
@@ -56,6 +59,13 @@ namespace DNDS::Cauchy
         {
             serializer->WriteReal("history_dt", snapshot.PreviousDt());
             WriteEquationArrays(*snapshot.PreviousState(), serializer, "history_field_", mpi);
+        }
+        if (data.internal)
+        {
+            for (const auto &[key, values] : data.internal->equations)
+                WriteEquationArrays(values, serializer, key, mpi);
+            for (const auto &[key, values] : data.internal->arrays)
+                WriteStateArray(values, serializer, key, mpi, Runtime::ExecutionContext::Host());
         }
         serializer->CloseFile();
     }

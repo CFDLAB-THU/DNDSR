@@ -100,6 +100,38 @@ namespace DNDS::Cauchy
     AsyncOutput::AsyncOutput(Simulation &simulation) : _data(std::make_unique<Data>(simulation)) {}
     AsyncOutput::~AsyncOutput() = default;
     void AsyncOutput::Drain() { _data->queue->Drain(); }
+    void AsyncOutput::SubmitInternal(Simulation &simulation, const SimulationConfig &config, const OutputPlan &plan,
+                                     index iDomain, const std::string &token, const NonlinearSolveState &state,
+                                     bool checkpoint, bool visualization, Json outputController, Json snapshotManifest)
+    {
+        _data->queue->Enqueue([&]() -> OutputQueue::Action
+                              {
+            auto batch = std::make_shared<OutputBatch>();
+            // A dislocated domain may emit independently. Its completion barrier
+            // and manifest publication must never enter the simulation control communicator.
+            batch->control = _data->domains.at(iDomain);
+            batch->direct = true;
+            batch->checkpoint = checkpoint;
+            batch->resolved = config.Root();
+            batch->snapshotManifest = std::move(snapshotManifest);
+            batch->outputController = std::move(outputController);
+            batch->snapshotPath = plan.InternalSnapshotManifestPath(iDomain, token);
+            DomainFiles files;
+            files.communication = batch->control;
+            auto &domain = simulation.GetDomain(iDomain);
+            if (visualization)
+            {
+                files.visualizationPrefix = plan.VisualizationPrefix(iDomain, token);
+                files.visualization.emplace(domain.CaptureInternalVisualization(config.Output().hdfDeflateLevel));
+            }
+            if (checkpoint)
+            {
+                files.checkpointPath = plan.InternalCheckpointPath(iDomain, token);
+                files.checkpoint.emplace(domain.CaptureInternalCheckpoint(files.communication, state, true));
+            }
+            batch->domains.push_back(std::move(files));
+            return [batch] { batch->Write(); }; });
+    }
     void AsyncOutput::Submit(Simulation &simulation, const SimulationConfig &config, const OutputPlan &plan,
                              const std::string &token, bool checkpoint, bool visualization, Json outputController, Json snapshotManifest)
     {

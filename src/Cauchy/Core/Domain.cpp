@@ -654,6 +654,10 @@ namespace DNDS::Cauchy
     }
     void Domain::WriteInternalVisualization(const std::string &prefix, int hdfDeflateLevel)
     {
+        CaptureInternalVisualization(hdfDeflateLevel).Write(prefix, _problem.finiteVolume.Metrics().Communication());
+    }
+    PreparedVisualization Domain::CaptureInternalVisualization(int hdfDeflateLevel)
+    {
         const MPIInfo mpi(_problem.finiteVolume.Metrics().Communicator());
         MPI::LocalStage(mpi, [&]
                         { DNDS_check_throw_info(_state.timeStepper && _state.trialEpoch.trial &&
@@ -684,8 +688,8 @@ namespace DNDS::Cauchy
         _problem.finiteVolume.Execute(*_execution.observationInput, *_execution.observationReconstruction,
                                       *_execution.observationWorkspace, _execution.Context(),
                                       FiniteVolumeEvaluation::Spatial(*_execution.observationState, _state.progressTime));
-        _problem.finiteVolume.WriteVisualization(*_execution.observationInput, *_execution.observationReconstruction, *_execution.observationWorkspace, prefix, _state.progressTime,
-                                                 hdfDeflateLevel, _execution.ChemicalWorkers());
+        return _problem.finiteVolume.PrepareVisualization(*_execution.observationInput, *_execution.observationReconstruction, *_execution.observationWorkspace, _state.progressTime,
+                                                          hdfDeflateLevel, _execution.ChemicalWorkers());
     }
     DomainStateSnapshot Domain::CaptureStateSnapshot(
         bool includeReconstruction) const

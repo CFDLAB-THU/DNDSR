@@ -101,6 +101,8 @@ def main():
         exact["time"].update({"method": "bdf2", "steps": 1})
         exact["output"].update({
             "prefix": str(folder / "exact"),
+            # Exercise the detached writer and restart at two ranks.
+            "asynchronous": args.np == 2,
             "implicit": {"checkpointInterval": 1, "visualizationInterval": 1,
                          "consoleInterval": 5},
         })

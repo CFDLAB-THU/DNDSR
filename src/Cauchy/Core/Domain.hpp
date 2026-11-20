@@ -23,6 +23,10 @@ namespace DNDS::Cauchy
     class Domain
     {
         friend class DomainStateSnapshot;
+        friend class AsyncOutput;
+        PreparedCheckpoint CaptureInternalCheckpoint(std::shared_ptr<Runtime::CommunicationContext>,
+                                                     const NonlinearSolveState &, bool detach) const;
+        PreparedVisualization CaptureInternalVisualization(int hdfDeflateLevel);
         FiniteVolume::WorkspaceOptions ObservationWorkspaceOptions() const;
         DomainProblem _problem;
         DomainState _state;
