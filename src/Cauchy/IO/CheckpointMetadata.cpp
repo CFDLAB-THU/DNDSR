@@ -67,7 +67,15 @@ namespace DNDS::Cauchy::CheckpointMetadata
             result["rans"] = equation.RANS().Settings();
         return result;
     }
-    nlohmann::json CompatibleConfig(Json config)
+    void AgreeLoadMode(const MPIInfo &mpi, CheckpointLoadMode mode)
+    {
+        std::optional<int> candidate;
+        if (mode == CheckpointLoadMode::Resume || mode == CheckpointLoadMode::MeansOnly)
+            candidate = int(mode);
+        DNDS_check_throw_info(MPI::AgreeOptionalInteger(mpi, candidate, 2),
+                              "Cauchy checkpoint load mode is invalid or differs between ranks");
+    }
+    nlohmann::json CompatibleConfig(Json config, CheckpointLoadMode mode)
     {
         // Display/config JSON preserves insertion order. Semantic restart
         // equality must not: filling old defaults appends keys at another
@@ -123,14 +131,32 @@ namespace DNDS::Cauchy::CheckpointMetadata
                 }
             if (settings.contains("mesh") && settings["mesh"].is_object())
                 settings["mesh"].erase("file");
+            if (mode == CheckpointLoadMode::MeansOnly)
+                settings.erase("numerics"); // The new solve initializes every numerical workspace from the means.
             if (settings.contains("numerics") && settings["numerics"].is_object())
             {
                 auto &numerics = settings["numerics"];
+                // Both the old positive default and 0 use the same sample floor.
+                if (numerics.contains("wallDistanceFloor") && numerics["wallDistanceFloor"] == 0)
+                    numerics["wallDistanceFloor"] = NumericsSettings::wallDistanceSafetyFloor;
                 // Earlier archives predate the coarse convection switch.
                 // Its false default preserves their operator; true remains
                 // a deliberate numerical compatibility difference.
                 if (!numerics.value("firstOrderConvection", false))
                     numerics.erase("firstOrderConvection");
+                if (!numerics.value("ransMeanFaceValues", false))
+                    numerics.erase("ransMeanFaceValues");
+                if (!numerics.value("ransCellCenterViscosity", false))
+                    numerics.erase("ransCellCenterViscosity");
+                if (!numerics.value("ransP1Overlay", false))
+                    numerics.erase("ransP1Overlay");
+                if (!numerics.value("cellCenterWallDistanceForQuadrature", false))
+                    numerics.erase("cellCenterWallDistanceForQuadrature");
+                if (!numerics.value("firstLayerCenterWallDistance", false))
+                    numerics.erase("firstLayerCenterWallDistance");
+                if (!numerics.contains("firstLayerCenterWallDistance") ||
+                    numerics.value("firstLayerWallDistanceMethod", std::string{"cellCenter"}) == "cellCenter")
+                    numerics.erase("firstLayerWallDistanceMethod");
                 // Adding inactive limiter controls must not invalidate
                 // older non-LVR checkpoints. Active LVR controls remain a
                 // numerical compatibility requirement.

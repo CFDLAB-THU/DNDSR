@@ -92,7 +92,13 @@ TEST_CASE("Bottom pMG uses mean convection and jump-only face viscosity in both 
                 settings.equation.transport = viscous ? "NewtonianFourier" : "inviscid";
                 settings.equation.viscosity = viscous ? .01 : 0;
                 if (variant)
+                {
+                    // The constant reconstruction is the reference for the
+                    // P0 face flux. It has no physical gradient to limit.
                     settings.numerics.reconstruction = "constant";
+                    settings.numerics.limiter = "none";
+                    settings.coarseGradientPositivity = false;
+                }
                 const auto equation = C::EquationSystem::Resolve(settings.equation);
                 C::FiniteVolume fv(mesh, settings, equation);
                 {
@@ -168,6 +174,17 @@ TEST_CASE("Each coarse smoother inherits defaults and resolves independent parti
     CHECK(bottom.implicit.positivity.rhsFPPMode == "none");
     CHECK(settings.implicit.positivity.rhsFPPMode == "rhs");
     CHECK(bottom.numerics.positivity == settings.numerics.positivity);
+    CHECK(intermediate.numerics.limiter == "Barth");
+    CHECK(bottom.numerics.limiter == "Barth");
+    CHECK(intermediate.GradientPositivity());
+    CHECK(bottom.GradientPositivity());
+    auto acm = settings;
+    acm.equation.system = "incompressibleACM";
+    CHECK_FALSE(C::PolynomialMultigrid::CoarseSettings(acm, 0).GradientPositivity());
+    settings.implicit.multigrid.coarseGradientBarth = false;
+    settings.implicit.multigrid.coarseGradientPositivity = false;
+    CHECK(C::PolynomialMultigrid::CoarseSettings(settings, 0).numerics.limiter == "none");
+    CHECK_FALSE(C::PolynomialMultigrid::CoarseSettings(settings, 1).GradientPositivity());
     CHECK(bottom.implicit.positivity.incrementRelax == settings.implicit.positivity.incrementRelax);
     settings.implicit.multigrid.coarseRHSFPP = true;
     CHECK(C::PolynomialMultigrid::CoarseSettings(settings, 0).implicit.positivity.rhsFPPMode == "rhs");

@@ -52,17 +52,14 @@ namespace DNDS::Cauchy
         DNDS_check_throw_info(preparationStatus && preparationStatus->pending, "device source requires an active preparation status segment");
         const int dimension = owner->metrics.Dimension(), components = int(state.ComponentNumber());
         const auto &empty = owner->deviceEmpty;
-        const bool ransP1 = sourceSampling && owner->settings.numerics.ransP1Overlay;
-        DNDS_check_throw_info(!ransP1 || meanGradients, "device RANS P1 source overlay requires mean gradients");
-        const auto &grad = ransP1 ? meanGradients->fields.front().Owned()
-                                 : sourceSampling ? empty : directGradients.front().Owned();
+        const auto &grad = sourceSampling ? empty : directGradients.front().Owned();
         VolumeSourceBasis basis;
         if (sourceSampling)
         {
             basis.polynomial = sourceSampling->BasisParameters();
             basis.cachedDerivatives = sourceSampling->CachedDerivativeNumber();
         }
-        auto evaluate = [pin, dimension, components, basis, ransP1](R::ExecutionContext context, auto means, auto coefficients, auto grad, auto points, auto cached, auto moments, auto geometry, auto offsets, auto weights, auto lengths, auto selected, auto output, auto status, auto cells, auto wallMean, auto wallPoints, auto... derivative)
+        auto evaluate = [pin, dimension, components, basis](R::ExecutionContext context, auto means, auto coefficients, auto grad, auto points, auto cached, auto moments, auto geometry, auto offsets, auto weights, auto lengths, auto selected, auto output, auto status, auto wallPoints, auto... derivative)
         {
             CUDA::SourceRequest request;
             ((request.preparedDerivative = derivative), ...);
@@ -72,16 +69,11 @@ namespace DNDS::Cauchy
                 request.parameters = R::MetadataArrayView(pin->owner->devicePhysics, context.device);
             request.means = means; request.cellInputs=basis.polynomial.size==0;
             request.coefficients=coefficients;
-            request.ransP1Overlay = ransP1;
-            if (ransP1)
-                request.ransP1Gradients = grad;
             request.basis=basis;
             request.basis.points=points; request.basis.cached=cached; request.basis.moments=moments; request.basis.geometry=geometry;
             for(int d=0; d<dimension; ++d) request.gradients[d]={grad,dimension,d};
             request.offsets = offsets; request.weights = weights; request.lengths = lengths;
-            request.wallMean = {wallMean.data, wallMean.offsets, wallMean.rows, wallMean.width, wallMean.stride, wallMean.sizes, wallMean.kind, wallMean.device};
             request.wallPoints = {wallPoints.data, wallPoints.offsets, wallPoints.rows, wallPoints.width, wallPoints.stride, wallPoints.sizes, wallPoints.kind, wallPoints.device};
-            request.cells = cells;
             request.output = output; request.status = status;
             request.components = components; request.dimension = dimension;
             CUDA::AddRANSSources(context, request, selected); };
@@ -91,7 +83,7 @@ namespace DNDS::Cauchy
                             R::ReadAs<R::UniformTableRows>(sourceSampling ? sourceSampling->PointStorage() : empty),
                             R::ReadAs<R::UniformTableRows>(sourceSampling ? sourceSampling->BasisStorage() : empty),
                             R::ReadAs<R::UniformTableRows>(sourceSampling ? sourceSampling->MomentStorage() : empty),
-                            R::ReadAs<R::UniformTableRows>(sourceSampling ? sourceSampling->CellGeometryStorage() : empty), R::ReadAs<R::FixedRows<1>>(sourceOffsets), R::ReadAs<R::FixedRows<1>>(sourceWeights), R::ReadAs<R::FixedRows<1>>(owner->ransCellLength), R::ReadAs<R::FixedRows<1>>(DeviceCellSelection(CFV::ReconstructionRegion::All)), R::ReadWriteAs<R::UniformTableRows>(result.CoupledField().Owned()), R::WriteAs<R::FixedRows<1>>(preparationStatus->meanOwned), R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics()), R::ReadAs<R::FixedRows<1>>(owner->wallDistance->CellMeans()), R::ReadAs<R::CSRRows>(owner->wallDistance->CellValues()), record...);
+                            R::ReadAs<R::UniformTableRows>(sourceSampling ? sourceSampling->CellGeometryStorage() : empty), R::ReadAs<R::FixedRows<1>>(sourceOffsets), R::ReadAs<R::FixedRows<1>>(sourceWeights), R::ReadAs<R::FixedRows<1>>(owner->ransCellLength), R::ReadAs<R::FixedRows<1>>(DeviceCellSelection(CFV::ReconstructionRegion::All)), R::ReadWriteAs<R::UniformTableRows>(result.CoupledField().Owned()), R::WriteAs<R::FixedRows<1>>(preparationStatus->meanOwned), R::ReadAs<R::CSRRows>(owner->wallDistance->CellValues()), record...);
         };
         if (sourceDerivative)
             submit(R::WriteAs<R::UniformTableRows>(*sourceDerivative));

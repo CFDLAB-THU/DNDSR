@@ -274,7 +274,7 @@ namespace DNDS::Cauchy::CUDA::Detail
             fields.primitiveGradients = source(input.viscous.primitive);
         fields.waveJump = source(input.waveJump);
         fields.pressureMinimum = source(input.pressureMinimum);
-        fields.ransP1Gradients = input.ransP1Gradients;
+        fields.centerViscosity = input.centerViscosity;
         fields.incoming = input.incoming;
         fields.hasIncoming = input.hasIncoming;
         fields.hasWave = input.hasWave;

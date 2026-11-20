@@ -287,7 +287,12 @@ namespace DNDS::Cauchy::CUDA::Detail
                 const auto diffusion = [&]() -> NumericalResult<std::array<real, Components>>
                 {
                     if constexpr (std::is_same_v<FluxScalar, real>)
-                        return face.Diffusion(parameters.physics, sample.normal, distance, wall && !condition.isothermal);
+                    {
+                        real viscosity = -1;
+                        if constexpr (Components > 5)
+                            viscosity = fields.centerViscosity.AtFace(sample.cell, sample.other);
+                        return face.Diffusion(parameters.physics, sample.normal, distance, wall && !condition.isothermal, viscosity);
+                    }
                     else
                     {
                         static_assert(Components == 5, "reduced full flux is a flow5 specialization");

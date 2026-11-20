@@ -200,6 +200,53 @@ TEST_CASE("One progress controller constructs iteration stage and step CSV rows"
     std::filesystem::remove_all(directory);
 }
 
+TEST_CASE("Steady ACM SST progress groups console residuals and displays an infinite physical step")
+{
+    C::EquationSchema schema;
+    schema.family = "incompressibleACM";
+    schema.blocks = {
+        {"flow", {{"u", "", ""}, {"v", "", ""}, {"w", "", ""}, {"p", "", ""}}, {}},
+        {"rans", {{"rhoK", "", ""}, {"rhoOmega", "", ""}}, {}}};
+    C::OutputSettings settings;
+    settings.eventLog = true;
+    settings.implicit.consoleInterval = 1;
+    const auto serial = std::chrono::steady_clock::now().time_since_epoch().count();
+    const auto directory = std::filesystem::temp_directory_path() / ("dnds-cauchy-steady-progress-" + std::to_string(serial));
+    settings.prefix = (directory / "case").string();
+    const auto bare = settings.prefix + "-D0-history";
+    {
+        auto logger = std::make_shared<C::OperationalLogger>(settings, 0);
+        C::ProgressOutputController output(schema, settings, "", bare, true, logger);
+        C::ProgressLocation location{1, -1, -1, -1, 0, 0, .001, 0, true};
+        output.BeginAttempt(location);
+        C::NonlinearProgress iteration;
+        iteration.iteration = 1;
+        iteration.residual = {1, 2, 3, 4, 5, 6};
+        iteration.pseudoCFL = 7;
+        output.CaptureIteration(iteration, 0);
+        output.FlushIterations();
+        C::AcceptedStepProgress step;
+        step.residual = iteration.residual;
+        step.pseudoCFL = iteration.pseudoCFL;
+        output.StepEnd(location, step, true, true);
+        output.Flush();
+    }
+    std::ifstream events(settings.prefix + "-events-rank0.log");
+    REQUIRE(events);
+    std::string line;
+    for (int i = 0; i < 2; ++i)
+    {
+        REQUIRE(std::getline(events, line));
+        CHECK(line.find("res flow4 [1.000e+00 2.000e+00 3.000e+00 4.000e+00] kOmega [5.000e+00 6.000e+00]") != std::string::npos);
+        CHECK(line.find("t,dt,CFL [0.000e+00,inf,7.000e+00]") != std::string::npos);
+    }
+    std::ifstream history(bare + ".csv");
+    REQUIRE(std::getline(history, line));
+    const auto row = ReadRow(history, Split(line));
+    CHECK(std::stod(row.at("dt")) == doctest::Approx(.001));
+    std::filesystem::remove_all(directory);
+}
+
 TEST_CASE("Resolved output plan centralizes names cadence inheritance and exact endpoint snapping")
 {
     C::OutputSettings settings;

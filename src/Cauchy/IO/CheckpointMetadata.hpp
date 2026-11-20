@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Cauchy/IO/CheckpointLoadMode.hpp"
 #include "DNDS/Runtime/Array/Array.hpp"
 #include "DNDS/Serializer/SerializerBase.hpp"
 #include <nlohmann/json.hpp>
@@ -25,7 +26,8 @@ namespace DNDS::Cauchy::CheckpointMetadata
 
     /// Normalize inactive historical fields only; retain physical distinctions.
     nlohmann::json CompatibleEquationMetadata(Json value);
-    nlohmann::json CompatibleConfig(Json config);
+    void AgreeLoadMode(const MPIInfo &mpi, CheckpointLoadMode mode);
+    nlohmann::json CompatibleConfig(Json config, CheckpointLoadMode mode = CheckpointLoadMode::Resume);
     Json EquationMetadata(const EquationSystem &equation);
     Json FrameMetadata(const FiniteVolume &fv, real time);
     bool CompatibleFrame(const Json &metadata, const FiniteVolume &fv, real time);

@@ -366,12 +366,6 @@ namespace DNDS::Cauchy
         std::optional<R::Array<real>> lowOrderFaceFlux;
         bool boundaryMomentumCurrent = false, boundaryFacialFluxCurrent = false;
         std::optional<MeanGradients> meanGradients;
-        bool UseRANSP1FaceOverlay() const
-        {
-            const auto &settings = owner->settings.numerics;
-            return settings.ransP1Overlay && settings.reconstruction == "variational" && !settings.ransMeanFaceValues &&
-                   !meanOnly && !settings.firstOrderConvection;
-        }
         bool chemical;
         int iterations = 0;
         real relativeUpdate = 0;
@@ -596,6 +590,7 @@ namespace DNDS::Cauchy
         const R::Array<index> &DeviceCellSelection(CFV::ReconstructionRegion) const;
         void ResetDeviceFluxStatus(R::EagerEngine &, const R::ExecutionStream &);
         void CheckDeviceFluxStatus();
+        /// @see docs/architecture/CauchyDispatch.md (CUDA flux RHS).
         void SubmitDeviceRHS(R::EagerEngine &, const R::ExecutionStream &,
                              const EquationDofs &, EquationDofs &, CFV::ReconstructionRegion,
                              real time, OptionalRef<const AuxiliaryValues> auxiliary = {},
@@ -613,6 +608,7 @@ namespace DNDS::Cauchy
         /// segment drains. CUDA uses the workspace's device status segment and
         /// returns an empty record. The same scheduling caller uses both.
         /// A shared point evaluator is exclusive to this stream until drain.
+        /// @see docs/architecture/CauchyDispatch.md (CPU flux RHS).
         std::shared_ptr<RHSSubmission> SubmitRHS(
             R::EagerEngine &, const R::ExecutionStream &, const EquationDofs &, EquationDofs &,
             CFV::ReconstructionRegion, real time, std::shared_ptr<PointEvaluator> evaluator = {},
@@ -642,6 +638,7 @@ namespace DNDS::Cauchy
                               OptionalRef<R::Array<real>> faceOutput, RHSScalarView incoming);
         /// Integrate sources into owned CUDA residual rows. Numerical failures
         /// are recorded in the active preparation segment.
+        /// @see docs/architecture/CauchyDispatch.md (CUDA volume source).
         void SubmitDeviceVolumeSource(R::EagerEngine &, const R::ExecutionStream &,
                                       const EquationDofs &, EquationDofs &result, real time,
                                       OptionalRef<EquationDofs> lowOrder = {}, OptionalRef<R::Array<real>> sourceDerivative = {});
@@ -652,6 +649,7 @@ namespace DNDS::Cauchy
         /// is retained and exclusive to this lane; otherwise a worker from
         /// the retained workspace pool is acquired only during execution.
         /// Optional derivative storage belongs to the caller pairing it with this rate.
+        /// @see docs/architecture/CauchyDispatch.md (CPU volume source).
         void SubmitVolumeSource(R::EagerEngine &, const R::ExecutionStream &,
                                 const EquationDofs &, EquationDofs &result, real time,
                                 std::shared_ptr<PointEvaluator> evaluator = {},

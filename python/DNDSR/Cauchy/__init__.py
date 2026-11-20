@@ -4,7 +4,7 @@ from DNDSR._loader import preload
 
 preload("cauchy")
 
-from ._ext.cauchy_pybind11 import Domain, Simulation, StepResult, InterfaceDiagnostics, NonlinearIterationReport, PhysicalStepLimit, DerivedFields, DerivedQuantity
+from ._ext.cauchy_pybind11 import Domain, Simulation, StepResult, InterfaceDiagnostics, NonlinearIterationReport, PhysicalStepLimit, DerivedFields, DerivedQuantity, CheckpointLoadMode
 from ._ext.cauchy_pybind11 import (EquationDofs, FiniteVolumeOperators, AuxiliaryRequest,
                                   AuxiliaryValues, MeanGradients, Workspace,
                                   MeanWorkspace, DiagonalStorage, OffDiagonalStorage,
@@ -15,7 +15,7 @@ from ._ext.cauchy_pybind11 import (EquationDofs, FiniteVolumeOperators, Auxiliar
                                   NonlinearSolveControl, NonlinearStageSolver,
                                   PolynomialMultigrid)
 
-__all__ = ["Domain", "Simulation", "StepResult", "InterfaceDiagnostics", "NonlinearIterationReport", "PhysicalStepLimit", "DerivedFields", "DerivedQuantity"]
+__all__ = ["Domain", "Simulation", "StepResult", "InterfaceDiagnostics", "NonlinearIterationReport", "PhysicalStepLimit", "DerivedFields", "DerivedQuantity", "CheckpointLoadMode"]
 __all__ += ["EquationDofs", "FiniteVolumeOperators", "AuxiliaryRequest", "AuxiliaryValues",
             "MeanGradients", "Workspace", "MeanWorkspace",
             "DiagonalStorage", "OffDiagonalStorage", "LinearRegion",

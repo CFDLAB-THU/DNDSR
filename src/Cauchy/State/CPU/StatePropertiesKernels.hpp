@@ -36,4 +36,6 @@ namespace DNDS::Cauchy::CPU
     NumericalStatus AccumulateStateDiagnostics(EquationBlockReadView, std::optional<EquationBlockReadView>,
                                                Algebra::DofComponentView<const real>, CFV::FiniteVolumeHostView,
                                                SpanView<StatePropertiesWorker>, SpanView<real>) noexcept;
+    /// Rank-local interleaved (-min,max) pairs. One scratch row per worker.
+    void MeasureStateBounds(Algebra::DofComponentView<const real>, SpanView<real> result, SpanView<real> scratch) noexcept;
 }

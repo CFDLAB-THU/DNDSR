@@ -25,7 +25,7 @@ namespace DNDS::Cauchy
             DNDS_check_throw_info(fields.GetDevice() == R::Device::Host() &&
                                       fields.RowCount() == mesh->NumCell() && fields.Layout().Width() == index(names.size()) &&
                                       boundary.fields.GetDevice() == R::Device::Host() &&
-                                      boundary.fields.RowCount() == faces && boundary.fields.Layout().Width() == index(names.size()) &&
+                                      boundary.fields.RowCount() == faces && boundary.fields.Layout().Width() == index(names.size()) + index(mesh->HasNodeWallDist()) &&
                                       boundary.normals.GetDevice() == R::Device::Host() &&
                                       boundary.normals.RowCount() == faces && boundary.normals.Layout().Width() == 3 &&
                                       index(boundary.zones->size()) == faces,
@@ -65,7 +65,7 @@ namespace DNDS::Cauchy
         if (boundary.flux)
             fluxRead.emplace(boundary.flux->Read());
         const auto fluxValues = fluxRead ? fluxRead->View<R::TableRows>() : decltype(faces){};
-        const index nFields = index(data.names.size()), nFlux = index(boundary.fluxNames.size());
+        const index nFields = faces.Width(), nFlux = index(boundary.fluxNames.size());
 
         Geom::UnstructuredMesh::VTKHDFExtraFields extra;
         extra.cellIntegers.push_back({"bnd_zone_id", {boundary.zones->data(), index(boundary.zones->size())}});
@@ -77,7 +77,9 @@ namespace DNDS::Cauchy
             extra.fieldStrings.front().second.push_back(label);
         }
         const auto scalarName = [&](int i)
-        { return i < nFields ? data.names.at(i) : boundary.fluxNames.at(i - nFields); };
+        { if (i >= nFields) return boundary.fluxNames.at(i - nFields);
+          if (i == int(data.names.size())) return std::string("wall_distance_cell_center");
+          return data.names.at(i); };
         const auto scalarValue = [&](int i, index iFace)
         { return i < nFields ? faces(iFace, i) : fluxValues(iFace, i - nFields); };
         const auto vectorName = [](int i) -> std::string

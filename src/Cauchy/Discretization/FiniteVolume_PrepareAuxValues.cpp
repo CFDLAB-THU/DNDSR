@@ -10,21 +10,6 @@ namespace DNDS::Cauchy
     using FiniteVolumeDetail::Load;
     using FiniteVolumeDetail::RotateState;
     using FieldView = R::PairReadView<real, R::AccessBoundsChecks, R::UniformTableRows>;
-    namespace
-    {
-        template <class Values>
-        auto AuxiliaryArrays(Values &values)
-        {
-            using Array = std::conditional_t<std::is_const_v<Values>, const R::Array<real>, R::Array<real>>;
-            return std::array<Array *, 7>{values.meanThermodynamics ? &*values.meanThermodynamics : nullptr,
-                                          values.faceSpectralRadius ? &*values.faceSpectralRadius : nullptr,
-                                          values.faceWaveJump ? &*values.faceWaveJump : nullptr,
-                                          values.facePressureMinimum ? &*values.facePressureMinimum : nullptr,
-                                          values.cellSpectralSum ? &values.cellSpectralSum->Owned() : nullptr,
-                                          values.cellWaveJump ? &values.cellWaveJump->Owned() : nullptr,
-                                          values.cellPressureMinimum ? &values.cellPressureMinimum->Owned() : nullptr};
-        }
-    }
     AuxiliaryValues FiniteVolume::BuildAuxiliaryValues(AuxiliaryRequest request) const
     {
         // A caller-provided auxiliary bundle must cover the same mean thermal
@@ -33,6 +18,9 @@ namespace DNDS::Cauchy
         if (_data->equation.HasMixture() && _data->settings.numerics.characteristicLimiter &&
             _data->settings.numerics.limiter == "WBAP")
             request.meanThermodynamics = true;
+        request.cellTurbulentViscosity = request.cellTurbulentViscosity || _data->settings.numerics.ransCellCenterViscosity;
+        DNDS_check_throw_info(!request.cellTurbulentViscosity || _data->equation.HasRANS(),
+                              "cell turbulent viscosity requires a RANS closure");
         AuxiliaryValues values;
         const index faces = _data->stencil.stencilFaces.RowCount();
         DNDS_check_throw_info(Device() == R::Device::Host() || request.derived.ComponentNumber() == 0,
@@ -40,7 +28,7 @@ namespace DNDS::Cauchy
         if (request.derived.ComponentNumber())
         {
             values._derivedThermodynamics = request.meanThermodynamics;
-            if (request.meanThermodynamics)
+            if (values._derivedThermodynamics)
             {
                 for (auto quantity : {DerivedQuantity::Pressure, DerivedQuantity::SoundSpeed, DerivedQuantity::DiffusionBound})
                     request.derived.enabled[int(quantity)] = true;
@@ -53,6 +41,8 @@ namespace DNDS::Cauchy
         }
         if (request.meanThermodynamics && !values._derivedThermodynamics)
             values.meanThermodynamics.emplace(R::RowLayout::Dense(Metrics().NumCellProc(), _data->equation.HasMixture() ? 5 : 3), Device());
+        if (request.cellTurbulentViscosity)
+            values.cellTurbulentViscosity.emplace(R::RowLayout::Dense(Metrics().NumCellProc(), 1), Device());
         if (request.faceSpectralRadius)
             values.faceSpectralRadius.emplace(R::RowLayout::Dense(faces, 2), Device());
         if (request.faceWaveJump)
@@ -74,6 +64,7 @@ namespace DNDS::Cauchy
                 array->SetName(std::string("Cauchy/auxiliary/") + name, DNDS_ALLOCATION_SITE());
         };
         label(values.meanThermodynamics, "meanThermodynamics");
+        label(values.cellTurbulentViscosity, "cellTurbulentViscosity");
         label(values.faceSpectralRadius, "faceSpectralRadius");
         label(values.faceWaveJump, "faceWaveJump");
         label(values.facePressureMinimum, "facePressureMinimum");
@@ -93,6 +84,7 @@ namespace DNDS::Cauchy
     }
     AuxiliaryRequest FiniteVolume::CompleteRHSAuxiliaryRequest(AuxiliaryRequest request) const
     {
+        request.cellTurbulentViscosity = request.cellTurbulentViscosity || _data->settings.numerics.ransCellCenterViscosity;
         if (_data->equation.HasMixture() && _data->settings.numerics.characteristicLimiter &&
             _data->settings.numerics.limiter == "WBAP")
             request.meanThermodynamics = true;

@@ -71,8 +71,19 @@ is inserted. This changes arithmetic precision, not the reconstruction weights.
 
 Quantized FP32-map placement also supports `fp32Pipelined` (full FP32 SIMT
 arithmetic) and `tf32Pipelined` (TF32-rounded tensor products and FP32 update
-arithmetic), through the same neighbor-buffered implementation. Raw matrix
-representations remain FP64-only. TF32 has a separately looser accuracy budget;
+arithmetic), through the same neighbor-buffered implementation.
+
+Raw CUDA relaxation separately supports `numerics.cfv.storage.rawBPrecision`
+and `numerics.cfv.storage.inversePrecision`, each accepting `fp64` (default)
+or `fp32`. These controls quantize only the selected device matrix after FP64
+setup and inversion. The raw mean and boundary maps, evolving coefficients,
+and all update arithmetic remain FP64. Either FP32 storage option selects
+`fp64Pipelined` when `execution.reconstructionKernel` is `auto`. The
+inverse precision applies to both full and triangular inverse storage.
+The kernel promotes packed values on load and retains a single device
+allocation per matrix.
+
+TF32 has a separately looser accuracy budget;
 it is not an ordinary-FP32 alias. The general FP32/TF32 policies remain
 available as numerical/comparison anchors. Matrix, state and output component
 meaning is identical across those choices. All use the common queued CFV

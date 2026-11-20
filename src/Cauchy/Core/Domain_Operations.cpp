@@ -195,10 +195,10 @@ namespace DNDS::Cauchy
         _state.time = _state.trialTime = time;
     }
     Domain::CheckpointCandidate Domain::PrepareCheckpoint(
-        const std::string &path, const Json &resolved)
+        const std::string &path, const Json &resolved, CheckpointLoadMode mode)
     {
         return CheckpointCandidate(std::make_unique<CheckpointCandidate::Data>(
-            *this, PrepareCheckpointRead(path, resolved)));
+            *this, PrepareCheckpointRead(path, resolved, mode)));
     }
     Domain::InternalCheckpointCandidate
     Domain::PrepareInternalCheckpoint(const std::string &path,

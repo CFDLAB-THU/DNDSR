@@ -1,6 +1,12 @@
 #pragma once
 
+#include "DNDS/Core/OptionalRef.hpp"
 #include "Geom/Access/MeshAccess.hpp"
+
+namespace DNDS::Runtime
+{
+    class CommunicationContext;
+}
 
 namespace DNDS::Cauchy
 {
@@ -10,8 +16,8 @@ namespace DNDS::Cauchy
     }
 
     /// Borrowed resident views, indexed by local cell/face and quadrature ordinal.
-    /// Retain WallDistanceRead through every use. CellMean is the arithmetic
-    /// quadrature mean used by Euler's mean-state turbulence source and wall BC.
+    /// Retain WallDistanceRead through every use. cellMean uses the arithmetic
+    /// quadrature mean, or the chosen first-layer distance on selected cells.
     struct WallDistanceView
     {
         Runtime::ArrayView<const real, false, Runtime::CSRRows> cells, faces;
@@ -39,6 +45,19 @@ namespace DNDS::Cauchy
         WallDistanceView View() const;
     };
 
+    struct WallCellDistance
+    {
+        index cell;
+        real distance;
+    };
+    using WallCellRows = Runtime::ArrayView<const WallCellDistance, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
+
+    enum class FirstLayerWallDistance
+    {
+        CellCenter,
+        HalfMaxNodal,
+    };
+
     /// Optional cache of a Geom-owned nodal wall-distance field. This does
     /// not search walls or create another wall-distance provider. Scalar nodal
     /// distances (norms of Geom's wall vectors) are interpolated by the mesh's
@@ -58,8 +77,25 @@ namespace DNDS::Cauchy
             : _data(std::move(data)) {}
 
     public:
+        /// Mark cells incident to a selected wall zone and transfer the flags
+        /// to their ghost copies. The predicate is evaluated during host setup.
+        static Runtime::ArrayPair<uint8_t> BuildFirstLayerMask(
+            Geom::UnstructuredMesh &mesh, std::shared_ptr<Runtime::CommunicationContext> communication,
+            const std::function<bool(int)> &isWallZone);
+        /// Center-based sampling broadcasts the floored center value over a cell
+        /// and the average of adjacent floored centers over a face. A first-layer
+        /// mean-distance override still serves mean consumers such as wall omega.
         static WallDistanceSamples Construct(ssp<Geom::UnstructuredMesh> mesh, int intOrder,
-                                             real minimumDistance = 0);
+                                             real minimumDistance = 0,
+                                             OptionalRef<const Runtime::ArrayPair<uint8_t>> firstLayer = {},
+                                             FirstLayerWallDistance method = FirstLayerWallDistance::CellCenter,
+                                             bool retainFirstLayer = false, bool replaceSamples = true,
+                                             bool centerQuadratureSamples = false);
+        const Runtime::Array<WallCellDistance> &FirstLayerCells() const;
+        /// Minimum interpolated center sample over owned cells, before the floor.
+        real LocalMinimumCellCenterDistance() const;
+        /// Minimum applied distance of selected owned cells, or infinity if empty.
+        real LocalMinimumFirstLayerDistance() const;
         WallDistanceRead AcquireRead(Runtime::ExecutionContext context = Runtime::ExecutionContext::Host()) const;
         Runtime::Device Device() const;
         /// Immutable sampled operands for queued readers. Retain the mesh wall

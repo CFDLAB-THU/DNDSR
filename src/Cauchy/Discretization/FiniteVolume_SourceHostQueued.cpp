@@ -56,7 +56,7 @@ namespace DNDS::Cauchy
             std::optional<EquationBlockLocation> ransMean, ransOutput, speciesOutput;
             index components = 0, flowFirst = -1, speciesFirst = -1, ransFirst = -1;
             bool chemical = false, interleavedGradients = false;
-            std::optional<index> derivativeSlot, ransP1Slot;
+            std::optional<index> derivativeSlot;
             std::array<index, 4> basisSlots{};
             VolumeSourceBasis basis;
             explicit Inputs(std::shared_ptr<const Data> data)
@@ -130,11 +130,6 @@ namespace DNDS::Cauchy
             pin->basisSlots = {read(sourceSampling->PointStorage()), read(sourceSampling->BasisStorage()), read(sourceSampling->MomentStorage()), read(sourceSampling->CellGeometryStorage())};
             for (index f = 0; f < state.PhysicalFieldNumber(); ++f)
                 pin->coefficientSlots.push_back(read(FluxCoefficients().PhysicalField(f).Owned()));
-            if (owner->settings.numerics.ransP1Overlay)
-            {
-                DNDS_check_throw_info(meanGradients && pin->ransMean, "RANS P1 source overlay requires mean gradients");
-                pin->ransP1Slot = read(meanGradients->fields[pin->ransMean->physicalField].Owned());
-            }
         }
         else if (ransFirst >= 0)
             for (const auto &gradient : directGradients)
@@ -152,7 +147,7 @@ namespace DNDS::Cauchy
             pin->derivativeSlot = index(outputs.size());
             outputs.push_back(R::WriteAs<R::UniformTableRows>(*sourceDerivative));
         }
-        R::SubmitArrayBatch(engine, stream, [pin](R::ExecutionContext, auto inputs, auto outputs, auto offsets, auto weights, auto lengths, auto wallCells, auto wallMean, auto cells)
+        R::SubmitArrayBatch(engine, stream, [pin](R::ExecutionContext, auto inputs, auto outputs, auto offsets, auto weights, auto lengths, auto wallCells)
                             {
             // Reserve a chemistry worker only after predecessors execute.
             // Holding it while queueing could starve an earlier auxiliary
@@ -166,7 +161,6 @@ namespace DNDS::Cauchy
                         pin->interleavedGradients ? pin->owner->metrics.Dimension() : 1,
                         pin->interleavedGradients ? d : 0};
             CPU::SourceKernelRequest request;
-            request.metric.cells = cells;
             request.offsets = offsets;
             request.weights = weights;
             if (pin->ransFirst >= 0)
@@ -174,7 +168,6 @@ namespace DNDS::Cauchy
             if (pin->walls)
             {
                 request.walls.cells = {wallCells.data, wallCells.offsets, wallCells.rows, wallCells.width, wallCells.stride, wallCells.sizes, wallCells.kind, wallCells.device};
-                request.walls.cellMean = {wallMean.data, wallMean.offsets, wallMean.rows, wallMean.width, wallMean.stride, wallMean.sizes, wallMean.kind, wallMean.device};
             }
             request.cells = pin->owner->metrics.NumCell();
             request.components = pin->components;
@@ -213,11 +206,6 @@ namespace DNDS::Cauchy
             if (pin->ransMean)
             {
                 const auto location = *pin->ransMean;
-                if (pin->ransP1Slot)
-                {
-                    request.ransP1Gradients = inputs[*pin->ransP1Slot];
-                    request.ransP1First = location.firstComponent;
-                }
                 request.ransMean = {{inputs[pin->meanSlots[location.physicalField]], location.firstComponent, location.componentNumber},
                                    {{}, location.firstComponent, location.componentNumber}};
             }
@@ -229,7 +217,7 @@ namespace DNDS::Cauchy
                     pin->propertyRequest, pin->components);
                 RequireNumericalSuccess(CPU::EvaluateVolumeSource(request, pin->owner->equation,
                     SpanView<CPU::SourceWorkerScratch>{workers.data(), index(workers.size())}), "queued volume source");
-            } }, std::move(inputs), std::move(outputs), std::make_tuple(R::ReadAs<R::FixedRows<1>>(sourceOffsets), R::ReadAs<R::FixedRows<1>>(sourceWeights), R::ReadAs<R::RowLayout>(ransFirst >= 0 ? owner->ransCellLength : owner->deviceEmpty), R::ReadAs<R::RowLayout>(pin->walls ? owner->wallDistance->CellValues() : owner->deviceEmpty), R::ReadAs<R::RowLayout>(pin->walls ? owner->wallDistance->CellMeans() : owner->deviceEmpty), R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics())));
+            } }, std::move(inputs), std::move(outputs), std::make_tuple(R::ReadAs<R::FixedRows<1>>(sourceOffsets), R::ReadAs<R::FixedRows<1>>(sourceWeights), R::ReadAs<R::RowLayout>(ransFirst >= 0 ? owner->ransCellLength : owner->deviceEmpty), R::ReadAs<R::RowLayout>(pin->walls ? owner->wallDistance->CellValues() : owner->deviceEmpty)));
         EndQueuedPhase(engine, stream, timing);
     }
 }

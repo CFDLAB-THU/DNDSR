@@ -169,14 +169,6 @@ namespace DNDS::Cauchy::CPU
                 const RANSReconstructionView rans{ransModel->Kind(), ransModel->ComponentNumber()};
                 const auto mean = ransMean[iCell];
                 auto *values = point.values.data() + request.ransFirst;
-                if (request.ransP1Gradients.owned.data)
-                {
-                    const auto dx = FiniteVolumeDetail::DirectFVDisplacement(metric, sample, iCell != sample.cell || side != sample.side);
-                    const auto gradient = request.ransP1Gradients[iCell];
-                    rans.OverlayP1(dim, mean, dx,
-                                   [&](int j, int d) { return gradient[(request.ransP1First + j) * dim + d]; },
-                                   [&](int j, int d, real slope) { point.gradient(request.ransFirst + j, d) = slope; }, values);
-                }
                 rans.ApplyFacePoint(mean, values, request.ransMeanFaceValues);
             }
             if (request.primitiveGradient)
@@ -322,15 +314,16 @@ namespace DNDS::Cauchy::CPU
                         {
                             const auto at = Physics::Incompressible::RANSPoint(face.values, face.gradient, ransModel->ComponentNumber(),
                                                                                mu, wallValues.faces(sample.face, sample.point - first), 0);
-                            const auto transport = ransModel->TryTransport(at);
+                            const auto transport = ransModel->TryTransport(at, request.centerViscosity.AtFace(sample.cell, sample.other));
                             if (!transport)
                                 return NumericalStatus{transport.status.code, 6201, iCell, sample.point};
-                            const auto diffusion = ransModel->TryDiffusionFlux(at, sample.normal, transport.value.viscosity);
+                            const real nuT = transport.value.viscosity;
+                            const auto diffusion = ransModel->TryDiffusionFlux(at, sample.normal, nuT);
                             if (!diffusion)
                                 return NumericalStatus{diffusion.status.code, 6202, iCell, sample.point};
                             for (int j = 0; j < ransModel->ComponentNumber(); ++j)
                                 flux[4 + j] -= diffusion.value[j];
-                            mu += transport.value.viscosity;
+                            mu += nuT;
                         }
                         const auto traction = Physics::Transport::NewtonianTraction(face.gradient, sample.normal, mu);
                         // Cauchy omits the former isotropic 2*rho*k/3 normal stress.
@@ -595,7 +588,7 @@ namespace DNDS::Cauchy::CPU
                             const index iQ = sample.point - metric.FaceQuadratureBegin(sample.face);
                             // Transport does not consume the DES source length.
                             const auto ransPoint = RANSPoint(face, request.flowFirst, request.ransFirst, model, point, wallValues.faces(sample.face, iQ), 0);
-                            const auto turbulent = model.TryTransport(ransPoint);
+                            const auto turbulent = model.TryTransport(ransPoint, request.centerViscosity.AtFace(sample.cell, sample.other));
                             if (!turbulent)
                                 return turbulent.status.At(iCell, sample.point);
                             transportOptions.turbulentViscosity = turbulent.value.viscosity;

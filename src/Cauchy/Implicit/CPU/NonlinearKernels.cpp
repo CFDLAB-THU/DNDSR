@@ -198,7 +198,7 @@ namespace DNDS::Cauchy::CPU
                     for (int j = 0; j < rans.components; ++j)
                     {
                         oldRANS[j] = mean(iCell, control.ransFirst + j);
-                        changeRANS[j] = fix * storedChange[control.ransFirst + j];
+                        changeRANS[j] = control.ransRelaxation * fix * storedChange[control.ransFirst + j];
                     }
                     if (!(rans.Admissible(oldRANS)))
                         return NumericalStatus{NumericalError::InvalidState, 4, iCell};

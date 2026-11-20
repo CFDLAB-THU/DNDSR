@@ -620,6 +620,15 @@ TEST_CASE("Managed nonlinear arithmetic retains CPU worker and CUDA state semant
                 for (I i = 0; i < I(fields.size()); ++i)
                     Compare(expected[i], fields[i]);
             }
+            if (n == 7)
+            {
+                operators.ApplyCorrection(engine, lane, u, d, candidate, {}, {1, .9, 2, true, .1});
+                engine.Synchronize();
+                const auto host = candidate.CoupledField().Owned().To(R::Device::Host());
+                const auto relaxed = host.Read(), base = initial.Read();
+                CHECK(relaxed.View()(0, 6) == doctest::Approx(10.0)); // 20 + 0.1 * (-100)
+                CHECK(relaxed.View()(0, 4) == doctest::Approx(base.View()(0, 4) + .1));
+            }
             CHECK_THROWS(operators.AssembleDefect(engine, lane, u, r, b, u, .2, 1, {}, 1, true));
         }
     }

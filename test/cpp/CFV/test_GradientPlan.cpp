@@ -100,6 +100,28 @@ TEST_CASE("Standalone gradients recover linear fields with physical boundary sam
                                                                                   mode < 2 ? expected[component * 2 + mode] * geometry.HostView().cells(iCell, 7) : 0)
                                                                                   .epsilon(1e-11));
             }
+            const I modes = reconstruction.NRecDOF();
+            {
+                auto write = coefficients.Owned().Write();
+                for (I cell = 0; cell < metrics.NumCell(); ++cell)
+                    for (I j = 0; j < 2 * modes; ++j)
+                        write.View()(cell, j) = 42;
+            }
+            R::EagerEngine engine;
+            plan.SetLinearCoefficients(engine, engine.CreateCPUStream(), gradient, reconstruction, coefficients, 1, 1);
+            engine.Close();
+            {
+                const auto geometry = metrics.AcquireRead();
+                const auto read = coefficients.Owned().Read();
+                for (I cell = 0; cell < metrics.NumCell(); ++cell)
+                    for (I m = 0; m < modes; ++m)
+                    {
+                        CHECK(read.View()(cell, m) == 42);
+                        CHECK(read.View()(cell, modes + m) == doctest::Approx(
+                                                                  m < 2 ? expected[2 + m] * geometry.HostView().cells(cell, 7) : 0)
+                                                                  .epsilon(1e-11));
+                    }
+            }
             R::Array<double> wrong(R::RowLayout::Dense(plan.NumBoundaryQuadrature(), 3));
             CHECK_THROWS(plan.Evaluate(mean, wrong, gradient));
         }

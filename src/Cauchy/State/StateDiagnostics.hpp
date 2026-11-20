@@ -26,5 +26,9 @@ namespace DNDS::Cauchy
         /// domain converts these into an RMS divergence and mean gauge pressure.
         std::array<real, 14> Evaluate(Runtime::EagerEngine &, const Runtime::ExecutionStream &,
                                       const EquationDofs &mean, const EquationDofs &residual) const;
+        /// Observe owned cell means in logical component order as interleaved
+        /// (minimum, maximum) pairs over the domain communicator.
+        std::vector<real> MeasureBounds(Runtime::EagerEngine &, const Runtime::ExecutionStream &,
+                                        const EquationDofs &mean) const;
     };
 }

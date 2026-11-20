@@ -94,18 +94,62 @@ at physical boundary faces on CPU and CUDA. It keeps the full ACM time
 block, the interior face linearization, and the centered source diagonal.
 The RHS and its wall states use the same flux in both modes.
 
-With variational reconstruction, `numerics.ransP1Overlay` replaces the
-RANS values and physical gradients at volume points with a linear field
-from the current means and the configured `numerics.gradient` scheme.
-The VR solve still updates every component. The overlay leaves the flow
-polynomial, quadrature and the centered source Jacobian unchanged. With
-`ransMeanFaceValues: false`, the same linear field supplies RANS face
-values and gradients before applying boundary and periodic frame rules.
-With `ransMeanFaceValues: true`, face fluxes retain mean RANS values and
-the configured face derivatives. Both switches default to `false`.
+During RANS setup, Cauchy reports the domain-wide minimum cell-center wall
+distance before applying `numerics.wallDistanceFloor`. The distance is the
+nodal Geom wall field interpolated with the element shape functions at
+the same reference center as `FiniteVolumePlan::GetCellCent`.
+`numerics.firstLayerCenterWallDistance = true` selects one distance for
+all volume quadrature points in each cell incident to a no-slip wall.
+`numerics.firstLayerWallDistanceMethod` defaults to `cellCenter` for the
+interpolated center value. Set it to `halfMaxNodal` for half the maximum
+nodal wall distance of the cell. Both rules apply the configured floor
+and supply the SST wall \(\omega\) condition and other mean-distance
+consumers. Setup also reports the global minimum of the applied first-layer
+distance. Face quadrature evaluates the nodal interpolant at each face
+point. With the feature disabled, each volume quadrature point evaluates
+the nodal interpolant and mean-distance consumers use the unweighted
+mean of those samples.
 
-The initial scope uses stationary single domains, unlimited reconstruction
-and FP64 ACM face fluxes. CUDA requires combined AoS and the resident Jacobi
+Set `numerics.cellCenterWallDistanceForQuadrature = true` to reuse
+each cell's interpolated center distance at its volume quadrature points.
+Each interior face uses the arithmetic mean of its two adjacent center
+distances at every point. A physical boundary face uses its only adjacent
+center. The floor applies to each center before averaging. Outer ghost
+faces beyond the local flux stencil retain nodal samples if their parent
+cells are outside the halo. The first-layer mean-distance override still
+feeds the omega boundary condition and other mean-distance consumers.
+The option defaults to false and applies on CPU and CUDA through the same setup.
+
+A positive `numerics.wallDistanceFloor` clips every volume and face
+quadrature sample and either first-layer replacement to that minimum in
+solver units. The default value `0` uses the existing positive denominator
+safeguard of `1e-10` for RANS, since wall values can be exactly zero.
+
+With variational reconstruction, `numerics.ransP1Overlay` forces the RANS
+coefficients after reconstruction and limiting, before coefficient exchange.
+For each RANS scalar, the linear coefficients are the cell length scale times
+its physical mean gradient and the higher coefficients are zero. The ordinary
+face and volume samplers consume this polynomial. Flow coefficients retain
+their VR order, including the velocity gradients in the SST volume source.
+With `numerics.limiter = "Barth"`, the RANS coefficients use the Barth-limited
+physical gradient. Cell-center turbulent viscosity and the centered source
+Jacobian continue to use the unlimited mean gradient.
+`ransMeanFaceValues` independently selects cell means for the RANS face value.
+Both switches default to false.
+
+`numerics.ransCellCenterViscosity` requests a separate scalar auxiliary
+Array on owned and ghost cells. The auxiliary pass computes eddy viscosity
+using the cell mean and center wall distance, with the mean gradient for
+two-equation closures. The viscous flux averages the adjacent cell values on
+interior, periodic and MPI faces. Physical and domain-interface boundaries
+use their pointwise closure. This switch defaults to false.
+
+ACM uses stationary single domains and FP64 face fluxes. For direct P1
+reconstruction, set `numerics.reconstruction = "gradient"` and
+`numerics.limiter = "Barth"` to limit the gradients used in the RHS. The
+limiter bounds each velocity, pressure and turbulence component by cell
+means. It rotates only the velocity triplet for periodic neighbor reads.
+Positivity limiting is disabled for ACM. CUDA requires combined AoS and the resident Jacobi
 or supported Krylov path. Both CUDA face mappings have generated polynomial
 specializations for flow4, SA and two-equation profiles, in 2D and 3D for
 degrees 1–3. On A100 the automatic policy uses CTA segments for 3D P2 with

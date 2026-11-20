@@ -582,6 +582,14 @@ namespace DNDS::Cauchy
         _lastCharacteristicFallbacks = _problem.finiteVolume.LastCharacteristicFallbacks(*_execution.workspace);
         return _state.residual;
     }
+    std::vector<real> Domain::MeasureStateBounds(bool trial)
+    {
+        if (!_execution.stateDiagnostics)
+            _execution.stateDiagnostics.emplace(_problem.finiteVolume.Metrics(), _problem.equation,
+                                                _execution.ComputeStream().Context(), _execution.ChemicalWorkers());
+        return _execution.stateDiagnostics->MeasureBounds(_execution.Engine(), _execution.ComputeStream(), trial ? _state.trial : _state.accepted);
+    }
+
     std::array<real, 14> Domain::Diagnostics(const DomainSettings &settings, const std::vector<int> &forceZones)
     {
         const auto snapshot = CaptureStateSnapshot(true);

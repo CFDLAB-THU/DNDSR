@@ -19,6 +19,7 @@ namespace DNDS::Cauchy
         real scale = 1, relax = 1;
         int compressionPower = 1;
         bool positivity = true;
+        real ransRelaxation = 1;
     };
     struct NonlinearCorrectionResult
     {

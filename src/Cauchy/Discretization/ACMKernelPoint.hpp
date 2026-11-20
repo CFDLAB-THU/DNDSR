@@ -55,17 +55,17 @@ namespace DNDS::Cauchy::ACM
             return Physics::Incompressible::RANSPoint(values, [&](int j, int d)
                                                       { return gradients[j][d]; }, C - 4, p.flow.kinematicViscosity, distance, length);
         }
-        DNDS_DEVICE_CALLABLE NumericalResult<std::array<real, 3>> Auxiliary(const SpatialParameters &p, real distance) const
+        DNDS_DEVICE_CALLABLE NumericalResult<std::array<real, 4>> Auxiliary(const SpatialParameters &p, real distance) const
         {
-            real mu = p.flow.kinematicViscosity;
+            real nuT = 0;
             if constexpr (C > 4)
             {
                 const auto eddy = Physics::RANS::TryTransport(p.rans, Turbulence(p, distance));
                 if (!eddy)
                     return eddy.status;
-                mu += eddy.value.viscosity;
+                nuT = eddy.value.viscosity;
             }
-            return std::array<real, 3>{values[3], 0, (4. / 3.) * mu};
+            return std::array<real, 4>{values[3], 0, (4. / 3.) * (p.flow.kinematicViscosity + nuT), nuT};
         }
     };
 }

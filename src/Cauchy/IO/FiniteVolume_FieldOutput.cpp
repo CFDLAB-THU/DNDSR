@@ -6,6 +6,7 @@
 #include "DNDS/Runtime/Execution/EagerArray.hpp"
 #include "DNDS/Runtime/Communication/RowTransfer.hpp"
 #include "DNDS/MPI/CollectiveStage.hpp"
+#include "Geom/Quadratures/Quadrature.hpp"
 #include <unordered_map>
 
 namespace DNDS::Cauchy
@@ -212,7 +213,12 @@ namespace DNDS::Cauchy
             auto prepared = OutputFields::Submit(engine, stream, state, equation, workers);
             engine.Synchronize();
             outputFields = prepared.CopyToHost(stream.Context());
-            boundaryFields = R::Array<real>(R::RowLayout::Dense(boundary->rows.RowCount(), outputFields.Layout().Width()));
+            const bool exportDistance = _data->mesh->HasNodeWallDist();
+            auto requirements = Geom::MeshReadRequirements::CellFlux();
+            requirements.wallDistance = exportDistance;
+            auto meshRead = _data->mesh->AcquireRead(requirements);
+            const auto meshView = meshRead.HostView();
+            boundaryFields = R::Array<real>(R::RowLayout::Dense(boundary->rows.RowCount(), outputFields.Layout().Width() + index(exportDistance)));
             const auto fieldsRead = outputFields.Read();
             const auto rowsRead = boundary->rows.Read();
             auto boundaryWrite = boundaryFields.Write();
@@ -220,8 +226,21 @@ namespace DNDS::Cauchy
             const auto rows = rowsRead.View<R::FixedRows<1>>();
             const auto output = boundaryWrite.View<R::TableRows>();
             for (index iRow = 0; iRow < output.RowCount(); ++iRow)
-                for (index j = 0; j < output.Width(); ++j)
-                    output(iRow, j) = fields(rows(iRow, 0).cell, j); });
+            {
+                const index cell = rows(iRow, 0).cell;
+                for (index j = 0; j < fields.Width(); ++j)
+                    output(iRow, j) = fields(cell, j);
+                if (exportDistance)
+                {
+                    // Geometric center sample, before any SST floor or first-layer override.
+                    const auto nodes = meshView.CellNodes(cell);
+                    const auto &shape = Geom::Elem::GetCachedShapeAtQuadrature(meshView.GetCellElement(cell).type, 1, 0);
+                    real distance = 0;
+                    for (index j = 0; j < index(nodes.size()); ++j)
+                        distance += shape(0, j) * meshView.NodeWallDist(nodes[j]).norm();
+                    output(iRow, fields.Width()) = distance;
+                }
+            } });
         if (capture)
             MPI::LocalStage(mpi, [&]
                             {

@@ -4,6 +4,7 @@
 
 #include "Cauchy/Discretization/PerfectGasKernelPoint.hpp"
 #include "Cauchy/Discretization/ACMKernelPoint.hpp"
+#include "Cauchy/Discretization/CellCenterViscosityView.hpp"
 #include "Cauchy/Boundary/ACMBoundary.hpp"
 #include "Cauchy/Discretization/FiniteVolumeStencil.hpp"
 #include "Cauchy/Discretization/FiniteVolumeKernelPolicy.hpp"
@@ -100,7 +101,7 @@ namespace DNDS::Cauchy::CUDA
         int blockSize = 128;
         bool doubleBuffer = false, hoistFaceRows = false;
         bool mechanical = false, captureBoundaryFlux = false;
-        bool ransMeanFaceValues = false, ransP1Overlay = false;
+        bool ransMeanFaceValues = false;
         void Validate() const;
     };
     static_assert(std::is_trivially_copyable_v<RHSKernelControls>);
@@ -121,13 +122,16 @@ namespace DNDS::Cauchy::CUDA
         Runtime::PairReadView<real, Runtime::AccessBoundsChecks, MeanPolicy> mean;
         Runtime::PairReadView<real, Runtime::AccessBoundsChecks, CoefficientPolicy> reconstruction;
         Runtime::PairReadView<real, Runtime::AccessBoundsChecks, ViscousPolicy> viscousData;
-        RHSField waveJump, pressureMinimum, ransP1Gradients;
+        RHSField waveJump, pressureMinimum;
         RHSInput preparedMean;
         Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, IncomingPolicy> incoming;
         bool hasPreparedMean = false, hasIncoming = false, hasWave = false, hasPressure = false;
+        CellCenterViscosityView centerViscosity;
         void ValidateDevice(Runtime::Device device) const
         {
-            Runtime::ValidateViewDevices(device, mean, reconstruction, viscousData, ransP1Gradients);
+            Runtime::ValidateViewDevices(device, mean, reconstruction, viscousData);
+            if (centerViscosity.values.RowCount())
+                centerViscosity.values.ValidateDevice(device);
             if (hasPreparedMean)
                 preparedMean.ValidateDevice(device);
             if (hasIncoming)

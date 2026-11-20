@@ -594,10 +594,9 @@ namespace DNDS::Cauchy
         lower.numerics.reconstructionSolver = ReconstructionSolverSettings{};
         lower.numerics.firstOrderConvection = level > 0;
         lower.numerics.cfv.maxOrder = 1;
-        if (lower.numerics.limiter == "LVR")
-            lower.numerics.limiter = "WBAP";
-        if (level)
-            lower.numerics.limiter = "none";
+        lower.numerics.limiter = fine.implicit.multigrid.coarseGradientBarth ? "Barth" : "none";
+        lower.coarseGradientPositivity = fine.equation.system == "compressible" &&
+                                         fine.implicit.multigrid.coarseGradientPositivity;
         return lower;
     }
 

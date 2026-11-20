@@ -706,6 +706,14 @@ equation operators. Do not catch a rank-local failure and continue into MPI.
 With checks enabled, entry agreement detects mismatched controls before work.
 Shape/binding checks remain outside cell loops.
 
+The P1 and P0 coarse operators apply componentwise Barth limiting to their
+physical gradients by default. They also apply gradient positivity limiting
+for compressible equations. Use `implicit.multigrid.coarseGradientBarth`
+and `implicit.multigrid.coarseGradientPositivity` to disable the respective
+stages on both coarse levels. The P0 convection flux still uses cell means.
+These controls do not change the fine operator or the coarse increment and
+RHS/dTau positivity controls.
+
 `implicit.multigrid.coarseRHSFPP` defaults to `false`, matching Euler's
 coarse pMG loop, which omits RHS/dTau alpha limiting before its linear solve.
 False forces the resolved coarse `positivity.rhsFPPMode` to `"none"` after each

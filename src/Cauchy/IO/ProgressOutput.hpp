@@ -83,7 +83,7 @@ namespace DNDS::Cauchy
     };
 
     std::vector<std::string> EquationComponentNames(const EquationSchema &schema);
-    CsvSchema DetailedHistorySchema(const EquationSchema &schema);
+    CsvSchema DetailedHistorySchema(const EquationSchema &schema, bool stateBounds = true);
     std::vector<std::string> DetailedHistoryColumns(const EquationSchema &schema);
 
     enum class ProgressRecordStatus : index
@@ -97,11 +97,13 @@ namespace DNDS::Cauchy
         uint64_t step = 0;
         index stage = -1, coupledStage = -1, iteration = -1, attempt = 0;
         real time = 0, dt = 0, wall = 0;
+        bool steady = false;
     };
     struct AcceptedStepProgress
     {
         std::array<real, 14> diagnostics{};
         std::vector<real> residual;
+        std::vector<real> stateBounds;
         real pseudoCFL = 0;
         index faceFallbacks = 0, retries = 0, implicitStages = 0, nonlinearIterations = 0, linearIterations = 0;
         index cappedStages = 0;
@@ -137,6 +139,7 @@ namespace DNDS::Cauchy
         std::map<std::tuple<uint64_t, index, index>, std::pair<real, index>> _stageTiming;
         ProgressRow Base(const ProgressLocation &location, ProgressRecordStatus status) const;
         void FillResiduals(ProgressRow &row, const std::vector<real> &residual) const;
+        void FillStateBounds(ProgressRow &row, const std::vector<real> &bounds) const;
         void FillNonlinear(ProgressRow &row, const NonlinearProgress &progress) const;
         void ConsoleNonlinear(const ProgressLocation &location, const NonlinearProgress &progress,
                               real stageAverage) const;
@@ -150,7 +153,9 @@ namespace DNDS::Cauchy
         /// Capture the frontend's elapsed wall time at observation, not the
         /// attempt-start time or the later sink-flush time.
         void CaptureIteration(const NonlinearProgress &progress, real wall);
-        void FlushIterations();
+        /// A due snapshot prints its row when implicit console reporting is
+        /// enabled, even if its ordinary cadence skips this update.
+        void FlushIterations(bool snapshotDue = false);
         void StageEnd(ProgressLocation location, const NonlinearIterationReport &report);
         void StepEnd(ProgressLocation location, const AcceptedStepProgress &progress, bool forceHistory = false,
                      bool printConsole = true);

@@ -97,7 +97,7 @@ namespace DNDS::CFV
                            bool toCoefficients, bool ghost) const;
         void ConvertFields(Runtime::EagerEngine &engine, const Runtime::ExecutionStream &stream,
                            const FVField &source, FVField &destination, const VariationalReconstructionPlan &reconstruction,
-                           bool toCoefficients, bool ghost) const;
+                           bool toCoefficients, bool ghost, index firstComponent = 0, index componentCount = -1) const;
 
     public:
         static GradientPlan Prepare(Geom::UnstructuredMesh &mesh, FiniteVolumePlan metrics,
@@ -137,6 +137,10 @@ namespace DNDS::CFV
                                    FVField &coefficients) const;
         void ConvertToCoefficients(Runtime::EagerEngine &engine, const Runtime::ExecutionStream &stream,
                                    const FVField &gradient, const VariationalReconstructionPlan &reconstruction, FVField &coefficients) const;
+        /// Replace just the named component interval in an existing modal field.
+        void SetLinearCoefficients(Runtime::EagerEngine &engine, const Runtime::ExecutionStream &stream,
+                                   const FVField &gradient, const VariationalReconstructionPlan &plan, FVField &coefficients,
+                                   index firstComponent, index componentCount) const;
         /// Explicit compatibility projection of linear modes into physical
         /// gradients, without basis evaluation. Higher modes are ignored: the
         /// caller must supply a linear polynomial, e.g. the accepted direct-FV

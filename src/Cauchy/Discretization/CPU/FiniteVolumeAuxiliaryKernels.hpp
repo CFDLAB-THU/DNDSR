@@ -24,8 +24,8 @@ namespace DNDS::Cauchy::CPU
         WallDistanceView wall;
         bool hasWall = false;
         std::optional<MeanThermodynamicView> derived;
-        std::array<bool, 7> enabled{};
-        std::array<RHSOutputView, 7> values;
+        std::array<bool, 8> enabled{};
+        std::array<RHSOutputView, 8> values;
         RHSOutputView scratch;
         bool useScratch = false;
         RHSScalarView incoming;

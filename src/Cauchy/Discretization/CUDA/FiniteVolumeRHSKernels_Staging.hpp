@@ -40,10 +40,8 @@ namespace DNDS::Cauchy::CUDA::Detail
         Field<Components * Dimension> gradients, viscousGradients;
         Field<5 * Dimension> primitiveGradients;
         Field<1> waveJump, pressureMinimum;
-        // The optional overlay is loaded directly, independent of the staged
-        // high-order rows and shared-memory package shape.
-        RHSField ransP1Gradients;
         Field<2> preparedMean;
+        CellCenterViscosityView centerViscosity;
         Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::FixedRows<Components, Components>> incoming;
         bool hasPreparedMean = false, hasIncoming = false, hasWave = false, hasPressure = false;
     };
@@ -106,7 +104,7 @@ namespace DNDS::Cauchy::CUDA::Detail
         result.waveJump = {values, sample.cell, sample.other, 1, shape.width, shape.AuxFirst() + 2};
         result.pressureMinimum = {values, sample.cell, sample.other, 1, shape.width, shape.AuxFirst() + 3};
         result.incoming = fields.incoming;
-        result.ransP1Gradients = fields.ransP1Gradients;
+        result.centerViscosity = fields.centerViscosity;
         result.hasPreparedMean = fields.hasPreparedMean;
         result.hasIncoming = fields.hasIncoming;
         result.hasWave = fields.hasWave;

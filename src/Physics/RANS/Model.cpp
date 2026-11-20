@@ -74,11 +74,12 @@ namespace DNDS::Physics::RANS
                 viscosity / std::max(point.state[0] * _settings.turbulentSchmidt, verySmallReal)};
     }
 
-    NumericalResult<TurbulentTransport> Model::TryTransport(const Point &point) const noexcept
+    NumericalResult<TurbulentTransport> Model::TryTransport(const Point &point, real preparedViscosity) const noexcept
     {
         if (_parameters.Supported())
-            return RANS::TryTransport(_parameters, point);
-        const auto result = Transport(point); // CPU-only legacy RealizableKE.
+            return RANS::TryTransport(_parameters, point, preparedViscosity);
+        const auto result = preparedViscosity < 0 ? Transport(point) : // CPU-only legacy RealizableKE.
+                                TransportFromViscosity(point, preparedViscosity, _settings.turbulentPrandtl, _settings.turbulentSchmidt);
         if (!std::isfinite(result.viscosity) || !std::isfinite(result.conductivity) || !std::isfinite(result.speciesDiffusivity))
             return NumericalStatus{NumericalError::InvalidState};
         return result;

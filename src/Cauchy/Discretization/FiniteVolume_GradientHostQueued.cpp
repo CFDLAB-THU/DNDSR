@@ -59,7 +59,7 @@ namespace DNDS::Cauchy
     {
         FiniteVolume(owner).ValidateWorkspace(state, *this);
         DNDS_check_throw_info(engine.Owns(stream) && stream.Context().device == owner->metrics.Device() &&
-                                  nativeDirectGradient && directGradients.size() == fields.size(),
+                                  (nativeDirectGradient || (!meanOnly && owner->settings.numerics.UsesRANSGradientBarth())) && directGradients.size() == fields.size(),
                               "gradient limiter stream, placement or workspace differs");
         if (owner->metrics.Device() != R::Device::Host())
         {
@@ -137,7 +137,7 @@ namespace DNDS::Cauchy
     {
         FiniteVolume(owner).ValidateWorkspace(state, *this);
         DNDS_check_throw_info(engine.Owns(stream) && stream.Context().device == owner->metrics.Device() && nativeDirectGradient &&
-                                  owner->settings.numerics.positivity && directGradients.size() == fields.size() &&
+                                  owner->settings.GradientPositivity() && directGradients.size() == fields.size() &&
                                   owner->maximumGradientPoints >= 0,
                               "gradient PP stream, placement or workspace differs");
         DNDS_check_throw_info(!pendingGradientStatistics || pendingGradientStatistics->published,

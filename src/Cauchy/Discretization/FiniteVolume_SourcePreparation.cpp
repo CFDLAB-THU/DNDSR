@@ -143,17 +143,6 @@ namespace DNDS::Cauchy
         if (!result)
             return;
         CPU::SourceKernelRequest request;
-        const auto metric = owner->metrics.AcquireRead();
-        request.metric = metric.HostView();
-        std::optional<R::Array<real>::ReadLease> ransP1Read;
-        if (sourceSampling && owner->settings.numerics.ransP1Overlay)
-        {
-            DNDS_check_throw_info(meanGradients, "RANS P1 source overlay requires mean gradients");
-            const auto location = state.LocateBlock("rans");
-            ransP1Read.emplace(meanGradients->fields[location.physicalField].Owned().Read());
-            request.ransP1Gradients = ransP1Read->View<R::UniformTableRows>();
-            request.ransP1First = location.firstComponent;
-        }
         std::vector<R::Array<real>::ReadLease> sources, coefficientReads, gradientReads, basisReads;
         std::vector<RHSScalarView> samples, coefficientViews;
         std::vector<std::array<CPU::SourceGradientView, 3>> gradients;

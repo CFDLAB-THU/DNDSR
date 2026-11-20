@@ -121,13 +121,9 @@ namespace DNDS::Cauchy::CUDA
                                           g.basis.availableDerivatives >= (controls.viscous && !controls.primitiveGradient ? controls.dimension + 1 : 1),
                                       "CUDA RHS basis publication is incomplete");
         }
-        if (controls.ransP1Overlay)
-        {
-            DNDS_check_throw_info(reconstruct && !controls.direct && !controls.ransMeanFaceValues &&
-                                      controls.components > (controls.mechanical ? 4 : 5),
-                                  "CUDA RANS P1 face overlay requires modal RANS face states");
-            ValidateField(fields.ransP1Gradients, owned, ghost, controls.components * controls.dimension, requireGhost);
-        }
+        if (fields.centerViscosity.values.RowCount())
+            DNDS_check_throw_info(fields.centerViscosity.values.RowCount() == g.cells.RowCount() && controls.components > (controls.mechanical ? 4 : 5),
+                                  "CUDA RHS cell turbulent viscosity requires one value per local cell and a RANS model");
         if (controls.primitiveGradient)
             ValidateField(fields.viscousData, owned, ghost, 5 * controls.dimension, requireGhost);
         else if (reconstruct && controls.viscous && controls.distinctViscous)

@@ -66,11 +66,15 @@ namespace DNDS::CFV::Detail
         DNDS_check_throw_info(!limited || (a.target.RowCount() == p.owned && a.target.Width() == a.output.Width() &&
                                            a.alpha.RowCount() == p.owned && a.alpha.Width() == 1 && uniform(a.target) && uniform(a.alpha)),
                               "CUDA reconstruction target/penalty shape differs");
-        const auto matrices = p.quantized ? p.matrixAInvB32.Width() : p.matrixAInvB.Width();
+        const auto matrices = p.packedRawB ? p.rawMatrixB32.Width() : p.quantized ? p.matrixAInvB32.Width()
+                                                                                  : p.matrixAInvB.Width();
         const auto vectors = p.quantized ? p.vectorAInvB32.Width() : p.vectorAInvB.Width();
+        const auto inverseRows = p.packedInverse ? p.localInverse32.RowCount() : p.localInverse.RowCount();
+        const auto inverseWidth = p.packedInverse ? p.localInverse32.Width() : p.localInverse.Width();
         DNDS_check_throw_info(matrices == p.n * p.n && vectors == p.n &&
-                                  (!p.raw || (p.localInverse.RowCount() == p.owned && p.localInverse.Width() ==
-                                                                                          (p.inverseTriangle ? p.n * (p.n + 1) / 2 : p.n * p.n))) &&
+                                  (!(p.packedRawB || p.packedInverse) || (p.raw && !p.quantized)) &&
+                                  (!p.raw || (inverseRows == p.owned &&
+                                              inverseWidth == (p.inverseTriangle ? p.n * (p.n + 1) / 2 : p.n * p.n))) &&
                                   (!p.faceCoupling || (p.faces.RowCount() == p.neighbors.RowCount() && p.faceSide.RowCount() == p.neighbors.RowCount())),
                               "CUDA reconstruction matrix payload shape differs");
     }

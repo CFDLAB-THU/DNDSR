@@ -27,8 +27,6 @@ namespace DNDS::Cauchy::CPU
         SpanView<const index> logicalFirst;
         SpanView<const RHSScalarView> samples, coefficients;
         VolumeSourceBasis basis;
-        RHSScalarView ransP1Gradients;
-        index ransP1First = 0;
         SpanView<const std::array<SourceGradientView, 3>> gradients;
         WallDistanceView walls;
         EquationBlockReadView ransMean;

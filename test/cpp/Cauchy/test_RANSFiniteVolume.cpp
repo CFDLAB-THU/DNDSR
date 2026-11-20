@@ -175,7 +175,7 @@ TEST_CASE("Finite-volume admissibility includes the prepared RANS mean policy")
 
 TEST_CASE("ACM wall-bounded first implicit correction transports the velocity and turbulence blocks")
 {
-    for (const auto *name : {"SA", "KOmegaWilcox", "KOmegaSST"})
+    for (const auto *name : {"SA", "KOmegaWilcox", "KOmegaSST", "resolvedSST"})
     {
         CAPTURE(name);
         auto settings = Settings();
@@ -184,7 +184,9 @@ TEST_CASE("ACM wall-bounded first implicit correction transports the velocity an
         settings.equation.eos = "none";
         settings.equation.transport = "Newtonian";
         settings.equation.referenceScales = {{"rho0", 1}, {"U0", 1}, {"L0", 1}, {"T0", 300}};
-        settings.equation.rans.model = name;
+        const bool resolved = std::string(name) == "resolvedSST";
+        settings.equation.rans.model = resolved ? "KOmegaSST" : name;
+        settings.numerics.resolvedCellOmega = resolved;
         settings.equation.rans.viscosityReference = .001;
         settings.boundaries["7"].kind = "noSlipWall";
         const bool sa = settings.equation.rans.model == "SA";
@@ -199,7 +201,8 @@ TEST_CASE("ACM wall-bounded first implicit correction transports the velocity an
         settings.implicit.minIterations = settings.implicit.iterations = 1;
         C::TimeSettings time;
         time.method = "bdf1";
-        C::Domain domain("wall", CFVTest::CartesianHexes(mpi, 3), settings, time);
+        auto mesh = CFVTest::CartesianHexes(mpi, 3);
+        C::Domain domain("wall", mesh, settings, time);
         REQUIRE(domain.Advance(1e-4).accepted);
         auto read = domain.Dofs().ReadOwned();
         const auto flow = read.Block("flow"), rans = read.Block("rans");
@@ -208,6 +211,21 @@ TEST_CASE("ACM wall-bounded first implicit correction transports the velocity an
         {
             changes[0] += std::abs(flow(cell, 0) - initial[0]);
             changes[1] += std::abs(rans(cell, 0) - initial[4]);
+        }
+        if (resolved)
+        {
+            const auto comm = std::make_shared<DNDS::Runtime::CommunicationContext>(mpi.comm);
+            const auto mask = C::WallDistanceSamples::BuildFirstLayerMask(*mesh, comm, [](int zone)
+                                                                          { return zone == 7; });
+            const auto distances = C::WallDistanceSamples::Construct(mesh, 1);
+            const auto access = distances.AcquireRead();
+            const auto flags = mask.owned.Read();
+            for (I cell = 0; cell < flow.RowCount(); ++cell)
+                if (flags.View()(cell, 0))
+                {
+                    const auto distance = access.HostView().cellMean(cell, 0);
+                    CHECK(rans(cell, 1) == doctest::Approx(80 * settings.equation.viscosity / (distance * distance)));
+                }
         }
         MPI_Allreduce(MPI_IN_PLACE, changes.data(), 2, MPI_DOUBLE, MPI_SUM, mpi.comm);
         CHECK(std::isfinite(changes[0]));

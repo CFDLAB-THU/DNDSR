@@ -64,32 +64,35 @@ TEST_CASE("CUDA RANS quadrature sources and destruction diagonals match generic 
             auto weights = Table<real>(5, 1, [](I i, I)
                                        { return std::array<real, 5>{.4, .6, .3, .7, 1}[i]; });
             auto metric = Table<real>(3, 8, [](I i, I j)
-                                      { return j == 0 ? real(1 + i) : j == 7 ? 1.1 + .1 * i : 0.; });
+                                      { return j == 0 ? real(1 + i) : j == 7 ? 1.1 + .1 * i
+                                                                             : 0.; });
             const auto state = [&](I iRow, I j)
             {
                 const auto flow = equation.Gas().Conservative({1.1 + .01 * iRow, .3, .02, -.1, 1.2});
                 return j < 5 ? flow[j] : j == 5 ? .02 + .001 * iRow
                                                 : .3 + .01 * iRow;
             };
-            const bool direct = operation == 4, overlay = operation == 5;
-            const auto parent = [](I q) -> I { return q < 2 ? 0 : 1; };
-            const auto displacement = [](I q, int d) { return .03 * (q + 1) * (d == 0 ? 1 : -2); };
-            const auto overlaySlope = [](I cell, I j, int d) { return j < 5 ? 0. : .001 * (cell + 1) * (j + 1) * (d + 1); };
+            const bool direct = operation == 4, modal = operation == 5;
+            const auto parent = [](I q) -> I
+            { return q < 2 ? 0 : 1; };
+            const auto displacement = [](I q, int d)
+            { return .03 * (q + 1) * (d == 0 ? 1 : -2); };
+            const auto modalSlope = [](I cell, I j, int d)
+            { return .001 * (cell + 1) * (j + 1) * (d + 1); };
             auto means = Table<real>(2, width, state);
             auto samples = Table<real>(5, width, [&](I q, I j)
                                        {
-                                           real value = state(direct || overlay ? parent(q) : q, j);
-                                           if (overlay)
+                                           real value = state(direct || modal ? parent(q) : q, j);
+                                           if (modal)
                                                for (int d = 0; d < 2; ++d)
-                                                   value += overlaySlope(parent(q), j, d) * displacement(q, d);
-                                           return value;
-                                       });
+                                                   value += modalSlope(parent(q), j, d) * displacement(q, d);
+                                           return value; });
             const I gradientRows = mean ? 2 : 5;
             std::array<R::Array<real>, 3> gradients;
             for (int d = 0; d < 3; ++d)
                 gradients[d] = Table<real>(gradientRows, width, [=](I i, I j)
-                                           { return overlay ? overlaySlope(parent(i), j, d)
-                                                            : .001 * ((direct ? parent(i) : i) + 1) * (j + 1) * (d + 1); });
+                                           { return modal ? modalSlope(parent(i), j, d)
+                                                          : .001 * ((direct ? parent(i) : i) + 1) * (j + 1) * (d + 1); });
             R::Array<real> wallPoints(R::RowLayout::Ragged({2, 3, 1}));
             {
                 auto wall = wallPoints.Write();
@@ -179,21 +182,19 @@ TEST_CASE("CUDA RANS quadrature sources and destruction diagonals match generic 
             }
             auto du = means.To(device), dq = samples.To(device), dw = weights.To(device), dl = lengths.To(device), dm = wallMean.To(device), dp = wallPoints.To(device), dg = metric.To(device);
             auto offDevice = offsets.To(device);
-            std::optional<R::Array<real>> overlayGradient, overlayBasis, overlayCoefficients;
-            if (overlay)
+            std::optional<R::Array<real>> modalBasis, modalCoefficients;
+            if (modal)
             {
-                overlayGradient = Table<real>(2, width * 2, [&](I i, I j)
-                                               { return overlaySlope(i, j / 2, int(j % 2)); }).To(device);
-                overlayBasis = Table<real>(5, 2 * 3, [&](I q, I col)
-                                            {
+                modalBasis = Table<real>(5, 2 * 3, [&](I q, I col)
+                                         {
                                                 const int mode = int(col / 3), derivative = int(col % 3);
                                                 const real scale = 1.1 + .1 * parent(q);
                                                 return derivative ? real(derivative - 1 == mode) / scale
-                                                                  : displacement(q, mode) / scale;
-                                            }).To(device);
-                // Deliberately give the modal RANS columns different slopes.
-                overlayCoefficients = Table<real>(2, width * 2, [](I, I j)
-                                                   { return j < 5 * 2 ? 0. : .3; }).To(device);
+                                                                  : displacement(q, mode) / scale; })
+                                 .To(device);
+                modalCoefficients = Table<real>(2, width * 2, [&](I cell, I j)
+                                                { return (1.1 + .1 * cell) * modalSlope(cell, j / 2, int(j % 2)); })
+                                        .To(device);
             }
             std::array<R::Array<real>, 3> derivativeDevice;
             for (int d = 0; d < 3; ++d)
@@ -214,7 +215,7 @@ TEST_CASE("CUDA RANS quadrature sources and destruction diagonals match generic 
                 request.parameters = params.View<R::FixedRows<1>>();
                 request.means = u.View<R::TableRows>();
                 request.cellInputs = direct;
-                if (!direct)
+                if (!direct && !modal)
                     request.samples = q.View<R::TableRows>();
                 request.gradients = {{{g0.View<R::TableRows>(), 1, 0}, {g1.View<R::TableRows>(), 1, 0}, {g2.View<R::TableRows>(), 1, 0}}};
                 request.offsets = off.View<R::FixedRows<1>>();
@@ -233,17 +234,14 @@ TEST_CASE("CUDA RANS quadrature sources and destruction diagonals match generic 
                 request.scale = .7;
                 request.evaluation = mean ? K::SourceEvaluation::MeanDestruction : jacobian ? K::SourceEvaluation::QuadratureDestruction
                                                                                             : K::SourceEvaluation::QuadratureResidual;
-                std::optional<R::Array<real>::ReadLease> overlayGradientRead, overlayBasisRead, overlayCoefficientRead;
-                if (overlay)
+                std::optional<R::Array<real>::ReadLease> modalBasisRead, modalCoefficientRead;
+                if (modal)
                 {
-                    overlayGradientRead.emplace(overlayGradient->Read(context));
-                    overlayBasisRead.emplace(overlayBasis->Read(context));
-                    overlayCoefficientRead.emplace(overlayCoefficients->Read(context));
-                    request.ransP1Overlay = true;
-                    request.ransP1Gradients = overlayGradientRead->View<R::TableRows>();
-                    request.coefficients = overlayCoefficientRead->View<R::TableRows>();
+                    modalBasisRead.emplace(modalBasis->Read(context));
+                    modalCoefficientRead.emplace(modalCoefficients->Read(context));
+                    request.coefficients = modalCoefficientRead->View<R::TableRows>();
                     request.basis.polynomial = DNDS::CFV::Math::TaylorBasis(2, 1).KernelParameters();
-                    request.basis.cached = overlayBasisRead->View<R::UniformTableRows>();
+                    request.basis.cached = modalBasisRead->View<R::UniformTableRows>();
                     request.basis.cachedDerivatives = 3;
                 }
                 K::AddRANSSources(context, request, rows.View<R::FixedRows<1>>());

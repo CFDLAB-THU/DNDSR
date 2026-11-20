@@ -244,7 +244,11 @@ namespace DNDS::Direct
                     // converged rather than rotating forever on that noise.
                     // This is an arithmetic convergence floor; the singular
                     // filter below remains exactly epsilon*sigma_max.
-                    const real relative = std::numeric_limits<real>::epsilon() * std::sqrt(alpha) * std::sqrt(beta);
+                    // The dot product accumulates N rounded terms. Testing
+                    // against one ulp can keep rotating already orthogonal
+                    // columns until the sweep limit. Keep the rank cutoff
+                    // independent of this convergence tolerance.
+                    const real relative = N * std::numeric_limits<real>::epsilon() * std::sqrt(alpha) * std::sqrt(beta);
                     const real threshold = relative > std::numeric_limits<real>::min() ? relative : std::numeric_limits<real>::min();
                     if (std::abs(gamma) <= threshold)
                         continue;

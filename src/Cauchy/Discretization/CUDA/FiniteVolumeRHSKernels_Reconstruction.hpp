@@ -127,16 +127,6 @@ namespace DNDS::Cauchy::CUDA::Detail
                 mean[j] = fields.mean(iCell, first + j);
             const RANSReconstructionView rans{kind, Components - first};
             const SpanView<real> values{point.values.data() + first, Components - first};
-            if (controls.ransP1Overlay)
-            {
-                auto dx = ParentPoint(geometry, sample, other);
-                for (int d = 0; d < dimension; ++d)
-                    dx[d] -= geometry.cells(iCell, 4 + d);
-                const auto gradient = fields.ransP1Gradients[iCell];
-                rans.OverlayP1(dimension, mean, dx,
-                               [&](int j, int d) { return gradient[(first + j) * dimension + d]; },
-                               [&](int j, int d, real slope) { point.gradients[first + j][d] = slope; }, values);
-            }
             rans.ApplyFacePoint(mean, values, controls.ransMeanFaceValues);
         };
         if constexpr (std::is_same_v<Point, ACM::KernelPoint<Components>>)

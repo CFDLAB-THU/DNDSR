@@ -17,7 +17,7 @@ namespace DNDS::Cauchy::CUDA
             return point;
         }
         template <int Components, bool Mechanical = false>
-        __device__ NumericalResult<std::array<real, 3>> Properties(const AuxiliaryStateInput &input,
+        __device__ NumericalResult<std::array<real, 4>> Properties(const AuxiliaryStateInput &input,
                                                                    const std::conditional_t<Mechanical, ACM::KernelPoint<Components>, PerfectGasKernelPoint<Components>> &point, index iCell)
         {
             if constexpr (Mechanical)
@@ -26,23 +26,28 @@ namespace DNDS::Cauchy::CUDA
                 return point.Auxiliary(input.parameters(0, 0), input.hasWall ? input.wallMean(iCell, 0) : 1);
         }
         template <int Components, bool Mechanical = false>
-        __global__ void Means(AuxiliaryStateInput input, AuxiliaryOutput output, AuxiliaryStatus status, index first, index end)
+        __global__ void Means(AuxiliaryStateInput input, AuxiliaryOutput output, AuxiliaryOutput viscosity, AuxiliaryStatus status, index first, index end)
         {
             for (index iCell = first + index(blockIdx.x) * blockDim.x + threadIdx.x; iCell < end; iCell += index(gridDim.x) * blockDim.x)
             {
                 const auto result = Properties<Components, Mechanical>(input, Load<Components, Mechanical>(input, iCell), iCell);
                 status(iCell, 0) = result.status.At(iCell);
                 if (result)
-                    for (int j = 0; j < 3; ++j)
-                        output(iCell, j) = result.value[j];
+                {
+                    if (output.RowCount())
+                        for (int j = 0; j < 3; ++j)
+                            output(iCell, j) = result.value[j];
+                    if (viscosity.RowCount())
+                        viscosity(iCell, 0) = result.value[3];
+                }
             }
         }
         template <int Components, bool Mechanical = false>
-        __device__ NumericalResult<std::array<real, 3>> Prepared(const AuxiliaryFaceRequest &request,
+        __device__ NumericalResult<std::array<real, 4>> Prepared(const AuxiliaryFaceRequest &request,
                                                                  const std::conditional_t<Mechanical, ACM::KernelPoint<Components>, PerfectGasKernelPoint<Components>> &point, index iCell)
         {
             if (request.preparedMeans.RowCount())
-                return std::array<real, 3>{request.preparedMeans(iCell, 0), request.preparedMeans(iCell, 1), request.preparedMeans(iCell, 2)};
+                return std::array<real, 4>{request.preparedMeans(iCell, 0), request.preparedMeans(iCell, 1), request.preparedMeans(iCell, 2)};
             return Properties<Components, Mechanical>(request.state, point, iCell);
         }
         template <int Components, bool Mechanical = false>
@@ -205,12 +210,15 @@ namespace DNDS::Cauchy::CUDA
             DNDS_check_throw_info(wallMean.RowCount() >= mean.RowCount(), "CUDA auxiliary wall mean is incomplete");
     }
     void PrepareAuxiliaryMeans(R::ExecutionContext context, const AuxiliaryStateInput &state,
-                               AuxiliaryOutput output, AuxiliaryStatus status, index first, index end)
+                               AuxiliaryOutput output, AuxiliaryOutput viscosity, AuxiliaryStatus status, index first, index end)
     {
         state.Validate(context.device);
-        R::ValidateViewDevices(context.device, output, status);
-        R::CheckKernelArgumentBudget<AuxiliaryStateInput, AuxiliaryOutput, AuxiliaryStatus, index, index>();
-        DNDS_check_throw_info(first >= 0 && first <= end && end <= state.mean.RowCount() && output.RowCount() >= end && output.Width() == 3 && status.RowCount() >= end,
+        R::ValidateViewDevices(context.device, output, viscosity, status);
+        R::CheckKernelArgumentBudget<AuxiliaryStateInput, AuxiliaryOutput, AuxiliaryOutput, AuxiliaryStatus, index, index>();
+        DNDS_check_throw_info(first >= 0 && first <= end && end <= state.mean.RowCount() && status.RowCount() >= end &&
+                                  (!end || output.RowCount() || viscosity.RowCount()) &&
+                                  (!output.RowCount() || (output.RowCount() >= end && output.Width() == 3)) &&
+                                  (!viscosity.RowCount() || (viscosity.RowCount() >= end && viscosity.Width() == 1)),
                               "CUDA auxiliary mean range/shape mismatch");
         if (first == end)
             return;
@@ -219,24 +227,24 @@ namespace DNDS::Cauchy::CUDA
         if (state.acm.RowCount())
         {
             if (state.components == 4)
-                Means<4, true><<<blocks, 128, 0, stream>>>(state, output, status, first, end);
+                Means<4, true><<<blocks, 128, 0, stream>>>(state, output, viscosity, status, first, end);
             else if (state.components == 5)
-                Means<5, true><<<blocks, 128, 0, stream>>>(state, output, status, first, end);
+                Means<5, true><<<blocks, 128, 0, stream>>>(state, output, viscosity, status, first, end);
             else
-                Means<6, true><<<blocks, 128, 0, stream>>>(state, output, status, first, end);
+                Means<6, true><<<blocks, 128, 0, stream>>>(state, output, viscosity, status, first, end);
             CheckLaunch();
             return;
         }
         switch (state.components)
         {
         case 5:
-            Means<5><<<blocks, 128, 0, stream>>>(state, output, status, first, end);
+            Means<5><<<blocks, 128, 0, stream>>>(state, output, viscosity, status, first, end);
             break;
         case 6:
-            Means<6><<<blocks, 128, 0, stream>>>(state, output, status, first, end);
+            Means<6><<<blocks, 128, 0, stream>>>(state, output, viscosity, status, first, end);
             break;
         case 7:
-            Means<7><<<blocks, 128, 0, stream>>>(state, output, status, first, end);
+            Means<7><<<blocks, 128, 0, stream>>>(state, output, viscosity, status, first, end);
             break;
         }
         CheckLaunch();

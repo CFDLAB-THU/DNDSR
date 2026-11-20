@@ -82,6 +82,7 @@ namespace DNDS::Cauchy
         bool cellWaveJump = false;
         bool cellPressureMinimum = false;
         DerivedRequest derived;
+        bool cellTurbulentViscosity = false;
     };
     /// Explicit, extensible output buffers. Every member is optional; absent
     /// outputs are neither allocated nor written. Face rows follow AuxiliaryFaces().
@@ -89,9 +90,13 @@ namespace DNDS::Cauchy
     struct AuxiliaryValues
     {
         /// Local owned+ghost rows: [p,a,diffusivity], followed by [H,beta] for
-        /// mixtures. Ghost properties are evaluated from the fresh mean halo;
-        /// this rank-local cache has no independent transfer plan.
+        /// mixtures. Ghost properties are
+        /// evaluated from the fresh means and (for two-equation RANS) gradient
+        /// halos; this rank-local cache has no independent transfer plan.
         std::optional<Runtime::Array<real>> meanThermodynamics;
+        /// One dynamic eddy viscosity per owned and ghost cell, evaluated from
+        /// the mean-state closure (unit density gives kinematic viscosity in ACM).
+        std::optional<Runtime::Array<real>> cellTurbulentViscosity;
         std::optional<Runtime::Array<real>> faceSpectralRadius; // convection, diffusion (speed)
         std::optional<Runtime::Array<real>> faceWaveJump;
         std::optional<Runtime::Array<real>> facePressureMinimum;
@@ -668,6 +673,7 @@ namespace DNDS::Cauchy
         /// integrated derivative produced with the retained spatial rate
         /// through JacobianContext. Its storage must be disjoint from all
         /// matrix outputs. Later polynomial evaluations can use other records.
+        /// @see docs/architecture/CauchyDispatch.md (CPU flux Jacobian).
         void PrepareJacobian(const EquationDofs &state, const AuxiliaryValues &auxiliary,
                              const Runtime::Array<real> &inversePseudoTime, LinearProblemContext &output,
                              JacobianPreparation controls = {}, real time = 0,
@@ -812,6 +818,9 @@ namespace DNDS::Cauchy
         /// reference quadrature across reports; CUDA callers supply their lane.
         std::array<FlowState, 3> Error(const EquationDofs &state, const FlowProfileSettings &profile, const FlowState &primitive, real time,
                                        std::optional<Runtime::ExecutionStream> stream = {}) const;
+        /// Project the corrected first-layer ACM SST omega mean after a nonlinear update.
+        /// The defect, assembled Jacobian and wall-face omega retain their own definitions.
+        void ApplyResolvedCellOmega(Runtime::EagerEngine &, const Runtime::ExecutionStream &, EquationDofs &candidate) const;
         /// Prepare the complete equation mean-state predicate. Mixtures require
         /// their retained worker pool exactly once here; subsequent row checks
         /// perform no EOS inversion or worker acquisition.
@@ -926,6 +935,7 @@ namespace DNDS::Cauchy
         void PrepareFlow5Jacobian(const CFV::FVField &state, const AuxiliaryValues &auxiliary,
                                   const Runtime::Array<real> &inversePseudoTime, LinearProblemContext &output,
                                   JacobianPreparation controls, real time) const;
+        /// @see docs/architecture/CauchyDispatch.md (CUDA flux Jacobian).
         void PrepareDeviceJacobian(const EquationDofs &, const AuxiliaryValues &, const Runtime::Array<real> &inversePseudoTime,
                                    LinearProblemContext &, JacobianPreparation, real time, const JacobianContext &) const;
         ReconstructionRestore ReserveReconstructionRestoreImpl(ReconstructionState &state, const EquationDofs &guess,

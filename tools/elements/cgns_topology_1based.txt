@@ -154,15 +154,10 @@ FACES:
 # Corner nodes: N1-N6
 # Mid-edge nodes: N7-N15
 #   N7-N9:   bottom triangle edges (E1-E3)
-#   N10-N12: top triangle edges (E7-E9)
-#   N13-N15: vertical edges (E4-E6)
+#   N10-N12: connecting edges (E4-E6)
+#   N13-N15: top triangle edges (E7-E9)
 # Mid-face nodes: N16-N18 (on quad lateral faces F1-F3)
 #
-# NOTE: The CGNS convention numbers mid-edge nodes as:
-#   N7=mid(E1), N8=mid(E2), N9=mid(E3),
-#   N10=mid(E7), N11=mid(E8), N12=mid(E9),
-#   N13=mid(E4), N14=mid(E5), N15=mid(E6)
-# i.e., bottom edges first, then top edges, then vertical edges.
 # ======================================================================
 
 PENTA_18  nodes=18  edges=9  faces=5
@@ -171,19 +166,19 @@ EDGES:
   E1:  N1, N2,  mid=N7
   E2:  N2, N3,  mid=N8
   E3:  N3, N1,  mid=N9
-  E4:  N1, N4,  mid=N13
-  E5:  N2, N5,  mid=N14
-  E6:  N3, N6,  mid=N15
-  E7:  N4, N5,  mid=N10
-  E8:  N5, N6,  mid=N11
-  E9:  N6, N4,  mid=N12
+  E4:  N1, N4,  mid=N10
+  E5:  N2, N5,  mid=N11
+  E6:  N3, N6,  mid=N12
+  E7:  N4, N5,  mid=N13
+  E8:  N5, N6,  mid=N14
+  E9:  N6, N4,  mid=N15
 
 FACES:
-  F1:  N1, N2, N5, N4       | mid-edge: N7, N14, N10, N13   | mid-face: N16   | edges:  E1,  E5, -E7, -E4
-  F2:  N2, N3, N6, N5       | mid-edge: N8, N15, N11, N14   | mid-face: N17   | edges:  E2,  E6, -E8, -E5
-  F3:  N3, N1, N4, N6       | mid-edge: N9, N13, N12, N15   | mid-face: N18   | edges:  E3,  E4, -E9, -E6
+  F1:  N1, N2, N5, N4       | mid-edge: N7, N11, N13, N10   | mid-face: N16   | edges:  E1,  E5, -E7, -E4
+  F2:  N2, N3, N6, N5       | mid-edge: N8, N12, N14, N11   | mid-face: N17   | edges:  E2,  E6, -E8, -E5
+  F3:  N3, N1, N4, N6       | mid-edge: N9, N10, N15, N12   | mid-face: N18   | edges:  E3,  E4, -E9, -E6
   F4:  N1, N3, N2           | mid-edge: N9, N8, N7          | edges: -E3, -E2, -E1
-  F5:  N4, N5, N6           | mid-edge: N10, N11, N12       | edges:  E7,  E8,  E9
+  F5:  N4, N5, N6           | mid-edge: N13, N14, N15       | edges:  E7,  E8,  E9
 
 
 # ======================================================================

@@ -1229,6 +1229,73 @@ TEST_CASE("Rigid motion restart retains absolute-state convention and BDF histor
             CHECK(u(iCell, j) == v(iCell, j));
     Remove({path});
 }
+TEST_CASE("Means-only restart selects the steady trial or the accepted transient state")
+{
+    for (const bool steady : {true, false})
+    {
+        CAPTURE(steady);
+        const auto path = Path("cauchy-internal-means-");
+        C::Json input{
+            {"defaults", {{"mesh", {{"dimension", 2}}}, {"numerics", {{"reconstruction", "variational"}, {"cfv", {{"maxOrder", 2}}}}}, {"implicit", {{"iterations", 2}, {"minIterations", 2}}}}},
+            {"time", {{"method", steady ? "bdf1" : "bdf2"}, {"steady", steady}}}};
+        const auto factory = [](DNDS::index, const auto &, const DNDS::MPIInfo &domainMPI)
+        { return CauchyTest::PeriodicQuads(domainMPI, 4); };
+        const auto sourceConfig = C::SimulationConfig::ResolveCollective(input, mpi.comm);
+        C::Simulation source(sourceConfig, mpi.comm, factory);
+        auto &domain = source.GetDomain(0);
+        Initialize(domain);
+        if (!steady)
+            REQUIRE(source.Advance(.001).accepted);
+        const auto accepted = domain.Dofs().CoupledField().Owned().Clone();
+        const auto expectedTime = source.Time();
+        const auto expectedStep = source.Step();
+        bool written = false;
+        domain.SetQuiescentObserver([&](const C::NonlinearSolveState &state)
+                                    {
+            if (state.terminal && !written)
+            {
+                domain.WriteInternalCheckpoint(path, sourceConfig.Root(), state, C::Json{{"sentinel", 1}});
+                written = true;
+            } });
+        REQUIRE(source.Advance(.002).accepted);
+        REQUIRE(written);
+
+        input["defaults"]["numerics"]["vrBoundaryValue"] = "physicalMirrored";
+        const auto targetConfig = C::SimulationConfig::ResolveCollective(input, mpi.comm);
+        C::Simulation target(targetConfig, mpi.comm, factory);
+        CHECK_THROWS(target.ReadCheckpoint(path));
+        target.ReadCheckpoint(path, C::CheckpointLoadMode::MeansOnly);
+        CHECK(target.Time() == expectedTime);
+        CHECK(target.Step() == expectedStep);
+        CHECK(target.GetDomain(0).PreviousTimeStep() == 0);
+        CHECK_FALSE(target.RestoredOutputController());
+        {
+            const auto now = domain.Dofs().CoupledField().Owned().Read();
+            const auto before = accepted.Read();
+            const auto imported = target.GetDomain(0).Dofs().CoupledField().Owned().Read();
+            bool changed = false;
+            for (DNDS::index iCell = 0; iCell < imported.View().RowCount(); ++iCell)
+                for (int j = 0; j < 5; ++j)
+                {
+                    changed |= before.View()(iCell, j) != now.View()(iCell, j);
+                    CHECK(imported.View()(iCell, j) == (steady ? now.View()(iCell, j) : before.View()(iCell, j)));
+                }
+            CHECK(DNDS::MPI::AllreduceValue<DNDS::MPI::Reduction::Max>(int(changed), mpi.comm) == 1);
+        }
+        {
+            const auto snapshot = target.GetDomain(0).CaptureStateSnapshot(true);
+            const auto reconstruction = snapshot.Reconstruction();
+            REQUIRE(reconstruction);
+            const auto coefficients = reconstruction->CoupledField().Owned().Read();
+            for (DNDS::index iCell = 0; iCell < coefficients.View().RowCount(); ++iCell)
+                for (const auto value : coefficients.View()[iCell])
+                    CHECK(value == 0);
+        }
+        REQUIRE(target.Advance(.002).accepted);
+        Remove({path});
+    }
+}
+
 TEST_CASE("Exact internal checkpoints resume BDF DIRK and DITR nonlinear iterations")
 {
     const auto metadata = C::Json{{"test", "exact internal nonlinear continuation"}};

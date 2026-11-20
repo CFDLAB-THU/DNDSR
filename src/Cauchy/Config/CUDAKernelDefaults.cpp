@@ -47,8 +47,9 @@ namespace DNDS::Cauchy
         {
             // The matrix-shared selector remains a fixed comparison fixture.
             const bool measuredFlow4 = a100P3 && acm && withoutRANS;
-            const bool usePipeline = (measuredFlow5 || measuredFlow4) &&
-                                     !numerics.reconstructionSolver.UsesAMG() && numerics.limiter != "LVR";
+            const bool packedRaw = numerics.cfv.storage.PackedRawB() || numerics.cfv.storage.PackedInverse();
+            const bool usePipeline = packedRaw || ((measuredFlow5 || measuredFlow4) &&
+                                                   !numerics.reconstructionSolver.UsesAMG() && numerics.limiter != "LVR");
             execution.reconstructionKernel = usePipeline ? "fp64Pipelined" : "fp64";
         }
         if (!kernels.polynomialPPThreads)

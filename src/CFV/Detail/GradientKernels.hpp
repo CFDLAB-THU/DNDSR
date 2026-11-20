@@ -52,9 +52,9 @@ namespace DNDS::CFV::Detail
     /// modes by that scale. firstCell aligns a ghost-only field with geometry.
     /// Input/output do not alias. These leaves never exchange or resize fields.
     void ConvertGradient(GradientCellGeometry cells, GradientInput input, GradientOutput output,
-                         index firstCell, int dimension, index modes, bool toCoefficients);
+                         index firstCell, int dimension, index modes, bool toCoefficients, index firstComponent = 0, index componentCount = -1);
     void LaunchGradientConversion(Runtime::ExecutionContext context, GradientCellGeometry cells, GradientInput input, GradientOutput output,
-                                  index firstCell, int dimension, index modes, bool toCoefficients);
+                                  index firstCell, int dimension, index modes, bool toCoefficients, index firstComponent = 0, index componentCount = -1);
 
     /// Canonical topology and shared periodic maps for one-level gradient WBAP.
     struct GradientLimiterView

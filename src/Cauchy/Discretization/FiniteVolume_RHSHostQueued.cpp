@@ -1,4 +1,5 @@
 #include "Cauchy/Discretization/FiniteVolumeWorkspaceInternal.hpp"
+#include "Cauchy/Discretization/ViscousReconstruction.hpp"
 #include "DNDS/Diagnostics/Timeline.hpp"
 #include "Cauchy/Discretization/CPU/FiniteVolumeRHSKernels.hpp"
 #include "Cauchy/Core/NumericalFailure.hpp"
@@ -104,7 +105,7 @@ namespace DNDS::Cauchy
         const bool ghosts = region != CFV::ReconstructionRegion::Core;
         const auto &n = owner->settings.numerics;
         const bool modal = n.reconstruction == "variational";
-        const bool separateViscous = !n.viscousLimited && (n.limiter == "WBAP" || limitedVR || n.positivity);
+        const bool separateViscous = FiniteVolumeDetail::UsesUnlimitedViscousReconstruction(owner->settings);
         struct Inputs
         {
             std::shared_ptr<const Data> owner;
@@ -122,8 +123,8 @@ namespace DNDS::Cauchy
             std::optional<ReadEquation> coefficients, viscousCoefficients;
             std::optional<WriteEquation> lowResult;
             std::vector<PairSlots> gradients, viscousGradients;
-            PairSlots primitive, waveJump, pressureMinimum, derived, ransP1;
-            index ransP1First = 0;
+            PairSlots primitive, waveJump, pressureMinimum, derived;
+            index viscosity = -1;
             std::optional<DerivedFields> derivedOwned, derivedGhost;
             std::array<int, 5> derivedColumns{0, 1, 2, -1, -1};
             index derivedWidth = 3;
@@ -216,17 +217,12 @@ namespace DNDS::Cauchy
         // first-order convective trial, matching its original input contract.
         if (pin->fixed && !modal && separateViscous && pin->viscousGradients.empty() && !directViscousGradients.empty())
             pin->viscousGradients.push_back(addField(directViscousGradients.front()));
-        if (UseRANSP1FaceOverlay())
-        {
-            DNDS_check_throw_info(meanGradients, "RANS P1 face overlay requires mean gradients");
-            const auto location = state.LocateBlock("rans");
-            pin->ransP1 = addField(meanGradients->fields[location.physicalField]);
-            pin->ransP1First = location.firstComponent;
-        }
         if (primitiveGradient)
             pin->primitive = addField(*primitiveGradient);
         if (auxiliary)
         {
+            if (n.ransCellCenterViscosity && auxiliary->cellTurbulentViscosity)
+                pin->viscosity = addRead(*auxiliary->cellTurbulentViscosity);
             if (auxiliary->meanThermodynamics)
                 pin->meanThermodynamics = addRead(*auxiliary->meanThermodynamics);
             else if (pin->fixed && auxiliary->derivedOwned)
@@ -375,8 +371,7 @@ namespace DNDS::Cauchy
                 request.waveJump = pin->waveJump.View(inputs);
                 request.pressureMinimum = pin->pressureMinimum.View(inputs);
                 request.primitiveGradientValues = pin->primitive.View(inputs);
-                request.ransP1Gradients = pin->ransP1.View(inputs);
-                request.ransP1First = pin->ransP1First;
+                if (pin->viscosity >= 0) request.centerViscosity = CellCenterViscosityView::From(inputs[pin->viscosity]);
                 if (pin->incoming >= 0) request.incoming = inputs[pin->incoming];
                 request.faceValues = outputs[pin->faces];
                 if (pin->lowFaces >= 0) request.lowFaceValues = outputs[pin->lowFaces];

@@ -77,15 +77,16 @@ TEST_CASE("Cell geometry reduces pseudo-time in larger cells across periodic and
         const auto stream = engine.CreateCPUStream();
         const auto &n = controls.numerics;
         C::NonlinearOperators operators(metrics,
-                                         C::AdmissibilityPolicy(equation, n.densityFloor, n.temperatureFloor,
-                                                                 n.sensibleEnergyFloor, n.pressureFloor),
-                                         stream.Context());
+                                        C::AdmissibilityPolicy(equation, n.densityFloor, n.temperatureFloor,
+                                                               n.sensibleEnergyFloor, n.pressureFloor),
+                                        stream.Context());
         operators.PreparePseudoTime(engine, stream, mean, defect, spectral, inverse, {}, {cfl});
         const auto time = inverse.Read();
         for (index iCell = 0; iCell < metrics.NumCell(); ++iCell)
         {
             const DNDS::real x = metrics.GetCellCent(iCell)[0];
-            const int column = x < 0.5 ? 0 : x < 2. / 3 ? 1 : 2;
+            const int column = x < 0.5 ? 0 : x < 2. / 3 ? 1
+                                                        : 2;
             const DNDS::real neighborMean = (2 * h[column] + h[(column + 1) % 3] + h[(column + 2) % 3]) / 4;
             const DNDS::real expected = std::min(h[column], (h[column] + neighborMean) / 2) / h[column];
             CHECK(factors.View<R::FixedRows<1>>()(iCell, 0) == doctest::Approx(expected));
@@ -357,11 +358,16 @@ TEST_CASE("Cauchy nonlinear progress reports completed iterations and zero-based
                                               { return std::make_pair(0, 0.); }, [](int coupledStage, auto &, bool applyCorrection)
                                               { CHECK(coupledStage == 0); CHECK(applyCorrection); }});
     CHECK(report.converged);
-    REQUIRE(captured.size() == 2);
+    REQUIRE(captured.size() == 3);
     CHECK(captured[0].stage == 0);
     CHECK(captured[0].iteration == 1);
+    CHECK(captured[0].observedIteration == 0);
     CHECK(captured[1].stage == 0);
     CHECK(captured[1].iteration == 2);
+    CHECK(captured[1].observedIteration == 1);
+    CHECK(captured[2].iteration == 2);
+    CHECK(captured[2].observedIteration == 2);
+    CHECK(captured[2].terminal);
 }
 TEST_CASE("Implicit convergence retains initial and running references without hiding unselected components")
 {

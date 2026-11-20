@@ -178,11 +178,9 @@ namespace DNDS::Cauchy
             (options.rhsKernel == RHSKernelPolicy::FixedFlow5 || options.rhsKernel == RHSKernelPolicy::Auto))
             result->fixedFlowRHS.emplace(AcquireRHSOperator());
         auto request = CompleteRHSAuxiliaryRequest({});
-        if (request.meanThermodynamics || request.cellWaveJump || request.cellPressureMinimum)
-        {
-            request.meanThermodynamics = true;
+        request.meanThermodynamics = request.meanThermodynamics || request.cellWaveJump || request.cellPressureMinimum;
+        if (request.meanThermodynamics || request.cellTurbulentViscosity)
             result->rhsAuxiliary.emplace(BuildAuxiliaryValues(request));
-        }
         if (std::any_of(result->fields.begin(), result->fields.end(), [](const auto &field)
                         { return bool(field.gradient); }))
             EnsureMeanGradientWorkspace(state, *result);

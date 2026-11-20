@@ -9,6 +9,7 @@
 #include "DNDS/Runtime/Execution/KernelViews.hpp"
 #include <mma.h>
 #include <cuda_runtime.h>
+#include <cstring>
 
 namespace DNDS::CFV::Detail
 {
@@ -28,26 +29,33 @@ namespace DNDS::CFV::Detail
         template <int N, class Storage, bool Triangle>
         struct Sweep
         {
+            using MatrixRows = R::FixedRows<N * N>;
+            using InverseRows = R::FixedRows<Triangle ? N *(N + 1) / 2 : N * N>;
             Table<index, R::FixedRows<1>> offsets, neighbors, faces, boundaryOffsets;
             Table<uint8_t, R::FixedRows<1>> rotationActive, faceSide;
-            Table<Storage, R::FixedRows<N * N>> matrices;
+            Table<Storage, MatrixRows> matrices;
             Table<Storage, R::FixedRows<N>> vectors, injection;
-            Table<real, R::FixedRows<Triangle ? N *(N + 1) / 2 : N * N>> inverse;
+            Table<real, InverseRows> inverse;
+            Table<float, MatrixRows> packedMatrices;
+            Table<float, InverseRows> packedInverse;
             Table<real, R::FixedRows<9>> rotation;
             real relax;
             bool rotated, faceCoupling;
+            bool usePackedB, usePackedInverse;
             explicit Sweep(const ReconstructionDeviceView &p)
                 : offsets(Project<R::FixedRows<1>>(p.offsets)), neighbors(Project<R::FixedRows<1>>(p.neighbors)),
                   faces(Project<R::FixedRows<1>>(p.faces)), boundaryOffsets(Project<R::FixedRows<1>>(p.boundaryOffsets)),
                   rotationActive(Project<R::FixedRows<1>>(p.rotationActive)), faceSide(Project<R::FixedRows<1>>(p.faceSide)),
-                  inverse(Project<R::FixedRows<Triangle ? N *(N + 1) / 2 : N * N>>(p.localInverse)),
+                  inverse(Project<InverseRows>(p.localInverse)),
+                  packedMatrices(Project<MatrixRows>(p.rawMatrixB32)),
+                  packedInverse(Project<InverseRows>(p.localInverse32)),
                   rotation(Project<R::FixedRows<9>>(p.rotation)), relax(p.relax), rotated(p.rotated),
-                  faceCoupling(p.faceCoupling)
+                  faceCoupling(p.faceCoupling), usePackedB(p.packedRawB), usePackedInverse(p.packedInverse)
             {
                 if constexpr (std::is_same_v<Storage, float>)
-                    matrices = Project<R::FixedRows<N * N>>(p.matrixAInvB32), vectors = Project<R::FixedRows<N>>(p.vectorAInvB32), injection = Project<R::FixedRows<N>>(p.boundaryInjection32);
+                    matrices = Project<MatrixRows>(p.matrixAInvB32), vectors = Project<R::FixedRows<N>>(p.vectorAInvB32), injection = Project<R::FixedRows<N>>(p.boundaryInjection32);
                 else
-                    matrices = Project<R::FixedRows<N * N>>(p.matrixAInvB), vectors = Project<R::FixedRows<N>>(p.vectorAInvB), injection = Project<R::FixedRows<N>>(p.boundaryInjection);
+                    matrices = Project<MatrixRows>(p.matrixAInvB), vectors = Project<R::FixedRows<N>>(p.vectorAInvB), injection = Project<R::FixedRows<N>>(p.boundaryInjection);
             }
         };
         template <bool Warp>
@@ -91,7 +99,13 @@ namespace DNDS::CFV::Detail
 #endif
             Join<Warp>();
         }
-        template <int N, bool Pipeline, class Storage, bool Triangle, class Input>
+        template <int N, bool Pipeline, class Row>
+        __device__ void StageMatrix(real *slot, Row matrix, int rank, int teamSize)
+        {
+            for (int i = rank; i < N * N; i += teamSize)
+                CopyWord<Pipeline>(slot + i, &matrix[i]);
+        }
+        template <int N, bool Pipeline, bool Raw, class Storage, bool Triangle, class Input>
         __device__ void StageEntry(Sweep<N, Storage, Triangle> plan, index entry, real *slot,
                                    Input input,
                                    int components, int rank, int teamSize)
@@ -100,9 +114,15 @@ namespace DNDS::CFV::Detail
             if (other == UnInitIndex)
                 return; // Boundary values are consumed through the injection map.
             const index matrixRow = plan.faceCoupling ? plan.faces(entry, 0) : entry;
-            const auto matrix = plan.matrices[matrixRow];
-            for (int i = rank; i < N * N; i += teamSize)
-                CopyWord<Pipeline>(slot + i, &matrix[i]);
+            if constexpr (Raw)
+            {
+                if (plan.usePackedB)
+                    StageMatrix<N, Pipeline>(slot, plan.packedMatrices[matrixRow], rank, teamSize);
+                else
+                    StageMatrix<N, Pipeline>(slot, plan.matrices[matrixRow], rank, teamSize);
+            }
+            else
+                StageMatrix<N, Pipeline>(slot, plan.matrices[matrixRow], rank, teamSize);
             const auto values = input[other];
             for (int i = rank; i < N * components; i += teamSize)
                 CopyWord<Pipeline>(slot + N * N + i, &values[i]);
@@ -172,6 +192,24 @@ namespace DNDS::CFV::Detail
             }
             Join<Warp>();
         }
+        template <int N, bool Warp>
+        __device__ void PromoteRawB(real *slot, int rank, int teamSize)
+        {
+            // The float is in the first four bytes of its FP64 staging slot.
+            for (int i = rank; i < N * N; i += teamSize)
+            {
+                float stored;
+                memcpy(&stored, slot + i, sizeof(stored));
+                slot[i] = real(stored);
+            }
+            Join<Warp>();
+        }
+        template <int N, bool Triangle, class Scalar, class Row>
+        __device__ void StageInverse(Scalar *inverse, Row row, int rank, int teamSize)
+        {
+            for (int i = rank; i < N * N; i += teamSize)
+                inverse[i] = Scalar(row[Triangle ? Math::SymmetricTriangleEntry(i % N, i / N) : i]);
+        }
         struct alignas(32) TF32Tile
         {
             float a[128], b[128], c[256];
@@ -232,6 +270,8 @@ namespace DNDS::CFV::Detail
                                      Fields<Components, N> fields, R::ArrayView<const int> status, int teamWords)
         {
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
+            static_assert(!Raw || (std::is_same_v<Storage, real> && std::is_same_v<Scalar, real> &&
+                                   std::is_same_v<Product, real> && !Tensor));
             if (status(0, 0))
                 return;
             extern __shared__ __align__(32) real shared[];
@@ -279,19 +319,19 @@ namespace DNDS::CFV::Detail
                 if constexpr (Pipeline)
                     if (begin < end)
                     {
-                        StageEntry<N, Pipeline>(plan, begin, slots, input, components, rank, teamSize);
+                        StageEntry<N, Pipeline, Raw>(plan, begin, slots, input, components, rank, teamSize);
                         CommitCopies<Pipeline>();
                     }
                 for (index entry = begin; entry < end; ++entry)
                 {
                     const int slot = Pipeline ? int((entry - begin) % 2) : 0;
                     if constexpr (!Pipeline)
-                        StageEntry<N, Pipeline>(plan, entry, slots, input, components, rank, teamSize);
+                        StageEntry<N, Pipeline, Raw>(plan, entry, slots, input, components, rank, teamSize);
                     WaitCopies<Tensor, Pipeline>();
                     if constexpr (Pipeline)
                         if (entry + 1 < end)
                         {
-                            StageEntry<N, Pipeline>(plan, entry + 1, slots + (1 - slot) * entryWords, input, components, rank, teamSize);
+                            StageEntry<N, Pipeline, Raw>(plan, entry + 1, slots + (1 - slot) * entryWords, input, components, rank, teamSize);
                             CommitCopies<Pipeline>();
                         }
                     const auto other = plan.neighbors(entry, 0);
@@ -299,8 +339,15 @@ namespace DNDS::CFV::Detail
                     const bool transpose = plan.faceCoupling && plan.faceSide(entry, 0);
                     if (other != UnInitIndex && (!Raw || other != iCell || rotated))
                     {
-                        ConvertSlot<N, Storage, Scalar, Tensor>(slots + slot * entryWords, entryWords, rank, teamSize);
-                        const auto *matrix = reinterpret_cast<const Word<Scalar> *>(slots + slot * entryWords);
+                        auto *entrySlot = slots + slot * entryWords;
+                        if constexpr (Raw)
+                        {
+                            if (plan.usePackedB)
+                                PromoteRawB<N, Tensor>(entrySlot, rank, teamSize);
+                        }
+                        else
+                            ConvertSlot<N, Storage, Scalar, Tensor>(entrySlot, entryWords, rank, teamSize);
+                        const auto *matrix = reinterpret_cast<const Word<Scalar> *>(entrySlot);
                         const auto *coefficients = matrix + N * N;
                         if constexpr (Tensor)
                         {
@@ -384,9 +431,10 @@ namespace DNDS::CFV::Detail
                     right[i] += OtherTerms<N, Scalar>(plan, vectors, iCell, i / N, i % N, mean, boundary);
                 if constexpr (Raw)
                 {
-                    const auto row = plan.inverse[iCell];
-                    for (int i = rank; i < N * N; i += teamSize)
-                        inverse[i] = Scalar(row[Triangle ? Math::SymmetricTriangleEntry(i % N, i / N) : i]);
+                    if (plan.usePackedInverse)
+                        StageInverse<N, Triangle>(inverse, plan.packedInverse[iCell], rank, teamSize);
+                    else
+                        StageInverse<N, Triangle>(inverse, plan.inverse[iCell], rank, teamSize);
                 }
                 Join<Tensor>();
                 for (int i = rank; i < N * components; i += teamSize)

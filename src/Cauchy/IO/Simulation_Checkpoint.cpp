@@ -1,4 +1,5 @@
 #include "Cauchy/Core/Simulation.hpp"
+#include "Cauchy/IO/CheckpointMetadata.hpp"
 #include "DNDS/MPI/Failure.hpp"
 #include "Cauchy/Interface/InterfaceCoupling.hpp"
 #include "DNDS/Serializer/SerializerH5.hpp"
@@ -111,10 +112,12 @@ namespace DNDS::Cauchy
         MPI::LocalStage(control, [&]
                         { if (control.rank == 0) std::filesystem::rename(temporary, manifest); });
     }
-    void Simulation::ReadCheckpoint(const std::string &path)
+    void Simulation::ReadCheckpoint(const std::string &path, CheckpointLoadMode mode)
     {
         const MPIInfo control(_placement.Control());
         AgreePath(control, path);
+        CheckpointMetadata::AgreeLoadMode(control, mode);
+        const bool resume = mode == CheckpointLoadMode::Resume;
         const std::filesystem::path manifest(path);
         // Fail missing files collectively before entering the HDF5 backend,
         // whose low-level open failure is an assertion rather than an exception.
@@ -141,7 +144,7 @@ namespace DNDS::Cauchy
                                   "exact internal checkpoint currently requires one simulation domain");
             serializer.ReadReal("accepted_time", time);
             serializer.ReadIndex("accepted_step", step);
-            if (keys.count("output_controller_json"))
+            if (resume && keys.count("output_controller_json"))
             {
                 std::string text;
                 serializer.ReadString("output_controller_json", text);
@@ -158,7 +161,7 @@ namespace DNDS::Cauchy
             serializer.ReadString("domains_json", text);
             serializer.ReadReal("accepted_time", time);
             serializer.ReadIndex("accepted_step", step);
-            if (keys.count("output_controller_json"))
+            if (resume && keys.count("output_controller_json"))
             {
                 std::string controllerText;
                 serializer.ReadString("output_controller_json", controllerText);
@@ -189,11 +192,11 @@ namespace DNDS::Cauchy
                      {
             MPI::LocalStage(MPIInfo(_placement.Context(iDomain)->Communicator()), [&]
                             { DNDS_check_throw_info(std::filesystem::is_regular_file(paths[iDomain]), "missing Cauchy domain checkpoint"); });
-            checkpoints[iDomain].emplace(GetDomain(iDomain).PrepareCheckpoint(paths[iDomain], _config.Root()));
+            checkpoints[iDomain].emplace(GetDomain(iDomain).PrepareCheckpoint(paths[iDomain], _config.Root(), mode));
             MPI::LocalStage(MPIInfo(_placement.Context(iDomain)->Communicator()), [&]
                             { DNDS_check_throw_info(checkpoints[iDomain]->Time() == time && checkpoints[iDomain]->Epoch().acceptedStep == uint64_t(step),
                                                     "domain checkpoint clock differs from its simulation manifest"); }); });
-        if (internal)
+        if (internal && resume)
         {
             internalCheckpoint.emplace(GetDomain(0).PrepareInternalCheckpoint(path, _config.Root()));
             MPI::LocalStage(control, [&]

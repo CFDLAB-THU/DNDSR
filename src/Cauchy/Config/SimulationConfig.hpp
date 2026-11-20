@@ -229,6 +229,7 @@ namespace DNDS::Cauchy
         std::string vrBoundaryValue = "physicalTrace";
         bool firstOrderConvection = false;
         bool ransMeanFaceValues = false;
+        bool ransCellCenterViscosity = false;
         bool ransP1Overlay = false;
         std::string viscousGradient = "primitive";
         bool viscousLimited = true, noGRPOnWall = false, noRsOnWall = false;
@@ -241,7 +242,13 @@ namespace DNDS::Cauchy
         int positivityBetaPower = 1;
         real densityFloor = 1e-12, pressureFloor = 1e-12;
         real sensibleEnergyFloor = 1e-12;
-        real wallDistanceFloor = 1e-10;
+        /// RANS point arithmetic divides by distance; zero selects this safeguard.
+        static constexpr real wallDistanceSafetyFloor = 1e-10;
+        real wallDistanceFloor = 0;
+        bool cellCenterWallDistanceForQuadrature = false;
+        bool firstLayerCenterWallDistance = false;
+        bool resolvedCellOmega = false;
+        std::string firstLayerWallDistanceMethod = "cellCenter";
         RANSStateSettings ransState;
         CFV::ReconstructionSettings cfv;
         CFV::LimitedVRSettings limitedVR;
@@ -249,6 +256,12 @@ namespace DNDS::Cauchy
         /// Direct linear/constant FV uses center-point flux/source evaluation.
         /// cfv.intOrder still controls geometric measures and VR setup.
         int RHSIntegrationOrder() const { return reconstruction == "variational" ? cfv.intOrder : 1; }
+        /// Barth bounds only the linear RANS coefficients embedded in the flow VR polynomial.
+        bool UsesRANSGradientBarth() const { return ransP1Overlay && reconstruction == "variational" && limiter == "Barth"; }
+        real EffectiveWallDistanceFloor() const
+        {
+            return wallDistanceFloor == 0 ? wallDistanceSafetyFloor : wallDistanceFloor;
+        }
         void ValidatePositivity() const;
         DNDS_DECLARE_CONFIG(NumericsSettings)
         {
@@ -256,7 +269,7 @@ namespace DNDS::Cauchy
             DNDS_FIELD(gradient, "leastSquares, greenGauss, or ggmp");
             config.field_section(&T::leastSquares, "leastSquares", "Weights for the P1 weighted least-squares objective");
             DNDS_FIELD(flux, "Numerical inviscid flux family");
-            DNDS_FIELD(limiter, "none, direct-gradient Barth, WBAP, or native LVR; positivity is checked separately");
+            DNDS_FIELD(limiter, "none, Barth for direct gradients or the RANS P1 overlay, WBAP, or native LVR; positivity is checked separately");
             config.field_section(&T::reconstructionSolver, "reconstructionSolver", "Relaxation or explicit single-device AMG reconstruction solve");
             DNDS_FIELD(reconstructionIterations, "Maximum local VR relaxation sweeps or AMG defect corrections per residual");
             DNDS_FIELD(reconstructionResidualCheckInterval, "Observe the VR update norm every N sweeps and at the final sweep when reconstructionTolerance is positive; each observation is an explicit host stopping boundary");
@@ -268,7 +281,8 @@ namespace DNDS::Cauchy
             DNDS_FIELD(vrBoundaryValue, "VR-only boundary target: physicalTrace or physicalMirrored (Euler reflected-state target); interface values remain prescribed samples");
             DNDS_FIELD(firstOrderConvection, "P0 face operator: cell means and jump-only normal viscosity; separate reconstruction remains available for RANS/volume sources. Used by bottom pMG");
             DNDS_FIELD(ransMeanFaceValues, "Use cell-mean RANS scalars in face fluxes while retaining face gradients, flow/species reconstruction, and physical or interface exterior states");
-            DNDS_FIELD(ransP1Overlay, "Use the configured mean-gradient reconstruction for RANS volume points and for RANS face points when ransMeanFaceValues is off. The full VR sweep remains active");
+            DNDS_FIELD(ransCellCenterViscosity, "Average the two cell-center turbulent viscosities at interior faces, including periodic and MPI faces. Boundary faces retain pointwise transport");
+            DNDS_FIELD(ransP1Overlay, "Force RANS VR coefficients to the configured linear gradient reconstruction before halo exchange. Flow components retain their polynomial order");
             DNDS_FIELD(viscousGradient, "primitive retains the cell-gradient scheme; polynomial uses cached polynomial derivatives and Euler's normal face-jump penalty");
             DNDS_FIELD(viscousLimited, "Use the filtered flux polynomial for polynomial viscosity; false uses the unlimited VR guess");
             DNDS_FIELD(noGRPOnWall, "Disable the polynomial normal jump penalty on no-slip walls, retaining the polynomial gradient");
@@ -283,7 +297,11 @@ namespace DNDS::Cauchy
             DNDS_FIELD(densityFloor, "Positive inclusive density admissibility floor");
             DNDS_FIELD(pressureFloor, "Positive inclusive pressure admissibility floor for the initial perfect-gas equation");
             DNDS_FIELD(sensibleEnergyFloor, "Mixture internal-energy density margin above its backend reference temperature; no gamma conversion");
-            DNDS_FIELD(wallDistanceFloor, "Positive floor for nodal wall-distance quadrature samples used by RANS");
+            DNDS_FIELD(wallDistanceFloor, "Minimum distance in solver units for RANS face/volume quadrature and first-layer replacements; 0 uses the positive denominator safeguard (1e-10)");
+            DNDS_FIELD(resolvedCellOmega, "ACM SST: set no-slip first-cell omega to 6 nu/(beta1 d1^2) after implicit updates");
+            DNDS_FIELD(cellCenterWallDistanceForQuadrature, "Use the interpolated center distance for cell quadrature and the adjacent-center average for face quadrature. The first-layer mean-distance override is independent");
+            DNDS_FIELD(firstLayerCenterWallDistance, "Enable first-layer distance replacement on no-slip-wall-adjacent cells for volume samples and mean-distance consumers such as the omega BC");
+            DNDS_FIELD(firstLayerWallDistanceMethod, "First-layer distance when enabled: cellCenter (interpolated nodal field) or halfMaxNodal (half the largest nodal distance on the cell)");
             config.field_section(&T::ransState, "ransState", "Model-specific scalar repairs after the common flow correction");
             config.field_section(&T::cfv, "cfv", "Independent mathematical CFV configuration");
             config.field_section(&T::limitedVR, "limitedVR", "Native v2/v3 target-penalty controls");
@@ -443,7 +461,7 @@ namespace DNDS::Cauchy
     /// the hierarchy or the finest convergence policy.
     inline Json MultigridSmootherSchema()
     {
-        return {{"type", "object"}, {"additionalProperties", false}, {"properties", {{"diagonal", {{"type", "string"}}}, {"jacobianAction", {{"type", "string"}}}, {"roeDissipation", {{"type", "boolean"}}}, {"pseudoCFL", {{"type", "number"}}}, {"maxPseudoCFL", {{"type", "number"}}}, {"relaxation", {{"type", "number"}}}, {"linear", ImplicitLinearSettings::schema()}, {"sgs", ImplicitSGSSettings::schema()}, {"ilu", ImplicitILUSettings::schema()}, {"positivity", ImplicitPositivitySettings::schema()}}}};
+        return {{"type", "object"}, {"additionalProperties", false}, {"properties", {{"diagonal", {{"type", "string"}}}, {"jacobianAction", {{"type", "string"}}}, {"roeDissipation", {{"type", "boolean"}}}, {"pseudoCFL", {{"type", "number"}}}, {"maxPseudoCFL", {{"type", "number"}}}, {"relaxation", {{"type", "number"}}}, {"ransRelaxation", {{"type", "number"}}}, {"linear", ImplicitLinearSettings::schema()}, {"sgs", ImplicitSGSSettings::schema()}, {"ilu", ImplicitILUSettings::schema()}, {"positivity", ImplicitPositivitySettings::schema()}}}};
     }
     struct MultigridLevelSettings
     {
@@ -466,6 +484,7 @@ namespace DNDS::Cauchy
         /// Match Euler's omission of coarse RHS/dTau PP by default.
         /// Reconstruction/increment PP remain independently active.
         bool coarseRHSFPP = false;
+        bool coarseGradientBarth = true, coarseGradientPositivity = true;
         std::vector<index> updateComponents;
         std::map<std::string, MultigridLevelSettings> coarseLevelSettings;
         DNDS_DECLARE_CONFIG(PolynomialMultigridSettings)
@@ -477,6 +496,8 @@ namespace DNDS::Cauchy
             DNDS_FIELD(coarseSmooth, "Bounded nonlinear corrections at the coarsest level");
             DNDS_FIELD(scratchPool, "Reserve four ghost-capable DoF scratch slots for synchronous pMG values/residuals/corrections; keep parent sources/references and solver/reconstruction workspaces independent");
             DNDS_FIELD(reuseCoarseRate, "Reuse a version-validated direct-gradient coarse tau rate for its first correction; independent of finest measured-rate reuse");
+            DNDS_FIELD(coarseGradientBarth, "Apply componentwise Barth limiting to the P1 and P0 physical gradients");
+            DNDS_FIELD(coarseGradientPositivity, "Apply positivity limiting to the P1 and P0 physical gradients for compressible flow");
             DNDS_FIELD(coarseRHSFPP, "Opt in to RHS/dTau positivity limiting on coarse levels; default false forces coarse rhsFPPMode=none after level overrides, matching Euler. Reconstruction and increment PP remain unchanged");
             config.field_map_of<MultigridLevelSettings>(&T::coarseLevelSettings, "coarseLevelSettings", "Independent coarse-level controls keyed by 1 or 2; finest uses domain implicit and the common pre/post counts");
             DNDS_FIELD(damping, "Physical coarse-correction multiplier in (0,1]");
@@ -502,7 +523,7 @@ namespace DNDS::Cauchy
                 return residualComponents;
             return acm ? std::vector<std::string>{"u", "v", "w"} : std::vector<std::string>{"rho"};
         }
-        real pseudoCFL = 10, maxPseudoCFL = 1e4, pseudoGrowth = 1.3, relaxation = 1;
+        real pseudoCFL = 10, maxPseudoCFL = 1e4, pseudoGrowth = 1.3, relaxation = 1, ransRelaxation = 1;
         int nIterCellSmoothScale = 15;
         bool roeDissipation = false, collectiveChecks = true;
         bool requireConvergedReconstruction = false;
@@ -541,6 +562,7 @@ namespace DNDS::Cauchy
             DNDS_FIELD(maxPseudoCFL, "Maximum pseudo-time CFL");
             DNDS_FIELD(pseudoGrowth, "CFL growth factor after each nonlinear correction");
             DNDS_FIELD(nIterCellSmoothScale, "Euler geometric pseudo-time smoothing passes at FV setup; zero disables it");
+            DNDS_FIELD(ransRelaxation, "Additional implicit RANS increment multiplier in (0,1], applied before scalar repair");
             DNDS_FIELD(relaxation, "Multiplier on each computed correction in (0,1]");
             DNDS_FIELD(roeDissipation, "Use full equation-owned characteristic dissipation; requires block diagonal");
             DNDS_FIELD(collectiveChecks, "Optional solver and Runtime halo safety agreements, default on; false also disables extra halo freshness audits. Routing/protocol and numerical collectives remain. Runtime local launch failure then aborts instead of rank-asymmetric recovery");
@@ -626,6 +648,9 @@ namespace DNDS::Cauchy
         std::map<std::string, BoundarySettings> boundaries;
         /// Resolved from global output controls by the Simulation frontend.
         bool boundaryFacialFluxes = false;
+        /// Resolved by pMG. Direct gradients otherwise follow numerics.positivity.
+        std::optional<bool> coarseGradientPositivity;
+        bool GradientPositivity() const { return coarseGradientPositivity.value_or(numerics.positivity); }
         /// Extra halo audits are opt-in and respect the umbrella check switch.
         bool CheckHaloFreshness() const { return execution.haloFreshnessChecks && implicit.collectiveChecks; }
         DNDS_DECLARE_CONFIG(DomainSettings)
@@ -789,6 +814,7 @@ namespace DNDS::Cauchy
         index historyInterval = 1;
         index historySegmentRows = 10000;
         int historyPrecision = 10;
+        bool historyStateBounds = true;
         std::string consoleColor = "auto", consoleBold = "auto";
         bool eventLog = true;
         int hdfDeflateLevel = 0;
@@ -813,6 +839,7 @@ namespace DNDS::Cauchy
             DNDS_FIELD(historyInterval, "Accepted-step CSV cadence; final step rows remain unconditional");
             DNDS_FIELD(historySegmentRows, "Maximum history rows per CSV segment; each segment has the same header");
             DNDS_FIELD(historyPrecision, "Scientific-notation digits after the decimal point for real CSV cells");
+            DNDS_FIELD(historyStateBounds, "Record domain-wide min and max for every mean-state component at CSV history points; false preserves the old CSV header");
             DNDS_FIELD(consoleColor, "Console color policy: auto, always or never");
             DNDS_FIELD(consoleBold, "Console emphasis policy, independent of color: auto, always or never");
             DNDS_FIELD(eventLog, "Write plain-text rotating events-rank<N>.log alongside ordinary CLI progress by default; no tee is needed. Uses diagnostics rotation limits");

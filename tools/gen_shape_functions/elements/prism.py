@@ -55,8 +55,8 @@ class Prism18Def(ElementDef):
         # 0-2:   bottom tri vertices (zt=-1)     -> T[0..2] * Lz[0]
         # 3-5:   top tri vertices (zt=+1)        -> T[0..2] * Lz[1]
         # 6-8:   bottom tri edge mids (zt=-1)    -> T[3..5] * Lz[0]
-        # 9-11:  top tri edge mids (zt=+1)       -> T[3..5] * Lz[1]
-        # 12-14: vertical edge mids (zt=0)       -> T[0..2] * Lz[2]
+        # 9-11:  connecting edge mids (zt=0)     -> T[0..2] * Lz[2]
+        # 12-14: top tri edge mids (zt=+1)       -> T[3..5] * Lz[1]
         # 15-17: quad face centers (zt=0)         -> T[3..5] * Lz[2]
         return [
             T[0] * Lz[0],   # 0:  bottom vertex 0
@@ -68,12 +68,12 @@ class Prism18Def(ElementDef):
             T[3] * Lz[0],   # 6:  bottom edge mid(0-1)
             T[4] * Lz[0],   # 7:  bottom edge mid(1-2)
             T[5] * Lz[0],   # 8:  bottom edge mid(2-0)
-            T[3] * Lz[1],   # 9:  top edge mid(3-4)
-            T[4] * Lz[1],   # 10: top edge mid(4-5)
-            T[5] * Lz[1],   # 11: top edge mid(5-3)
-            T[0] * Lz[2],   # 12: vertical edge mid(0-3)
-            T[1] * Lz[2],   # 13: vertical edge mid(1-4)
-            T[2] * Lz[2],   # 14: vertical edge mid(2-5)
+            T[0] * Lz[2],   # 9:  connecting edge mid(0-3)
+            T[1] * Lz[2],   # 10: connecting edge mid(1-4)
+            T[2] * Lz[2],   # 11: connecting edge mid(2-5)
+            T[3] * Lz[1],   # 12: top edge mid(3-4)
+            T[4] * Lz[1],   # 13: top edge mid(4-5)
+            T[5] * Lz[1],   # 14: top edge mid(5-3)
             T[3] * Lz[2],   # 15: face center(0-1-4-3)
             T[4] * Lz[2],   # 16: face center(1-2-5-4)
             T[5] * Lz[2],   # 17: face center(2-0-3-5)

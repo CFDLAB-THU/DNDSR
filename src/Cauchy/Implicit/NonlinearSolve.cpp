@@ -247,6 +247,8 @@ namespace DNDS::Cauchy
             if (!data.localTerminal && ObservationBeforeUpdate())
                 data.held = false;
         }
+        if (data.problem.control.measureStateBounds)
+            data.report.stateBounds = data.problem.control.measureStateBounds(data.currentIteration, data.localTerminal);
         data.phase = ObservationBeforeUpdate() && !data.localTerminal
                          ? Data::Phase::ReadyForUpdate
                          : Data::Phase::AwaitFinish;
@@ -261,9 +263,10 @@ namespace DNDS::Cauchy
         auto &data = *_data;
         data.report.converged = data.localConverged;
         data.PublishState(coordinatedTerminal);
-        const index reportedIteration = std::max(data.currentIteration, index(1));
-        const bool initialBeforeUpdate = ObservationBeforeUpdate() &&
-                                         data.currentIteration == 0;
+        // The residual of a before-update policy describes the state used
+        // for this correction. At termination there is no further correction.
+        const index reportedIteration = data.currentIteration +
+                                        index(ObservationBeforeUpdate() && !coordinatedTerminal);
         const auto copy = [](const auto &values)
         { return std::vector<real>(values.begin(), values.end()); };
         NonlinearProgress progress{
@@ -286,8 +289,10 @@ namespace DNDS::Cauchy
             data.report.reconstructionRelativeUpdate,
             data.report.reconstructionUpdateMeasured,
             std::chrono::duration<real>(std::chrono::steady_clock::now() - data.iterationStarted).count(),
-            data.convergence.RelativeRatio()};
-        if (data.problem.control.progress && !initialBeforeUpdate)
+            data.convergence.RelativeRatio(),
+            data.currentIteration,
+            data.report.stateBounds};
+        if (data.problem.control.progress && reportedIteration > 0)
             data.problem.control.progress(progress);
         if (coordinatedTerminal)
         {

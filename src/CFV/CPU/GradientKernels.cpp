@@ -13,11 +13,11 @@ namespace DNDS::CFV::Detail
                      { Math::EvaluateGradientCell(plan, vectors, mean, boundary, output, selection.Cell(iWork), mean.owned.Width()); });
     }
     void ConvertGradient(GradientCellGeometry cells, GradientInput input, GradientOutput output,
-                         index firstCell, int dimension, index modes, bool toCoefficients)
+                         index firstCell, int dimension, index modes, bool toCoefficients, index firstComponent, index componentCount)
     {
         Runtime::ValidateViewDevices(Runtime::Device::Host(), cells, input, output);
         OMP::ForRows(0, output.RowCount(), [&](index iRow) noexcept
-                     { Math::ConvertGradientRow(cells, input, output, iRow, firstCell, dimension, modes, toCoefficients); });
+                     { Math::ConvertGradientRow(cells, input, output, iRow, firstCell, dimension, modes, toCoefficients, firstComponent, componentCount); });
     }
     void LimitGradient(GradientLimiterView plan, DeviceWorkSelection selection, GradientVectorRanges vectors,
                        GradientLimiterValues values, GradientOutput output, GradientOutput scratch)

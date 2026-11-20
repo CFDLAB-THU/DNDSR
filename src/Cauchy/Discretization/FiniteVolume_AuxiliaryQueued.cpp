@@ -123,6 +123,10 @@ namespace DNDS::Cauchy
                     return buffers.cellPressureMinimum->Owned();
                 break;
             case 7:
+                if (buffers.cellTurbulentViscosity)
+                    return *buffers.cellTurbulentViscosity;
+                break;
+            case 8:
                 if (buffers._faceScratch)
                     return *buffers._faceScratch;
                 break;
@@ -165,9 +169,9 @@ namespace DNDS::Cauchy
             const auto pin = shared_from_this();
             const index first = ghost ? data->metrics.NumCell() : 0;
             const index end = ghost ? data->metrics.NumCellProc() : data->metrics.NumCell();
-            if (means && buffers.meanThermodynamics)
-                R::SubmitArrays(engine, stream, [pin, first, end](R::ExecutionContext context, auto u, auto ug, auto g, auto gg, auto out, auto status, auto wall)
-                                { CUDA::PrepareAuxiliaryMeans(context, pin->StateInput(u, ug, g, gg, wall), out, status, first, end); }, R::ReadAs<R::TableRows>(field.Owned()), R::ReadAs<R::TableRows>(uGhost), R::ReadAs<R::TableRows>(gOwned), R::ReadAs<R::TableRows>(gGhost), R::WriteAs<R::TableRows>(*buffers.meanThermodynamics), R::WriteAs<R::FixedRows<1>>(scratch->meanStatus), R::ReadAs<R::TableRows>(hasWall ? data->wallDistance->CellMeans() : scratch->empty));
+            if (means && (buffers.meanThermodynamics || buffers.cellTurbulentViscosity))
+                R::SubmitArrays(engine, stream, [pin, first, end](R::ExecutionContext context, auto u, auto ug, auto g, auto gg, auto out, auto viscosity, auto status, auto wall)
+                                { CUDA::PrepareAuxiliaryMeans(context, pin->StateInput(u, ug, g, gg, wall), out, viscosity, status, first, end); }, R::ReadAs<R::TableRows>(field.Owned()), R::ReadAs<R::TableRows>(uGhost), R::ReadAs<R::TableRows>(gOwned), R::ReadAs<R::TableRows>(gGhost), R::WriteAs<R::TableRows>(Output(0)), R::WriteAs<R::TableRows>(Output(7)), R::WriteAs<R::FixedRows<1>>(scratch->meanStatus), R::ReadAs<R::TableRows>(hasWall ? data->wallDistance->CellMeans() : scratch->empty));
             if (!needFaces)
                 return;
             const auto &incoming = boundary ? (data->stencil.quadratureBoundaryValues
@@ -192,7 +196,7 @@ namespace DNDS::Cauchy
                     request.needSpectral = bool(pin->buffers.faceSpectralRadius || pin->buffers.cellSpectralSum);
                     request.needWave = bool(pin->buffers.faceWaveJump || pin->buffers.cellWaveJump);
                     request.needPressure = bool(pin->buffers.facePressureMinimum || pin->buffers.cellPressureMinimum);
-                    CUDA::PrepareAuxiliaryFaces(context, request, selected); }, R::ReadAs<R::TableRows>(field.Owned()), R::ReadAs<R::TableRows>(uGhost), R::ReadAs<R::TableRows>(gOwned), R::ReadAs<R::TableRows>(gGhost), R::ReadAs<R::TableRows>(Output(0)), R::ReadAs<R::TableRows>(incoming), R::WriteAs<R::TableRows>(Output(1)), R::WriteAs<R::TableRows>(Output(2)), R::WriteAs<R::TableRows>(Output(3)), R::WriteAs<R::TableRows>(Output(7)), R::WriteAs<R::FixedRows<1>>(scratch->faceStatus), R::ReadAs<R::FixedRows<1>>(faces), R::ReadAs<R::TableRows>(hasWall ? data->wallDistance->CellMeans() : scratch->empty), R::Read(hasWall ? data->wallDistance->FaceValues() : scratch->empty));
+                    CUDA::PrepareAuxiliaryFaces(context, request, selected); }, R::ReadAs<R::TableRows>(field.Owned()), R::ReadAs<R::TableRows>(uGhost), R::ReadAs<R::TableRows>(gOwned), R::ReadAs<R::TableRows>(gGhost), R::ReadAs<R::TableRows>(Output(0)), R::ReadAs<R::TableRows>(incoming), R::WriteAs<R::TableRows>(Output(1)), R::WriteAs<R::TableRows>(Output(2)), R::WriteAs<R::TableRows>(Output(3)), R::WriteAs<R::TableRows>(Output(8)), R::WriteAs<R::FixedRows<1>>(scratch->faceStatus), R::ReadAs<R::FixedRows<1>>(faces), R::ReadAs<R::TableRows>(hasWall ? data->wallDistance->CellMeans() : scratch->empty), R::Read(hasWall ? data->wallDistance->FaceValues() : scratch->empty));
             if (!buffers.cellSpectralSum && !buffers.cellWaveJump && !buffers.cellPressureMinimum)
                 return;
             R::SubmitArrays(engine, stream, [pin](R::ExecutionContext context, auto spectral, auto wave, auto pressure, auto scratchValues, auto sum, auto jump, auto minimum, auto selected)
@@ -205,7 +209,7 @@ namespace DNDS::Cauchy
                     request.spectralSum = sum; request.waveMaximum = jump; request.pressureMinimum = minimum;
                     const auto &w = pin->frame.angularVelocity;
                     request.angularSpeed = std::sqrt(w[0] * w[0] + w[1] * w[1] + w[2] * w[2]);
-                    CUDA::ReduceAuxiliaryCells(context, request, selected); }, R::ReadAs<R::TableRows>(Output(1)), R::ReadAs<R::TableRows>(Output(2)), R::ReadAs<R::TableRows>(Output(3)), R::ReadAs<R::TableRows>(Output(7)), R::WriteAs<R::TableRows>(Output(4)), R::WriteAs<R::TableRows>(Output(5)), R::WriteAs<R::TableRows>(Output(6)), R::ReadAs<R::FixedRows<1>>(cells));
+                    CUDA::ReduceAuxiliaryCells(context, request, selected); }, R::ReadAs<R::TableRows>(Output(1)), R::ReadAs<R::TableRows>(Output(2)), R::ReadAs<R::TableRows>(Output(3)), R::ReadAs<R::TableRows>(Output(8)), R::WriteAs<R::TableRows>(Output(4)), R::WriteAs<R::TableRows>(Output(5)), R::WriteAs<R::TableRows>(Output(6)), R::ReadAs<R::FixedRows<1>>(cells));
         }
         void ReduceStatus(R::EagerEngine &engine, const R::ExecutionStream &stream)
         {
@@ -222,7 +226,7 @@ namespace DNDS::Cauchy
         const FiniteVolume &owner, const EquationDofs &state, AuxiliaryValues &output, real time, AuxiliaryInputs inputs)
     {
         DNDS_check_throw_info(owner.Device().space == R::MemorySpace::CUDA, "queued auxiliary backend is unavailable");
-        const index means = output.meanThermodynamics ? owner.Metrics().NumCellProc() : 0;
+        const index means = (output.meanThermodynamics || output.cellTurbulentViscosity) ? owner.Metrics().NumCellProc() : 0;
         const bool needFaces = bool(output.faceSpectralRadius || output.faceWaveJump || output.facePressureMinimum ||
                                     output.cellSpectralSum || output.cellWaveJump || output.cellPressureMinimum);
         const index faces = needFaces ? owner._data->stencil.stencilFaces.RowCount() : 0;

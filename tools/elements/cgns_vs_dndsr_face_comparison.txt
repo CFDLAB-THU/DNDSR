@@ -90,41 +90,14 @@ Verdict: IDENTICAL
 
 # ======================================================================
 # Prism18 (PENTA_18) — 5 faces: 3 Quad9 + 2 Tri6
-# Source: src/Geom/Elements/Prism18.hpp:473-478
-#
-# KEY DIFFERENCE: DNDSR and CGNS number high-order nodes differently.
-#
-# CGNS mid-edge node order: bottom(E1-E3)=N7-N9, top(E7-E9)=N10-N12, vertical(E4-E6)=N13-N15
-# DNDSR mid-edge node order: bottom(E1-E3)=N6-N8, vertical(E4-E6)=N9-N11, top(E7-E9)=N12-N14
-#   (DNDSR is 0-based, so DNDSR node 6 = 7th node)
-#
-# Mapping DNDSR-to-role:
-#   DNDSR 6,7,8   = mid(edge 0-1), mid(edge 1-2), mid(edge 2-0)   [bottom edges]
-#   DNDSR 9,10,11 = mid(edge 0-3), mid(edge 1-4), mid(edge 2-5)   [vertical edges]
-#   DNDSR 12,13,14= mid(edge 3-4), mid(edge 4-5), mid(edge 5-3)   [top edges]
-#   DNDSR 15,16,17= center(face 0), center(face 1), center(face 2) [quad face centers]
 # ======================================================================
 
-Face | DNDSR                                       | Geometric correctness?
-F0   | {0, 1, 4, 3, 6, 10, 12, 9, 15}             | YES — verts + correct mid-edges + face center
-F1   | {1, 2, 5, 4, 7, 11, 13, 10, 16}            | YES
-F2   | {2, 0, 3, 5, 8, 9, 14, 11, 17}             | YES
-F3   | {0, 2, 1, 8, 7, 6}                          | YES — bottom tri with bottom edge mids
-F4   | {3, 4, 5, 9, 10, 11}                        | ** SUSPECT BUG **
-
-ISSUE: Face 4 is the top triangle (vertices 3, 4, 5).
-  Its edges are: 3-4, 4-5, 5-3.
-  In DNDSR numbering, the midpoints of those edges are: 12, 13, 14 (top edges).
-  But DNDSR's faceNodes uses {3, 4, 5, 9, 10, 11}, where 9,10,11 are
-  VERTICAL edge midpoints (edges 0-3, 1-4, 2-5), NOT top edge midpoints.
-  Correct Face 4 should be: {3, 4, 5, 12, 13, 14}.
-
-  Verified from DNDSR standardCoords in Prism18.hpp:
-    Node 9:  (0, 0, 0)    = midpoint of edge (0,0,-1)->(0,0,1)  = vertical edge 0-3
-    Node 12: (0.5, 0, 1)  = midpoint of edge (0,0,1)->(1,0,1)   = top edge 3-4
-
-Verdict: FACES 0-3 CORRECT. FACE 4 HAS WRONG MID-EDGE NODES.
-
+Face | CGNS and DNDSR (0-based)
+F0   | {0, 1, 4, 3, 6, 10, 12, 9, 15}
+F1   | {1, 2, 5, 4, 7, 11, 13, 10, 16}
+F2   | {2, 0, 3, 5, 8, 9, 14, 11, 17}
+F3   | {0, 2, 1, 8, 7, 6}
+F4   | {3, 4, 5, 12, 13, 14}
 
 # ======================================================================
 # Pyramid5 (PYRA_5) — 5 faces: 1 Quad4 + 4 Tri3
@@ -167,15 +140,9 @@ Verdict: IDENTICAL
 # Hex8       | 6          | YES    |
 # Hex27      | 6          | YES    |
 # Prism6     | 5          | YES    |
-# Prism18    | 5          | F0-F3 YES, F4 SUSPECT BUG | F4 uses vertical mids instead of top mids
+# Prism18    | 5          | YES    |
 # Pyramid5   | 5          | YES    |
 # Pyramid14  | 5          | YES    |
 #
-# DNDSR uses the CGNS convention for corner node numbering on all linear
-# elements (Tet4, Hex8, Prism6, Pyramid5) and for the following quadratic
-# elements: Tet10, Hex27, Pyramid14.
-#
-# Prism18 is the exception: DNDSR swaps vertical and top edge midpoint
-# groups relative to CGNS. This is a legitimate internal convention
-# difference, BUT the faceNodes table for Face 4 (top triangle) appears
-# to reference the wrong nodes given DNDSR's own numbering.
+# DNDSR uses CGNS ordering for all element faces in this table,
+# with CGNS node numbers converted from one-based to zero-based.

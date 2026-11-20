@@ -44,17 +44,18 @@ namespace DNDS::CFV::Math
     }
     template <class Input, class Output>
     DNDS_DEVICE_CALLABLE void ConvertGradientRow(Detail::GradientCellGeometry cells, Input input, Output output,
-                                                 index iRow, index firstCell, int dimension, index modes, bool toCoefficients) noexcept
+                                                 index iRow, index firstCell, int dimension, index modes, bool toCoefficients, index firstComponent = 0, index componentCount = -1) noexcept
     {
         const auto source = input[iRow];
         const auto destination = output[iRow];
         const real scale = cells(firstCell + iRow, 7);
         const index components = toCoefficients ? source.size() / dimension : destination.size() / dimension;
+        const index end = componentCount < 0 ? components : firstComponent + componentCount;
         if (toCoefficients)
         {
-            for (index j = 0; j < destination.size(); ++j)
+            for (index j = firstComponent * modes; j < end * modes; ++j)
                 destination[j] = 0;
-            for (index component = 0; component < components; ++component)
+            for (index component = firstComponent; component < end; ++component)
                 for (int d = 0; d < dimension; ++d)
                     destination[component * modes + d] = source[component * dimension + d] * scale;
         }

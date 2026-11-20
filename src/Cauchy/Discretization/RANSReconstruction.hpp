@@ -31,25 +31,6 @@ namespace DNDS::Cauchy
             }
         }
 
-        /// Replace only the RANS point values and derivatives. Displacement
-        /// is measured from the cell barycenter in the parent cell frame.
-        template <class Mean, class Offset, class ReadGradient, class WriteGradient, class Row>
-        DNDS_DEVICE_CALLABLE void OverlayP1(int dimension, const Mean &mean, const Offset &dx,
-                                           ReadGradient gradient, WriteGradient setGradient, Row &&values) const noexcept
-        {
-            for (int j = 0; j < components; ++j)
-            {
-                real value = mean[j];
-                for (int d = 0; d < dimension; ++d)
-                {
-                    const real slope = gradient(j, d);
-                    value += slope * dx[d];
-                    setGradient(j, d, slope);
-                }
-                values[j] = value;
-            }
-        }
-
         /// Select the interior RANS face trace before applying face-frame
         /// transforms and boundary conditions. Derivatives live separately.
         template <class Mean, class Row>

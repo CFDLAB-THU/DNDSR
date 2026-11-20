@@ -92,6 +92,7 @@ namespace DNDS::Cauchy::Bindings
                  py::call_guard<py::gil_scoped_release>(), Local);
         py::class_<AuxiliaryRequest>(m, "AuxiliaryRequest")
             .def(py::init<>())
+            .def_readwrite("cell_turbulent_viscosity", &AuxiliaryRequest::cellTurbulentViscosity)
             .def_readwrite("mean_thermodynamics", &AuxiliaryRequest::meanThermodynamics)
             .def_readwrite("face_spectral_radius", &AuxiliaryRequest::faceSpectralRadius)
             .def_readwrite("face_wave_jump", &AuxiliaryRequest::faceWaveJump)
@@ -121,6 +122,11 @@ namespace DNDS::Cauchy::Bindings
         py::class_<AuxiliaryValues>(
             m, "AuxiliaryValues",
             "Optional explicit outputs. Debug arrays share allocations; external writes invalidate publication. No automatic refresh/exchange.")
+            .def_property_readonly("cell_turbulent_viscosity",
+                                   [](const AuxiliaryValues &v)
+        {
+            return ShareOptional(v.cellTurbulentViscosity);
+        })
             .def_property_readonly("mean_thermodynamics",
                                    [](const AuxiliaryValues &v)
         {

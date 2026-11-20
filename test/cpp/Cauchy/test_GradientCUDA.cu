@@ -72,6 +72,46 @@ TEST_CASE("CUDA Cauchy centered Barth PP and primitive means match generic CPU")
     const auto device = R::Device::CUDA(0), host = R::Device::Host();
     const auto context = R::ExecutionContext::CUDA(0);
     const CauchyTest::CompactStencilFixture gpuGeometry(fixture, context);
+    // ACM stores velocity in [0,3), including when SA or SST follows it.
+    for (const I components : {4, 5, 6})
+    {
+        auto center = Table<real>(1, components, [](I, I j)
+                                  { return .1 * (j + 1); });
+        auto neighbor = Table<real>(1, components, [](I, I j)
+                                    { return .3 * (j + 1); });
+        auto slopes = Table<real>(1, 2 * components, [](I, I j)
+                                  { return .4 * (j + 1); });
+        auto dCenter = center.To(device), dNeighbor = neighbor.To(device), dSlopes = slopes.To(device);
+        auto selection = selected.To(device);
+        R::Array<real> reference(slopes.Layout()), actual(slopes.Layout(), device);
+        {
+            const auto u = center.Read(), g = neighbor.Read(), input = slopes.Read();
+            auto target = reference.Write();
+            std::vector<DNDS::Algebra::DofComponentColumn<const real>> columns;
+            for (I j = 0; j < components; ++j)
+                columns.push_back({u.View<R::UniformTableRows>(), g.View<R::UniformTableRows>(), j});
+            const DNDS::Algebra::DofComponentLayout<const real> layout(std::move(columns), 1, 1);
+            const std::array<I, 6> fields{}, offsets{0, 1, 2, 3, 4, 5};
+            const I velocityStart = 0;
+            R::Array<real> scratch(R::RowLayout::Dense(6, components));
+            auto work = scratch.Write();
+            const auto src = input.View<R::UniformTableRows>();
+            const auto dst = target.View<R::UniformTableRows>();
+            const auto stencil = cpuGeometry.View();
+            C::CPU::LimitPhysicalGradients({stencil, stencil.metric, layout.View(), {&src, 1}, {&dst, 1}, {fields.data(), components}, {offsets.data(), components}, {&velocityStart, 1}, work.View<R::TableRows>(), components, 2, true});
+        }
+        {
+            const auto u = dCenter.Read(context), g = dNeighbor.Read(context), input = dSlopes.Read(context);
+            const auto rows = selection.Read(context);
+            auto target = actual.Write(context);
+            K::LimitPhysicalGradients(context, {gpuGeometry.Descriptor(), 1, 2},
+                                      {u.View<R::TableRows>(), g.View<R::TableRows>()},
+                                      input.View<R::TableRows>(), target.View<R::TableRows>(),
+                                      rows.View<R::FixedRows<1>>(), 2, 0, true);
+            REQUIRE(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)) == cudaSuccess);
+        }
+        Compare(actual, reference);
+    }
     auto dm = mean.To(device), dghost = ghost.To(device), dg = gradient.To(device);
     auto rows = selected.To(device);
     R::Array<real> cpuBarth(R::RowLayout::Dense(1, 14)), gpuBarth(cpuBarth.Layout(), device);
@@ -142,7 +182,7 @@ TEST_CASE("CUDA Cauchy centered Barth PP and primitive means match generic CPU")
         auto errors = partialStatus.Write(context), resultStatus = status.Write(context);
         auto counts = partialCount.Write(context), resultCount = count.Write(context);
         const K::GradientLimiterGeometry geometry{gpuGeometry.Descriptor(), 1, 2};
-        K::LimitPhysicalGradients(context, geometry, {u.View<R::TableRows>(), g.View<R::TableRows>()}, grad.View<R::TableRows>(), out.View<R::TableRows>(), selection.View<R::FixedRows<1>>(), 2, true);
+        K::LimitPhysicalGradients(context, geometry, {u.View<R::TableRows>(), g.View<R::TableRows>()}, grad.View<R::TableRows>(), out.View<R::TableRows>(), selection.View<R::FixedRows<1>>(), 2, 1, true);
         K::GradientPositivityParameters policy;
         policy.bounds = thermal.View();
         policy.rans = C::ResolveRANSReconstructionPolicy(equation);

@@ -216,7 +216,10 @@ TEST_CASE("CUDA auxiliary means match generic CPU thermodynamics and RANS transp
         }
         R::Array<real> own(R::RowLayout::Dense(3, components)), ghost(R::RowLayout::Dense(2, components));
         R::Array<real> ownGradient(R::RowLayout::Dense(3, components * 2)), ghostGradient(R::RowLayout::Dense(2, components * 2));
-        R::Array<real> wall(R::RowLayout::Dense(5, 1)), expected(R::RowLayout::Dense(5, 3));
+        const bool viscosityOnly = model == "KOmegaWilcox";
+        const bool writeViscosity = viscosityOnly || model == "KOmegaSST";
+        const int auxiliaryWidth = writeViscosity ? 4 : 3;
+        R::Array<real> wall(R::RowLayout::Dense(5, 1)), expected(R::RowLayout::Dense(5, auxiliaryWidth));
         {
             auto a = own.Write(), b = ghost.Write(), ga = ownGradient.Write(), gb = ghostGradient.Write();
             auto distance = wall.Write(), result = expected.Write();
@@ -246,6 +249,8 @@ TEST_CASE("CUDA auxiliary means match generic CPU thermodynamics and RANS transp
                 {
                     const auto transport = equation.RANS().TryTransport(C::EquationFVDetail::RANSPoint(point, 0, 5, equation.RANS(), properties, distance.View()(iCell, 0), 0));
                     REQUIRE(bool(transport));
+                    if (auxiliaryWidth == 4)
+                        result.View()(iCell, 3) = transport.value.viscosity;
                     bound = std::max({bound, real(4. / 3.) * (properties.transport.viscosity + transport.value.viscosity) / flow[0],
                                       (properties.transport.conductivity + transport.value.conductivity) / (flow[0] * properties.thermo.cv)});
                 }
@@ -257,27 +262,32 @@ TEST_CASE("CUDA auxiliary means match generic CPU thermodynamics and RANS transp
         auto p = hostParameters.To(device, context);
         auto u = own.To(device, context), ug = ghost.To(device, context);
         auto g = ownGradient.To(device, context), gg = ghostGradient.To(device, context), w = wall.To(device, context);
-        R::Array<real> output(R::RowLayout::Dense(5, 3), device);
+        R::Array<real> output(R::RowLayout::Dense(viscosityOnly ? 0 : 5, 3), device);
+        R::Array<real> viscosity(R::RowLayout::Dense(writeViscosity ? 5 : 0, 1), device);
         R::Array<DNDS::NumericalStatus> status(R::RowLayout::Dense(5, 1), device);
         R::EagerEngine engine;
         const auto stream = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
         // Both partitions are queued without a host join between them. The
         // same output lease is scheduled twice on one lane, with disjoint rows.
         for (const bool dependent : {false, true})
-            R::SubmitArrays(engine, stream, [=](R::ExecutionContext execution, auto params, auto mean, auto halo, auto gradient, auto gradientHalo, auto walls, auto out, auto errors)
+            R::SubmitArrays(engine, stream, [=](R::ExecutionContext execution, auto params, auto mean, auto halo, auto gradient, auto gradientHalo, auto walls, auto out, auto eddy, auto errors)
                             {
                 K::AuxiliaryStateInput input{params, {mean, halo}, {gradient, gradientHalo}, walls, components, 2, true, true};
-                K::PrepareAuxiliaryMeans(execution, input, out, errors, dependent ? 3 : 0, dependent ? 5 : 3); }, R::ReadAs<R::FixedRows<1>>(p), R::ReadAs<R::TableRows>(u), R::ReadAs<R::TableRows>(ug), R::ReadAs<R::TableRows>(g), R::ReadAs<R::TableRows>(gg), R::ReadAs<R::FixedRows<1>>(w), R::WriteAs<R::TableRows>(output), R::WriteAs<R::FixedRows<1>>(status));
+                K::PrepareAuxiliaryMeans(execution, input, out, eddy, errors, dependent ? 3 : 0, dependent ? 5 : 3); }, R::ReadAs<R::FixedRows<1>>(p), R::ReadAs<R::TableRows>(u), R::ReadAs<R::TableRows>(ug), R::ReadAs<R::TableRows>(g), R::ReadAs<R::TableRows>(gg), R::ReadAs<R::FixedRows<1>>(w), R::WriteAs<R::TableRows>(output), R::WriteAs<R::TableRows>(viscosity), R::WriteAs<R::FixedRows<1>>(status));
         engine.Close();
         const auto result = output.To(R::Device::Host());
         const auto errors = status.To(R::Device::Host());
-        const auto actual = result.Read(), reference = expected.Read();
+        const auto hostViscosity = viscosity.To(R::Device::Host());
+        const auto actual = result.Read(), reference = expected.Read(), eddy = hostViscosity.Read();
         const auto error = errors.Read();
         for (I iCell = 0; iCell < 5; ++iCell)
         {
             REQUIRE(bool(error.View()(iCell, 0)));
-            for (int j = 0; j < 3; ++j)
-                CHECK(actual.View()(iCell, j) == doctest::Approx(reference.View()(iCell, j)).epsilon(2e-11).scale(1));
+            if (!viscosityOnly)
+                for (int j = 0; j < 3; ++j)
+                    CHECK(actual.View()(iCell, j) == doctest::Approx(reference.View()(iCell, j)).epsilon(2e-11).scale(1));
+            if (writeViscosity)
+                CHECK(eddy.View()(iCell, 0) == doctest::Approx(reference.View()(iCell, 3)).epsilon(2e-11).scale(1));
         }
     }
 }

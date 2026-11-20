@@ -61,7 +61,7 @@ namespace DNDS::Cauchy::CUDA
     /// before publication. Mean status uses local-cell IDs; face status uses
     /// auxiliary-face IDs. Untouched rows retain their previous contents.
     void PrepareAuxiliaryMeans(Runtime::ExecutionContext context, const AuxiliaryStateInput &state,
-                               AuxiliaryOutput output, AuxiliaryStatus status, index first, index end);
+                               AuxiliaryOutput output, AuxiliaryOutput viscosity, AuxiliaryStatus status, index first, index end);
     void PrepareAuxiliaryFaces(Runtime::ExecutionContext context, const AuxiliaryFaceRequest &request, AuxiliaryIndices faces);
     void ReduceAuxiliaryCells(Runtime::ExecutionContext context, const AuxiliaryCellRequest &request, AuxiliaryIndices cells);
 }

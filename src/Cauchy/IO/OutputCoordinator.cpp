@@ -226,7 +226,7 @@ namespace DNDS::Cauchy
                     const Json manifest{
                         {"schema", "dndsr.cauchy.run-output.v1"},
                         {"resolvedConfig", plan.ResolvedPath()},
-                        {"historySchema", "dndsr.cauchy.detailed-history.v2"},
+                        {"historySchema", output.historyStateBounds ? "dndsr.cauchy.detailed-history.v3" : "dndsr.cauchy.detailed-history.v2"},
                         {"progressStatus",
                          {{"nonlinearIteration", 0},
                           {"implicitStageEnd", 1},
@@ -298,7 +298,8 @@ namespace DNDS::Cauchy
                   {
                       domain.SetProgressObserver(
                           [this, iDomain](const NonlinearProgress &entry)
-                          { progress[size_t(iDomain)]->CaptureIteration(entry, MPI_Wtime() - started); });
+                          { progress[size_t(iDomain)]->CaptureIteration(entry, MPI_Wtime() - started); },
+                          output.historyStateBounds ? output.implicit.historyInterval : 0);
                       domain.SetQuiescentObserver(
                           [this, iDomain](const NonlinearSolveState &nonlinear)
                           { InternalSnapshot(iDomain, nonlinear); }); });
@@ -307,12 +308,6 @@ namespace DNDS::Cauchy
         void InternalSnapshot(index iDomain,
                               const NonlinearSolveState &nonlinear)
         {
-            // Already at a quiescent nonlinear boundary. Emit captured progress
-            // even when internal snapshots are disabled; otherwise a long
-            // steady solve remains silent until its entire step completes.
-            // This local sink operation adds no rank agreement/reduction.
-            // Any exception escapes to the production abort handler.
-            progress[size_t(iDomain)]->FlushIterations();
             const bool ditr = time.method == "ditr";
             const index completedIteration =
                 ditr || nonlinear.terminal ? nonlinear.iteration
@@ -323,15 +318,25 @@ namespace DNDS::Cauchy
             { return completedIteration > 0 && interval > 0 && completedIteration % interval == 0; };
             const bool checkpoint = selected.checkpoint || intervalDue(internalCheckpointInterval);
             const bool visualization = selected.visualization || intervalDue(internalVisualizationInterval);
+            // Emit progress at the existing quiescent nonlinear boundary
+            // before staging any output or entering file I/O.
+            progress[size_t(iDomain)]->FlushIterations(checkpoint || visualization);
             if (!checkpoint && !visualization)
                 return;
+            const bool writer = simulation.Placement().DomainRank(iDomain) == 0;
+            const auto token = OutputPlan::InternalToken(step, nonlinear.stage, completedIteration);
+            if (writer)
+                logger->Info(fmt::format("Writing {} D{}{}",
+                                         checkpoint && visualization ? "checkpoint and visualization"
+                                         : checkpoint                ? "checkpoint"
+                                                                     : "visualization",
+                                         iDomain, token));
             // Internal checkpoints may contain active coupled stages. Keep the
             // exact existing synchronous writer, after all older background
             // transactions finish; never share its HDF/MPI sequence with them.
             if (asynchronous)
                 asynchronous->Drain();
             auto &domain = simulation.GetDomain(iDomain);
-            const auto token = OutputPlan::InternalToken(step, nonlinear.stage, completedIteration);
             const auto prefix = plan.VisualizationPrefix(iDomain, token);
             if (visualization)
                 domain.WriteInternalVisualization(prefix,
@@ -340,7 +345,7 @@ namespace DNDS::Cauchy
                 domain.WriteInternalCheckpoint(
                     plan.InternalCheckpointPath(iDomain, token), config.Root(),
                     nonlinear, CaptureDomainState(iDomain));
-            if (simulation.Placement().DomainRank(iDomain) != 0)
+            if (!writer)
                 return;
             Json artifacts = Json::array();
             if (checkpoint)
@@ -392,6 +397,10 @@ namespace DNDS::Cauchy
                   {
                       const auto values = domain.Diagnostics(
                           config.Domains()[iDomain].settings, output.forceZones);
+                      std::vector<real> stateBounds;
+                      if (output.historyStateBounds && (forceHistory ||
+                          (output.historyInterval > 0 && domain.Epoch().acceptedStep % uint64_t(output.historyInterval) == 0)))
+                          stateBounds = domain.MeasureStateBounds(false);
                       auto &baseline = baselines[size_t(iDomain)];
                       if (baseline == 0)
                           baseline = std::max(values[4], real(1e-300));
@@ -411,7 +420,7 @@ namespace DNDS::Cauchy
                               const ProgressLocation location{
                                   domain.Epoch().acceptedStep, -1, -1, -1,
                                   retries, domain.Time(), dt,
-                                  MPI_Wtime() - started};
+                                  MPI_Wtime() - started, time.steady};
                               for (index iStage = 0;
                                    iStage < index(domain.LastImplicitStages().size());
                                    ++iStage)
@@ -424,6 +433,7 @@ namespace DNDS::Cauchy
                               }
                               AcceptedStepProgress accepted;
                               accepted.diagnostics = values;
+                              accepted.stateBounds = std::move(stateBounds);
                               accepted.faceFallbacks = domain.LastFaceFallbacks();
                               accepted.retries = retries;
                               accepted.implicitStages =
@@ -541,9 +551,6 @@ namespace DNDS::Cauchy
             // timing collective. Include retries, exclude following file I/O.
             stepWallSeconds = stepStarted ? MPI_Wtime() - *stepStarted : 0;
             stepStarted.reset();
-            MaybeReportAllocations();
-            const bool reached =
-                Record(dt, retries, limits, useLimits, printConsole, false);
             bool checkpointTimeDue = false, visualizationTimeDue = false;
             if (!time.steady && output.checkpointTimeInterval > 0)
                 while (OutputPlan::TimeAt(nextCheckpointTime,
@@ -572,6 +579,11 @@ namespace DNDS::Cauchy
             const bool checkpoint = checkpointTimeDue || checkpointStepDue || selected.checkpoint;
             const bool visualization =
                 visualizationTimeDue || visualizationStepDue || selected.visualization;
+            const bool reached =
+                Record(dt, retries, limits, useLimits,
+                       printConsole || (output.consoleInterval > 0 && (checkpoint || visualization)),
+                       false);
+            MaybeReportAllocations();
             if (checkpoint || visualization)
             {
                 const auto token = checkpointTimeDue || visualizationTimeDue
@@ -648,7 +660,7 @@ namespace DNDS::Cauchy
         _data->Visit([&](index iDomain, Domain &)
                      { _data->progress[size_t(iDomain)]->BeginAttempt(
                            {_data->simulation.Step() + 1, -1, -1, -1, retries, targetTime,
-                            dt, MPI_Wtime() - _data->started}); });
+                            dt, MPI_Wtime() - _data->started, _data->time.steady}); });
     }
     void OutputCoordinator::FlushPending() { _data->FlushPending(); }
     void OutputCoordinator::WarnRetry(const std::string &reason)

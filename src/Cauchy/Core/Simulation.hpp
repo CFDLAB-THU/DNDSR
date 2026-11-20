@@ -65,9 +65,10 @@ namespace DNDS::Cauchy
         /// reconstruction history. Every domain validates and reserves before
         /// any accepted state changes. Placement may differ; names/order and
         /// physical metadata must match. Interface traces are refreshed at the
-        /// stored time from restored polynomials. Process-failure recovery is
-        /// unsupported. Caller joins work and releases conflicting views.
-        void ReadCheckpoint(const std::string &path);
+        /// stored time from restored polynomials. MeansOnly takes the active
+        /// steady means or the accepted means and starts fresh history and
+        /// output control. Caller joins work and releases conflicting views.
+        void ReadCheckpoint(const std::string &path, CheckpointLoadMode mode = CheckpointLoadMode::Resume);
         const std::optional<Json> &RestoredOutputController() const { return _restoredOutputController; }
         /// One native parallel output per domain, named prefix_domainN for
         /// several domains. The single-domain output name is unchanged.

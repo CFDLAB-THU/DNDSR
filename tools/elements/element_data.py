@@ -373,11 +373,11 @@ PRISM6 = ElementData(
     ],
     edge_groups=[("bottom", [0, 1, 2]), ("vertical", [3, 4, 5]), ("top", [6, 7, 8])],
     elevated_type="Prism18", num_elev_nodes=12,
-    # CGNS ordering: bottom edges, TOP edges, VERTICAL edges, face centers
+    # CGNS SIDS PENTA_18: bottom edges, connecting edges, top edges, face centers
     elev_spans=[
         (1, 2), (2, 3), (3, 1),                    # bottom edges -> N7, N8, N9
-        (4, 5), (5, 6), (6, 4),                    # top edges -> N10, N11, N12
-        (1, 4), (2, 5), (3, 6),                    # vertical edges -> N13, N14, N15
+        (1, 4), (2, 5), (3, 6),                    # connecting edges -> N10, N11, N12
+        (4, 5), (5, 6), (6, 4),                    # top edges -> N13, N14, N15
         (1, 2, 5, 4), (2, 3, 6, 5), (3, 1, 4, 6), # face centers -> N16, N17, N18
     ],
     elev_span_types=["Line2"] * 9 + ["Quad4"] * 3,
@@ -394,47 +394,45 @@ PRISM18 = ElementData(
         4: (0, 0, 1), 5: (1, 0, 1), 6: (0, 1, 1),
         # Bottom edge mids (E1-E3)
         7: (0.5, 0, -1), 8: (0.5, 0.5, -1), 9: (0, 0.5, -1),
-        # Top edge mids (E7-E9) — CGNS puts these BEFORE vertical
-        10: (0.5, 0, 1), 11: (0.5, 0.5, 1), 12: (0, 0.5, 1),
-        # Vertical edge mids (E4-E6)
-        13: (0, 0, 0), 14: (1, 0, 0), 15: (0, 1, 0),
+        # Connecting edge mids (E4-E6)
+        10: (0, 0, 0), 11: (1, 0, 0), 12: (0, 1, 0),
+        # Top edge mids (E7-E9)
+        13: (0.5, 0, 1), 14: (0.5, 0.5, 1), 15: (0, 0.5, 1),
         # Quad face centers
         16: (0.5, 0, 0), 17: (0.5, 0.5, 0), 18: (0, 0.5, 0),
     },
     num_faces=5,
     face_types=["Quad9", "Quad9", "Quad9", "Tri6", "Tri6"],
     face_nodes=[
-        [1, 2, 5, 4, 7, 14, 10, 13, 16],    # F1: side quad9
-        [2, 3, 6, 5, 8, 15, 11, 14, 17],    # F2: side quad9
-        [3, 1, 4, 6, 9, 13, 12, 15, 18],    # F3: side quad9
+        [1, 2, 5, 4, 7, 11, 13, 10, 16],    # F1: side quad9
+        [2, 3, 6, 5, 8, 12, 14, 11, 17],    # F2: side quad9
+        [3, 1, 4, 6, 9, 10, 15, 12, 18],    # F3: side quad9
         [1, 3, 2, 9, 8, 7],                  # F4: bottom tri6
-        [4, 5, 6, 10, 11, 12],               # F5: top tri6
+        [4, 5, 6, 13, 14, 15],               # F5: top tri6
     ],
     num_edges=9, edge_type="Line3",
     edge_nodes=[
         (1, 2, 7), (2, 3, 8), (3, 1, 9),       # bottom
-        (1, 4, 13), (2, 5, 14), (3, 6, 15),     # vertical
-        (4, 5, 10), (5, 6, 11), (6, 4, 12),     # top
+        (1, 4, 10), (2, 5, 11), (3, 6, 12),     # vertical
+        (4, 5, 13), (5, 6, 14), (6, 4, 15),     # top
     ],
     edge_groups=[("bottom", [0, 1, 2]), ("vertical", [3, 4, 5]), ("top", [6, 7, 8])],
     num_bisect=8, num_bisect_variants=1,
     bisect_uniform_type="Prism6",
     # Bisect nodes use CGNS 1-based indexing
     bisect_elements=[
-        (1, 7, 9, 13, 16, 18),
-        (7, 2, 8, 16, 14, 17),
+        (1, 7, 9, 10, 16, 18),
+        (7, 2, 8, 16, 11, 17),
         (9, 7, 8, 18, 16, 17),
-        (9, 8, 3, 18, 17, 15),
-        (13, 16, 18, 4, 10, 12),
-        (16, 14, 17, 10, 5, 11),
-        (18, 16, 17, 12, 10, 11),
-        (18, 17, 15, 12, 11, 6),
+        (9, 8, 3, 18, 17, 12),
+        (10, 16, 18, 4, 13, 15),
+        (16, 11, 17, 13, 5, 14),
+        (18, 16, 17, 15, 13, 14),
+        (18, 17, 12, 15, 14, 6),
     ],
     vtk_cell_type=26,
-    # VTK BiQuadraticQuadraticWedge: 15 nodes (no face centers)
-    # VTK order: corners, bottom-edge-mids, top-edge-mids, vertical-edge-mids
-    # (matches CGNS order for the first 15 nodes)
-    vtk_node_order=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+    # VTK quadratic wedge: 15 nodes. It lists top edges before connecting edges.
+    vtk_node_order=[0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 13, 14, 9, 10, 11],
 )
 
 HEX8 = ElementData(

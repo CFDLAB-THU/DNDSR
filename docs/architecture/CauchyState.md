@@ -1200,8 +1200,9 @@ the index locations of mixture thermal references and chemical derivatives.
 
 The C++ full-state finite-volume operator accepts SA, Wilcox k-omega, SST and
 realizable k-epsilon, with the existing SA/SST DES formulas. It
-requires the mesh's published nodal wall field and samples it with the configured
-positive `numerics.wallDistanceFloor` (default `1e-10`). RHS sources are
+requires the mesh's published nodal wall field and floors the volume and face
+samples with `numerics.wallDistanceFloor`. Its default `0` uses the
+`1e-10` denominator safeguard. RHS sources are
 integrated on cell quadrature. The centered implicit destruction diagonal uses the cell mean, cell volume,
 wall distance and an independently reconstructed physical gradient. With
 compressible `rhsQuadrature`, each volume point instead contributes its

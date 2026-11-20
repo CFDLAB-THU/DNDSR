@@ -1,6 +1,7 @@
 #include "Cauchy/Discretization/FiniteVolume.hpp"
 #include "Cauchy/Core/NumericalFailure.hpp"
 #include "Cauchy/Discretization/FiniteVolumeWorkspaceInternal.hpp"
+#include "Cauchy/Discretization/ViscousReconstruction.hpp"
 #include "Cauchy/Discretization/CPU/FiniteVolumeRHSKernels.hpp"
 #include "Cauchy/Discretization/CPU/FiniteVolumePointKernels.hpp"
 #include "Cauchy/Physics/PhysicalFlux.hpp"
@@ -37,8 +38,7 @@ namespace DNDS::Cauchy
             DNDS_assert_info(directGradients.size() == 1, "fixed-flow direct gradient is unavailable");
             input.conservativeGradient = scope.ReadField(directGradients.front());
         }
-        if (!owner->settings.numerics.viscousLimited &&
-            (owner->settings.numerics.limiter == "WBAP" || limitedVR || owner->settings.numerics.positivity))
+        if (FiniteVolumeDetail::UsesUnlimitedViscousReconstruction(owner->settings))
         {
             if (owner->settings.numerics.reconstruction == "variational")
                 input.viscousCoefficients = scope.ReadField(Coefficients().PhysicalField(0));
@@ -149,7 +149,7 @@ namespace DNDS::Cauchy
             meanProperties.emplace(auxiliary->meanThermodynamics->Read());
             preparedMean.emplace(meanProperties->View<R::UniformTableRows>());
         }
-        std::array<std::optional<R::Array<real>::ReadLease>, 6> stencilReads;
+        std::array<std::optional<R::Array<real>::ReadLease>, 4> stencilReads;
         RHSFieldView waveJump, pressureMinimum;
         const auto readStencil = [&](OptionalRef<const CFV::FVField> field, int slot, RHSFieldView &view)
         {
@@ -172,8 +172,7 @@ namespace DNDS::Cauchy
         {
             rec.emplace(ghosts ? FluxCoefficients().ReadWithGhost() : FluxCoefficients().ReadOwned());
             recBlocks = BlockViews(FluxCoefficients(), *rec);
-            if (owner->equation.Viscous() && !owner->settings.numerics.viscousLimited &&
-                (owner->settings.numerics.limiter == "WBAP" || limitedVR || owner->settings.numerics.positivity))
+            if (owner->equation.Viscous() && FiniteVolumeDetail::UsesUnlimitedViscousReconstruction(owner->settings))
             {
                 viscousRec.emplace(ghosts ? Coefficients().ReadWithGhost() : Coefficients().ReadOwned());
                 viscousRecBlocks = BlockViews(Coefficients(), *viscousRec);
@@ -252,12 +251,11 @@ namespace DNDS::Cauchy
         request.vectorStarts = vectorStarts.HostView();
         if (owner->equation.HasRANS())
             request.ransMean = mean.Block("rans");
-        if (UseRANSP1FaceOverlay())
+        std::optional<R::Array<real>::ReadLease> viscosityRead;
+        if (owner->settings.numerics.ransCellCenterViscosity && auxiliary && auxiliary->cellTurbulentViscosity)
         {
-            DNDS_check_throw_info(meanGradients, "RANS P1 face overlay requires mean gradients");
-            const auto location = state.LocateBlock("rans");
-            readStencil(std::cref(meanGradients->fields[location.physicalField]), 4, request.ransP1Gradients);
-            request.ransP1First = location.firstComponent;
+            viscosityRead.emplace(auxiliary->cellTurbulentViscosity->Read());
+            request.centerViscosity = CellCenterViscosityView::From(viscosityRead->View<R::UniformTableRows>());
         }
         request.preparedMean = preparedMean;
         request.waveJump = waveJump;

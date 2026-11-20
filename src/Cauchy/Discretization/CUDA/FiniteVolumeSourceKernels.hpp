@@ -41,7 +41,7 @@ namespace DNDS::Cauchy::CUDA
     {
         Runtime::ArrayView<const PerfectGasSpatialParameters, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> parameters;
         Runtime::ArrayView<const ACM::SpatialParameters, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> acm;
-        SourceInput means, samples, coefficients, ransP1Gradients;
+        SourceInput means, samples, coefficients;
         VolumeSourceBasis basis;
         std::array<SourceGradient, 3> gradients;
         SourceIndices offsets;
@@ -55,7 +55,7 @@ namespace DNDS::Cauchy::CUDA
         SourceStatus status;
         int components = 0, dimension = 0;
         SourceEvaluation evaluation = SourceEvaluation::QuadratureResidual;
-        bool fullBlock = false, cellInputs = false, ransP1Overlay = false;
+        bool fullBlock = false, cellInputs = false;
         real scale = 1;
     };
     /// One independent thread per selected owned cell, quadrature in CPU order.

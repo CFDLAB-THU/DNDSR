@@ -473,3 +473,58 @@ TEST_CASE("ACM block Jacobi preserves a null component through every geometric l
         }
     }
 }
+
+TEST_CASE("ACM block Jacobi converges for the finite SUBOFF diagonal after 49 refreshes")
+{
+    // Production P1 Green–Gauss SUBOFF, finest level row 3377546.
+    // Diagonal scaling leaves this block full rank with rcond below the LU
+    // guard. The previous Jacobi-SVD tolerance exhausted the sweep limit.
+    constexpr int width = 6;
+    constexpr double diagonal[width][width]{
+        {1.9773279177536006e-06, 2.78948246221429e-10, 4.7942875085516649e-12, 5.5440499376024187e-07, 0, 0},
+        {2.4953281034257269e-10, 1.9852122945221907e-06, 5.6571792666637391e-12, 2.3083121957118749e-11, 0, 0},
+        {1.7935857173181472e-13, 5.6754644299345757e-12, 2.2043606864614808e-06, -3.6823537682031406e-12, 0, 0},
+        {2.5832140947605813e-10, 2.9344443750127994e-11, -1.6240924771264112e-13, 5.5269599405838417e-07, 0, 0},
+        {7.8161370079229362e-20, 8.9476796893732532e-21, -2.6721550189705077e-18, 1.7281279542395811e-17, 1.970162848671865e-06, 0},
+        {1.2221518875188255e-06, 1.8254839805430317e-08, 0.015601468117405128, 0.0080930418839256987, 0, 1.9703836544799005e-06},
+    };
+    constexpr double exact[width]{1, -2, 3, -4, 5, -6};
+    const auto device = R::Device::CUDA(0);
+    const auto context = R::ExecutionContext::CUDA(0);
+    R::Array<int> offsets(R::RowLayout::Dense(2, 1)), columns(R::RowLayout::Dense(1, 1));
+    R::Array<double> values(R::RowLayout::Dense(width * width, 1)), rhs(R::RowLayout::Dense(width, 1));
+    {
+        auto o = offsets.Write(), c = columns.Write();
+        auto a = values.Write(), b = rhs.Write();
+        o.View()(0, 0) = c.View()(0, 0) = 0;
+        o.View()(1, 0) = 1;
+        for (int i = 0; i < width; ++i)
+        {
+            double sum = 0;
+            for (int j = 0; j < width; ++j)
+            {
+                a.View()(i * width + j, 0) = diagonal[i][j];
+                sum += diagonal[i][j] * exact[j];
+            }
+            b.View()(i, 0) = sum;
+        }
+    }
+    DNDS::Algebra::AmgXSettings settings;
+    settings.robustACMInverse = true;
+    settings.relaxation = 1;
+    DNDS::Algebra::AmgXPreconditioner provider(device, settings);
+    provider.SetPattern(offsets, columns, width);
+    const auto a = values.To(device), b = rhs.To(device);
+    R::Array<double> solution(rhs.Layout(), device);
+    {
+        auto output = solution.Write(context);
+        auto input = b.Read(context);
+        auto matrix = a.Read(context);
+        provider.UpdateValuesBorrowed(context, matrix.View());
+        provider.ApplyBorrowed(context, input.View(), output.View());
+    }
+    const auto host = solution.To(R::Device::Host());
+    const auto read = host.Read();
+    for (int i = 0; i < width; ++i)
+        CHECK(read.View()(i, 0) == doctest::Approx(exact[i]).epsilon(1e-6));
+}

@@ -13,6 +13,9 @@ PYBIND11_MODULE(cauchy_pybind11, m)
     namespace C = DNDS::Cauchy;
     namespace R = DNDS::Runtime;
     py::module_::import("DNDSR.CFV");
+    py::enum_<C::CheckpointLoadMode>(m, "CheckpointLoadMode")
+        .value("Resume", C::CheckpointLoadMode::Resume)
+        .value("MeansOnly", C::CheckpointLoadMode::MeansOnly);
     // Register the mutually referenced type before emitting method signatures;
     // otherwise pybind records an unbound C++ spelling in Python annotations.
     auto domainClass = py::class_<C::Domain>(
@@ -223,15 +226,16 @@ PYBIND11_MODULE(cauchy_pybind11, m)
             "Collective native checkpoint of all equation fields and BDF history; physical layouts are preserved. Optional reconstruction supports compatible warm continuation. Pass common metadata/path on the domain communicator.")
         .def(
             "read_checkpoint",
-            [](C::Domain &domain, const std::string &path, const std::string &resolved)
+            [](C::Domain &domain, const std::string &path, const std::string &resolved, C::CheckpointLoadMode mode)
     {
         C::Json input;
         DNDS::MPI::LocalStage(DNDS::MPIInfo(domain.Discretization().Metrics().Communicator()), [&]
         {
             input = C::Json::parse(resolved);
         });
-        domain.ReadCheckpoint(path, input);
-    }, py::arg("path"), py::arg("resolved_json"), py::call_guard<py::gil_scoped_release>(),
+        domain.ReadCheckpoint(path, input, mode);
+    }, py::arg("path"), py::arg("resolved_json"), py::arg("mode") = C::CheckpointLoadMode::Resume,
+            py::call_guard<py::gil_scoped_release>(),
             "Collective persistent-cell-ID restart, permitting redistribution and layout changes. Release all retained views, including species. Accepted means/history publish together; missing or incompatible reconstruction cold-starts.");
     py::class_<C::Simulation>(
         m, "Simulation",
@@ -301,7 +305,7 @@ PYBIND11_MODULE(cauchy_pybind11, m)
             "Collective coordinated checkpoint; multi-domain manifests retain per-domain native archives. Optional output-controller JSON preserves frontend cadence/history state. All ranks use the same path and release conflicting views.")
         .def(
             "read_checkpoint", &C::Simulation::ReadCheckpoint, py::arg("path"),
-            py::call_guard<py::gil_scoped_release>(),
+            py::arg("mode") = C::CheckpointLoadMode::Resume, py::call_guard<py::gil_scoped_release>(),
             "Collectively validate and reserve all domains before restoring accepted states, clocks and compatible history. Release debug views and serialize external mutation.")
         .def("write_visualization", &C::Simulation::WriteVisualization, py::arg("prefix"),
              py::arg("hdf_deflate_level") = 0, py::call_guard<py::gil_scoped_release>(),

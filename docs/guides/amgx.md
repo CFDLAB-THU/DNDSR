@@ -401,7 +401,8 @@ cell block, with 128 threads per CTA. Row normalization, condition estimation,
 LU, and the exceptional SVD execute in the same thread. The three sm_80
 kernels compiled with CUDA 13.2 use 128, 184 and 220 registers per thread for
 widths 4, 5 and 6 respectively (compiler resource report). They use no shared
-matrix scratch. A device integer flags numerical failures; its synchronous
-host read is part of inverse setup. The subsequent relaxation sweeps read the
+matrix scratch. Two device integers retain the first failing row and its status. The host
+reads them at the existing synchronous setup boundary. Only a failed
+inverse copies and logs a diagonal block. The subsequent relaxation sweeps read the
 prepared inverse. The device numerical routines are fixed-size DNDSR templates
 and have no Eigen, cuBLAS, or cuSOLVER dependency.

@@ -54,6 +54,13 @@ namespace DNDS::Cauchy
                                                   !Algebra::Detail::Overlaps(output.Storage(), fields->PhysicalField(iField).Ghost().Storage()),
                                               "face output aliases equation fields");
         }
+        if (!work.meanOnly && _data->settings.numerics.ransCellCenterViscosity)
+        {
+            if (!auxiliary && work.rhsAuxiliary)
+                auxiliary.Emplace(*work.rhsAuxiliary);
+            DNDS_check_throw_info(auxiliary && auxiliary->cellTurbulentViscosity,
+                                  "RANS face viscosity requires the prepared cell turbulent viscosity Array");
+        }
         if (auxiliary)
             ValidateAuxValues(state, *auxiliary, time);
         std::optional<R::Array<real>::ReadLease> incomingRead;

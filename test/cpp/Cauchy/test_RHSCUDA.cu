@@ -224,7 +224,10 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
         if (model == "KOmegaSST" && (reconstruction == 1 || reconstruction == 3))
             cases.push_back(experimentalVariants);
         if (model == "KOmegaSST" && reconstruction == 3)
+        {
             cases.push_back(experimentalVariants + 1);
+            cases.push_back(experimentalVariants + 2);
+        }
         return cases;
     };
     for (const int dimension : {2, 3})
@@ -274,8 +277,8 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
                     controls.distinctViscous = reconstruction != 0;
                     controls.produceLow = width == 5;
                     controls.positivity = true;
-                    controls.ransMeanFaceValues = experiment == experimentalVariants;
-                    controls.ransP1Overlay = experiment == experimentalVariants + 1;
+                    controls.ransMeanFaceValues = experiment == experimentalVariants || experiment == experimentalVariants + 2;
+                    const bool useCenterViscosity = experiment == experimentalVariants + 1 || experiment == experimentalVariants + 2;
                     controls.solver = model == "SA" ? C::Riemann::Solver::Roe_M9 : C::Riemann::Solver::AUSMPWPlus;
                     controls.polynomialPrecision = arithmetic[0];
                     controls.dissipationPrecision = arithmetic[1];
@@ -346,15 +349,7 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
                         for (int j = 0; j < width; ++j)
                             packet[iRow * width + j] = mean[width + j];
                     auto incoming = Rows(packet, width), meanAux = Rows(prepared, 2);
-                    std::vector<real> ransGradient;
-                    if (controls.ransP1Overlay)
-                        for (I iCell = 0; iCell < 3; ++iCell)
-                            for (int j = 0; j < width; ++j)
-                                for (int d = 0; d < dimension; ++d)
-                                    ransGradient.push_back(j < 5 ? 0. : .003 * (iCell + 1) * (j + 1) * (d + 1));
-                    const auto gradientSplit = ransGradient.begin() + (controls.ransP1Overlay ? 2 * width * dimension : 0);
-                    auto ransOwned = Rows<real>({ransGradient.begin(), gradientSplit}, width * dimension);
-                    auto ransGhost = Rows<real>({gradientSplit, ransGradient.end()}, width * dimension);
+                    auto viscosity = Rows<real>({.1, .2, .3});
                     auto wave = Rows<real>({.03, .07}), waveg = Rows<real>({.09});
                     auto pressure = Rows<real>({.7, .8}), pressureg = Rows<real>({.6});
                     const auto polynomial = F::Math::TaylorBasis(dimension, degree).KernelParameters();
@@ -453,12 +448,9 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
                         request.direct = controls.direct;
                         request.linear = controls.linear;
                         request.firstOrder = controls.firstOrder;
-                        const auto overlayOwned = ransOwned.Read(), overlayGhost = ransGhost.Read();
-                        if (controls.ransP1Overlay)
-                        {
-                            request.ransP1Gradients = {overlayOwned.View<R::UniformTableRows>(), overlayGhost.View<R::UniformTableRows>()};
-                            request.ransP1First = 5;
-                        }
+                        const auto mu = viscosity.Read();
+                        if (useCenterViscosity)
+                            request.centerViscosity = C::CellCenterViscosityView::From(mu.View<R::TableRows>());
                         request.ransMeanFaceValues = controls.ransMeanFaceValues;
                         request.viscous = request.hasWall = request.positivity = request.useStencil = request.preparedWaveJump = request.preparedPressureMinimum = true;
                         request.produceLow = controls.produceLow;
@@ -506,7 +498,7 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
                     auto dcells = fixture.cells.To(device), dquad = fixture.quadrature.To(device), dwall = fixture.wallFaces.To(device), dwm = fixture.wallMean.To(device), dcache = cache.To(device), dm = moments.To(device);
                     auto dcore = fixture.coreFaces.To(device), ddependent = fixture.dependentFaces.To(device), dcoreCells = fixture.coreCells.To(device), ddependentCells = fixture.dependentCells.To(device);
                     auto dparameters = Rows<K::RHSKernelParameters>({parameters}).To(device);
-                    auto dRansOwned = ransOwned.To(device), dRansGhost = ransGhost.To(device);
+                    auto deviceViscosity = viscosity.To(device);
                     std::optional<K::RHSFacePackages> corePackages, dependentPackages;
                     if (controls.mapping == K::RHSFaceMapping::CTASegments)
                     {
@@ -552,9 +544,9 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
                         fields.incoming = packetRead.View<R::TableRows>();
                         fields.waveJump = {w.View<R::UniformTableRows>(), wg.View<R::UniformTableRows>()};
                         fields.pressureMinimum = {p.View<R::UniformTableRows>(), pg.View<R::UniformTableRows>()};
-                        const auto overlayOwned = dRansOwned.Read(context), overlayGhost = dRansGhost.Read(context);
-                        if (controls.ransP1Overlay)
-                            fields.ransP1Gradients = {overlayOwned.View<R::UniformTableRows>(), overlayGhost.View<R::UniformTableRows>()};
+                        const auto mu = deviceViscosity.Read(context);
+                        if (useCenterViscosity)
+                            fields.centerViscosity = C::CellCenterViscosityView::From(mu.View<R::TableRows>());
                         fields.hasPreparedMean = fields.hasIncoming = fields.hasWave = fields.hasPressure = true;
                         {
                             auto face = faces.Write(context), lowFace = lowFaces.Write(context), force = forces.Write(context);
@@ -567,7 +559,6 @@ TEST_CASE("CUDA integrated RHS matches generic CPU with periodic halo wall and i
                             coreFields.viscousData.ghost = {};
                             coreFields.waveJump.ghost = {};
                             coreFields.pressureMinimum.ghost = {};
-                            coreFields.ransP1Gradients.ghost = {};
                             K::EvaluateFluxFaces(context, published, parametersRead.View<R::FixedRows<1>>(), controls, coreFields, outputs, core.View<R::FixedRows<1>>(), false,
                                                  corePackages ? corePackages->View() : K::RHSFacePackageView{});
                             K::EvaluateFluxFaces(context, published, parametersRead.View<R::FixedRows<1>>(), controls, fields, outputs, dependent.View<R::FixedRows<1>>(), true,

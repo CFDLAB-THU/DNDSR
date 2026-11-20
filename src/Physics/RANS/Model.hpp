@@ -62,7 +62,8 @@ namespace DNDS::Physics::RANS
         const PointParameters &KernelParameters() const { return _parameters; }
         /// Status-returning point calls for numerical kernels. Supported SA and
         /// k-omega profiles share the device math; RealizableKE remains CPU-only.
-        NumericalResult<TurbulentTransport> TryTransport(const Point &point) const noexcept;
+        /// A nonnegative prepared viscosity overrides the pointwise closure.
+        NumericalResult<TurbulentTransport> TryTransport(const Point &point, real preparedViscosity = -1) const noexcept;
         NumericalResult<std::array<real, 2>> TryDiffusionFlux(const Point &point, const Eigen::Vector3d &normal, real turbulentViscosity) const noexcept;
         NumericalResult<std::array<real, 2>> TrySource(const Point &point, int mode = 0) const noexcept;
         int ComponentNumber() const { return _kind == ModelKind::None ? 0 : _kind == ModelKind::SA ? 1

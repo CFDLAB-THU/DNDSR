@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <iomanip>
+#include <limits>
 #include <sstream>
 
 namespace DNDS::Cauchy
@@ -51,6 +52,50 @@ namespace DNDS::Cauchy
             for (const auto &column : schema.Columns())
                 result.push_back(column.name);
             return result;
+        }
+
+        std::string FormatResiduals(const EquationSchema &schema, const std::vector<real> &residual)
+        {
+            if (residual.empty())
+                return "[]";
+            std::string result;
+            index offset = 0;
+            for (const auto &block : schema.blocks)
+            {
+                const index width = index(block.components.size());
+                DNDS_check_throw_info(offset + width <= index(residual.size()),
+                                      "Cauchy progress residual shape differs from equation schema");
+                if (!result.empty())
+                    result += ' ';
+                std::string label = block.name;
+                if (block.name == "flow")
+                    label = fmt::format("flow{}", width);
+                else if (block.name == "rans")
+                {
+                    if (width == 1)
+                        label = "SA";
+                    else if (width == 2 && block.components.back().name == "rhoOmega")
+                        label = "kOmega";
+                    else if (width == 2 && block.components.back().name == "rhoEpsilon")
+                        label = "kEpsilon";
+                }
+                result += label + " [";
+                for (index j = 0; j < width; ++j)
+                    result += fmt::format("{}{:9.3e}", j == 0 ? "" : " ", residual[size_t(offset + j)]);
+                result += ']';
+                offset += width;
+            }
+            DNDS_check_throw_info(offset == index(residual.size()),
+                                  "Cauchy progress residual shape differs from equation schema");
+            return result;
+        }
+
+        std::string FormatTimeProgress(const ProgressLocation &location, real pseudoCFL)
+        {
+            // A steady solve has no physical-time term. Display its infinite
+            // physical step while retaining the configured value in CSV.
+            const real displayDt = location.steady ? std::numeric_limits<real>::infinity() : location.dt;
+            return fmt::format("t,dt,CFL [{:.3e},{:.3e},{:.3e}]", location.time, displayDt, pseudoCFL);
         }
     }
 
@@ -178,7 +223,7 @@ namespace DNDS::Cauchy
                 result.push_back(component.name);
         return result;
     }
-    CsvSchema DetailedHistorySchema(const EquationSchema &schema)
+    CsvSchema DetailedHistorySchema(const EquationSchema &schema, bool stateBounds)
     {
         using T = CsvColumnType;
         std::vector<CsvColumn> result{{"step", T::Integer}, {"stage", T::Integer}, {"coupled_stage", T::Integer}, {"iteration", T::Integer}, {"attempt", T::Integer}, {"time", T::Real}, {"dt", T::Real}, {"wall", T::Real}, {"iteration_wall", T::Real}, {"stage_iteration_wall_mean", T::Real}, {"step_wall", T::Real}, {"status", T::Integer}, {"pseudo_cfl", T::Real}, {"residual_target_ratio", T::Real}, {"linear_iterations", T::Integer}, {"vr_sweeps", T::Integer}, {"vr_relative_update", T::Real}, {"rhs_limited", T::Integer}, {"rhs_alpha_min", T::Real}, {"increment_limited", T::Integer}, {"increment_alpha_min", T::Real}, {"mass", T::Real}, {"energy", T::Real}, {"rho_min", T::Real}, {"p_min", T::Real}, {"residual_l2", T::Real}, {"force_x", T::Real}, {"force_y", T::Real}, {"force_z", T::Real}, {"rho_error_l1", T::Real}, {"rho_error_l2", T::Real}, {"rho_error_linf", T::Real}, {"temperature_min", T::Real}, {"face_fallbacks", T::Integer}, {"retries", T::Integer}, {"pp_rec_cells", T::Integer}, {"pp_beta_min", T::Real}, {"pp_stage_cells", T::Integer}, {"pp_alpha_min", T::Real}, {"characteristic_fallbacks", T::Integer}, {"implicit_stages", T::Integer}, {"nonlinear_iterations", T::Integer}, {"coupled_iterations", T::Integer}, {"coupled_residual_target_ratio", T::Real}, {"time_pp_cells", T::Integer}, {"time_pp_alpha", T::Real}, {"time_growth_limited", T::Integer}};
@@ -195,6 +240,12 @@ namespace DNDS::Cauchy
         }
         for (const auto &name : EquationComponentNames(schema))
             result.push_back({"res_" + name, T::Real});
+        if (stateBounds)
+            for (const auto &name : EquationComponentNames(schema))
+            {
+                result.push_back({"min_" + name, T::Real});
+                result.push_back({"max_" + name, T::Real});
+            }
         return CsvSchema(std::move(result));
     }
     std::vector<std::string> DetailedHistoryColumns(const EquationSchema &schema)
@@ -213,7 +264,7 @@ namespace DNDS::Cauchy
         // Multi-domain coordinators pass the configured domain name.
         DNDS_check_throw_info(_logger, "invalid Cauchy progress-output controller");
         if (_writer)
-            _history = std::make_unique<ProgressHistory>(DetailedHistorySchema(_schema), bareHistory,
+            _history = std::make_unique<ProgressHistory>(DetailedHistorySchema(_schema, _settings.historyStateBounds), bareHistory,
                                                          _settings.historySegmentRows, _settings.historyPrecision, resume);
     }
     ProgressRow ProgressOutputController::Base(const ProgressLocation &location, ProgressRecordStatus status) const
@@ -238,6 +289,19 @@ namespace DNDS::Cauchy
         for (size_t i = 0; i < names.size(); ++i)
             row.Set("res_" + names[i], residual[i]);
     }
+    void ProgressOutputController::FillStateBounds(ProgressRow &row, const std::vector<real> &bounds) const
+    {
+        if (!_settings.historyStateBounds || bounds.empty())
+            return;
+        const auto names = EquationComponentNames(_schema);
+        DNDS_check_throw_info(bounds.size() == 2 * names.size(),
+                              "Cauchy history state bounds shape differs from equation schema");
+        for (size_t j = 0; j < names.size(); ++j)
+        {
+            row.Set("min_" + names[j], bounds[2 * j]);
+            row.Set("max_" + names[j], bounds[2 * j + 1]);
+        }
+    }
     void ProgressOutputController::FillNonlinear(ProgressRow &row, const NonlinearProgress &progress) const
     {
         row.Set("pseudo_cfl", progress.pseudoCFL);
@@ -252,6 +316,7 @@ namespace DNDS::Cauchy
         row.Set("increment_alpha_min", progress.minimumIncrementAlpha);
         row.Set("iteration_wall", progress.iterationWallSeconds);
         FillResiduals(row, progress.residual);
+        FillStateBounds(row, progress.stateBounds);
     }
     void ProgressOutputController::BeginAttempt(ProgressLocation location)
     {
@@ -261,15 +326,11 @@ namespace DNDS::Cauchy
     void ProgressOutputController::ConsoleNonlinear(const ProgressLocation &location,
                                                     const NonlinearProgress &progress, real stageAverage) const
     {
-        std::string residual = "[";
-        for (const real value : progress.residual)
-            residual += fmt::format("{}{:9.3e}", residual.size() == 1 ? "" : " ", value);
-        residual += "]";
+        const auto residual = FormatResiduals(_schema, progress.residual);
         const auto identity = fmt::format("    {}Internal === Step [{:7},{:3},{:5}]",
                                           _domain.empty() ? "" : "D[" + _domain + "] ",
                                           location.step, location.stage, location.iteration);
-        const auto physical = fmt::format("t,dt,CFL [{:.3e},{:.3e},{:.3e}]",
-                                          location.time, location.dt, progress.pseudoCFL);
+        const auto physical = FormatTimeProgress(location, progress.pseudoCFL);
         const auto positivity = fmt::format("PP [rhs({},{:.3f}),inc({},{:.3f})]",
                                             progress.rhsLimited, progress.minimumRHSAlpha,
                                             progress.incrementLimited, progress.minimumIncrementAlpha);
@@ -312,7 +373,7 @@ namespace DNDS::Cauchy
         location.iteration = progress.iteration;
         _captured.push_back({location, progress});
     }
-    void ProgressOutputController::FlushIterations()
+    void ProgressOutputController::FlushIterations(bool snapshotDue)
     {
         if (!_writer)
         {
@@ -325,17 +386,21 @@ namespace DNDS::Cauchy
             timing.first += entry.progress.iterationWallSeconds;
             ++timing.second;
             const real stageAverage = timing.first / real(timing.second);
-            const bool history = _settings.implicit.historyInterval > 0 &&
-                                 (entry.location.iteration % _settings.implicit.historyInterval == 0 || entry.progress.terminal);
+            auto observation = entry.location;
+            if (entry.progress.observedIteration >= 0)
+                observation.iteration = entry.progress.observedIteration;
+            const bool history = _settings.implicit.historyInterval > 0 && observation.iteration > 0 &&
+                                 (observation.iteration % _settings.implicit.historyInterval == 0 || entry.progress.terminal);
             if (history)
             {
-                auto row = Base(entry.location, ProgressRecordStatus::NonlinearIteration);
+                auto row = Base(observation, ProgressRecordStatus::NonlinearIteration);
                 FillNonlinear(row, entry.progress);
                 row.Set("stage_iteration_wall_mean", stageAverage);
                 _history->Write(row);
             }
             if (_settings.implicit.consoleInterval > 0 &&
-                (entry.location.iteration % _settings.implicit.consoleInterval == 0 || entry.progress.terminal))
+                (entry.location.iteration % _settings.implicit.consoleInterval == 0 || entry.progress.terminal ||
+                 (snapshotDue && &entry == &_captured.back())))
                 ConsoleNonlinear(entry.location, entry.progress, stageAverage);
         }
         _captured.clear();
@@ -362,6 +427,7 @@ namespace DNDS::Cauchy
         progress.reconstructionIterations = report.reconstructionIterations;
         progress.reconstructionRelativeUpdate = report.reconstructionRelativeUpdate;
         progress.reconstructionUpdateMeasured = report.reconstructionUpdateMeasured;
+        progress.stateBounds = report.stateBounds;
         FillNonlinear(row, progress);
         _history->Write(row);
     }
@@ -420,17 +486,15 @@ namespace DNDS::Cauchy
             row.Set("step_wall", progress.stepWallSeconds);
             if (!progress.residual.empty())
                 FillResiduals(row, progress.residual);
+            FillStateBounds(row, progress.stateBounds);
             _history->Write(row);
         }
         if (printConsole)
         {
             const auto &v = progress.diagnostics;
-            std::string residual = "[";
-            for (const real value : progress.residual)
-                residual += fmt::format("{}{:9.3e}", residual.size() == 1 ? "" : " ", value);
-            residual += "]";
+            const auto residual = FormatResiduals(_schema, progress.residual);
             const auto identity = fmt::format("=== {}Step [{:7}]", _domain.empty() ? "" : "D[" + _domain + "] ", location.step);
-            const auto physical = fmt::format("t,dt,CFL [{:.3e},{:.3e},{:.3e}]", location.time, location.dt, progress.pseudoCFL);
+            const auto physical = FormatTimeProgress(location, progress.pseudoCFL);
             const auto state = _schema.family == "incompressibleACM"
                                    ? fmt::format("state [pMin {:.3e},pMean {:.3e},continuityRMS {:.3e}]", v[3], v[11], v[10])
                                    : fmt::format("state [rhoMin {:.3e},pMin {:.3e},Tmin {:.3e}]", v[2], v[3], v[13]);

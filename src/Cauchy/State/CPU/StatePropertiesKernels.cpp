@@ -2,6 +2,30 @@
 #include "DNDS/Core/OMP.hpp"
 namespace DNDS::Cauchy::CPU
 {
+    void MeasureStateBounds(Algebra::DofComponentView<const real> mean, SpanView<real> result, SpanView<real> scratch) noexcept
+    {
+        const index width = result.size(), rows = mean.RowCount();
+        const index workers = scratch.size() / width;
+        const real missing = -std::numeric_limits<real>::infinity();
+        OMP::ForRows(0, workers, [&](index worker)
+                     {
+            const index start = worker * (rows / workers) + std::min(worker, rows % workers);
+            const index end = start + rows / workers + (worker < rows % workers);
+            auto bounds = scratch.Subspan(worker * width, width);
+            std::fill(bounds.begin(), bounds.end(), missing);
+            for (index iCell = start; iCell < end; ++iCell)
+                for (index j = 0; j < width / 2; ++j)
+                {
+                    const auto value = mean(iCell, j);
+                    bounds[2 * j] = std::fmax(bounds[2 * j], -value);
+                    bounds[2 * j + 1] = std::fmax(bounds[2 * j + 1], value);
+                } });
+        std::fill(result.begin(), result.end(), missing);
+        for (index worker = 0; worker < workers; ++worker)
+            for (index j = 0; j < width; ++j)
+                result[j] = std::fmax(result[j], scratch[worker * width + j]);
+    }
+
     NumericalStatus ValidateMeanState(EquationLayoutView<const real> layout, AdmissibilityView bounds,
                                       Runtime::ArrayView<const uint8_t, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> activeRows) noexcept
     {

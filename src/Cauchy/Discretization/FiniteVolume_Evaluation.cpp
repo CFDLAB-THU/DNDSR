@@ -348,6 +348,9 @@ namespace DNDS::Cauchy
             reconstruction.binding.Check(state);
             if (residual)
             {
+                DNDS_check_throw_info(work.meanOnly || !_data->settings.numerics.ransCellCenterViscosity ||
+                                          (auxiliary && auxiliary->cellTurbulentViscosity),
+                                      "RANS face viscosity requires the prepared cell turbulent viscosity Array");
                 auto &output = *residual;
                 output.RequireSchema(_data->equation.Schema());
                 state.RequireCompatible(output);
@@ -590,11 +593,6 @@ namespace DNDS::Cauchy
                 else if (_data->reconstruction)
                     Algebra::Fill(engine, stream, reconstruction.WarmValues().PhysicalField(iField), 0.);
             }
-        // SST auxiliary preparation already publishes this halo. A source-only
-        // overlay reads owned gradients and needs no additional exchange.
-        std::vector<R::TransferOperation> ransP1Gradients;
-        if (!gradientAuxiliary && work.UseRANSP1FaceOverlay())
-            ransP1Gradients = schedule.BeginAfterCompute(work.meanGradients->_data->gradientHalo);
         std::optional<R::TransferOperation> primitiveGradientOperation;
         if (work.primitiveGradientHalo)
             primitiveGradientOperation.emplace(schedule.BeginAfterCompute(*work.primitiveGradientHalo));
@@ -673,7 +671,7 @@ namespace DNDS::Cauchy
                 Algebra::Copy(engine, stream, reconstruction.MutableFinalized().PhysicalField(iField),
                               reconstruction.WarmValues().PhysicalField(iField));
         if (work.nativeDirectGradient && numerics.limiter != "WBAP" &&
-            (numerics.limiter == "Barth" || numerics.positivity))
+            (numerics.limiter == "Barth" || _data->settings.GradientPositivity()))
             work.SubmitGradientLimiter(engine, stream, state, numerics.limiter == "Barth");
         // Mean-only forecasts do not publish a reconstructed face field, even
         // when the regular operator is configured with gradient/modal WBAP.
@@ -732,10 +730,10 @@ namespace DNDS::Cauchy
                 }
             }
         }
-        const auto positivityTiming = (work.nativeDirectGradient && numerics.positivity) || work.positivity
+        const auto positivityTiming = (work.nativeDirectGradient && _data->settings.GradientPositivity()) || work.positivity
                                           ? work.BeginQueuedPhase(engine, stream, Workspace::PPPhase)
                                           : nullptr;
-        if (work.nativeDirectGradient && numerics.positivity)
+        if (work.nativeDirectGradient && _data->settings.GradientPositivity())
             gradientPositivitySubmission = work.SubmitGradientPositivity(engine, stream, state);
         if (work.positivity)
             local([&]
@@ -746,14 +744,33 @@ namespace DNDS::Cauchy
                 // summary; no host decision interrupts local backtracking.
                 work.positivity->Apply(engine, stream, state, reconstruction.WarmValues(), reconstruction.MutableFinalized(), false); });
         work.EndQueuedPhase(engine, stream, positivityTiming);
+        // Freeze the RANS polynomial before publishing either flux coefficient halo.
+        // The unlimited viscous route can read warm coefficients independently.
+        if (ransP1Overlay)
+        {
+            const auto block = state.LocateBlock("rans");
+            const bool barth = numerics.UsesRANSGradientBarth();
+            if (barth)
+                work.SubmitGradientLimiter(engine, stream, state, true);
+            const auto &gradient = barth ? work.directGradients[block.physicalField] : work.meanGradients->fields[block.physicalField];
+            const auto force = [&](EquationDofs &coefficients)
+            {
+                _data->gradient.SetLinearCoefficients(engine, stream, gradient, *_data->reconstruction,
+                                                      coefficients.PhysicalField(block.physicalField), block.firstComponent, block.componentNumber);
+            };
+            force(reconstruction.WarmValues());
+            if (useFluxScratch)
+                force(reconstruction.MutableFinalized());
+        }
         std::vector<R::TransferOperation> operations;
         if (!work.nativeDirectGradient)
             operations = schedule.BeginAfterCompute(reconstruction.FinalizedHalo());
-        else if (!gradientAuxiliary || numerics.limiter != "none" || numerics.positivity)
+        else if (!gradientAuxiliary || numerics.limiter != "none" || _data->settings.GradientPositivity())
             operations = schedule.BeginAfterCompute(work.directGradientHalo);
         std::vector<R::TransferOperation> unlimitedViscousOperations;
         if (useFluxScratch && _data->equation.Viscous() && numerics.viscousGradient == "polynomial" && !numerics.viscousLimited)
-            unlimitedViscousOperations = schedule.Begin(reconstruction.coefficientHalo);
+            unlimitedViscousOperations = ransP1Overlay ? schedule.BeginAfterCompute(reconstruction.coefficientHalo)
+                                                       : schedule.Begin(reconstruction.coefficientHalo);
         auto directViscousOperations = gradientAuxiliary && work.nativeDirectGradient ? std::vector<R::TransferOperation>{} : schedule.Begin(work.directViscousGradientHalo);
         // Publish the direct physical gradients after limiter/PP, once per row.
         // The physical-gradient RHS itself never interprets coefficient data.
@@ -764,7 +781,6 @@ namespace DNDS::Cauchy
         schedule.Await(operations);
         schedule.Await(unlimitedViscousOperations);
         schedule.Await(directViscousOperations);
-        schedule.Await(ransP1Gradients);
         if (primitiveGradientOperation)
             schedule.Await(*primitiveGradientOperation);
         work.SubmitDirectGradients(engine, stream, state, true);

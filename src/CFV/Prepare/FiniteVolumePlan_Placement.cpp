@@ -302,7 +302,12 @@ namespace DNDS::CFV
         view.raw = host.settings.storage.Raw();
         view.inverseTriangle = host.settings.storage.inverseTriangle;
         view.faceCoupling = host.settings.storage.faceCoupling;
-        DNDS_check_throw_info(!view.raw || !view.quantized, "raw VR sweeps currently require FP64 matrix placement");
+        view.packedRawB = host.settings.storage.PackedRawB();
+        view.packedInverse = host.settings.storage.PackedInverse();
+        DNDS_check_throw_info(!view.raw || !view.quantized,
+                              "raw VR uses independent B/inverse storage controls with FP64 sweep arithmetic");
+        DNDS_check_throw_info(options.sweeps || (!view.packedRawB && !view.packedInverse),
+                              "independent raw matrix storage requires resident relaxation sweeps");
 #define DNDS_REC_ADD(member) view.member = result->Add(#member, host.member, context)
         DNDS_REC_ADD(offsets);
         DNDS_REC_ADD(neighbors);
@@ -316,13 +321,19 @@ namespace DNDS::CFV
         }
         else if (options.sweeps)
         {
-            view.matrixAInvB = result->Add(view.raw ? "rawMatrixB" : "matrixAInvB", host.SweepMatrices(), context, allocation);
+            if (view.packedRawB)
+                view.rawMatrixB32 = result->AddQuantized("rawMatrixB32", host.SweepMatrices(), context, allocation);
+            else
+                view.matrixAInvB = result->Add(view.raw ? "rawMatrixB" : "matrixAInvB", host.SweepMatrices(), context, allocation);
             view.vectorAInvB = result->Add(view.raw ? "rawVectorB" : "vectorAInvB", host.SweepVectors(), context, allocation);
             view.boundaryInjection = result->Add(view.raw ? "rawBoundaryInjection" : "boundaryInjection", host.SweepInjection(), context, allocation);
         }
         if (options.sweeps && view.raw)
         {
-            view.localInverse = result->Add("localInverse", *host.localInverse, context, allocation);
+            if (view.packedInverse)
+                view.localInverse32 = result->AddQuantized("localInverse32", *host.localInverse, context, allocation);
+            else
+                view.localInverse = result->Add("localInverse", *host.localInverse, context, allocation);
             if (view.faceCoupling)
                 view.faceSide = result->Add("rawFaceSide", *host.rawFaceSide, context);
         }
@@ -717,6 +728,7 @@ namespace DNDS::CFV
         DNDS_check_throw_info(kernel == ReconstructionDeviceKernel::FP64 || kernel == ReconstructionDeviceKernel::FP64Pipelined,
                               "LVR supports general FP64 or production fp64Pipelined, not fixed comparison fixtures");
         ValidateDeviceStream(*this, stream);
+        DNDS_check_throw_info(SupportsKernel(kernel), "requested limited CUDA reconstruction kernel is incompatible with resident storage");
         ValidateDeviceWorkspace(_device, work, input);
         ValidateDeviceField(*this, mean, work.components);
         ValidateDeviceField(*this, input, work.components * _device->view.n);
@@ -845,6 +857,8 @@ namespace DNDS::CFV
             return false;
         const auto n = _device->view.n;
         const bool staticModes = n == 2 || n == 3 || n == 5 || n == 9 || n == 19;
+        if (_device->view.packedRawB || _device->view.packedInverse)
+            return staticModes && kernel == ReconstructionDeviceKernel::FP64Pipelined;
         const bool comparison = n == 19 && !_device->view.raw;
         if (_device->view.quantized)
             return comparison && (kernel == ReconstructionDeviceKernel::FP32 || kernel == ReconstructionDeviceKernel::FP32Pipelined ||

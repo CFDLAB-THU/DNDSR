@@ -15,10 +15,10 @@ namespace DNDS::CFV::Detail
             Math::EvaluateGradientCell(plan, vectors, mean, boundary, output, selection.Cell(iWork), Components);
     }
     __global__ void ConvertRows(GradientCellGeometry cells, GradientInput input, GradientOutput output,
-                                index firstCell, int dimension, index modes, bool toCoefficients)
+                                index firstCell, int dimension, index modes, bool toCoefficients, index firstComponent, index componentCount)
     {
         for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < output.RowCount(); iRow += index(gridDim.x) * blockDim.x)
-            Math::ConvertGradientRow(cells, input, output, iRow, firstCell, dimension, modes, toCoefficients);
+            Math::ConvertGradientRow(cells, input, output, iRow, firstCell, dimension, modes, toCoefficients, firstComponent, componentCount);
     }
     void LaunchGradient(R::ExecutionContext context, GradientKernelView plan, DeviceWorkSelection selection, DevicePeriodicBlocks vectors,
                         GradientField mean, GradientInput boundary, GradientOutput output)
@@ -55,11 +55,11 @@ namespace DNDS::CFV::Detail
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA gradient launch failed");
     }
     void LaunchGradientConversion(R::ExecutionContext context, GradientCellGeometry cells, GradientInput input, GradientOutput output,
-                                  index firstCell, int dimension, index modes, bool toCoefficients)
+                                  index firstCell, int dimension, index modes, bool toCoefficients, index firstComponent, index componentCount)
     {
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA, "CUDA gradient conversion needs a CUDA stream");
         R::ValidateViewDevices(context.device, cells, input, output);
-        R::CheckKernelArgumentBudget<decltype(cells), decltype(input), decltype(output), index, int, index, bool>();
+        R::CheckKernelArgumentBudget<decltype(cells), decltype(input), decltype(output), index, int, index, bool, index, index>();
         DNDS_check_throw_info((dimension == 2 || dimension == 3) && modes >= dimension && input.RowCount() == output.RowCount() &&
                                   firstCell >= 0 && firstCell <= cells.RowCount() && output.RowCount() <= cells.RowCount() - firstCell &&
                                   input.kind == R::RowLayoutKind::Table && output.kind == R::RowLayoutKind::Table,
@@ -70,7 +70,7 @@ namespace DNDS::CFV::Detail
         if (!output.RowCount())
             return;
         const unsigned blocks = unsigned(std::min<index>((output.RowCount() + 127) / 128, 1024));
-        ConvertRows<<<blocks, 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(cells, input, output, firstCell, dimension, modes, toCoefficients);
+        ConvertRows<<<blocks, 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(cells, input, output, firstCell, dimension, modes, toCoefficients, firstComponent, componentCount);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA gradient conversion launch failed");
     }
     template <int Components>

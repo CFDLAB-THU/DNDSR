@@ -97,30 +97,32 @@ namespace DNDS::Cauchy
             point.cellLength = cellLength;
             return point;
         }
-        /// [pressure, sound speed, diffusion bound], matching the generic CPU
+        /// [pressure, sound speed, diffusion bound, eddy viscosity], matching the generic CPU
         /// auxiliary producer. RANS diffusion uses the same mean/gradient and
         /// wall-distance convention; it does not add an implicit state repair.
-        DNDS_DEVICE_CALLABLE NumericalResult<std::array<real, 3>> Auxiliary(const PerfectGasSpatialParameters &parameters, real wallDistance) const noexcept
+        DNDS_DEVICE_CALLABLE NumericalResult<std::array<real, 4>> Auxiliary(const PerfectGasSpatialParameters &parameters, real wallDistance) const noexcept
         {
             const auto properties = TryPerfectGasPoint(parameters.gas, Flow(), parameters.viscous);
             if (!properties)
                 return properties.status;
-            real bound = properties.value.diffusionBound;
+            real bound = properties.value.diffusionBound, eddy = 0;
             if constexpr (Components > 5)
             {
                 const auto transport = Physics::RANS::TryTransport(parameters.rans, RANSPoint(properties.value, wallDistance));
                 if (!transport)
                     return transport.status;
+                eddy = transport.value.viscosity;
                 const auto &p = properties.value;
                 bound = std::max(bound, std::max(real(4. / 3.) * (p.transport.viscosity + transport.value.viscosity) / values[0],
                                                  (p.transport.conductivity + transport.value.conductivity) / (values[0] * p.thermo.cv)));
             }
-            return std::array<real, 3>{properties.value.thermo.pressure, properties.value.thermo.soundSpeed, bound};
+            return std::array<real, 4>{properties.value.thermo.pressure, properties.value.thermo.soundSpeed, bound, eddy};
         }
         /// Face point already includes the viscous jump/gradient correction.
         /// No scalar repair occurs here: wall-reflected gradients are deliberate.
         DNDS_DEVICE_CALLABLE NumericalResult<std::array<real, Components>> Diffusion(
-            const PerfectGasSpatialParameters &parameters, const Vector3 &normal, real wallDistance, bool adiabatic) const noexcept
+            const PerfectGasSpatialParameters &parameters, const Vector3 &normal, real wallDistance, bool adiabatic,
+            real preparedViscosity = -1) const noexcept
         {
             const auto properties = TryPerfectGasPoint(parameters.gas, Flow(), true);
             if (!properties)
@@ -130,7 +132,7 @@ namespace DNDS::Cauchy
             if constexpr (Components > 5)
             {
                 const auto point = RANSPoint(properties.value, wallDistance);
-                const auto transport = Physics::RANS::TryTransport(parameters.rans, point);
+                const auto transport = Physics::RANS::TryTransport(parameters.rans, point, preparedViscosity);
                 if (!transport)
                     return transport.status;
                 turbulentViscosity = transport.value.viscosity;

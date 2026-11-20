@@ -162,7 +162,7 @@ namespace DNDS::Cauchy::CUDA
                     for (int j = 0; j < rans.components; ++j)
                     {
                         oldRANS[j] = old[first + j];
-                        deltaRANS[j] = fix * scaled[first + j];
+                        deltaRANS[j] = parameters.ransRelaxation * fix * scaled[first + j];
                     }
                     if (!rans.Admissible(oldRANS))
                     {
@@ -253,6 +253,24 @@ namespace DNDS::Cauchy::CUDA
             return;
         AgreedAlpha<<<unsigned(NonlinearScratchRows(defect.RowCount())), D::Threads, 0, ::DNDS::Runtime::CUDAStream(context)>>>(
             alpha, inverseTau, defect, minimum, reduction, compressRHS);
+        D::CheckLaunch();
+    }
+    namespace
+    {
+        __global__ void SetWallOmega(WallCellRows selected, OmegaStateRows state, index column, real coefficient)
+        {
+            const index i = index(blockIdx.x) * blockDim.x + threadIdx.x;
+            if (i < selected.RowCount())
+            {
+                const auto cell = selected(i, 0);
+                state(cell.cell, column) = coefficient / sqr(cell.distance);
+            }
+        }
+    }
+    void SetResolvedCellOmega(R::ExecutionContext context, WallCellRows selected, OmegaStateRows state, index column, real coefficient)
+    {
+        R::ValidateViewDevices(context.device, selected, state);
+        SetWallOmega<<<unsigned((selected.RowCount() + 127) / 128), 128, 0, R::CUDAStream(context)>>>(selected, state, column, coefficient);
         D::CheckLaunch();
     }
     void ApplyCorrection(R::ExecutionContext context, LinearReadRows mean, LinearReadRows increment,

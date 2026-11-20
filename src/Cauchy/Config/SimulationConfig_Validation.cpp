@@ -46,8 +46,12 @@ namespace DNDS::Cauchy
         DNDS_check_throw_info(settings.execution.device != "cuda" || settings.execution.deviceOrdinal >= 0,
                               "invalid CUDA device ordinal");
         const auto &numerics = settings.numerics;
+        DNDS_check_throw_info(std::isfinite(numerics.wallDistanceFloor) && numerics.wallDistanceFloor >= 0,
+                              "wallDistanceFloor must be finite and nonnegative");
         DNDS_check_throw_info(numerics.vrBoundaryValue == "physicalTrace" || numerics.vrBoundaryValue == "physicalMirrored",
                               "vrBoundaryValue must be physicalTrace or physicalMirrored");
+        DNDS_check_throw_info(numerics.firstLayerWallDistanceMethod == "cellCenter" || numerics.firstLayerWallDistanceMethod == "halfMaxNodal",
+                              "firstLayerWallDistanceMethod must be cellCenter or halfMaxNodal");
         numerics.ValidatePositivity();
         numerics.reconstructionSolver.Validate();
         DNDS_check_throw_info(!numerics.reconstructionSolver.UsesAMG() ||
@@ -209,7 +213,8 @@ namespace DNDS::Cauchy
                                   nonnegative(relativeTolerance) && nonnegative(absoluteTolerance) &&
                                   std::isfinite(algebraicRateTolerance) && algebraicRateTolerance > 0 &&
                                   std::isfinite(pseudoCFL) && pseudoCFL > 0 && std::isfinite(maxPseudoCFL) && maxPseudoCFL >= pseudoCFL &&
-                                  std::isfinite(pseudoGrowth) && pseudoGrowth >= 1 && std::isfinite(relaxation) && relaxation > 0 && relaxation <= 1,
+                                  std::isfinite(pseudoGrowth) && pseudoGrowth >= 1 && std::isfinite(relaxation) && relaxation > 0 && relaxation <= 1 &&
+                                  std::isfinite(ransRelaxation) && ransRelaxation > 0 && ransRelaxation <= 1,
                               "invalid implicit nonlinear/diagonal/pseudo-time controls");
         DNDS_check_throw_info((linear.cudaJacobiMapping == "thread" || linear.cudaJacobiMapping == "componentGroup") &&
                                   (linear.cudaDiagonalInverse == "auto" || linear.cudaDiagonalInverse == "batchedSVD" || linear.cudaDiagonalInverse == "guardedLU") &&
@@ -328,6 +333,11 @@ namespace DNDS::Cauchy
         require(!amgVR || s.execution.reconstructionKernel == "auto" || s.execution.reconstructionKernel == "fp64",
                 "AMG reconstruction does not use a relaxation kernel; leave reconstructionKernel at auto or fp64");
         const auto reconstructionKernel = s.execution.ReconstructionKernel();
+        const auto &storage = s.numerics.cfv.storage;
+        require(!(storage.PackedRawB() || storage.PackedInverse()) ||
+                    (cuda && storage.Raw() && s.numerics.reconstruction == "variational" && !amgVR &&
+                     (s.execution.reconstructionKernel == "auto" || reconstructionKernel == CFV::ReconstructionDeviceKernel::FP64Pipelined)),
+                "FP32 raw matrix storage requires CUDA variational relaxation with reconstructionKernel=auto or fp64Pipelined");
         require(cuda || reconstructionKernel == CFV::ReconstructionDeviceKernel::FP64,
                 "nondefault reconstruction kernel requires CUDA");
 #ifndef DNDS_USE_CCCL_COMPUTE
@@ -401,7 +411,8 @@ namespace DNDS::Cauchy
         require(s.equation.system == "compressible" || acm, "equation " + s.equation.system);
         if (acm)
         {
-            require(s.numerics.limiter == "none", "ACM requires unlimited reconstruction");
+            require(s.numerics.limiter == "none" || s.numerics.limiter == "Barth",
+                    "ACM supports unlimited reconstruction or Barth limiting of P1 gradients");
             require(!s.numerics.positivity, "ACM has relative pressure and no thermodynamic positivity limiter");
             require(s.implicit.sourceJacobianMode == "center", "ACM source Jacobian uses the cell mean");
             require(s.numerics.flux == "Roe" || s.numerics.flux == "rusanov", "ACM Roe or rusanov flux");
@@ -522,6 +533,7 @@ namespace DNDS::Cauchy
         require(s.numerics.reconstruction == "constant" || s.numerics.reconstruction == "gradient" || s.numerics.reconstruction == "variational", "reconstruction " + s.numerics.reconstruction);
         require(!s.numerics.ransP1Overlay || (rans && s.numerics.reconstruction == "variational"),
                 "RANS P1 overlay requires RANS and variational reconstruction");
+        require(!s.numerics.ransCellCenterViscosity || rans, "cell-center turbulent viscosity requires RANS");
         require(s.implicit.sourceJacobianMode == "center" || s.implicit.sourceJacobianMode == "rhsQuadrature", "source Jacobian mode " + s.implicit.sourceJacobianMode);
         require(s.implicit.sourceJacobianMode != "rhsQuadrature" || s.numerics.reconstruction == "variational", "rhsQuadrature source Jacobian requires variational reconstruction");
         require(s.implicit.sourceJacobianMode != "rhsQuadrature" || s.equation.source != "none" || rans, "rhsQuadrature source Jacobian requires an active volume source");
@@ -530,8 +542,8 @@ namespace DNDS::Cauchy
         require(s.numerics.limiter == "none" || s.numerics.limiter == "Barth" ||
                     s.numerics.limiter == "WBAP" || s.numerics.limiter == "LVR",
                 "limiter " + s.numerics.limiter);
-        require(s.numerics.limiter != "Barth" || s.numerics.reconstruction == "gradient",
-                "Barth needs direct gradient reconstruction");
+        require(s.numerics.limiter != "Barth" || s.numerics.reconstruction == "gradient" || s.numerics.UsesRANSGradientBarth(),
+                "Barth requires direct gradient reconstruction or a variational RANS P1 overlay");
         require(s.numerics.limiter != "WBAP" || s.numerics.reconstruction != "constant",
                 "WBAP needs gradient or variational reconstruction");
         require(s.numerics.limiter != "LVR" || (s.numerics.reconstruction == "variational" && s.numerics.cfv.maxOrder >= 2), "LVR needs degree2/3 variational reconstruction");

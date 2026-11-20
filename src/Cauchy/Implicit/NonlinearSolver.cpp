@@ -16,10 +16,39 @@
 #include "Cauchy/Implicit/LinearScaling.hpp"
 #include "Cauchy/Implicit/NonlinearSolve.hpp"
 #include <exception>
+#include <fmt/format.h>
 
 namespace DNDS::Cauchy
 {
     namespace R = Runtime;
+    namespace
+    {
+        void RequireStageVolume(real volume, int stage)
+        {
+            if (std::isfinite(volume) && volume > 0)
+                return;
+            const auto message = fmt::format("Cauchy residual observation at stage {} has invalid global volume {}", stage, volume);
+            MPI::AbortIfSolverFailure(message);
+            DNDS_check_throw_info(false, message);
+        }
+
+        real StageResidualNorm(real sum, int normOrder, index component, int stage, const EquationSchema &schema)
+        {
+            const real norm = normOrder == 1 ? sum : std::sqrt(sum);
+            if (std::isfinite(norm))
+                return norm;
+            const auto name = schema.LogicalComponents().at(size_t(component)).QualifiedName();
+            const auto message = fmt::format(
+                "Cauchy residual observation at stage {} has nonfinite L{} norm for {} (component {}, norm {}, global accumulator {})",
+                stage, normOrder, name, component, norm, sum);
+            // Report at the failure site before a stream owner can abort
+            // during unwinding. A local caller without a solver scope can throw.
+            MPI::AbortIfSolverFailure(message);
+            DNDS_check_throw_info(false, message);
+            return norm;
+        }
+    }
+
     struct NonlinearSolver::Data
     {
         // Declared first so it is destroyed last, after every stream, solver,
@@ -45,6 +74,7 @@ namespace DNDS::Cauchy
         NonlinearOperators operators;
         std::shared_ptr<LinearProblemContext> problem;
         std::unique_ptr<DofLinearSolver> linear;
+        bool resolvedCellOmega;
         bool positivity;
         std::shared_ptr<const real> pressureGauge;
         AlphaReduction rhsFPPReduction = AlphaReduction::Cell;
@@ -106,6 +136,7 @@ namespace DNDS::Cauchy
               problem(fv.BuildLinearProblem(state, settings.diagonal == "block" ? DiagonalStorage::Block : DiagonalStorage::Entries,
                                             (settings.jacobianAction == "directEvaluated" || settings.jacobianAction == "semiMatrixFree") ? OffDiagonalStorage::DirectEvaluated : OffDiagonalStorage::Assembled,
                                             NonlinearDetail::ResolveMatrixStorage(settings.linear))),
+              resolvedCellOmega(controls.numerics.resolvedCellOmega),
               positivity(controls.numerics.positivity && state.Schema().AccumulationKind() == PhysicalAccumulationKind::Identity), reconstructionTolerance(settings.requireConvergedReconstruction && controls.numerics.reconstruction == "variational" ? controls.numerics.reconstructionTolerance : 0)
         {
             spatial.Fields().SetName("Cauchy/nonlinear/spatial", DNDS_ALLOCATION_SITE());
@@ -461,19 +492,11 @@ namespace DNDS::Cauchy
             MPI::AllreduceInPlace<MPI::Reduction::Sum>(
                 MPI::ContiguousView<real>{local.data(), local.size()},
                 data.mpi.comm);
-            DNDS_check_throw_info(std::isfinite(local[size_t(nv)]) &&
-                                      local[size_t(nv)] > 0,
-                                  "invalid global equation stage volume");
+            RequireStageVolume(local[size_t(nv)], active->stage);
             if (local.size() == size_t(nv + 2))
                 active->continuityRatio = std::sqrt(local.back() / local[size_t(nv)]) / data.settings.algebraicRateTolerance;
             for (index j = 0; j < nv; ++j)
-            {
-                norms[size_t(j)] = data.settings.normOrder == 1
-                                       ? local[size_t(j)]
-                                       : std::sqrt(local[size_t(j)]);
-                DNDS_check_throw_info(std::isfinite(norms[size_t(j)]),
-                                      "nonfinite equation global stage norm");
-            }
+                norms[size_t(j)] = StageResidualNorm(local[size_t(j)], data.settings.normOrder, j, active->stage, active->state.Schema());
         };
         const auto reconstruction = [active]
         {
@@ -655,21 +678,18 @@ namespace DNDS::Cauchy
         };
         const auto measure = [&](auto &norms)
         {
-                std::vector<real> local(size_t(nv + 1));
-                data.Stage([&]
-                {
-                    local = data.operators.AssembleDefect(engine, data.stream, state, data.spatial, source, data.defect,
-                        mass, rhsScale, activeComponents.HostView(), data.settings.normOrder, !singleCorrection);
-                });
-                if (singleCorrection) return; // Defect is ready; no stopping norm is needed.
-                MPI::AllreduceInPlace<MPI::Reduction::Sum>(
-                    MPI::ContiguousView<real>{local.data(), size_t(nv + 1)}, data.mpi.comm);
-                DNDS_check_throw_info(std::isfinite(local[nv]) && local[nv] > 0, "invalid global equation stage volume");
-                for (index j = 0; j < nv; ++j)
-                {
-                    norms[j] = data.settings.normOrder == 1 ? local[j] : std::sqrt(local[j]);
-                    DNDS_check_throw_info(std::isfinite(norms[j]), "nonfinite equation global stage norm");
-                } };
+            std::vector<real> local(size_t(nv + 1));
+            data.Stage([&]
+                       { local = data.operators.AssembleDefect(engine, data.stream, state, data.spatial, source, data.defect,
+                                                               mass, rhsScale, activeComponents.HostView(), data.settings.normOrder, !singleCorrection); });
+            if (singleCorrection)
+                return; // Defect is ready; no stopping norm is needed.
+            MPI::AllreduceInPlace<MPI::Reduction::Sum>(
+                MPI::ContiguousView<real>{local.data(), size_t(nv + 1)}, data.mpi.comm);
+            RequireStageVolume(local[nv], stage);
+            for (index j = 0; j < nv; ++j)
+                norms[j] = StageResidualNorm(local[j], data.settings.normOrder, j, stage, state.Schema());
+        };
         const auto reconstruction = [&]
         { return ReconstructionStats(); };
         const auto advance = [&](auto &report)
@@ -811,8 +831,11 @@ namespace DNDS::Cauchy
             }
             const auto result = data.operators.ApplyCorrection(engine, data.stream, state, increment, data.candidate,
                 {active.data(), index(active.size())}, {scale, data.settings.positivity.incrementRelax,
-                    data.settings.positivity.compressionPower, data.positivity});
+                    data.settings.positivity.compressionPower, data.positivity, data.settings.ransRelaxation});
             limited = result.alpha.limited; minimum = result.alpha.minimum; frozen = result.frozen; });
+        if (data.resolvedCellOmega &&
+            (updateComponents.empty() || std::find(updateComponents.begin(), updateComponents.end(), data.ransFirst + 1) != updateComponents.end()))
+            data.discrete.ApplyResolvedCellOmega(engine, data.stream, data.candidate);
         // A free gauge is projected to the domain's fixed mean when this
         // correction is allowed to change pressure.
         if (data.pressureGauge && (updateComponents.empty() ||

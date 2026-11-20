@@ -18,6 +18,7 @@ namespace DNDS::Cauchy::CUDA
     using DiagnosticInput = Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::TableRows>;
     using DiagnosticOutput = Runtime::ArrayView<StateDiagnosticSummary, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
     using DiagnosticCounter = Runtime::ArrayView<unsigned int, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
+    using BoundsOutput = Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::TableRows>;
     index StateDiagnosticScratchRows(index rows);
     /// Pure borrowed-view host launcher. Partials and counter are operation-owned
     /// resident buffers. Stream-ordered counter reset precedes one kernel: the
@@ -26,4 +27,7 @@ namespace DNDS::Cauchy::CUDA
     void AccumulateStateDiagnostics(Runtime::ExecutionContext, DiagnosticInput mean, DiagnosticInput residual,
                                     Runtime::ArrayView<const real, false, Runtime::FixedRows<8>> cells,
                                     std::optional<PerfectGas> gas, DiagnosticOutput partial, DiagnosticOutput result, DiagnosticCounter);
+    /// Publish interleaved (-min,max) pairs over the owned combined row view.
+    void MeasureStateBounds(Runtime::ExecutionContext, DiagnosticInput mean, BoundsOutput partial,
+                            BoundsOutput result, DiagnosticCounter);
 }

@@ -18,12 +18,13 @@ namespace DNDS::Cauchy::CUDA
         index ownedCells = 0, allCells = 0;
     };
     /// Independent Barth limiting of physical gradients. Writes a disjoint
-    /// output field; equation momentum is rotated on periodic neighbor reads.
+    /// output field. The three velocity or momentum components starting at
+    /// vectorStart are rotated on periodic neighbor reads.
     /// Core selections need no ghost view. Boundary values do not enter the
     /// Barth extrema, matching the current generic CPU operator.
     void LimitPhysicalGradients(Runtime::ExecutionContext, GradientLimiterGeometry,
                                 GradientMeans, GradientInput source, GradientOutput destination,
-                                GradientIndices selected, int dimension, bool barth, bool requireGhost = true);
+                                GradientIndices selected, int dimension, int vectorStart, bool barth, bool requireGhost = true);
 
     struct GradientPositivityParameters
     {

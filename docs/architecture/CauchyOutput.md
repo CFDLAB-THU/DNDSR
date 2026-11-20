@@ -49,6 +49,14 @@ step; `iteration=-1` with a nonnegative stage denotes a stage end. Empty cells
 mean that a quantity does not apply, never false zero. Console messages and
 CSV rows use the same `ProgressOutputController` reports.
 
+`min_<component>` and `max_<component>` cover every logical component of
+the owned cell means, including RANS and species. Nonlinear rows use the
+state at the residual observation, DITR uses its endpoint, and step rows
+use the accepted state. The extrema are reduced over each domain only at
+history observation points. CUDA copies just the reduced values to the host.
+Use `output.historyStateBounds=false` to retain the previous CSV header when
+appending to a history produced before these columns were added.
+
 The current force query integrates the last completed RHS wall momentum flux,
 including numerical pressure and viscous/RANS traction, in mesh axes with sign
 `pressure*n - traction`. It can select individual wall zones, but the frontend
@@ -81,6 +89,12 @@ the RHS quadrature measure. The extracted boundary mesh keeps the ownership of
 its source boundary records. If those owners differ from the adjacent cell
 owners, a cached sparse route moves only the prepared boundary rows before I/O.
 
+When Geom has published nodal wall distances, each boundary face also carries
+`wall_distance_cell_center` in solver length units. It is the adjacent volume
+element’s scalar nodal wall distances interpolated at its order-one quadrature
+point. It precedes any turbulence-model floor or first-layer substitution.
+Multiply by the reference length for physical units.
+
 With `output.boundaryFacialFluxes=true`, the observation RHS produces
 `flux_<component>_facial` and the three-component `force_tangential`.
 Both are negative outward flux densities averaged over the RHS quadrature.
@@ -108,6 +122,7 @@ output.eventLog                          # true by default
 output.historyInterval
 output.historySegmentRows
 output.historyPrecision
+output.historyStateBounds
 output.boundaryFacialFluxes              # false by default
 output.implicit.consoleInterval
 output.implicit.historyInterval
@@ -191,7 +206,10 @@ nonlinear counters.
 ## Internal-iteration boundary
 
 Console `res` prints the raw norms used by the selected implicit residual
-policy in equation order. `conv [target_ratio, relative_converged]` prints the
+policy in equation order, grouped by equation block. An ACM SST case shows
+`res flow4 [...] kOmega [...]`. Steady-mode progress displays `dt=inf`
+because there is no physical-time term. CSV retains the configured numeric
+step size. `conv [target_ratio, relative_converged]` prints the
 largest ratio to the configured acceptance threshold, including applicable
 algebraic constraints, followed by the largest current/reference norm ratio
 over the selected equation components. The reference follows the configured
@@ -199,7 +217,12 @@ initial or running-maximum policy. A zero residual with zero reference
 contributes zero. Color-enabled output shows the convergence pair in orange.
 
 Iteration and stage progress are fully represented in the detailed history and
-console. A positive `output.implicit.visualizationInterval` writes the current
+console. When console reporting is enabled, a scheduled dump emits its
+iteration or step row before staging or writing the snapshot. The nonlinear
+console index counts completed corrections. With a before-update residual
+policy, the norm on that row is the one used to compute the correction.
+CSV keeps the residual observation index. A positive
+`output.implicit.visualizationInterval` writes the current
 trial at a quiescent nonlinear observation boundary. The observer copies the
 trial mean and the current warm reconstruction into detached storage, then
 prepares output fields with a separate workspace. Its halo publication,
@@ -224,6 +247,18 @@ different mathematical signature before replacing live stage state; it never
 reuses saved stages/rates with new coefficients. Older active payloads without
 this signature are rejected. Accepted-step restart remains separately flexible
 because it starts a new step rather than resuming an existing stage equation.
+
+`--restart <checkpoint.h5> --restart-mode meansOnly` starts a fresh solve
+directly from stored cell means. Internal steady checkpoints supply the active
+trial means. Accepted-step and internal transient checkpoints supply the last
+accepted means. The accepted clock and step are preserved. Reconstruction,
+time history, nonlinear progress, and output cursors start fresh. Numerical
+settings may change, including the VR boundary target. Physical settings,
+equation schema, frame, and the persistent-ID mesh envelope must match.
+For a floating ACM pressure gauge, the new requested target is applied if
+supplied. With no requested target, the imported field sets the gauge.
+The same mode is available as `CheckpointLoadMode::MeansOnly` in C++ and
+`CheckpointLoadMode.MeansOnly` in Python.
 
 Exact internal output is rejected for SSPRK3 and, currently, for multi-domain
 simulations. A domain callback cannot publish a truthful simulation-wide exact

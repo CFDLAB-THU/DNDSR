@@ -181,7 +181,7 @@ namespace DNDS::Cauchy
     void FiniteVolume::Workspace::ApplyDirectGradientPositivity(const EquationDofs &state)
     {
         DNDS_check_throw_info(nativeDirectGradient &&
-                                  owner->settings.numerics.positivity &&
+                                  owner->settings.GradientPositivity() &&
                                   owner->maximumGradientPoints >= 0,
                               "direct-P1 positivity workspace is incomplete");
         const int dim = owner->metrics.Dimension();

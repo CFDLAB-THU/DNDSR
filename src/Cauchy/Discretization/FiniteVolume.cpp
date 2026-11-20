@@ -24,6 +24,10 @@
 #include "Geom/Quadratures/Quadrature.hpp"
 #include "DNDS/MPI/CollectiveStage.hpp"
 #include "DNDS/Core/OMP.hpp"
+#include "DNDS/Runtime/Execution/EagerArray.hpp"
+#ifdef DNDS_USE_CUDA
+#    include "Cauchy/Implicit/CUDA/NonlinearKernels.hpp"
+#endif
 #include <limits>
 #include <climits>
 #include <cstdlib>
@@ -42,21 +46,28 @@ namespace DNDS::Cauchy
         R::CommunicationDetail::LocalStage(mesh->getMPI().comm, settings.implicit.collectiveChecks, [&]
                                            {
             settings.numerics.ValidatePositivity();
+            DNDS_check_throw_info(!settings.numerics.resolvedCellOmega ||
+                                      (equation.IsACM() && equation.HasRANS() && equation.RANS().Kind() == Physics::RANS::ModelKind::KOmegaSST &&
+                                       equation.ACMParameters().kinematicViscosity > 0),
+                                  "resolvedCellOmega requires viscous ACM SST");
             settings.numerics.reconstructionSolver.Validate();
             DNDS_check_throw_info(!settings.numerics.reconstructionSolver.UsesAMG() ||
                                       (settings.numerics.reconstruction == "variational" && settings.numerics.limiter != "LVR"),
                                   "AMG reconstruction requires variational reconstruction without LVR; LVR-AMG is deferred");
             DNDS_check_throw_info(settings.numerics.vrBoundaryValue == "physicalTrace" || settings.numerics.vrBoundaryValue == "physicalMirrored",
                                   "vrBoundaryValue must be physicalTrace or physicalMirrored");
+            DNDS_check_throw_info(settings.numerics.firstLayerWallDistanceMethod == "cellCenter" ||
+                                      settings.numerics.firstLayerWallDistanceMethod == "halfMaxNodal",
+                                  "firstLayerWallDistanceMethod must be cellCenter or halfMaxNodal");
             DNDS_check_throw_info(settings.initialState.is_null() && settings.referenceState.is_null(),
                                   "resolve tagged physical inputs before constructing FiniteVolume directly");
             if (equation.HasRANS())
-                DNDS_check_throw_info(std::isfinite(settings.numerics.wallDistanceFloor) && settings.numerics.wallDistanceFloor > 0 && mesh->HasNodeWallDist(),
-                                      "RANS FV requires a published nodal wall field with a positive sampling floor");
+                DNDS_check_throw_info(std::isfinite(settings.numerics.wallDistanceFloor) && settings.numerics.wallDistanceFloor >= 0 && mesh->HasNodeWallDist(),
+                                      "RANS FV requires a published nodal wall field and a finite nonnegative wallDistanceFloor");
             settings.numerics.limitedVR.Validate();
             DNDS_check_throw_info(settings.numerics.limiter != "Barth" ||
-                                      settings.numerics.reconstruction == "gradient",
-                                  "Barth needs direct gradient reconstruction");
+                                      settings.numerics.reconstruction == "gradient" || (equation.HasRANS() && settings.numerics.UsesRANSGradientBarth()),
+                                  "Barth requires direct gradient reconstruction or a variational RANS P1 overlay");
             DNDS_check_throw_info(settings.numerics.limiter != "WBAP" ||
                                       settings.numerics.reconstruction != "constant",
                                   "WBAP needs gradient or variational reconstruction");
@@ -70,10 +81,32 @@ namespace DNDS::Cauchy
         if (equation.HasRANS())
         {
             auto setupStage = progress.Stage("FV/RANS-geometry");
+            const auto method = settings.numerics.firstLayerWallDistanceMethod == "halfMaxNodal"
+                                    ? FirstLayerWallDistance::HalfMaxNodal
+                                    : FirstLayerWallDistance::CellCenter;
+            std::optional<R::ArrayPair<uint8_t>> firstLayer;
+            if (settings.numerics.firstLayerCenterWallDistance || settings.numerics.resolvedCellOmega)
+                firstLayer.emplace(WallDistanceSamples::BuildFirstLayerMask(*data->mesh, data->metrics.Communication(),
+                                                                            [&](int zone)
+                                                                            { return data->boundary.At(zone).kind == BoundaryKind::NoSlipWall; }));
             data->metrics.Communication()->LocalStage([&]
                                                       {
-                data->wallDistance.emplace(WallDistanceSamples::Construct(data->mesh, settings.numerics.RHSIntegrationOrder(), settings.numerics.wallDistanceFloor));
+                data->wallDistance.emplace(WallDistanceSamples::Construct(data->mesh, settings.numerics.RHSIntegrationOrder(),
+                                                                        settings.numerics.EffectiveWallDistanceFloor(),
+                                                                        firstLayer ? OptionalRef<const R::ArrayPair<uint8_t>>(*firstLayer) : OptionalRef<const R::ArrayPair<uint8_t>>{},
+                                                                        method, settings.numerics.resolvedCellOmega, settings.numerics.firstLayerCenterWallDistance,
+                                                                        settings.numerics.cellCenterWallDistanceForQuadrature));
                 data->ransCellLength = data->metrics.BuildCellMaxLenScale(); });
+            real minimum[]{data->wallDistance->LocalMinimumCellCenterDistance(),
+                           data->wallDistance->LocalMinimumFirstLayerDistance()};
+            MPI::AllreduceInPlace<MPI::Reduction::Min>(MPI::ContiguousView<real>{minimum, 2}, data->metrics.Communicator());
+            auto wallDistanceReport = progress.Stage("FV/wall-center-distance", fmt::format("global min {:.9e}; quadrature samples use {}", minimum[0],
+                                                                                            settings.numerics.cellCenterWallDistanceForQuadrature ? "cell center" : "quadrature policy"));
+            if (std::isfinite(minimum[1]))
+            {
+                auto firstLayerReport = progress.Stage("FV/first-layer-distance",
+                                                       fmt::format("{} global min {:.9e}", settings.numerics.firstLayerWallDistanceMethod, minimum[1]));
+            }
         }
         const bool limitedVR = settings.numerics.limiter == "LVR" && (settings.numerics.limitedVR.alphaMax > 0 || settings.numerics.limitedVR.contactAlphaMax > 0);
         {
@@ -159,6 +192,31 @@ namespace DNDS::Cauchy
         Metrics().Communication()->LocalStage([&]
                                               { operation.emplace(*this, lane.Context()); });
         return operation->Evaluate(engine, lane, state, profile, primitive, time);
+    }
+    void FiniteVolume::ApplyResolvedCellOmega(R::EagerEngine &engine, const R::ExecutionStream &stream, EquationDofs &candidate) const
+    {
+        if (!_data->settings.numerics.resolvedCellOmega)
+            return;
+        const auto &cells = _data->wallDistance->FirstLayerCells();
+        if (!cells.RowCount())
+            return;
+        const auto block = candidate.LocateBlock("rans");
+        const index column = block.firstComponent + 1;
+        const real coefficient = (6.0 / 0.075) * _data->equation.ACMParameters().kinematicViscosity;
+        R::SubmitArrays(engine, stream, [column, coefficient](R::ExecutionContext context, auto selected, auto state)
+                        {
+                            if (context.device == R::Device::Host())
+                                for (index i = 0; i < selected.RowCount(); ++i)
+                                {
+                                    const auto cell = selected(i, 0);
+                                    state(cell.cell, column) = coefficient / sqr(cell.distance);
+                                }
+#ifdef DNDS_USE_CUDA
+                            else
+                                CUDA::SetResolvedCellOmega(context, selected, state, column, coefficient);
+#endif
+                        },
+                        R::ReadAs<R::FixedRows<1>>(cells), R::ReadWriteAs<R::UniformTableRows>(candidate.PhysicalField(block.physicalField).Owned()));
     }
     AdmissibilityPolicy FiniteVolume::PrepareAdmissibility(
         std::optional<Physics::Chemistry::ChemicalWorkerPool> workers) const

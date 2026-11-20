@@ -53,6 +53,7 @@ namespace DNDS::Cauchy
         _state.time = checkpoint.time;
         _state.epoch = checkpoint.epoch;
         _state.trialReady = _state.restoreReconstruction = _state.coordinatedPrepared = false;
+        _state.internalResume = false;
         _state.stageGroup.reset();
         if (checkpoint.stepper)
             _state.timeStepper.swap(checkpoint.stepper);

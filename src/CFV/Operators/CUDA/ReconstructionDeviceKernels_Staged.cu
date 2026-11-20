@@ -20,6 +20,13 @@ namespace DNDS::CFV::Detail
             const bool tensor = arithmetic == ReconstructionSweepArithmetic::FP64TensorCore || arithmetic == ReconstructionSweepArithmetic::TF32 ||
                                 arithmetic == ReconstructionSweepArithmetic::TF32Synchronous;
             const bool comparison = arithmetic != ReconstructionSweepArithmetic::FP64;
+            const auto matrixWidth = plan.n * plan.n;
+            const bool matricesOK = plan.packedRawB ? table(plan.rawMatrixB32, matrixWidth)
+                                    : quantized     ? table(plan.matrixAInvB32, matrixWidth)
+                                                    : table(plan.matrixAInvB, matrixWidth);
+            const auto inverseWidth = plan.inverseTriangle ? plan.n * (plan.n + 1) / 2 : plan.n * plan.n;
+            const bool inverseOK = plan.packedInverse ? table(plan.localInverse32, inverseWidth)
+                                                      : table(plan.localInverse, inverseWidth);
             DNDS_check_throw_info(arithmetic >= ReconstructionSweepArithmetic::FP64 && arithmetic <= ReconstructionSweepArithmetic::TF32Synchronous,
                                   "unknown VR arithmetic selector");
 #ifndef DNDS_USE_CCCL_COMPUTE
@@ -31,10 +38,11 @@ namespace DNDS::CFV::Detail
                                       args.selection.count >= 0 && args.selection.count <= plan.owned &&
                                       (!args.selection.indirect || args.selection.rows.RowCount() >= args.selection.count) &&
                                       args.mean.owned.Width() >= 1 && args.output.Width() <= INT_MAX / 4 &&
-                                      (quantized ? (table(plan.matrixAInvB32, plan.n * plan.n) && table(plan.vectorAInvB32, plan.n) && table(plan.boundaryInjection32, plan.n))
-                                                 : (table(plan.matrixAInvB, plan.n * plan.n) && table(plan.vectorAInvB, plan.n) && table(plan.boundaryInjection, plan.n))) &&
+                                      matricesOK &&
+                                      (quantized ? table(plan.vectorAInvB32, plan.n) && table(plan.boundaryInjection32, plan.n)
+                                                 : table(plan.vectorAInvB, plan.n) && table(plan.boundaryInjection, plan.n)) &&
                                       table(plan.offsets, 1) && table(plan.neighbors, 1) && table(plan.boundaryOffsets, 1) &&
-                                      (!plan.raw || table(plan.localInverse, plan.inverseTriangle ? plan.n * (plan.n + 1) / 2 : plan.n * plan.n)) &&
+                                      (!plan.raw || inverseOK) &&
                                       (!plan.faceCoupling || (table(plan.faces, 1) && table(plan.faceSide, 1))) &&
                                       (!plan.rotated || (table(plan.rotation, 9) && table(plan.rotationActive, 1))) &&
                                       plan.offsets.RowCount() == plan.owned + 1 &&
@@ -43,7 +51,6 @@ namespace DNDS::CFV::Detail
                                       table(args.status, 1) && args.status.RowCount() == 1 &&
                                       (!plan.faceCoupling || (plan.faces.RowCount() == plan.neighbors.RowCount() && plan.faceSide.RowCount() == plan.neighbors.RowCount())) &&
                                       (!plan.rotated || (plan.rotation.RowCount() == plan.neighbors.RowCount() && plan.rotationActive.RowCount() == plan.neighbors.RowCount())) &&
-                                      (!plan.raw || plan.localInverse.RowCount() == plan.owned) &&
                                       args.input.owned.Width() == args.output.Width() && args.mean.owned.Width() == args.output.Width() / plan.n &&
                                       field(args.mean.owned, args.mean.owned.Width()) && field(args.mean.ghost, args.mean.owned.Width()) &&
                                       field(args.input.owned, args.output.Width()) && field(args.input.ghost, args.output.Width()) &&

@@ -698,6 +698,70 @@ TEST_CASE("CUDA sweep-only publication omits limiter matrices and scratch")
             CHECK(read.View()(iRow, j) == 0);
     CHECK_THROWS(resident.DoLimiterWBAP_3Order(coefficients, work, 1));
 }
+TEST_CASE("Raw VR packs B and the full inverse independently while using the FP64 sweep")
+{
+    constexpr I components = 6;
+    const auto device = R::Device::CUDA(0);
+    const auto context = R::ExecutionContext::CUDA(0);
+    const auto metrics = C::FiniteVolumePlan::ConstructMetrics(CFVTest::CartesianHexes(mpi, 3));
+    C::ReconstructionSettings settings;
+    settings.maxOrder = 3;
+    settings.storage.representation = "raw";
+    settings.storage.faceCoupling = true;
+    const auto capabilities = C::ReconstructionCapabilities::ForSweeps(false);
+    const auto reference = C::VariationalReconstructionPlan::ConstructRecCoeff(metrics, settings, capabilities);
+    auto mean = metrics.BuildField(components);
+    auto input = reference.BuildCoefficients(components);
+    Fill(mean, 1.1);
+    Fill(input, .01);
+    metrics.BindHalo(mean).Begin().Wait();
+    metrics.BindHalo(input).Begin().Wait();
+    auto boundary = reference.BuildBoundaryValues(components);
+    auto referenceWork = reference.BuildWorkspace(components);
+    reference.DoReconstructionIterTo(mean, input, referenceWork, boundary);
+    auto deviceMean = metrics.BuildField(mean.Owned().Layout(), device);
+    deviceMean.Owned().CopyFrom(mean.Owned(), context).Wait();
+    deviceMean.Ghost().CopyFrom(mean.Ghost(), context).Wait();
+    R::EagerEngine engine;
+    const auto stream = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
+    const auto bytes = [](const auto &buffers, const std::string &name)
+    {
+        const auto found = std::find_if(buffers.begin(), buffers.end(), [&](const auto &buffer)
+                                        { return buffer.name == name; });
+        return found == buffers.end() ? 0 : found->bytes;
+    };
+    const auto fullBuffers = reference.Place(device, context).ResidentBuffers();
+    for (const auto packed : {std::pair{true, false}, std::pair{false, true}, std::pair{true, true}})
+    {
+        settings.storage.rawBPrecision = packed.first ? "fp32" : "fp64";
+        settings.storage.inversePrecision = packed.second ? "fp32" : "fp64";
+        const auto plan = C::VariationalReconstructionPlan::ConstructRecCoeff(metrics, settings, capabilities);
+        const auto resident = plan.Place(device, context);
+        const auto buffers = resident.ResidentBuffers();
+        CHECK_FALSE(resident.SupportsKernel(C::ReconstructionDeviceKernel::FP64));
+        CHECK(resident.SupportsKernel(C::ReconstructionDeviceKernel::FP64Pipelined));
+        for (const auto &[name, reduced] : {std::pair{"rawMatrixB", packed.first}, std::pair{"localInverse", packed.second}})
+        {
+            const auto originalBytes = bytes(fullBuffers, name);
+            REQUIRE(originalBytes > 0);
+            CHECK(bytes(buffers, name) == (reduced ? 0 : originalBytes));
+            CHECK(bytes(buffers, std::string(name) + "32") == (reduced ? originalBytes / 2 : 0));
+        }
+        CHECK(bytes(buffers, "rawVectorB") == bytes(fullBuffers, "rawVectorB"));
+        CHECK(bytes(buffers, "rawBoundaryInjection") == bytes(fullBuffers, "rawBoundaryInjection"));
+        auto deviceInput = resident.BuildCoefficients(components);
+        deviceInput.Owned().CopyFrom(input.Owned(), context).Wait();
+        deviceInput.Ghost().CopyFrom(input.Ghost(), context).Wait();
+        auto work = resident.BuildWorkspace(components);
+        auto deviceBoundary = resident.PlaceBoundaryValues(plan.BuildBoundaryValues(components));
+        resident.SubmitReconstructionIterTo(engine, stream, deviceMean, deviceInput, work, deviceBoundary,
+                                            C::ReconstructionRegion::All, C::ReconstructionDeviceKernel::FP64Pipelined);
+        engine.Synchronize();
+        resident.CheckStatus(work);
+        Equal(referenceWork.temporary, work.temporary, 2e-5);
+    }
+}
+
 TEST_CASE("Opt-in FP32 sweep maps retain FP64 coefficients and avoid duplicate device matrix storage")
 {
     const auto device = R::Device::CUDA(0);

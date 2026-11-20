@@ -6,6 +6,7 @@
 #include "Cauchy/Core/DomainStateSnapshot.hpp"
 #include "Cauchy/Physics/PhysicsResources.hpp"
 #include "Cauchy/State/RANSState.hpp"
+#include "Cauchy/IO/CheckpointLoadMode.hpp"
 #include "Cauchy/IO/CheckpointTransaction.hpp"
 #include "Cauchy/IO/PreparedCheckpoint.hpp"
 
@@ -28,6 +29,7 @@ namespace DNDS::Cauchy
         DomainExecution _execution;
         std::vector<NonlinearIterationReport> _lastImplicit;
         std::function<void(const NonlinearProgress &)> _progressObserver;
+        index _stateBoundsHistoryInterval = 0;
         std::function<void(const NonlinearSolveState &)> _quiescentObserver;
         index _lastCoupledIterations = 0;
         real _lastCoupledTargetRatio = 0;
@@ -60,7 +62,7 @@ namespace DNDS::Cauchy
         void PrepareGroupOperators(bool resume);
         NonlinearSession CreateCoupledNonlinearSession(
             bool resume);
-        NonlinearSolveControl ProgressControl() const;
+        NonlinearSolveControl ProgressControl();
         void SetTimeStage(int stage);
         void PreserveReconstructionGuess();
         void EvaluateImplicitRate(EquationDofs &state, EquationDofs &rate, FiniteVolume::Workspace &workspace, real time, int stage);
@@ -102,7 +104,7 @@ namespace DNDS::Cauchy
             int coupledStage, bool reconstructed) const;
         void ActivateCoupledInterface(int coupledStage);
         void CommitReserved(EquationDofs::WriteScope &destination, EquationDofs::ReadScope &source);
-        std::unique_ptr<IO::DomainCheckpointRead> PrepareCheckpointRead(const std::string &path, const Json &resolved);
+        std::unique_ptr<IO::DomainCheckpointRead> PrepareCheckpointRead(const std::string &path, const Json &resolved, CheckpointLoadMode mode);
         void ReserveCheckpointRead(IO::DomainCheckpointRead &checkpoint, bool collectiveChecks = true);
         void CommitCheckpointRead(IO::DomainCheckpointRead &checkpoint);
         std::unique_ptr<IO::DomainInternalCheckpointRead> PrepareInternalCheckpointRead(const std::string &path, const Json &resolved);
@@ -169,7 +171,7 @@ namespace DNDS::Cauchy
         void CommitCandidate(CandidateReservation &reservation);
         void SnapAcceptedTime(real time);
         CheckpointCandidate PrepareCheckpoint(const std::string &path,
-                                              const Json &resolved);
+                                              const Json &resolved, CheckpointLoadMode mode = CheckpointLoadMode::Resume);
         InternalCheckpointCandidate PrepareInternalCheckpoint(
             const std::string &path, const Json &resolved);
         InterfaceDonorPublication PrepareCheckpointInterfaceDonor(
@@ -197,6 +199,9 @@ namespace DNDS::Cauchy
         }
         EquationDofs &Dofs() { return _state.accepted; }
         const EquationDofs &Dofs() const { return _state.accepted; }
+        /// Domain-wide (min,max) pairs for all owned cell-mean components.
+        /// A trial observation uses the active endpoint for coupled DITR.
+        std::vector<real> MeasureStateBounds(bool trial);
         /// Synchronous local point refresh using this domain's explicit worker
         /// capacity. No halo exchange; caller ensures ready ghosts when used.
         bool RefreshDerived(DerivedFields &fields, bool onlyIfStale = false) const;
@@ -213,9 +218,10 @@ namespace DNDS::Cauchy
         const std::vector<NonlinearIterationReport> &LastImplicitStages() const { return _lastImplicit; }
         /// Synchronous sink-neutral nonlinear progress callback. The callback
         /// may buffer/report locally but must not enter unrelated collectives.
-        void SetProgressObserver(std::function<void(const NonlinearProgress &)> observer)
+        void SetProgressObserver(std::function<void(const NonlinearProgress &)> observer, index stateBoundsHistoryInterval = 0)
         {
             _progressObserver = std::move(observer);
+            _stateBoundsHistoryInterval = stateBoundsHistoryInterval;
         }
         void SetQuiescentObserver(std::function<void(const NonlinearSolveState &)> observer)
         {
@@ -316,6 +322,10 @@ namespace DNDS::Cauchy
         void WriteInternalCheckpoint(const std::string &path, const Json &resolved,
                                      const NonlinearSolveState &state,
                                      const Json &outputController = Json()) const;
-        void ReadCheckpoint(const std::string &path, const Json &resolved);
+        /// Restore the archived means at the accepted clock. MeansOnly selects
+        /// the current trial for an internal steady solve and starts fresh
+        /// reconstruction and time integration under the supplied settings.
+        void ReadCheckpoint(const std::string &path, const Json &resolved,
+                            CheckpointLoadMode mode = CheckpointLoadMode::Resume);
     };
 }

@@ -146,6 +146,53 @@ TEST_CASE("P3 viscous face derivatives reproduce polynomial heat conduction and 
     }
 }
 
+TEST_CASE("Direct P1 Barth preserves an independently selectable unlimited viscous gradient")
+{
+    const auto mesh = CauchyTest::PeriodicQuads(mpi, 8);
+    const auto run = [&](bool viscousLimited)
+    {
+        C::DomainSettings settings;
+        settings.equation.transport = "NewtonianFourier";
+        settings.equation.viscosity = .02;
+        settings.numerics.reconstruction = "gradient";
+        settings.numerics.limiter = "Barth";
+        settings.numerics.positivity = false;
+        settings.numerics.viscousGradient = "polynomial";
+        settings.numerics.viscousLimited = viscousLimited;
+        const auto equation = C::EquationSystem::Resolve(settings.equation);
+        C::FiniteVolume fv(mesh, settings, equation);
+        auto mean = fv.Metrics().BuildField(R::RowLayout::Dense(0, 5));
+        auto rhs = fv.Metrics().BuildField(mean.Owned().Layout());
+        {
+            auto write = mean.Owned().Write();
+            for (DNDS::index iCell = 0; iCell < mean.Owned().RowCount(); ++iCell)
+            {
+                // An oblique shear patch exercises tangential derivatives as well
+                // as the face-normal jump correction on this orthogonal mesh.
+                const auto x = fv.Metrics().GetCellCent(iCell);
+                const auto u = equation.Gas().Conservative({1, 0, x[0] + x[1] < .8 ? .3 : 0., 0, 1});
+                for (int j = 0; j < 5; ++j)
+                    write.View<R::UniformTableRows>()(iCell, j) = u[j];
+            }
+        }
+        auto state = C::EquationDofs::Coupled(equation.Schema(), mean);
+        auto result = C::EquationDofs::Coupled(equation.Schema(), rhs);
+        auto reconstruction = fv.BuildReconstructionState(state);
+        auto work = fv.BuildWorkspace(state);
+        R::EagerEngine engine;
+        fv.Evaluate(state, result, *reconstruction, *work, engine, engine.CreateCPUStream());
+        return rhs.Owned();
+    };
+    const auto limited = run(true), unlimited = run(false);
+    const auto a = limited.Read(), b = unlimited.Read();
+    double difference = 0.;
+    for (DNDS::index iCell = 0; iCell < limited.RowCount(); ++iCell)
+        for (int j = 1; j <= 2; ++j)
+            difference = std::max(difference, std::abs(a.View()(iCell, j) - b.View()(iCell, j)));
+    MPI_Allreduce(MPI_IN_PLACE, &difference, 1, MPI_DOUBLE, MPI_MAX, mpi.comm);
+    CHECK(difference > 1e-10);
+}
+
 TEST_CASE("Polynomial viscosity exchanges the selected limited or unlimited coefficients after the last VR commit")
 {
     const auto mesh = CauchyTest::PeriodicQuads(mpi, 4);

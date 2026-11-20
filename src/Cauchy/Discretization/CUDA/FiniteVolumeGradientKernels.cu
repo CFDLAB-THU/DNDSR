@@ -12,7 +12,7 @@ namespace DNDS::Cauchy::CUDA
     {
         template <int Components>
         __global__ void Barth(GradientLimiterGeometry geometry, GradientMeans means, GradientInput source,
-                              GradientOutput destination, GradientIndices selected, int dimension, bool barth)
+                              GradientOutput destination, GradientIndices selected, int dimension, int vectorStart, bool barth)
         {
             const auto &stencil = geometry.stencil(0, 0);
             for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
@@ -35,9 +35,9 @@ namespace DNDS::Cauchy::CUDA
                                 const auto old = neighbor;
                                 for (int d = 0; d < 3; ++d)
                                 {
-                                    neighbor[1 + d] = 0;
+                                    neighbor[vectorStart + d] = 0;
                                     for (int k = 0; k < 3; ++k)
-                                        neighbor[1 + d] += sample.rotation[d + 3 * k] * old[1 + k];
+                                        neighbor[vectorStart + d] += sample.rotation[d + 3 * k] * old[vectorStart + k];
                                 }
                             }
                             for (int j = 0; j < Components; ++j)
@@ -214,12 +214,13 @@ namespace DNDS::Cauchy::CUDA
         }
     }
     void LimitPhysicalGradients(R::ExecutionContext context, GradientLimiterGeometry geometry, GradientMeans means,
-                                GradientInput source, GradientOutput destination, GradientIndices selected, int dimension, bool barth, bool requireGhost)
+                                GradientInput source, GradientOutput destination, GradientIndices selected, int dimension, int vectorStart, bool barth, bool requireGhost)
     {
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && (dimension == 2 || dimension == 3), "CUDA gradient context/dimension differs");
         R::ValidateViewDevices(context.device, means, source, destination, selected);
         const index owned = means.owned.RowCount(), components = means.owned.Width();
-        DNDS_check_throw_info(components >= 5 && components <= 7, "CUDA gradients require flow5/SA/2EQ");
+        DNDS_check_throw_info(components >= 4 && components <= 7 && vectorStart >= 0 && vectorStart + 3 <= components,
+                              "CUDA gradients require a flow4/flow5 profile with its three-component velocity or momentum range");
         CheckTable(means.owned, owned, components);
         CheckTable(source, owned, components * dimension);
         CheckTable(destination, owned, components * dimension);
@@ -230,20 +231,23 @@ namespace DNDS::Cauchy::CUDA
             if (requireGhost || means.ghost.RowCount())
                 CheckTable(means.ghost, geometry.allCells - owned, components);
         }
-        R::CheckKernelArgumentBudget<GradientLimiterGeometry, GradientMeans, GradientInput, GradientOutput, GradientIndices, int, bool>();
+        R::CheckKernelArgumentBudget<GradientLimiterGeometry, GradientMeans, GradientInput, GradientOutput, GradientIndices, int, int, bool>();
         if (!selected.RowCount())
             return;
         const auto stream = ::DNDS::Runtime::CUDAStream(context);
         switch (components)
         {
+        case 4:
+            Barth<4><<<Blocks(selected.RowCount()), 128, 0, stream>>>(geometry, means, source, destination, selected, dimension, vectorStart, barth);
+            break;
         case 5:
-            Barth<5><<<Blocks(selected.RowCount()), 128, 0, stream>>>(geometry, means, source, destination, selected, dimension, barth);
+            Barth<5><<<Blocks(selected.RowCount()), 128, 0, stream>>>(geometry, means, source, destination, selected, dimension, vectorStart, barth);
             break;
         case 6:
-            Barth<6><<<Blocks(selected.RowCount()), 128, 0, stream>>>(geometry, means, source, destination, selected, dimension, barth);
+            Barth<6><<<Blocks(selected.RowCount()), 128, 0, stream>>>(geometry, means, source, destination, selected, dimension, vectorStart, barth);
             break;
         case 7:
-            Barth<7><<<Blocks(selected.RowCount()), 128, 0, stream>>>(geometry, means, source, destination, selected, dimension, barth);
+            Barth<7><<<Blocks(selected.RowCount()), 128, 0, stream>>>(geometry, means, source, destination, selected, dimension, vectorStart, barth);
             break;
         }
         CheckLaunch();

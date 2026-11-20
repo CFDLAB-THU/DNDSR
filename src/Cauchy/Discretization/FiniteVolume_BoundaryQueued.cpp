@@ -140,7 +140,7 @@ namespace DNDS::Cauchy
         const auto device = owner->metrics.Device();
         const index quadrature = owner->BoundaryValueRows();
         const index primitive = primitiveBoundary ? owner->boundaryFaces.RowCount() : 0;
-        const bool gradientPP = nativeDirectGradient && owner->settings.numerics.positivity;
+        const bool gradientPP = nativeDirectGradient && owner->settings.GradientPositivity();
         const index owned = primitiveGradient || owner->equation.HasRANS() ? owner->metrics.NumCell() : 0;
         const index ghost = primitiveGradient ? owner->metrics.NumCellProc() - owner->metrics.NumCell() : 0;
         preparationStatus.emplace(PreparationStatusStorage{

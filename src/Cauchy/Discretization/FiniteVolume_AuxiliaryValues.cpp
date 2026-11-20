@@ -72,12 +72,11 @@ namespace DNDS::Cauchy
                 DNDS_check_throw_info(false, "CUDA mean gradients are not built");
 #endif
             } });
-        const index overlayField = workspace && workspace->UseRANSP1FaceOverlay() ? state.LocateBlock("rans").physicalField : -1;
         for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
         {
             if (!workspace)
                 result._data->meanHalo.push_back(BindHalo(state.PhysicalField(iField)));
-            if (!workspace || (_data->equation.HasRANS() && _data->equation.RANS().ComponentNumber() == 2) || iField == overlayField)
+            if (!workspace || (_data->equation.HasRANS() && _data->equation.RANS().ComponentNumber() == 2))
                 result._data->gradientHalo.push_back(BindHalo(result.fields[iField]));
         }
         return result;
@@ -285,12 +284,15 @@ namespace DNDS::Cauchy
         _data->boundary.ValidateEquationProducers(_data->boundaryZones);
         const auto arrays = EquationAuxiliaryArrays(output);
         const index faces = _data->stencil.stencilFaces.RowCount();
-        const index rows[9]{Metrics().NumCellProc(), faces, faces, faces, Metrics().NumCell(), Metrics().NumCell(), Metrics().NumCell(), Metrics().NumCell(), Metrics().NumCellProc() - Metrics().NumCell()};
-        const index widths[7]{_data->equation.HasMixture() ? 5 : 3, 2, 1, 1, 1, 1, 1};
-        for (int k = 0; k < 9; ++k)
+        const index rows[10]{Metrics().NumCellProc(), faces, faces, faces, Metrics().NumCell(), Metrics().NumCell(), Metrics().NumCell(), Metrics().NumCellProc(), Metrics().NumCell(), Metrics().NumCellProc() - Metrics().NumCell()};
+        const index widths[8]{_data->equation.HasMixture() ? 5 : 3, 2, 1, 1, 1, 1, 1, 1};
+        if (output.cellTurbulentViscosity)
+            DNDS_check_throw_info(_data->equation.HasRANS() && output.cellTurbulentViscosity->Layout().Kind() == R::RowLayoutKind::Table,
+                                  "cell turbulent viscosity requires RANS and a scalar table");
+        for (int k = 0; k < int(arrays.size()); ++k)
             if (arrays[k])
             {
-                DNDS_check_throw_info(arrays[k]->GetDevice() == Device() && arrays[k]->RowCount() == rows[k] && !arrays[k]->Layout().IsVariable() && (k >= 7 || arrays[k]->Layout().Width() == widths[k]), "equation auxiliary output shape/device differs");
+                DNDS_check_throw_info(arrays[k]->GetDevice() == Device() && arrays[k]->RowCount() == rows[k] && !arrays[k]->Layout().IsVariable() && (k >= 8 || arrays[k]->Layout().Width() == widths[k]), "equation auxiliary output shape/device differs");
                 for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
                     for (const auto *input : {&state.PhysicalField(iField).Owned(), &state.PhysicalField(iField).Ghost()})
                         DNDS_check_throw_info(!Algebra::Detail::Overlaps(input->Storage(), arrays[k]->Storage()), "equation auxiliary output aliases state");
@@ -390,7 +392,7 @@ namespace DNDS::Cauchy
         for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
             DNDS_check_throw_info(origin.ghostVersions[iField] == state.PhysicalField(iField).Ghost().Version(), "equation auxiliary ghosts changed");
         const auto arrays = EquationAuxiliaryArrays(values);
-        for (int k = 0; k < 9; ++k)
+        for (int k = 0; k < int(arrays.size()); ++k)
         {
             const auto &stamp = origin.outputs[k];
             DNDS_check_throw_info(bool(stamp.storage) == bool(arrays[k]), "equation auxiliary selection changed");

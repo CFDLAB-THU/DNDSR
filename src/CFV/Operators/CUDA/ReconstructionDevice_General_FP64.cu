@@ -8,7 +8,8 @@ namespace DNDS::CFV::Detail
         void LaunchGeneral(const GeneralSweepArguments &a, bool limited)
         {
             ValidateSweepArguments(a, limited);
-            DNDS_check_throw_info(!a.plan.quantized && a.plan.n > 0 && a.mean.owned.Width() > 0 &&
+            DNDS_check_throw_info(!a.plan.quantized && !a.plan.packedRawB && !a.plan.packedInverse &&
+                                      a.plan.n > 0 && a.mean.owned.Width() > 0 &&
                                       a.output.Width() == a.mean.owned.Width() * a.plan.n,
                                   "general FP64 reconstruction requires FP64 maps and matching field widths");
             const index bytes = a.output.Width() * index(sizeof(real));

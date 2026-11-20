@@ -136,6 +136,7 @@ namespace DNDS::Cauchy::CPU
         int independentSpecies;
         real scale, incrementRelax, compressionPower;
         bool positivity;
+        real ransRelaxation = 1;
     };
     struct CorrectionResult
     {

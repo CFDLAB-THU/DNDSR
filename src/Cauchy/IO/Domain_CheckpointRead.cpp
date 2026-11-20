@@ -14,27 +14,30 @@
 namespace DNDS::Cauchy
 {
     using namespace CheckpointMetadata;
-    void Domain::ReadCheckpoint(const std::string &path, const Json &resolved)
+    void Domain::ReadCheckpoint(const std::string &path, const Json &resolved, CheckpointLoadMode mode)
     {
         const MPIInfo mpi(_problem.finiteVolume.Metrics().Communicator());
+        AgreeLoadMode(mpi, mode);
         bool internal = false;
+        if (mode == CheckpointLoadMode::Resume)
         {
             auto serializer = std::make_shared<Serializer::SerializerH5>(mpi);
             serializer->OpenFile(path, true);
             internal = serializer->ListCurrentPath().count("cauchy_internal_format");
             serializer->CloseFile();
         }
-        auto checkpoint = PrepareCheckpointRead(path, resolved);
+        auto checkpoint = PrepareCheckpointRead(path, resolved, mode);
         auto active = internal ? PrepareInternalCheckpointRead(path, resolved) : nullptr;
         ReserveCheckpointRead(*checkpoint);
         CommitCheckpointRead(*checkpoint);
         if (active)
             CommitInternalCheckpointRead(*active);
     }
-    std::unique_ptr<IO::DomainCheckpointRead> Domain::PrepareCheckpointRead(const std::string &path, const Json &resolved)
+    std::unique_ptr<IO::DomainCheckpointRead> Domain::PrepareCheckpointRead(const std::string &path, const Json &resolved, CheckpointLoadMode mode)
     {
         _execution.Synchronize();
         const MPIInfo mpi(_problem.finiteVolume.Metrics().Communicator());
+        const bool meansOnly = mode == CheckpointLoadMode::MeansOnly;
         std::unique_ptr<IO::DomainCheckpointRead> checkpoint;
         MPI::LocalStage(mpi, [&]
                         { checkpoint = std::make_unique<IO::DomainCheckpointRead>(); });
@@ -69,16 +72,16 @@ namespace DNDS::Cauchy
         }
         std::optional<Runtime::Array<real>> reconstruction;
         const auto entries = serializer->ListCurrentPath();
-        if (entries.count("last_accepted_dt"))
+        if (!meansOnly && entries.count("last_accepted_dt"))
             serializer->ReadReal("last_accepted_dt", lastDt);
-        if (entries.count("reconstruction_guess"))
+        if (!meansOnly && entries.count("reconstruction_guess"))
             reconstruction.emplace(Runtime::ReadArray<real>(serializer, "reconstruction_guess", mpi, shard));
         std::optional<Runtime::Array<real>> limitedVRHistory;
-        if (entries.count("limited_vr_history"))
+        if (!meansOnly && entries.count("limited_vr_history"))
             limitedVRHistory.emplace(Runtime::ReadArray<real>(serializer, "limited_vr_history", mpi, shard));
         std::optional<Runtime::Array<real>> history;
         real historyDt = 0;
-        if (version >= 4 && metadata.is_object() && metadata.value("history", false))
+        if (!meansOnly && version >= 4 && metadata.is_object() && metadata.value("history", false))
         {
             serializer->ReadReal("history_dt", historyDt);
             if (version < 5)
@@ -87,10 +90,41 @@ namespace DNDS::Cauchy
         std::optional<StateArchive> stateArchive, reconstructionArchive, historyArchive;
         if (version == 5)
         {
-            stateArchive.emplace(StateArchive::Read(serializer, "state_field_", metadata.at("state_storage"), mpi, shard));
-            if (metadata.contains("reconstruction_storage"))
+            std::string statePrefix = "state_field_";
+            const Json *storage = &metadata.at("state_storage");
+            if (meansOnly && entries.count("cauchy_internal_format"))
+            {
+                int internalFormat = 0;
+                serializer->ReadInt("cauchy_internal_format", internalFormat);
+                MPI::LocalStage(mpi, [&]
+                                {
+                    DNDS_check_throw_info(internalFormat == 1 && metadata.value("restart_scope", std::string{}) == "exact_internal",
+                                          "unsupported Cauchy internal means checkpoint");
+                    const auto &cursor = metadata.at("time_state");
+                    // A transient trial belongs to an unaccepted stage. Keep
+                    // its accepted means at the stored clock. A steady trial
+                    // has the same physical clock as the accepted state.
+                    if (!cursor.at("pending_steady").get<bool>())
+                        return;
+                    DNDS_check_throw_info(cursor.at("start_time").get<real>() == time,
+                                          "steady checkpoint trial clock differs from the accepted clock");
+                    const auto &payloads = cursor.at("payloads");
+                    DNDS_check_throw_info(payloads.is_array(), "invalid steady checkpoint payload list");
+                    index trial = -1;
+                    for (index i = 0; i < index(payloads.size()); ++i)
+                        if (payloads.at(i).at("name") == "trial")
+                        {
+                            DNDS_check_throw_info(trial == -1, "duplicate steady checkpoint trial means");
+                            trial = i;
+                        }
+                    DNDS_check_throw_info(trial >= 0, "steady checkpoint is missing trial means");
+                    statePrefix = "internal_time_" + std::to_string(trial) + "_field_";
+                    storage = &payloads.at(trial).at("storage"); });
+            }
+            stateArchive.emplace(StateArchive::Read(serializer, statePrefix, *storage, mpi, shard));
+            if (!meansOnly && metadata.contains("reconstruction_storage"))
                 reconstructionArchive.emplace(StateArchive::Read(serializer, "reconstruction_field_", metadata.at("reconstruction_storage"), mpi, shard));
-            if (metadata.value("history", false))
+            if (!meansOnly && metadata.value("history", false))
                 historyArchive.emplace(StateArchive::Read(serializer, "history_field_", metadata.at("state_storage"), mpi, shard));
         }
         serializer->CloseFile();
@@ -112,23 +146,28 @@ namespace DNDS::Cauchy
         const bool initialMeansOnly = step == 0 && time == 0 && lastDt == 0 &&
                                       !entries.count("cauchy_internal_format") && !history && !historyArchive &&
                                       !reconstruction && !reconstructionArchive && !limitedVRHistory;
-        int valid = name == _problem.name && !storedConfig.is_discarded() && CompatibleConfig(storedConfig) == CompatibleConfig(resolved) && std::isfinite(time) && time >= 0 && step >= 0 &&
+        const bool freshMeans = meansOnly || initialMeansOnly;
+        int valid = name == _problem.name && !storedConfig.is_discarded() && CompatibleConfig(storedConfig, mode) == CompatibleConfig(resolved, mode) && std::isfinite(time) && time >= 0 && step >= 0 &&
                     (stateArchive ? stateArchive->Compatible(_state.trial) && stateArchive->fields[0].RowCount() == ids.RowCount()
                                   : flow && _state.trial.ComponentNumber() == 5 && _state.trial.PhysicalFieldNumber() == 1 &&
                                         flow->RowCount() == ids.RowCount() && flow->Layout().Width() == 5);
         valid = valid && (version < 4 || (metadata.is_object() && metadata.value("schema_version", 0) == 1 &&
                                           CompatibleEquationMetadata(metadata.value("flow", Json())) == CompatibleEquationMetadata(EquationMetadata(_problem.equation)) &&
-                                          (initialMeansOnly || !metadata.contains("update_policy") || metadata.at("update_policy") == UpdatePolicyMetadata())));
+                                          (freshMeans || !metadata.contains("update_policy") || metadata.at("update_policy") == UpdatePolicyMetadata())));
         valid = valid && CompatibleFrame(metadata, _problem.finiteVolume, std::isfinite(time) ? time : 0);
         valid = valid && (!limitedVRHistory || ((reconstruction || reconstructionArchive) && limitedVRHistory->RowCount() == ids.RowCount() &&
                                                 !limitedVRHistory->Layout().IsVariable() && limitedVRHistory->Layout().Width() == 2));
-        valid = valid && (version < 4 || (metadata.is_object() && metadata.value("limited_vr_history", false) == bool(limitedVRHistory) &&
-                                          (!limitedVRHistory || metadata.value("limited_vr_history_schema", 0) == 1)));
+        valid = valid && (meansOnly || version < 4 || (metadata.is_object() && metadata.value("limited_vr_history", false) == bool(limitedVRHistory) && (!limitedVRHistory || metadata.value("limited_vr_history_schema", 0) == 1)));
         valid = MPI::AllreduceValue<MPI::Reduction::Min>(valid, mpi.comm);
         if (!valid)
         {
-            const auto differences = storedConfig.is_discarded() ? nlohmann::json() : nlohmann::json::diff(CompatibleConfig(storedConfig), CompatibleConfig(resolved));
-            DNDS_check_throw_info(false, "Cauchy restart config/equation schema mismatch; normalized config differences: " + differences.dump());
+            const auto differences = storedConfig.is_discarded() ? nlohmann::json() : nlohmann::json::diff(CompatibleConfig(storedConfig, mode), CompatibleConfig(resolved, mode));
+            const auto message = "Cauchy restart config/equation schema mismatch for domain '" + _problem.name +
+                                 "' in checkpoint '" + path + "'; normalized config differences: " + differences.dump();
+            // Report the validation failure before a collective-I/O or
+            // execution resource can abort during stack unwinding.
+            MPI::AbortIfSolverFailure(message);
+            DNDS_check_throw_info(false, message);
         }
         const int meshEnvelope = version >= 4 ? metadata.value("mesh_envelope", 1) : 1;
         DNDS_check_throw_info(meshEnvelope == 1 || meshEnvelope == 2, "unsupported Cauchy mesh envelope");
@@ -185,15 +224,15 @@ namespace DNDS::Cauchy
                 auto &engine = _execution.Engine();
                 const auto &lane = _execution.ComputeStream();
                 const NonlinearOperators operators(_problem.finiteVolume.Metrics(), *_problem.admissibility, lane.Context());
-                if (initialMeansOnly || gauge == metadata.end())
-                    checkpoint->pressureGauge = initialMeansOnly && requested ? *requested : operators.PressureMean(engine, lane, _state.trial);
+                if (freshMeans || gauge == metadata.end())
+                    checkpoint->pressureGauge = freshMeans && requested ? *requested : operators.PressureMean(engine, lane, _state.trial);
                 else
                 {
                     DNDS_check_throw_info(gauge->is_number() && std::isfinite(gauge->get<real>()), "invalid checkpoint pressure gauge");
                     checkpoint->pressureGauge = gauge->get<real>();
                     DNDS_check_throw_info(!requested || *requested == *checkpoint->pressureGauge, "checkpoint pressure gauge differs from the configured target");
                 }
-                if (initialMeansOnly && requested)
+                if (freshMeans && requested)
                     operators.ProjectPressureMean(engine, lane, _state.trial, *requested);
             }
             else

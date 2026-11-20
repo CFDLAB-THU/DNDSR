@@ -153,15 +153,16 @@ namespace DNDS::Cauchy
         template <class Values>
         auto EquationAuxiliaryArrays(Values &values)
         {
-            return std::array<const R::Array<real> *, 9>{values.meanThermodynamics ? &*values.meanThermodynamics : nullptr,
-                                                         values.faceSpectralRadius ? &*values.faceSpectralRadius : nullptr,
-                                                         values.faceWaveJump ? &*values.faceWaveJump : nullptr,
-                                                         values.facePressureMinimum ? &*values.facePressureMinimum : nullptr,
-                                                         values.cellSpectralSum ? &values.cellSpectralSum->Owned() : nullptr,
-                                                         values.cellWaveJump ? &values.cellWaveJump->Owned() : nullptr,
-                                                         values.cellPressureMinimum ? &values.cellPressureMinimum->Owned() : nullptr,
-                                                         values.derivedOwned ? &values.derivedOwned->Values() : nullptr,
-                                                         values.derivedGhost ? &values.derivedGhost->Values() : nullptr};
+            return std::array<const R::Array<real> *, 10>{values.meanThermodynamics ? &*values.meanThermodynamics : nullptr,
+                                                          values.faceSpectralRadius ? &*values.faceSpectralRadius : nullptr,
+                                                          values.faceWaveJump ? &*values.faceWaveJump : nullptr,
+                                                          values.facePressureMinimum ? &*values.facePressureMinimum : nullptr,
+                                                          values.cellSpectralSum ? &values.cellSpectralSum->Owned() : nullptr,
+                                                          values.cellWaveJump ? &values.cellWaveJump->Owned() : nullptr,
+                                                          values.cellPressureMinimum ? &values.cellPressureMinimum->Owned() : nullptr,
+                                                          values.cellTurbulentViscosity ? &*values.cellTurbulentViscosity : nullptr,
+                                                          values.derivedOwned ? &values.derivedOwned->Values() : nullptr,
+                                                          values.derivedGhost ? &values.derivedGhost->Values() : nullptr};
         }
     }
     struct AuxiliaryValues::EquationOrigin
@@ -174,7 +175,7 @@ namespace DNDS::Cauchy
         std::weak_ptr<const void> owner;
         EquationDofOperations::Binding source;
         std::vector<uint64_t> ghostVersions;
-        std::array<Stamp, 9> outputs;
+        std::array<Stamp, 10> outputs;
         std::array<R::ArrayStorage::Shared, 3> ghosts;
         std::vector<R::Array<real>> gradientInputs;
         std::vector<std::array<uint64_t, 2>> gradientVersions;
@@ -187,7 +188,7 @@ namespace DNDS::Cauchy
             for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
                 ghostVersions.push_back(state.PhysicalField(iField).Ghost().Version());
             const auto arrays = AuxiliaryDetail::EquationAuxiliaryArrays(values);
-            for (int k = 0; k < 9; ++k)
+            for (int k = 0; k < int(arrays.size()); ++k)
                 if (arrays[k])
                     outputs[k] = {arrays[k]->SharedStorage(), arrays[k]->Version(), arrays[k]->ShapeVersion()};
             int k = 0;

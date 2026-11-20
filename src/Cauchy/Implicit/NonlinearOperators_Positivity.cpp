@@ -141,7 +141,7 @@ namespace DNDS::Cauchy
             const auto view = retained->policy.View();
             const auto correction = CPU::ApplyCorrection({view.thermal, view.rans, selection.HostView(),
                                                           index(u.columns.size()), retained->flowFirst, retained->speciesFirst, retained->ransFirst, int(retained->independent),
-                                                          controls.scale, controls.relax, real(controls.compressionPower), controls.positivity},
+                                                          controls.scale, controls.relax, real(controls.compressionPower), controls.positivity, controls.ransRelaxation},
                                                          mean.View(), increment.View(), candidate.View(),
                                                          {{hostScratch->species.data(), index(hostScratch->species.size())},
                                                           {hostScratch->partials.data(), index(hostScratch->partials.size())}});
@@ -156,7 +156,7 @@ namespace DNDS::Cauchy
         const auto device = [retained, u, d, y, selection, controls](auto context, auto input, auto output, auto scratch, auto summary)
         {
             const CUDA::CorrectionParameters parameters{retained->policy.View(), DeviceSelection(selection),
-                                                        controls.scale, controls.relax, controls.compressionPower, controls.positivity};
+                                                        controls.scale, controls.relax, controls.compressionPower, controls.positivity, controls.ransRelaxation};
             CUDA::ApplyCorrection(context, Table(input[u.firstSlot]), Table(input[d.firstSlot]), Table(output[y.firstSlot]), parameters, scratch, summary);
         };
 #else

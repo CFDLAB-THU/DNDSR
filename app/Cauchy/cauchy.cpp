@@ -40,6 +40,10 @@ static int Run(int argc, char **argv, double started)
             arguments.add_argument("--restart")
                 .default_value(std::string{})
                 .help("Restart from a Cauchy checkpoint");
+            arguments.add_argument("--restart-mode")
+                .default_value(std::string{"resume"})
+                .choices("resume", "meansOnly")
+                .help("meansOnly starts fresh numerical history from saved cell means; requires --restart");
             arguments.add_argument("--color")
                 .default_value(std::string{})
                 .help("Terminal color: auto, always or never; overrides output.consoleColor");
@@ -72,6 +76,7 @@ static int Run(int argc, char **argv, double started)
 
             const auto configPath = arguments.get<std::string>("config");
             const auto restartPath = arguments.get<std::string>("--restart");
+            const bool meansOnly = arguments.get<std::string>("--restart-mode") == "meansOnly";
             const bool checkConfig = arguments.get<bool>("--check-config");
             DNDS::Cauchy::Json input;
             std::vector<DNDS::Cauchy::ConfigOverride> overrides;
@@ -79,6 +84,7 @@ static int Run(int argc, char **argv, double started)
                                   {
                 DNDS_check_throw_info(!configPath.empty(), "provide a Cauchy config file or --help");
                 DNDS_check_throw_info(!checkConfig || restartPath.empty(), "--check-config and --restart are mutually exclusive");
+                DNDS_check_throw_info(!meansOnly || !restartPath.empty(), "--restart-mode meansOnly requires --restart");
                 std::ifstream stream(configPath);
                 DNDS_check_throw_info(bool(stream), "cannot open Cauchy config");
                 stream >> input;
@@ -105,7 +111,8 @@ static int Run(int argc, char **argv, double started)
 
             DNDS::Cauchy::Simulation simulation(config, mpi.comm);
             if (!restartPath.empty())
-                simulation.ReadCheckpoint(restartPath);
+                simulation.ReadCheckpoint(restartPath, meansOnly ? DNDS::Cauchy::CheckpointLoadMode::MeansOnly
+                                                                 : DNDS::Cauchy::CheckpointLoadMode::Resume);
             DNDS::Cauchy::OutputCoordinator outputs(simulation, config, mpi,
                                                     started);
             const auto &output = config.Output();

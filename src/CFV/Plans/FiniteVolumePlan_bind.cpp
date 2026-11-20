@@ -73,6 +73,8 @@ namespace DNDS::CFV
             .def_readwrite("representation", &ReconstructionStorageSettings::representation)
             .def_readwrite("inverseTriangle", &ReconstructionStorageSettings::inverseTriangle)
             .def_readwrite("faceCoupling", &ReconstructionStorageSettings::faceCoupling)
+            .def_readwrite("rawBPrecision", &ReconstructionStorageSettings::rawBPrecision)
+            .def_readwrite("inversePrecision", &ReconstructionStorageSettings::inversePrecision)
             .def_readwrite("aosRowPadding", &ReconstructionStorageSettings::aosRowPadding)
             .def_readwrite("allocationAlignmentBytes", &ReconstructionStorageSettings::allocationAlignmentBytes)
             .def("Validate", &ReconstructionStorageSettings::Validate);

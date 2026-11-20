@@ -54,6 +54,9 @@ namespace DNDS::Cauchy
         real iterationWallSeconds = 0;
         /// Worst selected component's norm divided by its own reference.
         real relativeConverged = 0;
+        /// State index of the measured residual, used by the history writer.
+        index observedIteration = -1;
+        std::vector<real> stateBounds;
     };
     /// Optional CPU profile. Values are local wall seconds, not
     /// reduced across ranks. Total encloses the disjoint named sections;
@@ -93,6 +96,9 @@ namespace DNDS::Cauchy
         /// receives copied scalar/vector data and may buffer it for a safe
         /// frontend flush boundary.
         std::function<void(const NonlinearProgress &)> progress;
+        /// Measure bounds on the observed state at configured history points.
+        /// All ranks of the domain must install the same cadence.
+        std::function<std::vector<real>(index, bool)> measureStateBounds;
         /// Optional live setup publication. Iterate updates it before the
         /// progress observer, so checkpoint/console/CSV see one state source.
         /// Shared ownership also covers externally phased prepared sessions;
@@ -124,6 +130,7 @@ namespace DNDS::Cauchy
         real reconstructionRelativeUpdate = 0;
         bool reconstructionUpdateMeasured = false;
         Linear::LinearIterationReport lastLinear;
+        std::vector<real> stateBounds;
     };
     using NonlinearIterationReport = BasicNonlinearIterationReport<std::vector<real>>;
     /// CPU whole-equation stage adapter over the shared nonlinear iteration

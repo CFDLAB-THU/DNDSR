@@ -15,12 +15,19 @@ namespace DNDS::Cauchy
         _state.trialEpoch.stage = coupled ? 0 : stage;
         _state.trialEpoch.coupledStage = coupled ? stage : 0;
     }
-    NonlinearSolveControl Domain::ProgressControl() const
+    NonlinearSolveControl Domain::ProgressControl()
     {
         NonlinearSolveControl control;
         if (_progressObserver)
             control.progress = [observer = _progressObserver](const NonlinearProgress &progress)
             { observer(progress); };
+        if (_stateBoundsHistoryInterval > 0)
+            control.measureStateBounds = [this](index iteration, bool terminal)
+            {
+                if (terminal || (iteration > 0 && iteration % _stateBoundsHistoryInterval == 0))
+                    return MeasureStateBounds(true);
+                return std::vector<real>{};
+            };
         if (_quiescentObserver)
             control.quiescent = [observer = _quiescentObserver](const NonlinearSolveState &state)
             { observer(state); };

@@ -51,9 +51,13 @@ namespace DNDS::CFV
     }
     void GradientPlan::ConvertFields(R::EagerEngine &engine, const R::ExecutionStream &stream,
                                      const FVField &source, FVField &destination, const VariationalReconstructionPlan &reconstruction,
-                                     bool toCoefficients, bool ghost) const
+                                     bool toCoefficients, bool ghost, index firstComponent, index componentCount) const
     {
         ValidateConversion(source, destination, reconstruction, toCoefficients, ghost);
+        const index components = (toCoefficients ? source.Width() : destination.Width()) / _data->metrics.Dimension();
+        if (componentCount == -1)
+            componentCount = components;
+        DNDS_check_throw_info(firstComponent >= 0 && firstComponent <= components && componentCount >= 0 && componentCount <= components - firstComponent, "gradient conversion component range");
         DNDS_check_throw_info(stream.Context().device == Device(), "gradient conversion stream placement differs");
 #ifndef DNDS_USE_CUDA
         DNDS_check_throw_info(Device() == R::Device::Host(), "CUDA gradient conversion is not built");
@@ -61,16 +65,19 @@ namespace DNDS::CFV
         auto geometry = std::make_shared<Geom::MeshReadAccess>(_data->metrics.AcquireMeshRead());
         const int dimension = _data->metrics.Dimension();
         const index firstCell = ghost ? _data->metrics.NumCell() : 0, modes = reconstruction.NRecDOF();
-        R::SubmitArrays(engine, stream, [geometry, dimension, firstCell, modes, toCoefficients](R::ExecutionContext context, auto cells, auto input, auto output)
+        auto &rows = ghost ? destination.Ghost() : destination.Owned();
+        const auto outputOperand = componentCount == components ? R::WriteAs<R::UniformTableRows>(rows)
+                                                                : R::ReadWriteAs<R::UniformTableRows>(rows);
+        R::SubmitArrays(engine, stream, [geometry, dimension, firstCell, modes, toCoefficients, firstComponent, componentCount](R::ExecutionContext context, auto cells, auto input, auto output)
                         {
                             if (context.device == R::Device::Host())
-                                Detail::ConvertGradient(cells, input, output, firstCell, dimension, modes, toCoefficients);
+                                Detail::ConvertGradient(cells, input, output, firstCell, dimension, modes, toCoefficients, firstComponent, componentCount);
 #ifdef DNDS_USE_CUDA
                             else
-                                Detail::LaunchGradientConversion(context, cells, input, output, firstCell, dimension, modes, toCoefficients);
+                                Detail::LaunchGradientConversion(context, cells, input, output, firstCell, dimension, modes, toCoefficients, firstComponent, componentCount);
 #endif
                         },
-                        R::ReadAs<R::FixedRows<8>>(_data->metrics.CellMetrics()), R::ReadAs<R::UniformTableRows>(ghost ? source.Ghost() : source.Owned()), R::WriteAs<R::UniformTableRows>(ghost ? destination.Ghost() : destination.Owned()));
+                        R::ReadAs<R::FixedRows<8>>(_data->metrics.CellMetrics()), R::ReadAs<R::UniformTableRows>(ghost ? source.Ghost() : source.Owned()), outputOperand);
     }
     void GradientPlan::ConvertToCoefficients(const FVField &gradient, const VariationalReconstructionPlan &reconstruction, FVField &coefficients) const
     {
@@ -80,6 +87,12 @@ namespace DNDS::CFV
                                              const FVField &gradient, const VariationalReconstructionPlan &reconstruction, FVField &coefficients) const
     {
         ConvertFields(engine, stream, gradient, coefficients, reconstruction, true, false);
+    }
+    void GradientPlan::SetLinearCoefficients(R::EagerEngine &engine, const R::ExecutionStream &stream, const FVField &gradient,
+                                             const VariationalReconstructionPlan &plan, FVField &coefficients,
+                                             index firstComponent, index componentCount) const
+    {
+        ConvertFields(engine, stream, gradient, coefficients, plan, true, false, firstComponent, componentCount);
     }
     void GradientPlan::ExtractLinearGradients(const FVField &coefficients, const VariationalReconstructionPlan &reconstruction, FVField &gradient, bool ghost) const
     {

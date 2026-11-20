@@ -50,8 +50,8 @@ namespace DNDS::Cauchy
         std::optional<WallDistanceRead> walls;
         WallDistanceView wallValues;
         std::optional<DerivedFields::ReadScope> derivedOwned, derivedGhost;
-        std::array<std::optional<R::Array<real>::WriteLease>, 7> writes;
-        std::array<RHSOutputView, 7> values;
+        std::array<std::optional<R::Array<real>::WriteLease>, 8> writes;
+        std::array<RHSOutputView, 8> values;
         std::optional<R::Array<real>::WriteLease> scratchWrite;
         RHSOutputView scratch;
         index flowFirst = -1, speciesFirst = -1, ransFirst = -1;
@@ -153,7 +153,7 @@ namespace DNDS::Cauchy
                 for (const auto *derived : {&buffers.derivedOwned, &buffers.derivedGhost})
                     if (*derived)
                         (*derived)->PreflightRefresh();
-                for (int k = 0; k < 7; ++k)
+                for (int k = 0; k < 8; ++k)
                     if (arrays[k])
                     {
                         auto handle = *arrays[k];
@@ -225,7 +225,7 @@ namespace DNDS::Cauchy
         }
         CPU::AuxiliaryKernelRequest KernelInput(
             SpanView<const EquationBlockReadView> blocks, SpanView<const RHSFieldView> gradient,
-            const std::array<RHSOutputView, 7> &outputs, RHSOutputView privateFaces,
+            const std::array<RHSOutputView, 8> &outputs, RHSOutputView privateFaces,
             std::optional<MeanThermodynamicView> derived, RHSScalarView packet) const
         {
             CPU::AuxiliaryKernelRequest request;
@@ -240,7 +240,7 @@ namespace DNDS::Cauchy
             request.hasWall = bool(walls);
             request.derived = derived;
             const auto arrays = EquationAuxiliaryArrays(buffers);
-            for (int k = 0; k < 7; ++k)
+            for (int k = 0; k < 8; ++k)
                 request.enabled[k] = bool(arrays[k]);
             request.values = outputs;
             request.scratch = privateFaces;
@@ -375,7 +375,7 @@ namespace DNDS::Cauchy
             struct Bindings
             {
                 std::vector<std::array<index, 2>> source, gradient;
-                std::array<index, 7> output{-1, -1, -1, -1, -1, -1, -1};
+                std::array<index, 8> output{-1, -1, -1, -1, -1, -1, -1, -1};
                 index scratch = -1, packet = -1, derivedOwned = -1, derivedGhost = -1;
                 std::optional<BoundaryInputs> boundary;
                 std::array<int, 5> derivedColumns{0, 1, 2, -1, -1};
@@ -432,7 +432,7 @@ namespace DNDS::Cauchy
                 }
             }
             const auto arrays = EquationAuxiliaryArrays(buffers);
-            for (int k = 0; k < 7; ++k)
+            for (int k = 0; k < 8; ++k)
                 if (arrays[k])
                 {
                     slots->output[k] = index(writes.size());
@@ -460,8 +460,8 @@ namespace DNDS::Cauchy
                     std::vector<RHSFieldView> gradients;
                     for (const auto &field : slots->gradient)
                         gradients.push_back({reads[field[0]], field[1] >= 0 ? reads[field[1]] : RHSScalarView{}});
-                    std::array<RHSOutputView, 7> outputs{};
-                    for (int k = 0; k < 7; ++k)
+                    std::array<RHSOutputView, 8> outputs{};
+                    for (int k = 0; k < 8; ++k)
                         if (slots->output[k] >= 0) outputs[k] = writes[slots->output[k]];
                     std::optional<MeanThermodynamicView> derived;
                     if (slots->derivedOwned >= 0)
@@ -556,7 +556,7 @@ namespace DNDS::Cauchy
         if (_state->mode == State::Mode::Queued)
             _state->CheckQueuedCompletion();
         const auto a = EquationAuxiliaryArrays(_state->buffers), b = EquationAuxiliaryArrays(output);
-        for (int k = 0; k < 9; ++k)
+        for (int k = 0; k < int(a.size()); ++k)
             DNDS_check_throw_info(bool(a[k]) == bool(b[k]) && (!a[k] || a[k]->SharedStorage() == b[k]->SharedStorage()), "equation auxiliary buffers were replaced");
         int k = 0;
         for (const auto *field : {&output.cellSpectralSum, &output.cellWaveJump, &output.cellPressureMinimum})

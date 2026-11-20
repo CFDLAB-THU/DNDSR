@@ -35,6 +35,21 @@ The last internal snapshot is useful for profile comparisons after a capped
 stage. The solver publishes an accepted steady result only when the configured
 tolerances pass.
 
+For SUBOFF phase 1, run [run_cauchy_suboff_phase1.sh](../../scripts/run_cauchy_suboff_phase1.sh)
+with the CUDA and AmgX build. Set `CUDA_VISIBLE_DEVICES` to select the
+physical GPU. The script uses one unbound MPI rank, defaults to 16 setup
+threads, and reads the existing SUBOFF mesh from the parent checkout.
+`SUBOFF_MESH` and `CAUCHY_EXE` can override those paths.
+Set `SUBOFF_CHECK_CONFIG=1` to print the resolved config.
+
+The [SUBOFF case](acm_suboff_p1_gg_amgx.json) uses ACM–SST at Re=12 million
+with direct P1 Green–Gauss and a single native AmgX V-cycle per update.
+It allows 20,000 nonlinear updates, checkpoints every 2,000, and writes
+volume and boundary visualizations every 4,000. History is written every
+update. The final state and summary distinguish a capped solve from
+a converged one. The launcher creates a fresh output directory and
+duplicates stdout to its log.
+
 The ACM vortex template uses a BDF1 start from the analytic cell averages.
 For ESDIRK4, first project the time-zero field onto the discrete continuity
 constraint using `cauchy_experiment_acm_vortex_projection`. Pass that checkpoint

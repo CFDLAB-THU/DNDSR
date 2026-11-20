@@ -10,6 +10,7 @@ import csv
 import json
 import math
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 
@@ -74,13 +75,15 @@ def main():
                     header = reader.fieldnames
                 assert reader.fieldnames == header
                 assert {"step", "stage", "coupled_stage", "iteration", "status",
-                        "res_rho", "res_rhoE"} <= set(header)
+                        "res_rho", "res_rhoE", "min_rho", "max_rho",
+                        "min_rhoE", "max_rhoE"} <= set(header)
                 data = list(reader)
                 assert 0 < len(data) <= 2
                 rows.extend(data)
         accepted = [int(row["step"]) for row in rows
                     if int(row["stage"]) == -1 and int(row["iteration"]) == -1]
         assert accepted == [0, 1, 2] and len(rows) == len(accepted)
+        assert all(0 < float(row["min_rho"]) < float(row["max_rho"]) for row in rows)
         assert all(None not in row and all(not value or math.isfinite(float(value))
                                           for value in row.values()) for row in rows)
         assert (folder / "first-D0-final.vtkhdf").exists()
@@ -98,13 +101,23 @@ def main():
         exact["time"].update({"method": "bdf2", "steps": 1})
         exact["output"].update({
             "prefix": str(folder / "exact"),
-            "implicit": {"checkpointInterval": 1, "visualizationInterval": 1},
+            "implicit": {"checkpointInterval": 1, "visualizationInterval": 1,
+                         "consoleInterval": 5},
         })
         exact_config = folder / "exact.json"
         exact_config.write_text(json.dumps(exact))
-        run(exact_config)
+        exact_stdout = run(exact_config)
+        with (folder / "exact-D0-history.csv").open() as history:
+            observed = [row for row in csv.DictReader(history) if row["status"] == "0"]
+            assert observed and all(float(row["min_rho"]) < float(row["max_rho"]) for row in observed)
         internal = sorted(folder.glob("exact-D0-S1_0_*.h5"))
         assert internal
+        for path in internal:
+            iteration = int(path.stem.rsplit("_", 1)[1])
+            announcement = f"Writing checkpoint and visualization {path.stem.removeprefix('exact-')}"
+            before_write, found, _ = exact_stdout.partition(announcement)
+            assert found
+            assert re.search(rf"Internal === Step \[\s*1,\s*0,\s*{iteration}\]", before_write)
         assert all(path.with_name(path.stem + "-manifest.json").is_file()
                    for path in internal)
         run(exact_config, "--restart", internal[0], "-k", "/output/prefix", "-v",

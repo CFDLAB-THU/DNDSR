@@ -28,7 +28,8 @@ TEST_CASE("ACM device correction matches CPU on flow4 and mechanical SA and SST"
         settings.equation.acmPressureMean = 0;
         settings.equation.transport = "Newtonian";
         settings.equation.viscosity = .001;
-        settings.equation.rans.model = multigrid ? "none" : eulerScalar ? "KOmegaSST" : profile;
+        settings.equation.rans.model = multigrid ? "none" : eulerScalar ? "KOmegaSST"
+                                                                        : profile;
         settings.equation.rans.viscosityReference = .001;
         settings.equation.referenceScales = {{"rho0", 1}, {"U0", 1}, {"L0", 1}, {"T0", 300}};
         std::vector<double> initial{.2, -.03, .04, -.1};
@@ -42,6 +43,11 @@ TEST_CASE("ACM device correction matches CPU on flow4 and mechanical SA and SST"
         settings.numerics.reconstruction = "constant";
         settings.numerics.viscousGradient = "polynomial";
         settings.numerics.faceFallback = false;
+        settings.numerics.ransMeanFaceValues = eulerScalar;
+        settings.numerics.ransP1Overlay = eulerScalar;
+        if (eulerScalar)
+            settings.numerics.limiter = "Barth";
+        settings.numerics.ransCellCenterViscosity = eulerScalar;
         settings.implicit.residualComponents.clear();
         settings.implicit.diagonal = "block";
         settings.implicit.jacobianAction = "assembled";
@@ -70,6 +76,7 @@ TEST_CASE("ACM device correction matches CPU on flow4 and mechanical SA and SST"
         time.method = "bdf1";
         auto mesh = CFVTest::CartesianHexes(mpi, 3);
         std::optional<R::Array<double>> reference;
+        std::vector<DNDS::real> referenceBounds;
         for (const auto *mapping : {"cpu", "thread", "ctaSegments"})
         {
             CAPTURE(std::string_view(mapping));
@@ -84,11 +91,16 @@ TEST_CASE("ACM device correction matches CPU on flow4 and mechanical SA and SST"
             if (multigrid)
                 CHECK(domain.LastImplicitStages().front().multigridCycles > 0);
             auto values = domain.Dofs().CoupledField().Owned().To(R::Device::Host());
+            const auto bounds = domain.MeasureStateBounds(false);
+            REQUIRE(bounds.size() == 2 * initial.size());
             if (!reference)
             {
                 reference = values.Clone();
+                referenceBounds = bounds;
                 continue;
             }
+            for (I j = 0; j < I(bounds.size()); ++j)
+                CHECK(bounds[j] == doctest::Approx(referenceBounds[j]).epsilon(1e-8).scale(1));
             auto expected = reference->Read(), actual = values.Read();
             for (I iCell = 0; iCell < values.RowCount(); ++iCell)
                 for (I j = 0; j < I(initial.size()); ++j)

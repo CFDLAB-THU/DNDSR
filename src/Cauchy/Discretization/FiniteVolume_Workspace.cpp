@@ -1,5 +1,6 @@
 #include "Cauchy/Discretization/FiniteVolume.hpp"
 #include "Cauchy/Discretization/FiniteVolumeWorkspaceInternal.hpp"
+#include "Cauchy/Discretization/ViscousReconstruction.hpp"
 #include "Cauchy/State/EquationDofAlgebra.hpp"
 #include "Cauchy/State/EquationDofCommunication.hpp"
 #include "DNDS/Core/OMP.hpp"
@@ -55,7 +56,7 @@ namespace DNDS::Cauchy
             const auto &numerics = data.settings.numerics;
             const bool meanSource = data.equation.HasRANS() &&
                                     (meanOnly || numerics.reconstruction == "constant");
-            if (meanSource || (!meanOnly && (numerics.reconstruction == "gradient" || data.limitedVRGeometry)))
+            if (meanSource || (!meanOnly && (numerics.reconstruction == "gradient" || numerics.UsesRANSGradientBarth() || data.limitedVRGeometry)))
             {
                 field.gradient.emplace(data.metrics.BuildField(
                     FiniteVolumeDetail::FieldLayout(physical.Owned().Layout(), data.metrics.NumCell(),
@@ -168,7 +169,8 @@ namespace DNDS::Cauchy
                                (owner->settings.numerics.limiter == "none" ||
                                 owner->settings.numerics.limiter == "Barth" ||
                                 owner->settings.numerics.limiter == "WBAP");
-        if (nativeDirectGradient)
+        const bool ransGradientBarth = !meanOnly && owner->settings.numerics.UsesRANSGradientBarth();
+        if (nativeDirectGradient || ransGradientBarth)
         {
             // These are CPU row-local temporaries. CUDA leaves use local
             // fixed-width values and per-cell result/status arrays instead.
@@ -176,7 +178,7 @@ namespace DNDS::Cauchy
             {
                 cpuGradientWorkers = OMP::DistributedThreads();
                 directLimiterScratch = R::Array<real>(R::RowLayout::Dense(6 * cpuGradientWorkers, componentNumber));
-                if (owner->settings.numerics.positivity)
+                if (nativeDirectGradient && owner->settings.GradientPositivity())
                     directPPSamples = R::Array<real>(R::RowLayout::Dense(owner->maximumGradientPoints * cpuGradientWorkers, componentNumber));
             }
         }
@@ -190,7 +192,7 @@ namespace DNDS::Cauchy
             else if (owner->reconstruction)
                 flowCharacteristic.emplace(owner->reconstruction->BuildQueuedFaceTransform(flow.firstComponent, 5));
         }
-        if (owner->settings.numerics.reconstruction != "variational" || (meanOnly && owner->equation.HasRANS()))
+        if (owner->settings.numerics.reconstruction != "variational" || (meanOnly && owner->equation.HasRANS()) || ransGradientBarth)
         {
             for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
             {
@@ -202,7 +204,7 @@ namespace DNDS::Cauchy
                     DNDS_check_throw_info(fields[iField].gradient,
                                           "explicit P1 has no prepared physical-gradient publication");
                     if (owner->settings.numerics.limiter == "none" &&
-                        !owner->settings.numerics.positivity)
+                        !owner->settings.GradientPositivity())
                         directGradients.push_back(*fields[iField].gradient);
                     else
                     {
@@ -218,10 +220,7 @@ namespace DNDS::Cauchy
                     directGradientHalo.push_back(owner->BindHalo(
                         directGradients.back(), "cauchy-direct-gradient"));
                     if (owner->equation.Viscous() &&
-                        owner->settings.numerics.viscousGradient == "polynomial" &&
-                        !owner->settings.numerics.viscousLimited &&
-                        (owner->settings.numerics.limiter != "none" ||
-                         owner->settings.numerics.positivity))
+                        FiniteVolumeDetail::UsesUnlimitedViscousReconstruction(owner->settings))
                     {
                         directViscousGradients.push_back(*fields[iField].gradient);
                         directViscousGradientHalo.push_back(owner->BindHalo(
@@ -239,8 +238,14 @@ namespace DNDS::Cauchy
                         FiniteVolumeDetail::FieldLayout(state.PhysicalField(iField).Owned().Layout(), owner->metrics.NumCell(),
                                                         state.PhysicalField(iField).Width() * owner->metrics.Dimension()),
                         owner->metrics.Device()));
+                if (ransGradientBarth)
+                {
+                    const auto name = "Cauchy/gradient/ransOverlayBarth/" + state.Fields().Name(iField);
+                    directGradients.back().Owned().SetName(name + "/owned", DNDS_ALLOCATION_SITE());
+                    directGradients.back().Ghost().SetName(name + "/ghost", DNDS_ALLOCATION_SITE());
+                }
                 if (!meanOnly && owner->equation.Viscous() && owner->settings.numerics.viscousGradient == "polynomial" &&
-                    !owner->settings.numerics.viscousLimited && !nativeDirectGradient && owner->reconstruction)
+                    !owner->settings.numerics.viscousLimited && !nativeDirectGradient && !ransGradientBarth && owner->reconstruction)
                     directViscousGradients.push_back(owner->metrics.BuildField(
                         FiniteVolumeDetail::FieldLayout(state.PhysicalField(iField).Owned().Layout(), owner->metrics.NumCell(),
                                                         state.PhysicalField(iField).Width() * owner->metrics.Dimension()),

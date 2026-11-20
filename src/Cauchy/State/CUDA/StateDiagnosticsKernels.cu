@@ -12,6 +12,60 @@ namespace DNDS::Cauchy::CUDA
     {
         constexpr int Threads = 128;
         using Cells = R::ArrayView<const real, false, R::FixedRows<8>>;
+        template <int Components>
+        struct StateBounds
+        {
+            real values[2 * Components];
+
+            __device__ StateBounds()
+            {
+                for (auto &value : values)
+                    value = -std::numeric_limits<real>::infinity();
+            }
+        };
+        template <int Components>
+        struct MergeBounds
+        {
+            __device__ StateBounds<Components> operator()(StateBounds<Components> a, StateBounds<Components> b) const
+            {
+                for (int j = 0; j < 2 * Components; ++j)
+                    a.values[j] = fmax(a.values[j], b.values[j]);
+                return a;
+            }
+        };
+        template <int Components>
+        __global__ void Bounds(DiagnosticInput mean, BoundsOutput partial, BoundsOutput result, DiagnosticCounter completed)
+        {
+            using Reduce = cub::BlockReduce<StateBounds<Components>, Threads, cub::BLOCK_REDUCE_RAKING>;
+            __shared__ typename Reduce::TempStorage scratch;
+            __shared__ bool last;
+            StateBounds<Components> local;
+            for (index iCell = index(blockIdx.x) * Threads + threadIdx.x; iCell < mean.RowCount(); iCell += index(gridDim.x) * Threads)
+                for (int j = 0; j < Components; ++j)
+                {
+                    const real value = mean(iCell, j);
+                    local.values[2 * j] = fmax(local.values[2 * j], -value);
+                    local.values[2 * j + 1] = fmax(local.values[2 * j + 1], value);
+                }
+            const auto block = Reduce(scratch).Reduce(local, MergeBounds<Components>{});
+            if (!threadIdx.x)
+            {
+                for (int j = 0; j < 2 * Components; ++j)
+                    partial(blockIdx.x, j) = block.values[j];
+                last = Device::ArriveReductionBlock(completed(0, 0), gridDim.x);
+            }
+            __syncthreads();
+            if (!last)
+                return;
+            StateBounds<Components> tail;
+            for (index iRow = threadIdx.x; iRow < partial.RowCount(); iRow += Threads)
+                for (int j = 0; j < 2 * Components; ++j)
+                    tail.values[j] = fmax(tail.values[j], partial(iRow, j));
+            const auto total = Reduce(scratch).Reduce(tail, MergeBounds<Components>{});
+            if (!threadIdx.x)
+                for (int j = 0; j < 2 * Components; ++j)
+                    result(0, j) = total.values[j];
+        }
         struct Merge
         {
             __device__ StateDiagnosticSummary operator()(StateDiagnosticSummary a, StateDiagnosticSummary b) const
@@ -95,6 +149,34 @@ namespace DNDS::Cauchy::CUDA
     {
         DNDS_check_throw_info(rows >= 0, "negative diagnostic row count");
         return std::max(index(1), std::min(index(256), rows / Threads + (rows % Threads != 0)));
+    }
+    void MeasureStateBounds(R::ExecutionContext context, DiagnosticInput mean, BoundsOutput partial, BoundsOutput result, DiagnosticCounter completed)
+    {
+        R::ValidateViewDevices(context.device, mean, partial, result, completed);
+        DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && mean.Width() >= 4 && mean.Width() <= 7 &&
+                                  partial.RowCount() == StateDiagnosticScratchRows(mean.RowCount()) && partial.Width() == 2 * mean.Width() &&
+                                  result.RowCount() == 1 && result.Width() == partial.Width() && completed.RowCount() == 1,
+                              "invalid CUDA state bounds views");
+        const auto stream = R::CUDAStream(context);
+        DNDS_check_throw_info(cudaMemsetAsync(completed.data, 0, sizeof(unsigned int), stream) == cudaSuccess,
+                              "CUDA state bounds counter reset failed");
+        const auto blocks = unsigned(partial.RowCount());
+        switch (mean.Width())
+        {
+        case 4:
+            Bounds<4><<<blocks, Threads, 0, stream>>>(mean, partial, result, completed);
+            break;
+        case 5:
+            Bounds<5><<<blocks, Threads, 0, stream>>>(mean, partial, result, completed);
+            break;
+        case 6:
+            Bounds<6><<<blocks, Threads, 0, stream>>>(mean, partial, result, completed);
+            break;
+        case 7:
+            Bounds<7><<<blocks, Threads, 0, stream>>>(mean, partial, result, completed);
+            break;
+        }
+        DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA state bounds launch failed");
     }
     void AccumulateStateDiagnostics(R::ExecutionContext context, DiagnosticInput mean, DiagnosticInput residual,
                                     Cells cells, std::optional<PerfectGas> gas, DiagnosticOutput partial, DiagnosticOutput result, DiagnosticCounter completed)

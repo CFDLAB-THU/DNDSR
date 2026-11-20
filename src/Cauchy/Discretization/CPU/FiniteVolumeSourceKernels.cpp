@@ -250,15 +250,6 @@ namespace DNDS::Cauchy::CPU
                     const RANSReconstructionView rans{model.Kind(), model.ComponentNumber()};
                     const auto mean = request.ransMean[iCell];
                     auto *values = point.values.data() + request.ransFirst;
-                    if (request.ransP1Gradients.data)
-                    {
-                        std::array<real, 3> dx{};
-                        for (int d = 0; d < dimension; ++d)
-                            dx[d] = request.metric.cells(iCell, 7) * basis[0][d];
-                        rans.OverlayP1(dimension, mean, dx,
-                                       [&](int j, int d) { return request.ransP1Gradients(iCell, (request.ransP1First + j) * dimension + d); },
-                                       [&](int j, int d, real slope) { point.gradient(request.ransFirst + j, d) = slope; }, values);
-                    }
                     rans.RepairPoint(mean, values);
                 }
                 PointProperties properties;

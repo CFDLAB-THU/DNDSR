@@ -19,7 +19,7 @@ namespace DNDS::Cauchy::CUDA::Detail
         using Pair = Runtime::PairReadView<real, Runtime::AccessBoundsChecks, Runtime::FixedRows<Width, Width>>;
         Pair<C> mean;
         Pair<C * (M ? M : D)> reconstruction, viscousData;
-        RHSField ransP1Gradients;
+        CellCenterViscosityView centerViscosity;
     };
 
     template <int C, class Fields, class Output>
@@ -70,7 +70,7 @@ namespace DNDS::Cauchy::CUDA::Detail
             if constexpr (C > 4)
             {
                 const auto at = face.Turbulence(physics, geometry.wallFaces(sample.face, entry - first));
-                const auto transport = Physics::RANS::TryTransport(physics.rans, at);
+                const auto transport = Physics::RANS::TryTransport(physics.rans, at, fields.centerViscosity.AtFace(sample.cell, sample.other));
                 if (!transport)
                     return transport.status.At(sample.cell, entry);
                 const Eigen::Vector3d normal(sample.normal[0], sample.normal[1], sample.normal[2]);
@@ -258,7 +258,7 @@ namespace DNDS::Cauchy::CUDA::Detail
         using Coefficients = Runtime::FixedRows<W, W>;
         ACMPolynomialFields<C, M, D> fields{};
         fields.mean = ProjectRHSField<State>(launch.fields.mean);
-        fields.ransP1Gradients = launch.fields.ransP1Gradients;
+        fields.centerViscosity = launch.fields.centerViscosity;
         if (modal || (!controls.firstOrder && controls.linear))
         {
             fields.reconstruction = ProjectRHSField<Coefficients>(launch.fields.reconstruction);

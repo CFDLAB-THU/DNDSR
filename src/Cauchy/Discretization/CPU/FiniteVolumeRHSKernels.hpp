@@ -1,4 +1,6 @@
 #pragma once
+
+#include "Cauchy/Discretization/CellCenterViscosityView.hpp"
 #include "DNDS/Core/NumericalStatus.hpp"
 #include "Cauchy/Discretization/FiniteVolumeStencil.hpp"
 #include "Cauchy/Discretization/FiniteVolumeViews.hpp"
@@ -60,8 +62,8 @@ namespace DNDS::Cauchy::CPU
         SpanView<const index> logicalFirst, vectorStarts;
         EquationBlockReadView ransMean;
         std::optional<RHSScalarView> preparedMean;
-        RHSFieldView waveJump, pressureMinimum, primitiveGradientValues, ransP1Gradients;
-        index ransP1First = 0;
+        RHSFieldView waveJump, pressureMinimum, primitiveGradientValues;
+        CellCenterViscosityView centerViscosity;
         RHSScalarView incoming;
         RHSOutputView faceValues, lowFaceValues;
         Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::FixedRows<3>> wallFlux;

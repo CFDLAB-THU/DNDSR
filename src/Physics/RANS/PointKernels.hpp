@@ -6,6 +6,12 @@
 
 namespace DNDS::Physics::RANS
 {
+    DNDS_DEVICE_CALLABLE inline TurbulentTransport TransportFromViscosity(const Point &point, real viscosity,
+                                                                          real prandtl, real schmidt) noexcept
+    {
+        return {viscosity, point.incompressible ? 0 : point.cp * viscosity / prandtl,
+                point.incompressible ? 0 : viscosity / std::max(point.state[0] * schmidt, verySmallReal)};
+    }
     /// Precondition check for the shared point math, independent of allocation
     /// or address space. Config scales are validated at setup, not per point.
     /// Only active conservative components and their gradients are inspected.
@@ -36,30 +42,34 @@ namespace DNDS::Physics::RANS
     /// Euler turbulent transport formulas. The false diagnostic template
     /// arguments suppress legacy fatal printing; outputs are checked here and
     /// failures returned explicitly. No clipping or alternate closure is added.
-    DNDS_DEVICE_CALLABLE inline NumericalResult<TurbulentTransport> TryTransport(const PointParameters &parameters, const Point &point) noexcept
+    /// A nonnegative prepared viscosity supplies a frozen closure coefficient.
+    DNDS_DEVICE_CALLABLE inline NumericalResult<TurbulentTransport> TryTransport(const PointParameters &parameters, const Point &point,
+                                                                                 real preparedViscosity = -1) noexcept
     {
         const auto status = CheckPoint(parameters, point);
         if (!status)
             return status;
-        real viscosity = 0;
+        real viscosity = preparedViscosity;
         using State = const Eigen::Matrix<real, 7, 1> &;
         using Gradient = const Eigen::Matrix<real, 3, 7> &;
-        switch (parameters.kind)
+        if (viscosity < 0)
         {
-        case ModelKind::SA:
-            viscosity = GetMut_SA<3>(point.state, parameters.viscosityReference, point.molecularViscosity);
-            break;
-        case ModelKind::KOmegaWilcox:
-            viscosity = GetMut_KOWilcox<3, State, Gradient, false>(point.state, point.gradient, point.molecularViscosity, point.wallDistance, parameters.kOmega);
-            break;
-        case ModelKind::KOmegaSST:
-            viscosity = GetMut_SST<3, State, Gradient, false>(point.state, point.gradient, point.molecularViscosity, point.wallDistance, parameters.sst);
-            break;
-        default:
-            return TurbulentTransport{};
+            switch (parameters.kind)
+            {
+            case ModelKind::SA:
+                viscosity = GetMut_SA<3>(point.state, parameters.viscosityReference, point.molecularViscosity);
+                break;
+            case ModelKind::KOmegaWilcox:
+                viscosity = GetMut_KOWilcox<3, State, Gradient, false>(point.state, point.gradient, point.molecularViscosity, point.wallDistance, parameters.kOmega);
+                break;
+            case ModelKind::KOmegaSST:
+                viscosity = GetMut_SST<3, State, Gradient, false>(point.state, point.gradient, point.molecularViscosity, point.wallDistance, parameters.sst);
+                break;
+            default:
+                return TurbulentTransport{};
+            }
         }
-        TurbulentTransport result{viscosity, point.incompressible ? 0 : point.cp * viscosity / parameters.turbulentPrandtl,
-                                  point.incompressible ? 0 : viscosity / std::max(point.state[0] * parameters.turbulentSchmidt, verySmallReal)};
+        const auto result = TransportFromViscosity(point, viscosity, parameters.turbulentPrandtl, parameters.turbulentSchmidt);
         if (!std::isfinite(result.viscosity) || !std::isfinite(result.conductivity) || !std::isfinite(result.speciesDiffusivity))
             return NumericalStatus{NumericalError::InvalidState, 50};
         return result;
