@@ -7,7 +7,7 @@ namespace DNDS::Cauchy
 {
     void FiniteVolume::Workspace::SubmitDeviceVolumeSource(
         R::EagerEngine &engine, const R::ExecutionStream &stream,
-        const EquationDofs &state, EquationDofs &result, real time,
+        const EquationDofs &state, EquationDofs &result, real time, CFV::ReconstructionRegion region,
         OptionalRef<EquationDofs> lowOrder, OptionalRef<R::Array<real>> sourceDerivative)
     {
 #ifdef DNDS_USE_CUDA
@@ -20,9 +20,10 @@ namespace DNDS::Cauchy
         struct Inputs
         {
             std::shared_ptr<const Data> owner;
+            FiniteVolumeStencilStorage::ReadAccess stencil;
             Geom::MeshReadAccess mesh;
             explicit Inputs(std::shared_ptr<const Data> data)
-                : owner(std::move(data)), mesh(owner->metrics.AcquireMeshRead(bool(owner->wallDistance)))
+                : owner(std::move(data)), stencil(owner->stencil.Read({owner->metrics.Device(), nullptr})), mesh(owner->metrics.AcquireMeshRead(bool(owner->wallDistance)))
             {
                 if (owner->equation.HasRANS())
                 {
@@ -31,17 +32,18 @@ namespace DNDS::Cauchy
             }
         };
         const auto pin = std::make_shared<Inputs>(owner);
+        const auto rows = pin->stencil.View().RHSRows(region, false, owner->metrics.NumCell());
         const auto frame = owner->motion.At(time).KernelParameters();
         if (frame.moving)
         {
             auto &output = result.CoupledField().Owned();
             const int firstMomentum = owner->equation.IsACM() ? 0 : 1;
             if (lowOrder)
-                R::SubmitArrays(engine, stream, [pin, frame, firstMomentum](R::ExecutionContext context, auto means, auto output, auto low, auto metric)
-                                { CUDA::AddRotationSource(context, metric, frame, means, output, low, true, R::RowSelectionShape::AllRows(means.RowCount()), firstMomentum); }, R::ReadAs<R::TableRows>(state.CoupledField().Owned()), R::ReadWriteAs<R::TableRows>(output), R::ReadWriteAs<R::TableRows>(lowOrder->CoupledField().Owned()), R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics()));
+                R::SubmitArrays(engine, stream, [pin, frame, firstMomentum, rows](R::ExecutionContext context, auto means, auto output, auto low, auto metric)
+                                { CUDA::AddRotationSource(context, metric, frame, means, output, low, true, rows, firstMomentum); }, R::ReadAs<R::TableRows>(state.CoupledField().Owned()), R::ReadWriteAs<R::TableRows>(output), R::ReadWriteAs<R::TableRows>(lowOrder->CoupledField().Owned()), R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics()));
             else
-                R::SubmitArrays(engine, stream, [pin, frame, firstMomentum](R::ExecutionContext context, auto means, auto output, auto metric)
-                                { CUDA::AddRotationSource(context, metric, frame, means, output, output, false, R::RowSelectionShape::AllRows(means.RowCount()), firstMomentum); }, R::ReadAs<R::TableRows>(state.CoupledField().Owned()), R::ReadWriteAs<R::TableRows>(output), R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics()));
+                R::SubmitArrays(engine, stream, [pin, frame, firstMomentum, rows](R::ExecutionContext context, auto means, auto output, auto metric)
+                                { CUDA::AddRotationSource(context, metric, frame, means, output, output, false, rows, firstMomentum); }, R::ReadAs<R::TableRows>(state.CoupledField().Owned()), R::ReadWriteAs<R::TableRows>(output), R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics()));
         }
         if (!sourceOffsets.RowCount())
             return;
@@ -59,7 +61,7 @@ namespace DNDS::Cauchy
             basis.polynomial = sourceSampling->BasisParameters();
             basis.cachedDerivatives = sourceSampling->CachedDerivativeNumber();
         }
-        auto evaluate = [pin, dimension, components, basis](R::ExecutionContext context, auto means, auto coefficients, auto grad, auto points, auto cached, auto moments, auto geometry, auto offsets, auto weights, auto lengths, auto output, auto status, auto wallPoints, auto... derivative)
+        auto evaluate = [pin, dimension, components, basis, rows](R::ExecutionContext context, auto means, auto coefficients, auto grad, auto points, auto cached, auto moments, auto geometry, auto offsets, auto weights, auto lengths, auto output, auto status, auto wallPoints, auto... derivative)
         {
             CUDA::SourceRequest request;
             ((request.preparedDerivative = derivative), ...);
@@ -76,7 +78,7 @@ namespace DNDS::Cauchy
             request.wallPoints = {wallPoints.data, wallPoints.offsets, wallPoints.rows, wallPoints.width, wallPoints.stride, wallPoints.sizes, wallPoints.kind, wallPoints.device};
             request.output = output; request.status = status;
             request.components = components; request.dimension = dimension;
-            CUDA::AddRANSSources(context, request, R::RowSelectionShape::AllRows(means.RowCount())); };
+            CUDA::AddRANSSources(context, request, rows); };
         const auto submit = [&](auto... record)
         {
             R::SubmitArrays(engine, stream, evaluate, R::ReadAs<R::TableRows>(state.CoupledField().Owned()), R::ReadAs<R::TableRows>(sourceSampling ? FluxCoefficients().CoupledField().Owned() : empty), R::ReadAs<R::TableRows>(grad),
@@ -89,7 +91,10 @@ namespace DNDS::Cauchy
             submit(R::WriteAs<R::UniformTableRows>(*sourceDerivative));
         else
             submit();
-        AppendPreparationStatus(engine, stream, preparationStatus->meanOwned);
+        // The core and dependent submissions fill disjoint owned slots. The
+        // intermediate direct-gradient publication writes only ghost status.
+        if (region != CFV::ReconstructionRegion::Core)
+            AppendPreparationStatus(engine, stream, preparationStatus->meanOwned);
 #else
         DNDS_check_throw_info(false, "CUDA volume sources are not built");
 #endif

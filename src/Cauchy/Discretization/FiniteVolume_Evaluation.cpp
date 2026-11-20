@@ -779,9 +779,17 @@ namespace DNDS::Cauchy
         // Publish the direct physical gradients after limiter/PP, once per row.
         // The physical-gradient RHS itself never interprets coefficient data.
         work.SubmitDirectGradients(engine, stream, state, false);
-        if (overlap && residual)
+        const auto submitSpatialRows = [&](CFV::ReconstructionRegion region)
+        {
             rhsSubmissions.push_back(work.SubmitRHS(engine, stream, state, *residual,
-                                                    CFV::ReconstructionRegion::Core, time, {}, OptionalRef<const AuxiliaryValues>(auxiliary), {}, incoming));
+                                                    region, time, {}, OptionalRef<const AuxiliaryValues>(auxiliary), {}, incoming));
+            // Flux initializes these residual rows; the volume term accumulates
+            // into them before handing execution to a different region.
+            work.SubmitVolumeSource(engine, stream, state, *residual, time, region, {},
+                                    work.lowOrderResidual ? OptionalRef<EquationDofs>(*work.lowOrderResidual) : OptionalRef<EquationDofs>{}, sourceDerivative);
+        };
+        if (overlap && residual)
+            submitSpatialRows(CFV::ReconstructionRegion::Core);
         schedule.Await(operations);
         schedule.Await(unlimitedViscousOperations);
         schedule.Await(directViscousOperations);
@@ -789,12 +797,7 @@ namespace DNDS::Cauchy
             schedule.Await(*primitiveGradientOperation);
         work.SubmitDirectGradients(engine, stream, state, true);
         if (residual)
-        {
-            rhsSubmissions.push_back(work.SubmitRHS(engine, stream, state, *residual,
-                                                    rest, time, {}, OptionalRef<const AuxiliaryValues>(auxiliary), {}, incoming));
-            work.SubmitVolumeSource(engine, stream, state, *residual, time, {},
-                                    work.lowOrderResidual ? OptionalRef<EquationDofs>(*work.lowOrderResidual) : OptionalRef<EquationDofs>{}, sourceDerivative);
-        }
+            submitSpatialRows(rest);
         local([&]
               {
             schedule.Join();

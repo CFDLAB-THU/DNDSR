@@ -8,7 +8,7 @@ namespace DNDS::Cauchy
 {
     void FiniteVolume::Workspace::SubmitVolumeSource(
         R::EagerEngine &engine, const R::ExecutionStream &stream,
-        const EquationDofs &state, EquationDofs &result, real time,
+        const EquationDofs &state, EquationDofs &result, real time, CFV::ReconstructionRegion region,
         std::shared_ptr<PointEvaluator> evaluator, OptionalRef<EquationDofs> lowOrder, OptionalRef<R::Array<real>> sourceDerivative)
     {
         DNDS_check_throw_info(engine.Owns(stream) && stream.Context().device == owner->metrics.Device() && std::isfinite(time),
@@ -35,15 +35,18 @@ namespace DNDS::Cauchy
             checkOutput(*lowOrder);
             EquationDofOperations::RequireDistinct(result, *lowOrder);
         }
+        if (!sourceOffsets.RowCount() && !owner->motion.At(time).moving)
+            return;
         if (owner->metrics.Device() != R::Device::Host())
         {
-            SubmitDeviceVolumeSource(engine, stream, state, result, time, lowOrder, sourceDerivative);
+            SubmitDeviceVolumeSource(engine, stream, state, result, time, region, lowOrder, sourceDerivative);
             return;
         }
         const auto timing = BeginQueuedPhase(engine, stream, SourcePhase);
         struct Inputs
         {
             std::shared_ptr<const Data> owner;
+            FiniteVolumeStencilStorage::ReadAccess stencil;
             Geom::MeshReadAccess geometry;
             bool walls = false;
             R::MetadataBuffer<index> logicalFirst;
@@ -60,9 +63,10 @@ namespace DNDS::Cauchy
             std::array<index, 4> basisSlots{};
             VolumeSourceBasis basis;
             explicit Inputs(std::shared_ptr<const Data> data)
-                : owner(std::move(data)), geometry(owner->metrics.AcquireMeshRead(bool(owner->wallDistance))) {}
+                : owner(std::move(data)), stencil(owner->stencil.Read({owner->metrics.Device(), nullptr})), geometry(owner->metrics.AcquireMeshRead(bool(owner->wallDistance))) {}
         };
         auto pin = std::make_shared<Inputs>(owner);
+        const auto rows = pin->stencil.View().RHSRows(region, false, owner->metrics.NumCell());
         pin->evaluator = std::move(evaluator);
         pin->workers = workers;
         const bool viscous = !meanOnly && owner->equation.Viscous();
@@ -78,7 +82,7 @@ namespace DNDS::Cauchy
             std::vector<Output> outputs{R::ReadWriteAs<R::UniformTableRows>(result.PhysicalField(target.physicalField).Owned())};
             if (low)
                 outputs.push_back(R::ReadWriteAs<R::UniformTableRows>(lowOrder->PhysicalField(low->physicalField).Owned()));
-            R::SubmitArrayBatch(engine, stream, [pin, flow, target, low, frame](R::ExecutionContext, auto inputs, auto outputs, auto cells)
+            R::SubmitArrayBatch(engine, stream, [pin, flow, target, low, frame, rows](R::ExecutionContext, auto inputs, auto outputs, auto cells)
                                 {
                 const EquationBlockReadView mean{{inputs[0], flow.firstComponent, flow.componentNumber}, {{}, flow.firstComponent, flow.componentNumber}};
                 const EquationBlockArrayView<real> output{outputs[0], target.firstComponent, target.componentNumber};
@@ -86,7 +90,7 @@ namespace DNDS::Cauchy
                 if (low) lowOutput.emplace(EquationBlockArrayView<real>{outputs[1], low->firstComponent, low->componentNumber});
                 CFV::FiniteVolumeHostView metric;
                 metric.cells = cells;
-                CPU::AddEquationRotationSource(metric, frame, mean, output, lowOutput, pin->owner->equation.IsACM() ? 0 : 1); }, std::vector<Input>{R::ReadAs<R::UniformTableRows>(state.PhysicalField(flow.physicalField).Owned())}, std::move(outputs), std::make_tuple(R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics())));
+                CPU::AddEquationRotationSource(metric, frame, mean, output, lowOutput, pin->owner->equation.IsACM() ? 0 : 1, rows); }, std::vector<Input>{R::ReadAs<R::UniformTableRows>(state.PhysicalField(flow.physicalField).Owned())}, std::move(outputs), std::make_tuple(R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics())));
         }
         if (!sourceOffsets.RowCount())
         {
@@ -147,7 +151,7 @@ namespace DNDS::Cauchy
             pin->derivativeSlot = index(outputs.size());
             outputs.push_back(R::WriteAs<R::UniformTableRows>(*sourceDerivative));
         }
-        R::SubmitArrayBatch(engine, stream, [pin](R::ExecutionContext, auto inputs, auto outputs, auto offsets, auto weights, auto lengths, auto wallCells)
+        R::SubmitArrayBatch(engine, stream, [pin, rows](R::ExecutionContext, auto inputs, auto outputs, auto offsets, auto weights, auto lengths, auto wallCells)
                             {
             // Reserve a chemistry worker only after predecessors execute.
             // Holding it while queueing could starve an earlier auxiliary
@@ -169,7 +173,7 @@ namespace DNDS::Cauchy
             {
                 request.walls.cells = {wallCells.data, wallCells.offsets, wallCells.rows, wallCells.width, wallCells.stride, wallCells.sizes, wallCells.kind, wallCells.device};
             }
-            request.cells = pin->owner->metrics.NumCell();
+            request.rows = rows;
             request.components = pin->components;
             request.dimension = pin->owner->metrics.Dimension();
             request.flowFirst = pin->flowFirst;

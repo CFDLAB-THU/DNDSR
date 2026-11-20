@@ -80,7 +80,7 @@ namespace DNDS::Cauchy
         const auto offsetRead = sourceOffsets.Read();
         CPU::SourceKernelRequest request;
         request.offsets = offsetRead.View<R::FixedRows<1>>();
-        request.cells = owner->metrics.NumCell();
+        request.rows = R::RowSelectionShape::AllRows(owner->metrics.NumCell());
         request.components = state.ComponentNumber();
         request.dimension = owner->metrics.Dimension();
         request.flowFirst = flowFirst;
@@ -134,7 +134,7 @@ namespace DNDS::Cauchy
             const auto geometry = owner->metrics.AcquireRead();
             const auto metric = geometry.HostView();
             CPU::AddEquationRotationSource(metric, frame, flow, output,
-                                           lowWrite ? std::make_optional(lowOutput) : std::nullopt, owner->equation.IsACM() ? 0 : 1);
+                                           lowWrite ? std::make_optional(lowOutput) : std::nullopt, owner->equation.IsACM() ? 0 : 1, R::RowSelectionShape::AllRows(owner->metrics.NumCell()));
         }
         if (sourceOffsets.RowCount() == 0)
             return;
@@ -199,7 +199,7 @@ namespace DNDS::Cauchy
             locations.push_back(state.LocateBlock(iBlock));
         const auto offsetRead = sourceOffsets.Read();
         request.offsets = offsetRead.View<R::FixedRows<1>>();
-        request.cells = owner->metrics.NumCell();
+        request.rows = R::RowSelectionShape::AllRows(owner->metrics.NumCell());
         request.components = state.ComponentNumber();
         request.dimension = owner->metrics.Dimension();
         request.flowFirst = flowFirst;

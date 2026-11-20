@@ -639,7 +639,7 @@ namespace DNDS::Cauchy
         /// are recorded in the active preparation segment.
         /// @see docs/architecture/CauchyDispatch.md (CUDA volume source).
         void SubmitDeviceVolumeSource(R::EagerEngine &, const R::ExecutionStream &,
-                                      const EquationDofs &, EquationDofs &result, real time,
+                                      const EquationDofs &, EquationDofs &result, real time, CFV::ReconstructionRegion region,
                                       OptionalRef<EquationDofs> lowOrder = {}, OptionalRef<R::Array<real>> sourceDerivative = {});
         /// Common CPU/CUDA source addition. Direct RANS gradients must already
         /// be prepared. Modal values use the shared volume basis inside the source kernel. Only rigid-
@@ -650,7 +650,7 @@ namespace DNDS::Cauchy
         /// Optional derivative storage belongs to the caller pairing it with this rate.
         /// @see docs/architecture/CauchyDispatch.md (CPU volume source).
         void SubmitVolumeSource(R::EagerEngine &, const R::ExecutionStream &,
-                                const EquationDofs &, EquationDofs &result, real time,
+                                const EquationDofs &, EquationDofs &result, real time, CFV::ReconstructionRegion region,
                                 std::shared_ptr<PointEvaluator> evaluator = {},
                                 OptionalRef<EquationDofs> lowOrder = {}, OptionalRef<R::Array<real>> sourceDerivative = {});
         bool AddMeanSourceJacobian(

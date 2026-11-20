@@ -136,7 +136,7 @@ TEST_CASE("CUDA RANS quadrature sources and destruction diagonals match generic 
                 request.ransMean = rans;
                 request.ransOutput = {output.View<R::UniformTableRows>(), 5, width - 5};
                 request.matrix = output.View<R::UniformTableRows>();
-                request.cells = 2;
+                request.rows = R::RowSelectionShape::AllRows(2);
                 request.components = width;
                 request.flowFirst = 0;
                 request.ransFirst = 5;

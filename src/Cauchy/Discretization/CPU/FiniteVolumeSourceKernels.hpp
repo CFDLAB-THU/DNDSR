@@ -1,4 +1,5 @@
 #pragma once
+#include "DNDS/Runtime/Array/RowSelection.hpp"
 #include "Cauchy/Discretization/VolumeSourceBasis.hpp"
 #include "Cauchy/Discretization/FiniteVolumeViews.hpp"
 #include "Cauchy/Motion/RigidMotion.hpp"
@@ -36,7 +37,8 @@ namespace DNDS::Cauchy::CPU
         /// use logical row-major order, independent of the linear solver.
         RHSOutputView preparedDerivative;
         std::optional<EquationFVDetail::MeanLinearizationOutput> linearization;
-        index cells = 0, components = 0, flowFirst = -1, speciesFirst = -1, ransFirst = -1;
+        Runtime::RowSelection rows;
+        index components = 0, flowFirst = -1, speciesFirst = -1, ransFirst = -1;
         int dimension = 0, independentSpecies = 0;
         bool chemical = false, fullBlock = false;
         bool cellInputs = false; ///< Direct FV takes its mean and physical gradient from the parent cell.
@@ -75,5 +77,5 @@ namespace DNDS::Cauchy::CPU
                                      index components, bool fullBlock, bool rowMajor, real scale);
     void AddEquationRotationSource(CFV::FiniteVolumeHostView metric, const RigidFrame &frame,
                                    EquationBlockReadView flow, EquationBlockArrayView<real> output,
-                                   std::optional<EquationBlockArrayView<real>> lowOutput, int firstMomentum);
+                                   std::optional<EquationBlockArrayView<real>> lowOutput, int firstMomentum, Runtime::RowSelection rows);
 }

@@ -62,6 +62,8 @@ widths 5/6/7, ACM uses 4/5/6, and both cover 2D and 3D. ACM's projected
 `Fields` encode modal or gradient row widths. A launch policy also controls
 eligible arithmetic experiments and selects the CTA face package when required.
 
+When overlap is enabled, the spatial evaluation submits the core flux and then adds volume sources to those same residual rows while coefficient halos are in flight. After halo completion it repeats the pair for halo-dependent cells. The unsplit evaluation does this once for all owned cells. Frame forces, turbulent and chemical sources, and any paired source derivative follow the selected cell order. Device source status is folded once after both regions have written their slots.
+
 ## CPU volume source
 
 ```mermaid

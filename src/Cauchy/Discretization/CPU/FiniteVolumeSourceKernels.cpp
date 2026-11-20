@@ -18,8 +18,9 @@ namespace DNDS::Cauchy::CPU
             return NumericalStatus{NumericalError::InvalidInput};
         const index nv = request.components;
         const int independent = request.independentSpecies;
-        for (index iCell = first; iCell < last; ++iCell)
+        for (index i = first; i < last; ++i)
         {
+            const index iCell = request.rows.RowAt(i);
             Gather(request.blocks, iCell, point, false);
             if (request.ransFirst >= 0)
                 for (index iBlock = 0; iBlock < request.locations.size(); ++iBlock)
@@ -224,8 +225,9 @@ namespace DNDS::Cauchy::CPU
         const int independent = request.independentSpecies;
         if constexpr (ProduceDerivative)
             rowDerivative.resize(request.fullBlock ? nv * nv : nv);
-        for (index iCell = first; iCell < last; ++iCell)
+        for (index i = first; i < last; ++i)
         {
+            const index iCell = request.rows.RowAt(i);
             if constexpr (ProduceResidual)
             {
                 if (request.chemical)
@@ -340,7 +342,7 @@ namespace DNDS::Cauchy::CPU
                 return NumericalStatus{NumericalError::InvalidInput};
             OMP::ForRows(0, workers.size(), [&](index iWorker)
                          {
-                const index quotient = request.cells / workers.size(), remainder = request.cells % workers.size();
+                const index quotient = request.rows.RowCount() / workers.size(), remainder = request.rows.RowCount() % workers.size();
                 const index first = iWorker * quotient + std::min(iWorker, remainder);
                 auto &worker = workers[iWorker];
                 DNDS_assert(index(worker.point.values.size()) == request.components);
@@ -356,7 +358,7 @@ namespace DNDS::Cauchy::CPU
     NumericalStatus AssembleCenterSourceJacobian(const SourceKernelRequest &request, const EquationSystem &equation, PointEvaluator &evaluator) noexcept
     {
         PointScratch point(request.components);
-        return AssembleCenterSourceJacobianRows(request, equation, evaluator, point, 0, request.cells);
+        return AssembleCenterSourceJacobianRows(request, equation, evaluator, point, 0, request.rows.RowCount());
     }
     NumericalStatus AssembleCenterSourceJacobian(const SourceKernelRequest &request, const EquationSystem &equation, SpanView<SourceWorkerScratch> workers) noexcept
     {
@@ -366,7 +368,7 @@ namespace DNDS::Cauchy::CPU
     NumericalStatus AddQuadratureSourceJacobian(const SourceKernelRequest &request, const EquationSystem &equation, PointEvaluator &evaluator) noexcept
     {
         SourceRowScratch row(request.components);
-        return EvaluateVolumeSourceRows<false, true>(request, equation, evaluator, row, 0, request.cells);
+        return EvaluateVolumeSourceRows<false, true>(request, equation, evaluator, row, 0, request.rows.RowCount());
     }
     NumericalStatus AddQuadratureSourceJacobian(const SourceKernelRequest &request, const EquationSystem &equation, SpanView<SourceWorkerScratch> workers) noexcept
     {
@@ -376,8 +378,8 @@ namespace DNDS::Cauchy::CPU
     {
         SourceRowScratch row(request.components);
         return request.preparedDerivative.data
-                   ? EvaluateVolumeSourceRows<true, true>(request, equation, evaluator, row, 0, request.cells)
-                   : EvaluateVolumeSourceRows<true, false>(request, equation, evaluator, row, 0, request.cells);
+                   ? EvaluateVolumeSourceRows<true, true>(request, equation, evaluator, row, 0, request.rows.RowCount())
+                   : EvaluateVolumeSourceRows<true, false>(request, equation, evaluator, row, 0, request.rows.RowCount());
     }
     NumericalStatus EvaluateVolumeSource(const SourceKernelRequest &request, const EquationSystem &equation, SpanView<SourceWorkerScratch> workers) noexcept
     {
@@ -399,11 +401,12 @@ namespace DNDS::Cauchy::CPU
     }
     void AddEquationRotationSource(CFV::FiniteVolumeHostView metric, const RigidFrame &frame,
                                    EquationBlockReadView flow, EquationBlockArrayView<real> output,
-                                   std::optional<EquationBlockArrayView<real>> lowOutput, int firstMomentum)
+                                   std::optional<EquationBlockArrayView<real>> lowOutput, int firstMomentum, Runtime::RowSelection rows)
     {
         const auto motion = frame.KernelParameters();
-        OMP::ForRows(0, output.RowCount(), [&](index iCell)
+        OMP::ForRows(0, rows.RowCount(), [&](index row)
                      {
+            const index iCell = rows.RowAt(row);
             const auto source = motion.MomentumSource({flow(iCell, firstMomentum), flow(iCell, firstMomentum + 1), flow(iCell, firstMomentum + 2)});
             for (int d = 0; d < 3; ++d)
             {
