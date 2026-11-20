@@ -31,7 +31,8 @@ cgsize_t = ctypes.c_long
 
 
 def _load_cgns(repo_root: Path) -> ctypes.CDLL:
-    lib = repo_root / "external" / "cfd_externals" / "install" / "lib" / "libcgns.so"
+    default_lib = repo_root / "external" / "cfd_externals" / "install" / "lib" / "libcgns.so"
+    lib = Path(os.environ.get("DNDS_EXTERNAL_LIB_CGNS", default_lib))
     if not lib.exists():
         raise FileNotFoundError(f"CGNS shared library not found: {lib}")
     cgns = ctypes.CDLL(str(lib), mode=ctypes.RTLD_GLOBAL)
@@ -168,8 +169,6 @@ def main() -> None:
                         default=[2, 3], choices=[2, 3])
     args = parser.parse_args()
 
-    lib_dir = repo_root / "external" / "cfd_externals" / "install" / "lib"
-    os.environ["LD_LIBRARY_PATH"] = f"{lib_dir}:{os.environ.get('LD_LIBRARY_PATH', '')}"
     for n in args.blocks:
         print(generate(n, args.output, repo_root))
 
