@@ -559,104 +559,105 @@ namespace DNDS
 #    pragma omp parallel for schedule(static)
 #endif
             for (int iPart = 0; iPart < this->mesh->NLocalParts(); iPart++)
-                for (index iCell = this->mesh->LocalPartStart(iPart); iCell < this->mesh->LocalPartEnd(iPart); iCell++)
-                {
-                    if (reconstructionMask.IsMasked(iCell))
+                for (const auto range : this->mesh->LocalPartRanges(iPart).Intervals())
+                    for (index iCell = range.begin; iCell < range.end; ++iCell)
                     {
-                        // The constrained equation is uRec_i=0. Its residual is
-                        // uRec_i, not a zero row (Krylov operators stay nonsingular).
-                        if (recordInc && !uRecIsZero)
-                            uRecNew[iCell] = uRec[iCell];
-                        else
-                            uRecNew[iCell].setZero();
-                        continue;
-                    }
-                    real relax = GetCellAtr(iCell).relax;
-                    real alphaCell = alpha == nullptr ? 0.0 : (*alpha)[iCell](0);
-                    DNDS_assert_info(alphaCell >= 0.0 && alphaCell <= 1.0,
-                                     "limited reconstruction alpha must be in [0, 1]");
-                    real recWeight = 1.0 - alphaCell;
-
-                    if (recordInc)
-                    {
-                        if (uRecIsZero)
-                            uRecNew[iCell].setZero();
-                        else
-                            uRecNew[iCell] = uRec[iCell];
-                    }
-                    else if (settings.SORInstead)
-                    {
-                        uRec[iCell] *= 1.0 - relax;
-                        if (uRecTarget != nullptr)
-                            uRec[iCell] += relax * alphaCell * (*uRecTarget)[iCell];
-                    }
-                    else
-                    {
-                        uRecNew[iCell] = uRec[iCell] * (1.0 - relax);
-                        if (uRecTarget != nullptr)
-                            uRecNew[iCell] += relax * alphaCell * (*uRecTarget)[iCell];
-                    }
-
-                    auto c2f = mesh->cell2face[iCell];
-                    auto matrixAAInvBRow = coefficients_.matrixAAInvB[iCell];
-                    auto vectorAInvBRow = coefficients_.vectorAInvB[iCell];
-                    for (int ic2f = 0; recWeight > 0 && ic2f < c2f.size(); ic2f++)
-                    {
-                        index iFace = c2f[ic2f];
-                        index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
-                        auto faceID = mesh->GetFaceZone(iFace);
-                        int if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
-                        if (iCellOther != UnInitIndex)
+                        if (reconstructionMask.IsMasked(iCell))
                         {
-                            Eigen::RowVector<real, nVarsFixed> uOther = u[iCellOther];
-                            Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> uRecOther = uRec[iCellOther];
-                            this->ApplyPeriodicTransform(if2c, faceID, uOther, uRecOther);
-                            if (recordInc)
+                            // The constrained equation is uRec_i=0. Its residual is
+                            // uRec_i, not a zero row (Krylov operators stay nonsingular).
+                            if (recordInc && !uRecIsZero)
+                                uRecNew[iCell] = uRec[iCell];
+                            else
+                                uRecNew[iCell].setZero();
+                            continue;
+                        }
+                        real relax = GetCellAtr(iCell).relax;
+                        real alphaCell = alpha == nullptr ? 0.0 : (*alpha)[iCell](0);
+                        DNDS_assert_info(alphaCell >= 0.0 && alphaCell <= 1.0,
+                                         "limited reconstruction alpha must be in [0, 1]");
+                        real recWeight = 1.0 - alphaCell;
+
+                        if (recordInc)
+                        {
+                            if (uRecIsZero)
+                                uRecNew[iCell].setZero();
+                            else
+                                uRecNew[iCell] = uRec[iCell];
+                        }
+                        else if (settings.SORInstead)
+                        {
+                            uRec[iCell] *= 1.0 - relax;
+                            if (uRecTarget != nullptr)
+                                uRec[iCell] += relax * alphaCell * (*uRecTarget)[iCell];
+                        }
+                        else
+                        {
+                            uRecNew[iCell] = uRec[iCell] * (1.0 - relax);
+                            if (uRecTarget != nullptr)
+                                uRecNew[iCell] += relax * alphaCell * (*uRecTarget)[iCell];
+                        }
+
+                        auto c2f = mesh->cell2face[iCell];
+                        auto matrixAAInvBRow = coefficients_.matrixAAInvB[iCell];
+                        auto vectorAInvBRow = coefficients_.vectorAInvB[iCell];
+                        for (int ic2f = 0; recWeight > 0 && ic2f < c2f.size(); ic2f++)
+                        {
+                            index iFace = c2f[ic2f];
+                            index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
+                            auto faceID = mesh->GetFaceZone(iFace);
+                            int if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
+                            if (iCellOther != UnInitIndex)
                             {
-                                if (uRecIsZero)
-                                    uRecNew[iCell] -=
-                                        (vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
+                                Eigen::RowVector<real, nVarsFixed> uOther = u[iCellOther];
+                                Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> uRecOther = uRec[iCellOther];
+                                this->ApplyPeriodicTransform(if2c, faceID, uOther, uRecOther);
+                                if (recordInc)
+                                {
+                                    if (uRecIsZero)
+                                        uRecNew[iCell] -=
+                                            (vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
+                                    else
+                                        uRecNew[iCell] -=
+                                            (matrixAAInvBRow[ic2f + 1] * uRecOther +
+                                             vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
+                                }
+                                else if (settings.SORInstead)
+                                    uRec[iCell] +=
+                                        relax * recWeight *
+                                        (matrixAAInvBRow[ic2f + 1] * uRecOther +
+                                         vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
                                 else
-                                    uRecNew[iCell] -=
+                                    uRecNew[iCell] +=
+                                        relax * recWeight *
                                         (matrixAAInvBRow[ic2f + 1] * uRecOther +
                                          vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
                             }
-                            else if (settings.SORInstead)
-                                uRec[iCell] +=
-                                    relax * recWeight *
-                                    (matrixAAInvBRow[ic2f + 1] * uRecOther +
-                                     vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
                             else
-                                uRecNew[iCell] +=
-                                    relax * recWeight *
-                                    (matrixAAInvBRow[ic2f + 1] * uRecOther +
-                                     vectorAInvBRow[ic2f] * (uOther - u[iCell].transpose()));
-                        }
-                        else
-                        {
-                            Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> BCC = GetBoundaryRHS(uRec, u, iCell, iFace, FBoundary);
-                            // BCC *= 0;
-                            if (recordInc)
                             {
-                                if (uRecIsZero)
-                                    ;
+                                Eigen::Matrix<real, Eigen::Dynamic, nVarsFixed> BCC = GetBoundaryRHS(uRec, u, iCell, iFace, FBoundary);
+                                // BCC *= 0;
+                                if (recordInc)
+                                {
+                                    if (uRecIsZero)
+                                        ;
+                                    else
+                                        uRecNew[iCell] -=
+                                            matrixAAInvBRow[0] * BCC;
+                                }
+                                else if (settings.SORInstead && !recordInc)
+                                    uRec[iCell] +=
+                                        relax * recWeight * matrixAAInvBRow[0] * BCC;
                                 else
-                                    uRecNew[iCell] -=
-                                        matrixAAInvBRow[0] * BCC;
+                                    uRecNew[iCell] +=
+                                        relax * recWeight * matrixAAInvBRow[0] * BCC;
                             }
-                            else if (settings.SORInstead && !recordInc)
-                                uRec[iCell] +=
-                                    relax * recWeight * matrixAAInvBRow[0] * BCC;
-                            else
-                                uRecNew[iCell] +=
-                                    relax * recWeight * matrixAAInvBRow[0] * BCC;
+                        }
+                        if ((!uRecNew[iCell].allFinite()) || (!uRec[iCell].allFinite()))
+                        {
+                            DNDS_assert(false);
                         }
                     }
-                    if ((!uRecNew[iCell].allFinite()) || (!uRec[iCell].allFinite()))
-                    {
-                        DNDS_assert(false);
-                    }
-                }
 
             if (!recordInc)
             {

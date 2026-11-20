@@ -48,7 +48,7 @@ namespace DNDS::CFV::CPU
         const bool coreFirst = work.coreFirst;
         const auto position = [&](index iCell)
         { return coreFirst ? work.coreFirstPosition[iCell] : iCell; };
-        auto compute = [&](index iCell, index partBegin, index partEnd)
+        auto compute = [&](index iCell, WorkerRowRanges worker)
         {
             Math::SmallMatrix rotatedRec;
             auto output = nextMatrices[iCell];
@@ -74,7 +74,7 @@ namespace DNDS::CFV::CPU
                     // SOR reads completed predecessors from a separate output,
                     // leaving the whole input immutable for direct MPI sends.
                     const auto otherCoefficients = other < work.owned
-                                                       ? (view.sor && other >= partBegin && other < partEnd && position(other) < position(iCell) ? visitedMatrices[other] : currentMatrices[other])
+                                                       ? (view.sor && worker.Contains(other) && position(other) < position(iCell) ? visitedMatrices[other] : currentMatrices[other])
                                                        : ghostMatrices[other - work.owned];
                     // Component rotation is independent of spatial derivative
                     // pullback, already included in the prepared B block.
@@ -156,12 +156,12 @@ namespace DNDS::CFV::CPU
         {
             if (work.all)
                 OMP::ForRows(0, owned, [&](index iCell)
-                             { compute(iCell, 0, owned); });
+                             { compute(iCell, {{0, owned}, {}}); });
             else
             {
                 const auto rows = work.rows;
                 OMP::ForRows(0, index(rows.size()), [&](index iRow)
-                             { compute(rows[iRow], 0, owned); });
+                             { compute(rows[iRow], {{0, owned}, {}}); });
             }
         }
         else
@@ -169,31 +169,26 @@ namespace DNDS::CFV::CPU
             // OMP=1 is the canonical serial sweep. With multiple threads, each
             // mesh subpartition is one ordered block; cross-block reads remain
             // frozen input. A split call preserves core-first logical ordering.
-            const auto sweep = [&](index begin, index end)
+            const auto sweep = [&](WorkerRowRanges worker)
             {
                 const index coreCount = index(work.coreCount);
                 const auto run = [&](bool core)
                 {
-                    for (index iCell = begin; iCell < end; ++iCell)
-                        if ((work.coreFirstPosition[iCell] < coreCount) == core)
-                            compute(iCell, begin, end);
+                    for (auto range : {worker.first, worker.second})
+                        for (index cell = range.begin; cell < range.end; ++cell)
+                            if (!coreFirst || (work.coreFirstPosition[cell] < coreCount) == core)
+                                compute(cell, worker);
                 };
-                if (!coreFirst)
-                    for (index iCell = begin; iCell < end; ++iCell)
-                        compute(iCell, begin, end);
-                else
-                {
-                    if ((work.all || work.core))
-                        run(true);
-                    if ((work.all || !work.core))
-                        run(false);
-                }
+                if (!coreFirst || work.all || work.core)
+                    run(true);
+                if (coreFirst && (work.all || !work.core))
+                    run(false);
             };
             if (OMP::DistributedThreads() == 1)
-                sweep(0, owned);
+                sweep({{0, owned}, {}});
             else
-                OMP::ForRows(0, index(work.partitionStarts.size()) - 1, [&](index part)
-                             { sweep(work.partitionStarts[part], work.partitionStarts[part + 1]); });
+                OMP::ForRows(0, index(work.workerRanges.size()), [&](index part)
+                             { sweep(work.workerRanges[part]); });
         }
         return {};
     }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "DNDS/Core/RowRanges.hpp"
+
 #include "Cauchy/Implicit/LinearPattern.hpp"
 #include "Cauchy/Implicit/OffDiagonalView.hpp"
 #include "DNDS/Algebra/DofComponentView.hpp"
@@ -28,7 +30,7 @@ namespace DNDS::Cauchy::CPU
         bool fullDiagonal;
         /// Immutable setup metadata; used only by CPU SGS. Each parallel block
         /// reads frozen values across its physical-row interval boundaries.
-        SpanView<const index> sweepPartitions;
+        SpanView<const WorkerRowRanges> sweepPartitions;
         bool rowMajorBlocks = false;
     };
     /// Apply A to the supplied rows; output is distinct from both inputs.

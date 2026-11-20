@@ -278,6 +278,8 @@ namespace DNDS::Geom
         void ReorderLocalCells(int nParts = 1, int nPartsInner = 1, int ghostLayers = 1);
         void ReorderLocalCells(const struct LocalCellOrderingSettings &settings, int ghostLayers = 1);
         int NLocalParts() const { return Native().NLocalParts(); }
+        /// Each worker owns at most two ordered intervals in the current owned cell numbering.
+        WorkerRowRanges LocalPartRanges(int part) const { return Native().LocalPartRanges(part); }
         index LocalPartStart(int part) const { return Native().LocalPartStart(part); }
         index LocalPartEnd(int part) const { return Native().LocalPartEnd(part); }
         const tLocalMatStruct &LocalCellNeighbors() const { return Native().LocalCellNeighbors(); }

@@ -40,6 +40,7 @@ namespace DNDS::Geom
         int ghostLayers = 1;        ///< explicit final cell-ring depth
         bool buildEdges = false;    ///< additionally construct 3D edges
         Diagnostics::SetupProgress progress;
+        bool coreFirst = false; ///< Keep the complete owned node-star core in one physical run.
     };
 
     inline NativeOwnedMeshData DeriveAndPartitionNativeMeshOwned(
@@ -183,8 +184,8 @@ namespace DNDS::Geom
         NativeOwnedMeshData owned, const MPIInfo &mpi, const PrepareMeshOptions &opts)
     {
         Runtime::CommunicationDetail::AgreePolicy(mpi.comm, !owned.communication || owned.communication->ChecksCollectivePreflight());
-        std::array<int, 6> settings{opts.reorderCells, opts.reorderParts, int(opts.buildSerialOut),
-                                    opts.reorderPartsInner, opts.ghostLayers, int(opts.buildEdges)},
+        std::array<int, 7> settings{opts.reorderCells, opts.reorderParts, int(opts.buildSerialOut),
+                                    opts.reorderPartsInner, opts.ghostLayers, int(opts.buildEdges), int(opts.coreFirst)},
             expected = settings;
         MPI_Bcast(expected.data(), int(expected.size()), MPI_INT, 0, mpi.comm);
         owned.LocalStage(mpi, [&]
@@ -194,7 +195,7 @@ namespace DNDS::Geom
         if (opts.reorderCells == 1)
         {
             auto stage = opts.progress.Stage("mesh/reorder");
-            owned = NativeMeshTransition::ReorderOwnedCells(owned, mpi, opts.reorderParts, opts.reorderPartsInner).owned;
+            owned = NativeMeshTransition::ReorderOwnedCells(owned, mpi, opts.reorderParts, opts.reorderPartsInner, opts.coreFirst).owned;
         }
         {
             auto stage = opts.progress.Stage("mesh/topology");

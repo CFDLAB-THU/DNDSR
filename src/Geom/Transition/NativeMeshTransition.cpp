@@ -5,6 +5,7 @@
 #include "Geom/Connectivity/AdjacencyRegistry.hpp"
 #include "Geom/Transition/FieldTransfer.hpp"
 #include "Geom/Transition/CellPermutation.hpp"
+#include "Geom/Connectivity/NativeMeshClosure.hpp"
 #include "Geom/Transition/LocalCellOrdering.hpp"
 #include "Geom/Unstructured/ReaderPartitionGraph.hpp"
 #include "Geom/Transition/NativeMeshPartitionGraph.hpp"
@@ -762,12 +763,12 @@ namespace DNDS::Geom
     }
 
     NativeOwnedMeshTransitionResult NativeMeshTransition::ReorderOwnedCells(
-        const NativeOwnedMeshData &source, const MPIInfo &mpi, int nParts, int nPartsInner)
+        const NativeOwnedMeshData &source, const MPIInfo &mpi, int nParts, int nPartsInner, bool coreFirst)
     {
         Runtime::CommunicationDetail::AgreePolicy(mpi.comm, !source.communication || source.communication->ChecksCollectivePreflight());
         nParts = std::max(nParts, 1);
         nPartsInner = std::max(nPartsInner, 1);
-        Agree(mpi, "owned-local:" + std::to_string(nParts) + ":" + std::to_string(nPartsInner), source.communication);
+        Agree(mpi, "owned-local:" + std::to_string(nParts) + ":" + std::to_string(nPartsInner) + ":" + std::to_string(coreFirst), source.communication);
         source.LocalStage(mpi, [&]
                           { DNDS_check_throw_info(int64_t(nParts) * nPartsInner < std::numeric_limits<int>::max(), "owned local partition count overflows"); });
         auto cachedFacial = source.namedRelations.find(NativeSetupFacialCellNeighborsKey());
@@ -821,19 +822,30 @@ namespace DNDS::Geom
         }
         else
             facial.emplace(detail::BuildOwnedPartitionGraph(source, mpi));
+        // Some ingress paths carry a deliberately truncated CellCells relation.
+        // Recover the exact node star for overlap classification on those meshes.
+        std::optional<NativeCellClosure> nodeStar;
+        if (coreFirst)
+        {
+            int complete = int(source.cellCellsComplete && bool(source.relations[size_t(MeshRelation::CellCells)]));
+            int agreed = complete;
+            MPI_Bcast(&agreed, 1, MPI_INT, 0, mpi.comm);
+            source.LocalStage(mpi, [&]
+                              { DNDS_check_throw_info(complete == agreed, "owned node-star coverage differs across ranks"); });
+            if (!complete)
+                nodeStar = BuildNativeCellClosure(source, mpi);
+        }
         detail::CellPermutationResult permutation;
         source.LocalStage(mpi, [&]
                           {
             const auto cells = source.spaces.at(EntityKind::Cell);
             tLocalMatStruct graph(size_t(cells.NumOwned()));
             std::vector<uint8_t> hasRemote(size_t(cells.NumOwned()), 0);
-            auto all = source.relations.at(size_t(MeshRelation::CellCells))->Read();
-            const auto allView = all.View();
+
             if (cachedFacial == source.namedRelations.end() && !source.requirements.faces)
                 graph = PrimaryFaceNeighborsFromCellGraph(source);
             else
             {
-                int invalid = 0;
 #pragma omp parallel for schedule(static)
                 for (index cell = 0; cell < cells.NumOwned(); ++cell)
                 {
@@ -845,6 +857,27 @@ namespace DNDS::Geom
                         if (const auto local = cells.GlobalToLocalPinned(index(facial->adjacency[size_t(slot)])))
                             row.push_back(*local);
                 }
+            }
+            if (nodeStar)
+            {
+                auto cone = nodeStar->cellNodes.Read();
+                const auto rows = cone.View();
+                std::unordered_set<index> remoteNodes;
+                for (index cell = cone.NumOwned(); cell < cone.Rows(); ++cell)
+                    for (auto node : rows[cell]) remoteNodes.insert(node);
+                for (index cell = 0; cell < cone.NumOwned(); ++cell)
+                    for (auto node : rows[cell])
+                        if (remoteNodes.count(node))
+                        {
+                            hasRemote[cell] = 1;
+                            break;
+                        }
+            }
+            else if (coreFirst || cachedFacial != source.namedRelations.end() || source.requirements.faces)
+            {
+                int invalid = 0;
+                auto all = source.relations.at(size_t(MeshRelation::CellCells))->Read();
+                const auto allView = all.View();
 #pragma omp parallel for reduction(| : invalid) schedule(static)
                 for (index cell = 0; cell < cells.NumOwned(); ++cell)
                 {
@@ -864,19 +897,19 @@ namespace DNDS::Geom
                 DNDS_check_throw_info(!invalid, "owned cell neighbor is unavailable");
             }
             if (cells.NumOwned() == 0)
-                permutation.localPartitionStarts.assign(size_t(nParts) + 1, 0);
+                permutation.workers.resize(nParts);
             else
             {
                 const std::vector<std::vector<index>> unusedRows;
                 permutation = detail::ComputeCellPermutation(graph, unusedRows, cells.NumOwned(), nParts, nPartsInner,
-                                                             &hasRemote);
+                                                             &hasRemote, coreFirst);
             } });
         auto result = !source.requirements.faces && !source.spaces.count(EntityKind::Face)
                           ? ReorderOwnedPrimaryRows(source, mpi, permutation.cellOld2New,
                                                     source.spaces.at(EntityKind::Cell)._global->ROffsets()[size_t(mpi.rank)])
                           : BuildOwnedImpl(source, mpi, {}, &permutation.cellOld2New);
         result.owned.namedRelations.erase(NativeSetupFacialCellNeighborsKey());
-        result.owned.localPartitionStarts = std::move(permutation.localPartitionStarts);
+        result.owned.localPartRanges = std::move(permutation.workers);
         return result;
     }
 

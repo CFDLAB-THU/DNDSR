@@ -59,7 +59,7 @@ namespace DNDS::Geom
         /// scratch and full node-neighbor private-cell classification. Carries
         /// the resulting local partition ranges through final assembly.
         static NativeOwnedMeshTransitionResult ReorderOwnedCells(const NativeOwnedMeshData &source, const MPIInfo &mpi,
-                                                                 int nParts = 1, int nPartsInner = 1);
+                                                                 int nParts = 1, int nPartsInner = 1, bool coreFirst = false);
         static NativeMeshTransitionResult Build(const UnstructuredMeshState &source, const MPIInfo &mpi,
                                                 const ReorderInput &input, int ghostLayers = 1);
         /// Detached setup-only rank-local cell permutation. Other family owned

@@ -107,18 +107,10 @@ namespace DNDS::CFV
             const FaceSystemLayout faceSystem(n, capabilities);
             const index nCell = mesh.NumCell(), nFace = mesh.NumFaceProc();
             const auto parts = geometry->mesh->NLocalParts();
-            std::vector<index> partitionStarts;
-            if (parts > 0)
-            {
-                for (int part = 0; part < parts; ++part)
-                    partitionStarts.push_back(geometry->mesh->LocalPartStart(part));
-                partitionStarts.push_back(geometry->mesh->LocalPartEnd(parts - 1));
-            }
-            else
-                partitionStarts = {0, nCell};
-            DNDS_check_throw_info(partitionStarts.front() == 0 && partitionStarts.back() == nCell &&
-                                  std::is_sorted(partitionStarts.begin(), partitionStarts.end()), "invalid VR host subpartition ranges");
-            data->hostPartitionStarts = R::MetadataBuffer<index>(partitionStarts);
+            std::vector<WorkerRowRanges> workers;
+            for (int part = 0; part < parts; ++part)
+                workers.push_back(geometry->mesh->LocalPartRanges(part));
+            data->hostWorkers = R::MetadataBuffer<WorkerRowRanges>(std::move(workers));
             data->coreFirstPosition.resize(nCell);
             index position = 0;
             for (auto iCell : data->workPartition->Core())

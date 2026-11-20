@@ -152,8 +152,7 @@ namespace DNDS::Cauchy
         if (prototype.Device() == R::Device::Host() && Mesh().NLocalParts() > 0)
         {
             for (int part = 0; part < Mesh().NLocalParts(); ++part)
-                partitions.starts.push_back(Mesh().LocalPartStart(part));
-            partitions.starts.push_back(Mesh().LocalPartEnd(Mesh().NLocalParts() - 1));
+                partitions.workers.push_back(Mesh().LocalPartRanges(part));
         }
         auto problem = std::make_shared<LinearProblemContext>(prototype.Space(), prototype.ComponentNumber(),
                                                               _data->jacobianColumns->CopyColumns(), _data->partition.Core(), diagonal, offDiagonal, prototype.Device(), std::move(partitions), storage);

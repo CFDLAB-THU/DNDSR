@@ -78,7 +78,7 @@ namespace DNDS::Cauchy::CPU
     template <bool Upper, int Size, bool ZeroInput = false, class RHS, class Old, class Forward, class Output, class Ghost, class Inverse, class Blocks>
     void ScanSGSRows(RHS rhs, Old old, Forward forward, Output output, Ghost ghost, Inverse inverse, const Blocks &blocks,
                      LinearPatternView pattern, Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> rows, index components, bool fullDiagonal,
-                     SpanView<const index> partitions = {}, index firstCell = 0, index lastCell = -1)
+                     SpanView<const WorkerRowRanges> partitions = {}, std::optional<WorkerRowRanges> worker = {})
     {
         constexpr bool scratch = std::is_same_v<Output, Algebra::DofComponentView<real>>;
         if constexpr (scratch && std::is_same_v<RHS, Algebra::DofComponentView<const real>> &&
@@ -105,7 +105,7 @@ namespace DNDS::Cauchy::CPU
                                                      Algebra::MakeEigenRowMatrices<N, 1>(*temporary, components, 1),
                                                      Algebra::MakeEigenRowMatrices<N, 1>(*destination, components, 1),
                                                      Algebra::MakeEigenRowMatrices<N, 1>(*remote, components, 1),
-                                                     inverse, blocks, pattern, rows, components, fullDiagonal, partitions, firstCell, lastCell);
+                                                     inverse, blocks, pattern, rows, components, fullDiagonal, partitions, worker);
                 };
                 if (components == 5)
                     scan(std::integral_constant<int, 5>{});
@@ -118,16 +118,15 @@ namespace DNDS::Cauchy::CPU
                 return;
             }
         }
-        if (OMP::DistributedThreads() > 1 && partitions.size() > 2)
+        if (OMP::DistributedThreads() > 1 && partitions.size() > 1)
         {
             // Each block scans the selected logical rows in their original
             // order. Only its own output may be read before the team joins.
-            OMP::ForRows(0, partitions.size() - 1, [&](index part)
+            OMP::ForRows(0, partitions.size(), [&](index part)
                          { ScanSGSRows<Upper, Size, ZeroInput>(rhs, old, forward, output, ghost, inverse, blocks,
-                                                               pattern, rows, components, fullDiagonal, {}, partitions[part], partitions[part + 1]); });
+                                                               pattern, rows, components, fullDiagonal, {}, partitions[part]); });
             return;
         }
-        const bool partitioned = lastCell >= 0;
         Eigen::VectorXd otherScratch(scratch ? components : 0), outputScratch(scratch ? components : 0);
         const auto readRow = [&](auto input, index iRow)
         {
@@ -142,7 +141,7 @@ namespace DNDS::Cauchy::CPU
         for (index scan = 0; scan < rows.RowCount(); ++scan)
         {
             const index iCell = rows(Upper ? rows.RowCount() - 1 - scan : scan, 0);
-            if (partitioned && (iCell < firstCell || iCell >= lastCell))
+            if (worker && !worker->Contains(iCell))
                 continue;
             value = readRow(rhs, iCell);
             const auto &columns = pattern.columns[iCell];
@@ -166,7 +165,7 @@ namespace DNDS::Cauchy::CPU
                 };
                 if (column >= ownedRows)
                     subtract(readRow(ghost, column - ownedRows));
-                else if (partitioned && (column < firstCell || column >= lastCell))
+                else if (worker && !worker->Contains(column))
                 {
                     // Lower input is the frozen old iterate (or analytic
                     // zero). Upper input is the fully completed lower result,

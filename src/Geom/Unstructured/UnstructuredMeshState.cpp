@@ -374,8 +374,11 @@ namespace DNDS::Geom
         const auto &view = BorrowHostView();
         tLocalMatStruct result(size_t(view.NumCell()));
         for (int part = 0; part < NLocalParts(); ++part)
-            for (index cell = LocalPartStart(part); cell < LocalPartEnd(part); ++cell)
+        {
+            const auto worker = LocalPartRanges(part);
+            for (index pos = 0; pos < worker.Size(); ++pos)
             {
+                const auto cell = worker.RowAt(pos);
                 const auto faces = view.CellFaces(cell);
                 auto &row = result[size_t(cell)];
                 row.reserve(faces.size());
@@ -388,23 +391,27 @@ namespace DNDS::Geom
                                           "native local graph requires local face-cell closure");
                     if (other == UnInitIndex || other == cell || other >= view.NumCell())
                         continue;
-                    if (onLocalPartition && (other < LocalPartStart(part) || other >= LocalPartEnd(part)))
+                    if (onLocalPartition && !worker.Contains(other))
                         continue;
                     row.push_back(other);
                 }
             }
+        }
         return result;
     }
 
     std::shared_ptr<const UnstructuredMeshState> UnstructuredMeshState::WithLocalPartitions(std::vector<index> partStarts) const
     {
         Validate();
-        DNDS_check_throw_info(partStarts.size() >= 2 && partStarts.front() == 0 &&
-                                  partStarts.back() == NumOwned(EntityKind::Cell) &&
-                                  std::is_sorted(partStarts.begin(), partStarts.end()),
-                              "invalid native local partition boundaries");
+        return WithLocalPartitionRanges(WorkerRangesFromStarts(partStarts, NumOwned(EntityKind::Cell)));
+    }
+
+    std::shared_ptr<const UnstructuredMeshState> UnstructuredMeshState::WithLocalPartitionRanges(std::vector<WorkerRowRanges> parts) const
+    {
+        Validate();
+        ValidateWorkerRanges(parts, NumOwned(EntityKind::Cell));
         auto result = std::shared_ptr<UnstructuredMeshState>(new UnstructuredMeshState(*this));
-        result->_localPartStarts = std::move(partStarts);
+        result->_localPartRanges = std::move(parts);
         if (result->Requirements().faces)
             result->_localCellNeighbors = result->BuildLocalCellNeighbors(true);
         else
@@ -420,14 +427,20 @@ namespace DNDS::Geom
         for (int part = 0; part < NLocalParts(); ++part)
             current.push_back(LocalPartStart(part));
         current.push_back(NumOwned(EntityKind::Cell));
-        DNDS_check_throw_info(partStarts == current && neighbors.size() == size_t(NumOwned(EntityKind::Cell)),
+        DNDS_check_throw_info(partStarts == current,
                               "native local setup changes current cell partition or row count");
+        return WithLocalCellNeighbors(std::move(neighbors));
+    }
+
+    std::shared_ptr<const UnstructuredMeshState> UnstructuredMeshState::WithLocalCellNeighbors(tLocalMatStruct neighbors) const
+    {
+        Validate();
+        DNDS_check_throw_info(neighbors.size() == size_t(NumOwned(EntityKind::Cell)), "wrong cell-neighbor row count");
         for (size_t row = 0; row < neighbors.size(); ++row)
             for (auto other : neighbors[row])
                 DNDS_check_throw_info(other >= 0 && other < NumOwned(EntityKind::Cell) && other != index(row),
                                       "native local graph contains an unavailable, ghost or diagonal cell");
         auto result = std::shared_ptr<UnstructuredMeshState>(new UnstructuredMeshState(*this));
-        result->_localPartStarts = std::move(partStarts);
         result->_localCellNeighbors = std::move(neighbors);
         return result;
     }

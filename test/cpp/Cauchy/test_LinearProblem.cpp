@@ -315,10 +315,12 @@ TEST_CASE("SGS mesh subpartitions freeze cross-block reads in ordinary and zero-
     receive[previous] = {0, 1};
     const auto route = R::RowTransferPlan::Known(communication, 4, 2, send, receive);
     const std::vector<std::vector<DNDS::index>> columns{{1}, {0, 2}, {1, 3, 4}, {2, 5}};
-    // Row zero is its own block; the second block contains both core and
-    // dependent rows. Nontrivial core order is [1,0], not physical row order.
+    // Worker zero owns rows 0,2,3; treating its range pair as [0,4)
+    // incorrectly makes the 0--1 and 1--2 couplings read fresh output.
+    C::LinearSweepPartitions workers;
+    workers.workers = {{{0, 1}, {2, 4}}, {{1, 2}, {}}};
     C::LinearProblemContext problem(space, 5, columns, {1, 0}, C::DiagonalStorage::Block,
-                                    C::OffDiagonalStorage::Assembled, R::Device::Host(), {{0, 1, 4}});
+                                    C::OffDiagonalStorage::Assembled, R::Device::Host(), std::move(workers));
     FillMatrix(problem);
     problem.InvertDiagonal();
     C::EquationSchema schema{"mock-flow5", "mock-energy", "identity", {}};
@@ -330,7 +332,7 @@ TEST_CASE("SGS mesh subpartitions freeze cross-block reads in ordinary and zero-
     const bool partitioned = DNDS::OMP::DistributedThreads() > 1;
     const std::array<DNDS::index, 4> order{1, 0, 2, 3}, position{1, 0, 2, 3};
     const auto sameBlock = [&](DNDS::index a, DNDS::index b)
-    { return !partitioned || (a == 0) == (b == 0); };
+    { return !partitioned || (a == 1) == (b == 1); };
     for (bool zero : {false, true})
         for (bool middle : {false, true})
         {

@@ -50,6 +50,6 @@ namespace DNDS::Geom
         /// Optional owned-cell partition ranges, installed at final assembly.
         /// Redistribution clears these; a rank-local permutation supplies new
         /// ranges. No mesh publication is needed to carry setup scheduling.
-        std::vector<index> localPartitionStarts;
+        std::vector<WorkerRowRanges> localPartRanges;
     };
 }

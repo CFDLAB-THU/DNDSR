@@ -678,25 +678,26 @@ namespace DNDS::Euler
 #if defined(DNDS_DIST_MT_USE_OMP)
 #    pragma omp parallel for schedule(static)
         for (int iPart = 0; iPart < this->mesh->NLocalParts(); iPart++)
-            for (index iCell = this->mesh->LocalPartStart(iPart); iCell < this->mesh->LocalPartEnd(iPart); iCell++)
-            {
-                auto c2f = mesh->cell2face[iCell];
-                for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
+            for (const auto range : this->mesh->LocalPartRanges(iPart).Intervals())
+                for (index iCell = range.begin; iCell < range.end; ++iCell)
                 {
-                    index iFace = c2f[ic2f];
-                    int if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
-                    TU fluxFaceC = faceFluxBuf[iFace] * (if2c ? -1 : 1);
-                    this->UFromFace2Cell(fluxFaceC, iFace, iCell, if2c);
-
-                    rhs[iCell] += fluxFaceC / vfv->GetCellVol(iCell);
-                    if (mesh->face2cell(iFace, 1 - if2c) == iCell) // check for self-facing face
+                    auto c2f = mesh->cell2face[iCell];
+                    for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                     {
-                        TU fluxFaceC = faceFluxBuf[iFace] * (if2c ? -1 : 1) * (-1);
-                        this->UFromFace2Cell(fluxFaceC, iFace, iCell, 1 - if2c); // use 1-if2c to force use the other periodic state
+                        index iFace = c2f[ic2f];
+                        int if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
+                        TU fluxFaceC = faceFluxBuf[iFace] * (if2c ? -1 : 1);
+                        this->UFromFace2Cell(fluxFaceC, iFace, iCell, if2c);
+
                         rhs[iCell] += fluxFaceC / vfv->GetCellVol(iCell);
+                        if (mesh->face2cell(iFace, 1 - if2c) == iCell) // check for self-facing face
+                        {
+                            TU fluxFaceC = faceFluxBuf[iFace] * (if2c ? -1 : 1) * (-1);
+                            this->UFromFace2Cell(fluxFaceC, iFace, iCell, 1 - if2c); // use 1-if2c to force use the other periodic state
+                            rhs[iCell] += fluxFaceC / vfv->GetCellVol(iCell);
+                        }
                     }
                 }
-            }
 #endif
         double t1 = MPI_Wtime();
 

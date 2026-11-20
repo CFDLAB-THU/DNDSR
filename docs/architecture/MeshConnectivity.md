@@ -39,6 +39,20 @@ The historical integer overload keeps its previous setup ordering for consumer
 compatibility. Python exposes the new choice as `reorder_local_cells` with
 `core_split` and `aggregate_send_regions` keyword arguments.
 
+Cauchy's owned-mesh setup resolves `execution.coreFirstCellOrdering` from
+`execution.overlap` unless explicitly set. When enabled, all workers' core
+cells precede all workers' halo-dependent cells in rank-local numbering.
+Both groups retain the relative order established within each worker. The
+core uses the complete cell–node–cell star, including vertex-only neighbors
+across ranks. An application that supplies an already prepared mesh keeps its
+published order.
+
+Use `mesh.LocalPartRanges(worker)` for ordered forward or reverse traversal
+and for same-worker neighbor tests. A worker can own two disjoint intervals.
+`LocalPartStart/End` report a single interval and reject a disjoint worker.
+Symbolic factorization packs each worker into a contiguous interval in factor
+numbering and records the permutation back to physical cells.
+
 Sender groups derive from canonical halo send lists. A multi-peer row has one
 authoritative location, so one contiguous interval per destination is not
 guaranteed. Core dependencies and export destinations remain separate contracts;

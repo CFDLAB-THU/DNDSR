@@ -207,87 +207,88 @@ namespace DNDS::Euler
 #    pragma omp parallel for schedule(static)
 #endif
         for (int iPart = 0; iPart < this->mesh->NLocalParts(); iPart++)
-            for (index iScan = this->mesh->LocalPartStart(iPart); iScan < this->mesh->LocalPartEnd(iPart); iScan++)
-            {
-                index iCell = iScan;
-                cellOp(iCell);
-                // iCell = (*vfv->SOR_iScan2iCell)[iCell];//TODO: add rb-sor
-                auto c2f = mesh->cell2face[iCell];
-                TU uIncNewBuf(cnvars);
-                uIncNewBuf.setZero(); // norhs
-                auto uINCi = uInc[iCell];
-
-                if (uINCi.hasNaN())
+            for (const auto range : this->mesh->LocalPartRanges(iPart).Intervals())
+                for (index iScan = range.begin; iScan < range.end; ++iScan)
                 {
-                    std::cout << uINCi << std::endl;
-                    DNDS_assert(false);
-                }
+                    index iCell = iScan;
+                    cellOp(iCell);
+                    // iCell = (*vfv->SOR_iScan2iCell)[iCell];//TODO: add rb-sor
+                    auto c2f = mesh->cell2face[iCell];
+                    TU uIncNewBuf(cnvars);
+                    uIncNewBuf.setZero(); // norhs
+                    auto uINCi = uInc[iCell];
 
-                for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
-                {
-                    index iFace = c2f[ic2f];
-                    // A self-periodic face can have face2cell = (iCell, iCell),
-                    // so face2cell alone cannot identify the side. Use the
-                    // cell-local incidence slot to recover if2c before forming
-                    // geometry, periodic transforms, and the diagonal LU block.
-                    index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
-                    auto if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
-                    TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1)(Seq012) *
-                                    (if2c ? -1 : 1); // faces out
-                    if (iCellOther != UnInitIndex)
+                    if (uINCi.hasNaN())
                     {
+                        std::cout << uINCi << std::endl;
+                        DNDS_assert(false);
+                    }
 
-                        if (true)
+                    for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
+                    {
+                        index iFace = c2f[ic2f];
+                        // A self-periodic face can have face2cell = (iCell, iCell),
+                        // so face2cell alone cannot identify the side. Use the
+                        // cell-local incidence slot to recover if2c before forming
+                        // geometry, periodic transforms, and the diagonal LU block.
+                        index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
+                        auto if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
+                        TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1)(Seq012) *
+                                        (if2c ? -1 : 1); // faces out
+                        if (iCellOther != UnInitIndex)
                         {
-                            TU uINCj = uInc[iCellOther];
-                            TU uj = u[iCellOther];
-                            this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, if2c);
-                            this->UFromOtherCell(uj, iFace, iCell, iCellOther, if2c);
-                            TU fInc;
-                            {
 
-                                // fInc = fluxJacobian0_Right(
-                                //            u[iCellOther],
-                                //            unitNorm,
-                                //            BoundaryType::Inner) *
-                                //        uInc[iCellOther]; //! always inner here
-                                fInc = fluxJacobian0_Right_Times_du(
-                                    uj, u[iCell],
-                                    unitNorm, GetFaceVGridFromCell(iFace, iCell, if2c, -1),
-                                    Geom::BC_ID_INTERNAL, uINCj,
-                                    lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
-                                    if2c ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], if2c ? lambdaFace0[iFace] : lambdaFace4[iFace],
-                                    // swap lambda0 and lambda4 if if2c==1
-                                    settings.useRoeJacobian); //! always inner here
-                            }
-
-                            uIncNewBuf -= (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) *
-                                          (fInc);
-                            if (uIncNewBuf.hasNaN() || (!uIncNewBuf.allFinite()))
+                            if (true)
                             {
-                                std::cout
-                                    << fInc.transpose() << std::endl
-                                    << uInc[iCellOther].transpose() << std::endl;
-                                DNDS_assert(!(uIncNewBuf.hasNaN() || (!uIncNewBuf.allFinite())));
+                                TU uINCj = uInc[iCellOther];
+                                TU uj = u[iCellOther];
+                                this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, if2c);
+                                this->UFromOtherCell(uj, iFace, iCell, iCellOther, if2c);
+                                TU fInc;
+                                {
+
+                                    // fInc = fluxJacobian0_Right(
+                                    //            u[iCellOther],
+                                    //            unitNorm,
+                                    //            BoundaryType::Inner) *
+                                    //        uInc[iCellOther]; //! always inner here
+                                    fInc = fluxJacobian0_Right_Times_du(
+                                        uj, u[iCell],
+                                        unitNorm, GetFaceVGridFromCell(iFace, iCell, if2c, -1),
+                                        Geom::BC_ID_INTERNAL, uINCj,
+                                        lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
+                                        if2c ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], if2c ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                                        // swap lambda0 and lambda4 if if2c==1
+                                        settings.useRoeJacobian); //! always inner here
+                                }
+
+                                uIncNewBuf -= (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) *
+                                              (fInc);
+                                if (uIncNewBuf.hasNaN() || (!uIncNewBuf.allFinite()))
+                                {
+                                    std::cout
+                                        << fInc.transpose() << std::endl
+                                        << uInc[iCellOther].transpose() << std::endl;
+                                    DNDS_assert(!(uIncNewBuf.hasNaN() || (!uIncNewBuf.allFinite())));
+                                }
                             }
                         }
                     }
-                }
-                // uIncNewBuf /= fpDivisor;
-                // uIncNew[iCell] = uIncNewBuf;
-                AuInc[iCell] = JDiag.MatVecLeft(iCell, uInc[iCell]) - uIncNewBuf;
+                    // uIncNewBuf /= fpDivisor;
+                    // uIncNew[iCell] = uIncNewBuf;
+                    AuInc[iCell] = JDiag.MatVecLeft(iCell, uInc[iCell]) - uIncNewBuf;
 
-                auto AuIncI = AuInc[iCell];
-                if (AuIncI.hasNaN())
-                {
-                    std::cout << AuIncI.transpose() << std::endl
-                              << uINCi.transpose() << std::endl
-                              << u[iCell].transpose() << std::endl
-                              << JDiag.getValue(iCell) << std::endl
-                              << iCell << std::endl;
-                    DNDS_assert(!AuInc[iCell].hasNaN());
+                    auto AuIncI = AuInc[iCell];
+                    if (AuIncI.hasNaN())
+                    {
+                        std::cout << AuIncI.transpose() << std::endl
+                                  << uINCi.transpose() << std::endl
+                                  << u[iCell].transpose() << std::endl
+                                  << JDiag.getValue(iCell) << std::endl
+                                  << iCell << std::endl;
+                        DNDS_assert(!AuInc[iCell].hasNaN());
+                    }
                 }
-            }
         DNDS_MPI_InsertCheck(u.father->getMPI(), "LUSGSMatrixVec -1");
     }
 
@@ -323,64 +324,68 @@ namespace DNDS::Euler
 #    pragma omp parallel for schedule(static)
 #endif
         for (int iPart = 0; iPart < this->mesh->NLocalParts(); iPart++)
-            for (index iScan = this->mesh->LocalPartStart(iPart); iScan < this->mesh->LocalPartEnd(iPart); iScan++)
-            {
-                index iCell = iScan;
-                jacLU.GetDiag(iCell) = JDiag.getValue(iCell);
-                auto c2f = mesh->cell2face[iCell];
-                for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
+        {
+            const auto worker = this->mesh->LocalPartRanges(iPart);
+            for (const auto range : worker.Intervals())
+                for (index iScan = range.begin; iScan < range.end; ++iScan)
                 {
-                    index iFace = c2f[ic2f];
-                    index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
-                    auto if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
-                    TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1)(Seq012) *
-                                    (if2c ? -1 : 1); // faces out
-                    if (iCellOther != UnInitIndex &&
-                        iCellOther < this->mesh->LocalPartEnd(iPart) && iCellOther >= this->mesh->LocalPartStart(iPart))
+                    index iCell = iScan;
+                    jacLU.GetDiag(iCell) = JDiag.getValue(iCell);
+                    auto c2f = mesh->cell2face[iCell];
+                    for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                     {
-                        TU uj = u[iCellOther];
-                        this->UFromOtherCell(uj, iFace, iCell, iCellOther, if2c);
-                        TJacobianU jacIJ;
+                        index iFace = c2f[ic2f];
+                        index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
+                        auto if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
+                        TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1)(Seq012) *
+                                        (if2c ? -1 : 1); // faces out
+                        if (iCellOther != UnInitIndex &&
+                            worker.Contains(iCellOther))
                         {
-                            jacIJ = fluxJacobian0_Right_Times_du_AsMatrix( // unitnorm and uj are both respect with this cell
-                                uj, u[iCell],
-                                unitNorm, GetFaceVGridFromCell(iFace, iCell, if2c, -1),
-                                Geom::BC_ID_INTERNAL,
-                                lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
-                                if2c ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], if2c ? lambdaFace0[iFace] : lambdaFace4[iFace],
-                                // swap lambda0 and lambda4 if if2c==1
-                                settings.useRoeJacobian); //! always inner here
-                        }
-                        auto faceID = mesh->GetFaceZone(iFace);
-                        mesh->CellOtherCellPeriodicHandle(
-                            iFace, if2c,
-                            [&]()
-                            { jacIJ(EigenAll, Seq123) =
-                                  mesh->periodicInfo.TransVectorBack<dim, nVarsFixed>(
-                                                        jacIJ(EigenAll, Seq123).transpose(), faceID)
-                                      .transpose(); },
-                            [&]()
-                            { jacIJ(EigenAll, Seq123) =
-                                  mesh->periodicInfo.TransVector<dim, nVarsFixed>(
-                                                        jacIJ(EigenAll, Seq123).transpose(), faceID)
-                                      .transpose(); });
-                        auto jacBlock = (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * jacIJ;
-                        if (iCellOther == iCell)
-                        {
-                            jacLU.GetDiag(iCell) += jacBlock;
-                        }
-                        else
-                        {
-                            int iC2CInLocal = -1;
-                            for (int ic2c = 0; ic2c < this->mesh->LocalCellNeighbors()[iCell].size(); ic2c++)
-                                if (iCellOther == this->mesh->LocalCellNeighbors()[iCell][ic2c])
-                                    iC2CInLocal = ic2c; // TODO: pre-search this
-                            DNDS_assert(iC2CInLocal != -1);
-                            jacLU.LDU(iCell, symLU->cell2cellFaceVLocal2FullRowPos[iCell][iC2CInLocal]) += jacBlock;
+                            TU uj = u[iCellOther];
+                            this->UFromOtherCell(uj, iFace, iCell, iCellOther, if2c);
+                            TJacobianU jacIJ;
+                            {
+                                jacIJ = fluxJacobian0_Right_Times_du_AsMatrix( // unitnorm and uj are both respect with this cell
+                                    uj, u[iCell],
+                                    unitNorm, GetFaceVGridFromCell(iFace, iCell, if2c, -1),
+                                    Geom::BC_ID_INTERNAL,
+                                    lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
+                                    if2c ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], if2c ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                                    // swap lambda0 and lambda4 if if2c==1
+                                    settings.useRoeJacobian); //! always inner here
+                            }
+                            auto faceID = mesh->GetFaceZone(iFace);
+                            mesh->CellOtherCellPeriodicHandle(
+                                iFace, if2c,
+                                [&]()
+                                { jacIJ(EigenAll, Seq123) =
+                                      mesh->periodicInfo.TransVectorBack<dim, nVarsFixed>(
+                                                            jacIJ(EigenAll, Seq123).transpose(), faceID)
+                                          .transpose(); },
+                                [&]()
+                                { jacIJ(EigenAll, Seq123) =
+                                      mesh->periodicInfo.TransVector<dim, nVarsFixed>(
+                                                            jacIJ(EigenAll, Seq123).transpose(), faceID)
+                                          .transpose(); });
+                            auto jacBlock = (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) * jacIJ;
+                            if (iCellOther == iCell)
+                            {
+                                jacLU.GetDiag(iCell) += jacBlock;
+                            }
+                            else
+                            {
+                                int iC2CInLocal = -1;
+                                for (int ic2c = 0; ic2c < this->mesh->LocalCellNeighbors()[iCell].size(); ic2c++)
+                                    if (iCellOther == this->mesh->LocalCellNeighbors()[iCell][ic2c])
+                                        iC2CInLocal = ic2c; // TODO: pre-search this
+                                DNDS_assert(iC2CInLocal != -1);
+                                jacLU.LDU(iCell, symLU->cell2cellFaceVLocal2FullRowPos[iCell][iC2CInLocal]) += jacBlock;
+                            }
                         }
                     }
                 }
-            }
+        }
         // TODO: make below OMP-ed
         jacLU.InPlaceDecompose();
         DNDS_MPI_InsertCheck(u.father->getMPI(), "LUSGSMatrixToJacobianLU -1");
@@ -604,14 +609,15 @@ namespace DNDS::Euler
         sumInc.setZero(cnvars);
 
 #if defined(DNDS_DIST_MT_USE_OMP)
-        auto cellOp = [&](index iScanStart, index iScanEnd)
+        auto cellOp = [&](WorkerRowRanges worker, TU &localSum)
         {
 #else
-        const index iScanStart{0}, iScanEnd(nCellDist);
+        const WorkerRowRanges worker{{0, nCellDist}, {}};
+        auto &localSum = sumInc;
 #endif
-            for (index iScan = iScanStart; iScan < iScanEnd; iScan++)
+            for (index iScan = 0; iScan < worker.Size(); ++iScan)
             {
-                index iCell = forward ? iScan : iScanEnd - 1 - (iScan - iScanStart);
+                index iCell = worker.RowAt(forward ? iScan : worker.Size() - 1 - iScan);
 
                 auto c2f = mesh->cell2face[iCell];
                 TU uIncNewBuf(nVars);
@@ -632,7 +638,7 @@ namespace DNDS::Euler
                         if (iCell != iCellOther)
                         {
                             TU fInc;
-                            bool iCellOtherIsThisPart = iScanStart <= iCellOther && iCellOther < iScanEnd;
+                            bool iCellOtherIsThisPart = worker.Contains(iCellOther);
                             bool gsUseNew = gsUpdate && iCellOtherIsThisPart && (forward ? (iCellOther < iCell) : (iCellOther > iCell));
 
                             // When uInc is known to be zero, skip flux for not-yet-processed
@@ -699,7 +705,7 @@ namespace DNDS::Euler
                 TU uIncOld = uIncNewI;
 
                 uIncNewI = JDiag.MatVecLeftInvert(iCell, uIncNewBuf);
-                sumInc.array() += (uIncNewI - uIncOld).array().abs();
+                localSum.array() += (uIncNewI - uIncOld).array().abs();
 
                 if (uIncNewI.hasNaN())
                 {
@@ -718,7 +724,7 @@ namespace DNDS::Euler
 #    pragma omp declare reduction(TUAdd:TU : omp_out += omp_in) initializer(omp_priv = omp_orig)
 #    pragma omp parallel for schedule(static) reduction(TUAdd : sumInc)
         for (int iPart = 0; iPart < this->mesh->NLocalParts(); iPart++)
-            cellOp(this->mesh->LocalPartStart(iPart), this->mesh->LocalPartEnd(iPart));
+            cellOp(this->mesh->LocalPartRanges(iPart), sumInc);
 #endif
 
         TU sumIncAll(cnvars);
@@ -906,54 +912,55 @@ namespace DNDS::Euler
 #    pragma omp parallel for schedule(static)
 #endif
         for (int iPart = 0; iPart < this->mesh->NLocalParts(); iPart++)
-            for (index iScan = this->mesh->LocalPartStart(iPart); iScan < this->mesh->LocalPartEnd(iPart); iScan++)
-            // update the ghost part (non proc-block) rhs
-            {
-                index iCell = iScan;
-                auto c2f = mesh->cell2face[iCell];
-                // std::cout << uIncIsZero << " " << uInc[iCell].norm() << " " << bBuf[iCell] << std::endl;
-                bBuf[iCell] = rhs[iCell] - bBuf[iCell]; // bBuf = b - Ax
-
-                // bBuf[iCell] = rhs[iCell]; //+ revert to old LU solve here
-                // if (uIncIsZero) //+ revert to old LU solve here
-                continue;
-
-                for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
+            for (const auto range : this->mesh->LocalPartRanges(iPart).Intervals())
+                for (index iScan = range.begin; iScan < range.end; ++iScan)
+                // update the ghost part (non proc-block) rhs
                 {
-                    index iFace = c2f[ic2f];
-                    index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
-                    auto if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
-                    TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1)(Seq012) *
-                                    (if2c ? -1 : 1); // faces out
-                    if (iCellOther != UnInitIndex && iCell != iCellOther
-                        // if is a ghost neighbour
-                        && iCellOther >= mesh->NumCell())
+                    index iCell = iScan;
+                    auto c2f = mesh->cell2face[iCell];
+                    // std::cout << uIncIsZero << " " << uInc[iCell].norm() << " " << bBuf[iCell] << std::endl;
+                    bBuf[iCell] = rhs[iCell] - bBuf[iCell]; // bBuf = b - Ax
+
+                    // bBuf[iCell] = rhs[iCell]; //+ revert to old LU solve here
+                    // if (uIncIsZero) //+ revert to old LU solve here
+                    continue;
+
+                    for (int ic2f = 0; ic2f < c2f.size(); ic2f++)
                     {
-                        TU fInc;
-                        TU uINCj = uInc[iCellOther];
-                        TU uj = u[iCellOther];
-                        this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, if2c);
-                        this->UFromOtherCell(uj, iFace, iCell, iCellOther, if2c);
+                        index iFace = c2f[ic2f];
+                        index iCellOther = mesh->CellFaceOther(iCell, iFace, ic2f);
+                        auto if2c = mesh->CellIsFaceBack(iCell, iFace, ic2f) ? 0 : 1;
+                        TVec unitNorm = vfv->GetFaceNormFromCell(iFace, iCell, if2c, -1)(Seq012) *
+                                        (if2c ? -1 : 1); // faces out
+                        if (iCellOther != UnInitIndex && iCell != iCellOther
+                            // if is a ghost neighbour
+                            && iCellOther >= mesh->NumCell())
                         {
+                            TU fInc;
+                            TU uINCj = uInc[iCellOther];
+                            TU uj = u[iCellOther];
+                            this->UFromOtherCell(uINCj, iFace, iCell, iCellOther, if2c);
+                            this->UFromOtherCell(uj, iFace, iCell, iCellOther, if2c);
+                            {
 
-                            fInc = fluxJacobian0_Right_Times_du(
-                                uj, u[iCell],
-                                unitNorm, GetFaceVGridFromCell(iFace, iCell, if2c, -1),
-                                Geom::BC_ID_INTERNAL, uINCj,
-                                lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
-                                if2c ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], if2c ? lambdaFace0[iFace] : lambdaFace4[iFace],
-                                // swap lambda0 and lambda4 if if2c==1
-                                settings.useRoeJacobian); //! always inner here
+                                fInc = fluxJacobian0_Right_Times_du(
+                                    uj, u[iCell],
+                                    unitNorm, GetFaceVGridFromCell(iFace, iCell, if2c, -1),
+                                    Geom::BC_ID_INTERNAL, uINCj,
+                                    lambdaFace[iFace], lambdaFaceC[iFace], lambdaFaceVis[iFace],
+                                    if2c ? lambdaFace4[iFace] : lambdaFace0[iFace], lambdaFace123[iFace], if2c ? lambdaFace0[iFace] : lambdaFace4[iFace],
+                                    // swap lambda0 and lambda4 if if2c==1
+                                    settings.useRoeJacobian); //! always inner here
+                            }
+
+                            bBuf[iCell] -= (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) *
+                                           (fInc);
                         }
-
-                        bBuf[iCell] -= (0.5 * alphaDiag) * vfv->GetFaceArea(iFace) / vfv->GetCellVol(iCell) *
-                                       (fInc);
                     }
+                    // TU uIncOld = uIncNew[iCell];
+                    // uIncNew[iCell] = JDiag[iCell].array().inverse() * bBuf[iCell].array();
+                    // sumInc.array() += (uIncNew[iCell] - uIncOld).array().abs();
                 }
-                // TU uIncOld = uIncNew[iCell];
-                // uIncNew[iCell] = JDiag[iCell].array().inverse() * bBuf[iCell].array();
-                // sumInc.array() += (uIncNew[iCell] - uIncOld).array().abs();
-            }
         jacLU.Solve(bBuf, uIncNew); // top-diagonal solve
         sumInc = uIncNew.componentWiseNorm1();
 

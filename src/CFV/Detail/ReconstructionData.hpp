@@ -1,5 +1,7 @@
 #pragma once
 
+#include "DNDS/Core/RowRanges.hpp"
+
 #include "CFV/Plans/FiniteVolumePlan.hpp"
 #include "Geom/Unstructured/UnstructuredMesh.hpp"
 #include "CFV/Math/PolynomialReconstruction.hpp"
@@ -96,7 +98,7 @@ namespace DNDS::CFV::Detail
         /// Immutable host subpartition ranges copied from the prepared mesh.
         /// Block SOR reads changing output only within its own range; neighbors
         /// in other ranges always use the frozen input, independent of timing.
-        Runtime::MetadataBuffer<index> hostPartitionStarts;
+        Runtime::MetadataBuffer<WorkerRowRanges> hostWorkers;
         int hostThreads = 1;
         int n, cachedDerivatives;
         Runtime::Array<real> moments;

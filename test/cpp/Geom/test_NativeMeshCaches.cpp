@@ -169,6 +169,22 @@ TEST_CASE("Native face graph and direct ordering match exact face slots and gene
     CHECK(partitioned->LocalCellNeighbors() == filtered);
     CHECK(partitioned->LocalPartStart(1) == 1);
 
+    // A factor worker can own both ends of the strip. Its scan must never
+    // visit the middle row or add edges through that other worker.
+    auto striped = G::UnstructuredMesh::FromNative(mpi, state->WithLocalPartitionRanges(
+                                                            {{{0, 1}, {2, 3}}, {{1, 2}, {}}}));
+    const auto bothEnds = striped->LocalPartRanges(0);
+    CHECK(bothEnds.RowAt(1) == 2);
+    CHECK_FALSE(bothEnds.Contains(1));
+    CHECK_THROWS(striped->LocalPartEnd(0));
+    CHECK(striped->GetCell2CellFaceVLocal(true) == G::tLocalMatStruct(3));
+    DNDS::Direct::SerialSymLUStructure stripedFactor(mpi, 3);
+    control.orderingCode = 0;
+    striped->ObtainLocalFactFillOrdering(stripedFactor, control);
+    striped->ObtainSymmetricSymbolicFactorization(stripedFactor, control);
+    CHECK(stripedFactor.localFillOrderingNew2Old == std::vector<I>{0, 2, 1});
+    CHECK(stripedFactor.localPartStarts == std::vector<I>{0, 2, 3});
+
     if (mpi.size > 1)
     {
         // Move each strip's middle cell away from both endpoints. Every real

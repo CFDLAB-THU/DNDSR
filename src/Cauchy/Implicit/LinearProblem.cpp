@@ -36,12 +36,18 @@ namespace DNDS::Cauchy
         auto data = std::make_shared<Pattern>(space.Pin());
         std::vector<index> dependent, order, position;
         const index rows = index(data->partition->owned), allRows = rows + index(data->partition->ghost);
-        if (partitions.starts.empty())
-            partitions.starts = {0, rows};
-        DNDS_check_throw_info(partitions.starts.size() >= 2 && partitions.starts.front() == 0 &&
-                                  partitions.starts.back() == rows && std::is_sorted(partitions.starts.begin(), partitions.starts.end()),
-                              "invalid linear SGS subpartition starts");
-        data->sweepPartitions = R::MetadataBuffer<index>(std::move(partitions.starts));
+        if (partitions.workers.empty())
+        {
+            if (partitions.starts.empty())
+                partitions.starts = {0, rows};
+            partitions.workers = WorkerRangesFromStarts(partitions.starts, rows);
+        }
+        else
+        {
+            DNDS_check_throw_info(partitions.starts.empty(), "ambiguous SGS worker partition");
+            ValidateWorkerRanges(partitions.workers, rows);
+        }
+        data->sweepPartitions = R::MetadataBuffer<WorkerRowRanges>(std::move(partitions.workers));
         DNDS_check_throw_info(index(columns.size()) == rows, "linear stencil row count differs from its DOF space");
         std::vector<unsigned char> isCore(rows, 0);
         for (auto iCell : core)

@@ -123,6 +123,7 @@ namespace DNDS::Cauchy
         int deviceOrdinal = 0;
         bool checkAccess = true;
         bool overlap = true;
+        std::optional<bool> coreFirstCellOrdering;
         bool haloFreshnessChecks = false;
         /// Check the actual MPI process capability before constructing workers.
         /// FUNNELED permits CPU workers; MPI calls still belong to the controller.
@@ -141,6 +142,7 @@ namespace DNDS::Cauchy
             DNDS_FIELD(reconstructionKernel, "auto selects fp64Pipelined for measured A100 P3 flow5 relaxation, otherwise fp64. AMG reconstruction uses its solver setting instead. Explicit comparison kernels retain their C5/M19 precomputed non-LVR fixture; fp64/fp64Pipelined support the production shapes and LVR. Launch dimensions: numerics.cfv.cudaSweep. Precision is never reduced automatically; nondefault kernels require CUDA.");
             config.field_section(&T::kernels, "kernels", "Operator-local CUDA input layout and compute arithmetic policies");
             DNDS_FIELD(checkAccess, "Validate declared scheduled accesses at submission");
+            config.field_optional(&T::coreFirstCellOrdering, "coreFirstCellOrdering", "Place all node-star core cells before dependent cells within the rank during mesh setup; defaults to overlap");
             DNDS_FIELD(overlap, "Overlap input halo exchanges with owned-only core work; false waits then runs unsplit kernels");
             DNDS_FIELD(haloFreshnessChecks, "Extra collective halo-publication audits; default off, also disabled by implicit.collectiveChecks=false");
         }

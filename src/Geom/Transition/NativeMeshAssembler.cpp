@@ -147,8 +147,7 @@ namespace DNDS::Geom
             result.audit = source.AuditOptions();
             result.ghostSpec = source.GhostSpecification();
             for (int part = 0; part < source.NLocalParts(); ++part)
-                result.localPartitionStarts.push_back(source.LocalPartStart(part));
-            result.localPartitionStarts.push_back(source.NumOwned(EntityKind::Cell));
+                result.localPartRanges.push_back(source.LocalPartRanges(part));
             result.dimension = snapshot.semantics.dim;
             result.periodic = snapshot.semantics.isPeriodic;
             result.periodicInfo = snapshot.semantics.periodicInfo;
@@ -530,8 +529,8 @@ namespace DNDS::Geom
         auto result = UnstructuredMeshState::FromNative(mpi, std::move(data), std::move(spaces), std::move(ids), owned.requirements);
         owned.LocalStage(mpi, [&]
                          {
-            if (!owned.localPartitionStarts.empty())
-                result = result->WithLocalPartitions(std::move(owned.localPartitionStarts)); });
+            if (!owned.localPartRanges.empty())
+                result = result->WithLocalPartitionRanges(std::move(owned.localPartRanges)); });
         return result;
     }
 }

@@ -284,16 +284,19 @@ namespace DNDS::Geom
     {
         if (control.useDirectPrec)
         {
-            std::vector<index> partitions;
+            std::vector<WorkerRowRanges> workers;
+            std::vector<index> partitions{0};
             for (int part = 0; part < NLocalParts(); ++part)
-                partitions.push_back(LocalPartStart(part));
-            partitions.push_back(NLocalParts() ? LocalPartEnd(NLocalParts() - 1) : NumCell());
+            {
+                workers.push_back(LocalPartRanges(part));
+                partitions.push_back(partitions.back() + workers.back().Size());
+            }
             DNDS_check_throw_info(symLU.Num() == NumCell() && LocalCellNeighbors().size() == size_t(NumCell()),
                                   "symbolic factorization requires current local cell-neighbor setup");
             symLU.ObtainSymmetricSymbolicFactorization(
                 LocalCellNeighbors(),
                 std::move(partitions),
-                control.getILUCode());
+                control.getILUCode(), true, workers);
         }
     }
     void UnstructuredMesh::WriteSerialize(Serializer::SerializerBaseSSP serializer, const std::string &name)

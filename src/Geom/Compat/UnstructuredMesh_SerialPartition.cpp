@@ -28,92 +28,39 @@ namespace DNDS::Geom
         auto read = AcquireRead(MeshReadRequirements::CellFlux());
         return CurrentNativeState()->BuildLocalCellNeighbors(local);
     }
-    static std::vector<index> put_perm_back_to_local_parts(const std::vector<index> &new2old, const std::vector<index> &localPartStarts)
+    /// Keep worker blocks contiguous in *factor* order even when their physical
+    /// cell numbers occupy two intervals. Preserve the selected order inside each block.
+    static void GroupFactorRows(const UnstructuredMesh &mesh, std::vector<index> &newToOld, std::vector<index> &oldToNew)
     {
-        auto fGetIPart = [&](index iCell) -> index
+        const index count = mesh.NumCell();
+        std::vector<int> owner(count);
+        std::vector<index> next(mesh.NLocalParts());
+        index offset = 0;
+        for (int part = 0; part < mesh.NLocalParts(); ++part)
         {
-            return std::lower_bound(localPartStarts.begin(), localPartStarts.end(), iCell, std::less_equal<index>()) -
-                   localPartStarts.begin() - 1;
-        };
-        index nParts = localPartStarts.size() - 1;
-        index N = new2old.size();
-        std::vector<std::vector<index>> outB(nParts);
-        for (index iPart = 0; iPart < nParts; iPart++)
-            outB[iPart].reserve(localPartStarts[iPart + 1] - localPartStarts[iPart]);
-        for (index v : new2old)
-        {
-            index iPart = fGetIPart(v);
-            DNDS_assert_info(iPart >= 0 && iPart < nParts, fmt::format("iPart [{}], v [{}], N [{}]", iPart, v, N));
-            outB[iPart].push_back(v);
+            const auto worker = mesh.LocalPartRanges(part);
+            next[part] = offset;
+            offset += worker.Size();
+            for (auto range : {worker.first, worker.second})
+                for (index row = range.begin; row < range.end; ++row)
+                    owner[row] = part;
         }
-        std::vector<index> out;
-        out.reserve(new2old.size());
-        for (const auto &vec : outB)
+        std::vector<index> ordered(count);
+        oldToNew.resize(count);
+        for (index pos = 0; pos < count; ++pos)
         {
-            out.insert(out.end(), vec.begin(), vec.end());
+            const auto row = newToOld.empty() ? pos : newToOld[pos];
+            const auto target = next[owner.at(row)]++;
+            ordered[target] = row;
+            oldToNew[row] = target;
         }
-        DNDS_assert(out.size() == new2old.size());
-        return out;
-    }
-    static void check_permutations(const std::vector<index> &new2old, const std::vector<index> &old2new, const std::vector<index> &localPartStarts)
-    {
-        index N = new2old.size();
-        DNDS_assert(N == old2new.size());
-        if (N == 0) // special: natural order
-            return;
-        std::unordered_set<index> counted;
-        counted.reserve(N);
-        for (auto v : new2old)
-        {
-            DNDS_assert(v >= 0 && v < N);
-            DNDS_assert(counted.count(v) == 0);
-            counted.insert(v);
-        }
-        counted.clear();
-        for (auto v : old2new)
-        {
-            DNDS_assert(v >= 0 && v < N);
-            DNDS_assert(counted.count(v) == 0);
-            counted.insert(v);
-        }
-
-        for (index i = 0; i < N; i++)
-        {
-            DNDS_assert(new2old[old2new[i]] == i);
-            DNDS_assert(old2new[new2old[i]] == i);
-        }
-
-        if (localPartStarts.size() > 2)
-        {
-            int nParts = localPartStarts.size() - 1;
-            for (int iPart = 0; iPart < nParts; iPart++)
-            {
-                index start = localPartStarts[iPart];
-                index end = localPartStarts[iPart + 1];
-                // std::cout << start << ", " << end << ", " << N << std::endl;
-                DNDS_assert(start <= end);
-                DNDS_assert(start >= 0);
-                DNDS_assert(end <= N);
-                for (index iCell = localPartStarts[iPart]; iCell < localPartStarts[iPart + 1]; iCell++)
-                {
-                    index n2o = new2old[iCell];
-                    index o2n = old2new[iCell];
-                    DNDS_assert(start <= n2o && n2o < end);
-                    DNDS_assert(start <= o2n && o2n < end);
-                }
-            }
-        }
+        newToOld = std::move(ordered);
     }
     void UnstructuredMesh::ObtainLocalFactFillOrdering(Direct::SerialSymLUStructure &symLU, Direct::DirectPrecControl control)
     {
         if (!control.useDirectPrec)
             return;
-        std::vector<index> partStarts;
-
-        for (int part = 0; part < NLocalParts(); ++part)
-            partStarts.push_back(LocalPartStart(part));
-        partStarts.push_back(NumCell());
-        _nativeState = _nativeState->WithLocalCellSetup(partStarts, GetCell2CellFaceVLocal(true));
+        _nativeState = _nativeState->WithLocalCellNeighbors(GetCell2CellFaceVLocal(true));
         _nativeSmoothing.reset();
 
         const auto &graph = LocalCellNeighbors();
@@ -214,12 +161,13 @@ namespace DNDS::Geom
         {
             DNDS_assert_info(false, "No such ordering code");
         }
-        if (this->NLocalParts() > 1 && control.getOrderingCode() != 0)
+        if (NLocalParts() > 1)
         {
-            localFillOrderingNew2Old = put_perm_back_to_local_parts(localFillOrderingNew2Old, partStarts);
-            for (index i = 0; i < localFillOrderingNew2Old.size(); i++)
-                localFillOrderingOld2New[localFillOrderingNew2Old[i]] = i;
+            bool disjoint = false;
+            for (int part = 0; part < NLocalParts(); ++part)
+                disjoint |= LocalPartRanges(part).second.Size() != 0;
+            if (control.getOrderingCode() != 0 || disjoint)
+                GroupFactorRows(*this, localFillOrderingNew2Old, localFillOrderingOld2New);
         }
-        check_permutations(localFillOrderingNew2Old, localFillOrderingOld2New, partStarts);
     }
 }

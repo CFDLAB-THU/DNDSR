@@ -1,5 +1,6 @@
 #pragma once
 
+#include "DNDS/Core/RowRanges.hpp"
 #include "DNDS/Runtime/Array/ArrayView.hpp"
 
 namespace DNDS::Runtime
@@ -12,11 +13,7 @@ namespace DNDS::Runtime
         RowRangePair
     };
 
-    /// A half-open interval in the operator's local row space.
-    struct RowInterval
-    {
-        index begin = 0, end = 0;
-    };
+    using ::DNDS::RowInterval;
 
     /// Small immutable description of a work list. Default means use the supplied indices.
     /// The setup pass recognizes at most two consecutive runs without reordering the list.

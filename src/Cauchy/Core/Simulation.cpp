@@ -60,6 +60,7 @@ namespace DNDS::Cauchy
             Geom::PrepareMeshOptions prepare;
             prepare.buildSerialOut = false;
             prepare.reorderCells = 1;
+            prepare.coreFirst = domain.settings.execution.coreFirstCellOrdering.value_or(domain.settings.execution.overlap);
             prepare.reorderParts = OMP::DistributedThreads();
             prepare.progress = progress;
             auto mesh = Geom::UnstructuredMesh::FromNative(

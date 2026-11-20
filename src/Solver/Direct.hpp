@@ -1,5 +1,7 @@
 #pragma once
 
+#include "DNDS/Core/RowRanges.hpp"
+
 // #ifndef __DNDS_REALLY_COMPILING__
 // #define __DNDS_REALLY_COMPILING__
 // #define __DNDS_REALLY_COMPILING__HEADER_ON__
@@ -169,7 +171,7 @@ namespace DNDS::Direct
         void ObtainSymmetricSymbolicFactorization(
             const TAdj &cell2cellFaceV,
             const std::vector<index> localPartStarts_in,
-            int iluCode, bool report = true)
+            int iluCode, bool report = true, const std::vector<WorkerRowRanges> &physicalWorkers = {})
         {
             hasSymbolicPattern = false;
             localPartStarts = localPartStarts_in;
@@ -184,17 +186,17 @@ namespace DNDS::Direct
                     localPartStarts[1] = this->Num();
                 }
 
-                for (int iPart = 0; iPart < nParts; iPart++)
+                DNDS_assert(physicalWorkers.empty() || physicalWorkers.size() == size_t(nParts));
+                for (int part = 0; part < nParts; ++part)
                 {
-                    index start = localPartStarts[iPart];
-                    index end = localPartStarts[iPart + 1];
-                    DNDS_assert(start <= end);
-                    for (index iCell = localPartStarts[iPart]; iCell < localPartStarts[iPart + 1]; iCell++)
+                    const auto begin = localPartStarts[part], end = localPartStarts[part + 1];
+                    const auto worker = physicalWorkers.empty() ? WorkerRowRanges{{begin, end}, {}} : physicalWorkers[part];
+                    DNDS_assert(end - begin == worker.Size());
+                    for (index pos = begin; pos < end; ++pos)
                     {
-                        index n2o = this->FillingReorderNew2Old(iCell);
-                        index o2n = this->FillingReorderOld2New(iCell);
-                        DNDS_assert(start <= n2o && n2o < end);
-                        DNDS_assert(start <= o2n && o2n < end);
+                        const auto row = FillingReorderNew2Old(pos);
+                        DNDS_assert(worker.Contains(row));
+                        DNDS_assert(FillingReorderOld2New(row) == pos);
                     }
                 }
             }

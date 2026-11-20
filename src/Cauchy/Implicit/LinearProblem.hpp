@@ -1,5 +1,7 @@
 #pragma once
 
+#include "DNDS/Core/RowRanges.hpp"
+
 #include "DNDS/Algebra/BlockMatrixStorage.hpp"
 #include "Cauchy/Implicit/LinearPattern.hpp"
 #include "Cauchy/Implicit/OffDiagonalView.hpp"
@@ -56,6 +58,7 @@ namespace DNDS::Cauchy
     struct LinearSweepPartitions
     {
         std::vector<index> starts;
+        std::vector<WorkerRowRanges> workers;
     };
     /// Independent numeric matrix layouts and the primary symbolic index ABI.
     /// Int32 is opt-in for providers which borrow that exact representation.
@@ -118,7 +121,7 @@ namespace DNDS::Cauchy
         {
             std::shared_ptr<const Algebra::DofSpace::Partition> partition;
             LinearPatternStorage rows;
-            Runtime::MetadataBuffer<index> sweepPartitions;
+            Runtime::MetadataBuffer<WorkerRowRanges> sweepPartitions;
             /// Host validation metadata only; resident numerical operators
             /// consume rows. This avoids copying device indices per publication.
             std::shared_ptr<const LinearPatternStorage> hostRows;

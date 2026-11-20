@@ -7,8 +7,10 @@
 
 #include "DNDS/Core/Defines.hpp"
 #include "DNDS/Core/OMP.hpp"
+#include "DNDS/Core/RowRanges.hpp"
 #include "Geom/Transition/SerialAdjReordering.hpp"
 
+#include <numeric>
 #include <vector>
 
 #include <fmt/core.h>
@@ -21,6 +23,7 @@ namespace DNDS::Geom::detail
         std::vector<index> cellOld2New;
         std::vector<index> cellNew2Old;
         std::vector<index> localPartitionStarts;
+        std::vector<WorkerRowRanges> workers;
         index bwOld = 0;
         index bwNew = 0;
     };
@@ -49,7 +52,7 @@ namespace DNDS::Geom::detail
         index nCell,
         int nParts,
         int nPartsInner,
-        const std::vector<uint8_t> *hasRemote = nullptr)
+        const std::vector<uint8_t> *hasRemote = nullptr, bool coreFirst = false)
     {
         DNDS_check_throw_info(!hasRemote || hasRemote->size() == size_t(nCell),
                               "cell permutation remote-marker extent differs from cells");
@@ -161,11 +164,25 @@ namespace DNDS::Geom::detail
                 for (index i = localPartStart(int(iPart)); i < localPartEnd(int(iPart)); ++i)
                     count += !result.cellOld2New[size_t(i)];
                 privateCounts[size_t(iPart)] = count; });
+            // Preserve RCM within each worker's core and dependent subsets.
+            // In overlap mode a single physical cut serves the entire rank.
+            index nextCore = 0;
+            index nextDependent = std::accumulate(privateCounts.begin(), privateCounts.end(), index(0));
+            for (int part = 0; part < nLocalParts; ++part)
+            {
+                const auto begin = localPartStart(part), end = localPartEnd(part);
+                const auto core = privateCounts[part], dependent = end - begin - core;
+                const auto first = coreFirst ? nextCore : begin;
+                const auto second = coreFirst ? nextDependent : begin + core;
+                result.workers.push_back({{first, first + core}, {second, second + dependent}});
+                nextCore += core;
+                nextDependent += dependent;
+            }
             OMP::ForSetupRows(0, nLocalParts, [&](index iPart)
                               {
                 const index begin = localPartStart(int(iPart));
-                index privateOutput = begin;
-                index interfaceOutput = begin + privateCounts[size_t(iPart)];
+                index privateOutput = result.workers[iPart].first.begin;
+                index interfaceOutput = result.workers[iPart].second.begin;
                 for (index i = begin; i < localPartEnd(int(iPart)); ++i)
                     if (!result.cellOld2New[size_t(i)])
                         cellNew2OldNew[size_t(privateOutput++)] = result.cellNew2Old[size_t(i)];

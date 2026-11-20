@@ -117,7 +117,7 @@ namespace DNDS::CFV
                 const auto &rows = region == ReconstructionRegion::Core ? data->workPartition->Core() : data->workPartition->HaloDependent();
                 selection.rows = {rows.data(), index(rows.size())};
                 selection.coreFirstPosition = {data->coreFirstPosition.data(), index(data->coreFirstPosition.size())};
-                selection.partitionStarts = data->hostPartitionStarts.HostView();
+                selection.workerRanges = data->hostWorkers.HostView();
                 selection.vectorStarts = {vectorStarts.data(), index(vectorStarts.size())};
                 selection.owned = data->metrics.NumCell();
                 selection.coreCount = index(data->workPartition->Core().size());

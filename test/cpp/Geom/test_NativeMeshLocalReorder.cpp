@@ -7,6 +7,7 @@
 #include "Geom/Transition/MeshTransition.hpp"
 #include "Geom/Transition/CellPermutation.hpp"
 #include "Geom/Access/EntityField.hpp"
+#include "Geom/Access/EntityWorkPartition.hpp"
 #include "Geom/Transition/FieldTransfer.hpp"
 #include "Geom/Unstructured/ReaderPartitionGraph.hpp"
 #include "NativeMeshFacadeFixture.hpp"
@@ -393,6 +394,29 @@ TEST_CASE("Primary local reorder matches full facial graph permutation and final
         CHECK_THROWS(primary->WithLocalPartitions({0, primary->NumOwned(G::EntityKind::Cell) + 1}));
         CHECK(G::detail::BuildPrimaryLocalCellNeighbors(*primary) == expectedGraph);
     }
+}
+
+TEST_CASE("Overlap order groups all node-star core cells before dependent workers")
+{
+    const DNDS::MPIInfo mpi(MPI_COMM_WORLD);
+    auto input = Fixture(mpi, false, true);
+    auto original = G::UnstructuredMesh::FromNative(mpi, input);
+    const auto membership = G::EntityWorkPartition::CellNodeCell(*original);
+    auto owned = G::NativeMeshAssembler::CaptureOwned(*input, mpi);
+    auto result = G::NativeMeshTransition::ReorderOwnedCells(owned, mpi, 2, 1, true);
+    const auto &map = result.transfers.at(G::EntityKind::Cell).localOld2New;
+    for (auto row : membership.Core())
+        CHECK(map.at(row) < I(membership.Core().size()));
+    for (auto row : membership.HaloDependent())
+        CHECK(map.at(row) >= I(membership.Core().size()));
+    auto final = G::AssembleNativeMesh(mpi, std::move(result.owned), 1);
+    REQUIRE(final->NLocalParts() == 2);
+    std::vector<int> counts(final->NumOwned(G::EntityKind::Cell));
+    for (int part = 0; part < final->NLocalParts(); ++part)
+        for (auto interval : final->LocalPartRanges(part).Intervals())
+            for (I row = interval.begin; row < interval.end; ++row)
+                ++counts.at(row);
+    CHECK(counts == std::vector<int>(5, 1));
 }
 
 TEST_CASE("Periodic primary local reorder uses frame-aware facial adjacency")

@@ -3,6 +3,7 @@
 
 #include "Geom/Unstructured/UnstructuredMeshSnapshot.hpp"
 #include "Geom/Access/EntitySpace.hpp"
+#include "DNDS/Core/RowRanges.hpp"
 #include <map>
 
 namespace DNDS::Geom
@@ -44,7 +45,7 @@ namespace DNDS::Geom
         UnstructuredMeshView _hostView;
         Runtime::VersionTracker _versions;
         Runtime::VersionStamp _epoch;
-        std::vector<index> _localPartStarts;
+        std::vector<WorkerRowRanges> _localPartRanges;
         tLocalMatStruct _localCellNeighbors;
 
         UnstructuredMeshState() = default;
@@ -80,6 +81,8 @@ namespace DNDS::Geom
         /// Primary-only states retain boundaries with an empty neighbor cache;
         /// final facial publication rebuilds the graph in its final slot order.
         std::shared_ptr<const UnstructuredMeshState> WithLocalPartitions(std::vector<index> partStarts) const;
+        std::shared_ptr<const UnstructuredMeshState> WithLocalPartitionRanges(std::vector<WorkerRowRanges> parts) const;
+        std::shared_ptr<const UnstructuredMeshState> WithLocalCellNeighbors(tLocalMatStruct neighbors) const;
         /// Replace wall vectors while retaining the exact coordinate allocation.
         std::shared_ptr<const UnstructuredMeshState> WithWallDistance(Runtime::ArrayPair<real> walls) const;
         /// Detached geometry-only replacement with identical entity order and
@@ -155,9 +158,17 @@ namespace DNDS::Geom
             DNDS_check_throw_info(found != _meshIdentity.nextIds.end(), "persistent-ID high-water mark is unavailable");
             return found->second;
         }
-        int NLocalParts() const { return _localPartStarts.empty() ? 1 : int(_localPartStarts.size() - 1); }
-        index LocalPartStart(int part) const { return _localPartStarts.empty() ? 0 : _localPartStarts.at(size_t(part)); }
-        index LocalPartEnd(int part) const { return _localPartStarts.empty() ? NumOwned(EntityKind::Cell) : _localPartStarts.at(size_t(part + 1)); }
+        int NLocalParts() const { return _localPartRanges.empty() ? 1 : int(_localPartRanges.size()); }
+        /// Current owned cell intervals for one worker. Read by value, in scan order.
+        WorkerRowRanges LocalPartRanges(int part) const
+        {
+            if (!_localPartRanges.empty())
+                return _localPartRanges.at(size_t(part));
+            DNDS_check_throw_info(part == 0, "cell partition outside mesh");
+            return {{0, NumOwned(EntityKind::Cell)}, {}};
+        }
+        index LocalPartStart(int part) const { return LocalPartRanges(part).Contiguous().begin; }
+        index LocalPartEnd(int part) const { return LocalPartRanges(part).Contiguous().end; }
         const tLocalMatStruct &LocalCellNeighbors() const { return _localCellNeighbors; }
     };
 }

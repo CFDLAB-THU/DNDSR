@@ -32,10 +32,9 @@ namespace DNDS::Geom
         auto result = AssembleNativeMesh(mpi, std::move(owned), ghostLayers);
         if (!result->Requirements().faces)
             return result;
-        std::vector<index> partStarts;
+        std::vector<WorkerRowRanges> parts;
         for (int part = 0; part < source.NLocalParts(); ++part)
-            partStarts.push_back(source.LocalPartStart(part));
-        partStarts.push_back(source.NumOwned(EntityKind::Cell));
-        return result->WithLocalPartitions(std::move(partStarts));
+            parts.push_back(source.LocalPartRanges(part));
+        return result->WithLocalPartitionRanges(std::move(parts));
     }
 }
