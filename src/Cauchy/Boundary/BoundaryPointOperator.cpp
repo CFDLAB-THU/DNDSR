@@ -92,7 +92,7 @@ namespace DNDS::Cauchy
             const auto &params = _equation.ACMParameters();
             const real omega = twoEquationWall ? params.kinematicViscosity * Physics::RANS::kWallOmegaCoeff / sqr(meanWallDistance) : 0;
             std::array<real, 6> exterior{};
-            if (!ACM::Exterior(params, kind, point, condition.acmState, condition.velocity, normal, exterior, int(_components), omega))
+            if (!ACM::ExteriorAt(params, kind, point, condition, normal, location, frame.KernelParameters(), exterior, int(_components), omega))
                 return {NumericalError::UnsupportedRequest};
             for (int j = 0; j < _components; ++j)
                 point[j] = stateKind == BoundaryPointStateKind::ExteriorState ? exterior[j] : 0.5 * (point[j] + exterior[j]);

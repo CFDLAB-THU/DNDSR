@@ -86,7 +86,7 @@ namespace DNDS::Cauchy
                 if (low) lowOutput.emplace(EquationBlockArrayView<real>{outputs[1], low->firstComponent, low->componentNumber});
                 CFV::FiniteVolumeHostView metric;
                 metric.cells = cells;
-                CPU::AddEquationRotationSource(metric, frame, mean, output, lowOutput); }, std::vector<Input>{R::ReadAs<R::UniformTableRows>(state.PhysicalField(flow.physicalField).Owned())}, std::move(outputs), std::make_tuple(R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics())));
+                CPU::AddEquationRotationSource(metric, frame, mean, output, lowOutput, pin->owner->equation.IsACM() ? 0 : 1); }, std::vector<Input>{R::ReadAs<R::UniformTableRows>(state.PhysicalField(flow.physicalField).Owned())}, std::move(outputs), std::make_tuple(R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics())));
         }
         if (!sourceOffsets.RowCount())
         {

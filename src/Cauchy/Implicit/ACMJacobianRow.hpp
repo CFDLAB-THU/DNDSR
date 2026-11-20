@@ -96,6 +96,13 @@ namespace DNDS::Cauchy::ACM
         for (int j = 4; j < C; ++j)
             sourceDiagonal[j - 4] = diagonal(j, j);
         FillACMTemporalBlock<C>(own, volume, tau, request.physicalInverseDt, request.physics.alpha, request.physics.beta2, diagonal);
+        if (request.frame.moving)
+        {
+            const auto negativeDerivative = request.frame.NegativeSourceJacobian();
+            for (int i = 0; i < 3; ++i)
+                for (int j = 0; j < 3; ++j)
+                    diagonal(i, j) += request.residualScale * volume * negativeDerivative[i + 1 + 5 * (j + 1)];
+        }
         for (index slot = 0; slot < request.offDiagonal.BlockNumber(cell); ++slot)
             for (int k = 0; k < C * C; ++k)
                 request.offDiagonal(cell, slot)[k] = 0;
@@ -133,8 +140,16 @@ namespace DNDS::Cauchy::ACM
             {
                 if (boundary)
                 {
-                    if (!ACM::Exterior(request.physics, bc.kind, left, bc.acmState, bc.velocity, sample.normal,
-                                       right, C, wallOmega))
+                    // Interface coupling freezes the interpolated exterior state for this linearization.
+                    if (bc.kind == BoundaryKind::Interface)
+                    {
+                        if (sample.boundaryPoint < 0 || sample.boundaryPoint >= request.incoming.RowCount())
+                            return {NumericalError::InvalidInput};
+                        for (int j = 0; j < C; ++j)
+                            right[j] = request.incoming(sample.boundaryPoint, j);
+                    }
+                    else if (!ACM::ExteriorAt(request.physics, bc.kind, left, bc, sample.normal, sample.ownPoint, request.frame,
+                                              right, C, wallOmega))
                         return {NumericalError::UnsupportedRequest};
                 }
                 else if (sample.changesFrame)
@@ -150,7 +165,8 @@ namespace DNDS::Cauchy::ACM
             {
                 if (const auto status = exterior(left, right); !status)
                     return status;
-                ACM::NumericalFlux(request.physics, left, right, sample.normal, result, C);
+                const auto grid = request.frame.GridVelocity(sample.ownPoint);
+                ACM::NumericalFlux(request.physics, left, right, sample.normal, result, C, ACM::NormalSpeed(grid, sample.normal));
                 for (int j = 0; j < C; ++j)
                     if (j != 3)
                         result[j] -= viscous * (right[j] - left[j]);

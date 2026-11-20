@@ -258,12 +258,31 @@ namespace DNDS::Cauchy
                                   auxiliary.derivedOwned ? &auxiliary.derivedOwned->Values() : nullptr, auxiliary.derivedGhost ? &auxiliary.derivedGhost->Values() : nullptr})
             if (input)
                 checkAlias(*input);
+        std::optional<R::Array<real>::ReadLease> incomingFaceRead;
+        std::optional<BoundaryInputs> boundaryInputs;
+        InterfaceBoundaryRows incomingFace;
+        if (HasInterfaces())
+        {
+            if (sourceWorkspace)
+                boundaryInputs = PreparedBoundaryInputs(*sourceWorkspace);
+            DNDS_check_throw_info(
+                boundaryInputs,
+                "equation interface Jacobian needs the current boundary publication");
+            ValidateBoundaryInputs(*boundaryInputs, time);
+            incomingFaceRead.emplace(
+                boundaryInputs->FaceCenterValues()
+                    .CoupledField()
+                    .Owned()
+                    .Read());
+            incomingFace =
+                incomingFaceRead->View<R::UniformTableRows>();
+        }
         if (acm)
         {
             DNDS_check_throw_info(output.DiagonalMode() == DiagonalStorage::Block && output.HasAssembledOffDiagonal(),
                                   "ACM matrix requires full diagonal and off-diagonal blocks");
-            DNDS_check_throw_info(nv >= 4 && nv <= 6 && !HasInterfaces() && !_data->motion.At(time).moving,
-                                  "ACM Jacobian requires stationary single-domain flow4, flow4+SA or flow4+2EQ");
+            DNDS_check_throw_info(nv >= 4 && nv <= 6,
+                                  "ACM Jacobian requires flow4, flow4+SA or flow4+2EQ");
             if (nv > 4)
             {
                 DNDS_check_throw_info(context, "ACM RANS matrix requires the centered source gradient workspace");
@@ -297,7 +316,7 @@ namespace DNDS::Cauchy
                                               controls.residualScale, evaluator, {}, output.RowMajorBlocks());
                 }
                 RequireNumericalSuccess(CPU::PrepareACMFluxJacobian(
-                                            {physics, stencil.View(), {_data->boundaryConditions.data(), index(_data->boundaryConditions.size())}, layout.View(), tau.View<R::UniformTableRows>(), radius.View<R::UniformTableRows>(), walls ? walls->HostView().cellMean : decltype(WallDistanceView::cellMean){}, diagonal.View<R::UniformTableRows>(), off->ArrayView(), controls.physicalMass, controls.residualScale, active, ResolveEquationPhysicsProfile(_data->equation), controls.scalarBoundaryDerivative}),
+                                            {physics, stencil.View(), {_data->boundaryConditions.data(), index(_data->boundaryConditions.size())}, layout.View(), tau.View<R::UniformTableRows>(), radius.View<R::UniformTableRows>(), walls ? walls->HostView().cellMean : decltype(WallDistanceView::cellMean){}, diagonal.View<R::UniformTableRows>(), off->ArrayView(), controls.physicalMass, controls.residualScale, active, ResolveEquationPhysicsProfile(_data->equation), controls.scalarBoundaryDerivative, _data->motion.At(time).KernelParameters(), incomingFace}),
                                         "assemble ACM Jacobian");
             }
             catch (...)
@@ -333,25 +352,6 @@ namespace DNDS::Cauchy
         const auto blocks = EquationFVDetail::BlockViews(state, input);
         const auto inputLayout = input.ComponentLayout();
         const auto inputValues = inputLayout.View();
-        std::optional<R::Array<real>::ReadLease> incomingFaceRead;
-        std::optional<BoundaryInputs> boundaryInputs;
-        InterfaceBoundaryRows incomingFace;
-        if (HasInterfaces())
-        {
-            if (sourceWorkspace)
-                boundaryInputs = PreparedBoundaryInputs(*sourceWorkspace);
-            DNDS_check_throw_info(
-                boundaryInputs,
-                "equation interface Jacobian needs the current boundary publication");
-            ValidateBoundaryInputs(*boundaryInputs, time);
-            incomingFaceRead.emplace(
-                boundaryInputs->FaceCenterValues()
-                    .CoupledField()
-                    .Owned()
-                    .Read());
-            incomingFace =
-                incomingFaceRead->View<R::UniformTableRows>();
-        }
         auto geometry = Metrics().AcquireRead();
         const auto metric = geometry.HostView();
         const auto faceRead = auxiliary.faceSpectralRadius->Read(), pseudo = inversePseudoTime.Read();

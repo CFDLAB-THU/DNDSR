@@ -67,16 +67,22 @@ namespace DNDS::Cauchy
                 state[1 + d] = momentum[d];
             return state;
         }
-        /// Absolute-velocity component-axis source, -Omega cross rho*u.
-        /// It contributes no mass or energy work.
-        DNDS_DEVICE_CALLABLE FlowState RotationSource(const FlowState &state) const noexcept
+        /// Components of minus Omega cross momentum in the local Cartesian axes.
+        DNDS_DEVICE_CALLABLE Vector3 MomentumSource(const Vector3 &momentum) const noexcept
         {
             if (!moving)
                 return {};
             const auto &w = angularVelocity;
-            return {0, -(w[1] * state[3] - w[2] * state[2]),
-                    -(w[2] * state[1] - w[0] * state[3]),
-                    -(w[0] * state[2] - w[1] * state[1]), 0};
+            return {w[2] * momentum[1] - w[1] * momentum[2],
+                    w[0] * momentum[2] - w[2] * momentum[0],
+                    w[1] * momentum[0] - w[0] * momentum[1]};
+        }
+        /// Absolute-velocity component-axis source, -Omega cross rho*u.
+        /// It contributes no mass or energy work.
+        DNDS_DEVICE_CALLABLE FlowState RotationSource(const FlowState &state) const noexcept
+        {
+            const auto source = MomentumSource({state[1], state[2], state[3]});
+            return {0, source[0], source[1], source[2], 0};
         }
         /// Column-major negative derivative; volume/time scaling stays outside.
         DNDS_DEVICE_CALLABLE std::array<real, 25> NegativeSourceJacobian() const noexcept

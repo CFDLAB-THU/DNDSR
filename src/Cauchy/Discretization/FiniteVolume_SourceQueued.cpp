@@ -36,12 +36,13 @@ namespace DNDS::Cauchy
         {
             auto &output = result.CoupledField().Owned();
             const auto &selection = DeviceCellSelection(CFV::ReconstructionRegion::All);
+            const int firstMomentum = owner->equation.IsACM() ? 0 : 1;
             if (lowOrder)
-                R::SubmitArrays(engine, stream, [pin, frame](R::ExecutionContext context, auto means, auto output, auto low, auto cells, auto metric)
-                                { CUDA::AddRotationSource(context, metric, frame, means, output, low, true, cells); }, R::ReadAs<R::TableRows>(state.CoupledField().Owned()), R::ReadWriteAs<R::TableRows>(output), R::ReadWriteAs<R::TableRows>(lowOrder->CoupledField().Owned()), R::ReadAs<R::FixedRows<1>>(selection), R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics()));
+                R::SubmitArrays(engine, stream, [pin, frame, firstMomentum](R::ExecutionContext context, auto means, auto output, auto low, auto cells, auto metric)
+                                { CUDA::AddRotationSource(context, metric, frame, means, output, low, true, cells, firstMomentum); }, R::ReadAs<R::TableRows>(state.CoupledField().Owned()), R::ReadWriteAs<R::TableRows>(output), R::ReadWriteAs<R::TableRows>(lowOrder->CoupledField().Owned()), R::ReadAs<R::FixedRows<1>>(selection), R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics()));
             else
-                R::SubmitArrays(engine, stream, [pin, frame](R::ExecutionContext context, auto means, auto output, auto cells, auto metric)
-                                { CUDA::AddRotationSource(context, metric, frame, means, output, output, false, cells); }, R::ReadAs<R::TableRows>(state.CoupledField().Owned()), R::ReadWriteAs<R::TableRows>(output), R::ReadAs<R::FixedRows<1>>(selection), R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics()));
+                R::SubmitArrays(engine, stream, [pin, frame, firstMomentum](R::ExecutionContext context, auto means, auto output, auto cells, auto metric)
+                                { CUDA::AddRotationSource(context, metric, frame, means, output, output, false, cells, firstMomentum); }, R::ReadAs<R::TableRows>(state.CoupledField().Owned()), R::ReadWriteAs<R::TableRows>(output), R::ReadAs<R::FixedRows<1>>(selection), R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics()));
         }
         if (!sourceOffsets.RowCount())
             return;

@@ -399,19 +399,17 @@ namespace DNDS::Cauchy::CPU
     }
     void AddEquationRotationSource(CFV::FiniteVolumeHostView metric, const RigidFrame &frame,
                                    EquationBlockReadView flow, EquationBlockArrayView<real> output,
-                                   std::optional<EquationBlockArrayView<real>> lowOutput)
+                                   std::optional<EquationBlockArrayView<real>> lowOutput, int firstMomentum)
     {
+        const auto motion = frame.KernelParameters();
         OMP::ForRows(0, output.RowCount(), [&](index iCell)
                      {
-            FlowState mean{};
-            for (int j = 0; j < 5; ++j)
-                mean[j] = flow(iCell, j);
-            const auto source = frame.RotationSource(mean);
-            for (int j = 0; j < 5; ++j)
+            const auto source = motion.MomentumSource({flow(iCell, firstMomentum), flow(iCell, firstMomentum + 1), flow(iCell, firstMomentum + 2)});
+            for (int d = 0; d < 3; ++d)
             {
-                output(iCell, j) += metric.GetCellVol(iCell) * source[j];
-                if (lowOutput)
-                    (*lowOutput)(iCell, j) += metric.GetCellVol(iCell) * source[j];
+                const real force = metric.GetCellVol(iCell) * source[d];
+                output(iCell, firstMomentum + d) += force;
+                if (lowOutput) (*lowOutput)(iCell, firstMomentum + d) += force;
             } });
     }
 }

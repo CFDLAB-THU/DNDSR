@@ -134,7 +134,7 @@ namespace DNDS::Cauchy
             const auto geometry = owner->metrics.AcquireRead();
             const auto metric = geometry.HostView();
             CPU::AddEquationRotationSource(metric, frame, flow, output,
-                                           lowWrite ? std::make_optional(lowOutput) : std::nullopt);
+                                           lowWrite ? std::make_optional(lowOutput) : std::nullopt, owner->equation.IsACM() ? 0 : 1);
         }
         if (sourceOffsets.RowCount() == 0)
             return;

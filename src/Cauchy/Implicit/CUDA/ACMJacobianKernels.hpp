@@ -35,6 +35,8 @@ namespace DNDS::Cauchy::CUDA
         std::array<bool, 6> active;
         EquationPhysicsProfile profile;
         bool physicalBoundary = true;
+        RigidFrameParameters frame;
+        LinearReadRows incoming;
     };
     using ACMJacobianStatusRows = Runtime::ArrayView<NumericalStatus, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
     /// One independent thread assembles one complete owned sparse row in its

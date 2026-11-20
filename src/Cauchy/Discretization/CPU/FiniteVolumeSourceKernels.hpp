@@ -75,5 +75,5 @@ namespace DNDS::Cauchy::CPU
                                      index components, bool fullBlock, bool rowMajor, real scale);
     void AddEquationRotationSource(CFV::FiniteVolumeHostView metric, const RigidFrame &frame,
                                    EquationBlockReadView flow, EquationBlockArrayView<real> output,
-                                   std::optional<EquationBlockArrayView<real>> lowOutput);
+                                   std::optional<EquationBlockArrayView<real>> lowOutput, int firstMomentum);
 }

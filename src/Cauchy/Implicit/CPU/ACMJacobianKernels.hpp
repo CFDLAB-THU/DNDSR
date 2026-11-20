@@ -29,6 +29,8 @@ namespace DNDS::Cauchy::CPU
         std::array<bool, 6> active;
         EquationPhysicsProfile profile;
         bool physicalBoundary = true;
+        RigidFrameParameters frame;
+        RHSScalarView incoming;
     };
     NumericalStatus PrepareACMFluxJacobian(const ACMJacobianPreparation &) noexcept;
 }

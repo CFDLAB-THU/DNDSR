@@ -128,7 +128,7 @@ namespace DNDS::Cauchy::CUDA
                                 omega = parameters.flow.kinematicViscosity * Physics::RANS::kWallOmegaCoeff / sqr(distance);
                             }
                         std::array<real, Components> exterior{};
-                        if (!ACM::Exterior(parameters.flow, condition.kind, point, condition.acmState, condition.velocity, sample.normal, exterior, Components, omega))
+                        if (!ACM::ExteriorAt(parameters.flow, condition.kind, point, condition, sample.normal, sample.location, request.frame, exterior, Components, omega))
                             status = NumericalStatus{NumericalError::UnsupportedRequest}.At(sample.cell, iPoint);
                         else
                             for (int j = 0; j < Components; ++j)

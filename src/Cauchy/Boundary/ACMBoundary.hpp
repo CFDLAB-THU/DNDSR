@@ -2,24 +2,26 @@
 
 #include "Cauchy/Boundary/BoundaryKind.hpp"
 #include "Cauchy/Physics/ACMFlux.hpp"
+#include "Cauchy/Motion/RigidFrameParameters.hpp"
 
 namespace DNDS::Cauchy::ACM
 {
-    /// Stationary mechanical boundary data in solver units, uploaded once
+    /// Reference mechanical boundary data in solver units, uploaded once
     /// during placement and shared by spatial and implicit device kernels.
     struct BoundaryParameters
     {
         BoundaryKind kind = BoundaryKind::Interior;
         std::array<real, 6> acmState{};
         std::array<real, 3> velocity{};
+        bool wallMovesWithMesh = true;
     };
-    /// Generate the stationary ACM Riemann exterior. Prescribed slip and
+    /// Generate the ACM Riemann exterior in the current local axes. Slip and
     /// Dirichlet data are reflected across the trace. Farfield imports only
-    /// incoming modes of Gamma^-1 A evaluated at the interior point.
+    /// incoming modes of Gamma^-1 (A_n - w_n M) evaluated at the interior point.
     template <class State, class Prescribed, class Wall, class Normal, class Output>
     DNDS_DEVICE_CALLABLE inline bool Exterior(const Parameters &p, BoundaryKind kind, const State &inside,
                                               const Prescribed &prescribed, const Wall &wall, const Normal &normal,
-                                              Output &out, int width, real wallOmega = 0) noexcept
+                                              Output &out, int width, real wallOmega = 0, real gridNormal = 0) noexcept
     {
         const real un = NormalSpeed(inside, normal);
         for (int j = 0; j < width; ++j)
@@ -53,10 +55,10 @@ namespace DNDS::Cauchy::ACM
             real jump[4], incoming[4];
             for (int j = 0; j < 4; ++j)
                 jump[j] = prescribed[j] - inside[j];
-            ApplyWaveFunction(p, inside, normal, jump, IncomingWave{}, incoming);
+            ApplyWaveFunction(p, inside, normal, jump, IncomingWave{}, incoming, gridNormal);
             for (int j = 0; j < 4; ++j)
                 out[j] += incoming[j];
-            if (un < 0)
+            if (un < gridNormal)
                 for (int j = 4; j < width; ++j)
                     out[j] = prescribed[j];
             break;
@@ -66,4 +68,26 @@ namespace DNDS::Cauchy::ACM
         }
         return true;
     }
+    /// Inertial inlet/farfield velocities are expressed in the current local axes.
+    /// A wall speed specified in mesh axes is relative to the rigid wall motion.
+    template <class Condition, class State, class Normal, class Point, class Output>
+    DNDS_DEVICE_CALLABLE inline bool ExteriorAt(const Parameters &p, BoundaryKind kind, const State &inside,
+                                                const Condition &bc, const Normal &normal, const Point &point,
+                                                const RigidFrameParameters &frame, Output &out, int width, real omega) noexcept
+    {
+        if (!frame.moving)
+            return Exterior(p, kind, inside, bc.acmState, bc.velocity, normal, out, width, omega);
+        const auto grid = frame.GridVelocity({point[0], point[1], point[2]});
+        auto prescribed = bc.acmState;
+        const auto velocity = frame.LocalVector({prescribed[0], prescribed[1], prescribed[2]});
+        auto wall = frame.LocalVector(bc.velocity);
+        for (int d = 0; d < 3; ++d)
+        {
+            prescribed[d] = velocity[d];
+            if (bc.wallMovesWithMesh)
+                wall[d] = bc.velocity[d] + grid[d];
+        }
+        return Exterior(p, kind, inside, prescribed, wall, normal, out, width, omega, NormalSpeed(grid, normal));
+    }
+
 }

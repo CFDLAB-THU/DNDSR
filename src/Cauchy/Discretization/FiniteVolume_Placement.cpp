@@ -98,7 +98,7 @@ namespace DNDS::Cauchy
                                                       _data->boundaryConditions.size(), [&](index i)
                                                       {
                     const auto &bc = _data->boundaryConditions[i];
-                    return ACM::BoundaryParameters{bc.kind, bc.acmState, bc.velocity}; })
+                    return ACM::BoundaryParameters{bc.kind, bc.acmState, bc.velocity, bc.wallMovesWithMesh}; })
                                                       .CopyTo(device, context);
             placed->deviceACMBoundaryConditions.SetDiagnosticName("Cauchy/ACM/boundaryConditions", DNDS_ALLOCATION_SITE());
             ACM::SpatialParameters parameters{_data->equation.ACMParameters(), {}};

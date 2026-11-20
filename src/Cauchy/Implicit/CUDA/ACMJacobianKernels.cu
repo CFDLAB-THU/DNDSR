@@ -26,7 +26,7 @@ namespace DNDS::Cauchy::CUDA
                                   status.RowCount() == cells && q.stencil.RowCount() == 1 &&
                                   (width == 4 || q.wallMean.RowCount() >= cells),
                               "invalid CUDA ACM Jacobian layout");
-        R::ValidateViewDevices(context.device, q.input.owned, q.input.ghost, q.diagonal, q.offDiagonal, q.radius, q.tau, q.conditions.rows, q.stencil, status);
+        R::ValidateViewDevices(context.device, q.input.owned, q.input.ghost, q.diagonal, q.offDiagonal, q.radius, q.tau, q.incoming, q.conditions.rows, q.stencil, status);
         DNDS_check_throw_info((q.profile == EquationPhysicsProfile::ACM && width == 4) ||
                                   (q.profile == EquationPhysicsProfile::ACMSA && width == 5) ||
                                   (q.profile == EquationPhysicsProfile::ACMTwoEquation && width == 6),

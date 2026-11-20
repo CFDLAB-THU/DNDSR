@@ -297,7 +297,8 @@ namespace DNDS::Cauchy::CPU
                 {
                     auto params = equation.ACMParameters();
                     params.roe = !rusanovFlux;
-                    ACM::NumericalFlux(params, left.values, right.values, sample.normal, flux, int(width));
+                    const auto grid = frame.GridVelocity({sample.ownPoint[0], sample.ownPoint[1], sample.ownPoint[2]});
+                    ACM::NumericalFlux(params, left.values, right.values, sample.normal, flux, int(width), ACM::NormalSpeed(grid, sample.normal));
                     // An ACM slip wall has inviscid pressure flux only. The copied
                     // interior gradient would otherwise leak shear and RANS diffusion.
                     if (viscous && boundaryKind != BoundaryKind::SlipWall)

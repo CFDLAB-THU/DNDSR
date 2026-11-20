@@ -61,14 +61,19 @@ namespace DNDS::Cauchy
         checkAlias(field.Ghost());
         checkAlias(inversePseudoTime);
         checkAlias(*auxiliary.faceSpectralRadius);
+        auto workspaceSession = work.session.Acquire();
+        const auto boundary = PreparedBoundaryInputs(work);
+        DNDS_check_throw_info(!HasInterfaces() || boundary, "device interface Jacobian requires its centered boundary publication");
+        if (boundary)
+            ValidateBoundaryInputs(*boundary, time);
+        const auto &incoming = boundary ? boundary->FaceCenterValues().CoupledField().Owned() : _data->deviceEmpty;
+        checkAlias(incoming);
         if (acm)
         {
-            DNDS_check_throw_info(full && output.HasAssembledOffDiagonal() && n >= 4 && n <= 6 &&
-                                      !HasInterfaces() && !_data->motion.At(time).moving,
-                                  "CUDA ACM Jacobian requires stationary single-domain full blocks");
+            DNDS_check_throw_info(full && output.HasAssembledOffDiagonal() && n >= 4 && n <= 6,
+                                  "CUDA ACM Jacobian requires full assembled blocks of width four to six");
             if (n > 4)
                 ValidateEquationSourceJacobian(state, context, time);
-            auto session = work.session.Acquire();
             const auto &lane = *context.stream;
             auto engine = lane.LockEngine();
             if (!work.deviceJacobian)
@@ -85,9 +90,7 @@ namespace DNDS::Cauchy
             if (n > 4)
                 scratch->SubmitSource(work, engine, lane, state, output.Diagonal(), full, controls.residualScale);
             auto blocks = output.OffDiagonal().Values();
-            R::SubmitArrays(engine, lane, [scratch, physics, active, profile = ResolveEquationPhysicsProfile(_data->equation),
-                                          scale = controls.residualScale, mass = controls.physicalMass, rowMajor = output.RowMajorBlocks(),
-                                          physicalBoundary = controls.scalarBoundaryDerivative](auto where, auto owned, auto ghost, auto tau, auto radius, auto offsets, auto diagonal, auto blocks, auto status)
+            R::SubmitArrays(engine, lane, [scratch, physics, active, profile = ResolveEquationPhysicsProfile(_data->equation), scale = controls.residualScale, mass = controls.physicalMass, rowMajor = output.RowMajorBlocks(), frame = _data->motion.At(time).KernelParameters(), physicalBoundary = controls.scalarBoundaryDerivative](auto where, auto owned, auto ghost, auto tau, auto radius, auto incoming, auto offsets, auto diagonal, auto blocks, auto status)
                             {
                 CUDA::ACMJacobianInput q{};
                 q.input = {owned,ghost};
@@ -97,6 +100,7 @@ namespace DNDS::Cauchy
                 q.physics = physics;
                 q.tau = tau;
                 q.radius = radius;
+                q.incoming = incoming;
                 if (scratch->walls) q.wallMean = scratch->walls->View().cellMean;
                 q.diagonal = diagonal;
                 q.offDiagonal = {blocks,offsets,owned.Width(),rowMajor};
@@ -105,7 +109,8 @@ namespace DNDS::Cauchy
                 q.residualScale = scale;
                 q.active = active;
                 q.physicalBoundary = physicalBoundary;
-                CUDA::PrepareACMFluxJacobian(where,q,status); }, R::ReadAs<R::TableRows>(field.Owned()), R::ReadAs<R::TableRows>(field.Ghost()), R::ReadAs<R::TableRows>(inversePseudoTime), R::ReadAs<R::TableRows>(*auxiliary.faceSpectralRadius), R::ReadAs<R::FixedRows<1>>(output.OffDiagonal().OffsetArray()), R::ReadWriteAs<R::UniformTableRows>(output.Diagonal()), R::WriteAs<R::UniformTableRows>(blocks), R::WriteAs<R::FixedRows<1>>(scratch->rowsStatus));
+                q.frame = frame;
+                CUDA::PrepareACMFluxJacobian(where,q,status); }, R::ReadAs<R::TableRows>(field.Owned()), R::ReadAs<R::TableRows>(field.Ghost()), R::ReadAs<R::TableRows>(inversePseudoTime), R::ReadAs<R::TableRows>(*auxiliary.faceSpectralRadius), R::ReadAs<R::TableRows>(incoming), R::ReadAs<R::FixedRows<1>>(output.OffDiagonal().OffsetArray()), R::ReadWriteAs<R::UniformTableRows>(output.Diagonal()), R::WriteAs<R::UniformTableRows>(blocks), R::WriteAs<R::FixedRows<1>>(scratch->rowsStatus));
             scratch->AppendStatus(engine, lane, scratch->rowsStatus);
             engine.Synchronize();
             const auto result = scratch->result.To(R::Device::Host(), lane.Context());
@@ -129,13 +134,6 @@ namespace DNDS::Cauchy
             }
         if (_data->equation.HasRANS())
             ValidateEquationSourceJacobian(state, context, time);
-        auto workspaceSession = work.session.Acquire();
-        const auto boundary = PreparedBoundaryInputs(work);
-        DNDS_check_throw_info(!HasInterfaces() || boundary, "device interface Jacobian requires its centered boundary publication");
-        if (boundary)
-            ValidateBoundaryInputs(*boundary, time);
-        const auto &incoming = boundary ? boundary->FaceCenterValues().CoupledField().Owned() : _data->deviceEmpty;
-        checkAlias(incoming);
         auto engine = context.stream->LockEngine();
         const auto &stream = *context.stream;
         if (!work.deviceJacobian)

@@ -18,6 +18,7 @@ namespace DNDS::Cauchy::CUDA::Detail
         template <int Width>
         using Pair = Runtime::PairReadView<real, Runtime::AccessBoundsChecks, Runtime::FixedRows<Width, Width>>;
         Pair<C> mean;
+        Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::FixedRows<C, C>> incoming;
         Pair<C *(M ? M : D)> reconstruction, viscousData;
         CellCenterViscosityView centerViscosity;
     };
@@ -49,13 +50,20 @@ namespace DNDS::Cauchy::CUDA::Detail
                         return NumericalStatus{NumericalError::InvalidInput}.At(sample.cell, entry);
                     omega = physics.flow.kinematicViscosity * Physics::RANS::kWallOmegaCoeff / sqr(distance);
                 }
-            if (!ACM::Exterior(physics.flow, kind, left.values, bc.acmState, bc.velocity,
-                               sample.normal, right.values, C, omega))
+            if (kind == BoundaryKind::Interface)
+            {
+                if (sample.boundaryPoint < 0 || sample.boundaryPoint >= fields.incoming.RowCount())
+                    return NumericalStatus{NumericalError::InvalidInput}.At(sample.cell, entry);
+                for (int j = 0; j < C; ++j)
+                    right.values[j] = fields.incoming(sample.boundaryPoint, j);
+            }
+            else if (!ACM::ExteriorAt(physics.flow, kind, left.values, bc, sample.normal, sample.ownPoint, controls.frame, right.values, C, omega))
                 return NumericalStatus{NumericalError::UnsupportedRequest}.At(sample.cell, entry);
             // Keep the reflected SA scalar for the wall-normal viscous jump.
         }
         std::array<real, C> flux{};
-        ACM::NumericalFlux(physics.flow, left.values, right.values, sample.normal, flux, C);
+        const auto grid = controls.frame.GridVelocity(sample.ownPoint);
+        ACM::NumericalFlux(physics.flow, left.values, right.values, sample.normal, flux, C, ACM::NormalSpeed(grid, sample.normal));
         // Slip walls keep only the inviscid flux, even with a nonzero interior gradient.
         if (controls.viscous && kind != BoundaryKind::SlipWall)
         {
@@ -265,6 +273,8 @@ namespace DNDS::Cauchy::CUDA::Detail
         using Coefficients = Runtime::FixedRows<W, W>;
         ACMPolynomialFields<C, M, D> fields{};
         fields.mean = ProjectRHSField<State>(launch.fields.mean);
+        if (launch.fields.hasIncoming)
+            fields.incoming = Runtime::ProjectKernelView<State>(launch.fields.incoming.DynamicView());
         fields.centerViscosity = launch.fields.centerViscosity;
         if (modal || (!controls.firstOrder && controls.linear))
         {

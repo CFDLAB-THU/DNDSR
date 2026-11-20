@@ -72,5 +72,5 @@ namespace DNDS::Cauchy::CUDA
     void AddRotationSource(Runtime::ExecutionContext context,
                            Runtime::ArrayView<const real, false, Runtime::FixedRows<8>> cells,
                            RigidFrameParameters frame, SourceInput means, SourceOutput output,
-                           SourceOutput lowOutput, bool produceLow, SourceIndices selected);
+                           SourceOutput lowOutput, bool produceLow, SourceIndices selected, int firstMomentum = 1);
 }

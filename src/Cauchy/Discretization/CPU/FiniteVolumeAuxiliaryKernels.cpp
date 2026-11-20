@@ -185,8 +185,8 @@ namespace DNDS::Cauchy::CPU
                     if (spectral)
                     {
                         if (acm)
-                            convection = std::max({convection, ACM::SpectralRadius(equation.ACMParameters(), ACM::NormalSpeed(left.values, normal)),
-                                                   ACM::SpectralRadius(equation.ACMParameters(), ACM::NormalSpeed(right.values, normal))});
+                            convection = std::max({convection, ACM::SpectralRadius(equation.ACMParameters(), ACM::NormalSpeed(left.values, normal), ACM::NormalSpeed(grid, normal)),
+                                                   ACM::SpectralRadius(equation.ACMParameters(), ACM::NormalSpeed(right.values, normal), ACM::NormalSpeed(grid, normal))});
                         else
                             convection = std::max({convection, Riemann::SignalSpeed(leftData, normal, grid), Riemann::SignalSpeed(rightData, normal, grid)});
                         real bound = std::max(leftProperties[2], rightProperties[2]);

@@ -120,6 +120,18 @@ TEST_CASE("Scheme A characteristic action reproduces the differentiated mechanic
     CHECK(primal[3] == doctest::Approx(parameters.beta2 * dun));
     for (int d = 0; d < 3; ++d)
         CHECK(primal[d] == doctest::Approx(un * direction[d] - parameters.alpha * state[d] * dun + normal[d] * direction[3]));
+    const double gridNormal = .71;
+    C::ACM::ApplyWaveFunction(parameters, state, normal, direction, Identity{}, primal, gridNormal);
+    for (int row = 0; row < 4; ++row)
+    {
+        double gammaAction = 0, fluxAction = 0;
+        for (int col = 0; col < 4; ++col)
+        {
+            gammaAction += C::ACM::GammaEntry(parameters, state, row, col) * primal[col];
+            fluxAction += C::ACM::FluxJacobianEntry(state, normal, row, col, gridNormal) * direction[col];
+        }
+        CHECK(gammaAction == doctest::Approx(fluxAction));
+    }
     // Every conserved face flux must cancel when neighboring cells exchange
     // left/right conventions, including the passive transport by continuity flux.
     const std::array<double, 6> left{1, .1, -.6, -2, .01, 4}, right{.75, -.3, .2, -.4, .2, 1.5};
@@ -128,8 +140,8 @@ TEST_CASE("Scheme A characteristic action reproduces the differentiated mechanic
     {
         parameters.roe = roe;
         std::array<double, 6> a{}, b{};
-        C::ACM::NumericalFlux(parameters, left, right, normal, a, 6);
-        C::ACM::NumericalFlux(parameters, right, left, reverse, b, 6);
+        C::ACM::NumericalFlux(parameters, left, right, normal, a, 6, gridNormal);
+        C::ACM::NumericalFlux(parameters, right, left, reverse, b, 6, -gridNormal);
         for (int j = 0; j < 6; ++j)
             CHECK(a[j] == doctest::Approx(-b[j]).epsilon(1e-13));
     }
@@ -145,6 +157,11 @@ TEST_CASE("Rotational periodic ACM matrix differentiates the production face res
     settings.numerics.flux = "rusanov";
     settings.numerics.faceFallback = false;
     settings.boundaries["12"].kind = settings.boundaries["13"].kind = "slipWall";
+    SUBCASE("fixed sector") {}
+    SUBCASE("sector rotating about its periodic axis")
+    {
+        settings.motion.angularVelocity = {0, 0, .19};
+    }
     const auto equation = C::EquationSystem::Resolve(settings.equation);
     C::FiniteVolume fv(mesh, settings, equation);
     const auto makeState = [&]

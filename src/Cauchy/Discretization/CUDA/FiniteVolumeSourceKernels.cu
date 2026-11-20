@@ -22,20 +22,18 @@ namespace DNDS::Cauchy::CUDA
         }
         __global__ void Rotation(R::ArrayView<const real, false, R::FixedRows<8>> cells,
                                  RigidFrameParameters frame, SourceInput means, SourceOutput output,
-                                 SourceOutput low, bool produceLow, SourceIndices selected)
+                                 SourceOutput low, bool produceLow, SourceIndices selected, int firstMomentum)
         {
             for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
             {
                 const index iCell = selected(iRow, 0);
-                FlowState mean;
-                for (int j = 0; j < 5; ++j)
-                    mean[j] = means(iCell, j);
-                const auto source = frame.RotationSource(mean);
-                for (int j = 0; j < 5; ++j)
+                const auto source = frame.MomentumSource({means(iCell, firstMomentum), means(iCell, firstMomentum + 1), means(iCell, firstMomentum + 2)});
+                for (int d = 0; d < 3; ++d)
                 {
-                    output(iCell, j) += cells(iCell, 0) * source[j];
+                    const real force = cells(iCell, 0) * source[d];
+                    output(iCell, firstMomentum + d) += force;
                     if (produceLow)
-                        low(iCell, j) += cells(iCell, 0) * source[j];
+                        low(iCell, firstMomentum + d) += force;
                 }
             }
         }
@@ -164,11 +162,11 @@ namespace DNDS::Cauchy::CUDA
         CheckLaunch();
     }
     void AddRotationSource(R::ExecutionContext context, R::ArrayView<const real, false, R::FixedRows<8>> cells,
-                           RigidFrameParameters frame, SourceInput means, SourceOutput output, SourceOutput low, bool produceLow, SourceIndices selected)
+                           RigidFrameParameters frame, SourceInput means, SourceOutput output, SourceOutput low, bool produceLow, SourceIndices selected, int firstMomentum)
     {
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA, "CUDA rotation source requires a CUDA context");
         R::ValidateViewDevices(context.device, cells, means, output, selected);
-        DNDS_check_throw_info(means.Width() >= 5 && means.Width() <= 7 && cells.RowCount() >= means.RowCount(), "CUDA rotation source shape differs");
+        DNDS_check_throw_info((firstMomentum == 0 || firstMomentum == 1) && means.Width() >= firstMomentum + 4 && means.Width() <= firstMomentum + 6 && cells.RowCount() >= means.RowCount(), "CUDA rotation source shape differs");
         CheckTable(means, means.RowCount(), means.Width());
         CheckTable(output, means.RowCount(), means.Width());
         if (produceLow)
@@ -178,10 +176,10 @@ namespace DNDS::Cauchy::CUDA
             // contributes only to flow5 and leaves those scalar entries intact.
             CheckTable(low, means.RowCount(), means.Width());
         }
-        R::CheckKernelArgumentBudget<decltype(cells), RigidFrameParameters, SourceInput, SourceOutput, SourceOutput, bool, SourceIndices>();
+        R::CheckKernelArgumentBudget<decltype(cells), RigidFrameParameters, SourceInput, SourceOutput, SourceOutput, bool, SourceIndices, int>();
         if (!selected.RowCount() || !frame.moving)
             return;
-        Rotation<<<Blocks(selected.RowCount()), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(cells, frame, means, output, low, produceLow, selected);
+        Rotation<<<Blocks(selected.RowCount()), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(cells, frame, means, output, low, produceLow, selected, firstMomentum);
         CheckLaunch();
     }
 }

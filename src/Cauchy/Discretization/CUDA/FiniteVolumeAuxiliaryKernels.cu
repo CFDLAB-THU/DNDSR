@@ -104,7 +104,11 @@ namespace DNDS::Cauchy::CUDA
                 {
                     const auto grid = request.frame.GridVelocity(sample.ownPoint);
                     if constexpr (Mechanical)
-                        convection = std::max(convection, std::max(ACM::SpectralRadius(physics.flow, ACM::NormalSpeed(left.values, sample.normal)), ACM::SpectralRadius(physics.flow, ACM::NormalSpeed(right.values, sample.normal))));
+                    {
+                        const real gridNormal = ACM::NormalSpeed(grid, sample.normal);
+                        convection = std::max(convection, std::max(ACM::SpectralRadius(physics.flow, ACM::NormalSpeed(left.values, sample.normal), gridNormal),
+                                                                   ACM::SpectralRadius(physics.flow, ACM::NormalSpeed(right.values, sample.normal), gridNormal)));
+                    }
                     else
                         convection = std::max(convection, std::max(Riemann::SignalSpeed(leftData, sample.normal, grid), Riemann::SignalSpeed(rightData, sample.normal, grid)));
                     real bound = std::max(leftResult.value[2], rightResult.value[2]);
