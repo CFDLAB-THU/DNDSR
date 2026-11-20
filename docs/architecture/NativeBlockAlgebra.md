@@ -123,3 +123,53 @@ The existing `View()` remains the CPU Eigen adapter and rejects device storage.
 Device placement alone does not make the Cauchy linear solver CUDA-capable:
 queued operator submission and inverse/preconditioner preparation are separate
 integration steps.
+
+## Rank-local CPU aggregation AMG
+
+`DNDS::Solver::AggregationAMG` in `Solver/AggregationAMG.hpp` is a
+synchronous OpenMP preconditioner for a local block system. The caller owns
+the outer linear iteration, communication, and choice of geometric strength.
+For example, the caller can supply face area divided by cell-center distance.
+
+1. Construct the hierarchy from host Runtime tables of int32 CSR offsets
+   `[N+1,1]`, local off-diagonal column IDs `[E,1]`, and FP64 edge strengths
+   `[E,1]`. Each row has unique columns. In ascending seed order, an aggregate
+   grows along its strongest positive outward edge to an unassigned row.
+   Equal strengths select the smaller destination ID. Across two aggregates,
+   directed edge strengths add. Coarsening stops at the configured size or
+   depth limit, or when a pass cannot reduce the row count.
+2. Call `Refresh(blocks, diagonal)` with FP64 host tables `[E,B*B]` and
+   `[N,B*B]`. Each block is flattened in **row-major** order. Table rows may
+   have tail padding. Supported block widths are 1 through 9 and 19.
+   The solver retains managed handles to the finest blocks and rebuilds the
+   numeric operators using the fixed aggregate membership and scatter slots.
+   For piecewise-constant prolongation, coarse blocks are
+   `A_c = Pᵀ A P`, including intra-aggregate edges in the diagonal. Each
+   level uses a row-scaled, condition-guarded partial-pivot LU inverse with
+   a filtered SVD fallback. A zero diagonal entry with a nonzero row uses
+   that row's largest absolute entry for scaling. A structural zero row is
+   retained in the scaled system.
+3. Call `Apply(rhs, correction)` on distinct host tables `[N,B]` for one
+   fixed V-cycle from zero. Weighted block Jacobi smooths before and after
+   coarse correction. The coarsest level also takes a fixed number of Jacobi
+   sweeps. Restriction sums the residuals in each aggregate and prolongation
+   adds its correction to every member. The finest level reads and writes the
+   supplied vectors directly. The caller serializes calls on an instance and
+   refreshes after mutating borrowed coefficients. Graph changes require a new
+   hierarchy.
+
+Persistent solver allocations are named under
+`Solver/aggregationAMG/level<depth>/`. The original matrix and finest vectors
+keep their caller-provided names. Symbolic aggregation is deterministic and
+serial. Numeric assembly, diagonal inversion, residuals, smoothing and level
+transfers use independent rows with the distributed OpenMP thread policy.
+The implementation makes no MPI calls. In a distributed solve the caller
+provides the rank-local operator and handles inter-rank coupling.
+
+`solver_aggregation_amg` checks a two-level V-cycle and numeric refresh against
+independently assembled dense operators, including nonsymmetric blocks, padded
+rows and singular diagonal handling. CUDA builds with AmgX also provide the
+manual benchmark target `dnds_benchmark_aggregation_amg`. Its arguments are
+grid side length, repeat count and CUDA ordinal. It reports relative residual
+and timing for each implementation. Multi-level results may differ because the
+aggregate selectors are independent.

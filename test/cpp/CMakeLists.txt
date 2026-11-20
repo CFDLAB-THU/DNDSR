@@ -588,6 +588,9 @@ if(DNDS_USE_CUDA)
         add_executable(dnds_benchmark_amgx EXCLUDE_FROM_ALL DNDS/benchmark_AmgX.cpp)
         target_include_directories(dnds_benchmark_amgx PRIVATE ${DNDS_EXTERNAL_INCLUDES} ${DNDS_INCLUDES})
         target_link_libraries(dnds_benchmark_amgx PRIVATE dnds ${DNDS_EXTERNAL_LIBS})
+        add_executable(dnds_benchmark_aggregation_amg EXCLUDE_FROM_ALL DNDS/benchmark_AggregationAMG.cpp)
+        target_include_directories(dnds_benchmark_aggregation_amg PRIVATE ${DNDS_EXTERNAL_INCLUDES} ${DNDS_INCLUDES})
+        target_link_libraries(dnds_benchmark_aggregation_amg PRIVATE dnds ${DNDS_EXTERNAL_LIBS})
     endif()
     dnds_add_mpi_test(array_dof_cuda "DNDS/test_ArrayDOF_CUDA.cu" "dnds")
     add_dependencies(dnds_unit_tests dnds_test_array_dof_cuda)
@@ -1177,7 +1180,7 @@ endforeach()
 add_custom_target(solver_unit_tests)
 add_dependencies(all_unit_tests solver_unit_tests)
 
-# All Solver tests are serial (header-only, no MPI needed at runtime)
+# Solver tests run in one process. Individual kernels may use OpenMP.
 function(solver_add_unit_test TEST_NAME SRC_FILE LIBS)
     set(TARGET_NAME "solver_test_${TEST_NAME}")
     add_executable(${TARGET_NAME} ${SRC_FILE})
@@ -1199,6 +1202,9 @@ function(solver_add_unit_test TEST_NAME SRC_FILE LIBS)
         ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
 endfunction()
 
+solver_add_unit_test(aggregation_amg "Solver/test_AggregationAMG.cpp" "dnds")
+set_property(TEST solver_aggregation_amg APPEND PROPERTY ENVIRONMENT
+    "DNDS_DIST_OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
 solver_add_unit_test(ode "Solver/test_ODE.cpp" "dnds")
 solver_add_unit_test(linear "Solver/test_Linear.cpp" "dnds")
 solver_add_unit_test(field_gmres "Solver/test_FieldGMRES.cpp" "dnds")
@@ -1208,6 +1214,7 @@ solver_add_unit_test(direct "Solver/test_Direct.cpp" "dnds")
 solver_add_unit_test(scalar "Solver/test_Scalar.cpp" "dnds")
 
 set(SOLVER_TEST_TARGETS
+    solver_test_aggregation_amg
     solver_test_ode
     solver_test_linear
     solver_test_field_gmres

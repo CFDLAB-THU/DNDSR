@@ -1,5 +1,5 @@
 #include "DNDS/Algebra/AmgXPreconditioner.hpp"
-#include "Solver/SmallBlockInverse.hpp"
+#include "Solver/ScaledBlockInverse.hpp"
 #include <cuda_runtime.h>
 #include <cstdio>
 
@@ -7,59 +7,7 @@ namespace DNDS::Algebra
 {
     namespace
     {
-        // A row scales by its signed diagonal when that normalization is finite.
-        // Otherwise use its largest magnitude. A structural zero row stays zero
-        // in the scaled problem. Dividing by divisors avoids overflowing 1/d.
-        enum InverseStatus
-        {
-            Success,
-            NonfiniteInput,
-            SVDNoConvergence,
-            NonfiniteOutput
-        };
-
-        template <int N>
-        __device__ InverseStatus InvertBlock(const double *block, double *output)
-        {
-            Direct::SmallDenseMatrix<N> matrix, inverse;
-            double divisor[N];
-            bool any = false;
-            for (int i = 0; i < N; ++i)
-            {
-                double largest = 0;
-                for (int j = 0; j < N; ++j)
-                {
-                    const double x = block[i * N + j];
-                    if (!isfinite(x))
-                        return NonfiniteInput;
-                    largest = fmax(largest, fabs(x));
-                }
-                any = any || largest > 0;
-                const double d = block[i * N + i];
-                divisor[i] = d != 0 && isfinite(1 / d) && isfinite(largest / d) ? d : (largest > 0 ? largest : 1);
-                for (int j = 0; j < N; ++j)
-                    matrix(i, j) = block[i * N + j] / divisor[i];
-            }
-            if (!any)
-            {
-                for (int k = 0; k < N * N; ++k)
-                    output[k] = 0;
-                return Success;
-            }
-            int truncated = 0;
-            if (!Direct::TrySmallLUInverse<N, false>(matrix, inverse) &&
-                !Direct::SmallSVDInverse<N, false>(matrix, inverse, truncated))
-                return SVDNoConvergence;
-            for (int i = 0; i < N; ++i)
-                for (int j = 0; j < N; ++j)
-                {
-                    const double x = inverse(i, j) / divisor[j];
-                    if (!isfinite(x))
-                        return NonfiniteOutput;
-                    output[i * N + j] = x;
-                }
-            return Success;
-        }
+        using namespace Direct::ScaledBlock;
 
         template <int N>
         __global__ void InvertRows(int rows, const int *diag, const double *values, double *output, int *failed)

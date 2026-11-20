@@ -58,6 +58,8 @@ Runtime/Communication/NCCLTransfer.cpp
 Algebra/DofAlgebra.cpp
 Algebra/AmgXPreconditioner.cpp
 Algebra/AmgXDiagnostics.cpp
+../Solver/AggregationAMG_Structure.cpp
+../Solver/AggregationAMG.cpp
 Algebra/BatchedSVD.cpp
 Algebra/LocalProducts.cpp
 Diagnostics/Profiling.cpp
