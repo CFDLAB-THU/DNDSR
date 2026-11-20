@@ -7,6 +7,12 @@ tuning and custom orchestration; it does not implement another numerical loop.
 The native solver also has CUDA operators for supported equation and storage
 combinations. The examples below exercise the CPU stream.
 
+## Driving a single implicit stage in Python
+
+`Cauchy.solve_single_stage(stage_solver, res_other, inverse_dt, rhs_scale, time=..., stage=...)` runs the single-domain nonlinear iteration loop in Python. The prepared native session owns the working state, reconstruction, CFL schedule, selected-component convergence test and linear correction. Python begins each iteration, observes the globally reduced domain residual, advances coupled stage zero if another correction is needed, and publishes the terminal decision. The returned report has the same fields as `stage_solver.solve`. The caller supplies the time-method coefficients and the frozen source term for this stage.
+
+Python can also order a bound halo transfer with `binding.submit_after(engine, comm_stream, producer.record())` and `operation.enqueue_wait(consumer)`. The ordinary MPI-to-CUDA edge currently requires controller progress. A prepared NCCL global reduction returns a CUDA event from `binding.submit(engine, comm_stream)`. Use `consumer.wait_for(event)` before reading its result on that stream. All ranks participate in matching collective order; a local Python reference may be released after submission.
+
 ## Step acceptance and failures
 
 `Domain.advance(dt)` and `Simulation.advance(dt)` return a `StepResult` with

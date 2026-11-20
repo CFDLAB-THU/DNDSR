@@ -352,6 +352,12 @@ namespace DNDS::Cauchy
         return Execute(state, source, mass, rhsScale, time, stage,
                        std::move(control), false, {});
     }
+    NonlinearSession NonlinearSolver::PrepareSolve(EquationDofs &state, const EquationDofs &source,
+                                                   real mass, real rhsScale, real time, int stage, NonlinearSolveControl control)
+    {
+        DNDS_check_throw_info(_data, "nonlinear session was moved");
+        return PrepareSolve(*_data->setup, state, source, mass, rhsScale, time, stage, std::move(control));
+    }
     NonlinearSession NonlinearSolver::PrepareSolve(
         const NonlinearSolveSetup &setup, EquationDofs &state,
         const EquationDofs &source, real mass, real rhsScale, real time,
@@ -584,11 +590,8 @@ namespace DNDS::Cauchy
         DNDS_check_throw_info(_data, "nonlinear session was moved");
         if (!singleCorrection)
         {
-            const auto &activeSetup = setup ? *setup
-                                            : *_data->setup;
-            auto coordinated = Start(state, source, mass, rhsScale, time,
-                                     stage, std::move(control),
-                                     activeSetup);
+            auto coordinated = setup ? PrepareSolve(*setup, state, source, mass, rhsScale, time, stage, std::move(control))
+                                     : PrepareSolve(state, source, mass, rhsScale, time, stage, std::move(control));
             return SolveNonlinear(coordinated);
         }
         auto session = _data->session.Acquire(_nestedSession.lock());

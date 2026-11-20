@@ -12,7 +12,7 @@ from ._ext.cauchy_pybind11 import (EquationDofs, FiniteVolumeOperators, Auxiliar
                                   MatrixTableLayout, MatrixTableOptions, LinearIndexStorage, LinearMatrixOptions,
                                   LinearSolveSettings, LinearExecution, LinearIterationReport, LinearStop,
                                   DofLinearSolver, DofSGSIteration,
-                                  NonlinearSolveControl, NonlinearStageSolver,
+                                  NonlinearSolveControl, NonlinearStageSolver, NonlinearSession,
                                   PolynomialMultigrid)
 
 __all__ = ["Domain", "Simulation", "StepResult", "InterfaceDiagnostics", "NonlinearIterationReport", "PhysicalStepLimit", "DerivedFields", "DerivedQuantity", "CheckpointLoadMode"]
@@ -22,5 +22,9 @@ __all__ += ["EquationDofs", "FiniteVolumeOperators", "AuxiliaryRequest", "Auxili
             "JacobianPreparation", "LinearProblem", "LinearSolveSettings",
             "MatrixTableLayout", "MatrixTableOptions", "LinearIndexStorage", "LinearMatrixOptions",
             "LinearExecution", "LinearIterationReport", "LinearStop", "DofLinearSolver",
-            "DofSGSIteration", "NonlinearSolveControl", "NonlinearStageSolver",
+            "DofSGSIteration", "NonlinearSolveControl", "NonlinearStageSolver", "NonlinearSession",
             "PolynomialMultigrid"]
+
+from .implicit import solve_single_stage
+
+__all__ += ["solve_single_stage"]

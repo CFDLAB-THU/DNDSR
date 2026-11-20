@@ -198,6 +198,11 @@ namespace DNDS::Cauchy
         /// Prepare one externally phased finest nonlinear solve. The returned
         /// session retains this solver's exclusion ticket and all borrowed
         /// numerical owners until coordinated completion.
+        /// Prepare this solver's configured single-stage session. The caller can
+        /// drive its iterations and observe the residual at the same point as Solve.
+        NonlinearSession PrepareSolve(EquationDofs &state, const EquationDofs &source,
+                                      real mass, real rhsScale, real time, int stage,
+                                      NonlinearSolveControl control);
         NonlinearSession PrepareSolve(
             const NonlinearSolveSetup &setup, EquationDofs &state,
             const EquationDofs &source, real mass, real rhsScale, real time,

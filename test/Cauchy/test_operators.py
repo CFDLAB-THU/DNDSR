@@ -217,6 +217,21 @@ def test_finite_volume_operator_frontend_composes_native_residual_and_linear_sol
         assert_state_equal(staged, block_values(unsplit), rtol=0, atol=0)
         source = state.clone()
         source.scale(1e6)
+        if not mixture and threads == 0:
+            # Both controllers start with independent fields and VR warm starts.
+            # Require a real correction before comparing the terminal observation.
+            controls = json.dumps({"iterations": 3, "minIterations": 2,
+                                   "linear": {"method": "sgs", "iterations": 1}})
+            states = [state.clone(), state.clone()]
+            stages = [operators.build_stage_solver(value, operators.build_workspace(value),
+                                                   engine, stream, controls) for value in states]
+            native = stages[0].solve(source, inverse_dt=1e6, rhs_scale=1.)
+            python = C.solve_single_stage(stages[1], source, inverse_dt=1e6, rhs_scale=1.)
+            assert (python.iterations, python.converged) == (native.iterations, native.converged)
+            assert python.linear_iterations == native.linear_iterations > 0
+            np.testing.assert_allclose(python.residual, native.residual, rtol=1e-12, atol=1e-14)
+            assert_state_equal(states[1], block_values(states[0]), rtol=1e-12, atol=1e-14)
+            del stages, states
         stage_solver = operators.build_stage_solver(state, work, engine, stream, json.dumps({
             "iterations": 1, "minIterations": 1,
             "linear": {"method": "sgs", "iterations": 2},
