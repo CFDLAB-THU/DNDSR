@@ -67,6 +67,7 @@ namespace DNDS::Cauchy
         /// default remains column-major; AmgX chooses primary row-major blocks
         /// for diagonal, inverse and off-diagonal together, without shadows.
         bool rowMajorBlocks = false;
+        bool cpuAMG = false;
         /// Allocate [off-diagonal][diagonal] in one native buffer, with disjoint
         /// Array aliases. Only the compatible single-device AmgX route uses it.
         bool amgxNativeStorage = false;
@@ -197,7 +198,7 @@ namespace DNDS::Cauchy
         void SetGeometricWeights(Runtime::Array<real> weights);
         const Runtime::Array<real> &GeometricWeights() const
         {
-            DNDS_check_throw_info(_geometricWeights, "flow AmgX requires geometric strengths matching its native CSR pattern");
+            DNDS_check_throw_info(_geometricWeights, "flow AMG requires geometric strengths matching its native CSR pattern");
             return *_geometricWeights;
         }
         const Runtime::Array<real> &NativeAMGXValues() const

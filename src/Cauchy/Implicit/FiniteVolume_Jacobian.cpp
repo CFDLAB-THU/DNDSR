@@ -157,6 +157,47 @@ namespace DNDS::Cauchy
         }
         auto problem = std::make_shared<LinearProblemContext>(prototype.Space(), prototype.ComponentNumber(),
                                                               _data->jacobianColumns->CopyColumns(), _data->partition.Core(), diagonal, offDiagonal, prototype.Device(), std::move(partitions), storage);
+        if (storage.cpuAMG)
+        {
+            DNDS_check_throw_info(prototype.Device() == R::Device::Host() && offDiagonal == OffDiagonalStorage::Assembled,
+                                  "CPU AMG requires an assembled host matrix");
+            const auto stencil = _data->stencil.Read(R::ExecutionContext::Host());
+            const auto &s = stencil.View();
+            const auto patternRead = problem->HostPattern().Read();
+            const auto columns = patternRead.View().columns;
+            R::Array<real> weights(R::RowLayout::Dense(problem->OffDiagonal().Values().RowCount(), 1));
+            weights.SetName("Cauchy/linear/cpuAMG/geometricWeights", DNDS_ALLOCATION_SITE());
+            {
+                auto write = weights.Write();
+                auto w = write.View();
+                index begin = 0;
+                for (index cell = 0; cell < columns.RowCount(); ++cell)
+                {
+                    for (index k = 0; k < columns.RowSize(cell); ++k)
+                        w(begin + k, 0) = 0;
+                    const auto faces = s.topology.CellFaces(cell);
+                    for (rowsize i = 0; i < faces.size(); ++i)
+                    {
+                        const index face = faces[i];
+                        const auto cells = s.topology.FaceCells(face);
+                        const int side = s.topology.CellIsFaceBack(cell, face, i) ? 0 : 1;
+                        const index other = cells[1 - side];
+                        if (other == UnInitIndex || other == cell)
+                            continue;
+                        const index slot = s.columns(face, side);
+                        DNDS_check_throw_info(cells[side] == cell && slot >= 0 && slot < columns.RowSize(cell) && columns(cell, slot) == other,
+                                              "CPU AMG face slot differs from matrix pattern");
+                        const real distance = (s.metric.GetNeighborCent(face, 0) - s.metric.GetCellCent(cells[0])).norm();
+                        const real area = s.metric.GetFaceArea(face);
+                        DNDS_check_throw_info(std::isfinite(distance) && distance > 0 && std::isfinite(area) && area > 0,
+                                              "CPU AMG requires positive finite face geometry");
+                        w(begin + slot, 0) += area / distance;
+                    }
+                    begin += columns.RowSize(cell);
+                }
+            }
+            problem->SetGeometricWeights(std::move(weights));
+        }
 #ifdef DNDS_USE_CUDA
         if (prototype.Device().space == R::MemorySpace::CUDA && storage.rowMajorBlocks &&
             storage.indices == LinearIndexStorage::Int32 && offDiagonal == OffDiagonalStorage::Assembled &&
@@ -257,11 +298,7 @@ namespace DNDS::Cauchy
                                               controls.residualScale, evaluator, {}, output.RowMajorBlocks());
                 }
                 RequireNumericalSuccess(CPU::PrepareACMFluxJacobian(
-                                            {physics, stencil.View(), {_data->boundaryConditions.data(), index(_data->boundaryConditions.size())},
-                                             layout.View(), tau.View<R::UniformTableRows>(), radius.View<R::UniformTableRows>(),
-                                             walls ? walls->HostView().cellMean : decltype(WallDistanceView::cellMean){},
-                                             diagonal.View<R::UniformTableRows>(), off->ArrayView(), controls.physicalMass, controls.residualScale, active,
-                                             ResolveEquationPhysicsProfile(_data->equation), controls.scalarBoundaryDerivative}),
+                                            {physics, stencil.View(), {_data->boundaryConditions.data(), index(_data->boundaryConditions.size())}, layout.View(), tau.View<R::UniformTableRows>(), radius.View<R::UniformTableRows>(), walls ? walls->HostView().cellMean : decltype(WallDistanceView::cellMean){}, diagonal.View<R::UniformTableRows>(), off->ArrayView(), controls.physicalMass, controls.residualScale, active, ResolveEquationPhysicsProfile(_data->equation), controls.scalarBoundaryDerivative}),
                                         "assemble ACM Jacobian");
             }
             catch (...)

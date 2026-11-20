@@ -27,7 +27,7 @@ namespace DNDS::Cauchy::NonlinearDetail
             total.levelCorrections[level] += step.levelCorrections[level];
     }
     /// Resolve storage before allocating the canonical matrix. Selecting a
-    /// provider never manufactures a converted pattern or numeric mirror.
+    /// AmgX borrows primary storage; CPU AMG extracts its local principal matrix.
     inline LinearMatrixOptions ResolveMatrixStorage(const ImplicitLinearSettings &settings)
     {
         const auto table = [](const ImplicitMatrixTableSettings &input)
@@ -49,6 +49,7 @@ namespace DNDS::Cauchy::NonlinearDetail
                              ? LinearIndexStorage::Int32
                              : LinearIndexStorage::Int64;
         result.rowMajorBlocks = amg;
+        result.cpuAMG = settings.method == "amg" || (settings.method == "gmres" && settings.preconditioner == "amg");
         DNDS_check_throw_info(settings.matrixStorage.amgxStorage == "upload" ||
                                   (amg && settings.matrixStorage.amgxStorage == "native"),
                               "invalid AmgX numeric storage mode");

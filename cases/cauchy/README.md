@@ -1,5 +1,7 @@
 # Native Cauchy cases
 
+The [SUBOFF AFF8-02 case guide](SUBOFF_AFF8_02.md) lists mesh and freestream assumptions, the P1 startup and P2/Q3 continuation inputs, and the exact means-only restart sequence.
+
 Run from the source root with `build/app/cauchy.exe cases/cauchy/<case>.json`.
 Equation, EOS and transport selection live inside each config. Validate without
 running with `--check-config`. These use the native DNDS/Geom/CFV solver and

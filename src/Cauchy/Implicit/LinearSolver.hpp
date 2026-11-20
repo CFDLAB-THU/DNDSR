@@ -9,7 +9,7 @@
 namespace DNDS::Cauchy
 {
     /// Resolved numerical choices, independent of frontend configuration layout.
-    /// sgs, jacobi, ilu and amgx are stationary iterations; only gmres constructs
+    /// sgs, jacobi, ilu, amg and amgx are stationary iterations; only gmres constructs
     /// Krylov history and uses the preconditioner selection. ILU/AmgX use frozen
     /// rank-local factors/cycles and x_next=x+P(b-A*x), with a normal halo before
     /// evaluating the full distributed A*x. AmgX has no hidden Krylov driver.

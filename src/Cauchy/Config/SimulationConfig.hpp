@@ -399,14 +399,14 @@ namespace DNDS::Cauchy
         real relativeTolerance = .1, absoluteTolerance = 1e-12;
         DNDS_DECLARE_CONFIG(ImplicitLinearSettings)
         {
-            DNDS_FIELD(method, "sgs or jacobi stationary sweeps, ilu or amgx stationary defect correction, or restarted left-gmres; amgx requires assembled CUDA storage");
-            DNDS_FIELD(amgxAggregateSize, "Flow AmgX target aggregate size: 0 selects 4 in 2D or 8 in 3D. Explicit choices are 2, 4 and 8.");
+            DNDS_FIELD(method, "sgs or jacobi stationary sweeps, ilu, amg (rank-local CPU) or amgx stationary defect correction, or restarted left-gmres; AMG requires assembled blocks");
+            DNDS_FIELD(amgxAggregateSize, "Flow AMG target aggregate size: 0 selects 4 in 2D or 8 in 3D. Explicit choices are 2, 4 and 8.");
             DNDS_FIELD(jacobiLocalSweeps, "One or two local Jacobi sweeps per iteration; two freezes remote iterate values between sweeps, with one input exchange");
             DNDS_FIELD(diagonalInverseRefinement, "Optional guarded block-inverse corrections: 0 (default) preserves the existing inversion, 1..3 refines within retained SVD subspaces without changing the cutoff. Requires block-diagonal SGS/Jacobi; unavailable for ILU/AmgX.");
             DNDS_FIELD(cudaDiagonalInverse, "auto selects guardedLU on A100 and batchedSVD elsewhere; explicit providers are preserved. Guarded 5/6/7 LU retains the CPU condition guard and filtered SVD fallback. CPU inversion is unchanged");
             DNDS_FIELD(cudaJacobiMapping, "CUDA assembled Jacobi mapping: thread (reference/default) or componentGroup (experimental eight lanes per cell); CPU row arithmetic is unchanged");
             config.field_section(&T::matrixStorage, "matrixStorage", "Independent matrix-table and native sparse-index formats; no hot-path format conversion");
-            DNDS_FIELD(preconditioner, "Fixed sgs, zero-started jacobi, rank-local ilu or single-device amgx for GMRES; amgx requires assembled CUDA storage; unused by stationary methods");
+            DNDS_FIELD(preconditioner, "Fixed sgs, zero-started jacobi, rank-local ilu/amg or single-device amgx for GMRES; amgx requires assembled CUDA storage; unused by stationary methods");
             DNDS_FIELD(stopping, "residual uses tolerance checks; fixedCount executes exactly iterations for SGS/ILU, omits true-residual reporting and checks the final update is finite; tolerances are ignored");
             DNDS_FIELD(componentScaling, "GMRES metric: none or meanState (Euler volume-averaged absolute conservative magnitudes with a common momentum scale and kinetic energy scale; requires a compressible flow5 block)");
             DNDS_FIELD(iterations, "Maximum linear iterations per nonlinear correction");

@@ -3,6 +3,7 @@
 #include "DNDS/Diagnostics/Timeline.hpp"
 #include "Cauchy/Implicit/LinearSolverAlgebra.hpp"
 #include "Cauchy/Implicit/LocalAMGPreconditioner.hpp"
+#include "Cauchy/Implicit/CPU/LocalAggregationAMG.hpp"
 #include "Cauchy/State/CPU/FieldKernels.hpp"
 #include "Cauchy/Core/OperatorSchedule.hpp"
 #include "Cauchy/State/EquationDofAlgebra.hpp"
@@ -112,6 +113,10 @@ namespace DNDS::Cauchy
         {
             return settings.method == "amgx" || (settings.method == "gmres" && settings.preconditioner == "amgx");
         }
+        bool UsesCPUAMG(const LinearSolveSettings &settings)
+        {
+            return settings.method == "amg" || (settings.method == "gmres" && settings.preconditioner == "amg");
+        }
         struct FieldLinearOperations : Linear::FieldKrylovOperations
         {
             using State = Field;
@@ -215,6 +220,7 @@ namespace DNDS::Cauchy
             AlgebraAdapter algebra;
             std::unique_ptr<A::LocalProductWorkspace> reductions;
             std::unique_ptr<LocalAMGPreconditioner> localAMG;
+            std::unique_ptr<CPUAMG> cpuAMG;
             std::unique_ptr<GMRES> gmres;
             std::optional<Field> solution;
             Field old, next, forward, action, residual;
@@ -343,6 +349,8 @@ namespace DNDS::Cauchy
                     amgx.aggregateSize = settings.amgxAggregateSize;
                     localAMG = std::make_unique<LocalAMGPreconditioner>(*problem, amgx);
                 }
+                else if (UsesCPUAMG(settings))
+                    cpuAMG = std::make_unique<CPUAMG>(*problem, settings.amgxAggregateSize);
                 else if (!UsesILU(settings))
                     problem->PrepareDiagonalInverse(compute.Context(), settings.cudaDiagonalInverse == "guardedLU"
                                                                            ? CUDADiagonalInverse::GuardedLU
@@ -473,6 +481,11 @@ namespace DNDS::Cauchy
                     auto engine = compute.LockEngine();
                     localAMG->Apply(engine, compute, Ops::Owned(rhs), Ops::Owned(output));
                 }
+                else if (cpuAMG)
+                {
+                    auto engine = compute.LockEngine();
+                    cpuAMG->template Apply<Ops>(engine, rhs, output);
+                }
                 else if (settings.preconditioner == "jacobi")
                 {
                     // Fixed one/two local sweeps from zero. No remote values
@@ -526,6 +539,11 @@ namespace DNDS::Cauchy
                 {
                     auto engine = compute.LockEngine();
                     localAMG->Apply(engine, compute, Ops::Owned(rhs), Ops::Owned(output));
+                }
+                else if (cpuAMG)
+                {
+                    auto engine = compute.LockEngine();
+                    cpuAMG->template Apply<Ops>(engine, rhs, output);
                 }
                 else
                     ApplyILU(rhs, output);
@@ -662,6 +680,11 @@ namespace DNDS::Cauchy
                 auto engine = data.compute.LockEngine();
                 data.localAMG->Update(engine, data.compute, *data.problem);
             }
+            else if (data.cpuAMG)
+            {
+                auto engine = data.compute.LockEngine();
+                data.cpuAMG->Update(engine, *data.problem);
+            }
             else if (UsesILU(data.settings))
             {
                 const LinearProfile::Scope timing(data.profile, LinearProfile::Factor);
@@ -705,7 +728,7 @@ namespace DNDS::Cauchy
                                                         { data.Precondition(x, y); }, [&](const Field &x, const auto &probes)
                                                         { return data.Products(x, probes); }, {data.settings.maxIterations, data.settings.relativeTolerance, data.settings.absoluteTolerance, data.settings.residualCheckInterval}, initialGuess.Get()));
                     auto &x = *data.solution;
-                    const bool localCorrection = data.settings.method == "ilu" || data.settings.method == "amgx";
+                    const bool localCorrection = data.settings.method == "ilu" || data.settings.method == "amgx" || data.settings.method == "amg";
                     const bool directFirstCorrection = !initialGuess && localCorrection && data.settings.stopping == "fixedCount";
                     data.Stage([&]
                                {
@@ -731,7 +754,7 @@ namespace DNDS::Cauchy
                             // storage is read. Publish P_local(b) directly,
                             // avoiding clear, zero+correction and next->x copy.
                             data.Stage([&]
-                                       { const LinearProfile::Scope timing(data.profile, data.localAMG ? LinearProfile::AMG : LinearProfile::Triangular);
+                                       { const LinearProfile::Scope timing(data.profile, (data.localAMG || data.cpuAMG) ? LinearProfile::AMG : LinearProfile::Triangular);
                                          data.ApplyLocalPreconditioner(rhs, x); });
                             ++report.preconditionerApplications;
                             ++report.iterations;
@@ -747,7 +770,7 @@ namespace DNDS::Cauchy
                             data.Stage([&]
                                        {
                                 {
-                                    const LinearProfile::Scope timing(data.profile, data.localAMG ? LinearProfile::AMG : LinearProfile::Triangular);
+                                    const LinearProfile::Scope timing(data.profile, (data.localAMG || data.cpuAMG) ? LinearProfile::AMG : LinearProfile::Triangular);
                                     data.ApplyLocalPreconditioner(defect, data.action);
                                 }
                                 const LinearProfile::Scope timing(data.profile, LinearProfile::Algebra);
@@ -869,9 +892,9 @@ namespace DNDS::Cauchy
             DNDS_check_throw_info(!UsesAMG(settings) || (problem->Device().space == R::MemorySpace::CUDA &&
                 problem->HasAssembledOffDiagonal() && Algebra::AmgXPreconditioner::Available()),
                 "AmgX requires the compiled single-device provider and an assembled CUDA matrix");
-            DNDS_check_throw_info(bindHalo && (settings.method == "sgs" || settings.method == "jacobi" || settings.method == "ilu" || settings.method == "amgx" || settings.method == "gmres") &&
+            DNDS_check_throw_info(bindHalo && (settings.method == "sgs" || settings.method == "jacobi" || settings.method == "ilu" || settings.method == "amgx" || settings.method == "amg" || settings.method == "gmres") &&
                                       (settings.stopping == "residual" || (settings.stopping == "fixedCount" && settings.method != "gmres")) &&
-                                      (settings.preconditioner == "sgs" || settings.preconditioner == "ilu" || settings.preconditioner == "jacobi" || settings.preconditioner == "amgx") && settings.maxIterations >= 0 && settings.residualCheckInterval > 0 &&
+                                      (settings.preconditioner == "sgs" || settings.preconditioner == "ilu" || settings.preconditioner == "jacobi" || settings.preconditioner == "amgx" || settings.preconditioner == "amg") && settings.maxIterations >= 0 && settings.residualCheckInterval > 0 &&
                                       settings.subspace > 0 && settings.subspace < INT_MAX && settings.sgsSweeps > 0 && settings.iluFill >= -1 && settings.iluFill <= 5 &&
                                       settings.iluPreconditionerCorrections > 0 &&
                                       settings.jacobiLocalSweeps >= 1 && settings.jacobiLocalSweeps <= 2 &&
@@ -879,19 +902,21 @@ namespace DNDS::Cauchy
                                       (settings.cudaDiagonalInverse == "batchedSVD" || settings.cudaDiagonalInverse == "guardedLU") &&
                                       (settings.cudaJacobiMapping == "thread" || settings.cudaJacobiMapping == "componentGroup") &&
                                       (prototype.Device() == R::Device::Host() || settings.cudaJacobiMapping == "thread" || problem->HasAssembledOffDiagonal()) &&
-                                      (!settings.diagonalInverseRefinement || (!UsesILU(settings) && !UsesAMG(settings) && problem->DiagonalMode() == DiagonalStorage::Block)) &&
+                                      (!settings.diagonalInverseRefinement || (!UsesILU(settings) && !UsesAMG(settings) && !UsesCPUAMG(settings) && problem->DiagonalMode() == DiagonalStorage::Block)) &&
                                       (settings.iluOrdering == "natural" || settings.iluOrdering == "rcm") &&
                                       std::isfinite(settings.relativeTolerance) && settings.relativeTolerance >= 0 &&
                                       std::isfinite(settings.absoluteTolerance) && settings.absoluteTolerance >= 0,
                                   "invalid linear solver controls");
-            DNDS_check_throw_info(!((UsesILU(settings) || UsesAMG(settings) || settings.method == "jacobi" || (settings.method == "gmres" && settings.preconditioner == "jacobi")) && settings.exchangeBetweenSweeps),
+            DNDS_check_throw_info(!((UsesILU(settings) || UsesAMG(settings) || UsesCPUAMG(settings) || settings.method == "jacobi" || (settings.method == "gmres" && settings.preconditioner == "jacobi")) && settings.exchangeBetweenSweeps),
                                   "local ILU/Jacobi has no inter-scan exchange"); });
             const std::array<int64_t, 23> integers{settings.method == "gmres" ? 1 : settings.method == "ilu"  ? 2
                                                                                 : settings.method == "jacobi" ? 3
                                                                                 : settings.method == "amgx"   ? 4
+                                                                                : settings.method == "amg"    ? 5
                                                                                                               : 0,
                                                    settings.preconditioner == "ilu" ? 1 : settings.preconditioner == "jacobi" ? 2
                                                                                       : settings.preconditioner == "amgx"     ? 3
+                                                                                      : settings.preconditioner == "amg"      ? 4
                                                                                                                               : 0,
                                                    settings.maxIterations, settings.subspace,
                                                    settings.sgsSweeps, settings.iluFill, settings.iluCoreFirst, settings.exchangeBetweenSweeps,

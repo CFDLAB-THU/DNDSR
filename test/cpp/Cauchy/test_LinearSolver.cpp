@@ -100,7 +100,7 @@ namespace
             receive[(rank + size - 1) % size] = {0, 1};
             return R::RowTransferPlan::Known(communication, 4, 2, send, receive);
         }
-        Fixture(int layout = 0, bool evaluated = false)
+        Fixture(int layout = 0, bool evaluated = false, bool useAMG = false)
             : communication(std::make_shared<R::CommunicationContext>(MPI_COMM_WORLD)),
               space(communication, 4, 2, "coupled linear solver oracle"), route(Route(communication, rank, size)),
               problem(std::make_shared<C::LinearProblemContext>(space, 5, columns, std::vector<DNDS::index>{1, 0}, C::DiagonalStorage::Block,
@@ -125,6 +125,16 @@ namespace
                     for (int j = 0; j < 5; ++j)
                         b.View<R::UniformTableRows>()(iCell, j) = RHS(rank, iCell, j);
                 }
+            }
+            if (useAMG)
+            {
+                R::Array<DNDS::real> weights(R::RowLayout::Dense(problem->OffDiagonal().Values().RowCount(), 1));
+                {
+                    auto w = weights.Write();
+                    for (DNDS::index i = 0; i < weights.RowCount(); ++i)
+                        w.View()(i, 0) = 1;
+                }
+                problem->SetGeometricWeights(std::move(weights));
             }
             if (evaluated)
                 problem->PublishOffDiagonalEvaluator(std::make_shared<EvaluatedOff>(space));
@@ -810,4 +820,41 @@ int main(int argc, char **argv)
     const auto result = context.run();
     DNDS::MPI::Finalize();
     return result;
+}
+
+TEST_CASE("CPU AMG preserves distributed action and CPU column-major blocks")
+{
+    for (int layout = 0; layout < 3; ++layout)
+    {
+        Fixture fixture(layout, false, true);
+        C::LinearSolveSettings settings;
+        settings.method = "amg";
+        settings.maxIterations = 80;
+        settings.relativeTolerance = 1e-11;
+        settings.absoluteTolerance = 1e-13;
+        C::LinearSolver solver(fixture.problem, fixture.rhs, [&](Field &field)
+                               { return fixture.Bind(field); }, settings);
+        const auto expected = fixture.Oracle();
+        for (int repeat = 0; repeat < 2; ++repeat)
+        {
+            if (repeat)
+            {
+                // Republish the same coefficients to exercise numeric refresh.
+                auto diagonal = fixture.problem->Diagonal().Write();
+                for (DNDS::index i = 0; i < 4; ++i)
+                {
+                    const auto block = Diagonal(i);
+                    for (int j = 0; j < 25; ++j)
+                        diagonal.View()(i, j) = block.data()[j];
+                }
+            }
+            const auto report = solver.Solve(fixture.rhs);
+            CHECK(report.converged);
+            const auto read = solver.Solution().Owned().Read();
+            const auto values = read.View<R::UniformTableRows>();
+            for (DNDS::index i = 0; i < 4; ++i)
+                for (int j = 0; j < 5; ++j)
+                    CHECK(values(i, j) == doctest::Approx(expected[fixture.rank * 20 + 5 * i + j]).epsilon(1e-10));
+        }
+    }
 }

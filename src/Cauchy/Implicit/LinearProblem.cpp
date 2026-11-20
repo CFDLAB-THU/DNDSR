@@ -139,10 +139,10 @@ namespace DNDS::Cauchy
     }
     void LinearProblemContext::SetGeometricWeights(R::Array<real> weights)
     {
-        DNDS_check_throw_info(!_geometricWeights && HasAssembledOffDiagonal() && ResidentPattern().UsesInt32() &&
+        DNDS_check_throw_info(!_geometricWeights && HasAssembledOffDiagonal() &&
                                   weights.GetDevice() == Device() && weights.Layout().Kind() == R::RowLayoutKind::Table &&
                                   weights.Layout().Width() == 1 && weights.Layout().Stride() == 1 &&
-                                  weights.RowCount() == ResidentPattern().Columns32().RowCount(),
+                                  weights.RowCount() == OffDiagonal().Values().RowCount(),
                               "geometric strengths need a fresh compact scalar field in native CSR order");
         _geometricWeights.emplace(std::move(weights));
     }

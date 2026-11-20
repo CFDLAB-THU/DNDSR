@@ -1,0 +1,45 @@
+{
+  "defaults": {
+    "mesh": {
+      "file": "data/mesh/SUBOFF_AFF8-02.cgns",
+      "dimension": 3, "scale": 0.2295684113865932,
+      "boundaryIds": {"far": 2, "hull": 3, "sail": 4, "hfin": 5, "vfin": 6}
+    },
+    "equation": {
+      "system": "incompressibleACM", "eos": "none", "transport": "Newtonian",
+      "referenceScales": {"rho0": 1000, "U0": 2.7548209366391188, "L0": 4.356, "T0": 293.15},
+      "viscosityModel": "constantKinematic", "viscosity": 8.333333333333333e-8,
+      "acmAlpha": 0, "acmBeta2": 4,
+      "rans": {"model": "KOmegaSST", "viscosityReference": 8.333333333333333e-8, "sst": {"productionLimit": 10}}
+    },
+    "initialState": {"type": "primUP", "state": [1, 0, 0, 0, 3.025e-10, 0.726]},
+    "referenceState": {"type": "primUP", "state": [1, 0, 0, 0, 3.025e-10, 0.726]},
+    "boundaries": {
+      "2": {"kind": "farfield", "state": {"type": "primUP", "state": [1, 0, 0, 0, 3.025e-10, 0.726]}},
+      "3": {"kind": "noSlipWall"}, "4": {"kind": "noSlipWall"},
+      "5": {"kind": "noSlipWall"}, "6": {"kind": "noSlipWall"}
+    },
+    "numerics": {
+      "reconstruction": "gradient", "gradient": "greenGauss",
+      "flux": "Roe", "viscousGradient": "polynomial", "limiter": "none",
+      "ransMeanFaceValues": true,
+      "positivity": false, "faceFallback": false
+    },
+    "implicit": {
+      "jacobianAction": "assembled", "diagonal": "block", "sourceJacobianMode": "center",
+      "nIterCellSmoothScale": 0,
+      "iterations": 20000, "rejectUnconvergedStages": false, "pseudoCFL": 0.2, "pseudoGrowth": 1.005, "maxPseudoCFL": 20,
+      "relativeTolerance": 1e-7, "absoluteTolerance": 1e-11, "algebraicRateTolerance": 1e-8,
+      "linear": {"method": "amgx", "stopping": "fixedCount", "iterations": 3,
+        "matrixStorage": {"amgxStorage": "native", "indices": "int32"}}
+    },
+    "execution": {"device": "cuda", "deviceOrdinal": 0, "hostThreads": 16, "layout": "aos", "fieldGrouping": "coupled", "overlap": false}
+  },
+  "time": {"steady": true, "method": "bdf1", "steps": 1},
+  "output": {
+    "prefix": "data/outUnsteady/Cauchy/SUBOFF_AFF8_02/P1/run",
+    "forceZones": [3, 4, 5, 6], "checkpointInterval": 0, "visualizationInterval": 0,
+    "diagnostics": {"allocations": false, "allocationWarmupSteps": 0},
+    "implicit": {"consoleInterval": 1, "historyInterval": 1, "checkpointInterval": 2000, "visualizationInterval": 4000}
+  }
+}
