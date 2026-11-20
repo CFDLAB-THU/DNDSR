@@ -96,6 +96,19 @@ namespace DNDS::Cauchy
         Runtime::RowSelectionShape coreCells, dependentCells, coreFaces, dependentFaces;
     };
 
+    enum class AuxiliaryRegion
+    {
+        Independent,
+        Core,
+        InterfaceCore,
+        Dependent
+    };
+    /// Host submission metadata. Only the selected descriptors cross a kernel boundary.
+    struct AuxiliaryRowShapes
+    {
+        Runtime::RowSelectionShape faces, cells;
+    };
+
     /** @brief Compact borrowed mesh/CFV stencil shared by RHS and Jacobians.
      * @details A SampleRecord is transient point arithmetic only. No expanded
      * cell-pair, geometry, rotation or query-to-face table is owned here.
@@ -243,6 +256,7 @@ namespace DNDS::Cauchy
             interfaceIndependentCells{Runtime::RowLayout::Dense(0, 1)},
             interfaceCoreCells{Runtime::RowLayout::Dense(0, 1)};
         RHSRegionShapes rhsRegions;
+        std::array<AuxiliaryRowShapes, 4> auxiliaryRegions;
         bool quadratureBoundaryValues = true;
         index incidenceCount = 0;
         index IncidenceNumber() const { return incidenceCount; }
@@ -335,6 +349,7 @@ namespace DNDS::Cauchy
             FiniteVolumeStencilStorage result;
             const auto device = metrics.Device();
             result.rhsRegions = rhsRegions;
+            result.auxiliaryRegions = auxiliaryRegions;
             result.routing = routing.To(device, context);
             result.columns = columns.To(device, context);
             result.viscousDistance = viscousDistance.To(device, context);

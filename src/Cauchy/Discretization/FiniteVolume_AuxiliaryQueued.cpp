@@ -159,13 +159,14 @@ namespace DNDS::Cauchy
                 inputs.emplace_back(ghost ? gradients->fields.front().Ghost() : gradients->fields.front().Owned());
         }
         void Submit(R::EagerEngine &engine, const R::ExecutionStream &stream,
-                    bool ghost, bool means, const R::Array<index> &faces, const R::Array<index> &cells)
+                    bool ghost, bool means, AuxiliaryRegion region, const R::Array<index> &faces, const R::Array<index> &cells)
         {
             DNDS_check_throw_info(engine.Owns(stream) && stream.Context().device == owner.Device(), "auxiliary stream belongs to another backend/runtime");
             const auto &field = source.CoupledField();
             const auto &uGhost = ghost ? field.Ghost() : scratch->empty;
             const auto &gOwned = gradients ? gradients->fields.front().Owned() : scratch->empty;
             const auto &gGhost = gradients && ghost ? gradients->fields.front().Ghost() : scratch->empty;
+            const auto selection = data->stencil.auxiliaryRegions[size_t(region)];
             const auto pin = shared_from_this();
             const index first = ghost ? data->metrics.NumCell() : 0;
             const index end = ghost ? data->metrics.NumCellProc() : data->metrics.NumCell();
@@ -180,7 +181,7 @@ namespace DNDS::Cauchy
                                             : scratch->empty;
             if (boundary)
                 inputs.emplace_back(incoming);
-            R::SubmitArrays(engine, stream, [pin](R::ExecutionContext context, auto u, auto ug, auto g, auto gg, auto prepared, auto incoming, auto spectral, auto wave, auto pressure, auto scratchValues, auto status, auto selected, auto wall, auto wallFaces)
+            R::SubmitArrays(engine, stream, [pin, selection](R::ExecutionContext context, auto u, auto ug, auto g, auto gg, auto prepared, auto incoming, auto spectral, auto wave, auto pressure, auto scratchValues, auto status, auto selected, auto wall, auto wallFaces)
                             {
                     CUDA::AuxiliaryFaceRequest request;
                     request.state = pin->StateInput(u, ug, g, gg, wall);
@@ -196,10 +197,10 @@ namespace DNDS::Cauchy
                     request.needSpectral = bool(pin->buffers.faceSpectralRadius || pin->buffers.cellSpectralSum);
                     request.needWave = bool(pin->buffers.faceWaveJump || pin->buffers.cellWaveJump);
                     request.needPressure = bool(pin->buffers.facePressureMinimum || pin->buffers.cellPressureMinimum);
-                    CUDA::PrepareAuxiliaryFaces(context, request, selected); }, R::ReadAs<R::TableRows>(field.Owned()), R::ReadAs<R::TableRows>(uGhost), R::ReadAs<R::TableRows>(gOwned), R::ReadAs<R::TableRows>(gGhost), R::ReadAs<R::TableRows>(Output(0)), R::ReadAs<R::TableRows>(incoming), R::WriteAs<R::TableRows>(Output(1)), R::WriteAs<R::TableRows>(Output(2)), R::WriteAs<R::TableRows>(Output(3)), R::WriteAs<R::TableRows>(Output(8)), R::WriteAs<R::FixedRows<1>>(scratch->faceStatus), R::ReadAs<R::FixedRows<1>>(faces), R::ReadAs<R::TableRows>(hasWall ? data->wallDistance->CellMeans() : scratch->empty), R::Read(hasWall ? data->wallDistance->FaceValues() : scratch->empty));
+                    CUDA::PrepareAuxiliaryFaces(context, request, {selection.faces, selected}); }, R::ReadAs<R::TableRows>(field.Owned()), R::ReadAs<R::TableRows>(uGhost), R::ReadAs<R::TableRows>(gOwned), R::ReadAs<R::TableRows>(gGhost), R::ReadAs<R::TableRows>(Output(0)), R::ReadAs<R::TableRows>(incoming), R::WriteAs<R::TableRows>(Output(1)), R::WriteAs<R::TableRows>(Output(2)), R::WriteAs<R::TableRows>(Output(3)), R::WriteAs<R::TableRows>(Output(8)), R::WriteAs<R::FixedRows<1>>(scratch->faceStatus), R::ReadAs<R::FixedRows<1>>(faces), R::ReadAs<R::TableRows>(hasWall ? data->wallDistance->CellMeans() : scratch->empty), R::Read(hasWall ? data->wallDistance->FaceValues() : scratch->empty));
             if (!buffers.cellSpectralSum && !buffers.cellWaveJump && !buffers.cellPressureMinimum)
                 return;
-            R::SubmitArrays(engine, stream, [pin](R::ExecutionContext context, auto spectral, auto wave, auto pressure, auto scratchValues, auto sum, auto jump, auto minimum, auto selected)
+            R::SubmitArrays(engine, stream, [pin, selection](R::ExecutionContext context, auto spectral, auto wave, auto pressure, auto scratchValues, auto sum, auto jump, auto minimum, auto selected)
                             {
                     CUDA::AuxiliaryCellRequest request;
                     request.stencil = pin->stencil.KernelDescriptor();
@@ -209,7 +210,7 @@ namespace DNDS::Cauchy
                     request.spectralSum = sum; request.waveMaximum = jump; request.pressureMinimum = minimum;
                     const auto &w = pin->frame.angularVelocity;
                     request.angularSpeed = std::sqrt(w[0] * w[0] + w[1] * w[1] + w[2] * w[2]);
-                    CUDA::ReduceAuxiliaryCells(context, request, selected); }, R::ReadAs<R::TableRows>(Output(1)), R::ReadAs<R::TableRows>(Output(2)), R::ReadAs<R::TableRows>(Output(3)), R::ReadAs<R::TableRows>(Output(8)), R::WriteAs<R::TableRows>(Output(4)), R::WriteAs<R::TableRows>(Output(5)), R::WriteAs<R::TableRows>(Output(6)), R::ReadAs<R::FixedRows<1>>(cells));
+                    CUDA::ReduceAuxiliaryCells(context, request, {selection.cells, selected}); }, R::ReadAs<R::TableRows>(Output(1)), R::ReadAs<R::TableRows>(Output(2)), R::ReadAs<R::TableRows>(Output(3)), R::ReadAs<R::TableRows>(Output(8)), R::WriteAs<R::TableRows>(Output(4)), R::WriteAs<R::TableRows>(Output(5)), R::WriteAs<R::TableRows>(Output(6)), R::ReadAs<R::FixedRows<1>>(cells));
         }
         void ReduceStatus(R::EagerEngine &engine, const R::ExecutionStream &stream)
         {
@@ -242,7 +243,7 @@ namespace DNDS::Cauchy
         auto &s = *_queued;
         DNDS_check_throw_info(s.phase == 0 && s.boundaryPending && !s.independentDone, "auxiliary independent phase is unavailable");
         s.PinInput(false);
-        s.Submit(engine, stream, false, true, s.data->stencil.auxiliaryInterfaceIndependentFaces, s.data->stencil.interfaceIndependentCells);
+        s.Submit(engine, stream, false, true, AuxiliaryRegion::Independent, s.data->stencil.auxiliaryInterfaceIndependentFaces, s.data->stencil.interfaceIndependentCells);
         s.independentDone = true;
     }
     void FiniteVolume::AuxiliaryPreparation::ApplyQueued(R::EagerEngine &engine, const R::ExecutionStream &stream, CFV::ReconstructionRegion region)
@@ -257,7 +258,7 @@ namespace DNDS::Cauchy
             DNDS_check_throw_info(s.phase == 0 && !s.boundaryPending, "auxiliary core was already submitted or boundary is pending");
             if (!s.independentDone)
                 s.PinInput(false);
-            s.Submit(engine, stream, false, !s.independentDone,
+            s.Submit(engine, stream, false, !s.independentDone, s.independentDone ? AuxiliaryRegion::InterfaceCore : AuxiliaryRegion::Core,
                      s.independentDone ? s.data->stencil.auxiliaryInterfaceFaces : s.data->stencil.auxiliaryCoreFaces,
                      s.independentDone ? s.data->stencil.interfaceCoreCells : s.data->stencil.coreCells);
             s.phase = 1;
@@ -268,7 +269,7 @@ namespace DNDS::Cauchy
             if (s.gradients)
                 s.gradients->_data->CheckQueued(s.source, s.gradients->fields, s.data, s.time, true);
             s.PinInput(true);
-            s.Submit(engine, stream, true, true, s.data->stencil.auxiliaryDependentFaces, s.data->stencil.dependentCells);
+            s.Submit(engine, stream, true, true, AuxiliaryRegion::Dependent, s.data->stencil.auxiliaryDependentFaces, s.data->stencil.dependentCells);
             s.ReduceStatus(engine, stream);
             s.phase = 2;
         }

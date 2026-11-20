@@ -24,13 +24,7 @@ namespace DNDS::Cauchy
             Immediate,
             Queued
         };
-        enum class Part
-        {
-            Independent,
-            Core,
-            InterfaceCore,
-            Dependent
-        };
+        using Part = AuxiliaryRegion;
         FiniteVolume owner;
         std::shared_ptr<const Data> data;
         EquationDofs source;
@@ -279,8 +273,9 @@ namespace DNDS::Cauchy
             const auto cells = part == Part::Independent ? request.stencil.interfaceIndependentCells : part == Part::InterfaceCore ? request.stencil.interfaceCoreCells
                                                                                                    : part == Part::Dependent       ? request.stencil.dependentCells
                                                                                                                                    : request.stencil.coreCells;
-            RequireNumericalSuccess(CPU::PrepareAuxiliaryFaces(request, data->equation, data->boundaryPoint, evaluator, faces), "auxiliary faces");
-            CPU::ReduceAuxiliaryCells(request, cells);
+            const auto &selection = data->stencil.auxiliaryRegions[size_t(part)];
+            RequireNumericalSuccess(CPU::PrepareAuxiliaryFaces(request, data->equation, data->boundaryPoint, evaluator, {selection.faces, faces}), "auxiliary faces");
+            CPU::ReduceAuxiliaryCells(request, {selection.cells, cells});
         }
         void InterfaceIndependent()
         {

@@ -242,6 +242,16 @@ namespace DNDS::Cauchy
                                  R::RowSelectionShape::FromIndices(partition.HaloDependent(), owned),
                                  R::RowSelectionShape::FromIndices(rhsCore, index(activeFaces.size())),
                                  R::RowSelectionShape::FromIndices(rhsDependent, index(activeFaces.size()))};
+            const auto setAuxiliaryRegion = [&](AuxiliaryRegion region, const auto &faces, const auto &cells)
+            {
+                stencil.auxiliaryRegions[size_t(region)] = {
+                    R::RowSelectionShape::FromIndices(faces, index(activeFaces.size())),
+                    R::RowSelectionShape::FromIndices(cells, owned)};
+            };
+            setAuxiliaryRegion(AuxiliaryRegion::Independent, independentFaces, independentCells);
+            setAuxiliaryRegion(AuxiliaryRegion::Core, coreFaces, partition.Core());
+            setAuxiliaryRegion(AuxiliaryRegion::InterfaceCore, interfaceFaces, interfaceCells);
+            setAuxiliaryRegion(AuxiliaryRegion::Dependent, dependentFaces, partition.HaloDependent());
             const auto publish = [](const auto &values, auto &array, const char *name)
             {
                 array = R::Array<index>(R::RowLayout::Dense(index(values.size()), 1));

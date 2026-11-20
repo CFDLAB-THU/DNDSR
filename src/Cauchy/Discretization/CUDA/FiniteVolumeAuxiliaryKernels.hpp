@@ -8,7 +8,7 @@
 
 namespace DNDS::Cauchy::CUDA
 {
-    using AuxiliaryIndices = Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
+    using AuxiliaryIndices = Runtime::RowSelection;
     using AuxiliaryInput = Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::TableRows>;
     using AuxiliaryOutput = Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::TableRows>;
     using AuxiliaryStatus = Runtime::ArrayView<NumericalStatus, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;

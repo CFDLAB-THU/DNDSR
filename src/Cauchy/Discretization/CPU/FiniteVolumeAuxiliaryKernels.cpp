@@ -95,7 +95,7 @@ namespace DNDS::Cauchy::CPU
                 return worker.status;
         return {};
     }
-    NumericalStatus PrepareAuxiliaryFaces(const AuxiliaryKernelRequest &request, const EquationSystem &equation, const BoundaryPointOperator &boundary, SpanView<AuxiliaryWorkerScratch> workers, FiniteVolumeStencilView::Indices faces) noexcept
+    NumericalStatus PrepareAuxiliaryFaces(const AuxiliaryKernelRequest &request, const EquationSystem &equation, const BoundaryPointOperator &boundary, SpanView<AuxiliaryWorkerScratch> workers, Runtime::RowSelection faces) noexcept
     {
         const bool spectral = request.enabled[1] || request.enabled[4], wave = request.enabled[2] || request.enabled[5], pressure = request.enabled[3] || request.enabled[6];
         if (!spectral && !wave && !pressure)
@@ -104,7 +104,7 @@ namespace DNDS::Cauchy::CPU
         const auto &derived = request.derived;
         if (workers.empty())
             return NumericalStatus{NumericalError::InvalidInput};
-        const auto compute = [&](AuxiliaryWorkerScratch &worker, index begin, index end) -> NumericalStatus
+        const auto compute = [&](AuxiliaryWorkerScratch &worker, index begin, index end, auto faceAt) -> NumericalStatus
         {
             auto &evaluator = worker.evaluator;
             auto &left = worker.left;
@@ -120,7 +120,7 @@ namespace DNDS::Cauchy::CPU
             };
             for (index iRow = begin; iRow < end; ++iRow)
             {
-                const index iAux = faces(iRow, 0);
+                const index iAux = faceAt(iRow);
                 const auto iFace = request.stencil.stencilFaces(iAux, 0), first = metric.FaceQuadratureBegin(iFace);
                 const auto &anchor = FiniteVolumeDetail::ExpandSample(request.stencil.RHSFaceSample(iFace, 0, first), request.conditions);
                 EquationFVDetail::Gather(request.blocks, anchor.cell, left);
@@ -230,25 +230,27 @@ namespace DNDS::Cauchy::CPU
             }
             return {};
         };
-        OMP::ForRows(0, workers.size(), [&](index iWorker)
-                     {
+        faces.Visit([&](auto faceAt)
+                    { OMP::ForRows(0, workers.size(), [&](index iWorker)
+                                   {
             const index count = faces.RowCount(), quotient = count / workers.size(), remainder = count % workers.size();
             const index begin = iWorker * quotient + std::min(iWorker, remainder);
-            workers[iWorker].status = compute(workers[iWorker], begin, begin + quotient + (iWorker < remainder)); });
+            workers[iWorker].status = compute(workers[iWorker], begin, begin + quotient + (iWorker < remainder), faceAt); }); });
         for (const auto &worker : workers)
             if (!worker.status)
                 return worker.status;
         return {};
     }
-    void ReduceAuxiliaryCells(const AuxiliaryKernelRequest &request, FiniteVolumeStencilView::Indices cells)
+    void ReduceAuxiliaryCells(const AuxiliaryKernelRequest &request, Runtime::RowSelection cells)
     {
         if (!request.enabled[4] && !request.enabled[5] && !request.enabled[6])
             return;
         const auto metric = request.metric;
         const real rotationBound = Geom::tPoint{request.frame.angularVelocity[0], request.frame.angularVelocity[1], request.frame.angularVelocity[2]}.norm();
-        OMP::ForRows(0, cells.RowCount(), [&](index iRow)
-                     {
-            const index iCell = cells(iRow, 0);
+        cells.Visit([&](auto cellAt)
+                    { OMP::ForRows(0, cells.RowCount(), [&](index iRow)
+                                   {
+            const index iCell = cellAt(iRow);
             real sum = 0, wave = 0, pressure = std::numeric_limits<real>::max();
             for (index entry = request.stencil.auxiliaryCellOffsets(iCell, 0);
                  entry < request.stencil.auxiliaryCellOffsets(iCell + 1, 0); ++entry)
@@ -267,7 +269,7 @@ namespace DNDS::Cauchy::CPU
             if (request.enabled[5])
                 request.values[5](iCell, 0) = wave;
             if (request.enabled[6])
-                request.values[6](iCell, 0) = pressure; });
+                request.values[6](iCell, 0) = pressure; }); });
     }
 
 }

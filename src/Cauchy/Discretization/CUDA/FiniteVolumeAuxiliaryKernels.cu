@@ -147,22 +147,23 @@ namespace DNDS::Cauchy::CUDA
             }
             return {};
         }
-        template <int Components, bool Mechanical = false>
-        __global__ void Faces(AuxiliaryFaceRequest request, AuxiliaryIndices faces)
+        template <int Components, bool Mechanical, class Rows>
+        __global__ void Faces(AuxiliaryFaceRequest request, index count, Rows faceAt)
         {
-            for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < faces.RowCount(); iRow += index(gridDim.x) * blockDim.x)
+            for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < count; iRow += index(gridDim.x) * blockDim.x)
             {
-                const auto iAux = faces(iRow, 0);
+                const auto iAux = faceAt(iRow);
                 request.status(iAux, 0) = Face<Components, Mechanical>(request, iAux);
             }
         }
-        __global__ void Cells(AuxiliaryCellRequest request, AuxiliaryIndices cells)
+        template <class Rows>
+        __global__ void Cells(AuxiliaryCellRequest request, index count, Rows cellAt)
         {
             const auto &stencil = request.stencil(0, 0);
             const auto &metric = stencil.metric;
-            for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < cells.RowCount(); iRow += index(gridDim.x) * blockDim.x)
+            for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < count; iRow += index(gridDim.x) * blockDim.x)
             {
-                const index iCell = cells(iRow, 0);
+                const index iCell = cellAt(iRow);
                 real sum = 0, wave = 0, pressure = std::numeric_limits<real>::max();
                 for (index entry = stencil.auxiliaryCellOffsets(iCell, 0); entry < stencil.auxiliaryCellOffsets(iCell + 1, 0); ++entry)
                 {
@@ -275,29 +276,30 @@ namespace DNDS::Cauchy::CUDA
             return;
         const auto stream = ::DNDS::Runtime::CUDAStream(context);
         const unsigned blocks = Blocks(faces.RowCount());
+        faces.Visit([&](auto faceAt)
+                    {
         if (request.state.acm.RowCount())
         {
             if (request.state.components == 4)
-                Faces<4, true><<<blocks, 128, 0, stream>>>(request, faces);
+                Faces<4, true><<<blocks, 128, 0, stream>>>(request, faces.RowCount(), faceAt);
             else if (request.state.components == 5)
-                Faces<5, true><<<blocks, 128, 0, stream>>>(request, faces);
+                Faces<5, true><<<blocks, 128, 0, stream>>>(request, faces.RowCount(), faceAt);
             else
-                Faces<6, true><<<blocks, 128, 0, stream>>>(request, faces);
-            CheckLaunch();
+                Faces<6, true><<<blocks, 128, 0, stream>>>(request, faces.RowCount(), faceAt);
             return;
         }
         switch (request.state.components)
         {
         case 5:
-            Faces<5><<<blocks, 128, 0, stream>>>(request, faces);
+            Faces<5, false><<<blocks, 128, 0, stream>>>(request, faces.RowCount(), faceAt);
             break;
         case 6:
-            Faces<6><<<blocks, 128, 0, stream>>>(request, faces);
+            Faces<6, false><<<blocks, 128, 0, stream>>>(request, faces.RowCount(), faceAt);
             break;
         case 7:
-            Faces<7><<<blocks, 128, 0, stream>>>(request, faces);
+            Faces<7, false><<<blocks, 128, 0, stream>>>(request, faces.RowCount(), faceAt);
             break;
-        }
+        } });
         CheckLaunch();
     }
     void ReduceAuxiliaryCells(R::ExecutionContext context, const AuxiliaryCellRequest &request, AuxiliaryIndices cells)
@@ -317,7 +319,8 @@ namespace DNDS::Cauchy::CUDA
         CheckRows(request.scratch, faceRows, 3, false);
         if (!cells.RowCount())
             return;
-        Cells<<<Blocks(cells.RowCount()), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(request, cells);
+        cells.Visit([&](auto cellAt)
+                    { Cells<<<Blocks(cells.RowCount()), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(request, cells.RowCount(), cellAt); });
         CheckLaunch();
     }
 }

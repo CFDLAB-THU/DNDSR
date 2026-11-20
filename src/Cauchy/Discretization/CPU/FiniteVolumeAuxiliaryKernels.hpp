@@ -50,7 +50,7 @@ namespace DNDS::Cauchy::CPU
     NumericalStatus PrepareAuxiliaryFaces(const AuxiliaryKernelRequest &request,
                                           const EquationSystem &equation, const BoundaryPointOperator &boundary,
                                           SpanView<AuxiliaryWorkerScratch> workers,
-                                          FiniteVolumeStencilView::Indices faces) noexcept;
+                                          Runtime::RowSelection faces) noexcept;
     void ReduceAuxiliaryCells(const AuxiliaryKernelRequest &request,
-                              FiniteVolumeStencilView::Indices cells);
+                              Runtime::RowSelection cells);
 }
