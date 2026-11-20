@@ -138,8 +138,9 @@ All intermediate EntitySpaces are owned-only; global relation entries may refer
 to another rank. Partition and permutation use exact temporary face incidence
 without creating a persistent Face family. The assembler is the first stage
 that creates the final compute ghosts and publishes a read state. Local cell
-partition ranges travel in `NativeOwnedMeshData::localPartitionStarts` and are
-installed at final assembly; redistribution resets them.
+worker intervals travel in `NativeOwnedMeshData::localPartRanges`. Final
+assembly publishes both exact intervals for each worker. Redistribution clears
+the old membership because rows may move between ranks.
 
 The completed C++ read helper retains owned data through partition/refinement
 before returning its requested readable mesh. `PrepareMesh` similarly captures
