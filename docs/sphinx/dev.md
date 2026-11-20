@@ -34,6 +34,7 @@ They contain early brainstorming, personal observations, and one-off benchmarks.
 ```{toctree}
 :maxdepth: 2
 
+/dev/validation_records
 /dev/ideas
 /dev/Notes
 /dev/cudaNotes

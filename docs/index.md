@@ -5,19 +5,14 @@ DNDSR is a C++17 / Python CFD (Computational Fluid Dynamics) research code
 implementing Compact Finite Volume methods with MPI parallelism and optional
 CUDA GPU support.
 
-The [2026-10-31 VR SVD correction](dev/vr_svd_cutoff_2026-10-31.md) documents the
-small-mode cutoff change, setup diagnostics and affected nonzero-tolerance cases.
+## Start here
 
-The [2026-11-03 extended Euler rotation correction](dev/euler_extended_rotation_2026-11-03.md)
-records the NS_EX/NS_EX_3D absolute-velocity source convention and focused tests.
-
-The [Cauchy preliminary completion record](dev/cauchy_preliminary_2026-11-01.md)
-records physical layouts, resident CUDA reconstruction, explicit device-packed
-transfers, completed gates and performance limits.
-
-The [NCCL/FP64 complement record](dev/nccl_fp64_2026-11-01.md) documents the
-CUDA-default NCCL build option, explicit provider/kernel selection, final
-distributed gates and the measured gains and regressions by shape.
+| Task | Entry point |
+| --- | --- |
+| Install dependencies and build | [Build guide](guides/building.md) |
+| Run a first case | [Worked examples](guides/examples.md) |
+| Write or run tests | [Test guide](sphinx/tests.md) |
+| Find past results and numerical corrections | [Validation records](dev/validation_records.md) |
 
 ## Architecture entry points
 
@@ -33,12 +28,6 @@ opt-in CUDA timeline ranges and the fixed uncached TGV optimization baseline.
 The [automatic A100 kernel defaults](dev/cauchy_a100_kernel_defaults.md) describe
 setup-time device/shape selection and explicit reproducibility overrides.
 
-The [Plan 61-6 consolidation record](dev/plan616_cuda_consolidation.md) describes
-the bounded generated RHS/VR catalogs, shared helpers and native AMG exploration.
-
-The [Plan 61 CUDA inventory](dev/plan61_cuda_inventory.md) tracks the specialized
-perfect-gas device path and its grouped implementation/validation status.
-
 The [experimental FV and VR matrix storage guide](dev/plan613_matrix_storage.md)
 describes independent layouts, raw VR sweeps, and allocation controls.
 
@@ -47,8 +36,6 @@ The [finite-volume dispatch guide](architecture/CauchyDispatch.md) maps the
 CPU and CUDA flux, source and Jacobian routes.
 The [constant-density ACM guide](architecture/CauchyACM.md) covers mechanical
 state input, pressure constraints, turbulence transport and qualification cases.
-The [November 5 pMG and distributed-failure audit](dev/cauchy_pmg_distributed_errors_2026-11-05.md)
-records the coarse-gradient correction, fail-fast boundary and publication checks.
 The [multidomain input and restart guide](guides/cauchy_multidomain.md) gives the
 configuration shape, CGNS/HDF loader boundaries and simulation archive layout.
 The [equation-state contract](architecture/CauchyState.md) documents semantic
@@ -69,15 +56,7 @@ The [Cauchy positivity policy](architecture/CauchyPositivity.md) specifies
 thermal constraints, component scopes and preserved Euler repair ordering.
 The [Cauchy output contract](architecture/CauchyOutput.md) defines centralized
 history, console, manifest, checkpoint/visualization naming and exact-time
-snapping, including the explicit internal-checkpoint limitation.
-The [Cauchy audit fix record](dev/cauchy_audit_fix.md) tracks the shared SST
-blend correction and independent RANS reconstruction positivity policy.
-The [plan 53 execution ledger](dev/plan53_audit_execution.md) reconciles those
-commits with the remaining programming audit, UT consolidation and enhancements.
-The initial CPU single-domain flow solver uses native CFV P3/WBAP; numerical
-case qualification and implicit/physical multi-domain execution remain separate
-gates. The placement foundation mock alone is not a fluid validation.
-
+snapping and nonlinear checkpoints.
 | Topic | Guide |
 | --- | --- |
 | Configuration publication, threading and native/Python library boundaries | [Configuration registration](architecture/Configuration.md) |
@@ -111,46 +90,6 @@ gates. The placement foundation mock alone is not a fluid validation.
 | Cauchy CPU kernel ownership, layout and read/write effects | [Kernel I/O contracts](architecture/CauchyKernelContracts.md) |
 | OpenMP policy, worker ownership and mesh preprocessing | [CPU threading](architecture/CPUThreading.md) |
 | Mesh Python access and operations | [Python mesh guide](guides/python_geom_guide.md) |
-
-The mesh construction correction and its fixture/condition audit are recorded
-in the validation ledger below. Earlier infrastructure acceptance was withdrawn
-after detecting an omitted boundary ring; see the
-[evidence correction](dev/infrastructure_finish_2026-10-27.md). Test totals and
-owned numerical parity do not prove per-rank ghost completeness.
-The [Runtime/mesh audit](dev/runtime_mesh_audit_2026-10-29.md) records the
-abstraction and safety review, fixes, validation checkpoints and the completed
-parallel setup median target; serial import and later FV work are separate.
-The [2026-10-30 retrospective](dev/refactor_retrospective_2026-10-30.md) records
-the next audit's local fixes, remaining design decisions, test limitations and
-CFV/sliding-interface planning boundary. Earlier validation is not evidence for
-these new changes.
-The [accepted-fixes follow-up](dev/accepted_audit_fixes_2026-10-30.md) resolves
-the field-layout and compiled-program decisions and records the next FV/Geom
-work orders.
-The [CPU FV/interface validation](dev/fv_interface_2026-10-30.md) records the
-implemented numerical/geometric scope, focused tests and matched legacy VR
-performance evidence.
-The [2026-10-31 facility next steps](dev/facilities_next_steps_2026-10-31.md)
-separates current DNDS/Geom/CFV support from accepted overlap, numerical and
-distributed-interface work, including explicit deferred features.
-The [source comparison and validation ledger](dev/mesh_construction_semantics_2026-10-28.md)
-records the final checks, explicit legacy periodic-frame differences and limits.
-The [legacy connectivity test-purpose ledger](dev/mesh_connectivity_test_port_2026-10-28.md)
-records all 47 original cases, independent expected answers and explicit
-replacements for retired containers.
-
-The [2026-11-05 Euler gradient correction](dev/euler_gradient_buffers_2026-11-05.md)
-documents limited-gradient preparation, explicit reuse and boundary-stage timing.
-
-The [Euler RANS reconstruction PP correction](dev/euler_rans_reconstruction_pp_2026-11-05.md)
-separates spatial flow beta from scalar limiting and preserves coupled increment scaling.
-
-The [SST convergence audit](dev/euler_sst_convergence_2026-11-05.md)
-records source linearization, wall perturbation checks and O2 numerical trials.
-
-The [GG boundary-target correction](dev/euler_gg_boundary_targets_2026-11-05.md)
-documents mutable wall traces, immutable means, preserved VR semantics and
-EulerP scalar neighbour/boundary indexing.
 
 ## Core Modules
 
