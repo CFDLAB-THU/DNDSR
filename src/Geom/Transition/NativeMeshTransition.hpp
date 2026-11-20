@@ -43,7 +43,8 @@ namespace DNDS::Geom
     {
         static NativeOwnedMeshTransitionResult BuildOwnedImpl(const NativeOwnedMeshData &source, const MPIInfo &mpi,
                                                               const ReorderInput &input,
-                                                              const std::vector<index> *cellOld2New);
+                                                              const std::vector<index> *cellOld2New,
+                                                              bool validateOwnedProvenance = false);
         static NativeMeshTransitionResult BuildImpl(const UnstructuredMeshState &source, const MPIInfo &mpi,
                                                     const ReorderInput &input, int ghostLayers,
                                                     const std::vector<index> *cellOld2New);

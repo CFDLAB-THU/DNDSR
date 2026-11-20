@@ -70,7 +70,7 @@ TEST_CASE("Backend metadata spans survive asynchronous launch after handles are 
     const auto context = ExecutionContext::CUDA(0);
     const MetadataBuffer<double> host(std::vector<double>{1, 2, 4});
     auto placed = host.CopyTo(Device::CUDA(0), context);
-    CHECK_THROWS(placed.HostView());
+    CHECK_THROWS(placed[0]);
     const auto roundTrip = placed.CopyTo(Device::Host(), context);
     CHECK(roundTrip == host);
     Array<double> output(RowLayout::Dense(128, 1), Device::CUDA(0));

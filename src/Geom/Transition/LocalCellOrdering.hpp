@@ -3,6 +3,7 @@
 #include "Geom/Access/EntityWorkPartition.hpp"
 #include "Geom/Transition/SerialAdjReordering.hpp"
 #include "DNDS/MPI/CollectiveStage.hpp"
+#include <array>
 #include <map>
 #include <utility>
 
@@ -47,10 +48,12 @@ namespace DNDS::Geom
         DNDS_check_throw_info(settings.subregions >= 1 &&
                                   (settings.coreSplit == CellCoreSplit::None || settings.coreSplit == CellCoreSplit::CellNodeCell),
                               "invalid local cell ordering settings"); });
-        int aggregate = settings.aggregateSendRegions, minimum = 0, maximum = 0;
-        MPI_Allreduce(&aggregate, &minimum, 1, MPI_INT, MPI_MIN, mpi.comm);
-        MPI_Allreduce(&aggregate, &maximum, 1, MPI_INT, MPI_MAX, mpi.comm);
-        DNDS_check_throw_info(minimum == maximum, "send aggregation options differ across ranks");
+        // Agree before either optional schedule can enter collective mesh operations.
+        const std::array<int, 2> options{int(settings.coreSplit), int(settings.aggregateSendRegions)};
+        std::array<int, 2> minimum{}, maximum{};
+        MPI_Allreduce(options.data(), minimum.data(), int(options.size()), MPI_INT, MPI_MIN, mpi.comm);
+        MPI_Allreduce(options.data(), maximum.data(), int(options.size()), MPI_INT, MPI_MAX, mpi.comm);
+        DNDS_check_throw_info(minimum == maximum, "cell core split or send aggregation differs across ranks");
         const auto cells = mesh.Entities(EntityKind::Cell);
         const index nCell = cells.NumOwned();
         tLocalMatStruct graph;

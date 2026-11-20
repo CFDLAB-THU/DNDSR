@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Geom/Connectivity/MeshRelationTypes.hpp"
+#include "Geom/Access/EntitySpace.hpp"
 #include "DNDS/MPI/MPI.hpp"
 #include <unordered_set>
 #include <vector>
@@ -41,6 +41,23 @@ namespace DNDS::Geom
     // ReorderInput: what the caller provides
     // =================================================================
 
+    /// Local provenance of a permutation derived by traversing a published mesh.
+    /// The source order includes both the traversal anchor and the permuted families.
+    struct ReorderSourceOrder
+    {
+        Runtime::VersionStamp generation;
+        std::vector<EntitySpace> families;
+
+        template <class Lookup>
+        void Validate(Lookup &&lookup) const
+        {
+            generation.Validate();
+            for (const auto &family : families)
+                DNDS_check_throw_info(family.SameOrder(lookup(family.Kind())),
+                                      "local permutation was planned for another mesh row ordering");
+        }
+    };
+
     /// Input to the reorder framework.
     struct ReorderInput
     {
@@ -68,6 +85,9 @@ namespace DNDS::Geom
         /// Every rank names the same kinds; local row extents can differ. Native
         /// transitions remap all registered references and companions normally.
         std::map<EntityKind, std::vector<index>> localPermutations;
+
+        /// Set by ordering plans. Explicit user-supplied maps may omit provenance.
+        std::optional<ReorderSourceOrder> sourceOrder;
     };
 
 }

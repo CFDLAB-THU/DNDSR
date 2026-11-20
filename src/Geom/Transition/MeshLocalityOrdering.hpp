@@ -15,7 +15,7 @@ namespace DNDS::Geom
     {
         struct Data
         {
-            Runtime::VersionStamp stamp;
+            ReorderSourceOrder sourceOrder;
             std::map<EntityKind, std::vector<index>> permutations;
         };
         std::shared_ptr<const Data> _data;
@@ -27,9 +27,10 @@ namespace DNDS::Geom
         {
             auto lease = mesh.versions.Read();
             auto data = std::make_shared<Data>();
-            data->stamp = mesh.versions.Stamp(Runtime::Change::Topology | Runtime::Change::Distribution |
-                                              Runtime::Change::Layout | Runtime::Change::Interface);
+            data->sourceOrder.generation = mesh.versions.Stamp(Runtime::Change::Topology | Runtime::Change::Distribution |
+                                                               Runtime::Change::Layout | Runtime::Change::Interface);
             const auto anchors = mesh.Entities(anchor);
+            data->sourceOrder.families.push_back(anchors);
             for (const auto &descriptor : adjacencies)
             {
                 auto adjacency = ReadPublishedAdjacency(mesh, descriptor);
@@ -38,6 +39,7 @@ namespace DNDS::Geom
                 const auto target = adjacency.Target();
                 auto [entry, inserted] = data->permutations.emplace(descriptor.to, std::vector<index>(size_t(target.NumOwned()), -1));
                 DNDS_check_throw_info(inserted, "locality ordering specifies a target kind more than once");
+                data->sourceOrder.families.push_back(target);
                 auto &oldToNew = entry->second;
                 index next = 0;
                 for (index iAnchor = 0; iAnchor < anchors.NumOwned(); ++iAnchor)
@@ -61,13 +63,19 @@ namespace DNDS::Geom
         void Validate() const
         {
             DNDS_check_throw_info(_data, "locality ordering was moved");
-            _data->stamp.Validate();
+            _data->sourceOrder.generation.Validate();
         }
-        const std::map<EntityKind, std::vector<index>> &Permutations() const { return _data->permutations; }
+        /// Borrow first-touch permutations from this plan while its row ordering is current.
+        const std::map<EntityKind, std::vector<index>> &Permutations() const
+        {
+            Validate();
+            return _data->permutations;
+        }
         ReorderInput Input() const
         {
             Validate();
             ReorderInput input;
+            input.sourceOrder = _data->sourceOrder;
             input.localPermutations = _data->permutations;
             return input;
         }

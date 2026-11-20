@@ -79,9 +79,12 @@ namespace DNDS::Runtime
         const T *end() const { return _size ? data() + _size : data(); }
         const T &operator[](size_t i) const
         {
+            // Residency is a host access contract even in bounds-unchecked builds.
+            // Numerical loops can acquire HostView() once before indexing its span.
+            const auto *values = data();
             if constexpr (SpanBoundsChecks)
-                DNDS_HD_assert(_host && i < _size);
-            return _data[i];
+                DNDS_HD_assert(i < _size);
+            return values[i];
         }
         const T &back() const { return (*this)[_size - 1]; }
         Device GetDevice() const { return _buffer.GetDevice(); }

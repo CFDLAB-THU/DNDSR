@@ -112,6 +112,10 @@ TEST_CASE("Locality plans preserve first-touch order from cell or node anchors")
             CHECK(boundaryRead.HostView().BoundaryFaces(iRow)[0] == oldBoundaries[iRow]);
         }
     }
+    // All family extents match, and the original source is still current.
+    // Replaying its first-touch permutation on the reordered publication is stale.
+    const auto saved = cells.Input();
+    CHECK_THROWS(NativeMeshTransition::Build(*reordered->CurrentNativeState(), mpi, saved));
     auto invalid = cells.Input();
     if (mpi.rank == 0)
         invalid.localPermutations.at(EntityKind::Node)[0] = invalid.localPermutations.at(EntityKind::Node)[1];
@@ -128,7 +132,7 @@ TEST_CASE("Locality plans preserve first-touch order from cell or node anchors")
         auto edit = mesh->versions.BeginMutation(DNDS::Runtime::Change::Layout);
         edit.Commit();
     }
-    CHECK_THROWS(cells.Validate());
+    CHECK_THROWS(cells.Permutations());
 }
 
 int main(int argc, char **argv)

@@ -608,6 +608,8 @@ namespace DNDS::Geom
         FieldTransferDetail::LocalStage(mpi, source.PreparationCommunication(), [&]
                                         {
             source.Validate();
+            if (input.sourceOrder)
+                input.sourceOrder->Validate([&](EntityKind kind) { return source.Entities(kind); });
             DNDS_check_throw_info(ghostLayers >= 1,"native transition requires positive closure");
             for (auto kind : requested)
             {
@@ -879,12 +881,13 @@ namespace DNDS::Geom
     NativeOwnedMeshTransitionResult NativeMeshTransition::BuildOwned(const NativeOwnedMeshData &source, const MPIInfo &mpi,
                                                                      const ReorderInput &input)
     {
-        return BuildOwnedImpl(source, mpi, input, nullptr);
+        return BuildOwnedImpl(source, mpi, input, nullptr, true);
     }
 
     NativeOwnedMeshTransitionResult NativeMeshTransition::BuildOwnedImpl(const NativeOwnedMeshData &source, const MPIInfo &mpi,
                                                                          const ReorderInput &input,
-                                                                         const std::vector<index> *cellOld2New)
+                                                                         const std::vector<index> *cellOld2New,
+                                                                         bool validateOwnedProvenance)
     {
         Runtime::CommunicationDetail::AgreePolicy(mpi.comm, !source.communication || source.communication->ChecksCollectivePreflight());
         NativeOwnedMeshTransitionResult result;
@@ -895,6 +898,9 @@ namespace DNDS::Geom
         RArray noGhostRows;
         source.LocalStage(mpi, [&]
                           {
+            // Build validates against the published order before CaptureOwned detaches ghost maps.
+            if (validateOwnedProvenance && input.sourceOrder)
+                input.sourceOrder->Validate([&](EntityKind kind) -> const EntitySpace & { return source.spaces.at(kind); });
             noGhostRows = BuildIndexRows({});
             DNDS_check_throw_info(input.destroyKinds.empty(), "owned transition requires retained entity kinds");
             int rank = -1, size = 0;
