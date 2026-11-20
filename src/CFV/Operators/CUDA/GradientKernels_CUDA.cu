@@ -8,11 +8,11 @@ namespace DNDS::CFV::Detail
 {
     namespace R = Runtime;
     template <int Components>
-    __global__ void EvaluateRows(GradientKernelView plan, DeviceWorkSelection selection, DevicePeriodicBlocks vectors,
+    __global__ void EvaluateRows(GradientKernelView plan, Runtime::RowSelection selection, DevicePeriodicBlocks vectors,
                                  GradientField mean, GradientInput boundary, GradientOutput output)
     {
-        for (index iWork = index(blockIdx.x) * blockDim.x + threadIdx.x; iWork < selection.count; iWork += index(gridDim.x) * blockDim.x)
-            Math::EvaluateGradientCell(plan, vectors, mean, boundary, output, selection.Cell(iWork), Components);
+        for (index iWork = index(blockIdx.x) * blockDim.x + threadIdx.x; iWork < selection.RowCount(); iWork += index(gridDim.x) * blockDim.x)
+            Math::EvaluateGradientCell(plan, vectors, mean, boundary, output, selection.RowAt(iWork), Components);
     }
     __global__ void ConvertRows(GradientCellGeometry cells, GradientInput input, GradientOutput output,
                                 index firstCell, int dimension, index modes, bool toCoefficients, index firstComponent, index componentCount)
@@ -20,7 +20,7 @@ namespace DNDS::CFV::Detail
         for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < output.RowCount(); iRow += index(gridDim.x) * blockDim.x)
             Math::ConvertGradientRow(cells, input, output, iRow, firstCell, dimension, modes, toCoefficients, firstComponent, componentCount);
     }
-    void LaunchGradient(R::ExecutionContext context, GradientKernelView plan, DeviceWorkSelection selection, DevicePeriodicBlocks vectors,
+    void LaunchGradient(R::ExecutionContext context, GradientKernelView plan, Runtime::RowSelection selection, DevicePeriodicBlocks vectors,
                         GradientField mean, GradientInput boundary, GradientOutput output)
     {
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA, "CUDA gradient needs a CUDA stream");
@@ -33,9 +33,9 @@ namespace DNDS::CFV::Detail
                               "CUDA gradient shape/profile mismatch");
         for (const auto kind : {mean.owned.kind, mean.ghost.kind, boundary.kind, output.kind})
             DNDS_check_throw_info(kind == R::RowLayoutKind::Table, "CUDA gradient currently requires AoS tables");
-        if (!selection.count)
+        if (!selection.RowCount())
             return;
-        const unsigned blocks = unsigned(std::min<index>((selection.count + 127) / 128, 1024));
+        const unsigned blocks = unsigned(std::min<index>((selection.RowCount() + 127) / 128, 1024));
         const auto stream = ::DNDS::Runtime::CUDAStream(context);
         switch (components)
         {
@@ -74,14 +74,14 @@ namespace DNDS::CFV::Detail
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA gradient conversion launch failed");
     }
     template <int Components>
-    __global__ void LimitRows(GradientLimiterView plan, DeviceWorkSelection selection, DevicePeriodicBlocks vectors,
+    __global__ void LimitRows(GradientLimiterView plan, Runtime::RowSelection selection, DevicePeriodicBlocks vectors,
                               GradientLimiterValues values, GradientOutput output, R::ArrayView<int> status)
     {
         if (status(0, 0))
             return;
         real scratch[6 * Components * 3];
-        for (index iWork = index(blockIdx.x) * blockDim.x + threadIdx.x; iWork < selection.count; iWork += index(gridDim.x) * blockDim.x)
-            Math::LimitGradientCell(plan, vectors, values, output, selection.Cell(iWork), {scratch, 6 * Components * 3});
+        for (index iWork = index(blockIdx.x) * blockDim.x + threadIdx.x; iWork < selection.RowCount(); iWork += index(gridDim.x) * blockDim.x)
+            Math::LimitGradientCell(plan, vectors, values, output, selection.RowAt(iWork), {scratch, 6 * Components * 3});
     }
     __global__ void ValidateGradientIndicator(GradientInput indicator, R::ArrayView<int> status)
     {
@@ -89,7 +89,7 @@ namespace DNDS::CFV::Detail
             if (!isfinite(indicator(iCell, 0)))
                 atomicExch(&status(0, 0), 1);
     }
-    void LaunchGradientLimiter(R::ExecutionContext context, GradientLimiterView plan, DeviceWorkSelection selection,
+    void LaunchGradientLimiter(R::ExecutionContext context, GradientLimiterView plan, Runtime::RowSelection selection,
                                DevicePeriodicBlocks vectors, GradientLimiterValues values, GradientOutput output, R::ArrayView<int> status)
     {
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA, "CUDA gradient limiter needs a CUDA stream");
@@ -113,9 +113,9 @@ namespace DNDS::CFV::Detail
         if (values.activated)
             DNDS_check_throw_info(values.indicator.Width() == 1 && values.indicator.RowCount() == output.RowCount(),
                                   "CUDA gradient indicator shape mismatch");
-        if (!selection.count)
+        if (!selection.RowCount())
             return;
-        const unsigned blocks = unsigned(std::min<index>((selection.count + 127) / 128, 1024));
+        const unsigned blocks = unsigned(std::min<index>((selection.RowCount() + 127) / 128, 1024));
         const auto stream = ::DNDS::Runtime::CUDAStream(context);
         if (values.activated && values.indicator.RowCount())
             ValidateGradientIndicator<<<unsigned(std::min<index>(256, (values.indicator.RowCount() + 127) / 128)), 128, 0, stream>>>(values.indicator, status);

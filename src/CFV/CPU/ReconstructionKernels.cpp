@@ -154,15 +154,9 @@ namespace DNDS::CFV::CPU
         const index owned = work.owned;
         if (!view.sor)
         {
-            if (work.all)
-                OMP::ForRows(0, owned, [&](index iCell)
-                             { compute(iCell, {{0, owned}, {}}); });
-            else
-            {
-                const auto rows = work.rows;
-                OMP::ForRows(0, index(rows.size()), [&](index iRow)
-                             { compute(rows[iRow], {{0, owned}, {}}); });
-            }
+            work.rows.Visit([&](auto rowAt)
+                            { OMP::ForRows(0, work.rows.RowCount(), [&](index iRow)
+                                           { compute(rowAt(iRow), {{0, owned}, {}}); }); });
         }
         else
         {
@@ -290,7 +284,7 @@ namespace DNDS::CFV::CPU
                     out(begin + mode, v) *= valid(mode, v) * up(mode, v) / down(mode, v);
         };
         const auto rows = work.rows;
-        const index count = work.all ? work.owned : index(rows.size());
+        const index count = rows.RowCount();
         const index workers = work.workers;
         OMP::ForRows(0, workers, [&](index worker)
                      {
@@ -300,7 +294,7 @@ namespace DNDS::CFV::CPU
             const index begin = worker * quotient + std::min(worker, remainder);
             const index end = begin + quotient + (worker < remainder);
             for (index iRow = begin; iRow < end; ++iRow)
-                compute(work.all ? iRow : rows[iRow], worker); });
+                compute(rows.RowAt(iRow), worker); });
         return {};
     }
     void CommitReconstruction(ReconstructionReadRows source, ReconstructionWriteRows destination)

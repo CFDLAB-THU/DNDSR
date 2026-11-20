@@ -27,7 +27,7 @@ namespace DNDS::Cauchy
         R::MetadataBuffer<CUDA::RHSKernelParameters> parameters;
         std::optional<R::ReadAccess> parameterRead;
         R::Array<NumericalStatus> faceStatus, cellStatus, partial, result;
-        R::Array<index> fallbackCounts, allCells, emptySelection;
+        R::Array<index> fallbackCounts, emptySelection;
         int submittedRegions = 0;
         bool pending = false;
         std::array<std::optional<Algebra::ArrayInputCache>, 6> inputCaches;
@@ -161,25 +161,12 @@ namespace DNDS::Cauchy
             partial = R::Array<NumericalStatus>(R::RowLayout::Dense(CUDA::StateReductionScratchRows(cells + 1), 1), device);
             result = R::Array<NumericalStatus>(R::RowLayout::Dense(1, 1), device);
             fallbackCounts = R::Array<index>(R::RowLayout::Dense(faces, 1), device);
-            const auto sequence = [&](index rows)
-            {
-                R::Array<index> host(R::RowLayout::Dense(rows, 1));
-                {
-                    auto write = host.Write();
-                    const auto values = write.View<R::FixedRows<1>>();
-                    OMP::ForRows(0, rows, [&](index iRow) noexcept
-                                 { values(iRow, 0) = iRow; });
-                }
-                return host.To(device, context);
-            };
-            allCells = sequence(cells);
             emptySelection = R::Array<index>(R::RowLayout::Dense(0, 1), device);
             faceStatus.SetName("Cauchy/fluxFaceStatus", DNDS_ALLOCATION_SITE());
             cellStatus.SetName("Cauchy/fluxCellStatus", DNDS_ALLOCATION_SITE());
             partial.SetName("Cauchy/fluxStatusPartials", DNDS_ALLOCATION_SITE());
             result.SetName("Cauchy/fluxStatusResult", DNDS_ALLOCATION_SITE());
             fallbackCounts.SetName("Cauchy/fluxFaceFallbackCounts", DNDS_ALLOCATION_SITE());
-            allCells.SetName("Cauchy/fluxAllCells", DNDS_ALLOCATION_SITE());
             if (controls.mapping == CUDA::RHSFaceMapping::WarpSegments || controls.mapping == CUDA::RHSFaceMapping::CTASegments)
             {
                 const bool reportSetup = std::getenv("DNDS_CAUCHY_PROFILE_RHS_PACKAGES") != nullptr;
@@ -232,19 +219,6 @@ namespace DNDS::Cauchy
         deviceFlux = std::make_shared<DeviceFluxData>(owner, thermal.View(), meanOnly, bool(primitiveGradient), bool(lowOrderResidual));
 #else
         DNDS_check_throw_info(false, "CUDA flux execution is not built");
-#endif
-    }
-    const R::Array<index> &FiniteVolume::Workspace::DeviceCellSelection(CFV::ReconstructionRegion region) const
-    {
-#ifdef DNDS_USE_CUDA
-        DNDS_check_throw_info(deviceFlux && (region == CFV::ReconstructionRegion::All || region == CFV::ReconstructionRegion::Core ||
-                                             region == CFV::ReconstructionRegion::HaloDependent),
-                              "invalid device cell selection");
-        return region == CFV::ReconstructionRegion::All ? deviceFlux->allCells : region == CFV::ReconstructionRegion::Core ? owner->stencil.coreCells
-                                                                                                                           : owner->stencil.dependentCells;
-#else
-        DNDS_check_throw_info(false, "CUDA cell selection is not built");
-        return owner->stencil.coreCells;
 #endif
     }
     void FiniteVolume::Workspace::ResetDeviceFluxStatus(R::EagerEngine &engine, const R::ExecutionStream &stream)
@@ -349,7 +323,9 @@ namespace DNDS::Cauchy
         const auto &faces = faceShape.form == R::RowSelectionForm::IndexList
                                 ? (region == CFV::ReconstructionRegion::Core ? owner->stencil.rhsCoreFaces : owner->stencil.rhsDependentFaces)
                                 : deviceFlux->emptySelection;
-        const auto &cells = cellShape.form == R::RowSelectionForm::IndexList ? DeviceCellSelection(region) : deviceFlux->emptySelection;
+        const auto &cells = cellShape.form == R::RowSelectionForm::IndexList
+                                ? (region == CFV::ReconstructionRegion::Core ? owner->stencil.coreCells : owner->stencil.dependentCells)
+                                : deviceFlux->emptySelection;
         const auto pin = deviceFlux;
         const auto &meanInput = pin->Input(0, mean.Owned(), engine, stream);
         const auto &meanGhostInput = pin->Input(1, ghosts ? mean.Ghost() : empty, engine, stream);

@@ -24,9 +24,9 @@ namespace DNDS::CFV::Detail
                 ordinal = a.context.device.ordinal;
             }
             DNDS_check_throw_info(bytes <= index(sharedLimit), "general FP64 reconstruction scratch exceeds shared memory");
-            if (!a.selection.count)
+            if (!a.selection.RowCount())
                 return;
-            GeneralJacobi<<<unsigned(std::min<index>(a.selection.count, 256)), 128, size_t(bytes), ::DNDS::Runtime::CUDAStream(a.context)>>>(
+            GeneralJacobi<<<unsigned(std::min<index>(a.selection.RowCount(), 256)), 128, size_t(bytes), ::DNDS::Runtime::CUDAStream(a.context)>>>(
                 RawReconstructionSweepView(a.plan), a.selection, a.vectors, a.mean, a.input, a.boundary,
                 a.output, a.status, a.target, a.alpha, a.plan.raw, limited);
         }

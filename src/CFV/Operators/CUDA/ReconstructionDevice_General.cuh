@@ -16,7 +16,7 @@ namespace DNDS::CFV::Detail
      * the inverse. At alpha=1 no neighbor, BC or inverse value may be read.
      * Index/placement checks belong to the wrapper; no host resource is used.
      */
-    __global__ void GeneralJacobi(RawReconstructionSweepView plan, DeviceWorkSelection selection,
+    __global__ void GeneralJacobi(RawReconstructionSweepView plan, Runtime::RowSelection selection,
                                   DevicePeriodicBlocks vectors, R::PairReadView<real> mean,
                                   R::PairReadView<real> input, R::ArrayView<const real> boundary,
                                   R::ArrayView<real> output, R::ArrayView<const int> status,
@@ -27,9 +27,9 @@ namespace DNDS::CFV::Detail
             return;
         extern __shared__ real right[];
         const index n = plan.n, width = output.Width();
-        for (index iWork = blockIdx.x; iWork < selection.count; iWork += gridDim.x)
+        for (index iWork = blockIdx.x; iWork < selection.RowCount(); iWork += gridDim.x)
         {
-            const index iCell = selection.Cell(iWork);
+            const index iCell = selection.RowAt(iWork);
             const real penalty = limited ? alpha(iCell, 0) : 0;
             const real scale = plan.relax * (1 - penalty);
             for (index i = threadIdx.x; i < width; i += blockDim.x)

@@ -121,6 +121,12 @@ namespace DNDS::Runtime
                 return f(IntervalPairRows{shape.first, shape.second});
             return f(IntervalRows{shape.first.begin});
         }
+        /// Resolve once per numerical row. Heavy point and matrix loops reuse this ID.
+        DNDS_DEVICE_CALLABLE index RowAt(index position) const
+        {
+            return Visit([&](auto rows)
+                         { return rows(position); });
+        }
     };
     static_assert(std::is_trivially_copyable_v<RowSelection>);
 }

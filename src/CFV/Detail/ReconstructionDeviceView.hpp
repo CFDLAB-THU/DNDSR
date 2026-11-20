@@ -1,6 +1,6 @@
 #pragma once
 
-#include "DNDS/Runtime/Array/ArrayView.hpp"
+#include "DNDS/Runtime/Array/RowSelection.hpp"
 #include "DNDS/Runtime/Execution/KernelArguments.hpp"
 
 namespace DNDS::CFV::Detail
@@ -13,7 +13,6 @@ namespace DNDS::CFV::Detail
         Runtime::ArrayView<const uint8_t> rotationActive, faceSide;
         Runtime::ArrayView<const real> matrixAInvB, vectorAInvB, secondary, boundaryInjection, rotation, localInverse;
         Runtime::ArrayView<const float> matrixAInvB32, vectorAInvB32, boundaryInjection32, rawMatrixB32, localInverse32;
-        Runtime::ArrayView<const index> core, dependent;
         index owned = 0, n = 0;
         real relax = 1, wbapCenterWeight = 10;
         bool rotated = false;
@@ -25,7 +24,7 @@ namespace DNDS::CFV::Detail
         void ValidateDevice(Runtime::Device expected) const
         {
             Runtime::ValidateViewDevices(expected, offsets, neighbors, faces, boundaryOffsets, rotationActive,
-                                         matrixAInvB, vectorAInvB, secondary, boundaryInjection, rotation, core, dependent,
+                                         matrixAInvB, vectorAInvB, secondary, boundaryInjection, rotation,
                                          matrixAInvB32, vectorAInvB32, boundaryInjection32, rawMatrixB32,
                                          localInverse, localInverse32, faceSide);
         }
@@ -44,18 +43,6 @@ namespace DNDS::CFV::Detail
               rotationActive(p.rotationActive), faceSide(p.faceSide), matrices(p.matrixAInvB), vectors(p.vectorAInvB),
               injection(p.boundaryInjection), inverse(p.localInverse), rotation(p.rotation), n(p.n), relax(p.relax),
               rotated(p.rotated), triangle(p.inverseTriangle), faceCoupling(p.faceCoupling) {}
-    };
-    struct DeviceWorkSelection
-    {
-        Runtime::ArrayView<const index> rows;
-        index count = 0;
-        bool indirect = false;
-        void ValidateDevice(Runtime::Device expected) const
-        {
-            if (indirect)
-                rows.ValidateDevice(expected);
-        }
-        DNDS_DEVICE_CALLABLE index Cell(index i) const { return indirect ? rows(i, 0) : i; }
     };
     struct DeviceCharacteristicView
     {

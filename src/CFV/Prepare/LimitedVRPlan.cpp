@@ -47,17 +47,6 @@ namespace DNDS::CFV
             const index iCell = core[iRow];
             for (index entry = o(iCell, 0); entry < o(iCell + 1, 0); ++entry)
                 DNDS_check_throw_info(n(entry, 0) == UnInitIndex || n(entry, 0) < result._metrics.NumCell(), "LVR core depends on ghost input"); });
-        const auto selection = [](const auto &rows)
-        {
-            Runtime::Array<index> array(Runtime::RowLayout::Dense(index(rows.size()), 1));
-            auto write = array.Write();
-            const auto values = write.View<Runtime::FixedRows<1>>();
-            OMP::ForRows(0, index(rows.size()), [&](index iRow)
-                         { values(iRow, 0) = rows[iRow]; });
-            return array;
-        };
-        result._core = selection(result._partition.Core());
-        result._dependent = selection(result._partition.HaloDependent());
         return result;
     }
 }

@@ -10,7 +10,7 @@ namespace DNDS::CFV::Detail
     {
         R::ExecutionContext context;
         ReconstructionDeviceView plan;
-        DeviceWorkSelection selection;
+        Runtime::RowSelection selection;
         DevicePeriodicBlocks vectors;
         R::PairReadView<real> mean, input;
         R::ArrayView<const real> boundary;
@@ -23,7 +23,7 @@ namespace DNDS::CFV::Detail
     {
         R::ExecutionContext context;
         ReconstructionDeviceView plan;
-        DeviceWorkSelection selection;
+        Runtime::RowSelection selection;
         DevicePeriodicBlocks vectors;
         R::PairReadView<real> mean, input;
         R::ArrayView<const real> boundary;
@@ -54,8 +54,7 @@ namespace DNDS::CFV::Detail
                                   (!a.boundary.RowCount() || a.boundary.Width() == a.mean.owned.Width()) &&
                                   uniform(a.mean.owned) && uniform(a.mean.ghost) && uniform(a.input.owned) && uniform(a.input.ghost) &&
                                   uniform(a.boundary) && uniform(a.output) && a.status.RowCount() == 1 && a.status.Width() == 1 && a.status.data &&
-                                  a.selection.count >= 0 && a.selection.count <= p.owned &&
-                                  (!a.selection.indirect || (a.selection.rows.RowCount() >= a.selection.count && a.selection.rows.Width() == 1)) &&
+                                  a.selection.RowCount() >= 0 && a.selection.RowCount() <= p.owned &&
                                   p.offsets.RowCount() == p.owned + 1 && p.offsets.Width() == 1 && p.neighbors.Width() == 1 &&
                                   p.boundaryOffsets.RowCount() == p.neighbors.RowCount() + 1,
                               "CUDA reconstruction field, selection or index shape differs");

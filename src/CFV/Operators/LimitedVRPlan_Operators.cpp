@@ -41,9 +41,9 @@ namespace DNDS::CFV
         const auto o = offsets.View<R::FixedRows<1>>(), n = neighbors.View<R::FixedRows<1>>(), b = boundary.View<R::FixedRows<1>>();
         auto write = output.Owned().Write();
         const auto result = write.View<R::UniformTableRows>();
-        const auto &selected = region == ReconstructionRegion::HaloDependent ? _dependent : _core;
-        const auto rows = selected.Read();
-        const Detail::DeviceWorkSelection selection{rows.DynamicView(), region == ReconstructionRegion::All ? _metrics.NumCell() : selected.RowCount(), region != ReconstructionRegion::All};
+        const auto &selected = _regionRows.Get(region);
+        const auto rows = selected.indices.Read();
+        const Runtime::RowSelection selection{selected.shape, rows.View<Runtime::FixedRows<1>>()};
         Detail::BuildLimitedVRSeeds({o, n, b}, selection, scalar, gate, prior, result, parameters);
     }
     void LimitedVRPlan::ValidateMaximum(const FVField &input, const FVField &output, std::array<real, 3> caps, ReconstructionRegion region) const
@@ -71,9 +71,9 @@ namespace DNDS::CFV
         const auto o = offsets.View<R::FixedRows<1>>(), n = neighbors.View<R::FixedRows<1>>(), b = boundary.View<R::FixedRows<1>>();
         auto write = output.Owned().Write();
         const auto result = write.View<R::UniformTableRows>();
-        const auto &selected = region == ReconstructionRegion::HaloDependent ? _dependent : _core;
-        const auto rows = selected.Read();
-        const Detail::DeviceWorkSelection selection{rows.DynamicView(), region == ReconstructionRegion::All ? _metrics.NumCell() : selected.RowCount(), region != ReconstructionRegion::All};
+        const auto &selected = _regionRows.Get(region);
+        const auto rows = selected.indices.Read();
+        const Runtime::RowSelection selection{selected.shape, rows.View<Runtime::FixedRows<1>>()};
         Detail::LimitedVRMaximum({o, n, b}, selection, source, result, active, excludeBoundary, saturatedOnly, caps);
     }
 }

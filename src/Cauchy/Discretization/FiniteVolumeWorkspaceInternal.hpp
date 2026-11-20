@@ -587,7 +587,6 @@ namespace DNDS::Cauchy
         /// Device flux preparation owns only immutable descriptor scopes and
         /// reusable scratch. Durable means/coefficients are explicit operands.
         void BuildDeviceFlux();
-        const R::Array<index> &DeviceCellSelection(CFV::ReconstructionRegion) const;
         void ResetDeviceFluxStatus(R::EagerEngine &, const R::ExecutionStream &);
         void CheckDeviceFluxStatus();
         /// @see docs/architecture/CauchyDispatch.md (CUDA flux RHS).

@@ -30,13 +30,10 @@ namespace DNDS::CFV
         const auto device = placed->metrics.Device();
         placed->offsets = _data->offsets.To(device, context);
         placed->boundaryIds = _data->boundaryIds.To(device, context);
-        placed->core = _data->core.To(device, context);
-        placed->dependent = _data->dependent.To(device, context);
+        placed->regionRows.Place(context, "CFV/gradient");
         placed->weights = _data->weights.To(device, context);
         placed->offsets.SetName("CFV/gradient/offsets", DNDS_ALLOCATION_SITE());
         placed->boundaryIds.SetName("CFV/gradient/boundaryIds", DNDS_ALLOCATION_SITE());
-        placed->core.SetName("CFV/gradient/core", DNDS_ALLOCATION_SITE());
-        placed->dependent.SetName("CFV/gradient/dependent", DNDS_ALLOCATION_SITE());
         placed->weights.SetName("CFV/gradient/weights", DNDS_ALLOCATION_SITE());
         // Boundary coordinates are setup inputs, not device gradient operands.
         // The boundary-row count survives without retaining their CPU payload.

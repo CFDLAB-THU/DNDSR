@@ -1,4 +1,5 @@
 #pragma once
+#include "DNDS/Runtime/Array/RowSelection.hpp"
 
 #include "Cauchy/Discretization/FiniteVolumeStencil.hpp"
 #include "Cauchy/Discretization/RANSReconstruction.hpp"
@@ -10,7 +11,6 @@ namespace DNDS::Cauchy::CUDA
     using GradientInput = Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::TableRows>;
     using GradientOutput = Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::TableRows>;
     using GradientMeans = Runtime::PairReadView<real, Runtime::AccessBoundsChecks, Runtime::TableRows>;
-    using GradientIndices = Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
     using GradientStatus = Runtime::ArrayView<NumericalStatus, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
     struct GradientLimiterGeometry
     {
@@ -24,7 +24,7 @@ namespace DNDS::Cauchy::CUDA
     /// Barth extrema, matching the current generic CPU operator.
     void LimitPhysicalGradients(Runtime::ExecutionContext, GradientLimiterGeometry,
                                 GradientMeans, GradientInput source, GradientOutput destination,
-                                GradientIndices selected, int dimension, int vectorStart, bool barth, bool requireGhost = true);
+                                Runtime::RowSelection selected, int dimension, int vectorStart, bool barth, bool requireGhost = true);
 
     struct GradientPositivityParameters
     {
@@ -43,7 +43,7 @@ namespace DNDS::Cauchy::CUDA
      * finalizer merges summaries without rescanning cell fields.
      */
     void LimitPositivePhysicalGradients(Runtime::ExecutionContext, GradientLimiterGeometry,
-                                        GradientInput means, GradientOutput gradients, GradientIndices selected,
+                                        GradientInput means, GradientOutput gradients, Runtime::RowSelection selected,
                                         GradientPositivityParameters,
                                         ModalPositivitySummary partials);
     index GradientPositivitySummaryRows(index selectedCells);

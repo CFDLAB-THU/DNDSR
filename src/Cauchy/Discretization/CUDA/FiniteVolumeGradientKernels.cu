@@ -12,12 +12,12 @@ namespace DNDS::Cauchy::CUDA
     {
         template <int Components>
         __global__ void Barth(GradientLimiterGeometry geometry, GradientMeans means, GradientInput source,
-                              GradientOutput destination, GradientIndices selected, int dimension, int vectorStart, bool barth)
+                              GradientOutput destination, Runtime::RowSelection selected, int dimension, int vectorStart, bool barth)
         {
             const auto &stencil = geometry.stencil(0, 0);
             for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
             {
-                const index iCell = selected(iRow, 0);
+                const index iCell = selected.RowAt(iRow);
                 std::array<real, Components> lower{}, upper{}, positive{}, negative{};
                 for (int j = 0; j < Components; ++j)
                     lower[j] = upper[j] = means(iCell, j);
@@ -168,14 +168,14 @@ namespace DNDS::Cauchy::CUDA
         }
         template <int Components>
         __global__ void Positive(GradientLimiterGeometry geometry, GradientInput means, GradientOutput gradients,
-                                 GradientIndices selected, GradientPositivityParameters p, ModalPositivitySummary partials)
+                                 Runtime::RowSelection selected, GradientPositivityParameters p, ModalPositivitySummary partials)
         {
             NumericalStatus failure;
             index limited = 0;
             real minimum = 1;
             for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
             {
-                const index iCell = selected(iRow, 0);
+                const index iCell = selected.RowAt(iRow);
                 real beta = 1;
                 const auto status = PositiveCell<Components>(geometry, means, gradients, iCell, p, beta);
                 failure = PositivityReductionDetail::FirstFailure{}(failure, status);
@@ -214,7 +214,7 @@ namespace DNDS::Cauchy::CUDA
         }
     }
     void LimitPhysicalGradients(R::ExecutionContext context, GradientLimiterGeometry geometry, GradientMeans means,
-                                GradientInput source, GradientOutput destination, GradientIndices selected, int dimension, int vectorStart, bool barth, bool requireGhost)
+                                GradientInput source, GradientOutput destination, Runtime::RowSelection selected, int dimension, int vectorStart, bool barth, bool requireGhost)
     {
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && (dimension == 2 || dimension == 3), "CUDA gradient context/dimension differs");
         R::ValidateViewDevices(context.device, means, source, destination, selected);
@@ -231,7 +231,7 @@ namespace DNDS::Cauchy::CUDA
             if (requireGhost || means.ghost.RowCount())
                 CheckTable(means.ghost, geometry.allCells - owned, components);
         }
-        R::CheckKernelArgumentBudget<GradientLimiterGeometry, GradientMeans, GradientInput, GradientOutput, GradientIndices, int, int, bool>();
+        R::CheckKernelArgumentBudget<GradientLimiterGeometry, GradientMeans, GradientInput, GradientOutput, Runtime::RowSelection, int, int, bool>();
         if (!selected.RowCount())
             return;
         const auto stream = ::DNDS::Runtime::CUDAStream(context);
@@ -253,7 +253,7 @@ namespace DNDS::Cauchy::CUDA
         CheckLaunch();
     }
     void LimitPositivePhysicalGradients(R::ExecutionContext context, GradientLimiterGeometry geometry, GradientInput means,
-                                        GradientOutput gradients, GradientIndices selected, GradientPositivityParameters p,
+                                        GradientOutput gradients, Runtime::RowSelection selected, GradientPositivityParameters p,
                                         ModalPositivitySummary partials)
     {
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && (p.dimension == 2 || p.dimension == 3), "CUDA gradient PP context/dimension differs");
@@ -269,7 +269,7 @@ namespace DNDS::Cauchy::CUDA
                               "unsupported CUDA gradient PP profile/shape");
         CheckTable(means, owned, components);
         CheckTable(gradients, owned, components * p.dimension);
-        R::CheckKernelArgumentBudget<GradientLimiterGeometry, GradientInput, GradientOutput, GradientIndices, GradientPositivityParameters, ModalPositivitySummary>();
+        R::CheckKernelArgumentBudget<GradientLimiterGeometry, GradientInput, GradientOutput, Runtime::RowSelection, GradientPositivityParameters, ModalPositivitySummary>();
         if (!selected.RowCount())
             return;
         const auto stream = ::DNDS::Runtime::CUDAStream(context);

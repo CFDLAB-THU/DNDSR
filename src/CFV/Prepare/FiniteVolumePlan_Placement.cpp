@@ -1,5 +1,7 @@
 #include "CFV/Plans/FiniteVolumePlan.hpp"
 #include "CFV/Detail/ReconstructionData.hpp"
+#include "CFV/Detail/CellRegionRows.hpp"
+#include "DNDS/Runtime/Execution/KernelViews.hpp"
 #include "DNDS/MPI/CollectiveStage.hpp"
 #include "CFV/Detail/ReconstructionDeviceKernels.hpp"
 #include "CFV/Detail/CharacteristicKernels.hpp"
@@ -42,6 +44,7 @@ namespace DNDS::CFV
             std::vector<R::Array<uint8_t>::ReadLease> byteReads;
             R::Array<real> empty;
             ReconstructionDeviceView view;
+            R::RowSelection coreRows, dependentRows;
             FiniteVolumeHostView metricView;
             ReconstructionBasisHostView basisView;
             ReconstructionPointBasisView pointBasisView;
@@ -160,13 +163,12 @@ namespace DNDS::CFV
                                       !Algebra::Detail::Overlaps(coefficients.Owned().Storage(), work.temporary.Owned().Storage()),
                                   "device coefficient state and scratch are incompatible or alias");
         }
-        Detail::DeviceWorkSelection Selection(const Detail::ReconstructionPlacementData &data, ReconstructionRegion region)
+        Runtime::RowSelection Selection(const Detail::ReconstructionPlacementData &data, ReconstructionRegion region)
         {
             if (region == ReconstructionRegion::All)
-                return {{}, data.view.owned, false};
+                return R::RowSelectionShape::AllRows(data.view.owned);
             DNDS_check_throw_info(region == ReconstructionRegion::Core || region == ReconstructionRegion::HaloDependent, "invalid device work region");
-            const auto rows = region == ReconstructionRegion::Core ? data.view.core : data.view.dependent;
-            return {rows, rows.rows, true};
+            return region == ReconstructionRegion::Core ? data.coreRows : data.dependentRows;
         }
         void ValidateDeviceStream(const VariationalReconstructionPlan &plan, const R::ExecutionStream &stream)
         {
@@ -353,18 +355,11 @@ namespace DNDS::CFV
         for (bool core : {true, false})
         {
             const auto &list = core ? host.workPartition->Core() : host.workPartition->HaloDependent();
-            R::Array<index> rows(R::RowLayout::Dense(list.size(), 1));
-            {
-                auto write = rows.Write();
-                const auto output = write.View();
-                OMP::ForRows(0, index(list.size()), [&](index iRow)
-                             { output(iRow, 0) = list[size_t(iRow)]; });
-            }
-            const auto selected = result->Add(core ? "core" : "dependent", rows, context);
-            if (core)
-                view.core = selected;
-            else
-                view.dependent = selected;
+            auto prepared = Detail::CellRegionRows::Prepare(list, view.owned);
+            auto &selection = core ? result->coreRows : result->dependentRows;
+            selection.shape = prepared.shape;
+            if (prepared.shape.form == R::RowSelectionForm::IndexList)
+                selection.indices = R::ProjectKernelView<R::FixedRows<1>>(result->Add(core ? "core" : "dependent", prepared.indices, context));
         }
         const auto &metric = *Metrics()._data;
         result->geometryStamp = metric.stamp;
@@ -878,20 +873,20 @@ namespace DNDS::CFV
 #ifndef DNDS_USE_CUDA
     namespace Detail
     {
-        ReconstructionSweepResources InspectStagedJacobi(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
+        ReconstructionSweepResources InspectStagedJacobi(R::ExecutionContext, ReconstructionDeviceView, Runtime::RowSelection, DevicePeriodicBlocks,
                                                          R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>,
                                                          R::ArrayView<const int>, const ReconstructionSweepLaunch &, ReconstructionSweepArithmetic)
         {
             DNDS_check_throw_info(false, "stage-once CUDA VR resource inspection unavailable in this build");
             return {};
         }
-        void LaunchStagedJacobi(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
+        void LaunchStagedJacobi(R::ExecutionContext, ReconstructionDeviceView, Runtime::RowSelection, DevicePeriodicBlocks,
                                 R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>,
                                 R::ArrayView<const int>, const ReconstructionSweepLaunch &, ReconstructionSweepArithmetic)
         {
             DNDS_check_throw_info(false, "stage-once CUDA VR unavailable in this build");
         }
-        void LaunchLimitedStagedJacobi(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
+        void LaunchLimitedStagedJacobi(R::ExecutionContext, ReconstructionDeviceView, Runtime::RowSelection, DevicePeriodicBlocks,
                                        R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>,
                                        R::ArrayView<const int>, R::ArrayView<const real>, R::ArrayView<const real>, const ReconstructionSweepLaunch &)
         {
@@ -903,35 +898,35 @@ namespace DNDS::CFV
         }
         bool FP64TensorCoreAvailable(R::Device) { return false; }
         bool TF32TensorCoreAvailable(R::Device) { return false; }
-        void LaunchJacobiTF32(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
+        void LaunchJacobiTF32(R::ExecutionContext, ReconstructionDeviceView, Runtime::RowSelection, DevicePeriodicBlocks,
                               R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>, R::ArrayView<const int>)
         {
             DNDS_check_throw_info(false, "CUDA TF32 reconstruction unavailable");
         }
-        void LaunchJacobi(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks, R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>, R::ArrayView<const int>)
+        void LaunchJacobi(R::ExecutionContext, ReconstructionDeviceView, Runtime::RowSelection, DevicePeriodicBlocks, R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>, R::ArrayView<const int>)
         {
             DNDS_check_throw_info(false, "CUDA Jacobi unavailable");
         }
-        void LaunchJacobiMatrixShared(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks, R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>, R::ArrayView<const int>)
+        void LaunchJacobiMatrixShared(R::ExecutionContext, ReconstructionDeviceView, Runtime::RowSelection, DevicePeriodicBlocks, R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>, R::ArrayView<const int>)
         {
             DNDS_check_throw_info(false, "CUDA matrix-shared Jacobi unavailable");
         }
-        void LaunchValidateJacobiResult(R::ExecutionContext, DeviceWorkSelection, R::ArrayView<const real>, R::ArrayView<int>)
+        void LaunchValidateJacobiResult(R::ExecutionContext, Runtime::RowSelection, R::ArrayView<const real>, R::ArrayView<int>)
         {
             DNDS_check_throw_info(false, "CUDA finite-result check unavailable");
         }
-        void LaunchJacobiFullAccumulation(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
+        void LaunchJacobiFullAccumulation(R::ExecutionContext, ReconstructionDeviceView, Runtime::RowSelection, DevicePeriodicBlocks,
                                           R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<real>, R::ArrayView<int>, bool)
         {
             DNDS_check_throw_info(false, "CUDA full accumulation Jacobi unavailable");
         }
-        void LaunchLimitedJacobi(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks,
+        void LaunchLimitedJacobi(R::ExecutionContext, ReconstructionDeviceView, Runtime::RowSelection, DevicePeriodicBlocks,
                                  R::PairReadView<real>, R::PairReadView<real>, R::ArrayView<const real>, R::ArrayView<const real>,
                                  R::ArrayView<const real>, R::ArrayView<real>, R::ArrayView<int>, bool, const ReconstructionSweepLaunch &)
         {
             DNDS_check_throw_info(false, "CUDA limited Jacobi unavailable");
         }
-        void LaunchWBAP(R::ExecutionContext, ReconstructionDeviceView, DeviceWorkSelection, DevicePeriodicBlocks, R::PairReadView<real>, R::ArrayView<real>, R::ArrayView<real>, DeviceCharacteristicView, R::ArrayView<const real>, R::ArrayView<int>, index, index, real, index)
+        void LaunchWBAP(R::ExecutionContext, ReconstructionDeviceView, Runtime::RowSelection, DevicePeriodicBlocks, R::PairReadView<real>, R::ArrayView<real>, R::ArrayView<real>, DeviceCharacteristicView, R::ArrayView<const real>, R::ArrayView<int>, index, index, real, index)
         {
             DNDS_check_throw_info(false, "CUDA WBAP unavailable");
         }

@@ -115,7 +115,11 @@ namespace DNDS::CFV
                 : data(std::move(values)), mesh(std::move(meshRead)), vectorStarts(work.periodicVectorStarts)
             {
                 const auto &rows = region == ReconstructionRegion::Core ? data->workPartition->Core() : data->workPartition->HaloDependent();
-                selection.rows = {rows.data(), index(rows.size())};
+                selection.rows.shape = region == ReconstructionRegion::All    ? R::RowSelectionShape::AllRows(data->metrics.NumCell())
+                                       : region == ReconstructionRegion::Core ? data->coreRows
+                                                                              : data->dependentRows;
+                if (selection.rows.shape.form == R::RowSelectionForm::IndexList)
+                    selection.rows.indices = {rows.data(), nullptr, index(rows.size()), 1, 1, nullptr, R::RowLayoutKind::Table, R::Device::Host()};
                 selection.coreFirstPosition = {data->coreFirstPosition.data(), index(data->coreFirstPosition.size())};
                 selection.workerRanges = data->hostWorkers.HostView();
                 selection.vectorStarts = {vectorStarts.data(), index(vectorStarts.size())};

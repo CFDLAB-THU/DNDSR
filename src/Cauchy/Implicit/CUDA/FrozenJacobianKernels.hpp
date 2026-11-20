@@ -1,4 +1,5 @@
 #pragma once
+#include "DNDS/Runtime/Array/RowSelection.hpp"
 
 #include "Cauchy/Implicit/CUDA/LinearBlockKernels.hpp"
 #include "Cauchy/Implicit/JacobianGeometry.hpp"
@@ -45,7 +46,7 @@ namespace DNDS::Cauchy::CUDA
     /// block. Status is per owned cell. No diagonal, source or BC work is done:
     /// those contributions belong to the diagonal-preparation producer.
     void AssembleFrozenJacobian(Runtime::ExecutionContext context, const FrozenJacobianInput &snapshot,
-                                LinearIndexRows selected, Algebra::BlockMatrixArrayView<real> output,
+                                Runtime::RowSelection selected, Algebra::BlockMatrixArrayView<real> output,
                                 FrozenJacobianStatus status);
 
     /// Evaluate y=A*x (jacobi=false) or D^-1*(b-Aoff*x) (jacobi=true) directly
@@ -58,7 +59,7 @@ namespace DNDS::Cauchy::CUDA
     /// Status must initially contain success; failures are sticky until an
     /// explicit caller reset. A failed row produces NaNs rather than stale data.
     void ApplyFrozenJacobian(Runtime::ExecutionContext context, const FrozenJacobianInput &snapshot,
-                             LinearIndexRows selected, MatrixReadRows diagonal, bool fullDiagonal,
+                             Runtime::RowSelection selected, MatrixReadRows diagonal, bool fullDiagonal,
                              VectorReadRows rhs, VectorReadRows owned, VectorReadRows ghost,
                              LinearWriteRows output, FrozenJacobianStatus status, bool jacobi, bool rowMajorBlocks = false);
 }

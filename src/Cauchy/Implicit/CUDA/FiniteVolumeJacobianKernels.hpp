@@ -41,7 +41,7 @@ namespace DNDS::Cauchy::CUDA
      */
     void InitializePerfectGasFluxJacobianDiagonal(Runtime::ExecutionContext context, JacobianCellMetrics cells,
                                                   LinearReadRows inverseTau, MatrixWriteRows diagonal, JacobianStatus status,
-                                                  LinearIndexRows selected, const RigidFrameParameters &frame,
+                                                  Runtime::RowSelection selected, const RigidFrameParameters &frame,
                                                   real physicalMass, real scale, int components, bool fullBlock, bool rowMajorBlocks = false);
 
     /** @brief Frozen centered face inputs of the approximate diagonal.
@@ -77,6 +77,6 @@ namespace DNDS::Cauchy::CUDA
      * Final component projection acts on the complete accumulated diagonal.
      */
     void AssemblePerfectGasFluxJacobian(Runtime::ExecutionContext context, const JacobianFaceInput &input,
-                                        LinearIndexRows selected, MatrixWriteRows diagonal, bool fullBlock,
+                                        Runtime::RowSelection selected, MatrixWriteRows diagonal, bool fullBlock,
                                         LinearWriteRows magnitudes, JacobianStatus status);
 }

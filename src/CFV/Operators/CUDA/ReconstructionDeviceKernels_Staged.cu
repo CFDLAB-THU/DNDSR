@@ -35,8 +35,7 @@ namespace DNDS::CFV::Detail
 #endif
             DNDS_check_throw_info(args.context.device.space == R::MemorySpace::CUDA && plan.quantized == quantized && !(quantized && plan.raw) &&
                                       plan.n > 0 && plan.n <= 19 && args.output.Width() % plan.n == 0 &&
-                                      args.selection.count >= 0 && args.selection.count <= plan.owned &&
-                                      (!args.selection.indirect || args.selection.rows.RowCount() >= args.selection.count) &&
+                                      args.selection.RowCount() >= 0 && args.selection.RowCount() <= plan.owned &&
                                       args.mean.owned.Width() >= 1 && args.output.Width() <= INT_MAX / 4 &&
                                       matricesOK &&
                                       (quantized ? table(plan.vectorAInvB32, plan.n) && table(plan.boundaryInjection32, plan.n)
@@ -67,7 +66,7 @@ namespace DNDS::CFV::Detail
                                       "optimized LVR target/penalty shape differs");
             R::ValidateViewDevices(args.context.device, plan, args.selection, args.vectors, args.mean, args.input, args.boundary,
                                    args.output, args.status, args.target, args.alpha);
-            if (!args.selection.count)
+            if (!args.selection.RowCount())
                 return {};
             ReconstructionSweepResources resource;
             switch (arithmetic)
@@ -107,28 +106,28 @@ namespace DNDS::CFV::Detail
             return resource;
         }
     }
-    void LaunchStagedJacobi(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection,
+    void LaunchStagedJacobi(R::ExecutionContext context, ReconstructionDeviceView plan, Runtime::RowSelection selection,
                             DevicePeriodicBlocks vectors, R::PairReadView<real> mean, R::PairReadView<real> input,
                             R::ArrayView<const real> boundary, R::ArrayView<real> output, R::ArrayView<const int> status,
                             const ReconstructionSweepLaunch &options, ReconstructionSweepArithmetic arithmetic)
     {
         (void)Dispatch({context, plan, selection, vectors, mean, input, boundary, output, status, options, true}, arithmetic);
     }
-    void LaunchLimitedStagedJacobi(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection,
+    void LaunchLimitedStagedJacobi(R::ExecutionContext context, ReconstructionDeviceView plan, Runtime::RowSelection selection,
                                    DevicePeriodicBlocks vectors, R::PairReadView<real> mean, R::PairReadView<real> input,
                                    R::ArrayView<const real> boundary, R::ArrayView<real> output, R::ArrayView<const int> status,
                                    R::ArrayView<const real> target, R::ArrayView<const real> alpha, const ReconstructionSweepLaunch &options)
     {
         (void)Dispatch({context, plan, selection, vectors, mean, input, boundary, output, status, options, true, target, alpha, true}, ReconstructionSweepArithmetic::FP64);
     }
-    ReconstructionSweepResources InspectStagedJacobi(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection,
+    ReconstructionSweepResources InspectStagedJacobi(R::ExecutionContext context, ReconstructionDeviceView plan, Runtime::RowSelection selection,
                                                      DevicePeriodicBlocks vectors, R::PairReadView<real> mean, R::PairReadView<real> input,
                                                      R::ArrayView<const real> boundary, R::ArrayView<real> output, R::ArrayView<const int> status,
                                                      const ReconstructionSweepLaunch &options, ReconstructionSweepArithmetic arithmetic)
     {
         return Dispatch({context, plan, selection, vectors, mean, input, boundary, output, status, options, false}, arithmetic);
     }
-    void LaunchJacobiTF32(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection,
+    void LaunchJacobiTF32(R::ExecutionContext context, ReconstructionDeviceView plan, Runtime::RowSelection selection,
                           DevicePeriodicBlocks vectors, R::PairReadView<real> mean, R::PairReadView<real> input,
                           R::ArrayView<const real> boundary, R::ArrayView<real> output, R::ArrayView<const int> status)
     {

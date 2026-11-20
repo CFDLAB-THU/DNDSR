@@ -9,17 +9,17 @@ namespace DNDS::CFV::Detail
     namespace R = Runtime;
     namespace
     {
-        __global__ void Seeds(LimitedVRStencilView stencil, DeviceWorkSelection selection, LVRField scalars, LVRField gates,
+        __global__ void Seeds(LimitedVRStencilView stencil, Runtime::RowSelection selection, LVRField scalars, LVRField gates,
                               LVRInput previous, LVROutput output, LimitedVRKernelParameters settings)
         {
-            for (index iWork = index(blockIdx.x) * blockDim.x + threadIdx.x; iWork < selection.count; iWork += index(gridDim.x) * blockDim.x)
-                Math::BuildLimitedVRSeedCell(stencil, scalars, gates, previous, output, settings, selection.Cell(iWork));
+            for (index iWork = index(blockIdx.x) * blockDim.x + threadIdx.x; iWork < selection.RowCount(); iWork += index(gridDim.x) * blockDim.x)
+                Math::BuildLimitedVRSeedCell(stencil, scalars, gates, previous, output, settings, selection.RowAt(iWork));
         }
-        __global__ void Maximum(LimitedVRStencilView stencil, DeviceWorkSelection selection, LVRField input, LVROutput output,
+        __global__ void Maximum(LimitedVRStencilView stencil, Runtime::RowSelection selection, LVRField input, LVROutput output,
                                 std::array<bool, 3> active, bool excludeBoundary, bool saturatedOnly, std::array<real, 3> caps)
         {
-            for (index iWork = index(blockIdx.x) * blockDim.x + threadIdx.x; iWork < selection.count; iWork += index(gridDim.x) * blockDim.x)
-                Math::LimitedVRMaximumCell(stencil, input, output, selection.Cell(iWork), active, excludeBoundary, saturatedOnly, caps);
+            for (index iWork = index(blockIdx.x) * blockDim.x + threadIdx.x; iWork < selection.RowCount(); iWork += index(gridDim.x) * blockDim.x)
+                Math::LimitedVRMaximumCell(stencil, input, output, selection.RowAt(iWork), active, excludeBoundary, saturatedOnly, caps);
         }
         void ValidateOutput(LimitedVRStencilView stencil, LVROutput output)
         {
@@ -33,7 +33,7 @@ namespace DNDS::CFV::Detail
         }
         unsigned Blocks(index rows) { return unsigned(std::min<index>((rows + 127) / 128, 1024)); }
     }
-    void LaunchLimitedVRSeeds(R::ExecutionContext context, LimitedVRStencilView stencil, DeviceWorkSelection selection,
+    void LaunchLimitedVRSeeds(R::ExecutionContext context, LimitedVRStencilView stencil, Runtime::RowSelection selection,
                               LVRField scalars, LVRField gates, LVRInput previous, LVROutput output, LimitedVRKernelParameters settings)
     {
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA, "CUDA LVR seeds require a CUDA context");
@@ -42,13 +42,13 @@ namespace DNDS::CFV::Detail
         ValidateInput(scalars, output.RowCount(), 2);
         ValidateInput(gates, output.RowCount(), 3);
         DNDS_check_throw_info(previous.RowCount() == output.RowCount() && previous.Width() == 2, "LVR previous seed shape differs");
-        R::CheckKernelArgumentBudget<LimitedVRStencilView, DeviceWorkSelection, LVRField, LVRField, LVRInput, LVROutput, LimitedVRKernelParameters>();
-        if (!selection.count)
+        R::CheckKernelArgumentBudget<LimitedVRStencilView, Runtime::RowSelection, LVRField, LVRField, LVRInput, LVROutput, LimitedVRKernelParameters>();
+        if (!selection.RowCount())
             return;
-        Seeds<<<Blocks(selection.count), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(stencil, selection, scalars, gates, previous, output, settings);
+        Seeds<<<Blocks(selection.RowCount()), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(stencil, selection, scalars, gates, previous, output, settings);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA LVR seed launch failed");
     }
-    void LaunchLimitedVRMaximum(R::ExecutionContext context, LimitedVRStencilView stencil, DeviceWorkSelection selection,
+    void LaunchLimitedVRMaximum(R::ExecutionContext context, LimitedVRStencilView stencil, Runtime::RowSelection selection,
                                 LVRField input, LVROutput output, std::array<bool, 3> active, bool excludeBoundary,
                                 bool saturatedOnly, std::array<real, 3> caps)
     {
@@ -56,10 +56,10 @@ namespace DNDS::CFV::Detail
         R::ValidateViewDevices(context.device, stencil, selection, input, output);
         ValidateOutput(stencil, output);
         ValidateInput(input, output.RowCount(), 3);
-        R::CheckKernelArgumentBudget<LimitedVRStencilView, DeviceWorkSelection, LVRField, LVROutput, std::array<bool, 3>, bool, bool, std::array<real, 3>>();
-        if (!selection.count)
+        R::CheckKernelArgumentBudget<LimitedVRStencilView, Runtime::RowSelection, LVRField, LVROutput, std::array<bool, 3>, bool, bool, std::array<real, 3>>();
+        if (!selection.RowCount())
             return;
-        Maximum<<<Blocks(selection.count), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(stencil, selection, input, output, active, excludeBoundary, saturatedOnly, caps);
+        Maximum<<<Blocks(selection.RowCount()), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(stencil, selection, input, output, active, excludeBoundary, saturatedOnly, caps);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA LVR maximum launch failed");
     }
 }

@@ -22,11 +22,11 @@ namespace DNDS::CFV::Detail
     // Stream-ordered after the update: never read and write status in the same
     // grid. Check only selected results, allowing unused FP64 inputs/rows to
     // exceed the narrower compute range. Commit remains guarded by this status.
-    __global__ void ValidateJacobiResult(DeviceWorkSelection selection, R::ArrayView<const real> output, R::ArrayView<int> status)
+    __global__ void ValidateJacobiResult(Runtime::RowSelection selection, R::ArrayView<const real> output, R::ArrayView<int> status)
     {
-        for (index iWork = blockIdx.x; iWork < selection.count; iWork += gridDim.x)
+        for (index iWork = blockIdx.x; iWork < selection.RowCount(); iWork += gridDim.x)
             for (index i = threadIdx.x; i < output.width; i += blockDim.x)
-                if (!isfinite(output(selection.Cell(iWork), i)))
+                if (!isfinite(output(selection.RowAt(iWork), i)))
                     atomicExch(&status(0, 0), 1);
     }
     __device__ real Biway(real center, real other, real epsilon)
@@ -49,18 +49,18 @@ namespace DNDS::CFV::Detail
             : offsets(p.offsets), neighbors(p.neighbors), faces(p.faces), secondary(p.secondary), rotation(p.rotation),
               rotationActive(p.rotationActive), n(p.n), wbapCenterWeight(p.wbapCenterWeight), rotated(p.rotated) {}
     };
-    __global__ void WBAP(WBAPView plan, DeviceWorkSelection selection, DevicePeriodicBlocks vectors,
+    __global__ void WBAP(WBAPView plan, Runtime::RowSelection selection, DevicePeriodicBlocks vectors,
                          R::PairReadView<real> input, R::ArrayView<real> output, R::ArrayView<real> scratch,
                          DeviceCharacteristicView transform, R::ArrayView<const real> indicator, R::ArrayView<int> status,
                          index begin, index modes, real threshold, real epsilon)
     {
         const index components = output.width / plan.n, count = modes * components;
         const auto iBlock = index(blockIdx.x);
-        for (index iWork = iBlock; iWork < selection.count; iWork += gridDim.x)
+        for (index iWork = iBlock; iWork < selection.RowCount(); iWork += gridDim.x)
         {
             if (status(0, 0))
                 return;
-            const auto iCell = selection.Cell(iWork);
+            const auto iCell = selection.RowAt(iWork);
             for (index i = threadIdx.x; i < output.width; i += blockDim.x)
                 output(iCell, i) = input(iCell, i);
             __syncthreads();
@@ -187,7 +187,7 @@ namespace DNDS::CFV::Detail
         for (index i = index(blockIdx.x) * blockDim.x + threadIdx.x; i < output.rows * output.width; i += index(gridDim.x) * blockDim.x)
             output(i / output.width, i % output.width) = input(i / output.width, i % output.width);
     }
-    void LaunchJacobi(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection, DevicePeriodicBlocks blocks,
+    void LaunchJacobi(R::ExecutionContext context, ReconstructionDeviceView plan, Runtime::RowSelection selection, DevicePeriodicBlocks blocks,
                       R::PairReadView<real> mean, R::PairReadView<real> input, R::ArrayView<const real> boundary, R::ArrayView<real> output, R::ArrayView<const int> status)
     {
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA, "CUDA Jacobi requires a CUDA context");
@@ -195,7 +195,7 @@ namespace DNDS::CFV::Detail
         R::CheckKernelArgumentBudget<RawReconstructionSweepView, decltype(selection), decltype(blocks), decltype(mean),
                                      decltype(input), decltype(boundary), decltype(output), decltype(status),
                                      R::ArrayView<const real>, R::ArrayView<const real>>();
-        if (!selection.count)
+        if (!selection.RowCount())
             return;
         const GeneralSweepArguments args{context, plan, selection, blocks, mean, input, boundary, output, status, {}, {}};
         if (plan.quantized)
@@ -204,15 +204,15 @@ namespace DNDS::CFV::Detail
             RunGeneralFP64(args);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA Jacobi launch failed");
     }
-    void LaunchValidateJacobiResult(R::ExecutionContext context, DeviceWorkSelection selection,
+    void LaunchValidateJacobiResult(R::ExecutionContext context, Runtime::RowSelection selection,
                                     R::ArrayView<const real> output, R::ArrayView<int> status)
     {
         R::ValidateViewDevices(context.device, selection, output, status);
-        if (selection.count)
-            ValidateJacobiResult<<<unsigned(std::min<index>(selection.count, 256)), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(selection, output, status);
+        if (selection.RowCount())
+            ValidateJacobiResult<<<unsigned(std::min<index>(selection.RowCount(), 256)), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(selection, output, status);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA Jacobi finite-result check failed");
     }
-    void LaunchJacobiFullAccumulation(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection,
+    void LaunchJacobiFullAccumulation(R::ExecutionContext context, ReconstructionDeviceView plan, Runtime::RowSelection selection,
                                       DevicePeriodicBlocks blocks, R::PairReadView<real> mean, R::PairReadView<real> input,
                                       R::ArrayView<const real> boundary, R::ArrayView<real> output, R::ArrayView<int> status, bool floatFloat)
     {
@@ -225,20 +225,20 @@ namespace DNDS::CFV::Detail
         R::CheckKernelArgumentBudget<RawReconstructionSweepView, decltype(selection), decltype(blocks), decltype(mean),
                                      decltype(input), decltype(boundary), decltype(output), decltype(status),
                                      R::ArrayView<const real>, R::ArrayView<const real>>();
-        if (!selection.count)
+        if (!selection.RowCount())
             return;
         LaunchStagedJacobi(context, plan, selection, blocks, mean, input, boundary, output, status.ConstView(), {},
                            floatFloat ? ReconstructionSweepArithmetic::FP32FloatFloatAccumulation : ReconstructionSweepArithmetic::FP32FullAccumulation);
         LaunchValidateJacobiResult(context, selection, output.ConstView(), status);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "full accumulation CUDA Jacobi launch failed");
     }
-    void LaunchJacobiMatrixShared(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection,
+    void LaunchJacobiMatrixShared(R::ExecutionContext context, ReconstructionDeviceView plan, Runtime::RowSelection selection,
                                   DevicePeriodicBlocks blocks, R::PairReadView<real> mean, R::PairReadView<real> input,
                                   R::ArrayView<const real> boundary, R::ArrayView<real> output, R::ArrayView<const int> status)
     {
         LaunchStagedJacobi(context, plan, selection, blocks, mean, input, boundary, output, status, {}, ReconstructionSweepArithmetic::FP64MatrixShared);
     }
-    void LaunchLimitedJacobi(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection,
+    void LaunchLimitedJacobi(R::ExecutionContext context, ReconstructionDeviceView plan, Runtime::RowSelection selection,
                              DevicePeriodicBlocks blocks, R::PairReadView<real> mean, R::PairReadView<real> input,
                              R::ArrayView<const real> boundary, R::ArrayView<const real> target, R::ArrayView<const real> alpha,
                              R::ArrayView<real> output, R::ArrayView<int> status, bool pipeline, const ReconstructionSweepLaunch &options)
@@ -249,7 +249,7 @@ namespace DNDS::CFV::Detail
                               "CUDA limited Jacobi penalty/target shape mismatch");
         R::CheckKernelArgumentBudget<RawReconstructionSweepView, decltype(selection), decltype(blocks), decltype(mean), decltype(input),
                                      decltype(boundary), decltype(output), decltype(status), decltype(target), decltype(alpha)>();
-        if (!selection.count)
+        if (!selection.RowCount())
             return;
         // A separate stream-ordered validation pass avoids a status read/write
         // race between cell blocks and prevents partial publication on error.
@@ -260,7 +260,7 @@ namespace DNDS::CFV::Detail
             RunGeneralLimited({context, plan, selection, blocks, mean, input, boundary, output, status.ConstView(), target, alpha});
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA limited Jacobi launch failed");
     }
-    void LaunchWBAP(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection, DevicePeriodicBlocks blocks,
+    void LaunchWBAP(R::ExecutionContext context, ReconstructionDeviceView plan, Runtime::RowSelection selection, DevicePeriodicBlocks blocks,
                     R::PairReadView<real> input, R::ArrayView<real> output, R::ArrayView<real> scratch, DeviceCharacteristicView transform,
                     R::ArrayView<const real> indicator, R::ArrayView<int> status, index begin, index modes, real threshold, index blocksCount)
     {
@@ -274,7 +274,7 @@ namespace DNDS::CFV::Detail
         // when recovering after an observed error. No host read per submission.
         if (indicator.rows)
             ValidateIndicator<<<unsigned(std::min<index>(256, (indicator.rows + 127) / 128)), 128, 0, stream>>>(indicator, status);
-        if (selection.count)
+        if (selection.RowCount())
             WBAP<<<unsigned(blocksCount), 128, 0, stream>>>(WBAPView(plan), selection, blocks, input, output, scratch, transform, indicator, status, begin, modes, threshold, std::pow(verySmallReal, .25));
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA WBAP launch failed");
     }

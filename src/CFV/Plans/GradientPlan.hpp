@@ -1,4 +1,5 @@
 #pragma once
+#include "CFV/Detail/CellRegionRows.hpp"
 
 #include "CFV/Plans/FiniteVolumePlan.hpp"
 
@@ -78,11 +79,11 @@ namespace DNDS::CFV
             FiniteVolumePlan metrics;
             Geom::EntityWorkPartition partition;
             Runtime::Array<index> offsets, boundaryIds;
-            Runtime::Array<index> core, dependent;
+            Detail::ReconstructionRegionRows regionRows;
             Runtime::Array<real> weights;
             std::vector<BoundaryQuadraturePoint> boundary;
             index boundaryCount = 0;
-            Data(FiniteVolumePlan plan) : metrics(std::move(plan)), partition(metrics.CellWorkPartition()) {}
+            Data(FiniteVolumePlan plan) : metrics(std::move(plan)), partition(metrics.CellWorkPartition()), regionRows(partition, metrics.NumCell()) {}
         };
         std::shared_ptr<const Data> _data;
         explicit GradientPlan(std::shared_ptr<const Data> data) : _data(std::move(data)) {}

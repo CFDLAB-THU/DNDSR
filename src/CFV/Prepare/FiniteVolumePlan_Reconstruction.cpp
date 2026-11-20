@@ -102,6 +102,8 @@ namespace DNDS::CFV
             data = std::make_shared<Detail::ReconstructionData>(metrics, settings, capabilities);
             const bool needInverse = capabilities.sweeps || capabilities.localPreconditioner || capabilities.inverseDiagnostics;
             data->workPartition.emplace(metrics.CellWorkPartition());
+            data->coreRows = Runtime::RowSelectionShape::FromIndices(data->workPartition->Core(), metrics.NumCell());
+            data->dependentRows = Runtime::RowSelectionShape::FromIndices(data->workPartition->HaloDependent(), metrics.NumCell());
             const int n = data->n, dim = geometry->dim, degree = settings.maxOrder;
             const Math::TaylorBasis polynomial(dim, degree);
             const FaceSystemLayout faceSystem(n, capabilities);

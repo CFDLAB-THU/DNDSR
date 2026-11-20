@@ -17,8 +17,7 @@ namespace DNDS::CFV
         result._offsets = _offsets.To(device, context);
         result._neighbors = _neighbors.To(device, context);
         result._boundary = _boundary.To(device, context);
-        result._core = _core.To(device, context);
-        result._dependent = _dependent.To(device, context);
+        result._regionRows.Place(context, "CFV/limitedVR");
         result._empty = Runtime::Array<real>(Runtime::RowLayout::Dense(0, 0), device);
         return result;
     }

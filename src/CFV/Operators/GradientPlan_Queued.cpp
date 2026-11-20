@@ -55,13 +55,12 @@ namespace DNDS::CFV
         // Retain the canonical incidence placement and source generation.
         // Neither topology nor periodic metadata is uploaded during submission.
         auto geometry = std::make_shared<FiniteVolumeTopologyRead>(_data->metrics.AcquireTopologyRead());
-        const auto &selected = region == ReconstructionRegion::HaloDependent ? _data->dependent : _data->core;
-        const index count = region == ReconstructionRegion::All ? _data->metrics.NumCell() : selected.RowCount();
+        const auto &selected = _data->regionRows.Get(region);
         const int dimension = _data->metrics.Dimension();
-        R::SubmitArrays(engine, stream, [geometry, region, count, dimension](R::ExecutionContext context, auto offsets, auto boundaryIds, auto weights, auto codes, auto parameters, auto rows, auto owned, auto ghost, auto boundary, auto starts, auto output)
+        R::SubmitArrays(engine, stream, [geometry, shape = selected.shape, dimension](R::ExecutionContext context, auto offsets, auto boundaryIds, auto weights, auto codes, auto parameters, auto rows, auto owned, auto ghost, auto boundary, auto starts, auto output)
                         {
                             const Detail::GradientKernelView plan{offsets, boundaryIds, weights, geometry->View(), {codes, parameters}, dimension};
-                            const Detail::DeviceWorkSelection selection{rows.DynamicView(), count, region != ReconstructionRegion::All};
+                            const Runtime::RowSelection selection{shape, rows};
                             const Detail::GradientField values{owned, ghost};
                             if (context.device == R::Device::Host())
                                 Detail::EvaluateGradient(plan, selection, {{starts.data, starts.RowCount()}}, values, boundary, output);
@@ -70,6 +69,6 @@ namespace DNDS::CFV
                                 Detail::LaunchGradient(context, plan, selection, {starts.DynamicView()}, values, boundary, output);
 #endif
                         },
-                        R::ReadAs<R::FixedRows<1>>(_data->offsets), R::ReadAs<R::FixedRows<1>>(_data->boundaryIds), R::ReadAs<R::FixedRows<3>>(_data->weights), R::ReadAs<R::FixedRows<1>>(_data->metrics.FacePeriodicCodes()), R::ReadAs<R::FixedRows<1>>(_data->metrics.PeriodicParameters()), R::ReadAs<R::FixedRows<1>>(selected), R::ReadAs<R::UniformTableRows>(mean.Owned()), R::ReadAs<R::UniformTableRows>(region == ReconstructionRegion::Core ? workspace.empty : mean.Ghost()), R::ReadAs<R::UniformTableRows>(boundaryValues), R::ReadAs<R::FixedRows<1>>(workspace.periodicVectorStarts), R::WriteAs<R::UniformTableRows>(gradient.Owned()));
+                        R::ReadAs<R::FixedRows<1>>(_data->offsets), R::ReadAs<R::FixedRows<1>>(_data->boundaryIds), R::ReadAs<R::FixedRows<3>>(_data->weights), R::ReadAs<R::FixedRows<1>>(_data->metrics.FacePeriodicCodes()), R::ReadAs<R::FixedRows<1>>(_data->metrics.PeriodicParameters()), R::ReadAs<R::FixedRows<1>>(selected.indices), R::ReadAs<R::UniformTableRows>(mean.Owned()), R::ReadAs<R::UniformTableRows>(region == ReconstructionRegion::Core ? workspace.empty : mean.Ghost()), R::ReadAs<R::UniformTableRows>(boundaryValues), R::ReadAs<R::FixedRows<1>>(workspace.periodicVectorStarts), R::WriteAs<R::UniformTableRows>(gradient.Owned()));
     }
 }

@@ -42,9 +42,9 @@ namespace DNDS::CFV::Detail
         }
     };
 
-    void EvaluateGradient(GradientKernelView plan, DeviceWorkSelection selection, GradientVectorRanges vectors,
+    void EvaluateGradient(GradientKernelView plan, Runtime::RowSelection selection, GradientVectorRanges vectors,
                           GradientField mean, GradientInput boundary, GradientOutput output);
-    void LaunchGradient(Runtime::ExecutionContext context, GradientKernelView plan, DeviceWorkSelection selection, DevicePeriodicBlocks vectors,
+    void LaunchGradient(Runtime::ExecutionContext context, GradientKernelView plan, Runtime::RowSelection selection, DevicePeriodicBlocks vectors,
                         GradientField mean, GradientInput boundary, GradientOutput output);
 
     /// Linear-mode projection. toCoefficients scales gradients by the isotropic
@@ -86,8 +86,8 @@ namespace DNDS::CFV::Detail
     };
     /// scratch is a reserved CPU-worker table with six gradient-width segments
     /// per row. CUDA uses bounded thread-local scratch for 4 to 7 components.
-    void LimitGradient(GradientLimiterView plan, DeviceWorkSelection selection, GradientVectorRanges vectors,
+    void LimitGradient(GradientLimiterView plan, Runtime::RowSelection selection, GradientVectorRanges vectors,
                        GradientLimiterValues values, GradientOutput output, GradientOutput scratch);
-    void LaunchGradientLimiter(Runtime::ExecutionContext context, GradientLimiterView plan, DeviceWorkSelection selection,
+    void LaunchGradientLimiter(Runtime::ExecutionContext context, GradientLimiterView plan, Runtime::RowSelection selection,
                                DevicePeriodicBlocks vectors, GradientLimiterValues values, GradientOutput output, Runtime::ArrayView<int> status);
 }

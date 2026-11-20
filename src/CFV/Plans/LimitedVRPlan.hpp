@@ -1,4 +1,5 @@
 #pragma once
+#include "CFV/Detail/CellRegionRows.hpp"
 
 #include "CFV/Plans/FiniteVolumePlan.hpp"
 #include "CFV/Math/LimitedVR.hpp"
@@ -12,11 +13,12 @@ namespace DNDS::CFV
     {
         FiniteVolumePlan _metrics;
         Geom::EntityWorkPartition _partition;
-        Runtime::Array<index> _offsets, _neighbors, _boundary, _core, _dependent;
+        Runtime::Array<index> _offsets, _neighbors, _boundary;
+        Detail::ReconstructionRegionRows _regionRows;
         Runtime::Array<real> _empty;
         explicit LimitedVRPlan(FiniteVolumePlan metrics)
             : _metrics(std::move(metrics)), _partition(_metrics.CellWorkPartition()),
-              _empty(Runtime::RowLayout::Dense(0, 0), _metrics.Device()) {}
+              _regionRows(_partition, _metrics.NumCell()), _empty(Runtime::RowLayout::Dense(0, 0), _metrics.Device()) {}
         void ValidateRegion(ReconstructionRegion region) const;
         void ValidateSeeds(const FVField &, const FVField &, const Runtime::Array<real> &,
                            const FVField &, ReconstructionRegion) const;

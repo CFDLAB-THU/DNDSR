@@ -129,10 +129,10 @@ namespace DNDS::CFV
         const auto offset = offsets.View<R::FixedRows<1>>(), bnd = boundaryIds.View<R::FixedRows<1>>();
         const auto w = weights.View<R::FixedRows<3>>();
         const auto output = outWrite.View<R::UniformTableRows>();
-        auto selectionRead = (region == ReconstructionRegion::HaloDependent ? _data->dependent : _data->core).Read();
+        const auto &selected = _data->regionRows.Get(region);
+        auto selectionRead = selected.indices.Read();
         const auto selectionRows = selectionRead.View<R::FixedRows<1>>();
-        const Detail::DeviceWorkSelection selection{selectionRows.DynamicView(),
-                                                    region == ReconstructionRegion::All ? _data->metrics.NumCell() : selectionRows.RowCount(), region != ReconstructionRegion::All};
+        const Runtime::RowSelection selection{selected.shape, selectionRows};
         const Detail::GradientKernelView plan{offset, bnd, w, topology.View(), {codes.View<R::FixedRows<1>, false>(), parameters.View<R::FixedRows<1>, false>()}, _data->metrics.Dimension()};
         Detail::EvaluateGradient(plan, selection, {{periodicVectorStarts.data(), index(periodicVectorStarts.size())}}, u, boundary.View<R::UniformTableRows>(), output);
     }

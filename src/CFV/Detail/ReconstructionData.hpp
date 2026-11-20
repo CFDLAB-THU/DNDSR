@@ -1,4 +1,5 @@
 #pragma once
+#include "DNDS/Runtime/Array/RowSelection.hpp"
 
 #include "DNDS/Core/RowRanges.hpp"
 
@@ -93,6 +94,7 @@ namespace DNDS::CFV::Detail
         ReconstructionInverseDiagnostics inverseDiagnostics;
         std::optional<Runtime::Array<real>> inverseConditions;
         std::optional<Geom::EntityWorkPartition> workPartition;
+        Runtime::RowSelectionShape coreRows, dependentRows;
         // Inverse logical order for split SOR. Independent of physical row order.
         std::vector<index> coreFirstPosition;
         /// Immutable host subpartition ranges copied from the prepared mesh.

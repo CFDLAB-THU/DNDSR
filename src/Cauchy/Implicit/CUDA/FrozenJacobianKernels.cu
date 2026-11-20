@@ -35,13 +35,13 @@ namespace DNDS::Cauchy::CUDA
         }
 
         template <int N>
-        __global__ void Assemble(FrozenJacobianInput s, LinearIndexRows selected,
+        __global__ void Assemble(FrozenJacobianInput s, Runtime::RowSelection selected,
                                  Algebra::BlockMatrixArrayView<real> output, FrozenJacobianStatus status)
         {
             for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x;
                  iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
             {
-                const index iCell = selected(iRow, 0);
+                const index iCell = selected.RowAt(iRow);
                 NumericalStatus checked{};
                 for (index iBlock = 0; iBlock < s.geometry.columns.RowSize(iCell) && checked; ++iBlock)
                 {
@@ -67,14 +67,14 @@ namespace DNDS::Cauchy::CUDA
         }
 
         template <int N, bool Jacobi>
-        __global__ void Apply(FrozenJacobianInput s, LinearIndexRows selected, MatrixReadRows diagonal,
+        __global__ void Apply(FrozenJacobianInput s, Runtime::RowSelection selected, MatrixReadRows diagonal,
                               bool fullDiagonal, VectorReadRows rhs, VectorReadRows owned,
                               VectorReadRows ghost, LinearWriteRows output, FrozenJacobianStatus status, bool rowMajorBlocks)
         {
             for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x;
                  iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
             {
-                const index iCell = selected(iRow, 0);
+                const index iCell = selected.RowAt(iRow);
                 std::array<real, N> value{};
                 NumericalStatus checked = status(iCell, 0);
                 if (!checked)
@@ -149,7 +149,7 @@ namespace DNDS::Cauchy::CUDA
                                        (view.kind == R::RowLayoutKind::TiledColMajorTable && view.stride == 32)),
                                   "frozen CUDA vector requires matching AoS or tiled32 input");
         }
-        void Check(R::ExecutionContext context, const FrozenJacobianInput &s, LinearIndexRows selected, FrozenJacobianStatus status)
+        void Check(R::ExecutionContext context, const FrozenJacobianInput &s, Runtime::RowSelection selected, FrozenJacobianStatus status)
         {
             const auto &p = s.parameters;
             DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && p.components >= 5 && p.components <= 7 &&
@@ -172,7 +172,7 @@ namespace DNDS::Cauchy::CUDA
             }
         }
     }
-    void AssembleFrozenJacobian(R::ExecutionContext context, const FrozenJacobianInput &s, LinearIndexRows selected,
+    void AssembleFrozenJacobian(R::ExecutionContext context, const FrozenJacobianInput &s, Runtime::RowSelection selected,
                                 Algebra::BlockMatrixArrayView<real> output, FrozenJacobianStatus status)
     {
         Check(context, s, selected, status);
@@ -184,7 +184,7 @@ namespace DNDS::Cauchy::CUDA
                                                       output.values.data != s.pressureDerivative.data && output.values.data != s.radius.data &&
                                                       output.values.data != s.magnitudes.data),
                               "frozen CUDA Jacobian blocks alias a snapshot input");
-        R::CheckKernelArgumentBudget<FrozenJacobianInput, LinearIndexRows, Algebra::BlockMatrixArrayView<real>, FrozenJacobianStatus>();
+        R::CheckKernelArgumentBudget<FrozenJacobianInput, Runtime::RowSelection, Algebra::BlockMatrixArrayView<real>, FrozenJacobianStatus>();
         if (!selected.RowCount())
             return;
         const unsigned blocks = unsigned(std::min<index>(65535, (selected.RowCount() + 127) / 128));
@@ -197,7 +197,7 @@ namespace DNDS::Cauchy::CUDA
             Assemble<7><<<blocks, 128, 0, stream>>>(s, selected, output, status);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "frozen CUDA Jacobian assembly launch failed");
     }
-    void ApplyFrozenJacobian(R::ExecutionContext context, const FrozenJacobianInput &s, LinearIndexRows selected,
+    void ApplyFrozenJacobian(R::ExecutionContext context, const FrozenJacobianInput &s, Runtime::RowSelection selected,
                              MatrixReadRows diagonal, bool fullDiagonal, VectorReadRows rhs, VectorReadRows owned,
                              VectorReadRows ghost, LinearWriteRows output, FrozenJacobianStatus status, bool jacobi, bool rowMajorBlocks)
     {
@@ -222,7 +222,7 @@ namespace DNDS::Cauchy::CUDA
                                                output.data != s.pressure.data && output.data != s.pressureDerivative.data &&
                                                output.data != s.radius.data && output.data != s.magnitudes.data),
                               "frozen CUDA Jacobian output aliases an input");
-        R::CheckKernelArgumentBudget<FrozenJacobianInput, LinearIndexRows, MatrixReadRows, bool, VectorReadRows,
+        R::CheckKernelArgumentBudget<FrozenJacobianInput, Runtime::RowSelection, MatrixReadRows, bool, VectorReadRows,
                                      VectorReadRows, VectorReadRows, LinearWriteRows, FrozenJacobianStatus, bool>();
         if (!selected.RowCount())
             return;

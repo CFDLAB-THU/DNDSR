@@ -149,7 +149,7 @@ static void Run(int argc, char **argv)
     const auto starts = workspace.devicePeriodicVectorStarts.Read(context);
     auto status = workspace.deviceStatus.Write(context);
     auto output = workspace.temporary.Owned().Write(context);
-    const D::DeviceWorkSelection selection{{}, metrics.NumCell(), false};
+    const DNDS::Runtime::RowSelection selection{DNDS::Runtime::RowSelectionShape::AllRows(metrics.NumCell())};
     const auto optionsFor = [](const J &row)
     {
         C::ReconstructionSweepLaunch options;

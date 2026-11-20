@@ -70,17 +70,6 @@ namespace DNDS::CFV
         data->weights.SetName("CFV/gradient/weights", DNDS_ALLOCATION_SITE());
         data->boundary.resize(size_t(boundaryCount));
         data->boundaryCount = boundaryCount;
-        const auto storeRows = [](const std::vector<index> &rows)
-        {
-            R::Array<index> result(R::RowLayout::Dense(index(rows.size()), 1));
-            auto write = result.Write();
-            const auto view = write.View<R::FixedRows<1>>();
-            OMP::ForRows(0, index(rows.size()), [&](index iRow)
-                         { view(iRow, 0) = rows[iRow]; });
-            return result;
-        };
-        data->core = storeRows(data->partition.Core());
-        data->dependent = storeRows(data->partition.HaloDependent());
         auto boundaryWrite = data->boundaryIds.Write();
         auto weightWrite = data->weights.Write();
         const auto boundaries = boundaryWrite.View<R::FixedRows<1>>();

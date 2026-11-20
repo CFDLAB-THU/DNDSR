@@ -212,12 +212,11 @@ namespace DNDS::CFV
                                       !Algebra::Detail::Overlaps(workspace.limiterScratch.Storage(), array->Storage()),
                                   "gradient limiter scratch aliases an operand");
         auto geometry = std::make_shared<FiniteVolumeTopologyRead>(_data->metrics.AcquireTopologyRead());
-        const auto &selected = region == ReconstructionRegion::HaloDependent ? _data->dependent : _data->core;
-        const index workCount = region == ReconstructionRegion::All ? _data->metrics.NumCell() : selected.RowCount();
-        R::SubmitArrays(engine, stream, [geometry, region, workCount, dimension, first, count, threshold, centerWeight, activated = bool(indicator)](R::ExecutionContext context, auto offsets, auto codes, auto parameters, auto rows, auto starts, auto owned, auto ghost, auto forward, auto inverse, auto activation, auto output, auto scratch, auto status)
+        const auto &selected = _data->regionRows.Get(region);
+        R::SubmitArrays(engine, stream, [geometry, shape = selected.shape, dimension, first, count, threshold, centerWeight, activated = bool(indicator)](R::ExecutionContext context, auto offsets, auto codes, auto parameters, auto rows, auto starts, auto owned, auto ghost, auto forward, auto inverse, auto activation, auto output, auto scratch, auto status)
                         {
                             const Detail::GradientLimiterView plan{offsets, geometry->View(), {codes, parameters}, int(dimension)};
-                            const Detail::DeviceWorkSelection selection{rows.DynamicView(), workCount, region != ReconstructionRegion::All};
+                            const Runtime::RowSelection selection{shape, rows};
                             const Detail::GradientLimiterValues values{{owned, ghost}, forward, inverse, activation, first, count, threshold, centerWeight, activated};
                             if (context.device == R::Device::Host())
                                 Detail::LimitGradient(plan, selection, {{starts.data, starts.RowCount()}}, values, output, scratch);
@@ -228,6 +227,6 @@ namespace DNDS::CFV
                             }
 #endif
                         },
-                        R::ReadAs<R::FixedRows<1>>(_data->offsets), R::ReadAs<R::FixedRows<1>>(_data->metrics.FacePeriodicCodes()), R::ReadAs<R::FixedRows<1>>(_data->metrics.PeriodicParameters()), R::ReadAs<R::FixedRows<1>>(selected), R::ReadAs<R::FixedRows<1>>(workspace.periodicVectorStarts), R::ReadAs<R::UniformTableRows>(input.Owned()), R::ReadAs<R::UniformTableRows>(region == ReconstructionRegion::Core ? workspace.empty : input.Ghost()), R::ReadAs<R::UniformTableRows>(forward), R::ReadAs<R::UniformTableRows>(inverse), R::ReadAs<R::UniformTableRows>(activation), R::WriteAs<R::UniformTableRows>(output.Owned()), R::WriteAs<R::UniformTableRows>(workspace.limiterScratch), R::ReadWrite(workspace.deviceStatus));
+                        R::ReadAs<R::FixedRows<1>>(_data->offsets), R::ReadAs<R::FixedRows<1>>(_data->metrics.FacePeriodicCodes()), R::ReadAs<R::FixedRows<1>>(_data->metrics.PeriodicParameters()), R::ReadAs<R::FixedRows<1>>(selected.indices), R::ReadAs<R::FixedRows<1>>(workspace.periodicVectorStarts), R::ReadAs<R::UniformTableRows>(input.Owned()), R::ReadAs<R::UniformTableRows>(region == ReconstructionRegion::Core ? workspace.empty : input.Ghost()), R::ReadAs<R::UniformTableRows>(forward), R::ReadAs<R::UniformTableRows>(inverse), R::ReadAs<R::UniformTableRows>(activation), R::WriteAs<R::UniformTableRows>(output.Owned()), R::WriteAs<R::UniformTableRows>(workspace.limiterScratch), R::ReadWrite(workspace.deviceStatus));
     }
 }

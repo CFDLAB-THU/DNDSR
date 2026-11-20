@@ -266,7 +266,7 @@ namespace DNDS::CFV::Detail
          */
         template <int N, int Components, bool Raw, bool Triangle, bool LVR, class Storage, class Scalar,
                   bool Tensor, bool TF32, bool Pipeline, class Product = Scalar>
-        __global__ void StagedJacobi(Sweep<N, Storage, Triangle> plan, DeviceWorkSelection selection, DevicePeriodicBlocks vectors,
+        __global__ void StagedJacobi(Sweep<N, Storage, Triangle> plan, Runtime::RowSelection selection, DevicePeriodicBlocks vectors,
                                      Fields<Components, N> fields, R::ArrayView<const int> status, int teamWords)
         {
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
@@ -294,9 +294,9 @@ namespace DNDS::CFV::Detail
             constexpr int M = TF32 ? 16 : 8, K = TF32 ? 8 : 4, C = TF32 ? 16 : 8;
             const index stride = index(gridDim.x) * teams;
             const Scalar relax(plan.relax), keep = Scalar(1) - relax;
-            for (index work = index(blockIdx.x) * teams + team; work < selection.count; work += stride)
+            for (index work = index(blockIdx.x) * teams + team; work < selection.RowCount(); work += stride)
             {
-                const auto iCell = selection.Cell(work);
+                const auto iCell = selection.RowAt(work);
                 const Scalar penalty = LVR ? Scalar(fields.alpha(iCell, 0)) : Scalar(0);
                 const Scalar scale = relax * (Scalar(1) - penalty);
                 if (scale == Scalar(0))
@@ -456,7 +456,7 @@ namespace DNDS::CFV::Detail
         }
         template <int N, int Components, bool Raw, bool Triangle, bool LVR, class Storage, class Scalar,
                   bool Tensor, bool TF32, bool Pipeline, class Product = Scalar>
-        ReconstructionSweepResources Launch(R::ExecutionContext context, ReconstructionDeviceView plan, DeviceWorkSelection selection,
+        ReconstructionSweepResources Launch(R::ExecutionContext context, ReconstructionDeviceView plan, Runtime::RowSelection selection,
                                             DevicePeriodicBlocks vectors, R::PairReadView<real> mean, R::PairReadView<real> input,
                                             R::ArrayView<const real> boundary, R::ArrayView<real> output, R::ArrayView<const int> status,
                                             const ReconstructionSweepLaunch &options, bool execute,
@@ -464,7 +464,7 @@ namespace DNDS::CFV::Detail
         {
             const int threads = options.threads ? options.threads : Pipeline ? (Tensor ? 128 : 32)
                                                                              : (Tensor ? 128 : 96);
-            R::CheckKernelArgumentBudget<Sweep<N, Storage, Triangle>, DeviceWorkSelection, DevicePeriodicBlocks,
+            R::CheckKernelArgumentBudget<Sweep<N, Storage, Triangle>, Runtime::RowSelection, DevicePeriodicBlocks,
                                          Fields<Components, N>, R::ArrayView<const int>, int>();
             const int teams = Tensor ? threads / 32 : 1;
             const index components = output.width / N;
@@ -485,7 +485,7 @@ namespace DNDS::CFV::Detail
             }
             DNDS_check_throw_info(device.major >= 8 && bytes <= device.sharedMemPerBlockOptin && bytes <= INT_MAX,
                                   "CUDA VR staging exceeds device shared memory or requires sm80+");
-            const index needed = (selection.count + teams - 1) / teams;
+            const index needed = (selection.RowCount() + teams - 1) / teams;
             const unsigned grid = unsigned(options.gridBlocks ? std::min<index>(needed, options.gridBlocks) : std::min<index>(needed, 65535));
             ReconstructionSweepResources resource{bytes, 0, 0, int(grid), threads};
             if (!execute)

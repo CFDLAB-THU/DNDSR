@@ -184,13 +184,13 @@ namespace DNDS::Cauchy::CUDA
             return {};
         }
         template <int N, bool FullBlock, bool Roe>
-        __global__ void AssemblePerfectGasFluxJacobianRows(JacobianFaceInput input, LinearIndexRows selected, MatrixWriteRows diagonal,
+        __global__ void AssemblePerfectGasFluxJacobianRows(JacobianFaceInput input, Runtime::RowSelection selected, MatrixWriteRows diagonal,
                                                            LinearWriteRows magnitudes, JacobianStatus status)
         {
             for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x;
                  iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
             {
-                const index iCell = selected(iRow, 0);
+                const index iCell = selected.RowAt(iRow);
                 if (status(iCell, 0))
                     status(iCell, 0) = FaceRow<N, FullBlock, Roe>(input, iCell, diagonal, magnitudes);
             }
@@ -203,7 +203,7 @@ namespace DNDS::Cauchy::CUDA
         }
     }
     void AssemblePerfectGasFluxJacobian(R::ExecutionContext context, const JacobianFaceInput &input,
-                                        LinearIndexRows selected, MatrixWriteRows diagonal, bool fullBlock,
+                                        Runtime::RowSelection selected, MatrixWriteRows diagonal, bool fullBlock,
                                         LinearWriteRows magnitudes, JacobianStatus status)
     {
         const auto &p = input.parameters;
@@ -254,7 +254,7 @@ namespace DNDS::Cauchy::CUDA
             DNDS_check_throw_info(!field || (field != diagonal.data && (!p.roe || field != magnitudes.data)),
                                   "CUDA Jacobian face output aliases input");
         DNDS_check_throw_info(!diagonal.data || (!p.roe || diagonal.data != magnitudes.data), "CUDA Jacobian face outputs alias");
-        R::CheckKernelArgumentBudget<JacobianFaceInput, LinearIndexRows, LinearWriteRows, bool, LinearWriteRows, JacobianStatus>();
+        R::CheckKernelArgumentBudget<JacobianFaceInput, Runtime::RowSelection, LinearWriteRows, bool, LinearWriteRows, JacobianStatus>();
         if (!selected.RowCount())
             return;
         const unsigned blocks = unsigned(std::min<index>(65535, (selected.RowCount() + 127) / 128));

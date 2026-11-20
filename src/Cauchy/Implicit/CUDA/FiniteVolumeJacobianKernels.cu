@@ -58,7 +58,7 @@ namespace DNDS::Cauchy::CUDA
                 output(iCell, 0) = iCell < owned.RowCount() ? owned(iCell, 0) : ghost(iCell - owned.RowCount(), 0);
         }
         __global__ void Initialize(JacobianCellMetrics cells, LinearReadRows inverseTau,
-                                   MatrixWriteRows diagonal, JacobianStatus status, LinearIndexRows selected,
+                                   MatrixWriteRows diagonal, JacobianStatus status, Runtime::RowSelection selected,
                                    RigidFrameParameters frame, real physicalMass, real scale, int components, bool fullBlock, bool rowMajorBlocks)
         {
             const auto rotation = frame.NegativeSourceJacobian();
@@ -69,7 +69,7 @@ namespace DNDS::Cauchy::CUDA
             for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x;
                  iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
             {
-                const index iCell = selected(iRow, 0);
+                const index iCell = selected.RowAt(iRow);
                 const real volume = cells(iCell, 0), tau = inverseTau(iCell, 0);
                 if (!(std::isfinite(volume) && volume > 0 && std::isfinite(tau) && tau >= 0))
                 {
@@ -162,7 +162,7 @@ namespace DNDS::Cauchy::CUDA
     }
     void InitializePerfectGasFluxJacobianDiagonal(R::ExecutionContext context, JacobianCellMetrics cells,
                                                   LinearReadRows inverseTau, MatrixWriteRows diagonal, JacobianStatus status,
-                                                  LinearIndexRows selected, const RigidFrameParameters &frame,
+                                                  Runtime::RowSelection selected, const RigidFrameParameters &frame,
                                                   real physicalMass, real scale, int components, bool fullBlock, bool rowMajorBlocks)
     {
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && components >= 5 && components <= 7 &&
@@ -174,7 +174,7 @@ namespace DNDS::Cauchy::CUDA
         DNDS_check_throw_info(cells.RowCount() >= diagonal.RowCount() && status.RowCount() == diagonal.RowCount() &&
                                   (!diagonal.data || (diagonal.data != inverseTau.data && diagonal.data != cells.data)),
                               "CUDA Jacobian diagonal shape or alias differs");
-        R::CheckKernelArgumentBudget<JacobianCellMetrics, LinearReadRows, MatrixWriteRows, JacobianStatus, LinearIndexRows,
+        R::CheckKernelArgumentBudget<JacobianCellMetrics, LinearReadRows, MatrixWriteRows, JacobianStatus, Runtime::RowSelection,
                                      RigidFrameParameters, real, real, int, bool, bool>();
         if (!selected.RowCount())
             return;

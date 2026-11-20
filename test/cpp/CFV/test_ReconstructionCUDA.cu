@@ -681,6 +681,11 @@ TEST_CASE("CUDA sweep-only publication omits limiter matrices and scratch")
         CHECK(buffer.name != "secondary");
         CHECK(buffer.name != "neighborRotation");
         CHECK(buffer.name != "neighborRotationActive");
+        if (mpi.size == 1)
+        {
+            CHECK(buffer.name != "core");
+            CHECK(buffer.name != "dependent");
+        }
     }
     auto mean = metrics.BuildField(R::RowLayout::Dense(0, 5), resident.Device());
     auto coefficients = resident.BuildCoefficients(5);

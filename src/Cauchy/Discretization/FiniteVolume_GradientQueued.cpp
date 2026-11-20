@@ -72,10 +72,10 @@ namespace DNDS::Cauchy
         };
         const auto pin = std::make_shared<Inputs>(owner);
         const bool ghosts = region != CFV::ReconstructionRegion::Core;
-        R::SubmitArrays(engine, stream, [pin, barth, ghosts](R::ExecutionContext context, auto mean, auto remote, auto input, auto output, auto cells)
+        R::SubmitArrays(engine, stream, [pin, barth, ghosts, selection = pin->stencil.View().RHSRows(region, false, owner->metrics.NumCell())](R::ExecutionContext context, auto mean, auto remote, auto input, auto output)
                         {
                 CUDA::GradientLimiterGeometry geometry{pin->stencil.KernelDescriptor(), pin->owner->metrics.NumCell(), pin->owner->metrics.NumCellProc()};
-                CUDA::LimitPhysicalGradients(context, geometry, {mean, remote}, input, output, cells, pin->owner->metrics.Dimension(), pin->owner->equation.IsACM() ? 0 : 1, barth, ghosts); }, R::ReadAs<R::TableRows>(means.Owned()), R::ReadAs<R::TableRows>(ghosts ? means.Ghost() : owner->deviceEmpty), R::ReadAs<R::TableRows>(source), R::WriteAs<R::TableRows>(target), R::ReadAs<R::FixedRows<1>>(DeviceCellSelection(region)));
+                CUDA::LimitPhysicalGradients(context, geometry, {mean, remote}, input, output, selection, pin->owner->metrics.Dimension(), pin->owner->equation.IsACM() ? 0 : 1, barth, ghosts); }, R::ReadAs<R::TableRows>(means.Owned()), R::ReadAs<R::TableRows>(ghosts ? means.Ghost() : owner->deviceEmpty), R::ReadAs<R::TableRows>(source), R::WriteAs<R::TableRows>(target));
 #else
         DNDS_check_throw_info(false, "CUDA gradient limiting is not built");
 #endif
@@ -105,10 +105,10 @@ namespace DNDS::Cauchy
         // Only immutable sample geometry is pinned here. Mutable means,
         // gradients, beta and mandatory status are declared engine operands.
         const auto stencil = owner->stencil.Read({owner->metrics.Device(), nullptr});
-        R::SubmitArrays(engine, stream, [stencil, parameters, count = owner->metrics.NumCell(), all = owner->metrics.NumCellProc()](R::ExecutionContext context, auto mean, auto gradients, auto cells, auto status, auto counts, auto minima)
+        R::SubmitArrays(engine, stream, [stencil, parameters, count = owner->metrics.NumCell(), all = owner->metrics.NumCellProc()](R::ExecutionContext context, auto mean, auto gradients, auto status, auto counts, auto minima)
                         {
                 CUDA::GradientLimiterGeometry geometry{stencil.KernelDescriptor(), count, all};
-                CUDA::LimitPositivePhysicalGradients(context, geometry, mean, gradients, cells, parameters, {status, counts, minima}); }, R::ReadAs<R::TableRows>(means), R::ReadWriteAs<R::TableRows>(gradients), R::ReadAs<R::FixedRows<1>>(DeviceCellSelection(CFV::ReconstructionRegion::All)), R::WriteAs<R::FixedRows<1>>(gradientStatistics->partialStatus), R::WriteAs<R::FixedRows<1>>(gradientStatistics->partialCount), R::WriteAs<R::FixedRows<1>>(gradientStatistics->partialMinimum));
+                CUDA::LimitPositivePhysicalGradients(context, geometry, mean, gradients, R::RowSelectionShape::AllRows(count), parameters, {status, counts, minima}); }, R::ReadAs<R::TableRows>(means), R::ReadWriteAs<R::TableRows>(gradients), R::WriteAs<R::FixedRows<1>>(gradientStatistics->partialStatus), R::WriteAs<R::FixedRows<1>>(gradientStatistics->partialCount), R::WriteAs<R::FixedRows<1>>(gradientStatistics->partialMinimum));
 #else
         DNDS_check_throw_info(false, "CUDA gradient positivity is not built");
 #endif

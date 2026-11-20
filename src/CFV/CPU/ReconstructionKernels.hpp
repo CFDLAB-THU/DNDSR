@@ -2,7 +2,7 @@
 
 #include "DNDS/Core/RowRanges.hpp"
 
-#include "DNDS/Runtime/Array/ArrayView.hpp"
+#include "DNDS/Runtime/Array/RowSelection.hpp"
 #include "DNDS/Core/Span.hpp"
 #include "DNDS/Core/NumericalStatus.hpp"
 
@@ -20,7 +20,8 @@ namespace DNDS::CFV::CPU
     /// order inside each mesh subpartition, with frozen cross-partition reads.
     struct ReconstructionWorkSelection
     {
-        SpanView<const index> rows, coreFirstPosition, vectorStarts;
+        R::RowSelection rows;
+        SpanView<const index> coreFirstPosition, vectorStarts;
         SpanView<const WorkerRowRanges> workerRanges;
         index owned = 0, coreCount = 0, workers = 1;
         bool all = true, core = false, coreFirst = false;
