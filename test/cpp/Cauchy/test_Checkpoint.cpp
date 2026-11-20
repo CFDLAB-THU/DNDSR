@@ -315,7 +315,8 @@ TEST_CASE("Boundary snapshot follows the face owner when the boundary record is 
         for (int j = 0; j < 5; ++j)
             write.View()(0, j) = state[j];
     }
-    domain.WriteVisualization(prefix, 0);
+    // Use the writer communicator while preserving the rotated parent-face ownership.
+    domain.PrepareVisualization(0).Write(prefix, DNDS::Runtime::CommunicationContext::Duplicate(mpi.comm));
     const auto boundary = prefix + "_bnd.vtkhdf";
     const auto rho = ReadVTKField<double>(boundary, "CellData/rho", H5T_NATIVE_DOUBLE);
     const auto mass = ReadVTKField<double>(boundary, "CellData/flux_rho_facial", H5T_NATIVE_DOUBLE);
