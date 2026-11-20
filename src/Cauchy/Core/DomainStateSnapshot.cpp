@@ -110,20 +110,24 @@ namespace DNDS::Cauchy
 
     DomainStateSnapshot DomainStateSnapshot::DetachedHost(Runtime::ExecutionContext context) const
     {
+        return DetachedTo(Runtime::Device::Host(), std::move(context));
+    }
+    DomainStateSnapshot DomainStateSnapshot::DetachedTo(Runtime::Device destination, Runtime::ExecutionContext context) const
+    {
         const auto &source = *_data;
-        const EquationSnapshotOptions allocation{source.means.Device().space == Runtime::MemorySpace::CUDA};
+        const EquationSnapshotOptions allocation{destination == Runtime::Device::Host() && source.means.Device().space == Runtime::MemorySpace::CUDA};
         std::optional<EquationDofs> reconstruction, previous;
         std::optional<Runtime::Array<real>> limitedVR;
-        auto means = EquationDofOperations::CopyOwnedTo(source.means, Runtime::Device::Host(), context, allocation);
+        auto means = EquationDofOperations::CopyOwnedTo(source.means, destination, context, allocation);
         means.Fields().SetName(source.name + "/outputSnapshot/means", DNDS_ALLOCATION_SITE());
         if (source.reconstruction)
         {
-            reconstruction.emplace(EquationDofOperations::CopyOwnedTo(*source.reconstruction, Runtime::Device::Host(), context, allocation));
+            reconstruction.emplace(EquationDofOperations::CopyOwnedTo(*source.reconstruction, destination, context, allocation));
             reconstruction->Fields().SetName(source.name + "/outputSnapshot/reconstruction", DNDS_ALLOCATION_SITE());
         }
         if (source.previous)
         {
-            previous.emplace(EquationDofOperations::CopyOwnedTo(*source.previous, Runtime::Device::Host(), context, allocation));
+            previous.emplace(EquationDofOperations::CopyOwnedTo(*source.previous, destination, context, allocation));
             previous->Fields().SetName(source.name + "/outputSnapshot/history", DNDS_ALLOCATION_SITE());
         }
         if (source.limitedVR)
@@ -132,14 +136,14 @@ namespace DNDS::Cauchy
             limitedVR.emplace(allocation.pinnedHost
                                   ? Runtime::Array<real>::FromStorage(layout, Runtime::Buffer::AllocatePinnedHost(
                                                                                   CheckedSize::Multiply(layout.Elements(), sizeof(real))))
-                                  : Runtime::Array<real>(layout));
+                                  : Runtime::Array<real>(layout, destination));
             limitedVR->CopyFrom(*source.limitedVR, context).Wait();
             limitedVR->SetName(source.name + "/outputSnapshot/limitedVR", DNDS_ALLOCATION_SITE());
         }
         return DomainStateSnapshot(std::make_shared<Data>(source.name, std::move(means),
                                                           std::move(reconstruction), std::move(limitedVR), std::move(previous), source.time,
                                                           source.lastAcceptedDt, source.previousDt, source.epoch, source.method, source.nonlinear,
-                                                          source.updatePolicy, source.sourceStrang, source.pressureGauge, Runtime::ExecutionContext::Host()));
+                                                          source.updatePolicy, source.sourceStrang, source.pressureGauge, destination == Runtime::Device::Host() ? Runtime::ExecutionContext::Host() : context));
     }
 
     const std::string &DomainStateSnapshot::Name() const { return _data->name; }

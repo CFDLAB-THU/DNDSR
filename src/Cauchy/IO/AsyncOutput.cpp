@@ -1,4 +1,7 @@
 #include "Cauchy/IO/AsyncOutput.hpp"
+#ifdef DNDS_USE_CUDA
+#    include "DNDS/Runtime/Execution/CUDAStream.hpp"
+#endif
 #include "Cauchy/IO/OutputQueue.hpp"
 #include "Cauchy/Core/Simulation.hpp"
 #include "DNDS/MPI/CollectiveStage.hpp"
@@ -72,6 +75,7 @@ namespace DNDS::Cauchy
     {
         std::shared_ptr<Runtime::CommunicationContext> control;
         std::vector<std::shared_ptr<Runtime::CommunicationContext>> domains;
+        std::vector<Runtime::ExecutionContext> writerCopy;
         // Destroy/join worker before releasing its MPI ordering contexts.
         std::unique_ptr<OutputQueue> queue;
         explicit Data(Simulation &simulation)
@@ -84,10 +88,17 @@ namespace DNDS::Cauchy
                                       "asynchronous parallel HDF5 output requires MPI_THREAD_MULTIPLE; use synchronous output otherwise"); });
             control = Runtime::CommunicationContext::Duplicate(mpi.comm);
             domains.resize(size_t(simulation.Placement().DomainNumber()));
+            writerCopy.resize(domains.size(), Runtime::ExecutionContext::Host());
             for (index iDomain = 0; iDomain < index(domains.size()); ++iDomain)
                 if (simulation.Local(iDomain))
-                    domains[iDomain] = Runtime::CommunicationContext::Duplicate(
-                        simulation.GetDomain(iDomain).Discretization().Metrics().Communicator());
+                {
+                    const auto &metrics = simulation.GetDomain(iDomain).Discretization().Metrics();
+                    domains[iDomain] = Runtime::CommunicationContext::Duplicate(metrics.Communicator());
+#ifdef DNDS_USE_CUDA
+                    if (metrics.Device().space == Runtime::MemorySpace::CUDA)
+                        writerCopy[iDomain] = {metrics.Device(), Runtime::CreateCUDAStream(metrics.Device().ordinal)};
+#endif
+                }
             queue = std::make_unique<OutputQueue>([owner = control](std::exception_ptr error)
                                                   {
                 // MPI thread support was checked before the worker existed.
@@ -127,7 +138,7 @@ namespace DNDS::Cauchy
             if (checkpoint)
             {
                 files.checkpointPath = plan.InternalCheckpointPath(iDomain, token);
-                files.checkpoint.emplace(domain.CaptureInternalCheckpoint(files.communication, state, true));
+                files.checkpoint.emplace(domain.CaptureInternalCheckpoint(files.communication, state, true, _data->writerCopy[iDomain]));
             }
             batch->domains.push_back(std::move(files));
             return [batch] { batch->Write(); }; });
@@ -182,7 +193,7 @@ namespace DNDS::Cauchy
                 files.communication = _data->domains[iDomain];
                 if (checkpoint)
                 {
-                    files.checkpoint.emplace(domain.PrepareCheckpoint(files.communication, {config.Output().checkpointReconstruction, true}));
+                    files.checkpoint.emplace(domain.CaptureCheckpoint(files.communication, {config.Output().checkpointReconstruction, true}, _data->writerCopy[iDomain]));
                     files.checkpointPath = batch->direct ? batch->checkpointPath
                         : (archive.parent_path() / batch->domainPaths[iDomain]["file"].get<std::string>()).string();
                 }

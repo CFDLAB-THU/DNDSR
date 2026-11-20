@@ -24,8 +24,9 @@ namespace DNDS::Cauchy
     {
         friend class DomainStateSnapshot;
         friend class AsyncOutput;
+        PreparedCheckpoint CaptureCheckpoint(std::shared_ptr<Runtime::CommunicationContext>, CheckpointPreparation, Runtime::ExecutionContext writerCopy) const;
         PreparedCheckpoint CaptureInternalCheckpoint(std::shared_ptr<Runtime::CommunicationContext>,
-                                                     const NonlinearSolveState &, bool detach) const;
+                                                     const NonlinearSolveState &, bool detach, Runtime::ExecutionContext writerCopy = Runtime::ExecutionContext::Host()) const;
         PreparedVisualization CaptureInternalVisualization(int hdfDeflateLevel);
         FiniteVolume::WorkspaceOptions ObservationWorkspaceOptions() const;
         DomainProblem _problem;

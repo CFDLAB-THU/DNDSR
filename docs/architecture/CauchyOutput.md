@@ -284,15 +284,10 @@ numerical state.
 ## Asynchronous accepted-step output
 
 `output.asynchronous` defaults to `false`. When enabled, `OutputCoordinator`
-uses one FIFO writer with capacity for two accepted-step output batches,
-including the currently running batch. It waits for capacity **before** making
-another snapshot. Capturing fields, numerical output preparation and required
-device-to-host transfers remain ordered controller work; subsequent computation
-can overlap file writing. Enqueue does not mean the files are complete.
+uses one FIFO writer for accepted-step and internal nonlinear output. Its capacity of two batches includes the running writer. The controller waits for capacity before capturing the next snapshot.
 
-`PreparedCheckpoint` owns the accepted means, optional reconstruction/history,
-nonlinear/control metadata, persistent IDs and mesh envelope. CPU snapshots
-are independent copies; device payloads use accounted pinned host allocations.
+For a CUDA checkpoint, the controller freezes the requested owned fields, reconstruction and time-method history in independent device allocations. After these device copies complete, the solver can overwrite its fields. The I/O worker copies the frozen data into page-locked host buffers on its own CUDA stream before opening HDF5. CPU checkpoints use independent host copies. An accepted or internal checkpoint can therefore overlap D2H and disk I/O with subsequent computation. Visualization still prepares host fields and boundary-file row ordering on the controller.
+
 `PreparedVisualization` owns prepared cell fields and optional reduced face data,
 and retains a mesh read until writing finishes. No live Domain, coefficient
 buffer or physics worker is borrowed by the writer. Mesh mutation or external

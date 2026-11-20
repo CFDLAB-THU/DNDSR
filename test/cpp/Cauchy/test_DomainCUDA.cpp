@@ -1,6 +1,8 @@
 #define DOCTEST_CONFIG_IMPLEMENT
 #include "doctest.h"
 #include "Cauchy/Core/Domain.hpp"
+#include "Cauchy/Core/Simulation.hpp"
+#include "Cauchy/IO/AsyncOutput.hpp"
 #include "CartesianFixture.hpp"
 #include "../CFV/ReconstructionFixture.hpp"
 #include "../CFV/RotatedSectorFixture.hpp"
@@ -457,6 +459,91 @@ TEST_CASE("Domain reconstruction selection runs quantized maps and shared or dir
         // Nonconstant data and an actual change prevent a vacuous constant
         // state test from passing when sweep selection is disconnected.
         CHECK(change > 1e-6);
+    }
+}
+
+TEST_CASE("Asynchronous CUDA checkpoint captures the accepted epoch before a new device write")
+{
+    int provided = MPI_THREAD_SINGLE;
+    MPI_Query_thread(&provided);
+    if (provided != MPI_THREAD_MULTIPLE)
+    {
+        MESSAGE("asynchronous checkpoint qualification requires MPI_THREAD_MULTIPLE");
+        return;
+    }
+    int pid = getpid();
+    MPI_Bcast(&pid, 1, MPI_INT, 0, mpi.comm);
+    const auto prefix = (std::filesystem::temp_directory_path() / ("cauchy-device-writer-" + std::to_string(pid))).string();
+    const C::Json input{{"defaults", {{"execution", {{"device", "cuda"}}}, {"implicit", {{"iterations", 4}, {"minIterations", 2}, {"linear", {{"method", "jacobi"}}}}}}},
+                        {"time", {{"method", "bdf1"}}},
+                        {"output", {{"prefix", prefix}, {"asynchronous", true}}}};
+    const auto config = C::SimulationConfig::ResolveCollective(input, mpi.comm);
+    const auto factory = [](I, const auto &, const auto &domainMPI)
+    { return CauchyTest::PeriodicQuads(domainMPI, 4); };
+    C::Simulation simulation(config, mpi.comm, factory);
+    const C::OutputPlan plan(config.Output(), 1);
+    const std::string token = "-S0";
+    auto &field = simulation.GetDomain(0).Dofs().CoupledField().Owned();
+    const auto placement = R::ExecutionContext::CUDA(0);
+    auto expected = field.To(R::Device::Host(), placement);
+    {
+        auto seed = expected.Write();
+        for (I i = 0; i < expected.RowCount(); ++i)
+            seed.At(i, 0) += .01 * std::sin(double(i + 1 + mpi.rank));
+    }
+    field.CopyFrom(expected, placement).Wait();
+    auto changed = expected.Clone();
+    {
+        auto write = changed.Write();
+        for (I i = 0; i < changed.RowCount(); ++i)
+            write.At(i, 0) += 1;
+    }
+    {
+        C::AsyncOutput output(simulation);
+        output.Submit(simulation, config, plan, token, true, false, {}, C::Json{{"step", 0}});
+        field.CopyFrom(changed, placement).Wait();
+        // Also exercise worker drain/join during destruction.
+    }
+    simulation.ReadCheckpoint(plan.CheckpointPath(token));
+    const auto observed = simulation.GetDomain(0).Dofs().CoupledField().Owned().To(R::Device::Host(), placement);
+    const auto read = observed.Read(), original = expected.Read();
+    REQUIRE(observed.RowCount() == expected.RowCount());
+    for (I i = 0; i < observed.RowCount(); ++i)
+        CHECK(read.At(i, 0) == original.At(i, 0));
+    // Freeze the first internal iteration while the foreground finishes the step.
+    const std::string internalToken = "-S1_0_0";
+    bool captured = false;
+    {
+        C::AsyncOutput output(simulation);
+        simulation.GetDomain(0).SetQuiescentObserver([&](const C::NonlinearSolveState &state)
+                                                     {
+            if (captured) return;
+            output.SubmitInternal(simulation, config, plan, 0, internalToken, state, true, false, {}, {});
+            captured = true; });
+        REQUIRE(simulation.Advance(.001).accepted);
+        simulation.GetDomain(0).SetQuiescentObserver({});
+    }
+    REQUIRE(captured);
+    C::Simulation resumed(config, mpi.comm, factory);
+    resumed.ReadCheckpoint(plan.InternalCheckpointPath(0, internalToken));
+    REQUIRE(resumed.Advance(.001).accepted);
+    const auto reference = simulation.GetDomain(0).Dofs().CoupledField().Owned().To(R::Device::Host(), placement);
+    const auto replay = resumed.GetDomain(0).Dofs().CoupledField().Owned().To(R::Device::Host(), placement);
+    const auto a = reference.Read(), b = replay.Read();
+    double change = 0;
+    for (I i = 0; i < replay.RowCount(); ++i)
+        change = std::max(change, std::abs(a.At(i, 0) - original.At(i, 0)));
+    CHECK(DNDS::MPI::AllreduceValue<DNDS::MPI::Reduction::Max>(change, mpi.comm) > 1e-12);
+    for (I i = 0; i < replay.RowCount(); ++i)
+        for (I j = 0; j < replay.Layout().Width(); ++j)
+            CHECK(a.At(i, j) == b.At(i, j));
+    MPI_Barrier(mpi.comm);
+    if (mpi.rank == 0)
+    {
+        CHECK(std::filesystem::remove(plan.InternalCheckpointPath(0, internalToken)));
+        CHECK(std::filesystem::remove(plan.InternalSnapshotManifestPath(0, internalToken)));
+        CHECK(std::filesystem::remove(plan.CheckpointPath(token)));
+        CHECK(std::filesystem::remove(plan.SnapshotManifestPath(token)));
     }
 }
 

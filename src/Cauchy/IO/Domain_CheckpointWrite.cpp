@@ -23,6 +23,11 @@ namespace DNDS::Cauchy
     PreparedCheckpoint Domain::PrepareCheckpoint(std::shared_ptr<Runtime::CommunicationContext> communication,
                                                  CheckpointPreparation options) const
     {
+        return CaptureCheckpoint(std::move(communication), options, Runtime::ExecutionContext::Host());
+    }
+    PreparedCheckpoint Domain::CaptureCheckpoint(std::shared_ptr<Runtime::CommunicationContext> communication,
+                                                 CheckpointPreparation options, Runtime::ExecutionContext writerCopy) const
+    {
         const MPIInfo mpi(_problem.finiteVolume.Metrics().Communicator());
         const bool includeReconstruction = options.includeReconstruction && bool(_problem.finiteVolume.PolynomialReconstruction());
         MPI::LocalStage(mpi, [&]
@@ -33,12 +38,12 @@ namespace DNDS::Cauchy
                                       (relation == MPI_IDENT || relation == MPI_CONGRUENT),
                                   "checkpoint I/O communicator must preserve domain membership and rank order"); });
         auto snapshot = CaptureStateSnapshot(includeReconstruction);
-        // Host-only serializers never receive device allocations. The detached
-        // copy pins the entire source epoch until all field copies complete.
+        // A background GPU checkpoint freezes its own device values here.
+        // The writer stages that immutable snapshot on its dedicated copy stream.
         const bool detached = options.detached || snapshot.Means().Device() != Runtime::Device::Host();
         MPI::LocalStage(mpi, [&]
                         {
-            if (detached) snapshot = snapshot.DetachedHost(_execution.ComputeStream().Context()); });
+            if (detached) snapshot = snapshot.DetachedTo(writerCopy.device, _execution.ComputeStream().Context()); });
         const bool history = bool(snapshot.PreviousState());
         const bool limitedVRHistory = bool(snapshot.LimitedVRHistory());
         int flags[]{int(includeReconstruction), -int(includeReconstruction), int(history), -int(history), int(limitedVRHistory), -int(limitedVRHistory)};
@@ -62,7 +67,7 @@ namespace DNDS::Cauchy
             ids = CellIds(*this);
             envelope.emplace(DescribeMesh(*this)); });
         return PreparedCheckpoint(std::move(snapshot), std::move(metadata), std::move(ids),
-                                  std::move(*envelope), std::move(communication), detached);
+                                  std::move(*envelope), std::move(communication), detached, {}, writerCopy);
     }
     void Domain::WriteInternalCheckpoint(const std::string &path, const Json &resolved,
                                          const NonlinearSolveState &state,
@@ -72,7 +77,7 @@ namespace DNDS::Cauchy
     }
 
     PreparedCheckpoint Domain::CaptureInternalCheckpoint(std::shared_ptr<Runtime::CommunicationContext> communication,
-                                                         const NonlinearSolveState &state, bool detach) const
+                                                         const NonlinearSolveState &state, bool detach, Runtime::ExecutionContext writerCopy) const
     {
         const MPIInfo mpi(_problem.finiteVolume.Metrics().Communicator());
         const bool polynomial = bool(_problem.finiteVolume.PolynomialReconstruction());
@@ -168,14 +173,14 @@ namespace DNDS::Cauchy
                         {
             const auto addField = [&](std::string key, const EquationDofs &field)
             {
-                auto saved = detach ? EquationDofOperations::CopyOwnedTo(field, Runtime::Device::Host(), context,
-                                           {field.Device().space == Runtime::MemorySpace::CUDA}) : field.NumericAlias();
+                auto saved = detach ? EquationDofOperations::CopyOwnedTo(field, writerCopy.device, context,
+                                           {writerCopy.device == Runtime::Device::Host() && field.Device().space == Runtime::MemorySpace::CUDA}) : field.NumericAlias();
                 if (detach) saved.Fields().SetName(_problem.name + "/outputSnapshot/" + key, DNDS_ALLOCATION_SITE());
                 internal.equations.emplace_back(std::move(key), std::move(saved));
             };
             const auto addArray = [&](std::string key, const Runtime::Array<real> &field)
             {
-                auto saved = detach ? field.To(Runtime::Device::Host(), context) : field;
+                auto saved = detach ? field.To(writerCopy.device, context) : field;
                 if (detach) saved.SetName(_problem.name + "/outputSnapshot/" + key, DNDS_ALLOCATION_SITE());
                 internal.arrays.emplace_back(std::move(key), std::move(saved));
             };
@@ -197,10 +202,10 @@ namespace DNDS::Cauchy
                 addReconstruction(*_state.reconstruction, "internal_endpoint_");
                 if (ditr) addReconstruction(*_coupledMiddle->state, "internal_middle_");
             }
-            if (detach) acceptedSnapshot = acceptedSnapshot.DetachedHost(context);
+            if (detach) acceptedSnapshot = acceptedSnapshot.DetachedTo(writerCopy.device, context);
             ids = CellIds(*this);
             envelope.emplace(DescribeMesh(*this)); });
         return PreparedCheckpoint(std::move(acceptedSnapshot), std::move(metadata), std::move(ids),
-                                  std::move(*envelope), std::move(communication), detach, std::move(internal));
+                                  std::move(*envelope), std::move(communication), detach, std::move(internal), writerCopy);
     }
 }
