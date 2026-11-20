@@ -464,7 +464,7 @@ TEST_CASE("Domain reconstruction selection runs quantized maps and shared or dir
     }
 }
 
-TEST_CASE("Asynchronous CUDA checkpoint captures the accepted epoch before a new device write")
+TEST_CASE("Asynchronous CUDA output freezes the accepted epoch before a new device write")
 {
     int provided = MPI_THREAD_SINGLE;
     MPI_Query_thread(&provided);
@@ -476,12 +476,12 @@ TEST_CASE("Asynchronous CUDA checkpoint captures the accepted epoch before a new
     int pid = getpid();
     MPI_Bcast(&pid, 1, MPI_INT, 0, mpi.comm);
     const auto prefix = (std::filesystem::temp_directory_path() / ("cauchy-device-writer-" + std::to_string(pid))).string();
-    const C::Json input{{"defaults", {{"execution", {{"device", "cuda"}}}, {"implicit", {{"iterations", 4}, {"minIterations", 2}, {"linear", {{"method", "jacobi"}}}}}}},
+    const C::Json input{{"defaults", {{"mesh", {{"dimension", 3}}}, {"boundaries", {{"7", {{"kind", "slipWall"}}}}}, {"execution", {{"device", "cuda"}}}, {"implicit", {{"iterations", 4}, {"minIterations", 2}, {"linear", {{"method", "jacobi"}}}}}}},
                         {"time", {{"method", "bdf1"}}},
                         {"output", {{"prefix", prefix}, {"asynchronous", true}}}};
     const auto config = C::SimulationConfig::ResolveCollective(input, mpi.comm);
     const auto factory = [](I, const auto &, const auto &domainMPI)
-    { return CauchyTest::PeriodicQuads(domainMPI, 4); };
+    { return CFVTest::CartesianHexes(domainMPI, 2); };
     C::Simulation simulation(config, mpi.comm, factory);
     const C::OutputPlan plan(config.Output(), 1);
     const std::string token = "-S0";
@@ -502,10 +502,30 @@ TEST_CASE("Asynchronous CUDA checkpoint captures the accepted epoch before a new
     }
     {
         C::AsyncOutput output(simulation);
-        output.Submit(simulation, config, plan, token, true, false, {}, C::Json{{"step", 0}});
+        output.Submit(simulation, config, plan, token, true, true, {}, C::Json{{"step", 0}});
         field.CopyFrom(changed, placement).Wait();
         // Also exercise worker drain/join during destruction.
     }
+    const auto volume = plan.VisualizationPrefix(0, token);
+    double localDensitySum = 0;
+    {
+        const auto read = expected.Read();
+        for (I i = 0; i < expected.RowCount(); ++i)
+            localDensitySum += read.At(i, 0);
+    }
+    const double frozenDensitySum = DNDS::MPI::AllreduceValue<DNDS::MPI::Reduction::Sum>(localDensitySum, mpi.comm);
+    const auto file = H5Fopen((volume + ".vtkhdf").c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+    REQUIRE(file >= 0);
+    const auto density = H5Dopen(file, "VTKHDF/CellData/rho", H5P_DEFAULT);
+    REQUIRE(density >= 0);
+    const auto densitySpace = H5Dget_space(density);
+    std::array<double, 8> written{};
+    REQUIRE(H5Sget_simple_extent_npoints(densitySpace) == I(written.size()));
+    REQUIRE(H5Dread(density, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, written.data()) >= 0);
+    CHECK(std::accumulate(written.begin(), written.end(), 0.) == doctest::Approx(frozenDensitySum).epsilon(1e-7));
+    H5Sclose(densitySpace);
+    H5Dclose(density);
+    H5Fclose(file);
     simulation.ReadCheckpoint(plan.CheckpointPath(token));
     const auto observed = simulation.GetDomain(0).Dofs().CoupledField().Owned().To(R::Device::Host(), placement);
     const auto read = observed.Read(), original = expected.Read();
@@ -544,6 +564,8 @@ TEST_CASE("Asynchronous CUDA checkpoint captures the accepted epoch before a new
     {
         CHECK(std::filesystem::remove(plan.InternalCheckpointPath(0, internalToken)));
         CHECK(std::filesystem::remove(plan.InternalSnapshotManifestPath(0, internalToken)));
+        CHECK(std::filesystem::remove(volume + ".vtkhdf"));
+        CHECK(std::filesystem::remove(volume + "_bnd.vtkhdf"));
         CHECK(std::filesystem::remove(plan.CheckpointPath(token)));
         CHECK(std::filesystem::remove(plan.SnapshotManifestPath(token)));
     }

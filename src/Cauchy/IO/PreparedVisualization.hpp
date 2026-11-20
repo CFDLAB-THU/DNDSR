@@ -5,29 +5,25 @@
 
 namespace DNDS::Cauchy
 {
+    struct BoundaryOutputGeometry;
+    class OutputFields;
     /** @brief Detached numerical output with a retained immutable mesh read.
-     * @details Owns prepared host cell fields and optional boundary flux rows. It
+     * @details Owns detached resident cell fields and optional parent-face flux rows. It
      * retains no solution/reconstruction/workspace or physics worker. Geometry
      * remains shared and read-pinned until writing ends; mesh mutation requires
-     * the output service to drain first. Both files use reference-frame coordinates. Write performs collective
-     * file I/O only, on the supplied retained communicator.
+     * the output service to drain first. Both files use reference-frame coordinates. Write stages device fields, gathers boundary values, and performs
+     * file redistribution and parallel HDF5 on the supplied communicator.
      */
     class PreparedVisualization
     {
         friend class FiniteVolume;
-        struct Boundary
-        {
-            std::shared_ptr<Geom::UnstructuredMesh> mesh;
-            Runtime::Array<real> fields, normals;
-            std::shared_ptr<const std::vector<int>> zones;
-            std::shared_ptr<const std::vector<std::pair<int, std::string>>> zoneNames;
-            std::optional<Runtime::Array<real>> flux;
-            std::vector<std::string> fluxNames;
-        };
+        friend class AsyncOutput;
+        void BindWriterCopy(Runtime::ExecutionContext);
         struct Data;
-        std::shared_ptr<const Data> _data;
-        PreparedVisualization(std::shared_ptr<Geom::UnstructuredMesh>, Runtime::Array<real>,
-                              std::vector<std::string>, Boundary, real time, int deflate);
+        std::shared_ptr<Data> _data;
+        PreparedVisualization(std::shared_ptr<Geom::UnstructuredMesh>, OutputFields,
+                              std::vector<std::string>, std::shared_ptr<const BoundaryOutputGeometry>,
+                              std::optional<Runtime::Array<real>>, std::vector<std::string>, real time, int deflate);
 
     public:
         void Write(const std::string &prefix, std::shared_ptr<Runtime::CommunicationContext>) const;

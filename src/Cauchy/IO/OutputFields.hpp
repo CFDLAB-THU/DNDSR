@@ -25,6 +25,7 @@ namespace DNDS::Cauchy
         static OutputFields Submit(Runtime::EagerEngine &, const Runtime::ExecutionStream &,
                                    const EquationDofs &, const EquationSystem &,
                                    std::optional<Physics::Chemistry::ChemicalWorkerPool> workers = {});
+        Runtime::Device Device() const { return _values.GetDevice(); }
         /// Explicit I/O observation after the producer lane is drained. Checks
         /// numerical status before returning a host field; never evaluates CPU
         /// physics on a downloaded device state. The result owns its payload.

@@ -286,7 +286,7 @@ numerical state.
 `output.asynchronous` defaults to `false`. When enabled, `OutputCoordinator`
 uses one FIFO writer for accepted-step and internal nonlinear output. Its capacity of two batches includes the running writer. The controller waits for capacity before capturing the next snapshot.
 
-For a CUDA checkpoint, the controller freezes the requested owned fields, reconstruction and time-method history in independent device allocations. After these device copies complete, the solver can overwrite its fields. The I/O worker copies the frozen data into page-locked host buffers on its own CUDA stream before opening HDF5. CPU checkpoints use independent host copies. An accepted or internal checkpoint can therefore overlap D2H and disk I/O with subsequent computation. Visualization still prepares host fields and boundary-file row ordering on the controller.
+For a CUDA checkpoint, the controller freezes the requested owned fields, reconstruction and time-method history in independent device allocations. After these device copies complete, the solver can overwrite its fields. The I/O worker copies the frozen data into page-locked host buffers on its own CUDA stream before opening HDF5. CPU checkpoints use independent host copies. An accepted or internal checkpoint can therefore overlap D2H and disk I/O with subsequent computation. For visualization the controller evaluates volume output fields and any requested facial fluxes into independent allocations on the solver's device. The worker downloads the frozen fields on its copy stream, samples adjacent-cell fields and wall distances, and sends one packed row per boundary face to its file owner. This last transfer uses the domain I/O communicator with the same peer and row mapping as the mesh. CPU output uses the detached host values directly.
 
 `PreparedVisualization` owns prepared cell fields and optional reduced face data,
 and retains a mesh read until writing finishes. No live Domain, coefficient
@@ -305,9 +305,5 @@ HDF5/CGNS calls; callers must respect the drain boundary.
 Each domain writes a collective volume and boundary file for a visualization. The worker
 publishes completion manifests only after every required file has closed
 successfully across its ranks/domains. Exceptions from collective file paths
-trigger an independent abort, with no collective exception recovery. Internal
-nonlinear output retains its synchronous semantics after draining older work.
-Final output and shutdown also drain; the final summary never reports merely
-queued files as complete. The Phase C implementation remains subject to its
-grouped build and distributed validation gate.
+trigger an independent abort, with no collective exception recovery. Final output and shutdown drain the writer before reporting files as complete.
 

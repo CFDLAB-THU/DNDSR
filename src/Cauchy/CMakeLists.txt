@@ -155,6 +155,7 @@ set(CPPS
     IO/FiniteVolume_FieldOutput.cpp
     IO/OutputFields.cpp
     IO/PreparedCheckpoint.cpp
+    IO/BoundaryOutputPlan.cpp
     IO/PreparedVisualization.cpp
     IO/OutputQueue.cpp
     IO/AsyncOutput.cpp

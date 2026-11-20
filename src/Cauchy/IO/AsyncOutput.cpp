@@ -134,6 +134,7 @@ namespace DNDS::Cauchy
             {
                 files.visualizationPrefix = plan.VisualizationPrefix(iDomain, token);
                 files.visualization.emplace(domain.CaptureInternalVisualization(config.Output().hdfDeflateLevel));
+                files.visualization->BindWriterCopy(_data->writerCopy[iDomain]);
             }
             if (checkpoint)
             {
@@ -200,6 +201,7 @@ namespace DNDS::Cauchy
                 if (visualization)
                 {
                     files.visualization.emplace(domain.PrepareVisualization(config.Output().hdfDeflateLevel));
+                    files.visualization->BindWriterCopy(_data->writerCopy[iDomain]);
                     files.visualizationPrefix = plan.VisualizationPrefix(iDomain, token);
                 }
                 batch->domains.push_back(std::move(files));

@@ -1,45 +1,16 @@
 #include "Cauchy/Discretization/FiniteVolume.hpp"
 #include "Cauchy/Discretization/FiniteVolumeWorkspaceInternal.hpp"
-#include "Cauchy/IO/BoundaryOutputGeometry.hpp"
+#include "Cauchy/IO/BoundaryOutputPlan.hpp"
 #include "Cauchy/IO/OutputFields.hpp"
 #include "DNDS/Runtime/Execution/CUDAExecution.hpp"
 #include "DNDS/Runtime/Execution/EagerArray.hpp"
 #include "DNDS/Runtime/Communication/RowTransfer.hpp"
 #include "DNDS/MPI/CollectiveStage.hpp"
-#include "Geom/Quadratures/Quadrature.hpp"
 #include <unordered_map>
 
 namespace DNDS::Cauchy
 {
     namespace R = Runtime;
-
-    struct BoundaryOutputGeometry
-    {
-        std::shared_ptr<Geom::UnstructuredMesh> mesh;
-        // Local fast path stores rows in file order. When ownership differs,
-        // store the compact FV rows and route their payloads to file order.
-        R::Array<BoundaryOutputRow> rows;
-        std::optional<R::RowTransferPlan> route;
-        R::Array<real> normals;
-        std::shared_ptr<const std::vector<int>> zones;
-        std::shared_ptr<const std::vector<std::pair<int, std::string>>> names;
-
-        R::Array<real> InFileOrder(R::Array<real> source) const
-        {
-            if (!route)
-                return source;
-            const MPIInfo mpi(route->Communicator());
-            R::Array<real> destination;
-            MPI::LocalStage(mpi, [&]
-                            { destination = R::Array<real>(R::RowLayout::Dense(route->DestinationRows(), source.Layout().Width())); });
-            R::PayloadPlan payload(*route, source.Layout(), destination.Layout(), R::ElementSchema::For<real>());
-            R::TransferOptions options;
-            options.mode = R::TransferMode::Transient;
-            options.context = route->Context();
-            payload.Bind(source, destination, R::TransferTransport::Direct, options).Begin().Wait();
-            return destination;
-        }
-    };
 
     std::shared_ptr<const BoundaryOutputGeometry> FiniteVolume::Data::PrepareBoundaryOutput() const
     {
@@ -142,7 +113,7 @@ namespace DNDS::Cauchy
                     names.emplace_back(zone, "");
             }
         BoundaryOutputGeometry geometry{std::move(extracted), std::move(rows), std::move(route), {}, std::make_shared<const std::vector<int>>(std::move(zones)), std::make_shared<const std::vector<std::pair<int, std::string>>>(std::move(names))};
-        geometry.normals = geometry.InFileOrder(std::move(normals));
+        geometry.normals = geometry.InFileOrder(std::move(normals), metrics.Communication());
         boundaryOutputGeometry = std::make_shared<const BoundaryOutputGeometry>(std::move(geometry));
         return boundaryOutputGeometry;
     }
@@ -162,7 +133,7 @@ namespace DNDS::Cauchy
         const auto &equation = _data->equation;
         auto boundary = _data->PrepareBoundaryOutput();
         std::vector<std::string> names, fluxNames;
-        R::Array<real> outputFields, boundaryFields;
+        OutputFields outputFields;
         std::optional<R::Array<real>> boundaryFluxes;
         bool compatible = workspace.boundaryFacialFluxCurrent &&
                           workspace.rhsState && workspace.rhsTime == time;
@@ -210,42 +181,14 @@ namespace DNDS::Cauchy
             else
                 DNDS_check_throw_info(false, "CUDA visualization is not compiled");
 #endif
-            auto prepared = OutputFields::Submit(engine, stream, state, equation, workers);
-            engine.Synchronize();
-            outputFields = prepared.CopyToHost(stream.Context());
-            const bool exportDistance = _data->mesh->HasNodeWallDist();
-            auto requirements = Geom::MeshReadRequirements::CellFlux();
-            requirements.wallDistance = exportDistance;
-            auto meshRead = _data->mesh->AcquireRead(requirements);
-            const auto meshView = meshRead.HostView();
-            boundaryFields = R::Array<real>(R::RowLayout::Dense(boundary->rows.RowCount(), outputFields.Layout().Width() + index(exportDistance)));
-            const auto fieldsRead = outputFields.Read();
-            const auto rowsRead = boundary->rows.Read();
-            auto boundaryWrite = boundaryFields.Write();
-            const auto fields = fieldsRead.View<R::TableRows>();
-            const auto rows = rowsRead.View<R::FixedRows<1>>();
-            const auto output = boundaryWrite.View<R::TableRows>();
-            for (index iRow = 0; iRow < output.RowCount(); ++iRow)
-            {
-                const index cell = rows(iRow, 0).cell;
-                for (index j = 0; j < fields.Width(); ++j)
-                    output(iRow, j) = fields(cell, j);
-                if (exportDistance)
-                {
-                    // Geometric center sample, before any SST floor or first-layer override.
-                    const auto nodes = meshView.CellNodes(cell);
-                    const auto &shape = Geom::Elem::GetCachedShapeAtQuadrature(meshView.GetCellElement(cell).type, 1, 0);
-                    real distance = 0;
-                    for (index j = 0; j < index(nodes.size()); ++j)
-                        distance += shape(0, j) * meshView.NodeWallDist(nodes[j]).norm();
-                    output(iRow, fields.Width()) = distance;
-                }
-            } });
+            outputFields = OutputFields::Submit(engine, stream, state, equation, workers);
+            engine.Synchronize(); });
         if (capture)
             MPI::LocalStage(mpi, [&]
                             {
                 auto rows = boundary->rows.To(Device(), stream.Context());
                 R::Array<real> packed(R::RowLayout::Dense(rows.RowCount(), state.ComponentNumber() + 3), Device());
+                packed.SetName("Cauchy/output/frozenBoundaryFlux", DNDS_ALLOCATION_SITE());
                 R::SubmitArrays(engine, stream, [](R::ExecutionContext context, auto rows, auto flux, auto momentum, auto quadrature, auto output)
                 {
 #ifdef DNDS_USE_CUDA
@@ -261,10 +204,8 @@ namespace DNDS::Cauchy
                 R::ReadAs<R::FixedRows<3>>(workspace.boundaryMomentumFlux), R::ReadAs<R::TableRows>(Metrics().FaceQuadrature()),
                 R::WriteAs<R::TableRows>(packed));
                 engine.Synchronize();
-                boundaryFluxes.emplace(packed.To(R::Device::Host(), stream.Context())); });
-        PreparedVisualization::Boundary surface{boundary->mesh, boundary->InFileOrder(std::move(boundaryFields)), boundary->normals, boundary->zones, boundary->names, {}, std::move(fluxNames)};
-        if (boundaryFluxes)
-            surface.flux.emplace(boundary->InFileOrder(std::move(*boundaryFluxes)));
-        return PreparedVisualization(_data->mesh, std::move(outputFields), std::move(names), std::move(surface), time, hdfDeflateLevel);
+                boundaryFluxes.emplace(std::move(packed)); });
+        return PreparedVisualization(_data->mesh, std::move(outputFields), std::move(names), std::move(boundary),
+                                     std::move(boundaryFluxes), std::move(fluxNames), time, hdfDeflateLevel);
     }
 }
