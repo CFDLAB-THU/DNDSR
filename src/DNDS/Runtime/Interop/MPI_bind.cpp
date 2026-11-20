@@ -10,6 +10,15 @@ namespace DNDS::Runtime
     std::string ArrayTypeIdentity(const PythonArray &array);
     namespace
     {
+        template <class T>
+        std::shared_ptr<const GlobalReductionBinding> BindGlobalReduction(const NCCLTransferProvider &provider,
+                                                                          const PythonArray &input, const PythonArray &output,
+                                                                          Reduction operation)
+        {
+            auto source = input.AsArray<T>(), destination = output.AsArray<T>();
+            py::gil_scoped_release release;
+            return provider.BindAllreduce(source, destination, operation);
+        }
         struct PythonDynamicTransfer
         {
             PythonArray prototype;
@@ -30,6 +39,9 @@ namespace DNDS::Runtime
     }
     void BindMPIOptions(py::module_ &m)
     {
+        py::class_<GlobalReductionBinding, std::shared_ptr<GlobalReductionBinding>>(m, "GlobalReductionBinding")
+            .def("submit", &GlobalReductionBinding::Submit, py::arg("engine"), py::arg("stream"), py::call_guard<py::gil_scoped_release>(),
+                 "Queue the bound collective; the returned event orders a dependent stream or host observation.");
         py::class_<TransferProvider, std::shared_ptr<TransferProvider>>(m, "TransferProvider");
         py::class_<NCCLTransferProvider, TransferProvider, std::shared_ptr<NCCLTransferProvider>>(m, "NCCLTransferProvider",
                                                                                                   "Explicit stream-ordered CUDA payload provider. One rank per GPU; MPI only bootstraps setup. Match per-peer order and retain streams through completion.")
@@ -39,6 +51,21 @@ namespace DNDS::Runtime
             .def(py::init([](std::shared_ptr<CommunicationContext> context, Device device)
                           { return NCCLTransferProvider::Create(std::move(context), device); }),
                  py::arg("context"), py::arg("device"))
+            .def("bind_allreduce", [](const NCCLTransferProvider &provider, const PythonArray &input, const PythonArray &output, Reduction operation)
+                 {
+                     const bool f64 = input.MatchesType<double>() && output.MatchesType<double>();
+                     const bool f32 = input.MatchesType<float>() && output.MatchesType<float>();
+                     const bool i64 = input.MatchesType<int64_t>() && output.MatchesType<int64_t>();
+                     const bool i32 = input.MatchesType<int32_t>() && output.MatchesType<int32_t>();
+                     {
+                         py::gil_scoped_release release;
+                         CommunicationDetail::RequireAll(f64 || f32 || i64 || i32, provider.ControlContext()->Communicator(),
+                                                         "global reduction requires matching native FP32/FP64/I32/I64 operands");
+                     }
+                     if (f64) return BindGlobalReduction<double>(provider, input, output, operation);
+                     if (f32) return BindGlobalReduction<float>(provider, input, output, operation);
+                     if (i64) return BindGlobalReduction<int64_t>(provider, input, output, operation);
+                     return BindGlobalReduction<int32_t>(provider, input, output, operation); }, py::arg("source"), py::arg("destination"), py::arg("operation"))
             .def_static("available", &NCCLTransferProvider::Available)
             .def("check_async_error", &NCCLTransferProvider::CheckAsyncError)
             .def("abort", &NCCLTransferProvider::Abort);

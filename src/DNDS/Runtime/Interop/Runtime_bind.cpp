@@ -674,9 +674,17 @@ namespace DNDS::Runtime
             .def("begin_scheduled", py::overload_cast<ExecutionContext, bool>(&TransferBinding::BeginScheduled, py::const_), py::arg("context") = ExecutionContext::Host(), py::arg("caller_valid") = true, "Borrowed-context interop. Caller owns request progress and stream lifetime; no ordering is inferred. caller_valid joins the existing preflight.")
             .def("begin_scheduled", py::overload_cast<const ExecutionStream &, bool>(&TransferBinding::BeginScheduled, py::const_), py::arg("stream"), py::arg("caller_valid") = true, py::call_guard<py::gil_scoped_release>(), "Managed MPI begin: runtime registers requests before posting and owns completion even when the operation handle is dropped. Caller still supplies all dependency edges.")
             .def("begin_checked", &TransferBinding::BeginChecked, py::arg("stream"), py::arg("caller_valid") = true, py::call_guard<py::gil_scoped_release>(), "Managed MPI begin with declared-access checking. Requires a checked stream; registers ownership before posting and preserves the caller's explicit dependencies.")
+            .def("submit_ready", &TransferBinding::SubmitReady, py::arg("engine"), py::arg("stream"), py::arg("caller_valid") = true,
+                 py::call_guard<py::gil_scoped_release>(), "Submit an already producer-ready transfer through the bound provider.")
+            .def("submit_after", &TransferBinding::SubmitAfter, py::arg("engine"), py::arg("stream"), py::arg("producer"), py::arg("caller_valid") = true,
+                 py::call_guard<py::gil_scoped_release>(), "Submit after a producer event. Ordinary MPI may wait for producer visibility on the controller.")
             .def("enqueue", &TransferBinding::Enqueue, py::arg("engine"), py::arg("stream"), py::call_guard<py::gil_scoped_release>(),
                  "Stream-native provider only: enqueue pack/transfer/unpack. Caller supplies ready/consumer edges, ordered scratch reuse and matching peer calls; no host completion wait.");
         py::class_<TransferOperation>(m, "TransferOperation", "Active requests/access ownership. Observe errors explicitly; coordinate rank-local failures before the next collective. Cleanup alone does not report errors.")
+            .def("completion_event", &TransferOperation::CompletionEvent)
+            .def("enqueue_wait", &TransferOperation::EnqueueWait, py::arg("consumer"), py::call_guard<py::gil_scoped_release>(),
+                 "Order a consumer after completion. An MPI-to-CUDA edge can require controller progress.")
+            .def_property_readonly("requires_host_progress", &TransferOperation::RequiresHostProgress)
             .def("wait", &TransferOperation::Wait, py::call_guard<py::gil_scoped_release>(), "Complete both source and destination uses and report retained errors. Call before MPI_Finalize.")
             .def("wait_destination_ready", &TransferOperation::WaitDestinationReady, py::call_guard<py::gil_scoped_release>(), "Make destination readable. Source may still be in use: full wait/test completion is required before reusing it.")
             .def("test", &TransferOperation::Test, py::call_guard<py::gil_scoped_release>());

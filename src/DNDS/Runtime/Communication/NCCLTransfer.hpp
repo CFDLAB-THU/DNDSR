@@ -47,7 +47,25 @@ namespace DNDS::Runtime
         {
             static_assert(std::is_same_v<T, float> || std::is_same_v<T, double> ||
                           std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t>);
-            return BindAllreduceBuffers(source.Storage(), destination.Storage(), source.Layout(), destination.Layout(),
+            Buffer input, output;
+            RowLayout inputShape, outputShape;
+            try
+            {
+                const auto src = source.SharedStorage(), dst = destination.SharedStorage();
+                DNDS_check_throw_info(src && dst, "allreduce binding needs live Array handles");
+                inputShape = src->Layout();
+                outputShape = dst->Layout();
+                input = src->Values();
+                output = dst->Values();
+            }
+            catch (...)
+            {
+                MPI::AbortIfSolverFailure("NCCL collective Array validation failed");
+                // A coordinated caller must reach the same binding preflight on
+                // every rank, including one with an unpublished or empty handle.
+                input = {};
+            }
+            return BindAllreduceBuffers(input, output, inputShape, outputShape,
                                         ElementSchema::Arithmetic<T>().Fields().front().scalar, operation);
         }
         const char *Name() const override { return "nccl"; }

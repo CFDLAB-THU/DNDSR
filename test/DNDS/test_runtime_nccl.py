@@ -52,14 +52,38 @@ def test_nccl_queued_copies_and_retained_shared_arrays(packed):
     engine = R.EagerEngine()
     producer, comm, consumer = (engine.cuda_stream(0) for _ in range(3))
     engine.copy(producer, source, produced)
-    comm.wait_for(producer.record())
-    binding.enqueue(engine, comm)
-    consumer.wait_for(comm.record())
+    operation = binding.submit_after(engine, comm, producer.record())
+    assert not operation.requires_host_progress
+    operation.enqueue_wait(consumer)
     engine.copy(consumer, destination, checkpoint)
     retained = checkpoint[::3, ::-2]
-    del binding, payload, route, source, produced, destination, checkpoint
+    del operation, binding, payload, route, source, produced, destination, checkpoint
     gc.collect()
     engine.synchronize()
     provider.check_async_error()
     expected = (np.arange(rows * width, dtype=np.float64).reshape(rows, width) + ((rank + 1) % size) * 10000)[mapping]
     np.testing.assert_array_equal(retained.numpy(), expected[::3, ::-2])
+
+
+@pytest.mark.mpi
+def test_streamed_global_sum_retains_python_operands():
+    if not R.cuda_enabled or not R.NCCLTransferProvider.available():
+        pytest.skip("requires CUDA and NCCL")
+    device = R.Device.cuda(0)
+    shape = R.RowLayout.dense(1, 3)
+    source, produced, result, observed = [R.Array(shape, np.dtype("float64"), device) for _ in range(4)]
+    values = np.arange(3, dtype=np.float64).reshape(1, 3) + MPI.COMM_WORLD.rank
+    source.assign(values)
+    provider = R.NCCLTransferProvider(mpi_info(), device)
+    binding = provider.bind_allreduce(produced, result, R.Reduction.Sum)
+    engine = R.EagerEngine()
+    compute, communication = (engine.cuda_stream(0) for _ in range(2))
+    engine.copy(compute, source, produced)
+    communication.wait_for(compute.record())
+    compute.wait_for(binding.submit(engine, communication))
+    engine.copy(compute, result, observed)
+    del binding, provider, source, produced, result
+    compute.record().wait()
+    n = MPI.COMM_WORLD.size
+    expected = n * np.arange(3).reshape(1, 3) + n * (n - 1) // 2
+    np.testing.assert_array_equal(observed.numpy(), expected)
