@@ -7,6 +7,20 @@ host waits between pack, communication and unpack. One rank uses one GPU.
 NCCL may internally use host shared memory and CPU proxy threads on PCIe systems;
 this does not promise NVLink, GPUDirect RDMA or a particular overlap speedup.
 
+## Global Array reductions
+
+Call `provider->BindAllreduce(source, destination, op)` collectively during setup. All ranks use the same compact table shape, scalar type and operation. Sum, minimum and maximum accept FP32, FP64 and signed 32- or 64-bit integers. Binding the same Array as both operands selects an in-place reduction. The binding refers to the allocations captured at setup. Bind again when replacing those allocations.
+
+On each rank, order the communication stream after the producer, submit collectives in matching order, and order the consumer after the returned event. For example:
+
+```cpp
+communication.WaitFor(producer.Record());
+auto ready = reduction->Submit(engine, communication);
+consumer.WaitFor(ready);
+```
+
+Submission enqueues the reduction on the selected CUDA stream. The engine tracks reads and writes through completion, observes NCCL errors, and retains the communicator on its controller even if the caller releases the binding. A host observer can wait on `ready`. The NCCL operation itself uses no host barrier or MPI data transfer.
+
 ## Build and selection
 
 `DNDS_USE_NCCL` defaults to ON when CUDA is enabled and OFF for a CPU build.

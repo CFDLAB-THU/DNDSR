@@ -4,6 +4,7 @@
 #include "DNDS/Runtime/Communication/TransferAccess.hpp"
 #include "DNDS/Runtime/Execution/EagerEngine.hpp"
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstring>
@@ -45,6 +46,38 @@ namespace DNDS::Runtime
     struct NCCLTransferProvider::State
     {
         struct Binding;
+        struct Allreduce;
+        struct Pending final : ExecutionProgress
+        {
+            std::shared_ptr<State> owner;
+            std::shared_ptr<const void> binding;
+            std::atomic<bool> retired{false};
+            std::exception_ptr failure;
+
+            Pending(std::shared_ptr<State> state, std::shared_ptr<const void> resource)
+                : owner(std::move(state)), binding(std::move(resource)) {}
+            bool Poll() override
+            {
+                // Only the controller polls and releases the communicator. The
+                // event observer publishes the failure before setting retired.
+                const bool done = retired.load(std::memory_order_acquire);
+                try
+                {
+                    owner->Check();
+                }
+                catch (...)
+                {
+                    MPI::Abort(owner->control, "managed NCCL asynchronous failure");
+                }
+                if (!done)
+                    return false;
+                if (failure)
+                    MPI::Abort(owner->control, "managed NCCL retirement failed");
+                binding.reset();
+                owner.reset();
+                return true;
+            }
+        };
         Device device;
         std::shared_ptr<CommunicationContext> controlOwner;
         MPI_Comm control = MPI_COMM_NULL;
@@ -388,36 +421,7 @@ namespace DNDS::Runtime
         }
         void Enqueue(EagerEngine &engine, const ExecutionStream &stream) const override
         {
-            struct PendingProvider final : ExecutionProgress
-            {
-                std::shared_ptr<const Binding> binding;
-                std::atomic<bool> retired{false};
-                std::exception_ptr failure; // Published by retired's release/acquire.
-                explicit PendingProvider(std::shared_ptr<const Binding> value) : binding(std::move(value)) {}
-                bool Poll() override
-                {
-                    if (!retired.load(std::memory_order_acquire))
-                    {
-                        try
-                        {
-                            binding->owner->Check();
-                        }
-                        catch (...)
-                        {
-                            // A transport failure can leave peers or a CUDA
-                            // prefix pending forever. Do not enter a drain or
-                            // recover by unwinding partially completed work.
-                            MPI::Abort(binding->owner->control, "managed NCCL asynchronous failure");
-                        }
-                        return false;
-                    }
-                    if (failure)
-                        MPI::Abort(binding->owner->control, "managed NCCL retirement failed");
-                    binding.reset(); // Final provider disposal stays on controller.
-                    return true;
-                }
-            };
-            auto pending = std::make_shared<PendingProvider>(shared_from_this());
+            auto pending = std::make_shared<State::Pending>(owner, shared_from_this());
             engine.RegisterProgress(pending); // Before issuing any native work.
             try
             {
@@ -441,6 +445,112 @@ namespace DNDS::Runtime
             }
         }
     };
+
+    struct NCCLTransferProvider::State::Allreduce final : GlobalReductionBinding, std::enable_shared_from_this<Allreduce>
+    {
+        std::shared_ptr<State> owner;
+        Buffer source, destination;
+        size_t count = 0, scalarBytes = 0;
+        ncclDataType_t type{};
+        ncclRedOp_t operation{};
+
+        StreamEvent Submit(EagerEngine &engine, const ExecutionStream &stream) const override
+        {
+            const auto context = stream.Context();
+            DNDS_check_throw_info(engine.Owns(stream) && context.device == owner->device &&
+                                      std::this_thread::get_id() == owner->controller,
+                                  "NCCL collective stream or controller differs");
+            const bool inPlace = source.SameRange(destination);
+            struct Operands
+            {
+                ScheduledAccess source, destination;
+            };
+            auto operands = std::make_shared<Operands>();
+            auto pending = std::make_shared<Pending>(owner, shared_from_this());
+            engine.RegisterProgress(pending);
+            try
+            {
+                std::vector<ScheduledBufferAccess> accesses;
+                if (!inPlace)
+                {
+                    operands->source = source.Reserve(AccessMode::Read, context.device, engine.ChecksAccess());
+                    accesses.emplace_back(source, AccessMode::Read);
+                }
+                const auto mode = inPlace ? AccessMode::ReadWrite : AccessMode::Write;
+                operands->destination = destination.Reserve(mode, context.device, engine.ChecksAccess());
+                accesses.emplace_back(destination, mode);
+                // The pending record pins this binding until controller retirement.
+                engine.SubmitOperation(stream, [this, operands, inPlace](ExecutionContext ctx)
+                                       {
+                    if (!inPlace) operands->source.Validate();
+                    operands->destination.Validate();
+                    if (!count) return;
+                    auto *out = operands->destination.Pointer(scalarBytes, scalarBytes);
+                    const auto *in = inPlace ? out : operands->source.Pointer(scalarBytes, scalarBytes);
+                    CheckCUDA(cudaSetDevice(ctx.device.ordinal));
+                    std::lock_guard<std::mutex> lock(owner->submission);
+                    owner->Check();
+                    CheckNCCL(ncclAllReduce(in, out, count, type, operation, owner->comm, CUDAStream(ctx))); }, [operands, pending](std::exception_ptr error) noexcept
+                                       {
+                    operands->source.Complete(!error);
+                    operands->destination.Complete(!error);
+                    pending->failure = error;
+                    pending->retired.store(true, std::memory_order_release); }, std::move(accesses));
+            }
+            catch (...)
+            {
+                MPI::AbortIfSolverFailure("solver NCCL allreduce submission rejected");
+                pending->retired.store(true, std::memory_order_release);
+                throw;
+            }
+            return stream.Record();
+        }
+    };
+
+    std::shared_ptr<const GlobalReductionBinding> NCCLTransferProvider::BindAllreduceBuffers(
+        Buffer src, Buffer dst, const RowLayout &in, const RowLayout &out, ElementScalar scalar, Reduction op) const
+    {
+        auto result = std::make_shared<State::Allreduce>();
+        result->owner = _state;
+        const auto comm = _state->control;
+        const bool valid = src.GetDevice() == _state->device && dst.GetDevice() == _state->device &&
+                           in.Kind() == RowLayoutKind::Table && out.Kind() == RowLayoutKind::Table &&
+                           in.Width() == in.Stride() && out.Width() == out.Stride() &&
+                           in.Width() == out.Width() && in.Rows() == out.Rows() &&
+                           (!src.Overlaps(dst) || src.SameRange(dst)) &&
+                           (op == Reduction::Sum || op == Reduction::Min || op == Reduction::Max);
+        std::array<uint64_t, 4> descriptor{uint64_t(scalar), uint64_t(op), uint64_t(in.Rows()), uint64_t(in.Width())};
+        auto reference = descriptor;
+        auto identity = _state->identity;
+        MPI_Bcast(reference.data(), int(reference.size()), MPI_UINT64_T, 0, comm);
+        MPI_Bcast(&identity, sizeof(identity), MPI_BYTE, 0, comm);
+        CommunicationDetail::RequireAll(valid && reference == descriptor && !std::memcmp(&identity, &_state->identity, sizeof(identity)),
+                                        comm, "NCCL allreduce requires matching scalar, operation, compact table shapes and provider");
+        result->source = std::move(src);
+        result->destination = std::move(dst);
+        result->count = in.Elements();
+        result->scalarBytes = ElementSchema::ScalarBytes(scalar);
+        switch (scalar)
+        {
+        case ElementScalar::I32:
+            result->type = ncclInt32;
+            break;
+        case ElementScalar::I64:
+            result->type = ncclInt64;
+            break;
+        case ElementScalar::F32:
+            result->type = ncclFloat32;
+            break;
+        case ElementScalar::F64:
+            result->type = ncclFloat64;
+            break;
+        default:
+            DNDS_check_throw_info(false, "unsupported NCCL allreduce scalar");
+        }
+        result->operation = op == Reduction::Sum ? ncclSum : op == Reduction::Max ? ncclMax
+                                                                                  : ncclMin;
+        return result;
+    }
 
     bool NCCLTransferProvider::Available() { return true; }
     void NCCLTransferProvider::CheckAsyncError() const { _state->Check(); }
@@ -514,6 +624,12 @@ namespace DNDS::Runtime
     struct NCCLTransferProvider::State
     {
     };
+    std::shared_ptr<const GlobalReductionBinding> NCCLTransferProvider::BindAllreduceBuffers(
+        Buffer, Buffer, const RowLayout &, const RowLayout &, ElementScalar, Reduction) const
+    {
+        DNDS_check_throw_info(false, "NCCL provider is unavailable");
+        return {};
+    }
     bool NCCLTransferProvider::Available() { return false; }
     void NCCLTransferProvider::CheckAsyncError() const { DNDS_check_throw_info(false, "NCCL provider is unavailable"); }
     void NCCLTransferProvider::Abort() const noexcept {}

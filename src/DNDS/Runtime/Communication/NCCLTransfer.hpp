@@ -1,5 +1,6 @@
 #pragma once
 
+#include "DNDS/Runtime/Communication/GlobalReduction.hpp"
 #include "DNDS/Runtime/Communication/RowTransfer.hpp"
 
 namespace DNDS::Runtime
@@ -17,6 +18,8 @@ namespace DNDS::Runtime
         struct State;
         std::shared_ptr<State> _state;
         explicit NCCLTransferProvider(std::shared_ptr<State>);
+        std::shared_ptr<const GlobalReductionBinding> BindAllreduceBuffers(
+            Buffer, Buffer, const RowLayout &, const RowLayout &, ElementScalar, Reduction) const;
 
     public:
         /// Build capability only; Create validates runtime device availability.
@@ -35,6 +38,18 @@ namespace DNDS::Runtime
         /// Explicit cancellation of this communicator and all its bindings.
         /// Drain engine work before releasing arrays or their native streams.
         void Abort() const noexcept;
+        /// Prepare an elementwise sum, minimum or maximum for two equally shaped
+        /// compact tables. Exact in-place reduction is supported. All ranks must
+        /// participate in binding; repeated submissions perform no MPI preflight.
+        template <class T>
+        std::shared_ptr<const GlobalReductionBinding> BindAllreduce(
+            const Array<T> &source, Array<T> &destination, Reduction operation) const
+        {
+            static_assert(std::is_same_v<T, float> || std::is_same_v<T, double> ||
+                          std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t>);
+            return BindAllreduceBuffers(source.Storage(), destination.Storage(), source.Layout(), destination.Layout(),
+                                        ElementSchema::Arithmetic<T>().Fields().front().scalar, operation);
+        }
         const char *Name() const override { return "nccl"; }
         std::shared_ptr<Detail::TransferProviderBinding> Bind(
             const TransferPayload &, Buffer, Buffer, std::shared_ptr<const Reducer>,

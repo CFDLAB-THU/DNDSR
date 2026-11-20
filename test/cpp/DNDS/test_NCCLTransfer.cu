@@ -389,6 +389,42 @@ TEST_CASE("CUDA producer chains device-packed MPI and NCCL across streams throug
         for (I j = 0; j < 5; ++j)
             CHECK(read.View()(iRow, j) == Value(twicePrevious, iRow, j, 7));
 }
+TEST_CASE("NCCL global Array reduction orders producer and consumer across streams")
+{
+    auto local = R::NCCLTransferProvider::Create(mpi.comm, device);
+    R::Array<double> input(R::RowLayout::Dense(3, 2), device), sum(input.Layout(), device), output(input.Layout(), device);
+    auto reduce = local->BindAllreduce(input, sum, R::Reduction::Sum);
+    auto inPlace = local->BindAllreduce(sum, sum, R::Reduction::Max);
+    R::EagerEngine engine(0, std::make_shared<R::AccessTrackingContext>());
+    auto compute = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
+    auto comm = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
+    TestGate gate;
+    gate.Enqueue(engine, compute);
+    R::SubmitArrays(engine, compute, [](auto ctx, auto values)
+                    { Produce<<<1, 32, 0, R::CUDAStream(ctx)>>>(values, mpi.rank, 1); LaunchOK(); }, R::Write(input));
+    comm.WaitFor(compute.Record());
+    reduce->Submit(engine, comm);
+    compute.WaitFor(inPlace->Submit(engine, comm));
+    R::SubmitArrays(engine, compute, [](auto ctx, auto x, auto y)
+                    { Core<<<1, 32, 0, R::CUDAStream(ctx)>>>(x, y); LaunchOK(); }, R::Read(sum), R::Write(output));
+    reduce.reset();
+    inPlace.reset();
+    local.reset();
+    gate.Release();
+    engine.Close();
+    CHECK_FALSE(gate.timedOut.load());
+    const auto host = output.To(R::Device::Host());
+    const auto read = host.Read();
+    for (I row = 0; row < 3; ++row)
+        for (I column = 0; column < 2; ++column)
+        {
+            double expected = 0;
+            for (int rank = 0; rank < mpi.size; ++rank)
+                expected += Value(rank, row, column, 1);
+            CHECK(read.At(row, column) == 2 * expected);
+        }
+}
+
 TEST_CASE("NCCL DOF halo publishes the retired producer version without a submission host wait")
 {
     namespace A = DNDS::Algebra;
