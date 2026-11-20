@@ -267,7 +267,7 @@ namespace DNDS::Cauchy
         const auto offDiagonal = ReadOffDiagonal();
         auto destination = output.Owned().Write();
         const auto remote = ghost ? ghost->View<R::UniformTableRows>() : CPU::LinearReadRows{};
-        const auto rows = pattern.Rows(region);
+        const auto rows = pattern.IndependentRows(region);
         CPU::ApplyLinearRows({offDiagonal.View(), pattern, rows, diagonal.View<R::UniformTableRows>(), _components, _diagonalStorage == DiagonalStorage::Block, {}, _rowMajorBlocks},
                              owned.View<R::UniformTableRows>(),
                              remote, destination.View<R::UniformTableRows>());
@@ -298,7 +298,7 @@ namespace DNDS::Cauchy
         const auto b = right.View<R::UniformTableRows>();
         const auto x = owned ? owned->View<R::UniformTableRows>() : b;
         const auto remote = ghost ? ghost->View<R::UniformTableRows>() : CPU::LinearReadRows{};
-        const auto rows = pattern.Rows(region);
+        const auto rows = pattern.IndependentRows(region);
         try
         {
             CPU::JacobiLinearRows({blocks.View(), pattern, rows, inverse.View<R::UniformTableRows>(), _components, _diagonalStorage == DiagonalStorage::Block, {}, _rowMajorBlocks},

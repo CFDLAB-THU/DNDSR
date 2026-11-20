@@ -141,10 +141,16 @@ namespace DNDS::Cauchy
         index ownedRows = 0;
         LinearRowSelections selections;
 
-        Runtime::RowSelection Rows(LinearRegion region) const
+        Runtime::RowSelection ScanRows(LinearRegion region) const
         {
             return {selections.For(region), region == LinearRegion::All ? order : region == LinearRegion::Core ? core
                                                                                                                : dependent};
+        }
+        /// An independent matrix action can traverse all owned cells naturally,
+        /// even when the triangular sweeps use a nonmonotone symbolic permutation.
+        Runtime::RowSelection IndependentRows(LinearRegion region) const
+        {
+            return region == LinearRegion::All ? Runtime::RowSelection{Runtime::RowSelectionShape::AllRows(ownedRows)} : ScanRows(region);
         }
         /// C++ launcher check; no residency branches inside row arithmetic.
         void ValidateDevice(Runtime::Device device) const

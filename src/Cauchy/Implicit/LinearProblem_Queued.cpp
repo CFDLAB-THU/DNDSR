@@ -195,7 +195,7 @@ namespace DNDS::Cauchy
             DNDS_check_throw_info(_offDiagonalEvaluator && _offDiagonalEvaluator->Device() == Device(),
                                   "queued evaluated Jacobian is missing or belongs to another device");
             EvaluatedLinearAction action;
-            action.selection = _pattern->rows.Selections().For(region);
+            action.selection = region == LinearRegion::All ? R::RowSelectionShape::AllRows(_space.OwnedRows()) : _pattern->rows.Selections().For(region);
             action.rows = region == LinearRegion::All    ? _pattern->rows.OrderArray()
                           : region == LinearRegion::Core ? _pattern->rows.CoreArray()
                                                          : _pattern->rows.DependentArray();
@@ -273,7 +273,7 @@ namespace DNDS::Cauchy
                                 {
             const auto symbolicColumns = SymbolicColumns(symbolicViews...);
             const LinearPatternView pattern{symbolicColumns, order, position, core, dependent, index(ownedRows), selections};
-            const auto rows = pattern.Rows(region);
+            const auto rows = pattern.IndependentRows(region);
             A::BlockMatrixArrayView<const real> blocks;
             if (blocksSlot >= 0)
                 blocks = {values[blocksSlot], offsets, components, rowMajorBlocks};

@@ -116,7 +116,7 @@ namespace DNDS::Cauchy
             state.inputGhostRead.emplace(state.inputGhost->Read());
         const auto ghost = state.inputGhostRead ? state.inputGhostRead->View<R::UniformTableRows>() : ReadView{};
         const auto target = state.forwardWrite->View<R::UniformTableRows>();
-        const auto rows = state.patternView.Rows(region);
+        const auto rows = state.patternView.ScanRows(region);
         state.Scan<false>(target, target, ghost, rows);
         state.lower = region == LinearRegion::Core ? 1 : 2;
         if (state.lower == 2)
@@ -144,7 +144,7 @@ namespace DNDS::Cauchy
         }
         const auto ghost = state.middleExchange ? (state.forwardGhostRead ? state.forwardGhostRead->View<R::UniformTableRows>() : ReadView{})
                                                 : (state.inputGhostRead ? state.inputGhostRead->View<R::UniformTableRows>() : ReadView{});
-        const auto rows = state.patternView.Rows(region);
+        const auto rows = state.patternView.ScanRows(region);
         state.Scan<true>(state.forwardRead->View<R::UniformTableRows>(), state.outputWrite->View<R::UniformTableRows>(), ghost, rows);
         state.upper = region == LinearRegion::HaloDependent ? 1 : 2;
     }

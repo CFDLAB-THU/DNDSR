@@ -120,7 +120,7 @@ namespace DNDS::Cauchy
         if (state.inputAllRead)
             ghost.emplace(state.inputAllRead->ComponentLayout());
         const auto target = state.forwardWrite->ComponentLayout();
-        const auto rows = state.patternView.Rows(region);
+        const auto rows = state.patternView.ScanRows(region);
         state.Scan<false>(target.View(), target.View(), ghost ? ghost->View().GhostPart() : Algebra::DofComponentView<const real>{}, rows);
         state.lower = region == LinearRegion::Core ? 1 : 2;
         if (state.lower == 2)
@@ -151,7 +151,7 @@ namespace DNDS::Cauchy
             ghost.emplace(state.inputAllRead->ComponentLayout());
         const auto forward = state.forwardRead->ComponentLayout();
         const auto target = state.outputWrite->ComponentLayout();
-        const auto rows = state.patternView.Rows(region);
+        const auto rows = state.patternView.ScanRows(region);
         state.Scan<true>(forward.View(), target.View(), ghost ? ghost->View().GhostPart() : Algebra::DofComponentView<const real>{}, rows);
         state.upper = region == LinearRegion::HaloDependent ? 1 : 2;
     }
