@@ -4,7 +4,8 @@ Python and the C++ frontend use the same native CPU operators. `Domain` and
 `Simulation` remain the production time controllers. `FiniteVolumeOperators`
 provides the existing lower-level FV and linear entrypoints for testing,
 tuning and custom orchestration; it does not implement another numerical loop.
-CUDA Cauchy kernels remain unavailable.
+The native solver also has CUDA operators for supported equation and storage
+combinations. The examples below exercise the CPU stream.
 
 ## Step acceptance and failures
 

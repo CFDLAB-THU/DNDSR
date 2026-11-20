@@ -113,7 +113,7 @@ namespace DNDS::Cauchy::CUDA::Detail
                     failure = physics.physics.rans.Supported() && physics.physics.rans.ComponentNumber() + 5 == Components && physics.physics.dimension == Dimension &&
                                       (!controls.viscous || physics.physics.viscous)
                                   ? EvaluateFacePoint<Components>(geometry, physics, controls, staged, output,
-                                                         segment.auxiliaryFace, firstPoint + q, value, valueLow, localFallback)
+                                                                  segment.auxiliaryFace, firstPoint + q, value, valueLow, localFallback)
                                   : NumericalStatus{NumericalError::InvalidInput, 1};
                 if (!warpTree)
                     for (int j = 0; j < Components; ++j)
@@ -292,8 +292,8 @@ namespace DNDS::Cauchy::CUDA::Detail
 
     template <bool Bind, int C, int M, int D, class Output>
     __device__ NumericalStatus EvaluateThreadFace(const RHSGeometry &geometry, const RHSKernelParameters &physics,
-                                                   RHSKernelControls controls, const RHSShapeFields<C, M, D> &input,
-                                                   const Output &output, index face, index &fallbacks)
+                                                  RHSKernelControls controls, const RHSShapeFields<C, M, D> &input,
+                                                  const Output &output, index face, index &fallbacks)
     {
         const auto anchor = geometry.FaceAnchor(face);
         auto fields = ThreadOperands<C, M, D, Bind>(input, controls, anchor);
@@ -367,7 +367,7 @@ namespace DNDS::Cauchy::CUDA::Detail
         Runtime::CheckKernelArgumentBudget<RHSGeometryView, RHSParametersView, RHSKernelControls,
                                            decltype(fields), decltype(output), RHSFacePackageView>();
         PerfectGasFluxCTASegments<Components, Modes, Dimension><<<a.segmentBlocks, a.controls.blockSize, a.packages.sharedBytes,
-                                                         ::DNDS::Runtime::CUDAStream(a.context)>>>(
+                                                                  ::DNDS::Runtime::CUDAStream(a.context)>>>(
             a.geometry.View(), a.parameters, a.controls, fields, output, a.packages);
     }
 }

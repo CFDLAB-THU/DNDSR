@@ -39,7 +39,7 @@ DEFAULT_ROOTS = ("src", "app", "test/cpp")
 FORMAT_EXTS = (
     ".c", ".cc", ".cpp", ".cxx",
     ".h", ".hpp", ".hxx",
-    ".cu", ".cuh",
+    ".cu", ".cuh", ".cpp.inc", ".cu.inc",
 )
 
 
@@ -52,7 +52,7 @@ def _which_clang_format(user: str | None) -> str:
 
 def _walk_dir(root: Path) -> Iterable[Path]:
     for path in root.rglob("*"):
-        if path.is_file() and path.suffix in FORMAT_EXTS:
+        if path.is_file() and path.name.endswith(FORMAT_EXTS):
             yield path
 
 
@@ -83,7 +83,7 @@ def _changed_files(since_ref: str | None, include_workdir: bool) -> list[Path]:
             continue
         seen.add(p)
         full = (PROJECT_ROOT / p).resolve()
-        if full.exists() and full.suffix in FORMAT_EXTS:
+        if full.exists() and full.name.endswith(FORMAT_EXTS):
             out_paths.append(full)
     return out_paths
 
@@ -132,7 +132,7 @@ def _select_files(scope_args: Sequence[str]) -> list[Path]:
                 sys.exit(f"error: path not found: {p}")
             if p.is_dir():
                 collected.extend(_walk_dir(p))
-            elif p.suffix in FORMAT_EXTS:
+            elif p.name.endswith(FORMAT_EXTS):
                 collected.append(p)
 
     seen: set[str] = set()

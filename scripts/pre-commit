@@ -9,7 +9,7 @@
 #   cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 #
 # What it does:
-#   - C/C++/CUDA (*.c, *.cc, *.cpp, *.cxx, *.h, *.hpp, *.hxx, *.cu, *.cuh)
+#   - C/C++/CUDA (*.c, *.cc, *.cpp, *.cxx, *.h, *.hpp, *.hxx, *.cu, *.cuh, *.cpp.inc, *.cu.inc)
 #     → clang-format -i (uses the .clang-format at project root)
 #   - Python (*.py) → autopep8 --in-place (PEP 8 only, minimal changes)
 #   - Jupyter notebooks (*.ipynb) → nbstripout (strip outputs + metadata)
@@ -55,7 +55,7 @@ PY_FILES=()
 NB_FILES=()
 while IFS= read -r -d '' f; do
     case "$f" in
-        *.c|*.cc|*.cpp|*.cxx|*.h|*.hpp|*.hxx|*.cu|*.cuh) CPP_FILES+=("./$f") ;;
+        *.c|*.cc|*.cpp|*.cxx|*.h|*.hpp|*.hxx|*.cu|*.cuh|*.cpp.inc|*.cu.inc) CPP_FILES+=("./$f") ;;
         *.py) PY_FILES+=("./$f") ;;
         *.ipynb) NB_FILES+=("./$f") ;;
         *) continue ;;

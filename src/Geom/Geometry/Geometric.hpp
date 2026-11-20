@@ -69,12 +69,13 @@ namespace DNDS::Geom
 namespace DNDS::Geom
 {
 
+    /// Flatten the 3x3 Jacobian in Eigen storage order, matching STDVectorToJacobi.
     inline std::vector<real> JacobiToSTDVector(const tJacobi &j)
     {
         std::vector<real> ret(9);
         for (int i = 0; i < 9; i++)
             ret[i] = j(i);
-        return ret; // TODO this is bullshit code
+        return ret;
     }
 
     inline tJacobi STDVectorToJacobi(const std::vector<real> &v)
@@ -83,19 +84,19 @@ namespace DNDS::Geom
         DNDS_assert(v.size() == 9);
         for (int i = 0; i < 9; i++)
             ret(i) = v[i];
-        return ret; //  TODO this is bullshit code
+        return ret;
     }
 
     inline std::vector<real> VectorToSTDVector(const Eigen::VectorXd &v)
     {
-        return {v.begin(), v.end()}; //  TODO this is bullshit code
+        return {v.begin(), v.end()};
     }
 
     inline Eigen::VectorXd STDVectorToVector(const std::vector<real> &v)
     {
         auto ret = Eigen::VectorXd(v.size());
         for (size_t i = 0; i < v.size(); i++)
-            ret[i] = v[i]; //  TODO this is bullshit code
+            ret[i] = v[i];
         return ret;
     }
 }

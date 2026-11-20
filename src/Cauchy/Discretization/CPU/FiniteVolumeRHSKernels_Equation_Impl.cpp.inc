@@ -18,10 +18,10 @@ namespace DNDS::Cauchy::CPU
     using namespace EquationFVDetail;
     template <EquationPhysicsProfile Model, ReconstructionForm Form, int C, int D, int M, class Input, class Output>
     NumericalResult<index> EvaluateEquationFluxRows(const EquationRHSRequest &request, const EquationSystem &equation,
-                                                     const BoundaryPointOperator &boundary, const Riemann::RiemannFlux &fluxOperator,
-                                                     PointEvaluator &evaluator, Input owned, Input remote,
-                                                     Output destination, Output lowDestination, CFV::ReconstructionRegion region,
-                                                     EquationRHSPointScratch &scratch, index firstRow, index lastRow, bool facePhase) noexcept
+                                                    const BoundaryPointOperator &boundary, const Riemann::RiemannFlux &fluxOperator,
+                                                    PointEvaluator &evaluator, Input owned, Input remote,
+                                                    Output destination, Output lowDestination, CFV::ReconstructionRegion region,
+                                                    EquationRHSPointScratch &scratch, index firstRow, index lastRow, bool facePhase) noexcept
     {
         index localFallbacks = 0;
         const auto metric = request.metric;
@@ -124,46 +124,46 @@ namespace DNDS::Cauchy::CPU
                     }
             }
             else if constexpr (Form == ReconstructionForm::Generic)
-            if (!request.firstOrder && (!request.direct || request.linear))
-            {
-                if (request.direct)
+                if (!request.firstOrder && (!request.direct || request.linear))
                 {
-                    const auto displacement = FiniteVolumeDetail::DirectFVDisplacement(metric, sample, iCell != sample.cell || side != sample.side);
-                    for (index iBlock = 0; iBlock < request.directLocations.size(); ++iBlock)
+                    if (request.direct)
                     {
-                        const auto location = request.directLocations[iBlock];
-                        const auto row = request.directViews[location.physicalField][iCell];
-                        const auto viscousRow = request.directViscousViews.empty() ? row : request.directViscousViews[location.physicalField][iCell];
-                        for (index j = 0; j < location.componentNumber; ++j)
-                            for (int d = 0; d < dim; ++d)
-                            {
-                                const real value = row[(location.firstComponent + j) * dim + d];
-                                point.values[request.logicalFirst[iBlock] + j] += value * displacement[d];
-                                if (viscous)
-                                    point.gradient(request.logicalFirst[iBlock] + j, d) = viscousRow[(location.firstComponent + j) * dim + d];
-                            }
+                        const auto displacement = FiniteVolumeDetail::DirectFVDisplacement(metric, sample, iCell != sample.cell || side != sample.side);
+                        for (index iBlock = 0; iBlock < request.directLocations.size(); ++iBlock)
+                        {
+                            const auto location = request.directLocations[iBlock];
+                            const auto row = request.directViews[location.physicalField][iCell];
+                            const auto viscousRow = request.directViscousViews.empty() ? row : request.directViscousViews[location.physicalField][iCell];
+                            for (index j = 0; j < location.componentNumber; ++j)
+                                for (int d = 0; d < dim; ++d)
+                                {
+                                    const real value = row[(location.firstComponent + j) * dim + d];
+                                    point.values[request.logicalFirst[iBlock] + j] += value * displacement[d];
+                                    if (viscous)
+                                        point.gradient(request.logicalFirst[iBlock] + j, d) = viscousRow[(location.firstComponent + j) * dim + d];
+                                }
+                        }
+                    }
+                    else
+                    {
+                        const auto basis = CFV::CPU::EvaluateFaceBasis(*request.basis, sample.face, side, sample.point, viscous ? 1 : 0, basisScratch);
+                        for (index iBlock = 0; iBlock < index(request.meanBlocks.size()); ++iBlock)
+                        {
+                            const auto row = request.recBlocks[iBlock][iCell];
+                            const auto viscousRow = request.viscousRecBlocks.empty() ? row : request.viscousRecBlocks[iBlock][iCell];
+                            for (index j = 0; j < request.meanBlocks[iBlock].ComponentNumber(); ++j)
+                                for (int mode = 0; mode < modes; ++mode)
+                                {
+                                    const real value = row[j * modes + mode];
+                                    const index logical = request.logicalFirst[iBlock] + j;
+                                    point.values[logical] += value * basis(0, mode);
+                                    if (viscous)
+                                        for (int d = 0; d < dim; ++d)
+                                            point.gradient(logical, d) += viscousRow[j * modes + mode] * basis(1 + d, mode);
+                                }
+                        }
                     }
                 }
-                else
-                {
-                    const auto basis = CFV::CPU::EvaluateFaceBasis(*request.basis, sample.face, side, sample.point, viscous ? 1 : 0, basisScratch);
-                    for (index iBlock = 0; iBlock < index(request.meanBlocks.size()); ++iBlock)
-                    {
-                        const auto row = request.recBlocks[iBlock][iCell];
-                        const auto viscousRow = request.viscousRecBlocks.empty() ? row : request.viscousRecBlocks[iBlock][iCell];
-                        for (index j = 0; j < request.meanBlocks[iBlock].ComponentNumber(); ++j)
-                            for (int mode = 0; mode < modes; ++mode)
-                            {
-                                const real value = row[j * modes + mode];
-                                const index logical = request.logicalFirst[iBlock] + j;
-                                point.values[logical] += value * basis(0, mode);
-                                if (viscous)
-                                    for (int d = 0; d < dim; ++d)
-                                        point.gradient(logical, d) += viscousRow[j * modes + mode] * basis(1 + d, mode);
-                            }
-                    }
-                }
-            }
             if (ransModel)
             {
                 const RANSReconstructionView rans{ransModel->Kind(), ransModel->ComponentNumber()};

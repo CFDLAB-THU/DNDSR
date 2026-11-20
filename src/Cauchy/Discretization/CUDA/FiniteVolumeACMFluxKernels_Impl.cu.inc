@@ -18,7 +18,7 @@ namespace DNDS::Cauchy::CUDA::Detail
         template <int Width>
         using Pair = Runtime::PairReadView<real, Runtime::AccessBoundsChecks, Runtime::FixedRows<Width, Width>>;
         Pair<C> mean;
-        Pair<C * (M ? M : D)> reconstruction, viscousData;
+        Pair<C *(M ? M : D)> reconstruction, viscousData;
         CellCenterViscosityView centerViscosity;
     };
 
@@ -45,7 +45,8 @@ namespace DNDS::Cauchy::CUDA::Detail
                 if (kind == BoundaryKind::NoSlipWall)
                 {
                     const real distance = geometry.wallMean(sample.cell, 0);
-                    if (!(distance > 0)) return NumericalStatus{NumericalError::InvalidInput}.At(sample.cell, entry);
+                    if (!(distance > 0))
+                        return NumericalStatus{NumericalError::InvalidInput}.At(sample.cell, entry);
                     omega = physics.flow.kinematicViscosity * Physics::RANS::kWallOmegaCoeff / sqr(distance);
                 }
             if (!ACM::Exterior(physics.flow, kind, left.values, bc.acmState, bc.velocity,
@@ -64,7 +65,7 @@ namespace DNDS::Cauchy::CUDA::Detail
                 face.values[j] = .5 * (left.values[j] + right.values[j]);
                 for (int d = 0; d < 3; ++d)
                     face.gradients[j][d] = .5 * (left.gradients[j][d] + right.gradients[j][d]) +
-                        sample.normal[d] * (right.values[j] - left.values[j]) / sample.viscousDistance;
+                                           sample.normal[d] * (right.values[j] - left.values[j]) / sample.viscousDistance;
             }
             real viscosity = physics.flow.kinematicViscosity;
             if constexpr (C > 4)
@@ -75,12 +76,15 @@ namespace DNDS::Cauchy::CUDA::Detail
                     return transport.status.At(sample.cell, entry);
                 const Eigen::Vector3d normal(sample.normal[0], sample.normal[1], sample.normal[2]);
                 const auto diffusion = Physics::RANS::TryDiffusionFlux(physics.rans, at, normal, transport.value.viscosity);
-                if (!diffusion) return diffusion.status.At(sample.cell, entry);
-                for (int j = 4; j < C; ++j) flux[j] -= diffusion.value[j - 4];
+                if (!diffusion)
+                    return diffusion.status.At(sample.cell, entry);
+                for (int j = 4; j < C; ++j)
+                    flux[j] -= diffusion.value[j - 4];
                 viscosity += transport.value.viscosity;
             }
             const auto traction = Physics::Transport::NewtonianTraction(
-                [&](int j, int d) { return face.gradients[j][d]; }, sample.normal, viscosity);
+                [&](int j, int d)
+                { return face.gradients[j][d]; }, sample.normal, viscosity);
             // Cauchy omits the former isotropic 2*rho*k/3 normal stress.
             for (int d = 0; d < 3; ++d)
                 flux[d] -= traction[d];
@@ -92,7 +96,8 @@ namespace DNDS::Cauchy::CUDA::Detail
                     controls.captureBoundaryFlux || kind == BoundaryKind::SlipWall || kind == BoundaryKind::NoSlipWall ? weight * flux[d] : 0;
         for (int j = 0; j < C; ++j)
         {
-            if (!std::isfinite(flux[j])) return NumericalStatus{NumericalError::InvalidState, j, sample.cell, entry};
+            if (!std::isfinite(flux[j]))
+                return NumericalStatus{NumericalError::InvalidState, j, sample.cell, entry};
             value[j] = -weight * flux[j];
         }
         return {};
@@ -121,7 +126,7 @@ namespace DNDS::Cauchy::CUDA::Detail
 
     template <int C, ReconstructionForm Form, class Fields, class Output>
     __global__ void ACMFluxFaceThreads(ACMGeometryView geometry, RHSKernelControls controls, Fields fields,
-                             Output output, RHSIndices selected)
+                                       Output output, RHSIndices selected)
     {
         if constexpr (Form != ReconstructionForm::Generic)
         {
@@ -143,7 +148,7 @@ namespace DNDS::Cauchy::CUDA::Detail
     // integrates in rule order, preserving the thread-per-face sum.
     template <int C, class Fields, class Output>
     __global__ void ACMFluxCTASegments(ACMGeometryView publication, RHSKernelControls controls, Fields fields,
-                                Output output, RHSFacePackageView prepared)
+                                       Output output, RHSFacePackageView prepared)
     {
         extern __shared__ real shared[];
         real *values = shared;
@@ -183,7 +188,7 @@ namespace DNDS::Cauchy::CUDA::Detail
                 const index q = index(tile) * segment.lanes + lane;
                 if (lane >= 0 && q < segment.points)
                     pointStatus = ACMFacePoint<C>(geometry, controls, fields, output,
-                                                 segment.auxiliaryFace, first, first + q, value);
+                                                  segment.auxiliaryFace, first, first + q, value);
                 for (int j = 0; j < C; ++j)
                     values[C * threadIdx.x + j] = value[j];
                 rows[threadIdx.x] = pointStatus.row;
