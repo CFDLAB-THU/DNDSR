@@ -416,7 +416,6 @@ namespace DNDS::Cauchy
             require(!s.numerics.positivity, "ACM has relative pressure and no thermodynamic positivity limiter");
             require(s.implicit.sourceJacobianMode == "center", "ACM source Jacobian uses the cell mean");
             require(s.numerics.flux == "Roe" || s.numerics.flux == "rusanov", "ACM Roe or rusanov flux");
-            require(s.motion.angularVelocity == Vector3{} && s.motion.translationVelocity == Vector3{}, "ACM on a fixed mesh");
             require(s.equation.rans.model != "RealizableKE", "ACM RANS requires SA, Wilcox or SST");
             require(!s.equation.rans.useQCR, "ACM RANS uses linear eddy-viscosity stress");
             require(s.equation.transport == "inviscid" || s.numerics.viscousGradient == "polynomial", "viscous ACM uses velocity and turbulence gradients directly");

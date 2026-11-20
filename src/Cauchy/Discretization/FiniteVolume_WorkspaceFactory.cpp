@@ -19,35 +19,6 @@ namespace DNDS::Cauchy
 {
     namespace R = Runtime;
     using namespace EquationFVDetail;
-    void FiniteVolume::InitializeConservative(EquationDofs &state, const std::vector<real> &values) const
-    {
-        Metrics().Communication()->LocalStage([&]
-                                              {
-            Metrics().Validate();
-            state.RequireSchema(_data->equation.Schema());
-            _data->equation.ResolveKernelProfile(state.Device());
-            index width = 0;
-            for (const auto &block : _data->equation.Schema().blocks) width += index(block.components.size());
-            DNDS_check_throw_info(state.Space().Same(Metrics().Space()) && index(values.size()) == width &&
-                                      std::all_of(values.begin(), values.end(), [](real v) { return std::isfinite(v); }),
-                                  "conservative initializer row space or values differ from equation");
-            FlowState flow{};
-            if (!_data->equation.IsACM())
-            {
-                std::copy_n(values.begin(), 5, flow.begin());
-                flow = _data->motion.At(0).LocalState(flow);
-            }
-            auto output = state.WriteOwned();
-            index offset = 0;
-            for (const auto &block : _data->equation.Schema().blocks)
-            {
-                const auto rows = output.Block(block.name);
-                CPU::FillConstantRows(rows, block.name == "flow" && !_data->equation.IsACM()
-                    ? SpanView<const real>{flow.data(), index(flow.size())}
-                    : SpanView<const real>{values.data() + offset, rows.ComponentNumber()});
-                offset += index(block.components.size());
-            } });
-    }
     void FiniteVolume::InitializeConstant(EquationDofs &state, const FlowState &primitive,
                                           const std::map<std::string, real> &massFractions, real temperature,
                                           std::optional<Physics::Chemistry::ChemicalWorkerPool> workers,

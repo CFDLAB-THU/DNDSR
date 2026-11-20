@@ -2,6 +2,7 @@
 #include "Cauchy/Core/NumericalFailure.hpp"
 #include "Cauchy/Discretization/FiniteVolumeInternal.hpp"
 #include "Cauchy/Input/InitialField.hpp"
+#include "Cauchy/State/CPU/FieldKernels.hpp"
 #include "DNDS/Core/OMP.hpp"
 #include "DNDS/MPI/CollectiveStage.hpp"
 #include "Geom/Quadratures/Quadrature.hpp"
@@ -10,6 +11,31 @@ namespace DNDS::Cauchy
 {
     namespace
     {
+        // Only schema-declared vector triples rotate. In particular, flow4 starts
+        // with velocity and must never be loaded as a five-component conservative state.
+        std::vector<index> InputVectorOffsets(const EquationSchema &schema)
+        {
+            std::vector<index> offsets;
+            index first = 0;
+            for (const auto &block : schema.blocks)
+            {
+                for (index start : block.vectorStarts)
+                    offsets.push_back(first + start);
+                first += index(block.components.size());
+            }
+            return offsets;
+        }
+
+        template <class Transform>
+        void RotateInputVectors(std::vector<real> &values, const std::vector<index> &offsets, Transform transform)
+        {
+            for (index first : offsets)
+            {
+                const auto v = transform(Vector3{values[first], values[first + 1], values[first + 2]});
+                std::copy(v.begin(), v.end(), values.begin() + first);
+            }
+        }
+
         // Setup-only programmable input evaluation belongs at the checked
         // operator boundary. Exprtk and physical-input conversion may reject
         // user data; these exceptions must never escape a noexcept CPU kernel.
@@ -17,7 +43,7 @@ namespace DNDS::Cauchy
             Geom::UnstructuredMeshView mesh,
             Algebra::DofComponentView<real> rows, const RigidFrame &frame,
             std::vector<std::unique_ptr<InitialFieldEvaluator>> &evaluators,
-            int integrationOrder)
+            int integrationOrder, const std::vector<index> &vectorOffsets)
         {
             DNDS_check_throw_info(!evaluators.empty(),
                                   "programmed initialization requires a CPU worker");
@@ -44,13 +70,9 @@ namespace DNDS::Cauchy
                                                  {
                                                      for (index j = 0; j < width; ++j)
                                                          background[size_t(j)] = rows(iCell, j);
-                                                     FlowState flow;
                                                      if (frame.moving)
-                                                     {
-                                                         std::copy_n(background.begin(), 5, flow.begin());
-                                                         flow = frame.WorldState(flow);
-                                                         std::copy(flow.begin(), flow.end(), background.begin());
-                                                     }
+                                                         RotateInputVectors(background, vectorOffsets, [&](const Vector3 &v)
+                                                                            { return frame.WorldVector(v); });
                                                      std::fill(average.begin(), average.end(), 0);
                                                      Geom::tSmallCoords coords;
                                                      mesh.GetCoordsOnCell(iCell, coords);
@@ -88,11 +110,8 @@ namespace DNDS::Cauchy
                                                      for (auto &value : average)
                                                          value /= volume;
                                                      if (frame.moving)
-                                                     {
-                                                         std::copy_n(average.begin(), 5, flow.begin());
-                                                         flow = frame.LocalState(flow);
-                                                         std::copy(flow.begin(), flow.end(), average.begin());
-                                                     }
+                                                         RotateInputVectors(average, vectorOffsets, [&](const Vector3 &v)
+                                                                            { return frame.LocalVector(v); });
                                                      for (index j = 0; j < width; ++j)
                                                          rows(iCell, j) = average[size_t(j)];
                                                  }
@@ -119,6 +138,31 @@ namespace DNDS::Cauchy
                     failure = candidate;
             return failure;
         }
+    }
+    void FiniteVolume::InitializeConservative(EquationDofs &state, const std::vector<real> &values) const
+    {
+        Metrics().Communication()->LocalStage([&]
+                                              {
+            Metrics().Validate();
+            state.RequireSchema(_data->equation.Schema());
+            _data->equation.ResolveKernelProfile(state.Device());
+            index width = 0;
+            for (const auto &block : _data->equation.Schema().blocks) width += index(block.components.size());
+            DNDS_check_throw_info(state.Space().Same(Metrics().Space()) && index(values.size()) == width &&
+                                      std::all_of(values.begin(), values.end(), [](real v) { return std::isfinite(v); }),
+                                  "conservative initializer row space or values differ from equation");
+            auto local = values;
+            const auto frame = _data->motion.At(0);
+            if (frame.moving)
+                RotateInputVectors(local, InputVectorOffsets(state.Schema()), [&](const Vector3 &v) { return frame.LocalVector(v); });
+            auto output = state.WriteOwned();
+            index offset = 0;
+            for (const auto &block : _data->equation.Schema().blocks)
+            {
+                const auto rows = output.Block(block.name);
+                CPU::FillConstantRows(rows, {local.data() + offset, rows.ComponentNumber()});
+                offset += index(block.components.size());
+            } });
     }
     void FiniteVolume::InitializeField(EquationDofs &state, const std::optional<Physics::Chemistry::ChemicalWorkerPool> &workers) const
     {
@@ -160,7 +204,7 @@ namespace DNDS::Cauchy
             RequireNumericalSuccess(
                 InitializeProgrammedField(
                     mesh, layout.View(), frame, evaluators,
-                    _data->settings.initialField.integrationOrder),
+                    _data->settings.initialField.integrationOrder, InputVectorOffsets(state.Schema())),
                 "InitializeProgrammedField"); });
     }
 }

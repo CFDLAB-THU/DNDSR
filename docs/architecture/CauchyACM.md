@@ -71,6 +71,31 @@ matrix differentiates the first-order inviscid face flux, including its boundary
 or periodic mapping, and adds frozen viscous and source approximations.
 The reference formulation comes from [Kirabo's GPUACM branch](https://github.com/Kirabo167/DNDSR-Kirabo/tree/GPUACM).
 
+### Rigid-frame spatial operators
+
+The ACM kernels store absolute velocity in local Cartesian axes. Write
+$u_n=\mathbf u\cdot\mathbf n$ and $w_n=\mathbf w_{grid}\cdot\mathbf n$.
+The advective momentum flux is $(u_n-w_n)\mathbf u+p\mathbf n$.
+The continuity flux is $u_n$, since pressure has zero physical mass.
+An advected scalar uses the numerical continuity flux minus $w_n$ as
+its transport speed. The tangential wave speed is $u_n-w_n$.
+The two acoustic speeds solve
+$\lambda^2-[(1-\alpha)u_n-w_n]\lambda-\beta^2=0$.
+Auxiliary preparation uses these same speeds for its stability estimate.
+
+A rotating frame adds $-\boldsymbol\Omega\times\mathbf u$ to the three
+momentum rates. The assembled diagonal includes the negative derivative of
+this source times the cell volume and residual coefficient. On a coupling
+face, the local linearization holds the supplied exterior trace fixed.
+
+Single-domain ACM accepts rigid motion. On a rotating periodic mesh, a
+uniform inertial velocity has local momentum rate $-\boldsymbol\Omega\times\mathbf u$
+and zero continuity residual. The rotating-sector test compares the assembled
+matrix action with finite differences of the physical residual. CPU and CUDA
+domain tests also compare the two CUDA face mappings and mechanical SST updates.
+ACM multidomain interfaces still require connected pressure anchoring and coupled
+moving-mesh qualification before use.
+
 SA appends the normalized working variable (`nuTilde / viscosityReference` in
 code units). A dimensional `primUP_phy` SA tail supplies kinematic viscosity
 in m²/s. Divide it by `U0 * L0 * viscosityReference` to obtain the stored

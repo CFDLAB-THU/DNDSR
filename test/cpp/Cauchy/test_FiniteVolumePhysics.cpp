@@ -468,6 +468,38 @@ TEST_CASE("Spatial initial input averages conservative polynomials on distribute
     }
 }
 
+TEST_CASE("Uniform inertial ACM flow preserves continuity on a rotating mesh")
+{
+    auto mesh = CauchyTest::PeriodicQuads(mpi, 6);
+    C::DomainSettings settings;
+    settings.equation.system = "incompressibleACM";
+    settings.equation.eos = "none";
+    settings.equation.referenceScales = {{"rho0", 1.2}, {"U0", 3}, {"L0", 2}, {"T0", 290}};
+    settings.numerics.reconstruction = "constant";
+    settings.numerics.flux = "Roe";
+    settings.motion.angularVelocity = {0, 0, .25};
+    settings.initialField.exprtkInitializers.push_back({{"inRegion := 1; UExprtk[0] := 2; UExprtk[1] := -1; UExprtk[2] := 0; UExprtk[3] := 7; 0;"}, "primUP"});
+    C::FiniteVolume fv(mesh, settings, C::EquationSystem::Resolve(settings.equation));
+    auto state = C::EquationDofs::Coupled(fv.Equation().Schema(), fv.Metrics().BuildField(4));
+    auto rate = C::EquationDofs::Coupled(fv.Equation().Schema(), fv.Metrics().BuildField(4));
+    fv.InitializeConservative(state, {0, 0, 0, 0});
+    fv.InitializeField(state);
+    auto work = fv.BuildWorkspace(state);
+    auto reconstruction = fv.BuildReconstructionState(state);
+    R::EagerEngine engine;
+    auto stream = engine.CreateCPUStream();
+    fv.Evaluate(state, rate, *reconstruction, *work, engine, stream);
+    const auto values = state.ReadOwned(), residual = rate.ReadOwned();
+    const auto metrics = fv.Metrics().AcquireRead();
+    const std::array<double, 4> initial{2, -1, 0, 7}, rotatedRate{-.25, -.5, 0, 0};
+    for (DNDS::index i = 0; i < fv.Metrics().NumCell(); ++i)
+        for (int j = 0; j < 4; ++j)
+        {
+            CHECK(values.Block("flow")(i, j) == doctest::Approx(initial[j]).epsilon(1e-12));
+            CHECK(residual.Block("flow")(i, j) == doctest::Approx(metrics.HostView().GetCellVol(i) * rotatedRate[j]).epsilon(1e-12).scale(1));
+        }
+}
+
 TEST_CASE("Face-centered assembled Jacobians match direct actions in stationary and moving frames")
 {
     // Cover translated identity frames and a genuinely rotated periodic

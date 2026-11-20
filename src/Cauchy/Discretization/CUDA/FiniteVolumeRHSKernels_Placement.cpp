@@ -75,7 +75,7 @@ namespace DNDS::Cauchy::CUDA
         if (mechanical)
         {
             DNDS_check_throw_info(fp64 && !produceLow && !positivity && !primitiveGradient && !faceFallback &&
-                                      !frame.moving && (mapping == RHSFaceMapping::Thread || mapping == RHSFaceMapping::CTASegments) &&
+                                      (mapping == RHSFaceMapping::Thread || mapping == RHSFaceMapping::CTASegments) &&
                                       reduction == RHSFaceReduction::Serial && !doubleBuffer && !hoistFaceRows &&
                                       gridBlocks >= 0 && (mapping != RHSFaceMapping::CTASegments || blockSize >= 128),
                                   "unsupported CUDA ACM spatial kernel policy");
