@@ -154,6 +154,12 @@ if(DNDS_USE_AMGX)
     target_link_libraries(${LIBNAME} PRIVATE DNDS::AmgX)
     target_link_libraries(${LIBNAME}_shared PRIVATE DNDS::AmgX)
     get_filename_component(_DNDS_AMGX_LIBRARY_DIR "${DNDS_AMGX_LIBRARY}" DIRECTORY)
+    # An ELF executable linking the shared Runtime resolves its indirect
+    # libamgxsh dependency at link time too. Prefer the verified fork when an
+    # older same-SONAME provider is installed alongside the mesh dependencies.
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        target_link_options(${LIBNAME}_shared INTERFACE "LINKER:-rpath-link,${_DNDS_AMGX_LIBRARY_DIR}")
+    endif()
     set_property(TARGET ${LIBNAME}_shared APPEND PROPERTY INSTALL_RPATH "${_DNDS_AMGX_LIBRARY_DIR}")
 endif()
 if(DNDS_USE_NCCL)
