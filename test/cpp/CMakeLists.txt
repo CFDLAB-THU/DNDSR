@@ -1274,3 +1274,20 @@ if(DNDS_USE_CUDA)
     target_include_directories(cauchy_benchmark_rhs_face_mappings_cuda PRIVATE ${DNDS_EXTERNAL_INCLUDES} ${DNDS_INCLUDES})
     target_link_libraries(cauchy_benchmark_rhs_face_mappings_cuda PRIVATE cauchy physics cfv geom dnds CUDA::cudart ${DNDS_EXTERNAL_LIBS})
 endif()
+
+if(DNDS_USE_SYCL)
+    # Keep offload flags local to the probe. The Runtime provider uses host
+    # SYCL APIs, while only this test compiles kernels for both selected devices.
+    set(DNDS_SYCL_TEST_FLAGS "-fsycl-targets=spir64,nvptx64-nvidia-cuda" CACHE STRING "Compile and link flags for the local SYCL migration probes")
+    add_executable(geom_test_sycl_migration EXCLUDE_FROM_ALL Geom/test_SYCLMigration.cpp)
+    target_compile_options(geom_test_sycl_migration PRIVATE -fsycl ${DNDS_SYCL_TEST_FLAGS})
+    target_link_options(geom_test_sycl_migration PRIVATE -fsycl ${DNDS_SYCL_TEST_FLAGS})
+    target_include_directories(geom_test_sycl_migration PRIVATE ${DNDS_EXTERNAL_INCLUDE_DOCTEST} ${DNDS_EXTERNAL_INCLUDES} ${DNDS_INCLUDES})
+    target_link_libraries(geom_test_sycl_migration PRIVATE geom dnds ${DNDS_EXTERNAL_LIBS})
+    add_dependencies(geom_unit_tests geom_test_sycl_migration)
+    foreach(backend cpu cuda)
+        add_test(NAME geom_sycl_${backend}_migration_np2 COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
+                 $<TARGET_FILE:geom_test_sycl_migration> ${MPIEXEC_POSTFLAGS} ${backend})
+        set_tests_properties(geom_sycl_${backend}_migration_np2 PROPERTIES LABELS "cpp;geom;sycl;level2" PROCESSORS 2 TIMEOUT 120)
+    endforeach()
+endif()

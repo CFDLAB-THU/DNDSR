@@ -83,6 +83,19 @@ Legacy/ArrayDOF_inst/ArrayDOF_op_D.cpp
 Legacy/ArrayDOF_inst/ArrayDOF_op_I.cpp
 )
 
+if(DNDS_USE_SYCL)
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag("-fsycl" DNDS_CXX_HAS_FSYCL)
+    if(NOT DNDS_CXX_HAS_FSYCL)
+        message(FATAL_ERROR "DNDS_USE_SYCL requires a DPC++ CMAKE_CXX_COMPILER supporting -fsycl")
+    endif()
+    get_filename_component(_sycl_bin "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    find_library(DNDS_SYCL_LIBRARY NAMES sycl HINTS "${_sycl_bin}/../lib" REQUIRED)
+    list(APPEND CPPS Runtime/Execution/SYCLExecution.cpp)
+    list(APPEND LINKS "${DNDS_SYCL_LIBRARY}")
+    set_source_files_properties(Runtime/Execution/SYCLExecution.cpp PROPERTIES COMPILE_OPTIONS "-fsycl")
+endif()
+
 if (DNDS_USE_CUDA)
     if(DNDS_USE_AMGX)
         list(APPEND CPPS Algebra/AmgXPreconditioner_Inverse.cu)
@@ -113,6 +126,10 @@ dnds_add_lib(${LIBNAME} "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}"
 
 dnds_add_lib(${LIBNAME}_shared "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}"
     ON ON ON)  # SHARED,FAST, EXCLUDE
+if(DNDS_USE_SYCL)
+    target_compile_definitions(dnds PUBLIC DNDS_USE_SYCL)
+    target_compile_definitions(dnds_shared PUBLIC DNDS_USE_SYCL)
+endif()
 if(DNDS_USE_CALIPER)
     foreach(_target ${LIBNAME} ${LIBNAME}_shared)
         target_link_libraries(${_target} PRIVATE caliper)

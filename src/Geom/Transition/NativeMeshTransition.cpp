@@ -345,8 +345,10 @@ namespace DNDS::Geom
                                            ? Runtime::RowLayout::Padded(sizes, sourceLayout.Stride())
                                            : Runtime::RowLayout::Ragged(sizes);
                     Runtime::Array<T> output(localLayout);
-                    auto input = source.Read(), target = output.Write();
-                    auto inputView = input.View(), outputView = target.View();
+                    auto input = source.Read();
+                    auto target = output.Write();
+                    auto inputView = input.View();
+                    auto outputView = target.View();
                     for (size_t row = 0; row < source.RowCount(); ++row)
                     {
                         const auto from = sendRows[row], to = receiveRows[row];

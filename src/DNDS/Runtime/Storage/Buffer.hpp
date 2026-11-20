@@ -79,7 +79,9 @@ namespace DNDS::Runtime
 
         DNDS_DEVICE_CALLABLE T &operator[](size_t i) const
         {
-#ifdef __CUDA_ARCH__
+#if defined(__SYCL_DEVICE_ONLY__)
+            DNDS_HD_assert(space == MemorySpace::SYCL && i < size);
+#elif defined(__CUDA_ARCH__)
             DNDS_HD_assert(space == MemorySpace::CUDA && i < size);
 #else
             DNDS_check_throw_info(space == MemorySpace::Host && i < size, "runtime span: invalid host access or index");

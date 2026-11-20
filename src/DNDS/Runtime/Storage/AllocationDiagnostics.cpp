@@ -155,7 +155,8 @@ namespace DNDS::Runtime
         output << '\n';
         for (const auto &entry : allocations)
         {
-            output << entry.identity << ' ' << (entry.device.space == MemorySpace::CUDA ? "cuda:" : "host:")
+            output << entry.identity << ' ' << (entry.device.space == MemorySpace::SYCL ? "sycl:" : entry.device.space == MemorySpace::CUDA ? "cuda:"
+                                                                                                                                            : "host:")
                    << entry.device.ordinal << " bytes=" << entry.bytes
                    << " provider=" << (entry.externalProvider ? "external" : "native")
                    << " stream_ordered=" << entry.streamOrderedMemory

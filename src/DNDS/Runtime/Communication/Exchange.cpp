@@ -8,7 +8,7 @@ namespace DNDS::Runtime
         {
             std::vector<RowRequest> requests;
             for (size_t i = 0; i < leaves.size(); ++i)
-                requests.push_back({leaves[i].rank, leaves[i].row, i});
+                requests.push_back({leaves[i].rank, leaves[i].row, index(i)});
             return requests;
         }
 

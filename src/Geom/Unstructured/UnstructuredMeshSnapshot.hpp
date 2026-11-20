@@ -86,9 +86,6 @@ namespace DNDS::Geom
         template <class T>
         static Pair<T> ClonePair(Runtime::PairReadView<T> source);
         static UnstructuredMeshSnapshot FromRead(MeshReadAccess read);
-        template <class T>
-        static std::optional<Pair<T>> Place(const std::optional<Pair<T>> &source, Runtime::Device device,
-                                            Runtime::ExecutionContext context);
 
     public:
         /// Consume validated local-index host buffers. Unsupported or missing

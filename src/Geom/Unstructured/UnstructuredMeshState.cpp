@@ -105,7 +105,7 @@ namespace DNDS::Geom
             for (index row = 0; row < space.NumGhost(); ++row)
             {
                 auto global = space.LocalToGlobal(space.NumOwned() + row);
-                requests.push_back({space.Owner(global), space.OwnerLocalRow(global), size_t(row)});
+                requests.push_back({space.Owner(global), space.OwnerLocalRow(global), row});
             }
             Runtime::RowTransferPlan ghostRoute(context, ids.RowCount(), size_t(space.NumGhost()), requests);
             Runtime::Array<index> expected(Runtime::RowLayout::Dense(size_t(space.NumGhost()), 1));
@@ -253,8 +253,8 @@ namespace DNDS::Geom
             result->_namedRelations.emplace(key, std::move(held));
         }
         data.namedRelations.clear();
-        result->_placements.emplace(-1, UnstructuredMeshSnapshot::FromNative(std::move(data), requirements));
-        result->_hostRead = std::make_shared<MeshReadAccess>(result->_placements.at(-1).AcquireRead());
+        result->_placements.emplace(UnstructuredMeshState::PlacementKey(Runtime::Device::Host()), UnstructuredMeshSnapshot::FromNative(std::move(data), requirements));
+        result->_hostRead = std::make_shared<MeshReadAccess>(result->_placements.at(UnstructuredMeshState::PlacementKey(Runtime::Device::Host())).AcquireRead());
         result->_hostView = result->_hostRead->HostView();
         result->_originalIds = std::move(ids);
         for (const auto &[kind, values] : result->_originalIds)
@@ -356,15 +356,14 @@ namespace DNDS::Geom
     std::shared_ptr<const UnstructuredMeshState> UnstructuredMeshState::WithPlacement(Runtime::Device device, Runtime::ExecutionContext context) const
     {
         Validate();
-        DNDS_check_throw_info(device == Runtime::Device::Host() ||
-                                  (device.space == Runtime::MemorySpace::CUDA && device.ordinal >= 0),
+        DNDS_check_throw_info(device.IsValid(),
                               "invalid native mesh placement device");
         context.Validate();
         DNDS_check_throw_info(context.device == device,
                               "native mesh placement context mismatch");
         auto result = std::shared_ptr<UnstructuredMeshState>(new UnstructuredMeshState(*this));
         if (!result->_placements.count(PlacementKey(device)))
-            result->_placements.emplace(PlacementKey(device), _placements.at(-1).To(device, context));
+            result->_placements.emplace(PlacementKey(device), _placements.at(UnstructuredMeshState::PlacementKey(Runtime::Device::Host())).To(device, context));
         return result;
     }
 
@@ -492,8 +491,8 @@ namespace DNDS::Geom
         auto result = std::shared_ptr<UnstructuredMeshState>(new UnstructuredMeshState(*this));
         result->_requirements.wallDistance = bool(data.nodeWallDist);
         result->_placements.clear();
-        result->_placements.emplace(-1, UnstructuredMeshSnapshot::FromNative(std::move(data), result->_requirements));
-        result->_hostRead = std::make_shared<MeshReadAccess>(result->_placements.at(-1).AcquireRead());
+        result->_placements.emplace(UnstructuredMeshState::PlacementKey(Runtime::Device::Host()), UnstructuredMeshSnapshot::FromNative(std::move(data), result->_requirements));
+        result->_hostRead = std::make_shared<MeshReadAccess>(result->_placements.at(UnstructuredMeshState::PlacementKey(Runtime::Device::Host())).AcquireRead());
         result->_hostView = result->_hostRead->HostView();
         // A detached replacement has independent validity until the facade
         // publishes it. Rebinding handles never mutates retained source maps.

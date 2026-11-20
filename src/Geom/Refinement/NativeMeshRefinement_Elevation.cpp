@@ -235,7 +235,7 @@ namespace DNDS::Geom
                 DNDS_check_throw_info(parents.View().RowSize(size_t(boundary)) == 2,
                                       "native elevation requires two boundary physical slots");
                 const auto parent = parents.View()(size_t(boundary), 0);
-                requests[size_t(boundary)] = {sourceCells.Owner(parent), sourceCells.OwnerLocalRow(parent), size_t(boundary)};
+                requests[size_t(boundary)] = {sourceCells.Owner(parent), sourceCells.OwnerLocalRow(parent), boundary};
             }); });
         auto context = owned.communication ? owned.communication : std::make_shared<Runtime::CommunicationContext>(mpi.comm);
         Runtime::RowTransferPlan boundaryRoute(context, size_t(cells.NumOwned()), size_t(boundaries.NumOwned()), requests);

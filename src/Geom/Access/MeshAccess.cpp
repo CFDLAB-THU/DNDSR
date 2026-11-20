@@ -103,17 +103,17 @@ namespace DNDS::Geom
             if (requirements.edges)
                 elementRows(_storage.edgeElemInfo, edgeRows, 1);
         }
-        const size_t sourceOwned[]{cellRows.owned.RowCount(), bndRows.owned.RowCount(), bndRows.owned.RowCount(), cellRows.owned.RowCount(),
-                                   _storage.coords.owned.RowCount(), _storage.coords.owned.RowCount(), cellRows.owned.RowCount(),
-                                   faceRows.owned.RowCount(), faceRows.owned.RowCount(), faceRows.owned.RowCount(), bndRows.owned.RowCount(),
-                                   cellRows.owned.RowCount(), edgeRows.owned.RowCount(), edgeRows.owned.RowCount(), cellRows.owned.RowCount()};
-        const size_t sourceGhost[]{cellRows.ghost.RowCount(), bndRows.ghost.RowCount(), bndRows.ghost.RowCount(), cellRows.ghost.RowCount(),
-                                   _storage.coords.ghost.RowCount(), _storage.coords.ghost.RowCount(), cellRows.ghost.RowCount(),
-                                   faceRows.ghost.RowCount(), faceRows.ghost.RowCount(), faceRows.ghost.RowCount(), bndRows.ghost.RowCount(),
-                                   cellRows.ghost.RowCount(), edgeRows.ghost.RowCount(), edgeRows.ghost.RowCount(), cellRows.ghost.RowCount()};
-        const size_t targetCounts[]{nodeCount, nodeCount, cellCount, cellCount, cellCount, bndCount,
-                                    faceCount, nodeCount, cellCount, bndCount, faceCount,
-                                    edgeCount, nodeCount, cellCount, cellCount};
+        const index sourceOwned[]{cellRows.owned.RowCount(), bndRows.owned.RowCount(), bndRows.owned.RowCount(), cellRows.owned.RowCount(),
+                                  _storage.coords.owned.RowCount(), _storage.coords.owned.RowCount(), cellRows.owned.RowCount(),
+                                  faceRows.owned.RowCount(), faceRows.owned.RowCount(), faceRows.owned.RowCount(), bndRows.owned.RowCount(),
+                                  cellRows.owned.RowCount(), edgeRows.owned.RowCount(), edgeRows.owned.RowCount(), cellRows.owned.RowCount()};
+        const index sourceGhost[]{cellRows.ghost.RowCount(), bndRows.ghost.RowCount(), bndRows.ghost.RowCount(), cellRows.ghost.RowCount(),
+                                  _storage.coords.ghost.RowCount(), _storage.coords.ghost.RowCount(), cellRows.ghost.RowCount(),
+                                  faceRows.ghost.RowCount(), faceRows.ghost.RowCount(), faceRows.ghost.RowCount(), bndRows.ghost.RowCount(),
+                                  cellRows.ghost.RowCount(), edgeRows.ghost.RowCount(), edgeRows.ghost.RowCount(), cellRows.ghost.RowCount()};
+        const index targetCounts[]{nodeCount, nodeCount, cellCount, cellCount, cellCount, bndCount,
+                                   faceCount, nodeCount, cellCount, bndCount, faceCount,
+                                   edgeCount, nodeCount, cellCount, cellCount};
         std::vector<bool> requiredFaces(faceCount, false);
         if (requirements.faces && _context.device == Runtime::Device::Host())
         {
@@ -243,7 +243,7 @@ namespace DNDS::Geom
     UnstructuredMeshView MeshReadAccess::DeviceView() const
     {
         DNDS_check_throw_info(_active && !_completed, "mesh read access was moved or sealed");
-        DNDS_check_throw_info(_context.device.space == Runtime::MemorySpace::CUDA, "DeviceView requires CUDA acquisition");
+        DNDS_check_throw_info(_context.device.IsValid() && _context.device != Runtime::Device::Host(), "DeviceView requires a device acquisition");
         _stamp.Validate();
         return UnstructuredMeshView(_storage);
     }

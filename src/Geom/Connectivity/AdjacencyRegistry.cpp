@@ -149,7 +149,7 @@ namespace DNDS::Geom
             if (!reusedRoute)
                 for (size_t row = 0; row < globals.size(); ++row)
                     requests.push_back({relation.Source().Owner(globals[row]),
-                                        relation.Source().OwnerLocalRow(globals[row]), row}); });
+                                        relation.Source().OwnerLocalRow(globals[row]), index(row)}); });
         const auto &values = _fetchValues.at(relation.Kind());
         const auto retain = [&](Runtime::Array<index> fetched)
         {
@@ -389,7 +389,7 @@ namespace DNDS::Geom
                 requests.reserve(requested[group.relationSlots.front()].size());
                 for (size_t row = 0; row < requested[group.relationSlots.front()].size(); ++row)
                     requests.push_back({source.Owner(requested[group.relationSlots.front()][row]),
-                                        source.OwnerLocalRow(requested[group.relationSlots.front()][row]), row});
+                                        source.OwnerLocalRow(requested[group.relationSlots.front()][row]), index(row)});
                 group.context = _communication ? _communication : std::make_shared<Runtime::CommunicationContext>(_mpi.comm);
                 group.route.emplace(group.context, size_t(model.NumOwned()),
                                     requested[group.relationSlots.front()].size(), requests,

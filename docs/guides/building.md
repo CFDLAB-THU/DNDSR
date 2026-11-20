@@ -637,3 +637,21 @@ settings in `pyproject.toml`:
 When scikit-build-core configures CMake it sets `SKBUILD_PROJECT_NAME`,
 which the build system uses to skip ccache and in-source symlink
 creation (these are only relevant for the developer C++ build).
+
+### SYCL Runtime Array and mesh placement
+
+Configure a separate build with a DPC++ C++ compiler and `-DDNDS_USE_SYCL=ON`.
+Runtime assigns a local placement to each selected device and owns one USM
+context per device. `SelectSYCLDevice(SYCLTarget::CPU)` selects a CPU with
+device USM. `SYCLTarget::CUDA` selects the NVIDIA CUDA adapter. Multiple queues
+from `CreateSYCLQueue(device)` share the allocation context. Submit kernels
+through `SYCLQueue(context)` and attach `Completion::Record(context)` to their
+operand leases before releasing them.
+
+For local qualification, enable tests, build `geom_test_sycl_migration`, and run
+`ctest -R '^geom_sycl_(cpu|cuda)_migration_np2$' --output-on-failure`.
+The probe compiles a SPIR image and an NVIDIA image. Set the semicolon-separated
+CMake list `DNDS_SYCL_TEST_FLAGS` to select the installed CUDA toolkit and SM.
+For example, CUDA 12.6 and an A100 use
+`-fsycl-targets=spir64,nvptx64-nvidia-cuda;--cuda-path=/usr/local/cuda-12.6;-Xsycl-target-backend=nvptx64-nvidia-cuda;--offload-arch=sm_80`.
+Both MPI ranks must be able to access the selected device.

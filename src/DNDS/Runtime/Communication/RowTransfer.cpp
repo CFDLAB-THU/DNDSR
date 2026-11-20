@@ -637,19 +637,22 @@ namespace DNDS::Runtime
                                  state->reducer ? int(state->reducer->initialization) : 0, bool(state->options.provider), state->options.allowStreamOrderedDeviceMemory,
                                  state->collectivePreflight, int(state->options.preflight), bool(state->options.communicationWorker), state->options.isolatedNamespace};
         constexpr index controlNumber = sizeof(controls) / sizeof(controls[0]);
-        int64_t agreed[2 * controlNumber + 1];
+        int64_t agreed[2 * controlNumber + 2];
         for (index i = 0; i < controlNumber; ++i)
         {
             agreed[2 * i] = controls[i];
             agreed[2 * i + 1] = -controls[i];
         }
         agreed[2 * controlNumber] = layoutsValid;
-        MPI_Allreduce(MPI_IN_PLACE, agreed, int(2 * controlNumber + 1), MPI_INT64_T, MPI_MIN, routeComm);
+        agreed[2 * controlNumber + 1] = state->source.GetDevice().space != MemorySpace::SYCL &&
+                                        state->destination.GetDevice().space != MemorySpace::SYCL;
+        MPI_Allreduce(MPI_IN_PLACE, agreed, int(2 * controlNumber + 2), MPI_INT64_T, MPI_MIN, routeComm);
         bool controlsAgree = true;
         for (index i = 0; i < controlNumber; ++i)
             controlsAgree = controlsAgree && agreed[2 * i] == -agreed[2 * i + 1];
         MPI::CheckPreflight(controlsAgree, "transfer binding policy differs between ranks");
         MPI::CheckPreflight(agreed[2 * controlNumber], "Array layout differs from compiled payload");
+        MPI::CheckPreflight(agreed[2 * controlNumber + 1], "SYCL device halo transfer is unsupported");
         if (state->options.communicationWorker)
             CommunicationDetail::Preflight(!state->options.provider && state->source.GetDevice() == Device::Host() &&
                                                state->destination.GetDevice() == Device::Host() &&

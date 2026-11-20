@@ -257,8 +257,8 @@ namespace DNDS::Geom
             }
             prepared->_requirements = requirements;
             prepared->_placements.clear();
-            prepared->_placements.emplace(-1, UnstructuredMeshSnapshot::FromNative(data, requirements));
-            prepared->_hostRead = std::make_shared<MeshReadAccess>(prepared->_placements.at(-1).AcquireRead());
+            prepared->_placements.emplace(UnstructuredMeshState::PlacementKey(Runtime::Device::Host()), UnstructuredMeshSnapshot::FromNative(data, requirements));
+            prepared->_hostRead = std::make_shared<MeshReadAccess>(prepared->_placements.at(UnstructuredMeshState::PlacementKey(Runtime::Device::Host())).AcquireRead());
             prepared->_hostView = prepared->_hostRead->HostView();
             prepared->_versions.RebindPrepared(mesh.versions); });
         _closed = true;

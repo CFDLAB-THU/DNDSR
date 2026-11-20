@@ -265,13 +265,32 @@ namespace DNDS::Geom
         return UnstructuredMeshSnapshot(std::move(state));
     }
 
-    template <class T>
-    std::optional<UnstructuredMeshSnapshot::Pair<T>> UnstructuredMeshSnapshot::Place(const std::optional<Pair<T>> &source,
-                                                                                     Runtime::Device device, Runtime::ExecutionContext context)
+    namespace
     {
-        if (!source)
-            return {};
-        return Pair<T>{source->owned.To(device, context), source->ghost.To(device, context)};
+        // A single placement pass can encounter the same published payload under several
+        // relation slots. Use complete Array storage identity (values and layout).
+        template <class T>
+        class PlacePairs
+        {
+            std::map<const void *, Runtime::Array<T>> _placed;
+
+        public:
+            std::optional<Runtime::ArrayPair<T>> operator()(const std::optional<Runtime::ArrayPair<T>> &input,
+                                                            Runtime::Device device, Runtime::ExecutionContext context)
+            {
+                if (!input)
+                    return {};
+                const auto place = [&](const Runtime::Array<T> &source)
+                {
+                    const auto key = source.SharedStorage().get();
+                    auto it = _placed.find(key);
+                    if (it == _placed.end())
+                        it = _placed.emplace(key, source.To(device, context)).first;
+                    return it->second;
+                };
+                return Runtime::ArrayPair<T>{place(input->owned), place(input->ghost)};
+            }
+        };
     }
 
     UnstructuredMeshSnapshot UnstructuredMeshSnapshot::To(Runtime::Device device, Runtime::ExecutionContext context) const
@@ -279,25 +298,31 @@ namespace DNDS::Geom
         Live();
         DNDS_check_throw_info(context.device == (device == Runtime::Device::Host() ? GetDevice() : device),
                               "snapshot placement context mismatch");
+        if (device == GetDevice())
+            return *this;
+        PlacePairs<index> indices;
+        PlacePairs<real> values;
+        PlacePairs<ElemInfo> elementInfo;
+        PlacePairs<NodePeriodicBits> periodic;
         auto next = std::make_shared<State>();
         next->source = _state->source;
         next->device = device;
         next->semantics = _state->semantics;
         next->audit = _state->audit;
         for (size_t i = 0; i < next->relations.size(); ++i)
-            next->relations[i] = Place(_state->relations[i], device, context);
-        next->coords = Place(_state->coords, device, context);
-        next->nodeWallDist = Place(_state->nodeWallDist, device, context);
-        next->cellInfo = Place(_state->cellInfo, device, context);
-        next->bndInfo = Place(_state->bndInfo, device, context);
-        next->faceInfo = Place(_state->faceInfo, device, context);
-        next->edgeInfo = Place(_state->edgeInfo, device, context);
-        next->cellNodesPbi = Place(_state->cellNodesPbi, device, context);
-        next->bndNodesPbi = Place(_state->bndNodesPbi, device, context);
-        next->cellFacesPbi = Place(_state->cellFacesPbi, device, context);
-        next->faceNodesPbi = Place(_state->faceNodesPbi, device, context);
-        next->cellEdgesPbi = Place(_state->cellEdgesPbi, device, context);
-        next->edgeNodesPbi = Place(_state->edgeNodesPbi, device, context);
+            next->relations[i] = indices(_state->relations[i], device, context);
+        next->coords = values(_state->coords, device, context);
+        next->nodeWallDist = values(_state->nodeWallDist, device, context);
+        next->cellInfo = elementInfo(_state->cellInfo, device, context);
+        next->bndInfo = elementInfo(_state->bndInfo, device, context);
+        next->faceInfo = elementInfo(_state->faceInfo, device, context);
+        next->edgeInfo = elementInfo(_state->edgeInfo, device, context);
+        next->cellNodesPbi = periodic(_state->cellNodesPbi, device, context);
+        next->bndNodesPbi = periodic(_state->bndNodesPbi, device, context);
+        next->cellFacesPbi = periodic(_state->cellFacesPbi, device, context);
+        next->faceNodesPbi = periodic(_state->faceNodesPbi, device, context);
+        next->cellEdgesPbi = periodic(_state->cellEdgesPbi, device, context);
+        next->edgeNodesPbi = periodic(_state->edgeNodesPbi, device, context);
         return UnstructuredMeshSnapshot(std::move(next));
     }
 

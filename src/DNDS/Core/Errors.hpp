@@ -246,8 +246,32 @@ namespace DNDS
 #define DNDS_HD_assert_infof(cond, info, ...) \
     DNDS_HD_assert_infof_l(DNDS_ASSERT_LEVEL_MAX, cond, info, ##__VA_ARGS__)
 
-#ifdef __CUDA_ARCH__
+#if defined(__SYCL_DEVICE_ONLY__)
+// Host exception/formatting machinery is unavailable in a SYCL device kernel.
+#    if defined(DNDS_NDEBUG) || defined(DNDS_NDEBUG_DEVICE)
+#        define DNDS__SYCL_ASSERT(level, cond) (void(0))
+#    else
+#        define DNDS__SYCL_ASSERT(level, cond)                                                  \
+            do                                                                                  \
+            {                                                                                   \
+                if constexpr ((level) >= DNDS_ASSERT_LEVEL || (level) >= DNDS_ASSERT_LEVEL_MAX) \
+                {                                                                               \
+                    if (!(cond))                                                                \
+                        __builtin_trap();                                                       \
+                }                                                                               \
+            } while (0)
+#    endif
+#    define DNDS__HD_ASSERT_L0(cond) DNDS__SYCL_ASSERT(0, cond)
+#    define DNDS__HD_ASSERT_INFOF_L0(cond, ...) DNDS__SYCL_ASSERT(0, cond)
+#    define DNDS__HD_ASSERT_L1(cond) DNDS__SYCL_ASSERT(1, cond)
+#    define DNDS__HD_ASSERT_INFOF_L1(cond, ...) DNDS__SYCL_ASSERT(1, cond)
+#    define DNDS__HD_ASSERT_L2(cond) DNDS__SYCL_ASSERT(2, cond)
+#    define DNDS__HD_ASSERT_INFOF_L2(cond, ...) DNDS__SYCL_ASSERT(2, cond)
+#    define DNDS__HD_ASSERT_L3(cond) DNDS__SYCL_ASSERT(3, cond)
+#    define DNDS__HD_ASSERT_INFOF_L3(cond, ...) DNDS__SYCL_ASSERT(3, cond)
+#elif defined(__CUDA_ARCH__)
 
+// CUDA failures include the failing thread location.
 /// @brief Device-side assertion failure: print once (atomic-guarded) and trap.
 /// @details Uses `atomicCAS` on a managed flag so only the first failing thread
 /// prints; all threads trap after the guarded block to ensure immediate
@@ -403,7 +427,13 @@ __device__ inline void device_assert_fail(const char *expr, const char *file, in
 
 #endif
 
-#ifdef __CUDA_ARCH__
+#if defined(__SYCL_DEVICE_ONLY__)
+#    define EIGEN_NO_MALLOC
+// Route Eigen's alignment and index checks through the same on-device trap.
+// The host OpenCL runtime does not necessarily export the libc assert handler.
+#    define eigen_assert(expr) DNDS_HD_assert(expr)
+#    define DNDS_DEVICE_CODE_GUARD_EIGEN_MALLOC (void(0))
+#elif defined(__CUDA_ARCH__)
 #    ifdef DNDS_DEVICE_BAN_EIGEN_MALLOC_DYNAMIC
 #        define EIGEN_RUNTIME_NO_MALLOC
 #    else

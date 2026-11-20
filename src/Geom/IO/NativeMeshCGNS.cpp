@@ -1232,7 +1232,7 @@ namespace DNDS::Geom
                                             {
                 requests.reserve(size_t(length));
                 for (index row = 0; row < length; ++row)
-                    requests.push_back({readerRank, first + row, size_t(row)}); });
+                    requests.push_back({readerRank, first + row, row}); });
             return Runtime::RowTransferPlan(context, mpi.rank == readerRank ? size_t(total) : 0, size_t(length), requests);
         };
         auto cells = route(counts[0]), nodes = route(counts[1]), boundaries = route(counts[2]);

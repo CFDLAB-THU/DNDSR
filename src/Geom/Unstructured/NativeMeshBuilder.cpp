@@ -123,7 +123,7 @@ namespace DNDS::Geom
                 {
                     for (auto cell : candidates.GlobalRow(boundary))
                     {
-                        requests.push_back({input.cells.Owner(cell), input.cells.OwnerLocalRow(cell), candidateCells.size()});
+                        requests.push_back({input.cells.Owner(cell), input.cells.OwnerLocalRow(cell), index(candidateCells.size())});
                         candidateCells.push_back(cell);
                     }
                     starts.push_back(candidateCells.size());
@@ -224,7 +224,7 @@ namespace DNDS::Geom
                     DNDS_check_throw_info(containment.RowSize(boundary) == 1,
                                           "external boundary must have exactly one all-node containing cell");
                     const auto cell = containment.ReadEntry(boundary, 0).global;
-                    requests.push_back({input.cells.Owner(cell), input.cells.OwnerLocalRow(cell), size_t(boundary)});
+                    requests.push_back({input.cells.Owner(cell), input.cells.OwnerLocalRow(cell), index(boundary)});
                 }
                 return true; });
             // Containment may name a remote cell that is not in the initial

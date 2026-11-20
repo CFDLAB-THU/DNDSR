@@ -46,9 +46,9 @@ namespace DNDS::Runtime
                                              size_t(contiguous ? count : 1) * sizeof(T), context);
             }
             const auto done = Completion::Record(context);
-            if (inputDevice.space == MemorySpace::CUDA)
+            if (inputDevice != Device::Host())
                 read.Complete(done);
-            if (device.space == MemorySpace::CUDA)
+            if (device != Device::Host())
                 write.Complete(done);
             // Host DMA endpoints remain retained until the same copy prefix is
             // observed. This is one boundary, not one event per copied element.

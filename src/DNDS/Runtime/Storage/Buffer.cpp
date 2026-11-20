@@ -1,6 +1,9 @@
 #include "DNDS/Runtime/Storage/Buffer.hpp"
 #include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "DNDS/Runtime/Storage/AllocationResource.hpp"
+#ifdef DNDS_USE_SYCL
+#    include "DNDS/Runtime/Execution/SYCLExecution.hpp"
+#endif
 #include <atomic>
 #include <algorithm>
 #include <cstring>
@@ -19,11 +22,12 @@ namespace DNDS::Runtime
 
         void ValidateDevice(Device device)
         {
-            DNDS_check_throw_info((device.space == MemorySpace::Host && device.ordinal == -1) ||
-                                      (device.space == MemorySpace::CUDA && device.ordinal >= 0),
-                                  "runtime: invalid device descriptor");
+            DNDS_check_throw_info(device.IsValid(), "runtime: invalid device descriptor");
 #ifndef DNDS_USE_CUDA
-            DNDS_check_throw_info(device.space == MemorySpace::Host, "runtime: CUDA is not enabled in this build");
+            DNDS_check_throw_info(device.space != MemorySpace::CUDA, "runtime: CUDA is not enabled in this build");
+#endif
+#ifndef DNDS_USE_SYCL
+            DNDS_check_throw_info(device.space != MemorySpace::SYCL, "runtime: SYCL is not enabled in this build");
 #endif
         }
 
@@ -253,6 +257,9 @@ namespace DNDS::Runtime
     {
         Device device;
         std::shared_ptr<StreamResource> stream;
+#ifdef DNDS_USE_SYCL
+        std::shared_ptr<SYCLDetail::Event> syclEvent;
+#endif
 #ifdef DNDS_USE_CUDA
         cudaEvent_t event = nullptr;
         mutable std::mutex observation;
@@ -328,6 +335,10 @@ namespace DNDS::Runtime
             stream->Synchronize();
             return;
         }
+#ifdef DNDS_USE_SYCL
+        if (device.space == MemorySpace::SYCL)
+            SYCLDetail::Synchronize(*this);
+#endif
 #ifdef DNDS_USE_CUDA
         if (device.space == MemorySpace::CUDA)
         {
@@ -363,6 +374,10 @@ namespace DNDS::Runtime
             CheckCUDA(cudaEventRecord(state->event, CUDAStream(context)));
         }
 #endif
+#ifdef DNDS_USE_SYCL
+        if (context.device.space == MemorySpace::SYCL)
+            state->syclEvent = SYCLDetail::Record(context);
+#endif
         return Completion(std::move(state));
     }
 
@@ -380,6 +395,10 @@ namespace DNDS::Runtime
 
     void Completion::Wait() const
     {
+#ifdef DNDS_USE_SYCL
+        if (_state && _state->syclEvent)
+            return SYCLDetail::Wait(*_state->syclEvent);
+#endif
 #ifdef DNDS_USE_CUDA
         if (_state && _state->event)
             _state->Observe(true);
@@ -388,6 +407,10 @@ namespace DNDS::Runtime
 
     bool Completion::Ready() const
     {
+#ifdef DNDS_USE_SYCL
+        if (_state && _state->syclEvent)
+            return SYCLDetail::Ready(*_state->syclEvent);
+#endif
 #ifdef DNDS_USE_CUDA
         if (_state && _state->event)
             return _state->Observe(false);
@@ -476,6 +499,7 @@ namespace DNDS::Runtime
     Allocation Allocation::Import(std::shared_ptr<void> owner, size_t bytes, Device device, bool writable, bool streamOrderedMemory)
     {
         ValidateDevice(device);
+        DNDS_check_throw_info(device.space != MemorySpace::SYCL, "external SYCL allocations are unsupported; use Runtime-owned USM");
         DNDS_check_throw_info(owner.use_count() && (!bytes || owner.get()), "runtime: imported allocation requires shared ownership");
         DNDS_check_throw_info(bytes <= UINTPTR_MAX - reinterpret_cast<uintptr_t>(owner.get()), "runtime: imported address range overflow");
         DNDS_check_throw_info(!streamOrderedMemory || device.space == MemorySpace::CUDA, "pool/VMM memory needs a device allocation");
@@ -521,6 +545,10 @@ namespace DNDS::Runtime
     Buffer Buffer::Allocate(size_t bytes, Device device, AllocationOptions options)
     {
         ValidateDevice(device);
+#ifdef DNDS_USE_SYCL
+        if (device.space == MemorySpace::SYCL)
+            return FromResource(SYCLDetail::Allocate(bytes, ValidateAlignment(options), device));
+#endif
         return FromResource(std::make_unique<NativeResource>(bytes, device, options));
     }
 
@@ -532,6 +560,7 @@ namespace DNDS::Runtime
     Buffer Buffer::Allocate(size_t bytes, Device device, std::shared_ptr<Allocator> allocator, AllocationOptions options)
     {
         ValidateDevice(device);
+        DNDS_check_throw_info(device.space != MemorySpace::SYCL, "external SYCL allocators are unsupported; use Runtime-owned USM");
         DNDS_check_throw_info(allocator, "runtime: null allocator policy");
         ValidateAlignment(options);
         auto owner = allocator->Allocate(bytes, device, options);
@@ -904,7 +933,7 @@ namespace DNDS::Runtime
     {
         ValidateDevice(context.device);
         const bool gpu = sourceDevice != Device::Host() || destinationDevice != Device::Host();
-        DNDS_check_throw_info(gpu == (context.device.space == MemorySpace::CUDA), "copy execution device mismatch");
+        DNDS_check_throw_info(gpu == (context.device != Device::Host()), "copy execution device mismatch");
         DNDS_check_throw_info((sourceDevice == Device::Host() || sourceDevice == context.device) &&
                                   (destinationDevice == Device::Host() || destinationDevice == context.device),
                               "copy device ordinal mismatch");
@@ -914,6 +943,10 @@ namespace DNDS::Runtime
             if (bytes)
                 std::memcpy(destination, source, bytes);
         }
+#ifdef DNDS_USE_SYCL
+        else if (context.device.space == MemorySpace::SYCL)
+            SYCLDetail::Copy(destination, source, bytes, context);
+#endif
 #ifdef DNDS_USE_CUDA
         else
         {
@@ -941,35 +974,26 @@ namespace DNDS::Runtime
         auto sourceContext = source.GetDevice().space == MemorySpace::Host ? ExecutionContext::Host() : context;
         context.Validate();
         auto destinationContext = destination.GetDevice().space == MemorySpace::Host ? ExecutionContext::Host() : context;
-        const bool onDevice = source.GetDevice().space == MemorySpace::CUDA || destination.GetDevice().space == MemorySpace::CUDA;
-        DNDS_check_throw_info(onDevice == (context.device.space == MemorySpace::CUDA), "runtime: copy execution device mismatch");
+        const bool onDevice = source.GetDevice() != Device::Host() || destination.GetDevice() != Device::Host();
+        DNDS_check_throw_info(onDevice == (context.device != Device::Host()), "runtime: copy execution device mismatch");
         CopyOperation operation;
         operation._source = source.Read(sourceContext);
         operation._destination = destination.Write(destinationContext);
         auto src = operation._source.View<std::byte>();
         auto dst = operation._destination.View<std::byte>();
-        if (!onDevice)
+        // A pending DMA also owns the host endpoint. Attach its queue before
+        // enqueue so exception unwinding fences that lane even if event recording fails.
+        operation._source._context = context;
+        operation._destination._context = context;
+        Detail::EnqueueCopyBytes(src.data, source.GetDevice(), dst.data, destination.GetDevice(), source.Bytes(), context);
+        if (onDevice)
         {
-            if (source.Bytes())
-                std::memcpy(dst.data, src.data, source.Bytes());
-            operation.Wait();
-        }
-#ifdef DNDS_USE_CUDA
-        else
-        {
-            DeviceScope device(context.device.ordinal);
-            operation._source._context = context;
-            operation._destination._context = context;
-            if (source.Bytes())
-                CheckCUDA(cudaMemcpyAsync(dst.data, src.data, source.Bytes(), cudaMemcpyDefault,
-                                          CUDAStream(context)));
-            // Host staging leases also have to wait on the CUDA copy. Attach
-            // the copy context before recording its event (no host-side access).
             auto done = Completion::Record(context);
             operation._source.Complete(done);
             operation._destination.Complete(done);
         }
-#endif
+        else
+            operation.Wait();
         return operation;
     }
 

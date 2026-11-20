@@ -19,6 +19,7 @@ add_compile_definitions(DNDS_RUNTIME_ARRAY_BOUNDS_CHECKS=$<BOOL:${DNDS_RUNTIME_A
 set(DNDS_USE_OMP ON CACHE BOOL "enables openmp functionality")
 option(DNDS_USE_CALIPER "Enable optional Caliper performance annotations" OFF)
 set(DNDS_USE_CUDA OFF CACHE BOOL "enables cuda functionality")
+option(DNDS_USE_SYCL "Enable SYCL USM Runtime Array and mesh placement (DPC++ compiler required)" OFF)
 option(DNDS_USE_NCCL "Enable the CUDA stream-ordered NCCL payload provider (defaults to CUDA setting)" ${DNDS_USE_CUDA})
 if(DNDS_USE_NCCL AND NOT DNDS_USE_CUDA)
     message(FATAL_ERROR "DNDS_USE_NCCL requires DNDS_USE_CUDA")

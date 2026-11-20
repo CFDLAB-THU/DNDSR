@@ -39,7 +39,7 @@ namespace DNDS::Geom
         std::map<EntityKind, Space> _spaces;
         std::map<EntityKind, Runtime::Array<index>> _originalIds;
         std::map<EntityKind, std::shared_ptr<Runtime::Array<index>::ReadLease>> _originalReads;
-        std::map<int, UnstructuredMeshSnapshot> _placements;
+        std::map<std::pair<Runtime::MemorySpace, int>, UnstructuredMeshSnapshot> _placements;
         std::shared_ptr<MeshReadAccess> _hostRead;
         UnstructuredMeshView _hostView;
         Runtime::VersionTracker _versions;
@@ -49,9 +49,9 @@ namespace DNDS::Geom
 
         UnstructuredMeshState() = default;
         void BindPreparedEpoch(Runtime::VersionTracker versions);
-        static int PlacementKey(Runtime::Device device)
+        static auto PlacementKey(Runtime::Device device)
         {
-            return device.space == Runtime::MemorySpace::Host ? -1 : device.ordinal;
+            return std::make_pair(device.space, device.ordinal);
         }
 
     public:
