@@ -1,3 +1,4 @@
+#include "Cauchy/Implicit/JacobianRowBatches.hpp"
 #include "Cauchy/Discretization/FiniteVolume.hpp"
 #include "Cauchy/Core/NumericalFailure.hpp"
 #include "DNDS/MPI/Failure.hpp"
@@ -235,7 +236,8 @@ namespace DNDS::Cauchy
         request.evaluated = bool(evaluated);
         request.selected = !selection.All();
         request.active = active;
-        RequireNumericalSuccess(CPU::PrepareCompressibleFluxJacobian(request, _data->equation.Gas(), _data->flux), "PrepareCompressibleFluxJacobian");
+        for (const auto &rows : JacobianRowBatches(request.stencil, d.RowCount(), bool(blocks) && _data->settings.execution.overlap))
+            RequireNumericalSuccess(CPU::PrepareCompressibleFluxJacobian(request, _data->equation.Gas(), _data->flux, rows), "PrepareCompressibleFluxJacobian");
         magnitudeWrite.reset();
         diagonal.reset();
         if (evaluated)

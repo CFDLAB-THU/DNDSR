@@ -31,6 +31,7 @@ namespace DNDS::Cauchy::CPU
         bool physicalBoundary = true;
         RigidFrameParameters frame;
         RHSScalarView incoming;
+        Runtime::RowSelection rows;
     };
     NumericalStatus PrepareACMFluxJacobian(const ACMJacobianPreparation &) noexcept;
 }

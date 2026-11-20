@@ -88,6 +88,8 @@ TEST_CASE("ACM device correction matches CPU on flow4 and mechanical SA and SST"
         {
             CAPTURE(std::string_view(mapping));
             const bool cpu = std::string_view(mapping) == "cpu";
+            // Compare the regional device update against a whole-domain CPU correction.
+            settings.execution.overlap = !cpu;
             settings.execution.device = cpu ? "cpu" : "cuda";
             settings.execution.kernels.rhsMapping = cpu ? "auto" : mapping;
             settings.execution.reconstructionKernel = !cpu && polynomial ? "fp64Pipelined" : "fp64";

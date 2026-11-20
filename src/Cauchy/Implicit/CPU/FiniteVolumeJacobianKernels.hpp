@@ -1,4 +1,6 @@
 #pragma once
+#include "Cauchy/Implicit/JacobianRowBatches.hpp"
+
 #include "DNDS/Core/NumericalStatus.hpp"
 #include "Cauchy/Implicit/JacobianGeometry.hpp"
 #include "Cauchy/Physics/PointProperties.hpp"
@@ -222,7 +224,7 @@ namespace DNDS::Cauchy::CPU
     };
     void EvaluateFlowJacobianBlock(const FlowJacobianView &, const PerfectGas &, index iRow, index iBlock, Eigen::Ref<Eigen::MatrixXd> output);
     void ApplyFlowJacobianBlock(const FlowJacobianView &, const PerfectGas &, index iRow, index iBlock, JacobianInput input, Eigen::Ref<Eigen::VectorXd> output);
-    NumericalStatus PrepareCompressibleFluxJacobian(const FlowJacobianPreparation &, const PerfectGas &, const Riemann::RiemannFlux &) noexcept;
+    NumericalStatus PrepareCompressibleFluxJacobian(const FlowJacobianPreparation &, const PerfectGas &, const Riemann::RiemannFlux &, Runtime::RowSelection) noexcept;
     void FreezeFlowJacobian(RHSFlowFieldView mean, RHSScalarView radius,
                             Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::FixedRows<5>> frozenMean,
                             Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::TableRows> frozenRadius);
@@ -264,5 +266,5 @@ namespace DNDS::Cauchy::CPU
     /// Prepare the remaining EOS rows, boundary derivatives and face blocks.
     /// ownedPropertiesPrepared skips only means already emitted by the source kernel.
     NumericalStatus PrepareCompressibleFluxJacobian(const EquationJacobianPreparation &, const BoundaryPointOperator &,
-                                                    SpanView<EquationJacobianWorker>, bool ownedPropertiesPrepared) noexcept;
+                                                    SpanView<EquationJacobianWorker>, bool ownedPropertiesPrepared, const JacobianRowBatches &) noexcept;
 }

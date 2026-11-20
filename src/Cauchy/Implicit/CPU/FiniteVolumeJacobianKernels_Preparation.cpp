@@ -61,7 +61,7 @@ namespace DNDS::Cauchy::CPU
     }
     template <int C>
     static NumericalStatus PrepareCompressibleFluxJacobianRows(const EquationJacobianPreparation &request, const BoundaryPointOperator &boundaryOperator,
-                                                               SpanView<EquationJacobianWorker> workers, bool ownedPropertiesPrepared) noexcept
+                                                               SpanView<EquationJacobianWorker> workers, bool ownedPropertiesPrepared, const JacobianRowBatches &batches) noexcept
     {
         DNDS_assert(!workers.empty());
         const auto &snapshot = request.snapshot;
@@ -92,11 +92,15 @@ namespace DNDS::Cauchy::CPU
         // cell. Never cache a complete N*N flux matrix per cell/face.
         // A source-free/no-sampling workspace returns false: its owned EOS
         // outputs must still be initialized. Ghost means always need EOS.
-        const auto meanStatus = OMP::ForRowsStatus(0, workers.size(), [&](index part) -> NumericalStatus
-                                                   {
+        const auto prepareMeanRows = [&](index first, index last)
+        {
+            if (first == last)
+                return NumericalStatus{};
+            return OMP::ForRowsStatus(0, workers.size(), [&](index part) -> NumericalStatus
+                                      {
         auto &point = workers[part].point;
         auto &evaluator = workers[part].evaluator;
-        const auto [begin, end] = rowRange(part, ownedPropertiesPrepared ? owned : 0, all);
+        const auto [begin, end] = rowRange(part, first, last);
         for (index iCell = begin; iCell < end; ++iCell)
         {
             EquationFVDetail::Gather(blocks, iCell, point, false);
@@ -124,6 +128,10 @@ namespace DNDS::Cauchy::CPU
                 }
         }
         return {}; });
+        };
+        // Core matrix rows can be completed using only the owned EOS derivatives.
+        // Centered source preparation may already have supplied that owned part.
+        const auto meanStatus = prepareMeanRows(ownedPropertiesPrepared ? owned : 0, batches.Split() ? owned : all);
         if (!meanStatus)
             return meanStatus;
         // Prepare the independently sampled face-center exterior rows used
@@ -213,16 +221,24 @@ namespace DNDS::Cauchy::CPU
             const JacobianPointValue point{sample.other, sample.auxiliaryFace, UnInitIndex, {sample.normal[0], sample.normal[1], sample.normal[2]}, {sample.ownPoint[0], sample.ownPoint[1], sample.ownPoint[2]}, sample.rotation, weight, sample.changesFrame};
             AddFrozenEquationJacobianPoint(snapshot, point, block, inputValues);
         };
-        // EOS rows and boundary rows are complete before any partition reads
-        // them. Assembly writes independent matrix rows, with private dense
+        // Each batch reads completed EOS and boundary rows. Matrix rows use private dense
         // boundary/diagonal scratch and unchanged per-row incidence order.
-        return OMP::ForRowsStatus(0, workers.size(), [&](index part) -> NumericalStatus
-                                  {
+        for (auto batch = batches.begin(); batch != batches.end(); ++batch)
+        {
+            if (batch != batches.begin())
+            {
+                const auto ghostStatus = prepareMeanRows(owned, all);
+                if (!ghostStatus)
+                    return ghostStatus;
+            }
+            const auto &rows = *batch;
+            const auto batchStatus = OMP::ForRowsStatus(0, workers.size(), [&](index part) -> NumericalStatus
+                                                        {
         auto &own = workers[part].own;
         auto &other = workers[part].other;
         auto &boundaryDerivative = workers[part].boundaryDerivative;
         auto &cellMean = workers[part].cellMean;
-        const auto [begin, end] = rowRange(part, 0, owned);
+        const auto [begin, end] = rowRange(part, 0, rows.RowCount());
         const auto assembleFaceRow = [&](index iCell, auto &own) -> NumericalStatus
         {
             if (b)
@@ -299,8 +315,9 @@ namespace DNDS::Cauchy::CPU
         if (request.fullBlock)
         {
             const auto matrices = Algebra::MakeEigenRowMatrices(d, nv, nv, Runtime::Device::Host(), request.rowMajorBlocks);
-            for (index iCell = begin; iCell < end; ++iCell)
+            for (index slot = begin; slot < end; ++slot)
             {
+                const index iCell = rows.RowAt(slot);
                 auto block = matrices[iCell];
                 const auto status = assembleFaceRow(iCell, block);
                 if (!status)
@@ -308,8 +325,9 @@ namespace DNDS::Cauchy::CPU
             }
         }
         else
-            for (index iCell = begin; iCell < end; ++iCell)
+            for (index slot = begin; slot < end; ++slot)
             {
+                const index iCell = rows.RowAt(slot);
                 own.setZero();
                 for (index j = 0; j < nv; ++j)
                     own(j, j) = d(iCell, j);
@@ -320,6 +338,10 @@ namespace DNDS::Cauchy::CPU
                     d(iCell, j) = own(j, j);
             }
         return {}; });
+            if (!batchStatus)
+                return batchStatus;
+        }
+        return {};
     }
     // Static component counts are valid only for an exact compact table. A
     // segmented/strided or extended mixture uses the same row implementation.
@@ -351,10 +373,10 @@ namespace DNDS::Cauchy::CPU
     }
 
     NumericalStatus PrepareCompressibleFluxJacobian(const EquationJacobianPreparation &request, const BoundaryPointOperator &boundaryOperator,
-                                                    SpanView<EquationJacobianWorker> workers, bool ownedPropertiesPrepared) noexcept
+                                                    SpanView<EquationJacobianWorker> workers, bool ownedPropertiesPrepared, const JacobianRowBatches &batches) noexcept
     {
         return WithJacobianShape(request, [&](auto width)
-                                 { return PrepareCompressibleFluxJacobianRows<decltype(width)::value>(request, boundaryOperator, workers, ownedPropertiesPrepared); });
+                                 { return PrepareCompressibleFluxJacobianRows<decltype(width)::value>(request, boundaryOperator, workers, ownedPropertiesPrepared, batches); });
     }
 
 }

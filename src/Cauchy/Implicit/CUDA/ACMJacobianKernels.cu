@@ -9,13 +9,16 @@ namespace DNDS::Cauchy::CUDA
     namespace
     {
         template <int C>
-        __global__ void AssembleACMFluxJacobianRows(ACMJacobianInput request, ACMJacobianStatusRows status)
+        __global__ void AssembleACMFluxJacobianRows(ACMJacobianInput request, R::RowSelection rows, ACMJacobianStatusRows status)
         {
-            for (index cell = index(blockIdx.x) * blockDim.x + threadIdx.x; cell < status.RowCount(); cell += index(blockDim.x) * gridDim.x)
+            for (index slot = index(blockIdx.x) * blockDim.x + threadIdx.x; slot < rows.RowCount(); slot += index(blockDim.x) * gridDim.x)
+            {
+                const index cell = rows.RowAt(slot);
                 status(cell, 0) = ACM::AssembleRow<C>(request, request.stencil(0, 0), cell);
+            }
         }
     }
-    void PrepareACMFluxJacobian(R::ExecutionContext context, const ACMJacobianInput &q, ACMJacobianStatusRows status)
+    void PrepareACMFluxJacobian(R::ExecutionContext context, const ACMJacobianInput &q, R::RowSelection rows, ACMJacobianStatusRows status)
     {
         const index cells = q.diagonal.RowCount(), width = q.input.owned.Width();
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && width >= 4 && width <= 6 &&
@@ -33,17 +36,18 @@ namespace DNDS::Cauchy::CUDA
                               "CUDA ACM flux Jacobian component width differs from equation physics");
         if (width > 4)
             R::ValidateViewDevices(context.device, q.wallMean);
-        R::CheckKernelArgumentBudget<ACMJacobianInput, ACMJacobianStatusRows>();
-        if (!cells)
+        rows.ValidateDevice(context.device);
+        R::CheckKernelArgumentBudget<ACMJacobianInput, R::RowSelection, ACMJacobianStatusRows>();
+        if (!rows.RowCount())
             return;
-        const int blocks = int(std::min<index>(65535, 1 + (cells - 1) / 64));
+        const int blocks = int(std::min<index>(65535, 1 + (rows.RowCount() - 1) / 64));
         const auto stream = R::CUDAStream(context);
         if (q.profile == EquationPhysicsProfile::ACM)
-            AssembleACMFluxJacobianRows<4><<<blocks, 64, 0, stream>>>(q, status);
+            AssembleACMFluxJacobianRows<4><<<blocks, 64, 0, stream>>>(q, rows, status);
         else if (q.profile == EquationPhysicsProfile::ACMSA)
-            AssembleACMFluxJacobianRows<5><<<blocks, 64, 0, stream>>>(q, status);
+            AssembleACMFluxJacobianRows<5><<<blocks, 64, 0, stream>>>(q, rows, status);
         else
-            AssembleACMFluxJacobianRows<6><<<blocks, 64, 0, stream>>>(q, status);
+            AssembleACMFluxJacobianRows<6><<<blocks, 64, 0, stream>>>(q, rows, status);
         DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "CUDA ACM sparse assembly launch failed");
     }
 }

@@ -124,7 +124,7 @@ namespace DNDS::Cauchy::CPU
             for (int j = 0; j < 2; ++j)
                 frozenRadius(iFace, j) = radius(iFace, j); });
     }
-    NumericalStatus PrepareCompressibleFluxJacobian(const FlowJacobianPreparation &request, const PerfectGas &gas, const Riemann::RiemannFlux &flux) noexcept
+    NumericalStatus PrepareCompressibleFluxJacobian(const FlowJacobianPreparation &request, const PerfectGas &gas, const Riemann::RiemannFlux &flux, Runtime::RowSelection rows) noexcept
     {
         const auto &packet = request.packet;
         const auto &mean = request.mean;
@@ -147,8 +147,9 @@ namespace DNDS::Cauchy::CPU
                 return NumericalStatus{NumericalError::InvalidState, 5, iCell};
             return Riemann::AcousticState{{u, pressure}, sound};
         };
-        return OMP::ForRowsStatus(0, request.diagonal.RowCount(), [&](index iCell) -> NumericalStatus
+        return OMP::ForRowsStatus(0, rows.RowCount(), [&](index slot) -> NumericalStatus
                                   {
+            const index iCell = rows.RowAt(slot);
             const real inverseStep = inverseTau(iCell, 0);
             if (!(std::isfinite(inverseStep) && inverseStep >= 0))
                 return NumericalStatus{NumericalError::InvalidState, 1, iCell};

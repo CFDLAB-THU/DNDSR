@@ -6,8 +6,8 @@ namespace DNDS::Cauchy::CPU
     template <int C>
     static NumericalStatus Assemble(const ACMJacobianPreparation &request)
     {
-        return OMP::ForRowsStatus(0, request.diagonal.RowCount(), [&](index cell)
-                                  { return ACM::AssembleRow<C>(request, request.stencil, cell); });
+        return OMP::ForRowsStatus(0, request.rows.RowCount(), [&](index slot)
+                                  { return ACM::AssembleRow<C>(request, request.stencil, request.rows.RowAt(slot)); });
     }
     NumericalStatus PrepareACMFluxJacobian(const ACMJacobianPreparation &request) noexcept
     {

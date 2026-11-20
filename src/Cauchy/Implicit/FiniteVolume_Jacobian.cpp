@@ -1,3 +1,4 @@
+#include "Cauchy/Implicit/JacobianRowBatches.hpp"
 #include "Cauchy/Discretization/FiniteVolume.hpp"
 #include "DNDS/Diagnostics/Timeline.hpp"
 #include "DNDS/MPI/Failure.hpp"
@@ -315,9 +316,10 @@ namespace DNDS::Cauchy
                     AddEquationSourceJacobian(state, *context, diagonal, output.DiagonalMode(),
                                               controls.residualScale, evaluator, {}, output.RowMajorBlocks());
                 }
-                RequireNumericalSuccess(CPU::PrepareACMFluxJacobian(
-                                            {physics, stencil.View(), {_data->boundaryConditions.data(), index(_data->boundaryConditions.size())}, layout.View(), tau.View<R::UniformTableRows>(), radius.View<R::UniformTableRows>(), walls ? walls->HostView().cellMean : decltype(WallDistanceView::cellMean){}, diagonal.View<R::UniformTableRows>(), off->ArrayView(), controls.physicalMass, controls.residualScale, active, ResolveEquationPhysicsProfile(_data->equation), controls.scalarBoundaryDerivative, _data->motion.At(time).KernelParameters(), incomingFace}),
-                                        "assemble ACM Jacobian");
+                for (const auto &rows : JacobianRowBatches(stencil.View(), owned, _data->settings.execution.overlap))
+                    RequireNumericalSuccess(CPU::PrepareACMFluxJacobian(
+                                                {physics, stencil.View(), {_data->boundaryConditions.data(), index(_data->boundaryConditions.size())}, layout.View(), tau.View<R::UniformTableRows>(), radius.View<R::UniformTableRows>(), walls ? walls->HostView().cellMean : decltype(WallDistanceView::cellMean){}, diagonal.View<R::UniformTableRows>(), off->ArrayView(), controls.physicalMass, controls.residualScale, active, ResolveEquationPhysicsProfile(_data->equation), controls.scalarBoundaryDerivative, _data->motion.At(time).KernelParameters(), incomingFace, rows}),
+                                            "assemble ACM Jacobian");
             }
             catch (...)
             {
@@ -399,7 +401,8 @@ namespace DNDS::Cauchy
                 ownedPropertiesPrepared = AddEquationSourceJacobian(state, *context, *diagonal,
                                                                     output.DiagonalMode(), controls.residualScale, pointWorkers.front().evaluator, std::cref(request.linearization), output.RowMajorBlocks());
             RequireNumericalSuccess(CPU::PrepareCompressibleFluxJacobian(request, _data->boundaryPoint,
-                                                                         {pointWorkers.data(), index(pointWorkers.size())}, ownedPropertiesPrepared),
+                                                                         {pointWorkers.data(), index(pointWorkers.size())}, ownedPropertiesPrepared,
+                                                                         JacobianRowBatches(request.stencil, owned, bool(off) && _data->settings.execution.overlap)),
                                     "complete equation Jacobian");
         }
         catch (...)
