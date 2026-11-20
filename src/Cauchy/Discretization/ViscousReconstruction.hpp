@@ -4,9 +4,9 @@
 
 namespace DNDS::Cauchy::FiniteVolumeDetail
 {
-    /// Select a separate unlimited derivative for viscous fluxes. Modal RANS
-    /// P1 forcing updates both coefficient roles, so Barth alone only splits
-    /// the viscous input for direct physical-gradient reconstruction.
+    /// Select the pre-filter derivatives for polynomial viscous fluxes.
+    /// LVR changes the reconstruction equations themselves: its sweep has
+    /// a single solution, even when unlimited viscous gradients are requested.
     inline bool UsesUnlimitedViscousReconstruction(const DomainSettings &settings)
     {
         const auto &n = settings.numerics;
@@ -14,7 +14,6 @@ namespace DNDS::Cauchy::FiniteVolumeDetail
             return false;
         if (n.reconstruction == "gradient")
             return n.limiter != "none" || settings.GradientPositivity();
-        const bool lvr = n.limiter == "LVR" && (n.limitedVR.alphaMax > 0 || n.limitedVR.contactAlphaMax > 0);
-        return n.reconstruction == "variational" && (n.limiter == "WBAP" || lvr || n.positivity);
+        return n.reconstruction == "variational" && (n.limiter == "WBAP" || n.UsesRANSGradientBarth() || n.positivity);
     }
 }

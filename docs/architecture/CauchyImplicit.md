@@ -1321,7 +1321,10 @@ primitive_gradient = equation.PreparePrimitiveGradient((U_left + U_right)/2, G_f
 
 Convective states set the linearization. `viscousLimited=true` selects the
 filtered WBAP/PP polynomial; false selects the unlimited VR polynomial for
-viscous values and derivatives. At boundaries the exterior is generated from
+viscous values and derivatives. LVR alters the sweep equations and produces
+one polynomial for both roles when used alone, regardless of this switch.
+If reconstruction PP follows LVR, the pre-PP field is the LVR solution.
+At boundaries the exterior is generated from
 the convective interior, following Euler even with an unlimited viscous interior.
 No EOS work enters Riemann. `PolynomialViscousFlux` is a pure local numerical
 operator; `EquationSystem` owns the conservative-to-primitive chain rule and

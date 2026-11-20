@@ -131,8 +131,12 @@ For each RANS scalar, the linear coefficients are the cell length scale times
 its physical mean gradient and the higher coefficients are zero. The ordinary
 face and volume samplers consume this polynomial. Flow coefficients retain
 their VR order, including the velocity gradients in the SST volume source.
-With `numerics.limiter = "Barth"`, the RANS coefficients use the Barth-limited
-physical gradient. Cell-center turbulent viscosity and the centered source
+With `numerics.limiter = "Barth"`, face values and volume-source sampling use
+the Barth-limited RANS slopes. By default (`viscousLimited=true`), the viscous
+face gradient uses that same polynomial. With polynomial viscosity and
+`viscousLimited=false`, it uses the unlimited P1 slopes, with higher RANS
+modes still zero. The Barth pass borrows the completed VR sweep scratch;
+only the split viscous selection needs a second coefficient field for Barth alone. Cell-center turbulent viscosity and the centered source
 Jacobian continue to use the unlimited mean gradient.
 `ransMeanFaceValues` independently selects cell means for the RANS face value.
 Both switches default to false.

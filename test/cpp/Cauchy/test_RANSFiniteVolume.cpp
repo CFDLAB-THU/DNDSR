@@ -79,6 +79,66 @@ namespace
     }
 }
 
+TEST_CASE("Barth RANS overlay keeps face values fixed when selecting unlimited viscous slopes")
+{
+    auto mesh = CauchyTest::PeriodicQuads(mpi, 8);
+    mesh->BuildNodeWallDist([](auto)
+                            { return false; });
+    std::vector<double> limitedFlux, limitedRHS;
+    for (bool limited : {true, false})
+    {
+        auto settings = Settings();
+        settings.boundaries.clear();
+        settings.numerics.reconstruction = "variational";
+        settings.numerics.cfv.maxOrder = 2;
+        settings.numerics.reconstructionIterations = 1;
+        settings.numerics.positivity = false;
+        settings.numerics.ransP1Overlay = true;
+        settings.numerics.limiter = "Barth";
+        settings.numerics.viscousLimited = limited;
+        C::FiniteVolume fv(mesh, settings, Equation(settings));
+        auto state = State(fv, true);
+        Fill(state, fv, true);
+        {
+            auto write = state.WriteOwned();
+            const auto sa = write.Block("rans");
+            for (I iCell = 0; iCell < fv.Metrics().NumCell(); ++iCell)
+            {
+                const auto x = fv.Metrics().GetCellCent(iCell);
+                sa(iCell, 0) = x[0] + x[1] < .8 ? .03 : .01;
+            }
+        }
+        auto output = C::EquationDofOperations::NewVector(state);
+        auto rec = fv.BuildReconstructionState(state);
+        CHECK(fv.InspectReconstructionStorage(*rec).distinctFinalized == !limited);
+        auto work = fv.BuildWorkspace(state);
+        R::EagerEngine engine;
+        fv.Evaluate(state, output, *rec, *work, engine, engine.CreateCPUStream());
+        const auto flux = fv.FluxReconstruction(*rec, *work).PhysicalField(1).Owned().Read();
+        const auto rows = flux.View<R::UniformTableRows>();
+        const auto rhs = output.ReadOwned();
+        const auto sa = rhs.Block("rans");
+        double rhsDifference = 0;
+        for (I iCell = 0; iCell < rows.RowCount(); ++iCell)
+        {
+            for (I j = 0; j < rows.RowSize(iCell); ++j)
+                if (limited)
+                    limitedFlux.push_back(rows(iCell, j));
+                else
+                    CHECK(rows(iCell, j) == limitedFlux[iCell * rows.RowSize(iCell) + j]);
+            if (limited)
+                limitedRHS.push_back(sa(iCell, 0));
+            else
+                rhsDifference = std::max(rhsDifference, std::abs(sa(iCell, 0) - limitedRHS[iCell]));
+        }
+        if (!limited)
+        {
+            MPI_Allreduce(MPI_IN_PLACE, &rhsDifference, 1, MPI_DOUBLE, MPI_MAX, mpi.comm);
+            CHECK(rhsDifference > 1e-10);
+        }
+    }
+}
+
 TEST_CASE("Centered SST source Jacobian is independent of the VR polynomial")
 {
     auto mesh = CFVTest::CartesianHexes(mpi, 2);

@@ -233,19 +233,26 @@ namespace DNDS::Cauchy
                     // physical gradient. No limiter writes a second version,
                     // so retain the field instead of allocating/copying it.
                     directGradients.push_back(*fields[iField].gradient);
+                else if (ransGradientBarth)
+                {
+                    // All VR sweeps have committed before Barth runs. Borrow the
+                    // sweep temporary until SetLinearCoefficients consumes it on
+                    // the same stream. The subspans retain its allocation leases.
+                    const auto &temporary = fields[iField].reconstruction->temporary;
+                    const auto gradientRows = [&](const auto &rows)
+                    {
+                        const auto layout = R::RowLayout::Dense(rows.RowCount(), state.PhysicalField(iField).Width() * owner->metrics.Dimension());
+                        return R::Array<real>::FromStorage(layout, rows.Storage().Subspan(0, CheckedSize::Multiply(layout.Elements(), sizeof(real))));
+                    };
+                    directGradients.emplace_back(temporary.Space(), gradientRows(temporary.Owned()), gradientRows(temporary.Ghost()));
+                }
                 else
                     directGradients.push_back(owner->metrics.BuildField(
                         FiniteVolumeDetail::FieldLayout(state.PhysicalField(iField).Owned().Layout(), owner->metrics.NumCell(),
                                                         state.PhysicalField(iField).Width() * owner->metrics.Dimension()),
                         owner->metrics.Device()));
-                if (ransGradientBarth)
-                {
-                    const auto name = "Cauchy/gradient/ransOverlayBarth/" + state.Fields().Name(iField);
-                    directGradients.back().Owned().SetName(name + "/owned", DNDS_ALLOCATION_SITE());
-                    directGradients.back().Ghost().SetName(name + "/ghost", DNDS_ALLOCATION_SITE());
-                }
-                if (!meanOnly && owner->equation.Viscous() && owner->settings.numerics.viscousGradient == "polynomial" &&
-                    !owner->settings.numerics.viscousLimited && !nativeDirectGradient && !ransGradientBarth && owner->reconstruction)
+                if (!meanOnly && !nativeDirectGradient && !ransGradientBarth && owner->reconstruction &&
+                    owner->equation.Viscous() && FiniteVolumeDetail::UsesUnlimitedViscousReconstruction(owner->settings))
                     directViscousGradients.push_back(owner->metrics.BuildField(
                         FiniteVolumeDetail::FieldLayout(state.PhysicalField(iField).Owned().Layout(), owner->metrics.NumCell(),
                                                         state.PhysicalField(iField).Width() * owner->metrics.Dimension()),

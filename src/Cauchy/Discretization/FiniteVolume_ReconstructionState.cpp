@@ -1,3 +1,4 @@
+#include "Cauchy/Discretization/ViscousReconstruction.hpp"
 #include "Cauchy/Discretization/FiniteVolume.hpp"
 #include "Cauchy/Core/NumericalFailure.hpp"
 #include "Cauchy/Discretization/FiniteVolumeWorkspaceInternal.hpp"
@@ -101,7 +102,9 @@ namespace DNDS::Cauchy
           distinctFinalized(owner->reconstruction && ((owner->settings.numerics.limiter == "WBAP" &&
                                                        !(owner->settings.numerics.reconstruction == "gradient" &&
                                                          !owner->settings.numerics.positivity)) ||
-                                                      bool(owner->limitedVRGeometry) || owner->settings.numerics.positivity))
+                                                      owner->settings.numerics.positivity ||
+                                                      (owner->equation.Viscous() && owner->settings.numerics.UsesRANSGradientBarth() &&
+                                                       FiniteVolumeDetail::UsesUnlimitedViscousReconstruction(owner->settings))))
     {
         if (owner->reconstruction)
         {

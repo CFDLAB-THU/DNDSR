@@ -150,6 +150,8 @@ TEST_CASE("Native Cauchy LVR expansion admission changes the shock gate while co
         {
             auto settings = Settings("v2");
             settings.numerics.limitedVR.detectExpansion = expansion;
+            settings.numerics.positivity = false;
+            settings.numerics.viscousLimited = !expansion;
             const auto equation = C::EquationSystem::Resolve(settings.equation);
             C::FiniteVolume fv(mesh, settings, equation);
             auto mean = fv.Metrics().BuildField(5), residual = fv.Metrics().BuildField(5);
@@ -157,6 +159,7 @@ TEST_CASE("Native Cauchy LVR expansion admission changes the shock gate while co
             auto state = C::EquationDofs::Coupled(equation.Schema(), mean);
             auto output = C::EquationDofs::Coupled(equation.Schema(), residual);
             auto reconstruction = fv.BuildReconstructionState(state);
+            CHECK_FALSE(fv.InspectReconstructionStorage(*reconstruction).distinctFinalized);
             auto work = fv.BuildWorkspace(state);
             R::EagerEngine engine(2);
             const auto stream = engine.CreateCPUStream();

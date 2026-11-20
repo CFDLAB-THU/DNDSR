@@ -46,7 +46,10 @@ TEST_CASE("ACM device correction matches CPU on flow4 and mechanical SA and SST"
         settings.numerics.ransMeanFaceValues = eulerScalar;
         settings.numerics.ransP1Overlay = eulerScalar;
         if (eulerScalar)
+        {
             settings.numerics.limiter = "Barth";
+            settings.numerics.viscousLimited = false;
+        }
         settings.numerics.ransCellCenterViscosity = eulerScalar;
         settings.implicit.residualComponents.clear();
         settings.implicit.diagonal = "block";

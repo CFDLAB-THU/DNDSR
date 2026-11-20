@@ -1,3 +1,4 @@
+#include "Cauchy/Discretization/ViscousReconstruction.hpp"
 #include "Cauchy/Discretization/FiniteVolume.hpp"
 #include "DNDS/Diagnostics/Timeline.hpp"
 #include "Cauchy/State/CPU/FieldKernels.hpp"
@@ -746,21 +747,24 @@ namespace DNDS::Cauchy
         work.EndQueuedPhase(engine, stream, positivityTiming);
         // Freeze the RANS polynomial before publishing either flux coefficient halo.
         // The unlimited viscous route can read warm coefficients independently.
+        const bool separateViscous = useFluxScratch && _data->equation.Viscous() &&
+                                     FiniteVolumeDetail::UsesUnlimitedViscousReconstruction(_data->settings);
         if (ransP1Overlay)
         {
             const auto block = state.LocateBlock("rans");
             const bool barth = numerics.UsesRANSGradientBarth();
             if (barth)
                 work.SubmitGradientLimiter(engine, stream, state, true);
-            const auto &gradient = barth ? work.directGradients[block.physicalField] : work.meanGradients->fields[block.physicalField];
-            const auto force = [&](EquationDofs &coefficients)
+            const auto &meanGradient = work.meanGradients->fields[block.physicalField];
+            const auto &fluxGradient = barth ? work.directGradients[block.physicalField] : meanGradient;
+            const auto force = [&](EquationDofs &coefficients, const CFV::FVField &gradient)
             {
                 _data->gradient.SetLinearCoefficients(engine, stream, gradient, *_data->reconstruction,
                                                       coefficients.PhysicalField(block.physicalField), block.firstComponent, block.componentNumber);
             };
-            force(reconstruction.WarmValues());
+            force(reconstruction.WarmValues(), separateViscous ? meanGradient : fluxGradient);
             if (useFluxScratch)
-                force(reconstruction.MutableFinalized());
+                force(reconstruction.MutableFinalized(), fluxGradient);
         }
         std::vector<R::TransferOperation> operations;
         if (!work.nativeDirectGradient)
@@ -768,7 +772,7 @@ namespace DNDS::Cauchy
         else if (!gradientAuxiliary || numerics.limiter != "none" || _data->settings.GradientPositivity())
             operations = schedule.BeginAfterCompute(work.directGradientHalo);
         std::vector<R::TransferOperation> unlimitedViscousOperations;
-        if (useFluxScratch && _data->equation.Viscous() && numerics.viscousGradient == "polynomial" && !numerics.viscousLimited)
+        if (separateViscous)
             unlimitedViscousOperations = ransP1Overlay ? schedule.BeginAfterCompute(reconstruction.coefficientHalo)
                                                        : schedule.Begin(reconstruction.coefficientHalo);
         auto directViscousOperations = gradientAuxiliary && work.nativeDirectGradient ? std::vector<R::TransferOperation>{} : schedule.Begin(work.directViscousGradientHalo);
