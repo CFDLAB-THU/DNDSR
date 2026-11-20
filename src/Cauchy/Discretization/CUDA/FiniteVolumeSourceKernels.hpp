@@ -5,6 +5,7 @@
 #include "Cauchy/Discretization/ACMKernelPoint.hpp"
 #include "Cauchy/Motion/RigidFrameParameters.hpp"
 #include "DNDS/Runtime/Array/Array.hpp"
+#include "DNDS/Runtime/Array/RowSelection.hpp"
 
 namespace DNDS::Cauchy::CUDA
 {
@@ -62,7 +63,7 @@ namespace DNDS::Cauchy::CUDA
     /// The numerical source is committed only after all its points succeed.
     /// TODO: benchmark one CTA per modal cell with one thread per point and
     /// in-block reductions into the same RHS and optional derivative rows.
-    void AddRANSSources(Runtime::ExecutionContext context, SourceRequest request, SourceIndices selected);
+    void AddRANSSources(Runtime::ExecutionContext context, SourceRequest request, Runtime::RowSelection selected);
 
     void ApplyVolumeSourceDerivative(Runtime::ExecutionContext context, SourceInput source, decltype(SourceRequest::output) diagonal,
                                      index components, bool fullBlock, bool rowMajor, real scale);
@@ -72,5 +73,5 @@ namespace DNDS::Cauchy::CUDA
     void AddRotationSource(Runtime::ExecutionContext context,
                            Runtime::ArrayView<const real, false, Runtime::FixedRows<8>> cells,
                            RigidFrameParameters frame, SourceInput means, SourceOutput output,
-                           SourceOutput lowOutput, bool produceLow, SourceIndices selected, int firstMomentum = 1);
+                           SourceOutput lowOutput, bool produceLow, Runtime::RowSelection selected, int firstMomentum = 1);
 }

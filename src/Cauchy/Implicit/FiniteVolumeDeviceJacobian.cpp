@@ -102,7 +102,7 @@ namespace DNDS::Cauchy
         // The enclosing synchronous preparation retains this shared object
         // through its final drain. Numerical scopes are also captured explicitly.
         const auto pin = work.deviceJacobian;
-        R::SubmitArrays(engine, stream, [pin, n, dim, fullBlock, scale](R::ExecutionContext context, auto means, auto gradient, auto offsets, auto weights, auto lengths, auto cells, auto output, auto status)
+        R::SubmitArrays(engine, stream, [pin, n, dim, fullBlock, scale](R::ExecutionContext context, auto means, auto gradient, auto offsets, auto weights, auto lengths, auto output, auto status)
                         {
             CUDA::SourceRequest request;
             if (pin->owner->equation.IsACM())
@@ -120,7 +120,7 @@ namespace DNDS::Cauchy
             request.cells = pin->metric.View().cells; request.output = output; request.status = status;
             request.components = n; request.dimension = dim; request.fullBlock = fullBlock; request.scale = scale;
             request.evaluation = CUDA::SourceEvaluation::MeanDestruction;
-            CUDA::AddRANSSources(context, request, cells); }, R::ReadAs<R::TableRows>(state.CoupledField().Owned()), R::ReadAs<R::TableRows>(gradient), R::ReadAs<R::FixedRows<1>>(work.sourceOffsets), R::ReadAs<R::FixedRows<1>>(work.sourceWeights), R::ReadAs<R::FixedRows<1>>(owner->ransCellLength), R::ReadAs<R::FixedRows<1>>(work.DeviceCellSelection(CFV::ReconstructionRegion::All)), R::ReadWriteAs<R::UniformTableRows>(diagonal), R::WriteAs<R::FixedRows<1>>(rowsStatus));
+            CUDA::AddRANSSources(context, request, R::RowSelectionShape::AllRows(means.RowCount())); }, R::ReadAs<R::TableRows>(state.CoupledField().Owned()), R::ReadAs<R::TableRows>(gradient), R::ReadAs<R::FixedRows<1>>(work.sourceOffsets), R::ReadAs<R::FixedRows<1>>(work.sourceWeights), R::ReadAs<R::FixedRows<1>>(owner->ransCellLength), R::ReadWriteAs<R::UniformTableRows>(diagonal), R::WriteAs<R::FixedRows<1>>(rowsStatus));
         AppendStatus(engine, stream, rowsStatus);
 #else
         (void)work;

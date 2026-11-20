@@ -244,7 +244,9 @@ TEST_CASE("CUDA RANS quadrature sources and destruction diagonals match generic 
                     request.basis.cached = modalBasisRead->View<R::UniformTableRows>();
                     request.basis.cachedDerivatives = 3;
                 }
-                K::AddRANSSources(context, request, rows.View<R::FixedRows<1>>());
+                const R::RowSelection selection = mean ? R::RowSelection{R::RowSelectionShape::AllRows(request.means.RowCount())}
+                                                       : R::RowSelection{rows.View<R::FixedRows<1>>()};
+                K::AddRANSSources(context, request, selection);
                 REQUIRE(cudaStreamSynchronize(::DNDS::Runtime::CUDAStream(context)) == cudaSuccess);
             }
             if (paired)

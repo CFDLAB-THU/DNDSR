@@ -3,5 +3,5 @@
 namespace DNDS::Cauchy::CUDA::Detail
 {
     template void LaunchVolumeSourceCells<VolumeSourceModel::@source_model@, @source_width@, @source_dim@, @source_modes@>(
-        cudaStream_t, SourceRequest, SourceIndices, unsigned);
+        cudaStream_t, SourceRequest, Runtime::RowSelection, unsigned);
 }

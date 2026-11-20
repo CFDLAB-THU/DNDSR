@@ -10,5 +10,5 @@ namespace DNDS::Cauchy::CUDA::Detail
     };
     /// M=0 consumes a physical gradient. M>0 samples the finalized modal row.
     template <VolumeSourceModel Model, int C, int D, int M>
-    void LaunchVolumeSourceCells(cudaStream_t, SourceRequest, SourceIndices, unsigned blocks);
+    void LaunchVolumeSourceCells(cudaStream_t, SourceRequest, Runtime::RowSelection, unsigned blocks);
 }

@@ -12,7 +12,7 @@ namespace DNDS::Cauchy::CUDA::Detail
     /// Each cell thread integrates its own volume quadrature in stored order.
     /// TODO: compare CTA quadrature-point lanes and shared-memory reduction.
     template <VolumeSourceModel Model, int Components, int D, int Modes>
-    __global__ void EvaluateVolumeSourceCells(SourceRequest request, SourceIndices selected)
+    __global__ void EvaluateVolumeSourceCells(SourceRequest request, Runtime::RowSelection selected)
     {
         constexpr bool Mechanical = Model == VolumeSourceModel::ACM;
         constexpr int flow = Mechanical ? 4 : 5;
@@ -28,7 +28,7 @@ namespace DNDS::Cauchy::CUDA::Detail
         const bool jacobian = request.evaluation != SourceEvaluation::QuadratureResidual;
         for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
         {
-            const index iCell = selected(iRow, 0);
+            const index iCell = selected.Visit([&](auto rows) { return rows(iRow); });
             NumericalStatus status;
             if (physics.rans.ComponentNumber() + flow != Components || !physics.rans.Supported())
             {
@@ -137,7 +137,7 @@ namespace DNDS::Cauchy::CUDA::Detail
     }
 
     template <VolumeSourceModel Model, int C, int D, int M>
-    void LaunchVolumeSourceCells(cudaStream_t stream, SourceRequest request, SourceIndices rows, unsigned blocks)
+    void LaunchVolumeSourceCells(cudaStream_t stream, SourceRequest request, Runtime::RowSelection rows, unsigned blocks)
     {
         EvaluateVolumeSourceCells<Model, C, D, M><<<blocks, 128, 0, stream>>>(request, rows);
     }

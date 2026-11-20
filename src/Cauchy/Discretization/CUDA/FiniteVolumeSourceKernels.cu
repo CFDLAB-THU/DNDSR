@@ -22,11 +22,12 @@ namespace DNDS::Cauchy::CUDA
         }
         __global__ void Rotation(R::ArrayView<const real, false, R::FixedRows<8>> cells,
                                  RigidFrameParameters frame, SourceInput means, SourceOutput output,
-                                 SourceOutput low, bool produceLow, SourceIndices selected, int firstMomentum)
+                                 SourceOutput low, bool produceLow, Runtime::RowSelection selected, int firstMomentum)
         {
             for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
             {
-                const index iCell = selected(iRow, 0);
+                const index iCell = selected.Visit([&](auto rows)
+                                                   { return rows(iRow); });
                 const auto source = frame.MomentumSource({means(iCell, firstMomentum), means(iCell, firstMomentum + 1), means(iCell, firstMomentum + 2)});
                 for (int d = 0; d < 3; ++d)
                 {
@@ -39,7 +40,7 @@ namespace DNDS::Cauchy::CUDA
         }
         unsigned Blocks(index rows) { return unsigned(std::min<index>((rows + 127) / 128, 1024)); }
         template <Detail::VolumeSourceModel Model, int C, int D>
-        void LaunchCells(cudaStream_t stream, SourceRequest request, SourceIndices rows)
+        void LaunchCells(cudaStream_t stream, SourceRequest request, Runtime::RowSelection rows)
         {
             const unsigned blocks = Blocks(rows.RowCount());
             const int modes = std::max(0, request.basis.polynomial.size - 1);
@@ -55,7 +56,7 @@ namespace DNDS::Cauchy::CUDA
                 DNDS_check_throw_info(false, "unsupported modal source dimension or order");
         }
         template <Detail::VolumeSourceModel Model, int C>
-        void LaunchCells(cudaStream_t stream, SourceRequest request, SourceIndices rows)
+        void LaunchCells(cudaStream_t stream, SourceRequest request, Runtime::RowSelection rows)
         {
             if (request.dimension == 2)
                 LaunchCells<Model, C, 2>(stream, request, rows);
@@ -70,7 +71,7 @@ namespace DNDS::Cauchy::CUDA
                                   "CUDA source requires a correctly shaped combined AoS table");
         }
     }
-    void AddRANSSources(R::ExecutionContext context, SourceRequest request, SourceIndices selected)
+    void AddRANSSources(R::ExecutionContext context, SourceRequest request, Runtime::RowSelection selected)
     {
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA, "CUDA source requires a CUDA context");
         const bool mechanical = request.acm.RowCount() != 0;
@@ -136,7 +137,7 @@ namespace DNDS::Cauchy::CUDA
                                       gradient.values.Width() > (request.components - 1) * gradient.componentStride + gradient.direction,
                                   "CUDA source derivative field is incomplete");
         }
-        R::CheckKernelArgumentBudget<SourceRequest, SourceIndices>();
+        R::CheckKernelArgumentBudget<SourceRequest, Runtime::RowSelection>();
         if (!selected.RowCount())
             return;
         const auto stream = ::DNDS::Runtime::CUDAStream(context);
@@ -162,7 +163,7 @@ namespace DNDS::Cauchy::CUDA
         CheckLaunch();
     }
     void AddRotationSource(R::ExecutionContext context, R::ArrayView<const real, false, R::FixedRows<8>> cells,
-                           RigidFrameParameters frame, SourceInput means, SourceOutput output, SourceOutput low, bool produceLow, SourceIndices selected, int firstMomentum)
+                           RigidFrameParameters frame, SourceInput means, SourceOutput output, SourceOutput low, bool produceLow, Runtime::RowSelection selected, int firstMomentum)
     {
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA, "CUDA rotation source requires a CUDA context");
         R::ValidateViewDevices(context.device, cells, means, output, selected);
@@ -173,10 +174,10 @@ namespace DNDS::Cauchy::CUDA
         {
             low.ValidateDevice(context.device);
             // The combined equation buffer may include RANS scalars. Rotation
-            // contributes only to flow5 and leaves those scalar entries intact.
+            // contributes only to the three momentum components.
             CheckTable(low, means.RowCount(), means.Width());
         }
-        R::CheckKernelArgumentBudget<decltype(cells), RigidFrameParameters, SourceInput, SourceOutput, SourceOutput, bool, SourceIndices, int>();
+        R::CheckKernelArgumentBudget<decltype(cells), RigidFrameParameters, SourceInput, SourceOutput, SourceOutput, bool, Runtime::RowSelection, int>();
         if (!selected.RowCount() || !frame.moving)
             return;
         Rotation<<<Blocks(selected.RowCount()), 128, 0, ::DNDS::Runtime::CUDAStream(context)>>>(cells, frame, means, output, low, produceLow, selected, firstMomentum);

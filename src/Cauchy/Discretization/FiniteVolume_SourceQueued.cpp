@@ -35,14 +35,13 @@ namespace DNDS::Cauchy
         if (frame.moving)
         {
             auto &output = result.CoupledField().Owned();
-            const auto &selection = DeviceCellSelection(CFV::ReconstructionRegion::All);
             const int firstMomentum = owner->equation.IsACM() ? 0 : 1;
             if (lowOrder)
-                R::SubmitArrays(engine, stream, [pin, frame, firstMomentum](R::ExecutionContext context, auto means, auto output, auto low, auto cells, auto metric)
-                                { CUDA::AddRotationSource(context, metric, frame, means, output, low, true, cells, firstMomentum); }, R::ReadAs<R::TableRows>(state.CoupledField().Owned()), R::ReadWriteAs<R::TableRows>(output), R::ReadWriteAs<R::TableRows>(lowOrder->CoupledField().Owned()), R::ReadAs<R::FixedRows<1>>(selection), R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics()));
+                R::SubmitArrays(engine, stream, [pin, frame, firstMomentum](R::ExecutionContext context, auto means, auto output, auto low, auto metric)
+                                { CUDA::AddRotationSource(context, metric, frame, means, output, low, true, R::RowSelectionShape::AllRows(means.RowCount()), firstMomentum); }, R::ReadAs<R::TableRows>(state.CoupledField().Owned()), R::ReadWriteAs<R::TableRows>(output), R::ReadWriteAs<R::TableRows>(lowOrder->CoupledField().Owned()), R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics()));
             else
-                R::SubmitArrays(engine, stream, [pin, frame, firstMomentum](R::ExecutionContext context, auto means, auto output, auto cells, auto metric)
-                                { CUDA::AddRotationSource(context, metric, frame, means, output, output, false, cells, firstMomentum); }, R::ReadAs<R::TableRows>(state.CoupledField().Owned()), R::ReadWriteAs<R::TableRows>(output), R::ReadAs<R::FixedRows<1>>(selection), R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics()));
+                R::SubmitArrays(engine, stream, [pin, frame, firstMomentum](R::ExecutionContext context, auto means, auto output, auto metric)
+                                { CUDA::AddRotationSource(context, metric, frame, means, output, output, false, R::RowSelectionShape::AllRows(means.RowCount()), firstMomentum); }, R::ReadAs<R::TableRows>(state.CoupledField().Owned()), R::ReadWriteAs<R::TableRows>(output), R::ReadAs<R::FixedRows<8>>(owner->metrics.CellMetrics()));
         }
         if (!sourceOffsets.RowCount())
             return;
@@ -60,7 +59,7 @@ namespace DNDS::Cauchy
             basis.polynomial = sourceSampling->BasisParameters();
             basis.cachedDerivatives = sourceSampling->CachedDerivativeNumber();
         }
-        auto evaluate = [pin, dimension, components, basis](R::ExecutionContext context, auto means, auto coefficients, auto grad, auto points, auto cached, auto moments, auto geometry, auto offsets, auto weights, auto lengths, auto selected, auto output, auto status, auto wallPoints, auto... derivative)
+        auto evaluate = [pin, dimension, components, basis](R::ExecutionContext context, auto means, auto coefficients, auto grad, auto points, auto cached, auto moments, auto geometry, auto offsets, auto weights, auto lengths, auto output, auto status, auto wallPoints, auto... derivative)
         {
             CUDA::SourceRequest request;
             ((request.preparedDerivative = derivative), ...);
@@ -77,14 +76,14 @@ namespace DNDS::Cauchy
             request.wallPoints = {wallPoints.data, wallPoints.offsets, wallPoints.rows, wallPoints.width, wallPoints.stride, wallPoints.sizes, wallPoints.kind, wallPoints.device};
             request.output = output; request.status = status;
             request.components = components; request.dimension = dimension;
-            CUDA::AddRANSSources(context, request, selected); };
+            CUDA::AddRANSSources(context, request, R::RowSelectionShape::AllRows(means.RowCount())); };
         const auto submit = [&](auto... record)
         {
             R::SubmitArrays(engine, stream, evaluate, R::ReadAs<R::TableRows>(state.CoupledField().Owned()), R::ReadAs<R::TableRows>(sourceSampling ? FluxCoefficients().CoupledField().Owned() : empty), R::ReadAs<R::TableRows>(grad),
                             R::ReadAs<R::UniformTableRows>(sourceSampling ? sourceSampling->PointStorage() : empty),
                             R::ReadAs<R::UniformTableRows>(sourceSampling ? sourceSampling->BasisStorage() : empty),
                             R::ReadAs<R::UniformTableRows>(sourceSampling ? sourceSampling->MomentStorage() : empty),
-                            R::ReadAs<R::UniformTableRows>(sourceSampling ? sourceSampling->CellGeometryStorage() : empty), R::ReadAs<R::FixedRows<1>>(sourceOffsets), R::ReadAs<R::FixedRows<1>>(sourceWeights), R::ReadAs<R::FixedRows<1>>(owner->ransCellLength), R::ReadAs<R::FixedRows<1>>(DeviceCellSelection(CFV::ReconstructionRegion::All)), R::ReadWriteAs<R::UniformTableRows>(result.CoupledField().Owned()), R::WriteAs<R::FixedRows<1>>(preparationStatus->meanOwned), R::ReadAs<R::CSRRows>(owner->wallDistance->CellValues()), record...);
+                            R::ReadAs<R::UniformTableRows>(sourceSampling ? sourceSampling->CellGeometryStorage() : empty), R::ReadAs<R::FixedRows<1>>(sourceOffsets), R::ReadAs<R::FixedRows<1>>(sourceWeights), R::ReadAs<R::FixedRows<1>>(owner->ransCellLength), R::ReadWriteAs<R::UniformTableRows>(result.CoupledField().Owned()), R::WriteAs<R::FixedRows<1>>(preparationStatus->meanOwned), R::ReadAs<R::CSRRows>(owner->wallDistance->CellValues()), record...);
         };
         if (sourceDerivative)
             submit(R::WriteAs<R::UniformTableRows>(*sourceDerivative));
