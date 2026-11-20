@@ -78,3 +78,12 @@ ctest --test-dir build-audit --output-on-failure \
 The reduced-order SA executable checks the header policy independently; it does
 not claim a full solver build with that feature flag. No CUDA or production
 flow campaign is part of this fix's validation.
+
+## Historical Euler mean-gradient input
+
+Euler's `EvaluateDt` computes/exchanges `uGradBufNoLim`
+but reads the separate `uGradBuf` for turbulent viscosity. This mismatch originated
+in `e5b00928cc97` (2025-06-15), “EvaluateDt now does not rely on uRec (for getting
+gradient)”, and entered modern history through squash `90490801` (“Initial
+Release (#1)”). Cauchy's explicit-current input avoids reproducing that stale
+buffer behavior.

@@ -230,41 +230,22 @@ output value changes.
 
 ## Current physical dispatch and explicit limits
 
-`FiniteVolume::BuildWorkspace(EquationDofs&, ...)` and `Evaluate(EquationDofs&,
-...)` validate exact semantic schema, native row/storage identity and backend
-outside cell loops. `EquationSystem::ResolveKernelProfile()` distinguishes
-perfect-gas and ideal-mixture CPU models; this key alone does not promise every
-spatial/time operator exists for that model. FV has one schema-driven workspace
-and evaluation schedule. A perfect-gas flow5 operator may resolve a fixed-width
-leaf kernel, but Domain, time stepping, multigrid, restart, output and Python do
-not select a second flow5 frontend.
-Requesting another device fails explicitly,
-without host fallback. In checked execution a rank-local schema mismatch is
-coordinated before communication. FV entry/preparation stages inherit the
-metric communication context: with `implicit.collectiveChecks=false`, their
-local failures abort before dependent collective/payload work. Successful local
-stages add no safety agreement. This applies to whole-equation mean-gradient,
-auxiliary, reconstruction and restore stages too; it is not a promise of
-recoverable unchecked distributed exceptions.
-There is no `Flow5KernelWorkspace`, flow5 evaluation loop, or equation-prefixed
-workspace in the native API. Frozen comparisons bind the same `EquationDofs`
-and `FiniteVolume::Workspace`, then select a fixed-flow or forced-generic leaf
-through `WorkspaceOptions::rhsKernel`; both selections execute the same
-`EvaluateImpl` schedule. Fixed-width flow5 code therefore remains an
-operator-local optimization rather than a compatibility sub-workspace or a
-second solver frontend.
+`FiniteVolume::BuildWorkspace` and `FiniteVolume::Evaluate` validate the semantic
+schema, row space, storage layout and backend at the operator boundary. All
+physical profiles share the FV schedule. CPU operators support compressible
+perfect gas, ideal mixtures and incompressible ACM. CUDA has specialized
+perfect-gas and ACM kernels. The [dispatch graphs](CauchyDispatch.md) give
+the conditions for each flux, source and Jacobian route.
 
-The Domain frontend always uses the semantic binding. Perfect gas may select
-established fixed-width arithmetic inside an operator. Configured ideal mixtures
-use separate flow/species arrays, whole-equation
-FV/implicit stages, dynamic reports and full-state publication. Native checkpoint
-and output preserve all logical components; the independent mean trial also
-supports whole-equation physical-dt PP. Polynomial FAS preserves all logical
-blocks through the shared hierarchy. Extended interface packets and explicit
-flux blending still require adapters. Explicit extended stages instead use
-uncompressed flow5/species residuals and reject the whole trial when
-inadmissible. Separate RANS exponential repair is permitted without rescaling
-those components.
+FV preparation uses the metric communication context. With
+`implicit.collectiveChecks=false`, rank-local input failures abort before
+dependent communication. A successful local check adds no safety collective.
+
+The Domain frontend, time stepping, multigrid, restart and output work with
+logical equation blocks. A configured mixture may bind flow and species in
+separate arrays. Extended explicit steps preserve the flow and species
+increments and retry the physical step if it is inadmissible. RANS scalars
+can use their own exponential increment repair.
 
 CFV reconstruction and limiting are prepared per physical allocation, not per
 logical equation block. A combined equation allocation therefore makes one CFV
@@ -578,7 +559,7 @@ A mixture uses one explicit matching chemistry worker at a time; no chemistry
 rates are requested for these face/mean properties. Pressure, acoustics and
 molecular/species diffusion bounds come from the actual EOS/transport provider.
 
-The Plan 61 CPU characteristic correction extends a requested mixture mean
+The CPU characteristic producer extends a requested mixture mean
 cache from `[p,a,diffusivity]` to `[p,a,diffusivity,H,beta]`. The additional named
 derived quantities are `TotalEnthalpy` and `PressureInternalEnergyDerivative`:
 `H=(rhoE+p)/rho` retains thermochemical formation energy, and
@@ -597,8 +578,6 @@ Roe flux. A periodic face rotates the neighbor momentum, not scalar properties;
 a physical boundary uses the interior mean. No per-face temperature solve or
 face-thermodynamics cache is introduced. Perfect-gas CPU/CUDA keeps the existing
 Roe velocity/enthalpy rule and evaluates its cheap thermodynamics inline.
-The source includes this correction; its focused tests belong to the grouped
-Plan 61 B validation, not an already-completed numerical campaign.
 
 The equation boundary profile covers extrapolation, farfield, total-condition
 inlet, constant prescribed values and adiabatic/isothermal walls, using the same
@@ -1362,9 +1341,4 @@ unannounced mutation on a different rank.
 two-equation models. The quadrature RHS/source still uses reconstructed gradients;
 auxiliary mean-gradient preparation does not replace or change those coefficients.
 
-Legacy comparison note: Euler's `EvaluateDt` computes/exchanges `uGradBufNoLim`
-but reads the separate `uGradBuf` for turbulent viscosity. This mismatch originated
-in `e5b00928cc97` (2025-06-15), “EvaluateDt now does not rely on uRec (for getting
-gradient)”, and entered modern history through squash `90490801` (“Initial
-Release (#1)”). Cauchy's explicit-current input avoids reproducing that stale
-buffer behavior. The legacy implementation is unchanged by this work.
+For the Euler comparison and introducing revision, see the [mean-gradient audit record](../dev/cauchy_audit_fix.md#historical-euler-mean-gradient-input).

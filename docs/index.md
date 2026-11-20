@@ -59,6 +59,7 @@ The [native LVR guide](architecture/CauchyLimitedVR.md) documents penalty
 ownership, sensor ordering, halo phases and warm-state restart semantics.
 Native linear operators, Jacobian assembly, staged SGS and local ILU are described
 in [Cauchy implicit operator contracts](architecture/CauchyImplicit.md).
+The [implicit benchmark guide](guides/cauchy_implicit_benchmarks.md) gives command-line inputs and timing definitions.
 The [boundary convention guide](architecture/CauchyBoundary.md) distinguishes
 Euler exterior targets, conservative gradient traces, viscous wall laws,
 farfield switching and approximate implicit boundary derivatives.
