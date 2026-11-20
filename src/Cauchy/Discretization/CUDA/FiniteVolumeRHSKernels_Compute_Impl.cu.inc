@@ -23,9 +23,11 @@ namespace DNDS::Cauchy::CUDA::Detail
         const auto &geometry = published(0, 0);
         const auto &physics = parameters(0, 0);
         const index thread = index(blockIdx.x) * blockDim.x + threadIdx.x;
-        for (index iRow = thread; iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
+        selected.Visit([&](auto rowAt)
+                       {
+            for (index iRow = thread; iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
         {
-            const index iFace = selected(iRow, 0);
+            const index iFace = rowAt(iRow);
             index fallbacks = 0;
             const auto status = physics.physics.rans.Supported() && physics.physics.rans.ComponentNumber() + 5 == Components &&
                                         physics.physics.dimension == controls.dimension && (!controls.viscous || physics.physics.viscous) &&
@@ -34,7 +36,7 @@ namespace DNDS::Cauchy::CUDA::Detail
                                     : NumericalStatus{NumericalError::InvalidInput, 1};
             output.status(iFace, 0) = status;
             output.fallbackCounts(iFace, 0) = fallbacks;
-        }
+        } });
     }
     template <int Components, class PolynomialScalar = real, class FluxScalar = real,
               class DissipationScalar = real, class Fields, class Outputs>

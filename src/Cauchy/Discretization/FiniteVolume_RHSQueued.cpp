@@ -27,7 +27,7 @@ namespace DNDS::Cauchy
         R::MetadataBuffer<CUDA::RHSKernelParameters> parameters;
         std::optional<R::ReadAccess> parameterRead;
         R::Array<NumericalStatus> faceStatus, cellStatus, partial, result;
-        R::Array<index> fallbackCounts, allCells, allFaces;
+        R::Array<index> fallbackCounts, allCells, emptySelection;
         int submittedRegions = 0;
         bool pending = false;
         std::array<std::optional<Algebra::ArrayInputCache>, 6> inputCaches;
@@ -173,14 +173,13 @@ namespace DNDS::Cauchy
                 return host.To(device, context);
             };
             allCells = sequence(cells);
-            allFaces = sequence(faces);
+            emptySelection = R::Array<index>(R::RowLayout::Dense(0, 1), device);
             faceStatus.SetName("Cauchy/fluxFaceStatus", DNDS_ALLOCATION_SITE());
             cellStatus.SetName("Cauchy/fluxCellStatus", DNDS_ALLOCATION_SITE());
             partial.SetName("Cauchy/fluxStatusPartials", DNDS_ALLOCATION_SITE());
             result.SetName("Cauchy/fluxStatusResult", DNDS_ALLOCATION_SITE());
             fallbackCounts.SetName("Cauchy/fluxFaceFallbackCounts", DNDS_ALLOCATION_SITE());
             allCells.SetName("Cauchy/fluxAllCells", DNDS_ALLOCATION_SITE());
-            allFaces.SetName("Cauchy/fluxAllFaces", DNDS_ALLOCATION_SITE());
             if (controls.mapping == CUDA::RHSFaceMapping::WarpSegments || controls.mapping == CUDA::RHSFaceMapping::CTASegments)
             {
                 const bool reportSetup = std::getenv("DNDS_CAUCHY_PROFILE_RHS_PACKAGES") != nullptr;
@@ -197,9 +196,9 @@ namespace DNDS::Cauchy
                 for (index iFace = 0; iFace < faces; ++iFace)
                     counts[size_t(iFace)] = offsets(ids(iFace, 0) + 1, 0) - offsets(ids(iFace, 0), 0);
                 const SpanView<const index> ruleCounts{counts.data(), index(counts.size())};
-                packages[0].emplace(CUDA::RHSFacePackages::Prepare(allFaces, ruleCounts, controls, context));
-                packages[1].emplace(CUDA::RHSFacePackages::Prepare(owner->stencil.rhsCoreFaces, ruleCounts, controls, context));
-                packages[2].emplace(CUDA::RHSFacePackages::Prepare(owner->stencil.rhsDependentFaces, ruleCounts, controls, context));
+                packages[0].emplace(CUDA::RHSFacePackages::Prepare(emptySelection, ruleCounts, controls, context, R::RowSelectionShape::AllRows(faces)));
+                packages[1].emplace(CUDA::RHSFacePackages::Prepare(owner->stencil.rhsCoreFaces, ruleCounts, controls, context, incidence.rhsRegions.coreFaces));
+                packages[2].emplace(CUDA::RHSFacePackages::Prepare(owner->stencil.rhsDependentFaces, ruleCounts, controls, context, incidence.rhsRegions.dependentFaces));
                 if (reportSetup && owner->mesh->getMPI().rank == 0)
                 {
                     const real seconds = std::chrono::duration<real>(std::chrono::steady_clock::now() - started).count();
@@ -344,9 +343,13 @@ namespace DNDS::Cauchy
         const bool hasWave = auxiliary && bool(auxiliary->cellWaveJump), hasPressure = auxiliary && bool(auxiliary->cellPressureMinimum);
         auto &lowFace = lowOrderFaceFlux ? *lowOrderFaceFlux : faceFlux;
         auto &lowOutput = lowOrderResidual ? lowOrderResidual->CoupledField().Owned() : output.CoupledField().Owned();
-        const auto &faces = region == CFV::ReconstructionRegion::All ? deviceFlux->allFaces : region == CFV::ReconstructionRegion::Core ? owner->stencil.rhsCoreFaces
-                                                                                                                                        : owner->stencil.rhsDependentFaces;
-        const auto &cells = DeviceCellSelection(region);
+        const auto &stencil = deviceFlux->geometry->HostDescriptor().stencil;
+        const auto faceShape = stencil.RHSRows(region, true, owner->metrics.NumCell()).shape;
+        const auto cellShape = stencil.RHSRows(region, false, owner->metrics.NumCell()).shape;
+        const auto &faces = faceShape.form == R::RowSelectionForm::IndexList
+                                ? (region == CFV::ReconstructionRegion::Core ? owner->stencil.rhsCoreFaces : owner->stencil.rhsDependentFaces)
+                                : deviceFlux->emptySelection;
+        const auto &cells = cellShape.form == R::RowSelectionForm::IndexList ? DeviceCellSelection(region) : deviceFlux->emptySelection;
         const auto pin = deviceFlux;
         const auto &meanInput = pin->Input(0, mean.Owned(), engine, stream);
         const auto &meanGhostInput = pin->Input(1, ghosts ? mean.Ghost() : empty, engine, stream);
@@ -356,8 +359,8 @@ namespace DNDS::Cauchy
         const auto &visGhostInput = pin->Input(5, visGhost, engine, stream);
         // Inactive low-order outputs alias their primary arrays deliberately;
         // the leaf never accesses them. Tracking merges their access footprints.
-        R::SubmitArrays(engine, stream, [pin, controls, ghosts, hasMean, hasIncoming, hasWave, hasPressure, packageSlot = region == CFV::ReconstructionRegion::All ? 0 : region == CFV::ReconstructionRegion::Core ? 1
-                                                                                                                                                                                                                   : 2](R::ExecutionContext context, auto u, auto ug, auto rec, auto recg, auto vis, auto visg, auto prepared, auto packet, auto wave, auto waveg, auto pressure, auto pressureg, auto viscosity, auto high, auto low, auto force, auto status, auto counts, auto selected)
+        R::SubmitArrays(engine, stream, [pin, faceShape, controls, ghosts, hasMean, hasIncoming, hasWave, hasPressure, packageSlot = region == CFV::ReconstructionRegion::All ? 0 : region == CFV::ReconstructionRegion::Core ? 1
+                                                                                                                                                                                                                              : 2](R::ExecutionContext context, auto u, auto ug, auto rec, auto recg, auto vis, auto visg, auto prepared, auto packet, auto wave, auto waveg, auto pressure, auto pressureg, auto viscosity, auto high, auto low, auto force, auto status, auto counts, auto selected)
                         {
                 CUDA::RHSFields fields;
                 fields.mean = {u, ug}; fields.reconstruction = {rec, recg}; fields.viscousData = {vis, visg};
@@ -365,11 +368,11 @@ namespace DNDS::Cauchy
                 fields.waveJump = {wave, waveg}; fields.pressureMinimum = {pressure, pressureg};
                 fields.centerViscosity = CellCenterViscosityView::From(viscosity);
                 fields.hasPreparedMean = hasMean; fields.hasIncoming = hasIncoming; fields.hasWave = hasWave; fields.hasPressure = hasPressure;
-                CUDA::EvaluateFluxFaces(context, *pin->geometry, pin->Parameters(), controls, fields, {high, low, force, status, counts}, selected, ghosts,
+                CUDA::EvaluateFluxFaces(context, *pin->geometry, pin->Parameters(), controls, fields, {high, low, force, status, counts}, {faceShape, selected}, ghosts,
                     pin->packages[packageSlot] ? pin->packages[packageSlot]->View() : CUDA::RHSFacePackageView{}); },
                         R::ReadAs<R::UniformTableRows>(meanInput), R::ReadAs<R::UniformTableRows>(meanGhostInput), R::ReadAs<R::UniformTableRows>(recInput), R::ReadAs<R::UniformTableRows>(recGhostInput), R::ReadAs<R::UniformTableRows>(visInput), R::ReadAs<R::UniformTableRows>(visGhostInput), R::ReadAs<R::TableRows>(prepared), R::ReadAs<R::TableRows>(packet), R::ReadAs<R::UniformTableRows>(wave), R::ReadAs<R::UniformTableRows>(waveGhost), R::ReadAs<R::UniformTableRows>(pressure), R::ReadAs<R::UniformTableRows>(pressureGhost), R::ReadAs<R::TableRows>(viscosity), R::WriteAs<R::TableRows>(faceFlux), R::WriteAs<R::TableRows>(lowFace), R::WriteAs<R::FixedRows<3>>(boundaryMomentumFlux), R::WriteAs<R::FixedRows<1>>(pin->faceStatus), R::WriteAs<R::FixedRows<1>>(pin->fallbackCounts), R::ReadAs<R::FixedRows<1>>(faces));
-        R::SubmitArrays(engine, stream, [pin, low = controls.produceLow](R::ExecutionContext context, auto highFaces, auto lowFaces, auto faceStatus, auto high, auto lowValues, auto status, auto cells)
-                        { CUDA::GatherFluxCells(context, *pin->geometry, highFaces, lowFaces, faceStatus, high, lowValues, status, cells, low); }, R::ReadAs<R::TableRows>(faceFlux), R::ReadAs<R::TableRows>(lowFace), R::ReadAs<R::FixedRows<1>>(pin->faceStatus), R::WriteAs<R::TableRows>(output.CoupledField().Owned()), R::WriteAs<R::TableRows>(lowOutput), R::WriteAs<R::FixedRows<1>>(pin->cellStatus), R::ReadAs<R::FixedRows<1>>(cells));
+        R::SubmitArrays(engine, stream, [pin, cellShape, low = controls.produceLow](R::ExecutionContext context, auto highFaces, auto lowFaces, auto faceStatus, auto high, auto lowValues, auto status, auto cells)
+                        { CUDA::GatherFluxCells(context, *pin->geometry, highFaces, lowFaces, faceStatus, high, lowValues, status, {cellShape, cells}, low); }, R::ReadAs<R::TableRows>(faceFlux), R::ReadAs<R::TableRows>(lowFace), R::ReadAs<R::FixedRows<1>>(pin->faceStatus), R::WriteAs<R::TableRows>(output.CoupledField().Owned()), R::WriteAs<R::TableRows>(lowOutput), R::WriteAs<R::FixedRows<1>>(pin->cellStatus), R::ReadAs<R::FixedRows<1>>(cells));
         R::SubmitArrays(engine, stream, [pin](R::ExecutionContext context, auto status, auto partial, auto result)
                         { CUDA::ReduceNumericalStatus(context, status, result.ConstView(), partial, result); }, R::ReadAs<R::FixedRows<1>>(pin->cellStatus), R::WriteAs<R::FixedRows<1>>(pin->partial), R::ReadWriteAs<R::FixedRows<1>>(pin->result));
         pin->submittedRegions |= mask;

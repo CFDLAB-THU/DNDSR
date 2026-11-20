@@ -28,25 +28,28 @@ namespace DNDS::Cauchy::CUDA
     }
     struct RHSFacePackages::Data
     {
-        R::Array<index>::ReadLease selection;
+        std::optional<R::Array<index>::ReadLease> selection;
         R::Array<RHSFacePackage> packages;
         R::Array<RHSFaceSegment> segments;
         std::optional<R::Array<RHSFacePackage>::ReadLease> packageRead;
         std::optional<R::Array<RHSFaceSegment>::ReadLease> segmentRead;
         RHSFacePackageView view;
-        Data(const R::Array<index> &selected, R::ExecutionContext context)
-            : selection(selected.Read(context)) {}
     };
     RHSFacePackages RHSFacePackages::Prepare(const R::Array<index> &selection, SpanView<const index> counts,
-                                             const RHSKernelControls &controls, R::ExecutionContext context)
+                                             const RHSKernelControls &controls, R::ExecutionContext context, R::RowSelectionShape shape)
     {
         controls.Validate();
         DNDS_check_throw_info(context.device.space == R::MemorySpace::CUDA && selection.GetDevice() == context.device &&
                                   controls.mapping == RHSFaceMapping::CTASegments,
                               "RHS segments require placed CUDA selection and CTA-segment mapping");
-        auto data = std::make_shared<Data>(selection, context);
+        auto data = std::make_shared<Data>();
         auto &view = data->view;
-        view.selection = data->selection.View<R::FixedRows<1>>();
+        view.selection.shape = shape;
+        if (shape.form == R::RowSelectionForm::IndexList)
+        {
+            data->selection.emplace(selection.Read(context));
+            view.selection.indices = data->selection->View<R::FixedRows<1>>();
+        }
         view.mapping = controls.mapping;
         view.blockSize = controls.blockSize;
         view.produceLow = controls.produceLow;
@@ -60,9 +63,13 @@ namespace DNDS::Cauchy::CUDA
         DNDS_check_throw_info(scratch < budget && stagePerFace <= budget - scratch,
                               "RHS segment shape/block size exceeds portable 48 KiB shared-memory budget");
         const int capacity = stagePerFace ? int((budget - scratch) / stagePerFace) : controls.blockSize;
-        const auto host = selection.To(R::Device::Host(), context);
-        const auto selected = host.Read();
-        const auto ids = selected.View<R::FixedRows<1>>();
+        std::optional<R::Array<index>::ReadLease> hostRead;
+        R::RowSelection hostRows{shape};
+        if (shape.form == R::RowSelectionForm::IndexList)
+        {
+            hostRead.emplace(selection.To(R::Device::Host(), context).Read());
+            hostRows.indices = hostRead->View<R::FixedRows<1>>();
+        }
         std::vector<RHSFacePackage> packages;
         std::vector<RHSFaceSegment> segments;
         RHSFacePackage current;
@@ -77,9 +84,11 @@ namespace DNDS::Cauchy::CUDA
             current = {index(segments.size()), 0, 0};
             cursor = 0;
         };
-        for (index iRow = 0; iRow < ids.RowCount(); ++iRow)
+        hostRows.Visit([&](auto rowAt)
+                       {
+        for (index iRow = 0; iRow < hostRows.RowCount(); ++iRow)
         {
-            const index iAux = ids(iRow, 0);
+            const index iAux = rowAt(iRow);
             DNDS_check_throw_info(iAux >= 0 && iAux < counts.size() && counts[iAux] > 0,
                                   "RHS package has an unavailable or empty face rule");
             const index points = counts[iAux];
@@ -98,7 +107,7 @@ namespace DNDS::Cauchy::CUDA
             current.maximumLanes = std::max(current.maximumLanes, lanes);
             current.warpContained &= start / 32 == (start + lanes - 1) / 32;
             cursor = start + lanes;
-        }
+        } });
         finish();
         view.sharedBytes = scratch + size_t(view.maximumFaces) * stagePerFace;
         R::Array<RHSFacePackage> hostPackages(R::RowLayout::Dense(packages.size(), 1));

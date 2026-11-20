@@ -135,12 +135,14 @@ namespace DNDS::Cauchy::CUDA::Detail
             controls.firstOrder = Form == ReconstructionForm::MeanOnly;
         }
 
-        for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
+        selected.Visit([&](auto rowAt)
+                       {
+            for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
         {
-            const index iFace = selected(iRow, 0);
+            const index iFace = rowAt(iRow);
             output.status(iFace, 0) = ACMFace<C>(geometry(0, 0), controls, fields, output, iFace);
             output.fallbackCounts(iFace, 0) = 0;
-        }
+        } });
     }
 
     // The prototype uses the same complete-face packages as the compressible

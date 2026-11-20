@@ -395,16 +395,16 @@ namespace DNDS::Cauchy::CPU
             }
             return {};
         };
-        const auto rows = region == CFV::ReconstructionRegion::Core ? request.stencil.coreCells : request.stencil.dependentCells;
-        const index count = region == CFV::ReconstructionRegion::All ? request.ownedCells : rows.RowCount();
-        const auto cellAt = [&](index iRow)
-        { return region == CFV::ReconstructionRegion::All ? iRow : rows(iRow, 0); };
+        const auto rows = request.stencil.RHSRows(region, false, request.ownedCells);
+        const index count = rows.RowCount();
         // Optional face diagnostics currently revisit a shared face from both
         // parents. Keep their established serial publication until the common
         // face-owned flux/gather path replaces it; never race those writes.
         const index threads = writeFace && !output.boundaryFacesOnly ? 1 : std::min<index>(OMP::DistributedThreads(), std::max<index>(1, count));
         if (workers.diagnostics.size() < threads || workers.status.size() < threads)
             return NumericalStatus{NumericalError::InvalidState, 40, -1};
+        return rows.Visit([&](auto cellAt) -> NumericalStatus
+                          {
         if (threads == 1)
         {
             for (index iRow = 0; iRow < count; ++iRow)
@@ -432,7 +432,7 @@ namespace DNDS::Cauchy::CPU
                     return workers.status[worker];
             }
         }
-        return {};
+            return {}; });
     }
 
     NumericalStatus AddFlowRotationSource(const FlowRHSRequest &request, const RHSReadViews &input,
@@ -464,14 +464,10 @@ namespace DNDS::Cauchy::CPU
                     (*output.lowOrder)(iCell, j) += value;
             }
         };
-        if (region == CFV::ReconstructionRegion::All)
-            OMP::ForRows(0, request.ownedCells, compute);
-        else
-        {
-            const auto rows = region == CFV::ReconstructionRegion::Core ? request.stencil.coreCells : request.stencil.dependentCells;
-            OMP::ForRows(0, rows.RowCount(), [&](index iRow)
-                         { compute(rows(iRow, 0)); });
-        }
+        const auto rows = request.stencil.RHSRows(region, false, request.ownedCells);
+        rows.Visit([&](auto cellAt)
+                   { OMP::ForRows(0, rows.RowCount(), [&](index iRow)
+                                  { compute(cellAt(iRow)); }); });
         return {};
     }
 }

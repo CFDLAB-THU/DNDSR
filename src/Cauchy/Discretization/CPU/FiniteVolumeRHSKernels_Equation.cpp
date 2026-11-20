@@ -26,14 +26,7 @@ namespace DNDS::Cauchy::CPU
                     return run;
             return GenericFluxRows;
         }
-        index EquationRowCount(const EquationRHSRequest &request, CFV::ReconstructionRegion region, bool face)
-        {
-            if (region == CFV::ReconstructionRegion::All)
-                return face ? request.stencil.stencilFaces.RowCount() : request.ownedCells;
-            if (face)
-                return (region == CFV::ReconstructionRegion::Core ? request.stencil.rhsCoreFaces : request.stencil.rhsDependentFaces).RowCount();
-            return (region == CFV::ReconstructionRegion::Core ? request.stencil.coreCells : request.stencil.dependentCells).RowCount();
-        }
+
     }
     NumericalResult<index> EvaluateEquationFlux(const EquationRHSRequest &request, const EquationSystem &equation,
                                                 const BoundaryPointOperator &boundary, const Riemann::RiemannFlux &flux,
@@ -46,7 +39,7 @@ namespace DNDS::Cauchy::CPU
         const auto phase = [&](bool faces)
         {
             return run({request, equation, boundary, flux, worker, owned, remote, destination, lowDestination,
-                        region, scratch, 0, EquationRowCount(request, region, faces), faces});
+                        region, scratch, 0, request.stencil.RHSRows(region, faces, request.ownedCells).RowCount(), faces});
         };
         const auto face = phase(true);
         if (!face)
@@ -68,7 +61,7 @@ namespace DNDS::Cauchy::CPU
         // the face pass before any gather reads it; no scatter atomics.
         for (const bool faces : {true, false})
         {
-            const index count = EquationRowCount(request, region, faces);
+            const index count = request.stencil.RHSRows(region, faces, request.ownedCells).RowCount();
             OMP::ForRows(0, workers.size(), [&](index iWorker)
                          {
                     const index quotient = count / workers.size(), remainder = count % workers.size();

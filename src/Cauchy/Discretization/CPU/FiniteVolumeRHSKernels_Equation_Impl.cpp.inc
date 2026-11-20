@@ -635,13 +635,15 @@ namespace DNDS::Cauchy::CPU
         };
         if (facePhase)
         {
-            const auto rows = region == CFV::ReconstructionRegion::Core ? request.stencil.rhsCoreFaces : request.stencil.rhsDependentFaces;
-            for (index iRow = firstRow; iRow < lastRow; ++iRow)
-            {
-                const auto status = computeFace(region == CFV::ReconstructionRegion::All ? iRow : rows(iRow, 0));
-                if (!status)
-                    return status;
-            }
+            const auto rows = request.stencil.RHSRows(region, true, request.ownedCells);
+            const auto failure = rows.Visit([&](auto rowAt) -> NumericalStatus
+                                            {
+                for (index iRow = firstRow; iRow < lastRow; ++iRow)
+                    if (const auto status = computeFace(rowAt(iRow)); !status)
+                        return status;
+                return {}; });
+            if (!failure)
+                return failure;
             if (!allowPointFallback && localFallbacks)
                 return NumericalStatus{NumericalError::InvalidState};
             return localFallbacks;
@@ -696,9 +698,10 @@ namespace DNDS::Cauchy::CPU
                     lowDestination(iCell, j) = integratedLow[j];
             }
         };
-        const auto rows = region == CFV::ReconstructionRegion::Core ? request.stencil.coreCells : request.stencil.dependentCells;
-        for (index iRow = firstRow; iRow < lastRow; ++iRow)
-            compute(region == CFV::ReconstructionRegion::All ? iRow : rows(iRow, 0));
+        request.stencil.RHSRows(region, false, request.ownedCells).Visit([&](auto rowAt)
+                                                                         {
+            for (index iRow = firstRow; iRow < lastRow; ++iRow)
+                compute(rowAt(iRow)); });
         return index(0);
     }
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DNDS/Runtime/Array/Array.hpp"
+#include "DNDS/Runtime/Array/RowSelection.hpp"
 #include "DNDS/Core/Span.hpp"
 #include "Cauchy/Boundary/BoundarySystem.hpp"
 #include "Geom/Geometry/Geometric.hpp"
@@ -90,6 +91,11 @@ namespace DNDS::Cauchy
     };
     static_assert(std::is_trivially_copyable_v<FaceRouting>);
 
+    struct RHSRegionShapes
+    {
+        Runtime::RowSelectionShape coreCells, dependentCells, coreFaces, dependentFaces;
+    };
+
     /** @brief Compact borrowed mesh/CFV stencil shared by RHS and Jacobians.
      * @details A SampleRecord is transient point arithmetic only. No expanded
      * cell-pair, geometry, rotation or query-to-face table is owned here.
@@ -109,7 +115,20 @@ namespace DNDS::Cauchy
             coreCells, dependentCells,
             auxiliaryInterfaceIndependentFaces, auxiliaryInterfaceFaces,
             interfaceIndependentCells, interfaceCoreCells;
+        RHSRegionShapes rhsRegions;
         bool quadratureBoundaryValues = true;
+
+        /// Face selections address active stencil slots; cell selections address owned rows.
+        Runtime::RowSelection RHSRows(CFV::ReconstructionRegion region, bool face, index owned) const
+        {
+            if (region == CFV::ReconstructionRegion::All)
+                return {Runtime::RowSelectionShape::AllRows(face ? stencilFaces.RowCount() : owned), {}};
+            if (region == CFV::ReconstructionRegion::Core)
+                return face ? Runtime::RowSelection{rhsRegions.coreFaces, rhsCoreFaces}
+                            : Runtime::RowSelection{rhsRegions.coreCells, coreCells};
+            return face ? Runtime::RowSelection{rhsRegions.dependentFaces, rhsDependentFaces}
+                        : Runtime::RowSelection{rhsRegions.dependentCells, dependentCells};
+        }
 
         void ValidateDevice(Runtime::Device device) const
         {
@@ -223,6 +242,7 @@ namespace DNDS::Cauchy
             auxiliaryInterfaceFaces{Runtime::RowLayout::Dense(0, 1)},
             interfaceIndependentCells{Runtime::RowLayout::Dense(0, 1)},
             interfaceCoreCells{Runtime::RowLayout::Dense(0, 1)};
+        RHSRegionShapes rhsRegions;
         bool quadratureBoundaryValues = true;
         index incidenceCount = 0;
         index IncidenceNumber() const { return incidenceCount; }
@@ -263,6 +283,7 @@ namespace DNDS::Cauchy
                 view.rhsDependentFaces = capture(s.rhsDependentFaces);
                 view.auxiliaryCellOffsets = capture(s.auxiliaryCellOffsets);
                 view.auxiliaryCellFaces = capture(s.auxiliaryCellFaces);
+                view.rhsRegions = s.rhsRegions;
                 view.coreCells = capture(s.coreCells);
                 view.dependentCells = capture(s.dependentCells);
                 view.auxiliaryInterfaceIndependentFaces = capture(s.auxiliaryInterfaceIndependentFaces);
@@ -313,6 +334,7 @@ namespace DNDS::Cauchy
         {
             FiniteVolumeStencilStorage result;
             const auto device = metrics.Device();
+            result.rhsRegions = rhsRegions;
             result.routing = routing.To(device, context);
             result.columns = columns.To(device, context);
             result.viscousDistance = viscousDistance.To(device, context);

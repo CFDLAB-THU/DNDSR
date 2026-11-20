@@ -1,4 +1,5 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
+#include "DNDS/Runtime/Array/RowSelection.hpp"
 #include "doctest.h"
 #include "DNDS/Runtime/Array/Array.hpp"
 #include "DNDS/Runtime/Array/RowBuilder.hpp"
@@ -1303,3 +1304,15 @@ TEST_CASE("Checked element projections reject invalid row and component before m
     }
 }
 #endif
+
+TEST_CASE("Two disjoint row ranges retain supplied traversal order and offsets")
+{
+    const std::vector<DNDS::index> expected{8, 9, 10, 2, 3};
+    const R::RowSelection compact{R::RowSelectionShape::FromIndices(expected, 12)};
+    REQUIRE(compact.shape.form == R::RowSelectionForm::RowRangePair);
+    REQUIRE(compact.RowCount() == DNDS::index(expected.size()));
+    compact.Visit([&](auto rowAt)
+                  {
+        for (auto i = compact.RowCount(); i-- > 0;)
+            CHECK(rowAt(i) == expected[i]); });
+}

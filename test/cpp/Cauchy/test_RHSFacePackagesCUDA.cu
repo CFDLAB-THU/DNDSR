@@ -43,7 +43,7 @@ TEST_CASE("Complete-face packages preserve mixed rules tails and bounded point t
         controls.modes = 19;
         const auto owner = K::RHSFacePackages::Prepare(selected, {counts.data(), I(counts.size())}, controls, context);
         const auto view = owner.View();
-        CHECK(view.selection.data == selected.Read(context).View().data);
+        CHECK(view.selection.indices.data == selected.Read(context).View().data);
         REQUIRE(view.sharedBytes <= 48 * 1024);
         const auto packages = Download<K::RHSFacePackage>(view.packages);
         const auto segments = Download<K::RHSFaceSegment>(view.segments);
@@ -83,18 +83,13 @@ TEST_CASE("Nine-point packages pack tightly across warps within the CTA budget")
     const auto device = R::Device::CUDA(0);
     const R::ExecutionContext context{device, nullptr};
     std::vector<I> counts(40, 9);
-    R::Array<I> host(R::RowLayout::Dense(counts.size(), 1));
-    {
-        auto write = host.Write();
-        for (I iFace = 0; iFace < I(counts.size()); ++iFace)
-            write.View()(iFace, 0) = iFace;
-    }
-    const auto selected = host.To(device, context);
+    R::Array<I> empty(R::RowLayout::Dense(0, 1), device);
+    const auto all = R::RowSelectionShape::AllRows(I(counts.size()));
     {
         K::RHSKernelControls controls;
         controls.mapping = K::RHSFaceMapping::CTASegments;
         controls.modes = 19;
-        const auto owner = K::RHSFacePackages::Prepare(selected, {counts.data(), I(counts.size())}, controls, context);
+        const auto owner = K::RHSFacePackages::Prepare(empty, {counts.data(), I(counts.size())}, controls, context, all);
         const auto view = owner.View();
         const auto packages = Download<K::RHSFacePackage>(view.packages);
         const auto segments = Download<K::RHSFaceSegment>(view.segments);
@@ -108,6 +103,6 @@ TEST_CASE("Nine-point packages pack tightly across warps within the CTA budget")
         // fewer threads, omit the low flux, or replace the requested mapping.
         controls.blockSize = 512;
         controls.produceLow = true;
-        CHECK_THROWS(K::RHSFacePackages::Prepare(selected, {counts.data(), I(counts.size())}, controls, context));
+        CHECK_THROWS(K::RHSFacePackages::Prepare(empty, {counts.data(), I(counts.size())}, controls, context, all));
     }
 }

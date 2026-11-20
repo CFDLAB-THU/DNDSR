@@ -18,7 +18,7 @@ namespace DNDS::Cauchy::CUDA
     using RHSInput = Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::TableRows>;
     using RHSOutput = Runtime::ArrayView<real, Runtime::AccessBoundsChecks, Runtime::TableRows>;
     using RHSField = Runtime::PairReadView<real, Runtime::AccessBoundsChecks, Runtime::UniformTableRows>;
-    using RHSIndices = Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
+    using RHSIndices = Runtime::RowSelection;
     using RHSStatus = Runtime::ArrayView<NumericalStatus, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
 
     /// Immutable borrowed numerical geometry; no field values, physics workers

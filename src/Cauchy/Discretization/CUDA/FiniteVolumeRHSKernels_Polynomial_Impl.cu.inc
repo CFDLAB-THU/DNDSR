@@ -314,9 +314,11 @@ namespace DNDS::Cauchy::CUDA::Detail
         const auto &geometry = publication(0, 0);
         const auto &physics = parameters(0, 0);
         const index thread = index(blockIdx.x) * blockDim.x + threadIdx.x;
-        for (index row = thread; row < selected.RowCount(); row += index(gridDim.x) * blockDim.x)
+        selected.Visit([&](auto rowAt)
+                       {
+            for (index row = thread; row < selected.RowCount(); row += index(gridDim.x) * blockDim.x)
         {
-            const index face = selected(row, 0);
+            const index face = rowAt(row);
             index fallbacks = 0;
             NumericalStatus status{NumericalError::InvalidInput, 1};
             if (physics.physics.rans.Supported() && physics.physics.rans.ComponentNumber() + 5 == Components &&
@@ -328,7 +330,7 @@ namespace DNDS::Cauchy::CUDA::Detail
             }
             output.status(face, 0) = status;
             output.fallbackCounts(face, 0) = fallbacks;
-        }
+        } });
     }
 
     /// Resolve typed operand roles once; numerical work contains no host access,

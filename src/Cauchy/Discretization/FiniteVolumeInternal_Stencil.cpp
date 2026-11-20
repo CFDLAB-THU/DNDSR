@@ -238,6 +238,10 @@ namespace DNDS::Cauchy
             };
             collectFaces(partition.Core(), rhsCore);
             collectFaces(partition.HaloDependent(), rhsDependent);
+            stencil.rhsRegions = {R::RowSelectionShape::FromIndices(partition.Core(), owned),
+                                 R::RowSelectionShape::FromIndices(partition.HaloDependent(), owned),
+                                 R::RowSelectionShape::FromIndices(rhsCore, index(activeFaces.size())),
+                                 R::RowSelectionShape::FromIndices(rhsDependent, index(activeFaces.size()))};
             const auto publish = [](const auto &values, auto &array, const char *name)
             {
                 array = R::Array<index>(R::RowLayout::Dense(index(values.size()), 1));

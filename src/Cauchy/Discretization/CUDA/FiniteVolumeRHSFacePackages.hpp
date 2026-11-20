@@ -2,6 +2,7 @@
 
 #include "DNDS/Runtime/Array/Array.hpp"
 #include "DNDS/Core/Span.hpp"
+#include "DNDS/Runtime/Array/RowSelection.hpp"
 #include <memory>
 
 namespace DNDS::Cauchy::CUDA
@@ -44,7 +45,7 @@ namespace DNDS::Cauchy::CUDA
     {
         Runtime::ArrayView<const RHSFacePackage, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> packages;
         Runtime::ArrayView<const RHSFaceSegment, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> segments;
-        Runtime::ArrayView<const index, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> selection;
+        Runtime::RowSelection selection;
         RHSFaceStageShape shape;
         RHSFaceMapping mapping = RHSFaceMapping::Thread;
         int blockSize = 0, maximumFaces = 0;
@@ -77,7 +78,7 @@ namespace DNDS::Cauchy::CUDA
         static RHSFaceStageShape StageShape(const RHSKernelControls &controls);
         static size_t LaneScratchBytes(const RHSKernelControls &controls);
         static RHSFacePackages Prepare(const Runtime::Array<index> &selection, SpanView<const index> quadratureCountsByAux,
-                                       const RHSKernelControls &controls, Runtime::ExecutionContext context);
+                                       const RHSKernelControls &controls, Runtime::ExecutionContext context, Runtime::RowSelectionShape shape = {});
         RHSFacePackageView View() const;
     };
 }

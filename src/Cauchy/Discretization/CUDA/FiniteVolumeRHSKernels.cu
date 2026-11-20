@@ -22,9 +22,11 @@ namespace DNDS::Cauchy::CUDA
                                            Output output, Output lowOutput, RHSStatus status, RHSIndices selected, bool produceLow, int momentumFirst)
         {
             const auto &geometry = published(0, 0);
+            selected.Visit([&](auto rowAt)
+                           {
             for (index iRow = index(blockIdx.x) * blockDim.x + threadIdx.x; iRow < selected.RowCount(); iRow += index(gridDim.x) * blockDim.x)
             {
-                const index iCell = selected(iRow, 0);
+                const index iCell = rowAt(iRow);
                 std::array<real, Components> sum{}, lowSum{};
                 NumericalStatus cellStatus;
                 const auto cellFaces = geometry.stencil.topology.CellFaces(iCell);
@@ -77,7 +79,7 @@ namespace DNDS::Cauchy::CUDA
                         if (produceLow)
                             lowOutput(iCell, j) = lowSum[j];
                     }
-            }
+            } });
         }
         void ValidateField(const RHSField &field, index owned, index ghost, index width, bool requireGhost)
         {
