@@ -156,12 +156,6 @@ namespace DNDS::Cauchy
         std::weak_ptr<const Runtime::SessionAccess::Ticket> _nestedSession;
         explicit NonlinearSolver(std::shared_ptr<Data> data) : _data(std::move(data)) {}
         std::pair<index, real> ApplyCorrectionImpl(EquationDofs &state, const EquationDofs &increment, real scale, const std::vector<index> &components);
-        NonlinearIterationReport Execute(EquationDofs &state, const EquationDofs &source,
-                                         real mass, real rhsScale, real time, int stage,
-                                         NonlinearSolveControl control, bool singleCorrection,
-                                         OptionalRef<const EquationDofs> cachedRate,
-                                         OptionalRef<const Runtime::Array<real>> sourceDerivative = {},
-                                         OptionalRef<const NonlinearSolveSetup> setup = {});
         NonlinearSession Start(EquationDofs &state, const EquationDofs &source,
                                real mass, real rhsScale, real time, int stage,
                                NonlinearSolveControl control,

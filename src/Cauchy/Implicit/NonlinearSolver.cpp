@@ -349,8 +349,8 @@ namespace DNDS::Cauchy
     NonlinearIterationReport NonlinearSolver::Solve(EquationDofs &state, const EquationDofs &source,
                                                     real mass, real rhsScale, real time, int stage, NonlinearSolveControl control)
     {
-        return Execute(state, source, mass, rhsScale, time, stage,
-                       std::move(control), false, {});
+        auto session = PrepareSolve(state, source, mass, rhsScale, time, stage, std::move(control));
+        return SolveNonlinear(session);
     }
     NonlinearSession NonlinearSolver::PrepareSolve(EquationDofs &state, const EquationDofs &source,
                                                    real mass, real rhsScale, real time, int stage, NonlinearSolveControl control)
@@ -365,14 +365,6 @@ namespace DNDS::Cauchy
     {
         return Start(state, source, mass, rhsScale, time, stage,
                      std::move(control), setup);
-    }
-    NonlinearIterationReport NonlinearSolver::CorrectOnce(EquationDofs &state, const EquationDofs &source,
-                                                          real mass, real rhsScale, real time, int stage,
-                                                          NonlinearSolveControl control,
-                                                          OptionalRef<const EquationDofs> cachedRate, OptionalRef<const R::Array<real>> derivative)
-    {
-        control.correctionLimit = 1;
-        return Execute(state, source, mass, rhsScale, time, stage, std::move(control), true, cachedRate, derivative);
     }
     std::optional<R::Array<real>> NonlinearSolver::BuildSourceDerivative(const EquationDofs &state) const
     {
@@ -580,20 +572,13 @@ namespace DNDS::Cauchy
         DNDS_check_throw_info(_data->auxiliaryState, "equation auxiliary values have not been prepared");
         return _data->auxiliary;
     }
-    NonlinearIterationReport NonlinearSolver::Execute(EquationDofs &state, const EquationDofs &source,
-                                                      real mass, real rhsScale, real time, int stage,
-                                                      NonlinearSolveControl control, bool singleCorrection,
-                                                      OptionalRef<const EquationDofs> cachedRate,
-                                                      OptionalRef<const R::Array<real>> cachedDerivative,
-                                                      OptionalRef<const NonlinearSolveSetup> setup)
+    NonlinearIterationReport NonlinearSolver::CorrectOnce(EquationDofs &state, const EquationDofs &source,
+                                                          real mass, real rhsScale, real time, int stage,
+                                                          NonlinearSolveControl control, OptionalRef<const EquationDofs> cachedRate,
+                                                          OptionalRef<const R::Array<real>> cachedDerivative)
     {
         DNDS_check_throw_info(_data, "nonlinear session was moved");
-        if (!singleCorrection)
-        {
-            auto coordinated = setup ? PrepareSolve(*setup, state, source, mass, rhsScale, time, stage, std::move(control))
-                                     : PrepareSolve(state, source, mass, rhsScale, time, stage, std::move(control));
-            return SolveNonlinear(coordinated);
-        }
+        control.correctionLimit = 1;
         auto session = _data->session.Acquire(_nestedSession.lock());
         auto &data = *_data;
         auto engine = data.stream.LockEngine();
@@ -620,14 +605,14 @@ namespace DNDS::Cauchy
                 selection = Algebra::ComponentSelection(nv, control.updateComponents);
                 DNDS_check_throw_info(std::isfinite(mass) && mass >= 0 && std::isfinite(rhsScale) && rhsScale > 0 && std::isfinite(time) &&
                     control.correctionLimit >= -1 && control.correctionLimit <= data.settings.iterations &&
-                    (!singleCorrection || !control.resume) &&
+                    !control.resume &&
                     (control.initialPseudoCFL == 0 || (std::isfinite(control.initialPseudoCFL) && control.initialPseudoCFL >= data.settings.pseudoCFL && control.initialPseudoCFL <= data.settings.maxPseudoCFL)),
                     "invalid equation implicit stage coefficients");
                 if (data.settings.collectiveChecks)
                 {
                 serialized = Json{{"mass", mass}, {"rhsScale", rhsScale}, {"time", time}, {"limit", control.correctionLimit},
                     {"CFL", control.initialPseudoCFL}, {"selection", selection.Indices()},
-                    {"singleCorrection", singleCorrection}, {"cachedRate", bool(cachedRate)}}.dump();
+                    {"singleCorrection", true}, {"cachedRate", bool(cachedRate)}}.dump();
                 DNDS_check_throw_info(serialized.size() <= size_t(INT_MAX), "equation solve controls exceed MPI string range");
                 } });
             if (data.settings.collectiveChecks)
@@ -679,20 +664,6 @@ namespace DNDS::Cauchy
             data.Stage([&]
                        { data.operators.SubmitScaleRate(engine, data.stream, *cachedRate, data.spatial, true); });
         };
-        const auto measure = [&](auto &norms)
-        {
-            std::vector<real> local(size_t(nv + 1));
-            data.Stage([&]
-                       { local = data.operators.AssembleDefect(engine, data.stream, state, data.spatial, source, data.defect,
-                                                               mass, rhsScale, activeComponents.HostView(), data.settings.normOrder, !singleCorrection); });
-            if (singleCorrection)
-                return; // Defect is ready; no stopping norm is needed.
-            MPI::AllreduceInPlace<MPI::Reduction::Sum>(
-                MPI::ContiguousView<real>{local.data(), size_t(nv + 1)}, data.mpi.comm);
-            RequireStageVolume(local[nv], stage);
-            for (index j = 0; j < nv; ++j)
-                norms[j] = StageResidualNorm(local[j], data.settings.normOrder, j, stage, state.Schema());
-        };
         const auto reconstruction = [&]
         { return ReconstructionStats(); };
         const auto advance = [&](auto &report)
@@ -726,51 +697,48 @@ namespace DNDS::Cauchy
                     report.rhsLimited += rhsLimited; report.minimumRHSAlpha = std::min(report.minimumRHSAlpha, rhsAlpha);
                     report.incrementLimited += result.first; report.minimumIncrementAlpha = std::min(report.minimumIncrementAlpha, result.second);
                 } };
-        if (singleCorrection)
+        auto report = std::move(initial);
+        report.pseudoCFL = control.initialPseudoCFL == 0 ? data.settings.pseudoCFL : control.initialPseudoCFL;
         {
-            auto report = std::move(initial);
-            report.pseudoCFL = control.initialPseudoCFL == 0 ? data.settings.pseudoCFL : control.initialPseudoCFL;
-            {
-                const NonlinearDetail::PhaseTimer timer(profile, NonlinearProfile::Residual);
-                evaluate();
-                if (control.profile)
-                    ++control.profile->residualEvaluations;
-            }
-            measure(report.residual);
-            std::tie(report.reconstructionIterations, report.reconstructionRelativeUpdate) = reconstruction();
-            report.reconstructionUpdateMeasured = std::isfinite(report.reconstructionRelativeUpdate);
-            if (!report.reconstructionUpdateMeasured)
-                report.reconstructionRelativeUpdate = 0;
-            advance(report);
-            report.iterations = 1;
-            auto &stateSnapshot = *data.nonlinearState;
-            stateSnapshot.stage = stage;
-            stateSnapshot.coupledStage = -1;
-            stateSnapshot.iteration = 1;
-            stateSnapshot.converged = false;
-            stateSnapshot.terminal = true;
-            stateSnapshot.capped = false;
-            stateSnapshot.rejected = false;
-            stateSnapshot.residual = report.residual;
-            stateSnapshot.initialResidual = report.initialResidual;
-            stateSnapshot.referenceResidual = report.referenceResidual;
-            stateSnapshot.residualTargetRatio = report.residualTargetRatio;
-            stateSnapshot.pseudoCFL = report.pseudoCFL;
-            stateSnapshot.linearIterations = report.linearIterations;
-            stateSnapshot.multigridCycles = report.multigridCycles;
-            stateSnapshot.levelCorrections = report.levelCorrections;
-            stateSnapshot.rhsLimited = report.rhsLimited;
-            stateSnapshot.incrementLimited = report.incrementLimited;
-            stateSnapshot.minimumRHSAlpha = report.minimumRHSAlpha;
-            stateSnapshot.minimumIncrementAlpha = report.minimumIncrementAlpha;
-            stateSnapshot.reconstructionIterations = report.reconstructionIterations;
-            stateSnapshot.reconstructionRelativeUpdate = report.reconstructionRelativeUpdate;
-            stateSnapshot.reconstructionUpdateMeasured = report.reconstructionUpdateMeasured;
-            return report;
+            const NonlinearDetail::PhaseTimer timer(profile, NonlinearProfile::Residual);
+            evaluate();
+            if (control.profile)
+                ++control.profile->residualEvaluations;
         }
-        DNDS_check_throw_info(false,
-                              "unreachable nonlinear execution mode");
-        return {};
+        // A prescribed correction needs the defect but never makes a stopping decision.
+        data.Stage([&]
+                   { data.operators.AssembleDefect(engine, data.stream, state, data.spatial, source, data.defect,
+                                                   mass, rhsScale, activeComponents.HostView(), data.settings.normOrder, false); });
+        std::tie(report.reconstructionIterations, report.reconstructionRelativeUpdate) = reconstruction();
+        report.reconstructionUpdateMeasured = std::isfinite(report.reconstructionRelativeUpdate);
+        if (!report.reconstructionUpdateMeasured)
+            report.reconstructionRelativeUpdate = 0;
+        advance(report);
+        report.iterations = 1;
+        auto &stateSnapshot = *data.nonlinearState;
+        stateSnapshot.stage = stage;
+        stateSnapshot.coupledStage = -1;
+        stateSnapshot.iteration = 1;
+        stateSnapshot.converged = false;
+        stateSnapshot.terminal = true;
+        stateSnapshot.capped = false;
+        stateSnapshot.rejected = false;
+        stateSnapshot.residual = report.residual;
+        stateSnapshot.initialResidual = report.initialResidual;
+        stateSnapshot.referenceResidual = report.referenceResidual;
+        stateSnapshot.residualTargetRatio = report.residualTargetRatio;
+        stateSnapshot.pseudoCFL = report.pseudoCFL;
+        stateSnapshot.linearIterations = report.linearIterations;
+        stateSnapshot.multigridCycles = report.multigridCycles;
+        stateSnapshot.levelCorrections = report.levelCorrections;
+        stateSnapshot.rhsLimited = report.rhsLimited;
+        stateSnapshot.incrementLimited = report.incrementLimited;
+        stateSnapshot.minimumRHSAlpha = report.minimumRHSAlpha;
+        stateSnapshot.minimumIncrementAlpha = report.minimumIncrementAlpha;
+        stateSnapshot.reconstructionIterations = report.reconstructionIterations;
+        stateSnapshot.reconstructionRelativeUpdate = report.reconstructionRelativeUpdate;
+        stateSnapshot.reconstructionUpdateMeasured = report.reconstructionUpdateMeasured;
+        return report;
     }
     std::pair<int, real> NonlinearSolver::ReconstructionStats() const
     {
