@@ -4,6 +4,7 @@
 #include "Cauchy/Discretization/CPU/FiniteVolumeBoundaryKernels.hpp"
 #include "CompactManagedStencilFixture.hpp"
 #include "Cauchy/Input/FlowProfile.hpp"
+#include "Cauchy/Implicit/ACMPressureGauge.hpp"
 #include "Cauchy/Input/StateInput.hpp"
 #include "Cauchy/Boundary/BoundaryPointOperator.hpp"
 #include "../CFV/ReconstructionFixture.hpp"
@@ -240,7 +241,7 @@ TEST_CASE("Moving ACM interface packets preserve a uniform inertial flow under a
     for (const double pressure : {-3., 2.})
     {
         CAPTURE(pressure);
-        const std::vector<double> local{velocity[0], velocity[1], velocity[2], pressure};
+        const std::vector<double> local{velocity[0], velocity[1], velocity[2], -3.};
         fv.InitializeConservative(state, local);
         auto packet = fv.BuildBoundaryInputs();
         for (auto *section : {&packet.FaceCenterValues(), &packet.QuadratureValues()})
@@ -251,6 +252,14 @@ TEST_CASE("Moving ACM interface packets preserve a uniform inertial flow under a
                 for (int j = 0; j < 4; ++j)
                     rows(i, j) = local[j];
         }
+        // Apply one signed offset to three different row spaces. A uniform
+        // flow is preserved only if receiver pressures track the cell means.
+        const double offset = pressure - local[3];
+        for (auto *section : {&state, &packet.FaceCenterValues(), &packet.QuadratureValues()})
+            C::NonlinearOperatorDetail::SubmitPressureOffset(engine, stream, *section, offset);
+        stream.Record().WaitHost();
+        if (state.Space().OwnedRows())
+            CHECK(state.ReadOwned().Block("flow")(0, 3) == pressure);
         fv.PublishBoundaryInputs(packet, time);
         fv.SetBoundaryInputs(*work, packet);
         fv.Evaluate(state, rate, *reconstruction, *work, engine, stream, time);

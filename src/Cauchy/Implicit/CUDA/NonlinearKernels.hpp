@@ -58,7 +58,7 @@ namespace DNDS::Cauchy::CUDA
                                    LinearWriteRows inverseTau, real cfl);
     void PressureGaugeSum(Runtime::ExecutionContext, NonlinearCells, LinearReadRows candidate,
                           NonlinearSummaryOutput scratch, NonlinearSummaryOutput result);
-    void ShiftPressure(Runtime::ExecutionContext, LinearWriteRows candidate, real shift);
+    void ShiftPressure(Runtime::ExecutionContext, LinearWriteRows candidate, real offset);
     /** @brief Euler-compatible RHS/dTau forecast on combined 5/6/7 states.
      * @details No RANS scalar admissibility condition enters alpha. A thermal
      * alpha scales the entire coupled defect or the common pseudo-time. With

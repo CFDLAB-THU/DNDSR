@@ -37,10 +37,10 @@ namespace DNDS::Cauchy
      * Methods returning host values explicitly drain the engine before reading
      * compact summaries. These are nonlinear acceptance/convergence boundaries,
      * not per-cell waits. Submit* methods only enqueue, and their consumer must
-     * order or observe that prefix. No MPI reduction is performed here; the
-     * controller aggregates on the domain communicator. CUDA currently accepts
-     * combined AoS perfect-gas flow5/SA/2EQ, while CPU retains generic layouts
-     * and mixture policies. A workspace is serialized on its bound stream.
+     * order or observe that prefix. Norm assembly returns local contributions to the controller.
+     * PressureMean observes its domain-wide volume integral directly. CUDA accepts
+     * combined AoS perfect-gas flow5 or ACM flow4 with the supported RANS scalars.
+     * CPU also supports generic layouts and mixture policies. A workspace is serialized on its bound stream.
      */
     class NonlinearOperators
     {

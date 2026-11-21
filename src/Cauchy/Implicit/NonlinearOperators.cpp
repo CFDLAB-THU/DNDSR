@@ -1,3 +1,4 @@
+#include "Cauchy/Implicit/ACMPressureGauge.hpp"
 #include "Cauchy/Implicit/NonlinearOperators_Internal.hpp"
 
 namespace DNDS::Cauchy
@@ -132,26 +133,8 @@ namespace DNDS::Cauchy
     void NonlinearOperators::ProjectPressureMean(R::EagerEngine &engine, const R::ExecutionStream &stream,
                                                  EquationDofs &candidate, real pressureMean) const
     {
-        const real shift = PressureMean(engine, stream, candidate) - pressureMean;
-        DNDS_check_throw_info(std::isfinite(shift), "nonfinite pressure gauge shift");
-        if (shift == 0)
-            return;
-        Outputs writes;
-        const auto target = AddOutput(candidate, writes, true);
-        R::SubmitArrayBatch(engine, stream, [target, shift](R::ExecutionContext ctx, auto, auto output)
-                            {
-                                if (ctx.device == R::Device::Host())
-                                {
-                                    const auto field = target.Components(output);
-                                    OMP::ForRows(0, field.View().RowCount(), [&](index i)
-                                                 { field.View()(i, 3) -= shift; });
-                                }
-#ifdef DNDS_USE_CUDA
-                                else
-                                    CUDA::ShiftPressure(ctx, Table(output[target.firstSlot]), shift);
-#endif
-                            },
-                            Inputs{}, std::move(writes));
+        const real offset = pressureMean - PressureMean(engine, stream, candidate);
+        SubmitPressureOffset(engine, stream, candidate, offset);
     }
     std::vector<real> NonlinearOperators::MeasureMeanState(R::EagerEngine &engine, const R::ExecutionStream &stream, const EquationDofs &mean) const
     {
