@@ -110,12 +110,9 @@ namespace DNDS::Cauchy
 
     DomainStateSnapshot DomainStateSnapshot::DetachedHost(Runtime::ExecutionContext context) const
     {
-        return DetachedTo(Runtime::Device::Host(), std::move(context));
-    }
-    DomainStateSnapshot DomainStateSnapshot::DetachedTo(Runtime::Device destination, Runtime::ExecutionContext context) const
-    {
+        const auto destination = Runtime::Device::Host();
         const auto &source = *_data;
-        const EquationSnapshotOptions allocation{destination == Runtime::Device::Host() && source.means.Device().space == Runtime::MemorySpace::CUDA};
+        const EquationSnapshotOptions allocation{source.means.Device().space == Runtime::MemorySpace::CUDA};
         std::optional<EquationDofs> reconstruction, previous;
         std::optional<Runtime::Array<real>> limitedVR;
         auto means = EquationDofOperations::CopyOwnedTo(source.means, destination, context, allocation);
@@ -143,7 +140,7 @@ namespace DNDS::Cauchy
         return DomainStateSnapshot(std::make_shared<Data>(source.name, std::move(means),
                                                           std::move(reconstruction), std::move(limitedVR), std::move(previous), source.time,
                                                           source.lastAcceptedDt, source.previousDt, source.epoch, source.method, source.nonlinear,
-                                                          source.updatePolicy, source.sourceStrang, source.pressureGauge, destination == Runtime::Device::Host() ? Runtime::ExecutionContext::Host() : context));
+                                                          source.updatePolicy, source.sourceStrang, source.pressureGauge, Runtime::ExecutionContext::Host()));
     }
 
     const std::string &DomainStateSnapshot::Name() const { return _data->name; }

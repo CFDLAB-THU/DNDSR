@@ -1,3 +1,4 @@
+#include "Cauchy/IO/OutputStaging.hpp"
 #include "Cauchy/Core/Domain.hpp"
 #include "DNDS/MPI/Failure.hpp"
 #include "Cauchy/IO/StateArchive.hpp"
@@ -23,10 +24,11 @@ namespace DNDS::Cauchy
     PreparedCheckpoint Domain::PrepareCheckpoint(std::shared_ptr<Runtime::CommunicationContext> communication,
                                                  CheckpointPreparation options) const
     {
-        return CaptureCheckpoint(std::move(communication), options, Runtime::ExecutionContext::Host());
+        OutputStaging staging;
+        return CaptureCheckpoint(std::move(communication), options, staging);
     }
     PreparedCheckpoint Domain::CaptureCheckpoint(std::shared_ptr<Runtime::CommunicationContext> communication,
-                                                 CheckpointPreparation options, Runtime::ExecutionContext writerCopy) const
+                                                 CheckpointPreparation options, OutputStaging &staging) const
     {
         const MPIInfo mpi(_problem.finiteVolume.Metrics().Communicator());
         const bool includeReconstruction = options.includeReconstruction && bool(_problem.finiteVolume.PolynomialReconstruction());
@@ -38,12 +40,7 @@ namespace DNDS::Cauchy
                                       (relation == MPI_IDENT || relation == MPI_CONGRUENT),
                                   "checkpoint I/O communicator must preserve domain membership and rank order"); });
         auto snapshot = CaptureStateSnapshot(includeReconstruction);
-        // A background GPU checkpoint freezes its own device values here.
-        // The writer stages that immutable snapshot on its dedicated copy stream.
         const bool detached = options.detached || snapshot.Means().Device() != Runtime::Device::Host();
-        MPI::LocalStage(mpi, [&]
-                        {
-            if (detached) snapshot = snapshot.DetachedTo(writerCopy.device, _execution.ComputeStream().Context()); });
         const bool history = bool(snapshot.PreviousState());
         const bool limitedVRHistory = bool(snapshot.LimitedVRHistory());
         int flags[]{int(includeReconstruction), -int(includeReconstruction), int(history), -int(history), int(limitedVRHistory), -int(limitedVRHistory)};
@@ -60,24 +57,25 @@ namespace DNDS::Cauchy
         if (includeReconstruction)
             metadata["reconstruction_storage"] = DescribeEquationStorage(*snapshot.Reconstruction());
         metadata["source_integration"] = snapshot.SourceStrang() ? "strang" : "coupled";
-        Runtime::Array<index> ids;
-        std::optional<MeshEnvelope> envelope;
+        std::optional<PreparedCheckpoint> result;
         MPI::LocalStage(mpi, [&]
                         {
-            ids = CellIds(*this);
-            envelope.emplace(DescribeMesh(*this)); });
-        return PreparedCheckpoint(std::move(snapshot), std::move(metadata), std::move(ids),
-                                  std::move(*envelope), std::move(communication), detached, {}, writerCopy);
+            auto ids = CellIds(*this);
+            auto envelope = DescribeMesh(*this);
+            result.emplace(PreparedCheckpoint(std::move(snapshot), std::move(metadata), std::move(ids),
+                           std::move(envelope), std::move(communication), detached, {}, _execution.ComputeStream().Context(), staging)); });
+        return std::move(*result);
     }
     void Domain::WriteInternalCheckpoint(const std::string &path, const Json &resolved,
                                          const NonlinearSolveState &state,
                                          const Json &outputController) const
     {
-        CaptureInternalCheckpoint(_problem.finiteVolume.Metrics().Communication(), state, false).Write(path, resolved, outputController);
+        OutputStaging staging;
+        CaptureInternalCheckpoint(_problem.finiteVolume.Metrics().Communication(), state, false, staging).Write(path, resolved, outputController);
     }
 
     PreparedCheckpoint Domain::CaptureInternalCheckpoint(std::shared_ptr<Runtime::CommunicationContext> communication,
-                                                         const NonlinearSolveState &state, bool detach, Runtime::ExecutionContext writerCopy) const
+                                                         const NonlinearSolveState &state, bool detach, OutputStaging &staging) const
     {
         const MPIInfo mpi(_problem.finiteVolume.Metrics().Communicator());
         const bool polynomial = bool(_problem.finiteVolume.PolynomialReconstruction());
@@ -167,25 +165,21 @@ namespace DNDS::Cauchy
         const auto context = _execution.ComputeStream().Context();
         detach |= acceptedSnapshot.Means().Device() != Runtime::Device::Host();
         PreparedCheckpoint::InternalFields internal;
-        std::optional<MeshEnvelope> envelope;
-        Runtime::Array<index> ids;
+        std::optional<PreparedCheckpoint> result;
         MPI::LocalStage(mpi, [&]
                         {
             const auto addField = [&](std::string key, const EquationDofs &field)
             {
-                auto saved = detach ? EquationDofOperations::CopyOwnedTo(field, writerCopy.device, context,
-                                           {writerCopy.device == Runtime::Device::Host() && field.Device().space == Runtime::MemorySpace::CUDA}) : field.NumericAlias();
-                if (detach) saved.Fields().SetName(_problem.name + "/outputSnapshot/" + key, DNDS_ALLOCATION_SITE());
-                internal.equations.emplace_back(std::move(key), std::move(saved));
+                internal.equations.emplace_back(std::move(key), field.NumericAlias());
             };
             const auto addArray = [&](std::string key, const Runtime::Array<real> &field)
             {
-                auto saved = detach ? field.To(writerCopy.device, context) : field;
-                if (detach) saved.SetName(_problem.name + "/outputSnapshot/" + key, DNDS_ALLOCATION_SITE());
-                internal.arrays.emplace_back(std::move(key), std::move(saved));
+                internal.arrays.emplace_back(std::move(key), field);
             };
+            // CaptureActive already cloned the time integrator's fields.
+            internal.ownedEquations = active->fields.size();
             for (size_t i = 0; i < active->fields.size(); ++i)
-                addField("internal_time_" + std::to_string(i) + "_field_", active->fields[i]);
+                internal.equations.emplace_back("internal_time_" + std::to_string(i) + "_field_", std::move(active->fields[i]));
             if (ditr)
                 for (int stage = 0; stage < 2; ++stage)
                     if (const auto &derivative = _execution.coupledSourceDerivative[stage])
@@ -202,10 +196,10 @@ namespace DNDS::Cauchy
                 addReconstruction(*_state.reconstruction, "internal_endpoint_");
                 if (ditr) addReconstruction(*_coupledMiddle->state, "internal_middle_");
             }
-            if (detach) acceptedSnapshot = acceptedSnapshot.DetachedTo(writerCopy.device, context);
-            ids = CellIds(*this);
-            envelope.emplace(DescribeMesh(*this)); });
-        return PreparedCheckpoint(std::move(acceptedSnapshot), std::move(metadata), std::move(ids),
-                                  std::move(*envelope), std::move(communication), detach, std::move(internal), writerCopy);
+            auto ids = CellIds(*this);
+            auto envelope = DescribeMesh(*this);
+            result.emplace(PreparedCheckpoint(std::move(acceptedSnapshot), std::move(metadata), std::move(ids),
+                           std::move(envelope), std::move(communication), detach, std::move(internal), context, staging)); });
+        return std::move(*result);
     }
 }

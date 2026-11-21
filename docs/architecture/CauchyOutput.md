@@ -284,18 +284,21 @@ numerical state.
 ## Asynchronous accepted-step output
 
 `output.asynchronous` defaults to `false`. When enabled, `OutputCoordinator`
-uses one FIFO writer for accepted-step and internal nonlinear output. Its capacity of two batches includes the running writer. The controller waits for capacity before capturing the next snapshot.
+uses one file writer for accepted-step and internal nonlinear output. One
+batch includes every requested checkpoint and visualization for that emission.
+The controller waits for the preceding batch to finish writing its files and
+publishing its manifest before starting the next capture.
 
-For a CUDA checkpoint, the controller freezes the requested owned fields, reconstruction and time-method history in independent device allocations. After these device copies complete, the solver can overwrite its fields. The I/O worker copies the frozen data into page-locked host buffers on its own CUDA stream before opening HDF5. CPU checkpoints use independent host copies. An accepted or internal checkpoint can therefore overlap D2H and disk I/O with subsequent computation. For visualization the controller evaluates volume output fields and any requested facial fluxes into independent allocations on the solver's device. The worker downloads the frozen fields on its copy stream, samples adjacent-cell fields and wall distances, and sends one packed row per boundary face to its file owner. This last transfer uses the domain I/O communicator with the same peer and row mapping as the mesh. CPU output uses the detached host values directly.
+CPU capture copies mutable fields. CUDA capture prepares volume and boundary
+fields and transfers the requested checkpoint, history, and visualization data
+to reusable pinned host slots on the domain compute stream. Submission
+finishes these transfers before returning. The solver can then overwrite the
+source fields, including on an unrelated stream. The writer uses the frozen
+host values for HDF5, boundary sampling and file-order redistribution on the
+domain I/O communicator. Computation can proceed during the write. The next
+dump reuses the same slots after that write completes.
 
-`PreparedVisualization` owns prepared cell fields and optional reduced face data,
-and retains a mesh read until writing finishes. No live Domain, coefficient
-buffer or physics worker is borrowed by the writer. Mesh mutation or external
-CGNS/HDF5 operations must first drain this service.
-
-One writer owns the page-locked staging slots. Checkpoint staging visits owned field allocations in archive order, including time-history and internal-stage arrays. A subsequent file can reuse each slot after the previous write has returned. A slot grows when the next payload needs more bytes. The writer retains its high-water allocation until shutdown.
-
-Set `DNDS_CAUCHY_OUTPUT_PROFILE=1` to emit process-local timings in seconds for controller capture, D2H, file writes, queue-full waits and drains. The `bytes` value on `pinned_reserve` is the current total reserved pinned payload in bytes. Its maximum is the writer's pinned high-water mark. The file timers cover HDF5 writes and close. The D2H timers include the host wait for the copy. Controller and worker times can overlap.
+Set `DNDS_CAUCHY_OUTPUT_PROFILE=1` to emit process-local timings in seconds for controller capture, D2H, file writes, queue-full waits and drains. The `bytes` value on `pinned_reserve` is the current total reserved pinned payload in bytes. Its maximum is the controller's pinned high-water mark. The file timers cover HDF5 writes and close. The `write_batch` interval ends after manifest publication. Compare `start_ns` and `end_ns` within one process to check capture/write ordering. The D2H timers include the host wait for the copy. Controller and worker times can overlap.
 
 The current backend is parallel HDF5 and **requires MPI_THREAD_MULTIPLE**.
 FUNNELED/SERIALIZED configurations reject this option explicitly. Dedicated

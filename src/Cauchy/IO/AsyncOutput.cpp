@@ -1,7 +1,4 @@
 #include "Cauchy/IO/AsyncOutput.hpp"
-#ifdef DNDS_USE_CUDA
-#    include "DNDS/Runtime/Execution/CUDAStream.hpp"
-#endif
 #include "Cauchy/IO/OutputQueue.hpp"
 #include "Cauchy/IO/OutputStaging.hpp"
 #include "Cauchy/Core/Simulation.hpp"
@@ -34,6 +31,7 @@ namespace DNDS::Cauchy
             bool checkpoint = false, direct = false;
             void Write() const
             {
+                const OutputMeasurement writing("write_batch");
                 MPI::SolverFailureScope failureScope(control->Communicator());
                 for (const auto &domain : domains)
                 {
@@ -76,8 +74,7 @@ namespace DNDS::Cauchy
     {
         std::shared_ptr<Runtime::CommunicationContext> control;
         std::vector<std::shared_ptr<Runtime::CommunicationContext>> domains;
-        std::vector<Runtime::ExecutionContext> writerCopy;
-        std::shared_ptr<OutputStaging> staging = std::make_shared<OutputStaging>();
+        OutputStaging staging;
         // Destroy/join worker before releasing its MPI ordering contexts.
         std::unique_ptr<OutputQueue> queue;
         explicit Data(Simulation &simulation)
@@ -90,16 +87,11 @@ namespace DNDS::Cauchy
                                       "asynchronous parallel HDF5 output requires MPI_THREAD_MULTIPLE; use synchronous output otherwise"); });
             control = Runtime::CommunicationContext::Duplicate(mpi.comm);
             domains.resize(size_t(simulation.Placement().DomainNumber()));
-            writerCopy.resize(domains.size(), Runtime::ExecutionContext::Host());
             for (index iDomain = 0; iDomain < index(domains.size()); ++iDomain)
                 if (simulation.Local(iDomain))
                 {
                     const auto &metrics = simulation.GetDomain(iDomain).Discretization().Metrics();
                     domains[iDomain] = Runtime::CommunicationContext::Duplicate(metrics.Communicator());
-#ifdef DNDS_USE_CUDA
-                    if (metrics.Device().space == Runtime::MemorySpace::CUDA)
-                        writerCopy[iDomain] = {metrics.Device(), Runtime::CreateCUDAStream(metrics.Device().ordinal)};
-#endif
                 }
             queue = std::make_unique<OutputQueue>([owner = control](std::exception_ptr error)
                                                   {
@@ -107,7 +99,7 @@ namespace DNDS::Cauchy
                 // AbortCaught prints locally and calls MPI_Abort independently;
                 // no agreement or distributed exception recovery is attempted.
                 try { std::rethrow_exception(error); }
-                catch (...) { MPI::AbortCaught(owner->Communicator(), "asynchronous Cauchy output failed"); } });
+                catch (...) { MPI::AbortCaught(owner->Communicator(), "asynchronous Cauchy output failed"); } }, 1);
         }
     };
     AsyncOutput::AsyncOutput(Simulation &simulation) : _data(std::make_unique<Data>(simulation)) {}
@@ -119,6 +111,8 @@ namespace DNDS::Cauchy
     {
         _data->queue->Enqueue([&]() -> OutputQueue::Action
                               {
+            // Capacity one retires the preceding write before these slots are reused.
+            _data->staging.Rewind();
             auto batch = std::make_shared<OutputBatch>();
             // A dislocated domain may emit independently. Its completion barrier
             // and manifest publication must never enter the simulation control communicator.
@@ -135,14 +129,12 @@ namespace DNDS::Cauchy
             if (visualization)
             {
                 files.visualizationPrefix = plan.VisualizationPrefix(iDomain, token);
-                files.visualization.emplace(domain.CaptureInternalVisualization(config.Output().hdfDeflateLevel));
-                files.visualization->BindWriter(_data->writerCopy[iDomain], _data->staging);
+                files.visualization.emplace(domain.CaptureInternalVisualization(config.Output().hdfDeflateLevel, _data->staging));
             }
             if (checkpoint)
             {
                 files.checkpointPath = plan.InternalCheckpointPath(iDomain, token);
-                files.checkpoint.emplace(domain.CaptureInternalCheckpoint(files.communication, state, true, _data->writerCopy[iDomain]));
-                files.checkpoint->BindWriter(_data->staging);
+                files.checkpoint.emplace(domain.CaptureInternalCheckpoint(files.communication, state, true, _data->staging));
             }
             batch->domains.push_back(std::move(files));
             return [batch] { batch->Write(); }; });
@@ -152,6 +144,8 @@ namespace DNDS::Cauchy
     {
         _data->queue->Enqueue([&, controller = std::move(outputController), manifest = std::move(snapshotManifest)]() mutable -> OutputQueue::Action
                               {
+            // Capacity one retires the preceding write before these slots are reused.
+            _data->staging.Rewind();
             auto batch = std::make_shared<OutputBatch>();
             batch->control = _data->control;
             batch->resolved = config.Root();
@@ -197,15 +191,13 @@ namespace DNDS::Cauchy
                 files.communication = _data->domains[iDomain];
                 if (checkpoint)
                 {
-                    files.checkpoint.emplace(domain.CaptureCheckpoint(files.communication, {config.Output().checkpointReconstruction, true}, _data->writerCopy[iDomain]));
-                    files.checkpoint->BindWriter(_data->staging);
+                    files.checkpoint.emplace(domain.CaptureCheckpoint(files.communication, {config.Output().checkpointReconstruction, true}, _data->staging));
                     files.checkpointPath = batch->direct ? batch->checkpointPath
                         : (archive.parent_path() / batch->domainPaths[iDomain]["file"].get<std::string>()).string();
                 }
                 if (visualization)
                 {
-                    files.visualization.emplace(domain.PrepareVisualization(config.Output().hdfDeflateLevel));
-                    files.visualization->BindWriter(_data->writerCopy[iDomain], _data->staging);
+                    files.visualization.emplace(domain.CaptureVisualization(config.Output().hdfDeflateLevel, _data->staging));
                     files.visualizationPrefix = plan.VisualizationPrefix(iDomain, token);
                 }
                 batch->domains.push_back(std::move(files));

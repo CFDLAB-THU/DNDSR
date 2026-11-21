@@ -54,10 +54,9 @@ namespace DNDS::Cauchy
     R::Array<real> OutputFields::CopyToHost(R::ExecutionContext context) const
     {
         OutputStaging local;
-        OutputStaging::Batch batch(local);
-        return CopyToHost(context, batch);
+        return CopyToHost(context, local);
     }
-    R::Array<real> OutputFields::CopyToHost(R::ExecutionContext context, OutputStaging::Batch &batch) const
+    R::Array<real> OutputFields::CopyToHost(R::ExecutionContext context, OutputStaging &batch) const
     {
         DNDS_check_throw_info(_values.Storage().IsIdle() && _status.Storage().IsIdle(), "output fields require completed production before host observation");
         const auto hostStatus = batch.HostValues(_status, context, "fieldStatus");

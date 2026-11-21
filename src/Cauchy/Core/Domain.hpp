@@ -24,10 +24,12 @@ namespace DNDS::Cauchy
     {
         friend class DomainStateSnapshot;
         friend class AsyncOutput;
-        PreparedCheckpoint CaptureCheckpoint(std::shared_ptr<Runtime::CommunicationContext>, CheckpointPreparation, Runtime::ExecutionContext writerCopy) const;
+        PreparedCheckpoint CaptureCheckpoint(std::shared_ptr<Runtime::CommunicationContext>, CheckpointPreparation, OutputStaging &staging) const;
         PreparedCheckpoint CaptureInternalCheckpoint(std::shared_ptr<Runtime::CommunicationContext>,
-                                                     const NonlinearSolveState &, bool detach, Runtime::ExecutionContext writerCopy = Runtime::ExecutionContext::Host()) const;
-        PreparedVisualization CaptureInternalVisualization(int hdfDeflateLevel);
+                                                     const NonlinearSolveState &, bool detach, OutputStaging &staging) const;
+        PreparedVisualization CaptureInternalVisualization(int hdfDeflateLevel, OutputStaging &);
+        PreparedVisualization CaptureVisualization(int hdfDeflateLevel, OutputStaging &);
+        PreparedVisualization PackObservationVisualization(real time, int hdfDeflateLevel, OutputStaging &);
         FiniteVolume::WorkspaceOptions ObservationWorkspaceOptions() const;
         DomainProblem _problem;
         DomainState _state;

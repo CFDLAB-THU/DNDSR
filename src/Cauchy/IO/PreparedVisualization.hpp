@@ -6,23 +6,18 @@
 namespace DNDS::Cauchy
 {
     struct BoundaryOutputGeometry;
-    class OutputFields;
-    class OutputStaging;
     /** @brief Detached numerical output with a retained immutable mesh read.
-     * @details Owns detached resident cell fields and optional parent-face flux rows. It
-     * retains no solution/reconstruction/workspace or physics worker. Geometry
-     * remains shared and read-pinned until writing ends; mesh mutation requires
-     * the output service to drain first. Both files use reference-frame coordinates. Write stages device fields, gathers boundary values, and performs
-     * file redistribution and parallel HDF5 on the supplied communicator.
+     * @details The controller completes device-to-host staging on the producing
+     * stream. The writer owns host fields and retains immutable geometry. It
+     * gathers boundary rows in file order and writes both parallel HDF5 files.
      */
     class PreparedVisualization
     {
         friend class FiniteVolume;
-        friend class AsyncOutput;
-        void BindWriter(Runtime::ExecutionContext, std::shared_ptr<OutputStaging>);
+
         struct Data;
         std::shared_ptr<Data> _data;
-        PreparedVisualization(std::shared_ptr<Geom::UnstructuredMesh>, OutputFields,
+        PreparedVisualization(std::shared_ptr<Geom::UnstructuredMesh>, Runtime::Array<real>,
                               std::vector<std::string>, std::shared_ptr<const BoundaryOutputGeometry>,
                               std::optional<Runtime::Array<real>>, std::vector<std::string>, real time, int deflate);
 

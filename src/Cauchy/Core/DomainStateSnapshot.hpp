@@ -24,7 +24,6 @@ namespace DNDS::Cauchy
         DomainStateSnapshot(const Domain &domain, bool reconstruction);
         explicit DomainStateSnapshot(std::shared_ptr<const Data> data) : _data(std::move(data)) {}
         friend class Domain;
-        DomainStateSnapshot DetachedTo(Runtime::Device destination, Runtime::ExecutionContext copyContext) const;
 
     public:
         /// Deep immutable host snapshot for output workers. Copies owned means,

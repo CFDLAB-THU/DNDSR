@@ -29,6 +29,7 @@ namespace DNDS::Geom
 namespace DNDS::Cauchy
 {
     class DomainExecutionContext;
+    class OutputStaging;
     struct QueuedEvaluationDependency;
     class InterfaceCoupling;
     class InterfaceDonorPublication;
@@ -891,6 +892,16 @@ namespace DNDS::Cauchy
         void WriteVisualization(const EquationDofs &state, const ReconstructionState &reconstruction, const Workspace &workspace,
                                 const std::string &prefix, real time, int hdfDeflateLevel,
                                 const std::optional<Physics::Chemistry::ChemicalWorkerPool> &workers) const;
+
+    private:
+        friend class Domain;
+        /// Pack the observation and stage immutable host fields on the supplied lane.
+        PreparedVisualization PackVisualization(const EquationDofs &, const ReconstructionState &, const Workspace &,
+                                                real time, int hdfDeflateLevel,
+                                                const std::optional<Physics::Chemistry::ChemicalWorkerPool> &workers,
+                                                Runtime::EagerEngine &, const Runtime::ExecutionStream &, OutputStaging &) const;
+
+    public:
         /// Complete numerical observation before returning immutable host file
         /// input. The returned object retains geometry, not solver fields.
         PreparedVisualization PrepareVisualization(const EquationDofs &, const ReconstructionState &, const Workspace &,

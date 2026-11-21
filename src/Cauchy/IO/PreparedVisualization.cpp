@@ -1,6 +1,6 @@
 #include "Cauchy/IO/OutputMeasurement.hpp"
 #include "Cauchy/IO/PreparedVisualization.hpp"
-#include "Cauchy/IO/OutputFields.hpp"
+
 #include "Cauchy/IO/BoundaryOutputPlan.hpp"
 #include "DNDS/MPI/CollectiveStage.hpp"
 #include "Geom/Quadratures/Quadrature.hpp"
@@ -13,13 +13,12 @@ namespace DNDS::Cauchy
     {
         std::shared_ptr<Geom::UnstructuredMesh> mesh;
         Geom::MeshReadAccess read;
-        OutputFields fields;
+        R::Array<real> fields;
         std::vector<std::string> names;
         std::shared_ptr<const BoundaryOutputGeometry> boundary;
         std::optional<R::Array<real>> flux;
         std::vector<std::string> fluxNames;
-        std::shared_ptr<OutputStaging> staging;
-        R::ExecutionContext copy;
+
         real time;
         Geom::UnstructuredMesh::HDF5OutSetting settings;
         static auto Requirements(const Geom::UnstructuredMesh &mesh)
@@ -28,21 +27,22 @@ namespace DNDS::Cauchy
             request.wallDistance = mesh.HasNodeWallDist();
             return request;
         }
-        Data(std::shared_ptr<Geom::UnstructuredMesh> geometry, OutputFields values,
+        Data(std::shared_ptr<Geom::UnstructuredMesh> geometry, R::Array<real> values,
              std::vector<std::string> labels, std::shared_ptr<const BoundaryOutputGeometry> surface,
              std::optional<R::Array<real>> fluxValues, std::vector<std::string> fluxLabels, real when, int deflate)
             : mesh(std::move(geometry)), read(mesh->AcquireRead(Requirements(*mesh))),
               fields(std::move(values)), names(std::move(labels)), boundary(std::move(surface)),
-              flux(std::move(fluxValues)), fluxNames(std::move(fluxLabels)), copy{fields.Device(), nullptr}, time(when), settings(mesh->hdf5OutSetting)
+              flux(std::move(fluxValues)), fluxNames(std::move(fluxLabels)), time(when), settings(mesh->hdf5OutSetting)
         {
             settings.deflateLevel = deflate;
-            DNDS_check_throw_info(!flux || (flux->GetDevice() == fields.Device() && flux->RowCount() == boundary->rows.RowCount() &&
+            DNDS_check_throw_info(fields.GetDevice() == R::Device::Host(), "visualization requires host fields");
+            DNDS_check_throw_info(!flux || (flux->GetDevice() == R::Device::Host() && flux->RowCount() == boundary->rows.RowCount() &&
                                             flux->Layout().Width() == index(fluxNames.size()) + 3),
                                   "visualization face flux differs from the frozen boundary layout");
         }
     };
 
-    PreparedVisualization::PreparedVisualization(std::shared_ptr<Geom::UnstructuredMesh> mesh, OutputFields fields,
+    PreparedVisualization::PreparedVisualization(std::shared_ptr<Geom::UnstructuredMesh> mesh, R::Array<real> fields,
                                                  std::vector<std::string> names, std::shared_ptr<const BoundaryOutputGeometry> boundary,
                                                  std::optional<R::Array<real>> flux, std::vector<std::string> fluxNames, real time, int deflate)
         : _data(std::make_shared<Data>(std::move(mesh), std::move(fields), std::move(names), std::move(boundary),
@@ -50,22 +50,13 @@ namespace DNDS::Cauchy
     {
     }
 
-    void PreparedVisualization::BindWriter(R::ExecutionContext copy, std::shared_ptr<OutputStaging> staging)
-    {
-        DNDS_check_throw_info(_data.unique() && copy.device == _data->fields.Device(), "bind the writer stream before sharing a visualization snapshot");
-        _data->copy = std::move(copy);
-        _data->staging = std::move(staging);
-    }
-
     void PreparedVisualization::Write(const std::string &prefix, std::shared_ptr<R::CommunicationContext> communication) const
     {
         DNDS_check_throw_info(communication, "visualization writer needs a retained I/O communicator");
         const auto &data = *_data;
         const auto comm = communication->Communicator();
-        const auto &copy = data.copy;
-        OutputStaging local;
-        OutputStaging::Batch batch(data.staging ? *data.staging : local);
-        R::Array<real> volume, surface;
+        const auto &volume = data.fields;
+        R::Array<real> surface;
         const auto &boundary = *data.boundary;
         const auto meshView = data.read.HostView();
         const bool exportDistance = meshView.HasNodeWallDist();
@@ -73,16 +64,13 @@ namespace DNDS::Cauchy
         const index nFlux = index(data.fluxNames.size());
         MPI::LocalStage(MPIInfo(comm), [&]
                         {
-            volume = data.fields.CopyToHost(copy, batch);
             auto fieldsRead = volume.Read();
             const auto fields = fieldsRead.View<R::TableRows>();
             DNDS_check_throw_info(fields.RowCount() == data.mesh->NumCell() && fields.Width() == index(data.names.size()), "visualization volume field shape differs");
-            std::optional<R::Array<real>> hostFlux;
             std::optional<R::Array<real>::ReadLease> fluxRead;
             if (data.flux)
             {
-                hostFlux.emplace(batch.HostValues(*data.flux, copy, "boundaryFlux"));
-                fluxRead.emplace(hostFlux->Read());
+                fluxRead.emplace(data.flux->Read());
             }
             const auto flux = fluxRead ? fluxRead->View<R::TableRows>() : decltype(fields){};
             surface = R::Array<real>(R::RowLayout::Dense(boundary.rows.RowCount(), nFields + (fluxRead ? nFlux + 3 : 0)));

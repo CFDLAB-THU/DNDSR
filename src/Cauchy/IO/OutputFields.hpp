@@ -19,8 +19,8 @@ namespace DNDS::Cauchy
      */
     class OutputFields
     {
-        friend class PreparedVisualization;
-        Runtime::Array<real> CopyToHost(Runtime::ExecutionContext, OutputStaging::Batch &) const;
+        friend class FiniteVolume;
+        Runtime::Array<real> CopyToHost(Runtime::ExecutionContext, OutputStaging &) const;
         Runtime::Array<real> _values;
         Runtime::Array<NumericalStatus> _status;
 

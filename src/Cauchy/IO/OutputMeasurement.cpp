@@ -22,8 +22,11 @@ namespace DNDS::Cauchy
     {
         if (_phase)
         {
-            const double seconds = std::chrono::duration<double>(Clock::now() - _start).count();
-            std::fprintf(stderr, "CAUCHY_OUTPUT_PROFILE pid=%ld phase=%s seconds=%.9f bytes=%zu\n", long(getpid()), _phase, seconds, _bytes);
+            const auto end = Clock::now();
+            const double seconds = std::chrono::duration<double>(end - _start).count();
+            const auto nanos = [](auto t)
+            { return static_cast<long long>(std::chrono::duration_cast<std::chrono::nanoseconds>(t.time_since_epoch()).count()); };
+            std::fprintf(stderr, "CAUCHY_OUTPUT_PROFILE pid=%ld phase=%s seconds=%.9f bytes=%zu start_ns=%lld end_ns=%lld\n", long(getpid()), _phase, seconds, _bytes, nanos(_start), nanos(end));
         }
     }
 }

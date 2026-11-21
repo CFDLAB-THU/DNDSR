@@ -1,3 +1,4 @@
+#include "Cauchy/IO/OutputStaging.hpp"
 #include "Cauchy/Core/Domain.hpp"
 #include "Cauchy/Core/NumericalFailure.hpp"
 #include "DNDS/MPI/Failure.hpp"
@@ -648,15 +649,30 @@ namespace DNDS::Cauchy
     }
     PreparedVisualization Domain::PrepareVisualization(int hdfDeflateLevel)
     {
+        OutputStaging staging;
+        return CaptureVisualization(hdfDeflateLevel, staging);
+    }
+    PreparedVisualization Domain::CaptureVisualization(int hdfDeflateLevel, OutputStaging &staging)
+    {
         const auto snapshot = CaptureStateSnapshot(true);
         EvaluateObservation(snapshot);
-        return _problem.finiteVolume.PrepareVisualization(*_execution.observationInput, *_execution.observationReconstruction, *_execution.observationWorkspace, snapshot.Time(), hdfDeflateLevel, _execution.ChemicalWorkers());
+        return PackObservationVisualization(snapshot.Time(), hdfDeflateLevel, staging);
+    }
+    PreparedVisualization Domain::PackObservationVisualization(real time, int hdfDeflateLevel, OutputStaging &staging)
+    {
+        const auto &fv = _problem.finiteVolume;
+        const auto &state = *_execution.observationInput;
+        const auto &reconstruction = *_execution.observationReconstruction;
+        const auto &workspace = *_execution.observationWorkspace;
+        return fv.PackVisualization(state, reconstruction, workspace, time, hdfDeflateLevel, _execution.ChemicalWorkers(),
+                                    _execution.Engine(), _execution.ComputeStream(), staging);
     }
     void Domain::WriteInternalVisualization(const std::string &prefix, int hdfDeflateLevel)
     {
-        CaptureInternalVisualization(hdfDeflateLevel).Write(prefix, _problem.finiteVolume.Metrics().Communication());
+        OutputStaging staging;
+        CaptureInternalVisualization(hdfDeflateLevel, staging).Write(prefix, _problem.finiteVolume.Metrics().Communication());
     }
-    PreparedVisualization Domain::CaptureInternalVisualization(int hdfDeflateLevel)
+    PreparedVisualization Domain::CaptureInternalVisualization(int hdfDeflateLevel, OutputStaging &staging)
     {
         const MPIInfo mpi(_problem.finiteVolume.Metrics().Communicator());
         MPI::LocalStage(mpi, [&]
@@ -688,8 +704,7 @@ namespace DNDS::Cauchy
         _problem.finiteVolume.Execute(*_execution.observationInput, *_execution.observationReconstruction,
                                       *_execution.observationWorkspace, _execution.Context(),
                                       FiniteVolumeEvaluation::Spatial(*_execution.observationState, _state.progressTime));
-        return _problem.finiteVolume.PrepareVisualization(*_execution.observationInput, *_execution.observationReconstruction, *_execution.observationWorkspace, _state.progressTime,
-                                                          hdfDeflateLevel, _execution.ChemicalWorkers());
+        return PackObservationVisualization(_state.progressTime, hdfDeflateLevel, staging);
     }
     DomainStateSnapshot Domain::CaptureStateSnapshot(
         bool includeReconstruction) const

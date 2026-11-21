@@ -11,9 +11,11 @@ namespace DNDS::Cauchy
      * @details Construction collectively validates MPI_THREAD_MULTIPLE and
      * duplicates each participating domain/control communicator once for an
      * independent I/O ordering namespace. Subsequent requests share them.
-     * The controller freezes CPU or GPU checkpoint fields; the worker stages GPU values
-     * to pinned host storage on a dedicated stream. It owns detached values and
-     * pinned geometry. Existing archive/file schemas are preserved. HDF5 is
+     * The controller stages each batch on its compute stream into pinned host
+     * slots and completes D2H before returning. Both submission methods permit
+     * immediate source reuse. File writes run concurrently with subsequent
+     * solver updates. The next capture waits for the preceding write and
+     * manifest publication before reusing the slots. HDF5 is
      * process-serialized by SerializerH5/Geom. Drain before synchronous
      * external HDF5/CGNS use, mesh mutation or shutdown. Internal files use only their domain I/O communicator.
      * The service may not outlive MPI. Worker exceptions abort immediately.

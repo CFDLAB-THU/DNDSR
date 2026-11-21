@@ -129,6 +129,29 @@ namespace DNDS::Cauchy
                                                              const Workspace &workspace, real time, int hdfDeflateLevel,
                                                              const std::optional<Physics::Chemistry::ChemicalWorkerPool> &workers) const
     {
+        R::EagerEngine engine;
+        R::ExecutionStream stream;
+        MPI::LocalStage(MPIInfo(Metrics().Communicator()), [&]
+                        {
+                            if (Device() == R::Device::Host())
+                                stream = engine.CreateCPUStream();
+#ifdef DNDS_USE_CUDA
+                            else
+                                stream = engine.CreateStream(std::make_shared<R::CUDALauncher>(Device().ordinal));
+#else
+                            else
+                                DNDS_check_throw_info(false, "CUDA visualization is not compiled");
+#endif
+                        });
+        OutputStaging staging;
+        return PackVisualization(state, reconstruction, workspace, time, hdfDeflateLevel, workers, engine, stream, staging);
+    }
+
+    PreparedVisualization FiniteVolume::PackVisualization(const EquationDofs &state, const ReconstructionState &reconstruction,
+                                                          const Workspace &workspace, real time, int hdfDeflateLevel,
+                                                          const std::optional<Physics::Chemistry::ChemicalWorkerPool> &workers,
+                                                          R::EagerEngine &engine, const R::ExecutionStream &stream, OutputStaging &staging) const
+    {
         const MPIInfo mpi(Metrics().Communicator());
         const auto &equation = _data->equation;
         auto boundary = _data->PrepareBoundaryOutput();
@@ -149,8 +172,7 @@ namespace DNDS::Cauchy
             }
         }
         const bool capture = MPI::AllreduceValue<MPI::Reduction::Min>(int(compatible), mpi.comm) != 0;
-        R::EagerEngine engine;
-        R::ExecutionStream stream;
+        R::Array<real> hostFields;
         MPI::LocalStage(mpi, [&]
                         {
             ValidateWorkspace(state, workspace);
@@ -172,15 +194,7 @@ namespace DNDS::Cauchy
             auto sorted = names;
             std::sort(sorted.begin(), sorted.end());
             DNDS_check_throw_info(std::adjacent_find(sorted.begin(), sorted.end()) == sorted.end(), "ambiguous equation output field names");
-            if (Device() == R::Device::Host())
-                stream = engine.CreateCPUStream();
-#ifdef DNDS_USE_CUDA
-            else
-                stream = engine.CreateStream(std::make_shared<R::CUDALauncher>(Device().ordinal));
-#else
-            else
-                DNDS_check_throw_info(false, "CUDA visualization is not compiled");
-#endif
+
             // To() completes its placement copy before returning. Stage the
             // immutable row map before launching either numerical producer.
             auto rows = capture ? std::make_optional(boundary->rows.To(Device(), stream.Context())) : std::nullopt;
@@ -205,10 +219,13 @@ namespace DNDS::Cauchy
                 R::WriteAs<R::TableRows>(packed));
                 boundaryFluxes.emplace(std::move(packed));
             }
-            // Both output kernels use this lane. Retire their reads together
-            // before the caller can reuse the live observation workspace.
-            engine.Synchronize(); });
-        return PreparedVisualization(_data->mesh, std::move(outputFields), std::move(names), std::move(boundary),
+            // Retire the producer prefix before immediate D2H reads. Both
+            // volume and face staging use this same compute stream.
+            stream.Record().WaitHost();
+            hostFields = outputFields.CopyToHost(stream.Context(), staging);
+            if (boundaryFluxes)
+                *boundaryFluxes = staging.HostValues(*boundaryFluxes, stream.Context(), "boundaryFlux"); });
+        return PreparedVisualization(_data->mesh, std::move(hostFields), std::move(names), std::move(boundary),
                                      std::move(boundaryFluxes), std::move(fluxNames), time, hdfDeflateLevel);
     }
 }
