@@ -29,7 +29,10 @@ Submit all bindings sharing that MPI communicator on one lane per rank in
 matching order. Give unrelated host collectives their own communicator or
 finish the queued work before issuing them. The submitting MPI controller
 progresses the request when it observes an event or progresses the engine.
-For explicit host staging on CUDA, order D2H before the reduction. Call
+For CUDA staging, allocate `local` and `total` once with
+`device_result.empty_pinned_host_like()` and bind them before entering the loop.
+They are independent page-locked host Arrays with the device Array's layout and
+element schema. Order D2H before the reduction. Call
 `complete.wait()` before importing it on the GPU lane and submitting H2D.
 The return-copy event orders later consumers. NCCL provides a native CUDA
 dependency when the reduction operands reside on the GPU.

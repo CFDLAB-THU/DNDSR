@@ -500,6 +500,13 @@ namespace DNDS::Runtime
                  { return PythonAccess(a, false, ResolvePythonStream(stream, a.Storage().GetDevice())); }, py::arg("stream") = 0, "Immediate read lease; pending writes conflict. Retain it through native uses and complete the supplied CUDA stream before release.")
             .def("write", [](PythonArray &a, py::object stream)
                  { return PythonAccess(a, true, ResolvePythonStream(stream, a.Storage().GetDevice())); }, py::arg("stream") = 0, "Exclusive immediate write lease. Complete native work on the supplied stream; exceptions invalidate values. Writes do not zero untouched elements.")
+            .def("empty_pinned_host_like", [](const PythonArray &prototype)
+                 {
+                     auto layout = prototype.Layout();
+                     const auto elementBytes = size_t(prototype.Dtype().itemsize());
+                     auto values = Buffer::AllocatePinnedHost(CheckedSize::Multiply(layout.Elements(), elementBytes));
+                     return prototype.WithStorage(ArrayStorage::FromBuffer(std::move(layout), std::move(values), elementBytes)); }, "Allocate independent page-locked host storage with the same layout and element schema. "
+                      "Use for reusable CUDA transfers. No payload is copied. Requires a native CUDA build.")
             .def("alias", [](const PythonArray &a)
                  { return a; })
             .def("clone", [](const PythonArray &a, py::object stream)

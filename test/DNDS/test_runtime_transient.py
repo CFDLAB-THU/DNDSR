@@ -268,7 +268,8 @@ def test_streamed_host_allreduce_orders_consumer_after_binding_release(staged_cu
     compute = engine.cuda_stream(0) if staged_cuda else engine.cpu_stream()
     device = R.Device.cuda(0) if staged_cuda else R.Device.host()
     src, observed = [R.Array(shape, np.dtype("int32"), device) for _ in range(2)]
-    send, result = [R.Array(shape, src.dtype, R.Device.host()) for _ in range(2)]
+    send, result = [src.empty_pinned_host_like() if staged_cuda else R.Array(shape, src.dtype)
+                    for _ in range(2)]
     rank, size = MPI.COMM_WORLD.rank, MPI.COMM_WORLD.size
     src.assign(np.array([[rank, -rank]], dtype=np.int32))
     context = channel()
