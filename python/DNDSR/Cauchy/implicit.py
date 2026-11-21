@@ -10,6 +10,11 @@ def solve_single_stage(solver, source, inverse_dt, rhs_scale, **stage_options):
     CFL schedule and convergence reference through the last observation.
     """
     session = solver.prepare(source, inverse_dt, rhs_scale, **stage_options)
+    _single_stage_iterations(session)
+    return session.report
+
+
+def _single_stage_iterations(session):
     while not session.complete:
         session.begin_iteration()
         session.observe()
@@ -17,7 +22,38 @@ def solve_single_stage(solver, source, inverse_dt, rhs_scale, **stage_options):
         if not terminal:
             session.advance_stage(0)
         session.finish_iteration(terminal)
-    return session.report
+
+
+def _solve_group(session, policy):
+    if policy == "singleStageImplicit":
+        _single_stage_iterations(session)
+    elif policy == "ditrSequential2Stage":
+        while not session.complete:
+            session.begin_iteration()
+            session.advance_stage(0)
+            session.advance_stage(1)
+            session.observe()
+            session.finish_iteration(session.local_terminal)
+    else:
+        raise ValueError(f"No Python nonlinear controller for {policy!r}")
+
+
+def advance_domain(domain, dt):
+    """Advance one standalone domain with Python stage and iteration control.
+
+    Enter on every rank. The domain owns trial and accepted storage, the ODE
+    history, and normalized residuals. A numerical rejection discards the trial;
+    the caller selects any retry timestep. Do not reenter or mutate the domain
+    concurrently. Unexpected failures in collective work must terminate the run.
+    """
+    result = domain._begin_standalone_step(dt)
+    while result and domain._has_next_group:
+        result = domain._advance_group(_solve_group)
+    if result:
+        domain.commit_step()
+    else:
+        domain.discard_step()
+    return result
 
 
 def apply_v_cycle(hierarchy, source, inverse_dt, rhs_scale, **stage_options):

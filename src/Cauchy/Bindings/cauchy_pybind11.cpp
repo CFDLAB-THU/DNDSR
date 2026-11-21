@@ -200,6 +200,56 @@ PYBIND11_MODULE(cauchy_pybind11, m)
         .def(
             "prepare_step", &C::Domain::PrepareStep, py::arg("dt"), py::call_guard<py::gil_scoped_release>(),
             "Prepare all stages without publication. Discard a failed trial before smaller-dt retry; release debug views before preparation and commit.")
+        .def("_begin_standalone_step",
+             [](C::Domain &domain, DNDS::real dt)
+    {
+        DNDS_check_throw_info(!domain.Discretization().HasInterfaces(),
+                              "interface domains advance through their Simulation");
+        return domain.BeginStep(dt);
+    }, py::arg("dt"), py::call_guard<py::gil_scoped_release>())
+        .def_property_readonly("_has_next_group", &C::Domain::HasNextGroup)
+        .def("_advance_group",
+             [](C::Domain &domain, const py::function &solve)
+    {
+        // Python chooses the nonlinear update order. Keep the trial and all
+        // method history in the domain, including an exact-restart cursor.
+        const auto comm = domain.Communicator();
+        DNDS::MPI::SolverFailureScope failure(comm);
+        try
+        {
+            py::gil_scoped_release release;
+            domain.PrepareGroup();
+            if (auto session = domain.PrepareGroupSolve())
+            {
+                {
+                    py::gil_scoped_acquire acquire;
+                    // Move back before returning. Even a retained Python
+                    // handle cannot subsequently reach a retired trial.
+                    py::object active = py::cast(std::move(*session));
+                    auto &borrowed = active.cast<C::NonlinearSession &>();
+                    try
+                    {
+                        solve(active, borrowed.Policy().Descriptor().name);
+                    }
+                    catch (...)
+                    {
+                        DNDS::MPI::AbortCaught(comm, "Python Cauchy nonlinear policy failed");
+                    }
+                    *session = std::move(borrowed);
+                }
+                if (auto outcome = domain.FinishGroupSolve(*session); !outcome)
+                    return outcome;
+            }
+            else if (auto outcome = domain.ApplyExplicitGroup(); !outcome)
+                return outcome;
+            return domain.CompleteGroup();
+        }
+        catch (...)
+        {
+            DNDS::MPI::AbortCaught(comm, "Python Cauchy stage policy failed");
+        }
+    }, py::arg("solve"),
+             "Collective. Run one prepared time group. A Python exception in the collective policy aborts the domain.")
         .def("commit_step", &C::Domain::CommitStep, py::call_guard<py::gil_scoped_release>())
         .def("discard_step", &C::Domain::DiscardStep)
         .def("stable_step", &C::Domain::StableStep, py::arg("cfl"), py::call_guard<py::gil_scoped_release>())

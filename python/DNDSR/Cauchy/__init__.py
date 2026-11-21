@@ -25,7 +25,7 @@ __all__ += ["EquationDofs", "FiniteVolumeOperators", "AuxiliaryRequest", "Auxili
             "DofSGSIteration", "NonlinearSolveControl", "NonlinearStageSolver", "NonlinearSession",
             "PolynomialMultigrid", "FASOperation", "EquationOperations"]
 
-from .implicit import solve_single_stage, apply_v_cycle
+from .implicit import advance_domain, solve_single_stage, apply_v_cycle
 from .ditr import DITREquations
 
-__all__ += ["solve_single_stage", "apply_v_cycle", "DITREquations"]
+__all__ += ["advance_domain", "solve_single_stage", "apply_v_cycle", "DITREquations"]

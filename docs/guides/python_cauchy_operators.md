@@ -267,6 +267,17 @@ introduced. A caller building its own iteration loop owns CFL progression,
 convergence and trial rollback. Native Domain/Simulation remain the simple
 way to obtain method-owned stage/step history and accepted-step transactions.
 
+## Standalone physical steps
+
+`Cauchy.advance_domain(domain, dt)` runs the standalone time-group and
+nonlinear iteration loops in Python. In DITR it corrects and refreshes the
+midpoint, then the endpoint, before observing I+H. A serialized DIRK group
+observes before a correction. The domain retains its method history, time
+equations, reconstruction warm starts, CFL schedule and restart cursor. On
+numerical rejection the controller discards the trial and returns the reason.
+After acceptance it publishes the step. Call on all ranks of the domain.
+Connected domains require simulation-wide coordination of interface refreshes.
+
 ## Queued DITR equations
 
 `Cauchy.DITREquations(stream, fraction, theta, variant)` uses the native

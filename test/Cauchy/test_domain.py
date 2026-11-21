@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 from mpi4py import MPI
 from DNDSR import DNDS, Geom
-from DNDSR.Cauchy import Domain, Simulation, StepResult, PhysicalStepLimit, DerivedQuantity
+from DNDSR.Cauchy import Domain, Simulation, StepResult, PhysicalStepLimit, DerivedQuantity, advance_domain
 
 
 @pytest.mark.mpi
@@ -412,6 +412,36 @@ def test_configured_implicit_method_and_retained_shared_state(tmp_path, method, 
     # The same Python Array handle continues to reference the bound allocation.
     assert domain.fields["flow"].identity == flow.identity
     np.testing.assert_allclose(flow.numpy(), before, atol=3e-14)
+
+
+@pytest.mark.mpi
+def test_python_coupled_iteration_matches_native_step_and_restart(tmp_path):
+    perturb = {"exprtkInitializers": [{"stateType": "primRhoP", "exprs": [
+        "inRegion := 1; UExprtk[0] := UExprtk[0] * (1 + 0.01 * x[0]); 0;"
+    ]}]}
+    native, _ = build_domain(method="ditr", initial_field=perturb)
+    scripted, _ = build_domain(method="ditr", initial_field=perturb)
+    initial = native.fields["flow"].numpy().copy()
+    path = MPI.COMM_WORLD.bcast(str(tmp_path / "ditr.h5") if MPI.COMM_WORLD.rank == 0 else None)
+    for step in (1, 2):
+        if step == 2:
+            scripted.write_checkpoint(path, '{}', include_reconstruction=True)
+            scripted, _ = build_domain(method="ditr", initial_field=perturb)
+            scripted.read_checkpoint(path, '{}')
+        assert native.advance(.001).accepted
+        assert advance_domain(scripted, .001).accepted
+        assert native.step == scripted.step == step
+        assert native.time == scripted.time
+        a, = native.implicit_stages
+        b, = scripted.implicit_stages
+        assert (a.iterations, a.linear_iterations, a.converged) == (
+            b.iterations, b.linear_iterations, b.converged)
+        assert a.linear_iterations > 0
+        np.testing.assert_allclose(b.residual, a.residual, rtol=1e-12, atol=1e-14)
+        values = scripted.fields["flow"].numpy()
+        np.testing.assert_allclose(values, native.fields["flow"].numpy(), rtol=1e-12, atol=1e-14)
+        diff = np.max(np.abs(values - initial), initial=0.)
+        assert MPI.COMM_WORLD.allreduce(diff, op=MPI.MAX) > 1e-9
 
 
 @pytest.mark.mpi
