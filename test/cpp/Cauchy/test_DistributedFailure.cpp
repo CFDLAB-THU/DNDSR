@@ -62,10 +62,12 @@ int main(int argc, char **argv)
         {
             namespace R = DNDS::Runtime;
             R::Array<double> source(R::RowLayout::Dense(1, 1)), destination(source.Layout());
-            R::RowTransferPlan route(mpi.comm, 1, 1, {{(mpi.rank + 1) % mpi.size, 0, 0}});
+            // Every peer needs a send from rank zero. In a ring with four or
+            // more ranks a non-neighbour can finish and begin MPI teardown.
+            R::RowTransferPlan route(mpi.comm, 1, 1, {{mpi.rank == 0 ? 1 : 0, 0, 0}});
             R::TransferOptions options;
-            options.preflight = mode == "solver-checked-preflight" ? R::TransferPreflight::Collective
-                                                                   : R::TransferPreflight::AbortOnFailure;
+            const bool unchecked = mode == "solver-unchecked-preflight";
+            options.preflight = unchecked ? R::TransferPreflight::AbortOnFailure : R::TransferPreflight::Collective;
             auto binding = R::PayloadPlan(route, source.Layout(), destination.Layout(), R::ElementSchema::Arithmetic<double>())
                                .Bind(source, destination, R::TransferTransport::Direct, options);
             const DNDS::MPI::SolverFailureScope solverFailures(mpi.comm);
@@ -74,7 +76,15 @@ int main(int argc, char **argv)
                 held.emplace(destination.Read());
             try
             {
-                binding.Begin().Wait();
+                // In local-preflight mode let the healthy ranks post their
+                // receives before rank zero encounters its conflicting lease.
+                // Collective preflight requires all ranks to enter Begin together.
+                if (unchecked && mpi.rank == 0)
+                    MPI_Barrier(mpi.comm);
+                auto operation = binding.Begin();
+                if (unchecked && mpi.rank != 0)
+                    MPI_Barrier(mpi.comm);
+                operation.Wait();
             }
             catch (...)
             {
