@@ -452,6 +452,35 @@ TEST_CASE("ElementTraits: bisection data is valid for O2 elements")
     }
 }
 
+TEST_CASE("CGNS PENTA_18 connectivity preserves the reference prism mapping")
+{
+    // CGNS SIDS PENTA_18 node coordinates, in file order. The connecting
+    // edges are nodes 10–12, followed by the top edges at nodes 13–15.
+    const std::array<tPoint, 18> cgnsNodes{
+        tPoint{0, 0, -1}, tPoint{1, 0, -1}, tPoint{0, 1, -1},
+        tPoint{0, 0, 1}, tPoint{1, 0, 1}, tPoint{0, 1, 1},
+        tPoint{.5, 0, -1}, tPoint{.5, .5, -1}, tPoint{0, .5, -1},
+        tPoint{0, 0, 0}, tPoint{1, 0, 0}, tPoint{0, 1, 0},
+        tPoint{.5, 0, 1}, tPoint{.5, .5, 1}, tPoint{0, .5, 1},
+        tPoint{.5, 0, 0}, tPoint{.5, .5, 0}, tPoint{0, .5, 0}};
+    const Element prism{Prism18};
+    Eigen::Matrix<t_real, 3, 18> coordinates;
+    for (int iNode = 0; iNode < 18; ++iNode)
+        coordinates.col(iNode) = cgnsNodes[iNode];
+
+    for (const tPoint point : {tPoint{.21, .36, -.8}, tPoint{.4, .33, .9}})
+    {
+        tD1Nj derivatives;
+        prism.GetD1Nj(point, derivatives);
+        const Eigen::Matrix<t_real, 3, 3> jacobian = coordinates * derivatives.transpose();
+        CHECK(jacobian.isIdentity(1e-13));
+    }
+
+    CHECK(ElementTraits<Prism18>::faceNodes[4][3] == 12);
+    CHECK(ElementTraits<Prism6>::elevSpans[3][0] == 0);
+    CHECK(ElementTraits<Prism6>::elevSpans[3][1] == 3);
+}
+
 TEST_CASE("ElementTraits: VTK conversion works correctly")
 {
     // Test VTK conversion for each element type
