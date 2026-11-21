@@ -401,6 +401,10 @@ TEST_CASE("Interface capability checks admit coordinated DITR and honor the stea
     CHECK(C::SimulationConfig::Resolve(input, 1).Time().method == "ditr");
     input["time"]["steady"] = true;
     CHECK(C::SimulationConfig::Resolve(input, 1).Time().method == "bdf1");
+    input["domains"][1]["overrides"]["equation"]["referenceScales"] =
+        {{"rho0", 1.2}, {"U0", 3.}, {"L0", 2.}, {"T0", 290.}};
+    CHECK_THROWS_WITH_AS(C::SimulationConfig::Resolve(input, 1),
+                         doctest::Contains("identical equation, material and scaling"), std::exception);
 }
 TEST_CASE("Polynomial viscous reconstruction is explicit and retains the previous primitive default")
 {

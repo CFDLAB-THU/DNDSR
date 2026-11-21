@@ -215,7 +215,7 @@ TEST_CASE("Total inlet resolves physical vector input and applies static density
     CHECK(approximate.isZero());
 }
 
-TEST_CASE("An ACM interface publishes negative relative pressure and zero velocity")
+TEST_CASE("Moving ACM interface packets preserve a uniform inertial flow under a common pressure shift")
 {
     const auto mesh = CFVTest::CartesianHexes(mpi, 2);
     C::DomainSettings settings;
@@ -225,23 +225,44 @@ TEST_CASE("An ACM interface publishes negative relative pressure and zero veloci
     settings.numerics.reconstruction = "gradient";
     settings.numerics.positivity = false;
     settings.boundaries["7"].kind = "interface";
+    settings.motion.angularVelocity = {0., 0., .25};
+    settings.numerics.flux = "Roe";
     const auto equation = C::EquationSystem::Resolve(settings.equation);
     C::FiniteVolume fv(mesh, settings, equation);
-    auto packet = fv.BuildBoundaryInputs();
-    for (auto *section : {&packet.FaceCenterValues(), &packet.QuadratureValues()})
+    auto state = C::EquationDofs::Coupled(equation.Schema(), fv.Metrics().BuildField(4));
+    auto rate = C::EquationDofs::Coupled(equation.Schema(), fv.Metrics().BuildField(4));
+    auto work = fv.BuildWorkspace(state);
+    auto reconstruction = fv.BuildReconstructionState(state);
+    R::EagerEngine engine;
+    const auto stream = engine.CreateCPUStream();
+    constexpr double time = .8;
+    const auto velocity = fv.Motion().At(time).LocalVector({2., -1., .5});
+    for (const double pressure : {-3., 2.})
     {
-        auto write = section->WriteOwned();
-        const auto rows = write.Block("flow");
+        CAPTURE(pressure);
+        const std::vector<double> local{velocity[0], velocity[1], velocity[2], pressure};
+        fv.InitializeConservative(state, local);
+        auto packet = fv.BuildBoundaryInputs();
+        for (auto *section : {&packet.FaceCenterValues(), &packet.QuadratureValues()})
+        {
+            auto write = section->WriteOwned();
+            const auto rows = write.Block("flow");
+            for (I i = 0; i < rows.RowCount(); ++i)
+                for (int j = 0; j < 4; ++j)
+                    rows(i, j) = local[j];
+        }
+        fv.PublishBoundaryInputs(packet, time);
+        fv.SetBoundaryInputs(*work, packet);
+        fv.Evaluate(state, rate, *reconstruction, *work, engine, stream, time);
+        const auto read = rate.ReadOwned();
+        const auto rows = read.Block("flow");
+        // In local axes du/dt = -Omega x u. A constant pressure offset has
+        // zero gradient and cannot enter the algebraic continuity equation.
+        const std::array<double, 4> expected{.25 * velocity[1], -.25 * velocity[0], 0., 0.};
         for (I i = 0; i < rows.RowCount(); ++i)
             for (int j = 0; j < 4; ++j)
-                rows(i, j) = j == 3 ? -3. : 0.;
+                CHECK(rows(i, j) == doctest::Approx(fv.Metrics().GetCellVol(i) * expected[j]).scale(1).epsilon(1e-12));
     }
-    fv.PublishBoundaryInputs(packet, 0.);
-    fv.ValidateBoundaryInputs(packet, 0.);
-    const auto read = packet.FaceCenterValues().ReadOwned();
-    const auto published = read.Block("flow");
-    REQUIRE(published.RowCount() > 0);
-    CHECK(published(0, 3) == -3.);
 }
 
 TEST_CASE("P1 least squares uses affine receiver face-center values from an interface packet")

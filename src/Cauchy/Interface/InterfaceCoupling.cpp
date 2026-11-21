@@ -322,10 +322,6 @@ namespace DNDS::Cauchy
             };
             connection.donor = domainIndex(settings.donor);
             connection.receiver = domainIndex(settings.receiver);
-            DNDS_check_throw_info(
-                config.Root().at("domains").at(size_t(connection.donor)).at("settings").at("equation") ==
-                    config.Root().at("domains").at(size_t(connection.receiver)).at("settings").at("equation"),
-                "interface donor and receiver need identical equation, material and scaling settings");
             // Connections share the coupling communicator owner. Persistent
             // result bindings reserve distinct agreed channels below; transient
             // geometric matching retains its own short-lived search namespace.
@@ -823,16 +819,17 @@ namespace DNDS::Cauchy
             // publication must never acquire a late immediate write lease.
             if (receiver)
             {
-                const auto donorFrame = data.motion[connection.donor].At(state->time);
-                const auto receiverFrame = data.motion[connection.receiver].At(state->time);
                 InterfacePacketRotation rotation;
-                rotation.donorActive = donorFrame.moving;
-                rotation.receiverActive = receiverFrame.moving;
+                // Translation moves query points but leaves vector components unchanged.
+                // Identical stage axes also cancel exactly, including two rotating frames.
+                const bool differentAxes = donorPose.rotation != receiverPose.rotation;
+                rotation.donorActive = differentAxes && !donorPose.rotation.isIdentity(0);
+                rotation.receiverActive = differentAxes && !receiverPose.rotation.isIdentity(0);
                 for (int d = 0; d < 3; ++d)
                     for (int e = 0; e < 3; ++e)
                     {
-                        rotation.donor[size_t(3 * d + e)] = donorFrame.pose.rotation(d, e);
-                        rotation.receiver[size_t(3 * d + e)] = receiverFrame.pose.rotation(e, d);
+                        rotation.donor[size_t(3 * d + e)] = donorPose.rotation(d, e);
+                        rotation.receiver[size_t(3 * d + e)] = receiverPose.rotation(e, d);
                     }
                 auto &packet = *data.staging[connection.receiver];
                 // BuildBoundaryInputs owns canonical coupled receiver rows;

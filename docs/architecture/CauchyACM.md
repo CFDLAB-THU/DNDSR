@@ -93,8 +93,13 @@ uniform inertial velocity has local momentum rate $-\boldsymbol\Omega\times\math
 and zero continuity residual. The rotating-sector test compares the assembled
 matrix action with finite differences of the physical residual. CPU and CUDA
 domain tests also compare the two CUDA face mappings and mechanical SST updates.
-ACM multidomain interfaces still require connected pressure anchoring and coupled
-moving-mesh qualification before use.
+An interface packet expresses absolute velocity in receiver axes:
+$\mathbf u_r=R_r^T R_d\mathbf u_d$. Translation affects matching and grid
+transport. Identical donor and receiver axes preserve the velocity components
+exactly. Relative pressure, $k$ and $\omega$ are scalar packet entries.
+Adding the same constant pressure to the receiver and its prescribed packet
+leaves the spatial residual unchanged. Connected pressure anchoring and a
+moving two-domain ACM solve still need qualification before production use.
 
 SA appends the normalized working variable (`nuTilde / viscosityReference` in
 code units). A dimensional `primUP_phy` SA tail supplies kinematic viscosity

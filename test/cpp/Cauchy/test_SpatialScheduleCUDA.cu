@@ -18,6 +18,7 @@
 #include "../CFV/ReconstructionFixture.hpp"
 #include "CompactManagedStencilFixture.hpp"
 #include "CartesianFixture.hpp"
+#include <numeric>
 
 namespace C = DNDS::Cauchy;
 namespace R = DNDS::Runtime;
@@ -76,28 +77,47 @@ TEST_CASE("Flow AmgX matches periodic images and sums faces in the native CSR sl
 
 TEST_CASE("Prepared interface packet maps components and rotates vectors on every backend")
 {
+    C::DomainSettings settings;
+    bool mechanical = false;
+    SUBCASE("constant-density SST") { mechanical = true; }
+    SUBCASE("compressible SST") {}
+    settings.equation.rans.model = "KOmegaSST";
+    settings.equation.viscosity = 1e-5;
+    settings.equation.transport = mechanical ? "Newtonian" : "NewtonianFourier";
+    if (mechanical)
+    {
+        settings.equation.system = "incompressibleACM";
+        settings.equation.eos = "none";
+    }
+    const auto equation = C::EquationSystem::Resolve(settings.equation);
+    const I width = mechanical ? 6 : 7;
+    const I first = mechanical ? 0 : 1;
+    const auto &starts = equation.Schema().blocks.front().vectorStarts;
+    REQUIRE(starts == std::vector<I>{first});
     R::Array<C::InterfacePacketRow> rows(R::RowLayout::Dense(2, 1));
-    R::Array<real> source(R::RowLayout::Dense(2, 7));
-    R::Array<real> initial(R::RowLayout::Dense(3, 7));
+    R::Array<real> source(R::RowLayout::Dense(2, width));
+    R::Array<real> initial(R::RowLayout::Dense(3, width));
     {
         auto destinations = rows.Write();
         destinations.View()(0, 0) = {2, false};
         destinations.View()(1, 0) = {0, true};
         auto input = source.Write(), output = initial.Write();
         for (I iRow = 0; iRow < 2; ++iRow)
-            for (I j = 0; j < 7; ++j)
-                input.View()(iRow, j) = 10 * iRow + j + 1;
+            for (I j = 0; j < width; ++j)
+                input.View()(iRow, j) = (mechanical && j == 3 ? -1 : 1) * (10 * iRow + j + 1);
         for (I iRow = 0; iRow < 3; ++iRow)
-            for (I j = 0; j < 7; ++j)
+            for (I j = 0; j < width; ++j)
                 output.View()(iRow, j) = 777;
     }
-    const R::MetadataBuffer<I> components(std::vector<I>{0, 2, 1, 3, 4, 5, 6});
-    const R::MetadataBuffer<I> vectors(std::vector<I>{1});
+    std::vector<I> ordinals(size_t(width), 0);
+    std::iota(ordinals.begin(), ordinals.end(), 0);
+    std::swap(ordinals[first], ordinals[first + 1]);
+    const R::MetadataBuffer<I> components(ordinals), vectors(starts);
     for (int backend = 0; backend < 3; ++backend)
     {
         const auto device = backend == 2 ? R::Device::CUDA(0) : R::Device::Host();
         const R::ExecutionContext placement{device, nullptr};
-        C::InterfacePacketOperator mapping(rows, {components}, vectors, 7, 3, 3, placement);
+        C::InterfacePacketOperator mapping(rows, {components}, vectors, width, 3, 3, placement);
         auto values = source.To(device, placement);
         // Two distinct outputs, including on the CPU anchor.
         R::Array<real> quadrature(initial.Layout(), device), faces(initial.Layout(), device);
@@ -110,24 +130,30 @@ TEST_CASE("Prepared interface packet maps components and rotates vectors on ever
             C::InterfacePacketRotation rotation;
             rotation.donorActive = rotate;
             rotation.donor = {0, -1, 0, 1, 0, 0, 0, 0, 1};
+            rotation.receiverActive = rotate;
+            rotation.receiver = {1, 0, 0, 0, 0, 1, 0, -1, 0};
             mapping.Submit(engine, lane, {values}, quadrature, faces, rotation);
             engine.Synchronize();
             const auto hostQ = quadrature.To(R::Device::Host(), placement), hostF = faces.To(R::Device::Host(), placement);
             const auto q = hostQ.Read(), f = hostF.Read();
-            for (I j = 0; j < 7; ++j)
+            for (I j = 0; j < width; ++j)
             {
                 CHECK(q.View()(0, j) == 777);
                 CHECK(f.View()(2, j) == 777);
             }
-            CHECK(q.View()(2, 0) == 1);
-            CHECK(f.View()(0, 0) == 11);
-            CHECK(q.View()(2, 1) == (rotate ? -2 : 3));
-            CHECK(q.View()(2, 2) == (rotate ? 3 : 2));
-            CHECK(f.View()(0, 1) == (rotate ? -12 : 13));
-            CHECK(f.View()(0, 2) == (rotate ? 13 : 12));
-            CHECK(q.View()(2, 3) == 4);
-            CHECK(q.View()(2, 6) == 7);
-            CHECK(f.View()(0, 6) == 17);
+            // Swap donor x/y into receiver component order. The two frames
+            // then map (x,y,z) to (-y,z,-x). Pressure and turbulence are scalars.
+            for (I iRow = 0; iRow < 2; ++iRow)
+            {
+                const auto output = iRow ? f.View()[0] : q.View()[2];
+                const real base = 10 * iRow + first + 1;
+                CHECK(output[first] == (rotate ? -base : base + 1));
+                CHECK(output[first + 1] == (rotate ? base + 2 : base));
+                CHECK(output[first + 2] == (rotate ? -base - 1 : base + 2));
+                for (I j = 0; j < width; ++j)
+                    if (j < first || j >= first + 3)
+                        CHECK(output[j] == (mechanical && j == 3 ? -1 : 1) * (10 * iRow + j + 1));
+            }
         }
     }
 }

@@ -176,7 +176,7 @@ namespace DNDS::Cauchy
         }
         DNDS_check_throw_info(data->root["schemaVersion"] == 1, "unsupported resolved schema version");
         DNDS_check_throw_info(data->root["domains"].is_array() && !data->root["domains"].empty(), "resolved Cauchy configuration has no domains");
-        std::set<std::string> names;
+        std::map<std::string, index> domainIndices;
         for (index iDomain = 0; iDomain < index(data->root["domains"].size()); ++iDomain)
         {
             auto &resolved = data->root["domains"][iDomain];
@@ -225,7 +225,7 @@ namespace DNDS::Cauchy
                 resolved["settings"]["numerics"]["cfv"]["coreFirst"] = domain.settings.numerics.cfv.coreFirst;
                 data->provenance["/domains/" + std::to_string(iDomain) + "/settings/numerics/cfv/coreFirst"] = "Cauchy SOR logical ordering";
             }
-            DNDS_check_throw_info(names.insert(domain.placement.name).second, "duplicate Cauchy domain name");
+            DNDS_check_throw_info(domainIndices.emplace(domain.placement.name, iDomain).second, "duplicate Cauchy domain name");
             ValidateDomain(domain, size);
             ResolvedExecutionPlan::Resolve(domain);
             data->domains.push_back(std::move(domain));
@@ -261,7 +261,7 @@ namespace DNDS::Cauchy
         {
             Config::ValidatePartialJsonSchema(entry, InterfaceSettings::schema(), "/interfaces");
             auto connection = entry.get<InterfaceSettings>();
-            DNDS_check_throw_info(names.count(connection.donor) && names.count(connection.receiver) && connection.donor != connection.receiver,
+            DNDS_check_throw_info(domainIndices.count(connection.donor) && domainIndices.count(connection.receiver) && connection.donor != connection.receiver,
                                   "interface donor/receiver names must identify distinct configured domains");
             DNDS_check_throw_info(connection.routing == "coarseBoxes" || connection.routing == "allGatherBoundary", "unknown interface routing mode");
             DNDS_check_throw_info(connection.refreshCadence == "stageFrozen" ||
@@ -275,15 +275,19 @@ namespace DNDS::Cauchy
                     "all interface connections must use one coordinated refresh cadence");
             DNDS_check_throw_info(connection.coarseBoxesPerRank > 0 && std::isfinite(connection.maxGap) && connection.maxGap >= 0, "invalid interface search bounds");
             DNDS_check_throw_info(receivers.emplace(connection.receiver, connection.receiverZone).second, "interface receiver zone has multiple incoming connections");
-            const auto receiver = std::find_if(data->domains.begin(), data->domains.end(), [&](const auto &domain)
-                                               { return domain.placement.name == connection.receiver; });
-            const auto donor = std::find_if(data->domains.begin(), data->domains.end(), [&](const auto &domain)
-                                            { return domain.placement.name == connection.donor; });
-            DNDS_check_throw_info(donor->settings.equation.eos == receiver->settings.equation.eos &&
-                                      donor->settings.equation.gamma == receiver->settings.equation.gamma && donor->settings.equation.gasConstant == receiver->settings.equation.gasConstant,
-                                  "initial flow5 interfaces require the same gas/energy convention on both domains");
-            const auto condition = receiver->settings.boundaries.find(std::to_string(connection.receiverZone));
-            DNDS_check_throw_info(condition != receiver->settings.boundaries.end() && condition->second.kind == "interface", "receiver zone must have an interface boundary condition");
+            const index donor = domainIndices.at(connection.donor);
+            const index receiver = domainIndices.at(connection.receiver);
+            // Packets carry code-unit state. Check the full resolved material
+            // and scaling contract before allocating either domain's mesh.
+            const auto &domains = data->root.at("domains");
+            const auto &donorEquation = domains.at(donor).at("settings").at("equation");
+            const auto &receiverEquation = domains.at(receiver).at("settings").at("equation");
+            DNDS_check_throw_info(donorEquation == receiverEquation,
+                                  "interface " + connection.donor + " -> " + connection.receiver +
+                                      " requires identical equation, material and scaling settings");
+            const auto &boundaries = data->domains[receiver].settings.boundaries;
+            const auto condition = boundaries.find(std::to_string(connection.receiverZone));
+            DNDS_check_throw_info(condition != boundaries.end() && condition->second.kind == "interface", "receiver zone must have an interface boundary condition");
             data->interfaces.push_back(std::move(connection));
         }
         for (const auto &domain : data->domains)
