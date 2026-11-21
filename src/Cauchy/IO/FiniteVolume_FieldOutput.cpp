@@ -181,13 +181,13 @@ namespace DNDS::Cauchy
             else
                 DNDS_check_throw_info(false, "CUDA visualization is not compiled");
 #endif
+            // To() completes its placement copy before returning. Stage the
+            // immutable row map before launching either numerical producer.
+            auto rows = capture ? std::make_optional(boundary->rows.To(Device(), stream.Context())) : std::nullopt;
             outputFields = OutputFields::Submit(engine, stream, state, equation, workers);
-            engine.Synchronize(); });
-        if (capture)
-            MPI::LocalStage(mpi, [&]
-                            {
-                auto rows = boundary->rows.To(Device(), stream.Context());
-                R::Array<real> packed(R::RowLayout::Dense(rows.RowCount(), state.ComponentNumber() + 3), Device());
+            if (rows)
+            {
+                R::Array<real> packed(R::RowLayout::Dense(rows->RowCount(), state.ComponentNumber() + 3), Device());
                 packed.SetName("Cauchy/output/frozenBoundaryFlux", DNDS_ALLOCATION_SITE());
                 R::SubmitArrays(engine, stream, [](R::ExecutionContext context, auto rows, auto flux, auto momentum, auto quadrature, auto output)
                 {
@@ -200,11 +200,14 @@ namespace DNDS::Cauchy
 #endif
                     for (index iRow = 0; iRow < rows.RowCount(); ++iRow)
                         BoundaryOutputDetail::GatherFace(rows(iRow, 0), flux, momentum, quadrature, output, iRow);
-                }, R::ReadAs<R::FixedRows<1>>(rows), R::ReadAs<R::TableRows>(workspace.faceFlux),
+                }, R::ReadAs<R::FixedRows<1>>(*rows), R::ReadAs<R::TableRows>(workspace.faceFlux),
                 R::ReadAs<R::FixedRows<3>>(workspace.boundaryMomentumFlux), R::ReadAs<R::TableRows>(Metrics().FaceQuadrature()),
                 R::WriteAs<R::TableRows>(packed));
-                engine.Synchronize();
-                boundaryFluxes.emplace(std::move(packed)); });
+                boundaryFluxes.emplace(std::move(packed));
+            }
+            // Both output kernels use this lane. Retire their reads together
+            // before the caller can reuse the live observation workspace.
+            engine.Synchronize(); });
         return PreparedVisualization(_data->mesh, std::move(outputFields), std::move(names), std::move(boundary),
                                      std::move(boundaryFluxes), std::move(fluxNames), time, hdfDeflateLevel);
     }
