@@ -179,6 +179,20 @@ TEST_CASE("Equation FV uses the established P3/gradient/WBAP flow5 kernels acros
             fv.EvaluateFlux(state, separate, *preparedReconstruction, *prepared);
             fv.AddSource(state, separate, *preparedReconstruction, *prepared);
             Compare(result, separate, 2e-12);
+            if (mpi.size > 1)
+            {
+                // Preserve the owned state and replace only the received halo.
+                REQUIRE(state.CoupledField().Ghost().RowCount() > 0);
+                {
+                    auto updated = state.CoupledField().Ghost().Write();
+                    updated.View()(0, 0) += .01;
+                }
+                CHECK_THROWS_WITH(fv.EvaluateFlux(state, separate, *preparedReconstruction, *prepared), doctest::Contains("prepared residual means, halo"));
+                fv.PrepareReconstruction(state, *preparedReconstruction, *prepared, engine, stream);
+                fv.EvaluateFlux(state, separate, *preparedReconstruction, *prepared);
+                fv.AddSource(state, separate, *preparedReconstruction, *prepared);
+                Compare(result, separate, 2e-12);
+            }
         }
         ConservativeIntegral(result);
         if (variant == 1)

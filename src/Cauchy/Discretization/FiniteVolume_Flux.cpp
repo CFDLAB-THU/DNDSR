@@ -32,11 +32,7 @@ namespace DNDS::Cauchy
         EquationDofOperations::RequireDistinct(state, residual);
         if (finalized)
             EquationDofOperations::RequireDistinct(finalized->Values(), residual);
-        DNDS_check_throw_info(work.rhsState && work.rhsTime == time, "flux needs a completed spatial preparation at this time");
-        work.rhsState->Check(state, true);
-        DNDS_check_throw_info((finalized ? work.rhsCoefficients && work.rhsCoefficients->Current(finalized->Values())
-                                         : !work.rhsCoefficients),
-                              "flux reconstruction changed after spatial preparation");
+        work.CheckPreparedResidual(state, finalized, time);
         DNDS_check_throw_info(region == CFV::ReconstructionRegion::All || region == CFV::ReconstructionRegion::Core ||
                                   region == CFV::ReconstructionRegion::HaloDependent,
                               "unknown flux region");

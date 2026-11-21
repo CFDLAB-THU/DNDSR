@@ -819,12 +819,11 @@ namespace DNDS::Cauchy
             work.PublishQueuedPhases(); });
         work.boundaryMomentumCurrent = bool(residual);
         work.boundaryFacialFluxCurrent = bool(residual) && work.captureBoundaryFlux;
-        work.rhsState.emplace(state.NumericAlias());
+        work.rhsState.emplace(state, boundary, time);
         if (reconstruction.coefficients)
             work.rhsCoefficients.emplace(reconstruction.FinalizedValues());
         if (separateMeanGradient || gradientAuxiliary)
             work.centerGradientInput.emplace(state, boundary, time);
-        work.rhsTime = time;
     }
 
 }

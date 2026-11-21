@@ -173,113 +173,37 @@ namespace DNDS::Cauchy
             uint64_t resultEpoch = 0;
         };
         std::optional<R::TransferBinding> primitiveGradientHalo;
+        /// Snapshot of a physical array, including shape and mutation generations.
+        /// Weak ownership prevents a prepared operator from pinning replaced fields.
+        struct ArrayPublication
+        {
+            std::weak_ptr<const R::ArrayStorage> storage;
+            uint64_t shape, version;
+            explicit ArrayPublication(const R::Array<real> &);
+            bool Current(const R::Array<real> &) const;
+        };
+        /// A receiver may republish at the same physical time, and a direct-P1
+        /// receiver can use the center section of a modal packet. Track both
+        /// sections and the actual publication installed for this evaluation.
+        struct PacketPublication
+        {
+            std::weak_ptr<const BoundaryInputs::Publication> publication;
+            std::vector<ArrayPublication> arrays;
+            explicit PacketPublication(const BoundaryInputs &);
+            bool Current(const BoundaryInputs &) const;
+        };
         struct DirectGradientPublication
         {
-            struct BoundaryField
-            {
-                std::weak_ptr<const R::ArrayStorage> storage;
-                uint64_t shape = 0, version = 0;
-            };
-            // Weak identities reject rebinding/ABA without retaining old fields.
-            // The workspace/operation owns the arrays and packet; this stamp is
-            // validation metadata, never an asynchronous lifetime mechanism.
-            std::weak_ptr<const R::ArrayStorage> mean, input, output;
-            uint64_t meanShape = 0, meanVersion = 0, inputShape = 0,
-                     inputVersion = 0, outputShape = 0, outputVersion = 0;
+            std::optional<ArrayPublication> mean, input, output;
             R::VersionStamp geometry;
-            std::vector<BoundaryField> boundary;
+            std::optional<PacketPublication> boundary;
             real time = std::numeric_limits<real>::quiet_NaN();
             std::string reconstruction, gradient, limiter;
 
-            void Publish(const Data &plan, const R::Array<real> &meanValues,
-                         const R::Array<real> &inputValues,
-                         const R::Array<real> &outputValues,
-                         const std::optional<BoundaryInputs> &incoming,
-                         real stageTime)
-            {
-                const auto meanRead = meanValues.Read({meanValues.GetDevice(), nullptr});
-                const auto inputRead = inputValues.Read({inputValues.GetDevice(), nullptr});
-                const auto outputRead = outputValues.Read({outputValues.GetDevice(), nullptr});
-                mean = meanValues.SharedStorage();
-                input = inputValues.SharedStorage();
-                output = outputValues.SharedStorage();
-                meanShape = meanValues.ShapeVersion();
-                meanVersion = meanValues.Version();
-                inputShape = inputValues.ShapeVersion();
-                inputVersion = inputValues.Version();
-                outputShape = outputValues.ShapeVersion();
-                outputVersion = outputValues.Version();
-                geometry = plan.boundaryLayout->stamp;
-                boundary.clear();
-                if (plan.hasInterfaces)
-                {
-                    DNDS_check_throw_info(
-                        incoming && incoming->Time() == stageTime,
-                        "direct gradient publication needs the current interface packet");
-                    const auto &values = incoming->QuadratureValues();
-                    boundary.reserve(size_t(values.PhysicalFieldNumber()));
-                    for (index iField = 0;
-                         iField < values.PhysicalFieldNumber(); ++iField)
-                    {
-                        const auto &array = values.PhysicalField(iField).Owned();
-                        const auto read = array.Read({array.GetDevice(), nullptr});
-                        boundary.push_back({array.SharedStorage(),
-                                            array.ShapeVersion(),
-                                            array.Version()});
-                    }
-                }
-                time = stageTime;
-                reconstruction = plan.settings.numerics.reconstruction;
-                gradient = plan.settings.numerics.gradient;
-                limiter = plan.settings.numerics.limiter;
-            }
-
-            bool Current(const Data &plan, const R::Array<real> &meanValues,
-                         const R::Array<real> &inputValues,
-                         const R::Array<real> &outputValues,
-                         const std::optional<BoundaryInputs> &incoming,
-                         real stageTime) const
-            {
-                // Acquire before reading generations: checking first would
-                // permit a writer to publish a new generation in the gap.
-                const auto meanRead = meanValues.Read({meanValues.GetDevice(), nullptr});
-                const auto inputRead = inputValues.Read({inputValues.GetDevice(), nullptr});
-                const auto outputRead = outputValues.Read({outputValues.GetDevice(), nullptr});
-                if (time != stageTime || !geometry.Valid() ||
-                    reconstruction != plan.settings.numerics.reconstruction ||
-                    gradient != plan.settings.numerics.gradient ||
-                    limiter != plan.settings.numerics.limiter ||
-                    mean.lock() != meanValues.SharedStorage() ||
-                    input.lock() != inputValues.SharedStorage() ||
-                    output.lock() != outputValues.SharedStorage() ||
-                    meanShape != meanValues.ShapeVersion() ||
-                    meanVersion != meanValues.Version() ||
-                    inputShape != inputValues.ShapeVersion() ||
-                    inputVersion != inputValues.Version() ||
-                    outputShape != outputValues.ShapeVersion() ||
-                    outputVersion != outputValues.Version())
-                    return false;
-                if (!plan.hasInterfaces)
-                    return boundary.empty();
-                if (!incoming || incoming->Time() != stageTime ||
-                    boundary.size() !=
-                        size_t(incoming->QuadratureValues()
-                                   .PhysicalFieldNumber()))
-                    return false;
-                const auto &values = incoming->QuadratureValues();
-                for (index iField = 0;
-                     iField < values.PhysicalFieldNumber(); ++iField)
-                {
-                    const auto &array = values.PhysicalField(iField).Owned();
-                    const auto read = array.Read({array.GetDevice(), nullptr});
-                    const auto &saved = boundary[size_t(iField)];
-                    if (saved.storage.lock() != array.SharedStorage() ||
-                        saved.shape != array.ShapeVersion() ||
-                        saved.version != array.Version())
-                        return false;
-                }
-                return true;
-            }
+            void Publish(const Data &, const R::Array<real> &meanValues, const R::Array<real> &inputValues,
+                         const R::Array<real> &outputValues, const std::optional<BoundaryInputs> &, real stageTime);
+            bool Current(const Data &, const R::Array<real> &meanValues, const R::Array<real> &inputValues,
+                         const R::Array<real> &outputValues, const std::optional<BoundaryInputs> &, real stageTime) const;
         };
         std::shared_ptr<PositivityWorkspace> positivity;
         std::unique_ptr<LimitedVRWorkspace> limitedVR;
@@ -375,71 +299,26 @@ namespace DNDS::Cauchy
         /// these buffers; no allocation occurs in the cell/point operator.
         R::Array<real> directLimiterScratch, directPPSamples;
         index cpuGradientWorkers = 1;
-        struct WeakPublication
+        struct DofPublication
         {
-            std::vector<std::weak_ptr<const R::ArrayStorage>> storage;
-            std::vector<uint64_t> shapes, versions;
-            explicit WeakPublication(const EquationDofs &values)
-            {
-                storage.reserve(size_t(values.PhysicalFieldNumber()));
-                shapes.reserve(storage.capacity());
-                versions.reserve(storage.capacity());
-                for (index iField = 0; iField < values.PhysicalFieldNumber(); ++iField)
-                {
-                    const auto &array = values.PhysicalField(iField).Owned();
-                    storage.push_back(array.SharedStorage());
-                    shapes.push_back(array.ShapeVersion());
-                    versions.push_back(array.Version());
-                }
-            }
-            bool Current(const EquationDofs &values) const
-            {
-                if (storage.size() != size_t(values.PhysicalFieldNumber()))
-                    return false;
-                for (index iField = 0; iField < values.PhysicalFieldNumber(); ++iField)
-                {
-                    const auto &array = values.PhysicalField(iField).Owned();
-                    if (storage[size_t(iField)].lock() != array.SharedStorage() ||
-                        shapes[size_t(iField)] != array.ShapeVersion() ||
-                        versions[size_t(iField)] != array.Version())
-                        return false;
-                }
-                return true;
-            }
+            std::vector<std::array<ArrayPublication, 2>> fields;
+            std::vector<EquationBlockLocation> blocks;
+            explicit DofPublication(const EquationDofs &);
+            bool Current(const EquationDofs &) const;
         };
-        struct CenterGradientInput
+        /// Spatial derivatives depend on the completed halo as well as the
+        /// local mean. A fresh packet at the same stage also requires preparation.
+        struct SpatialInputs
         {
-            WeakPublication mean;
-            // Remote means may change independently of this rank's owned
-            // generation. Every completed halo replacement advances its version.
-            std::vector<uint64_t> ghostVersions;
-            std::optional<WeakPublication> boundaryCenters, boundaryQuadrature;
+            DofPublication mean;
+            std::optional<PacketPublication> boundary;
             real time;
-            CenterGradientInput(const EquationDofs &state, const std::optional<BoundaryInputs> &packet, real t) : mean(state), time(t)
-            {
-                ghostVersions.reserve(state.PhysicalFieldNumber());
-                for (index field = 0; field < state.PhysicalFieldNumber(); ++field)
-                    ghostVersions.push_back(state.PhysicalField(field).Ghost().Version());
-                if (packet)
-                {
-                    boundaryCenters.emplace(packet->FaceCenterValues());
-                    boundaryQuadrature.emplace(packet->QuadratureValues());
-                }
-            }
-            bool Current(const EquationDofs &state, const std::optional<BoundaryInputs> &packet, real t) const
-            {
-                if (time != t || !mean.Current(state) || bool(packet) != bool(boundaryCenters))
-                    return false;
-                for (index field = 0; field < state.PhysicalFieldNumber(); ++field)
-                    if (ghostVersions[field] != state.PhysicalField(field).Ghost().Version())
-                        return false;
-                return !packet || (boundaryCenters->Current(packet->FaceCenterValues()) && boundaryQuadrature->Current(packet->QuadratureValues()));
-            }
+            SpatialInputs(const EquationDofs &, const std::optional<BoundaryInputs> &, real);
+            bool Current(const EquationDofs &, const std::optional<BoundaryInputs> &, real) const;
         };
-        std::optional<CenterGradientInput> centerGradientInput;
-        std::optional<EquationDofOperations::Binding> rhsState;
-        std::optional<WeakPublication> rhsCoefficients;
-        real rhsTime = 0;
+        std::optional<SpatialInputs> centerGradientInput, rhsState;
+        std::optional<DofPublication> rhsCoefficients;
+        void CheckPreparedResidual(const EquationDofs &, const std::optional<FinalizedReconstruction> &, real) const;
         // Keep auxiliary cache metadata after the existing numerical fields.
         std::vector<std::array<DirectGradientPublication, 2>> directGradientPublications;
 

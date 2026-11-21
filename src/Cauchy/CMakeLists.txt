@@ -63,6 +63,7 @@ set(CPPS
     Discretization/FiniteVolume_RHSQueued.cpp
     Discretization/FiniteVolume_RHSHostQueued.cpp
     Discretization/FiniteVolume_Gradient.cpp
+    Discretization/FiniteVolumeWorkspaceInternal_Publication.cpp
     Discretization/FiniteVolume_GradientQueued.cpp
     Discretization/FiniteVolume_CharacteristicsQueued.cpp
     Discretization/FiniteVolume_ReconstructionNorm.cpp

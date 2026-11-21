@@ -34,11 +34,7 @@ namespace DNDS::Cauchy
         EquationDofOperations::RequireDistinct(state, residual);
         if (finalized)
             EquationDofOperations::RequireDistinct(finalized->Values(), residual);
-        DNDS_check_throw_info(work.rhsState && work.rhsTime == time, "source needs a completed spatial preparation at this time");
-        work.rhsState->Check(state, true);
-        DNDS_check_throw_info((finalized ? work.rhsCoefficients && work.rhsCoefficients->Current(finalized->Values())
-                                         : !work.rhsCoefficients),
-                              "source reconstruction changed after spatial preparation");
+        work.CheckPreparedResidual(state, finalized, time);
         auto evaluator = _data->equation.MakePointEvaluator(work.workers ? work.workers->Acquire() : Physics::Chemistry::ChemicalWorkerPool::Lease{},
                                                             {true, false, false, work.chemical, false});
         work.PrepareVolumeSource(state, std::ref(residual), evaluator, time);

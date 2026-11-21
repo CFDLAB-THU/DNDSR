@@ -158,19 +158,8 @@ namespace DNDS::Cauchy
         std::vector<std::string> names, fluxNames;
         OutputFields outputFields;
         std::optional<R::Array<real>> boundaryFluxes;
-        bool compatible = workspace.boundaryFacialFluxCurrent &&
-                          workspace.rhsState && workspace.rhsTime == time;
-        if (compatible)
-        {
-            const auto &binding = *workspace.rhsState;
-            compatible = binding.snapshot.PhysicalFieldNumber() == state.PhysicalFieldNumber();
-            for (index field = 0; compatible && field < state.PhysicalFieldNumber(); ++field)
-            {
-                const auto &owned = state.PhysicalField(field).Owned();
-                compatible = binding.snapshot.PhysicalField(field).Owned().SharedStorage() == owned.SharedStorage() &&
-                             binding.versions[field] == owned.Version();
-            }
-        }
+        const bool compatible = workspace.boundaryFacialFluxCurrent && workspace.rhsState &&
+                                workspace.rhsState->Current(state, workspace.incoming, time);
         const bool capture = MPI::AllreduceValue<MPI::Reduction::Min>(int(compatible), mpi.comm) != 0;
         R::Array<real> hostFields;
         MPI::LocalStage(mpi, [&]

@@ -257,6 +257,11 @@ TEST_CASE("Moving ACM interface packets preserve a uniform inertial flow under a
         auto separate = C::EquationDofs::Coupled(equation.Schema(), fv.Metrics().BuildField(4));
         fv.EvaluateFlux(state, separate, *reconstruction, *work, DNDS::CFV::ReconstructionRegion::All, time);
         fv.AddSource(state, separate, *reconstruction, *work, time);
+        // The replacement is at the same time with identical values. It is a
+        // distinct packet from the one that prepared these face reconstructions.
+        fv.SetBoundaryInputs(*work, fv.FreezeBoundaryInputs(packet));
+        CHECK_THROWS_WITH_AS(fv.AddSource(state, separate, *reconstruction, *work, time),
+                             doctest::Contains("prepared residual means, halo, interface packet or stage time changed"), std::runtime_error);
         const auto separateRead = separate.ReadOwned();
         const auto read = rate.ReadOwned();
         const auto rows = read.Block("flow");

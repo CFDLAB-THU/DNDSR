@@ -288,6 +288,9 @@ namespace DNDS::Cauchy
         for (index iField = 0; iField < state.PhysicalFieldNumber(); ++iField)
             result._meanVersions.push_back(
                 state.PhysicalField(iField).Owned().Version());
+        if (prepared)
+            DNDS_check_throw_info(work.rhsState && work.rhsState->Current(state, work.incoming, work.rhsState->time),
+                                  "interface donor needs the means, halo and boundary packet used for preparation");
         if (_data->settings.numerics.reconstruction == "variational")
         {
             const auto &values = prepared ? reconstruction.FinalizedValues()
@@ -323,7 +326,7 @@ namespace DNDS::Cauchy
                     publication.Current(
                         *_data, state.PhysicalField(iField).Owned(),
                         state.PhysicalField(iField).Owned(), field,
-                        work.incoming, work.rhsTime),
+                        work.incoming, work.rhsState->time),
                     "interface donor gradient publication is stale");
                 result._reconstructionVersions.push_back(field.Version());
             }
