@@ -1,3 +1,4 @@
+#include "Cauchy/Discretization/BoundaryFluxInput.hpp"
 #include "Cauchy/Discretization/FiniteVolume.hpp"
 #include "DNDS/Diagnostics/Timeline.hpp"
 #include "Cauchy/Core/NumericalFailure.hpp"
@@ -141,7 +142,7 @@ namespace DNDS::Cauchy
                 if (boundary)
                 {
                     owner.ValidateBoundaryInputs(*boundary, time);
-                    boundaryRead.emplace((data->stencil.quadratureBoundaryValues ? boundary->QuadratureValues() : boundary->FaceCenterValues()).CoupledField().Owned().Read());
+                    boundaryRead.emplace(FiniteVolumeDetail::BoundaryFluxInput(data->stencil, *boundary).Read());
                     incoming = boundaryRead->View<R::UniformTableRows>();
                 }
                 for (const auto *derived : {&buffers.derivedOwned, &buffers.derivedGhost})
@@ -308,7 +309,7 @@ namespace DNDS::Cauchy
             boundary = input;
             if (mode == Mode::Immediate)
             {
-                boundaryRead.emplace((data->stencil.quadratureBoundaryValues ? boundary->QuadratureValues() : boundary->FaceCenterValues()).CoupledField().Owned().Read());
+                boundaryRead.emplace(FiniteVolumeDetail::BoundaryFluxInput(data->stencil, *boundary).Read());
                 incoming = boundaryRead->View<R::UniformTableRows>();
             }
             boundaryPending = false;
@@ -398,12 +399,12 @@ namespace DNDS::Cauchy
             if (!independent && boundary)
             {
                 slots->boundary = boundary;
-                slots->packet = addRead((data->stencil.quadratureBoundaryValues ? boundary->QuadratureValues() : boundary->FaceCenterValues()).CoupledField().Owned());
+                slots->packet = addRead(FiniteVolumeDetail::BoundaryFluxInput(data->stencil, *boundary));
                 // The completed packet includes both point sets. Its metadata
                 // validator checks both, so declare both even though this
-                // numerical operation uses quadrature rows only.
-                for (index iField = 0; iField < boundary->FaceCenterValues().PhysicalFieldNumber(); ++iField)
-                    addRead(boundary->FaceCenterValues().PhysicalField(iField).Owned());
+                // numerical operation uses only the section selected by the stencil.
+                const auto &other = data->stencil.quadratureBoundaryValues ? boundary->FaceCenterValues() : boundary->QuadratureValues();
+                addRead(other.CoupledField().Owned());
             }
             if (buffers._derivedThermodynamics)
             {

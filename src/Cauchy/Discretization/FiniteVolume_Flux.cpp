@@ -1,3 +1,4 @@
+#include "Cauchy/Discretization/BoundaryFluxInput.hpp"
 #include "Cauchy/Discretization/FiniteVolume.hpp"
 #include "Cauchy/Discretization/FiniteVolumeWorkspaceInternal.hpp"
 #include "Cauchy/Physics/PointProperties.hpp"
@@ -71,7 +72,7 @@ namespace DNDS::Cauchy
         {
             ValidateBoundaryInputs(*work.incoming, time);
             incomingRead.emplace(
-                work.incoming->QuadratureValues().CoupledField().Owned().Read());
+                FiniteVolumeDetail::BoundaryFluxInput(_data->stencil, *work.incoming).Read());
             incoming = incomingRead->View<R::UniformTableRows>();
         }
         auto evaluator = _data->equation.MakePointEvaluator(work.workers ? work.workers->Acquire() : Physics::Chemistry::ChemicalWorkerPool::Lease{},

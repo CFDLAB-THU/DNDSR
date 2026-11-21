@@ -1,3 +1,4 @@
+#include "Cauchy/Discretization/BoundaryFluxInput.hpp"
 #include "Cauchy/Discretization/ViscousReconstruction.hpp"
 #include "Cauchy/Discretization/FiniteVolume.hpp"
 #include "DNDS/Diagnostics/Timeline.hpp"
@@ -414,8 +415,7 @@ namespace DNDS::Cauchy
             if (boundary)
             {
                 incomingCenters.Emplace(boundary->FaceCenterValues().CoupledField().Owned());
-                incoming.Emplace(_data->stencil.quadratureBoundaryValues
-                    ? boundary->QuadratureValues().CoupledField().Owned() : *incomingCenters);
+                incoming.Emplace(FiniteVolumeDetail::BoundaryFluxInput(_data->stencil, *boundary));
             }
             _data->partition.Validate();
             work.boundaryMomentumCurrent = work.boundaryFacialFluxCurrent = false; });

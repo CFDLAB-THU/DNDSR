@@ -254,6 +254,10 @@ TEST_CASE("Moving ACM interface packets preserve a uniform inertial flow under a
         fv.PublishBoundaryInputs(packet, time);
         fv.SetBoundaryInputs(*work, packet);
         fv.Evaluate(state, rate, *reconstruction, *work, engine, stream, time);
+        auto separate = C::EquationDofs::Coupled(equation.Schema(), fv.Metrics().BuildField(4));
+        fv.EvaluateFlux(state, separate, *reconstruction, *work, DNDS::CFV::ReconstructionRegion::All, time);
+        fv.AddSource(state, separate, *reconstruction, *work, time);
+        const auto separateRead = separate.ReadOwned();
         const auto read = rate.ReadOwned();
         const auto rows = read.Block("flow");
         // In local axes du/dt = -Omega x u. A constant pressure offset has
@@ -261,7 +265,10 @@ TEST_CASE("Moving ACM interface packets preserve a uniform inertial flow under a
         const std::array<double, 4> expected{.25 * velocity[1], -.25 * velocity[0], 0., 0.};
         for (I i = 0; i < rows.RowCount(); ++i)
             for (int j = 0; j < 4; ++j)
+            {
                 CHECK(rows(i, j) == doctest::Approx(fv.Metrics().GetCellVol(i) * expected[j]).scale(1).epsilon(1e-12));
+                CHECK(separateRead.Block("flow")(i, j) == doctest::Approx(rows(i, j)).scale(1).epsilon(1e-12));
+            }
     }
 }
 
@@ -314,6 +321,13 @@ TEST_CASE("P1 least squares uses affine receiver face-center values from an inte
     const auto stream = engine.CreateCPUStream();
     fv.Evaluate(state, rhs, *reconstruction, *workspace, engine, stream);
     const auto read = residual.Owned().Read();
+    auto prepared = C::EquationDofs::Coupled(equation.Schema(), metrics.BuildField(5));
+    fv.EvaluateFlux(state, prepared, *reconstruction, *workspace);
+    const auto fluxRead = prepared.ReadOwned();
+    const auto flux = fluxRead.Block("flow");
+    for (I cell = 0; cell < metrics.NumCell(); ++cell)
+        for (int component = 0; component < 5; ++component)
+            CHECK(flux(cell, component) == doctest::Approx(read.View()(cell, component)).epsilon(2e-13).scale(1));
     constexpr double densityRhs = -(.3 * .2 + (-.2) * (-.1) + .1 * .05);
     for (I iCell = 0; iCell < metrics.NumCell(); ++iCell)
         CHECK(std::abs(read.View()(iCell, 0) - densityRhs * metrics.GetCellVol(iCell)) < 2e-13);

@@ -1,3 +1,4 @@
+#include "Cauchy/Discretization/BoundaryFluxInput.hpp"
 #include "Cauchy/Discretization/FiniteVolumeAuxiliaryInternal.hpp"
 #include "DNDS/Diagnostics/Timeline.hpp"
 #include "Cauchy/Discretization/CUDA/FiniteVolumeAuxiliaryKernels.hpp"
@@ -175,9 +176,7 @@ namespace DNDS::Cauchy
                                 { CUDA::PrepareAuxiliaryMeans(context, pin->StateInput(u, ug, g, gg, wall), out, viscosity, status, first, end); }, R::ReadAs<R::TableRows>(field.Owned()), R::ReadAs<R::TableRows>(uGhost), R::ReadAs<R::TableRows>(gOwned), R::ReadAs<R::TableRows>(gGhost), R::WriteAs<R::TableRows>(Output(0)), R::WriteAs<R::TableRows>(Output(7)), R::WriteAs<R::FixedRows<1>>(scratch->meanStatus), R::ReadAs<R::TableRows>(hasWall ? data->wallDistance->CellMeans() : scratch->empty));
             if (!needFaces)
                 return;
-            const auto &incoming = boundary ? (data->stencil.quadratureBoundaryValues
-                                                   ? boundary->QuadratureValues().CoupledField().Owned()
-                                                   : boundary->FaceCenterValues().CoupledField().Owned())
+            const auto &incoming = boundary ? FiniteVolumeDetail::BoundaryFluxInput(data->stencil, *boundary)
                                             : scratch->empty;
             if (boundary)
                 inputs.emplace_back(incoming);
