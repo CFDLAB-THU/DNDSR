@@ -1,3 +1,4 @@
+#include "DNDS/Diagnostics/Timeline.hpp"
 #include "CFV/Detail/ReconstructionData.hpp"
 #include "CFV/CPU/ReconstructionBasisKernels.hpp"
 #include "CFV/CPU/ReconstructionKernels.hpp"
@@ -273,8 +274,9 @@ namespace DNDS::CFV
             std::vector<WriteOperand> writes{view.sor && region == ReconstructionRegion::HaloDependent
                                                  ? R::ReadWriteAs<R::UniformTableRows>(work.temporary.Owned())
                                                  : R::WriteAs<R::UniformTableRows>(work.temporary.Owned())};
-            const auto launch = [retained, view, meanGhost, inputGhost, targetSlot, alphaSlot, inverseSlot](R::ExecutionContext, SpanView<const ReadRows> inputs, SpanView<const WriteRows> outputs, auto offsets, auto neighbors, auto boundaryOffsets, auto matrices, auto vectors, auto injection, auto rotations, auto rotationActive, auto... rawMetadata) mutable
+            const auto launch = [retained, view, meanGhost, inputGhost, targetSlot, alphaSlot, inverseSlot, region](R::ExecutionContext, SpanView<const ReadRows> inputs, SpanView<const WriteRows> outputs, auto offsets, auto neighbors, auto boundaryOffsets, auto matrices, auto vectors, auto injection, auto rotations, auto rotationActive, auto... rawMetadata) mutable
             {
+                const TimelineScope execution("CFV/CPU/ReconstructionSweep", int(region));
                                     view.offsets = offsets;
                                     view.neighbors = neighbors;
                                     view.boundaryOffsets = boundaryOffsets;

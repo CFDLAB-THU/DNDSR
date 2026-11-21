@@ -438,6 +438,7 @@ namespace DNDS::Cauchy
             const auto self = shared_from_this();
             R::SubmitArrayBatch(engine, stream, [self, slots, part, ghost](R::ExecutionContext, auto reads, auto writes)
                                 {
+                    const TimelineScope execution("Cauchy/CPU/Auxiliary", int(part));
                     if (slots->boundary) self->owner.ValidateBoundaryPublication(*slots->boundary, self->time);
                     std::vector<EquationBlockReadView> blocks;
                     blocks.reserve(size_t(self->source.BlockNumber()));

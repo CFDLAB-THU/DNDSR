@@ -33,3 +33,19 @@ are excluded. Factor mode resets both numeric matrices each repetition.
 Solutions and RHS generation are checked before and after each timing batch.
 This synthetic six-component matrix benchmark does not measure a physical
 Jacobian or distributed linear convergence.
+
+### Observing CPU halo overlap
+
+With Caliper enabled at build time and `DNDS_TIMELINE=1`, the queued CPU
+callbacks mark work on the thread that executes it. `Cauchy/CPU/FluxRHS`,
+`VolumeSource`, `RotationSource`, `LinearApply`, `Jacobi` (under the same
+prefix), and `CFV/CPU/ReconstructionSweep` record their row selection as
+an integer attribute at both boundaries. Values 0, 1 and 2 mean all, core
+and halo-dependent. Auxiliary preparation records its own phase enumeration.
+
+Compare a worker interval with MPI observations on the **same rank**.
+A successful post and a later observed completion give an upper bound on
+the time a request was outstanding. For a receive, a singleton MPI_Testall
+returning false also gives a lower bound from posting to the start of that
+test. A delayed peer send can make this overlap reproducible. Use the unsplit
+execution as a control and compare final fields by persistent cell ID.

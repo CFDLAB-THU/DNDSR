@@ -19,7 +19,6 @@ namespace DNDS
         if (_active)
         {
             _name = name;
-            cali_begin_region(name);
             // Per-region typed context avoids confusing a step number with an
             // iteration number in a nested report. Attribute lookup is cached
             // by Caliper; identifiers remain valid through process lifetime.
@@ -31,6 +30,7 @@ namespace DNDS
                 caliper.begin(caliper.get_attribute(_attribute),
                               cali::Variant(CALI_TYPE_INT, &payload, sizeof(payload)));
             }
+            cali_begin_region(name);
         }
 #else
         (void)name;
@@ -42,9 +42,9 @@ namespace DNDS
 #ifdef DNDS_USE_CALIPER
         if (_active)
         {
+            cali_end_region(_name);
             if (_attribute != CALI_INV_ID)
                 cali_end(_attribute);
-            cali_end_region(_name);
         }
 #endif
     }

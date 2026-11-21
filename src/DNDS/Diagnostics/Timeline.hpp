@@ -7,7 +7,7 @@ namespace DNDS
      * @details DNDS_TIMELINE=1 enables annotations at startup. Scopes measure host
      * execution/submission, not GPU completion, and introduce no synchronization.
      * Builds without Caliper are no-ops. A scope stays on its creating thread; payloads
-     * identify steps, stages or iterations. No execution/lifetime contract relies
+     * identify steps, stages, iterations or row selections at both region boundaries. No execution/lifetime contract relies
      * on this diagnostic. Names must remain valid through scope destruction.
      */
     class TimelineScope

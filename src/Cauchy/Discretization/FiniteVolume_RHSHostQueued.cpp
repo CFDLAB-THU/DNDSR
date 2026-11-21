@@ -287,6 +287,7 @@ namespace DNDS::Cauchy
         const auto timing = BeginQueuedPhase(engine, stream, RHSPhase);
         R::SubmitArrayBatch(engine, stream, [pin, result, region, time](R::ExecutionContext, auto inputs, auto outputs, auto cached, auto moments, auto wallFaces, auto wallMean)
                             {
+            const TimelineScope execution("Cauchy/CPU/FluxRHS", int(region));
             if (pin->fixed)
             {
                 RHSReadViews input;

@@ -1,3 +1,4 @@
+#include "DNDS/Diagnostics/Timeline.hpp"
 #include "Cauchy/Implicit/LinearProblem.hpp"
 #include "Cauchy/Implicit/CPU/LinearBlockKernels.hpp"
 #include "Cauchy/State/EquationDofAlgebra.hpp"
@@ -293,6 +294,7 @@ namespace DNDS::Cauchy
 #endif
                 return;
             }
+            const TimelineScope execution(jacobi ? "Cauchy/CPU/Jacobi" : "Cauchy/CPU/LinearApply", int(region));
             CPU::LinearBlockInput request{{{}, evaluator.get(), components}, pattern, rows,
                 values[diagonalSlot], components, fullDiagonal, {}, rowMajorBlocks};
             if (blocksSlot >= 0) request.blocks.assembled.emplace(blocks);

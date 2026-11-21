@@ -1,3 +1,4 @@
+#include "DNDS/Diagnostics/Timeline.hpp"
 #include "Cauchy/Discretization/FiniteVolumeWorkspaceInternal.hpp"
 #include "Cauchy/Discretization/CPU/FiniteVolumeSourceKernels.hpp"
 #include "Cauchy/Core/NumericalFailure.hpp"
@@ -82,8 +83,9 @@ namespace DNDS::Cauchy
             std::vector<Output> outputs{R::ReadWriteAs<R::UniformTableRows>(result.PhysicalField(target.physicalField).Owned())};
             if (low)
                 outputs.push_back(R::ReadWriteAs<R::UniformTableRows>(lowOrder->PhysicalField(low->physicalField).Owned()));
-            R::SubmitArrayBatch(engine, stream, [pin, flow, target, low, frame, rows](R::ExecutionContext, auto inputs, auto outputs, auto cells)
+            R::SubmitArrayBatch(engine, stream, [pin, flow, target, low, frame, rows, region](R::ExecutionContext, auto inputs, auto outputs, auto cells)
                                 {
+                const TimelineScope execution("Cauchy/CPU/RotationSource", int(region));
                 const EquationBlockReadView mean{{inputs[0], flow.firstComponent, flow.componentNumber}, {{}, flow.firstComponent, flow.componentNumber}};
                 const EquationBlockArrayView<real> output{outputs[0], target.firstComponent, target.componentNumber};
                 std::optional<EquationBlockArrayView<real>> lowOutput;
@@ -151,8 +153,9 @@ namespace DNDS::Cauchy
             pin->derivativeSlot = index(outputs.size());
             outputs.push_back(R::WriteAs<R::UniformTableRows>(*sourceDerivative));
         }
-        R::SubmitArrayBatch(engine, stream, [pin, rows](R::ExecutionContext, auto inputs, auto outputs, auto offsets, auto weights, auto lengths, auto wallCells)
+        R::SubmitArrayBatch(engine, stream, [pin, rows, region](R::ExecutionContext, auto inputs, auto outputs, auto offsets, auto weights, auto lengths, auto wallCells)
                             {
+            const TimelineScope execution("Cauchy/CPU/VolumeSource", int(region));
             // Reserve a chemistry worker only after predecessors execute.
             // Holding it while queueing could starve an earlier auxiliary
             // refresh that shares a one-worker pool.
