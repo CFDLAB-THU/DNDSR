@@ -54,7 +54,11 @@ Connected domains must agree on the equation, material properties and code-unit
 scales. ACM patches must be reciprocal. A physical outlet or farfield anywhere
 in the component sets its datum. In a closed component, the first configured
 member supplies the target pressure mean. The simulation shifts every member
-by the same amount. Reference mesh coordinates
+by the same amount. Each ACM domain must contain one connected fluid region.
+Setup checks the reciprocal patch graph and actual pressure boundaries; the
+mesh producer is responsible for connectivity within each domain. Use separate
+domains for disconnected fluid regions requiring independent pressure data.
+Reference mesh coordinates
 stay fixed. At an interface, absolute momentum (compressible) or absolute
 velocity (ACM) is rotated into the receiver axes. Pressure and turbulence
 variables transfer as scalars. See the [ACM qualification cases](../architecture/CauchyACM.md).

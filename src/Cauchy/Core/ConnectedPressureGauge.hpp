@@ -6,6 +6,8 @@
 namespace DNDS::Cauchy
 {
     /// One pressure datum for each closed reciprocal ACM interface component.
+    /// Each domain must describe one connected fluid region. This coordinator
+    /// checks patch reciprocity; it does not flood-fill the cell graph.
     /// The simulation owns the placement and participating domains for the
     /// lifetime of this coordinator. Nonmembers hold only component metadata.
     class ConnectedPressureGauge
