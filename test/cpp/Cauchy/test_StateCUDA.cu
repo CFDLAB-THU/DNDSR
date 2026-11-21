@@ -303,7 +303,8 @@ TEST_CASE("Managed CUDA volume sources retain distributed geometry and match CPU
         R::EagerEngine engine(0, std::make_shared<R::AccessTrackingContext>());
         const auto stream = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
         gpuWork->ResetPreparationStatus(engine, stream);
-        gpuWork->SubmitVolumeSource(engine, stream, resident, std::ref(actual), .4, {}, std::ref(actualLow));
+        const auto region = DNDS::CFV::ReconstructionRegion::All;
+        gpuWork->SubmitVolumeSource(engine, stream, resident, actual, .4, region, {}, std::ref(actualLow));
         engine.Synchronize();
         gpuWork->CheckPreparationStatus();
         const auto compare = [&](const C::EquationDofs &reference, const C::EquationDofs &value)
@@ -331,7 +332,7 @@ TEST_CASE("Managed CUDA volume sources retain distributed geometry and match CPU
                 queuedWork->directGradients.front().Owned().CopyFrom(cpuWork->directGradients.front().Owned()).Wait();
             R::EagerEngine hostEngine(workers, std::make_shared<R::AccessTrackingContext>());
             const auto hostStream = hostEngine.CreateCPUStream();
-            queuedWork->SubmitVolumeSource(hostEngine, hostStream, state, std::ref(queued), .4,
+            queuedWork->SubmitVolumeSource(hostEngine, hostStream, state, queued, .4, region,
                                            workers == 0 ? std::make_shared<C::PointEvaluator>(equation.MakePointEvaluator({}, {true}))
                                                         : std::shared_ptr<C::PointEvaluator>{},
                                            std::ref(queuedLow));
@@ -568,7 +569,10 @@ TEST_CASE("Managed CUDA flux matches generic CPU for P0 P1 and P3 with distribut
                 hostEngine.Synchronize();
             }
             auto &field = cpuWork->fields.front();
-            cpuWork->owner->gradient.Evaluate(mean.CoupledField(), *field.gradientBoundary, *field.gradient, {1});
+            // The periodic mesh has no physical boundary values to prescribe.
+            const auto boundary = cpuWork->owner->gradient.BuildBoundaryValues(5);
+            REQUIRE(boundary.RowCount() == 0);
+            cpuWork->owner->gradient.Evaluate(mean.CoupledField(), boundary, *field.gradient, {1});
             cpuWork->PreparePrimitiveGradient(mean, DNDS::CFV::ReconstructionRegion::All);
             cpuWork->PrepareDirectGradientLimiter(mean, true);
             cpuWork->ApplyDirectGradientPositivity(mean);
@@ -631,8 +635,10 @@ TEST_CASE("Managed CUDA flux matches generic CPU for P0 P1 and P3 with distribut
         if (degree == 3)
             coefficientHalo.emplace(gpu.BindHalo(gpuRec->WarmValues().CoupledField()));
         std::optional<R::TransferBinding> gradientHalo, primitiveHalo;
+        std::optional<R::Array<real>> gradientBoundary;
         if (degree == 1)
         {
+            gradientBoundary.emplace(gpuWork->owner->gradient.BuildBoundaryValues(5));
             gradientHalo.emplace(gpu.BindHalo(gpuWork->directGradients.front()));
             primitiveHalo.emplace(gpu.BindHalo(*gpuWork->primitiveGradient));
         }
@@ -642,6 +648,13 @@ TEST_CASE("Managed CUDA flux matches generic CPU for P0 P1 and P3 with distribut
             R::EagerEngine engine(0, std::make_shared<R::AccessTrackingContext>());
             const auto compute = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
             const auto communication = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
+            const auto submitGradients = [&](DNDS::CFV::ReconstructionRegion region)
+            {
+                const auto &gradient = gpuWork->owner->gradient;
+                auto &field = gpuWork->fields.front();
+                gradient.Evaluate(engine, compute, resident.CoupledField(), *gradientBoundary, *field.gradient, *field.gradientExecution, region);
+                gpuWork->SubmitPrimitiveGradients(engine, compute, resident, region);
+            };
             gpuWork->ResetDeviceFluxStatus(engine, compute);
             if (degree == 1)
             {
@@ -655,7 +668,7 @@ TEST_CASE("Managed CUDA flux matches generic CPU for P0 P1 and P3 with distribut
             if (split)
             {
                 if (degree == 1)
-                    gpuWork->SubmitGradients(engine, compute, resident, DNDS::CFV::ReconstructionRegion::Core);
+                    submitGradients(DNDS::CFV::ReconstructionRegion::Core);
                 else
                     gpuWork->SubmitDeviceRHS(engine, compute, resident, actual, DNDS::CFV::ReconstructionRegion::Core, .3);
             }
@@ -664,8 +677,7 @@ TEST_CASE("Managed CUDA flux matches generic CPU for P0 P1 and P3 with distribut
                 recTransfer->EnqueueWait(compute);
             if (degree == 1)
             {
-                gpuWork->SubmitGradients(engine, compute, resident,
-                                         split ? DNDS::CFV::ReconstructionRegion::HaloDependent : DNDS::CFV::ReconstructionRegion::All);
+                submitGradients(split ? DNDS::CFV::ReconstructionRegion::HaloDependent : DNDS::CFV::ReconstructionRegion::All);
                 gpuWork->SubmitGradientLimiter(engine, compute, resident, true);
                 gradientPP = gpuWork->SubmitGradientPositivity(engine, compute, resident);
                 auto gradientTransfer = gradientHalo->SubmitAfter(engine, communication, compute.Record());

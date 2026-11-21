@@ -92,7 +92,7 @@ TEST_CASE("Detached snapshot publication retains validation and explicit placeme
     auto copy = snapshot.To(R::Device::Host());
     auto first = snapshot.AcquireRead(), second = copy.AcquireRead();
     if (first.HostView().NumCellProc() > 0)
-        CHECK(first.HostView().CellNodes(0).data() != second.HostView().CellNodes(0).data());
+        CHECK(first.HostView().CellNodes(0).data() == second.HostView().CellNodes(0).data());
     // Reject malformed detached native input before publication; the source
     // and its already-retained detached snapshot remain valid and unchanged.
     auto malformed = G::NativeMeshAssembler::CaptureOwned(*state, mpi);

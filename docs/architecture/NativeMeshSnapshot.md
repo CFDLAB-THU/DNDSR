@@ -25,8 +25,9 @@ provenance and may become stale without invalidating snapshot storage. Neither
 immutability nor a valid allocation proves compatibility with a newly ordered
 solver field; check its entity-space association separately.
 
-`To(device, context)` creates an independent placement and completes its copies
-before returning. A native facade instead retains prepared placements through
+`To(device, context)` shares the immutable snapshot when it is already on that
+device. Moving to a different device completes the placement copies before
+returning. A native facade retains prepared placements through
 `PlaceNative`. Acquisition on an unprepared device fails rather than uploading
 inside an operator. Backend placement preserves mathematical identity.
 

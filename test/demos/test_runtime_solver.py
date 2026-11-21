@@ -1,6 +1,6 @@
 """Small forward solver exercising the Array contract without Euler/Geom.
 
-Native stencils, separate owned/ghost buffers, direct MPI, async temporaries,
+Native stencils, separate owned/ghost buffers, direct MPI, queued execution,
 global norms, permutation/rebinding and a matching-rank parallel restart.
 The independent oracle evolves the globally assembled field in NumPy.
 """
@@ -50,9 +50,10 @@ def test_iterate_permute_restart(backend, mode):
     route = R.RowTransferPlan(channel, n, 2,
                              [R.RowRequest((comm.rank - 1) % comm.size, n - 1, 0),
                               R.RowRequest((comm.rank + 1) % comm.size, 0, 1)])
-    output = engine.allocate_like(compute, owned)
-    compute.record().wait()
-    # Bind each allocation once; rebinding is necessary after swapping buffers.
+    # Both ping-pong buffers become direct MPI operands. CUDA-aware MPI alone
+    # does not establish support for CUDA stream-ordered pool allocations.
+    output = R.Array(owned.layout, owned.dtype, device)
+
     def binding(a):
         return R.PayloadPlan(route, a.layout, ghost.layout, a.element_schema()).bind(
             a, ghost, options=R.TransferOptions(mode, channel, 61))

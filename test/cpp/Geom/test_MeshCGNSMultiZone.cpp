@@ -8,6 +8,7 @@
 #include "Geom/IO/NativeMeshCGNS.hpp"
 #include "Geom/IO/CGNS.hpp"
 
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <string>
@@ -33,37 +34,25 @@ static std::filesystem::path repoRoot()
     return p;
 }
 
-static std::filesystem::path meshPath(const std::string &name)
+static void generateMultiblockMeshes(const std::string &directory)
 {
-    return repoRoot() / "data" / "mesh" / name;
-}
-
-static void ensureGeneratedMultiblockMeshes()
-{
-    auto root = repoRoot();
-    auto script = root / "scripts" / "generate_multiblock_cgns.py";
-    auto out = root / "data" / "mesh";
-    auto lib = root / "external" / "cfd_externals" / "install" / "lib" / "libcgns.so";
+    const auto script = repoRoot() / "scripts" / "generate_multiblock_cgns.py";
     REQUIRE(std::filesystem::exists(script));
-    REQUIRE(std::filesystem::exists(lib));
-
-    std::string libPath = (root / "external" / "cfd_externals" / "install" / "lib").string();
-    std::string command =
-        "LD_LIBRARY_PATH=\"" + libPath + ":$LD_LIBRARY_PATH\" "
-                                         "python3 \"" +
-        script.string() + "\" --output \"" + out.string() + "\" --blocks 2 3";
+    // CTest supplies the configured CGNS library. Generate in the test's
+    // working directory so shared input meshes are never overwritten.
+    const std::string command = "python3 \"" + script.string() + "\" --output " + directory + " --blocks 2 3";
     int ret = std::system(command.c_str());
     REQUIRE(ret == 0);
 }
 
-static void checkGeneratedOneSidedBlocks(int blocks)
+static void checkGeneratedOneSidedBlocks(const std::filesystem::path &directory, int blocks)
 {
     auto mpi = MPIInfo();
     mpi.setWorld();
     REQUIRE(mpi.size == 1);
 
     std::string name = fmt::format("GeneratedMultiBlock{}x{}_OneSided.cgns", blocks, blocks);
-    auto serial = ReadNativeCGNSSerial(meshPath(name).string(), 2, FBC_Name_2_ID_Default);
+    auto serial = ReadNativeCGNSSerial((directory / name).string(), 2, FBC_Name_2_ID_Default);
 
     CHECK(serial.cellNodes.RowCount() == blocks * blocks);
     CHECK(serial.coordinates.RowCount() == (blocks + 1) * (blocks + 1));
@@ -80,9 +69,12 @@ static void checkGeneratedOneSidedBlocks(int blocks)
 
 TEST_CASE("CGNS multizone one-sided connectivity deduplicates 2x2 and 3x3 blocks")
 {
-    ensureGeneratedMultiblockMeshes();
-    checkGeneratedOneSidedBlocks(2);
-    checkGeneratedOneSidedBlocks(3);
+    const auto directory = fmt::format("cgns-multizone-{}", std::chrono::steady_clock::now().time_since_epoch().count());
+    REQUIRE(std::filesystem::create_directory(directory));
+    generateMultiblockMeshes(directory);
+    checkGeneratedOneSidedBlocks(directory, 2);
+    checkGeneratedOneSidedBlocks(directory, 3);
+    std::filesystem::remove_all(directory);
 }
 
 TEST_CASE("Audit regression: CGNS single-entry boundary PointList")

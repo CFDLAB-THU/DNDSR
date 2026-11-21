@@ -67,9 +67,8 @@ def test_eager_algebra_cross_stream_results_retain_native_operands(device):
     np.testing.assert_array_equal(A.component_min_local_async(engine, consumer, y).get(), varied.min(axis=0))
     np.testing.assert_array_equal(A.component_max_local_async(engine, consumer, y).get(), varied.max(axis=0))
     np.testing.assert_array_equal(A.component_sum_local_async(engine, consumer, y).get(), varied.sum(axis=0))
-    if device.space == R.MemorySpace.CUDA:
-        with pytest.raises(RuntimeError, match="placement"):
-            A.fill(y, 2)
+    A.fill(y, 2)
+    np.testing.assert_array_equal(y.owned.numpy(), np.full((257, 7), 2.))
 
 
 def test_global_reductions_count_uneven_owned_rows_and_reject_other_spaces_collectively():

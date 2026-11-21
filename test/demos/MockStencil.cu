@@ -1,4 +1,5 @@
 #include "MockStencil.hpp"
+#include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include <cuda_runtime.h>
 
 namespace DNDS::Runtime::Demo
@@ -18,12 +19,12 @@ namespace DNDS::Runtime::Demo
         if (core)
             SubmitArrays(engine, stream, [](ExecutionContext c, ArrayView<const double> u, ArrayView<double> v)
                          {
-                Core<<<17, 128, 0, static_cast<cudaStream_t>(c.stream)>>>(u, v);
+                Core<<<17, 128, 0, CUDAStream(c)>>>(u, v);
                 DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "mock core launch failed"); }, Read(owned), Write(output));
         else
             SubmitArrays(engine, stream, [](ExecutionContext c, ArrayView<const double> u, ArrayView<const double> g, ArrayView<double> v)
                          {
-                Ring<<<1, 1, 0, static_cast<cudaStream_t>(c.stream)>>>(u, g, v);
+                Ring<<<1, 1, 0, CUDAStream(c)>>>(u, g, v);
                 DNDS_check_throw_info(cudaGetLastError() == cudaSuccess, "mock ring launch failed"); }, Read(owned), Read(ghost), ReadWrite(output));
     }
 }

@@ -6,6 +6,16 @@ cd "$(dirname "$0")/.."
 level=${1:?usage: run_ci_tests.sh LEVEL BUILD_DIR PYTHON}
 export DNDS_BUILD_DIR="$(realpath "${2:?missing build directory}")"
 python_bin="$(realpath -s "${3:?missing Python interpreter}")"
+cache="$DNDS_BUILD_DIR/CMakeCache.txt"
+mpi_launcher="$(sed -n 's/^MPIEXEC_EXECUTABLE:FILEPATH=//p' "$cache")"
+test -x "$mpi_launcher"
+# The restart fixture launches mpirun itself. Match both the launcher and
+# mpi4py's dynamically loaded MPI to the build, including in a service shell.
+export PATH="$(dirname "$mpi_launcher"):$PATH"
+mpi_library="$(sed -n 's/^MPI_mpi_LIBRARY:FILEPATH=//p' "$cache")"
+if [[ -f "$mpi_library" ]]; then
+    export LD_LIBRARY_PATH="$(dirname "$mpi_library")${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
 export DNDS_MECH_PATH="${DNDS_MECH_PATH:-$PWD/external/cfd_externals/install/data}"
 export CANTERA_DATA="$DNDS_MECH_PATH"
 # The fixture writer must load the CGNS ABI selected by this build.
@@ -34,7 +44,7 @@ export OPENBLAS_NUM_THREADS=1
 test -x "$DNDS_BUILD_DIR/app/euler.exe"
 "$python_bin" -S scripts/verify_ci_python.py
 "$python_bin" -S scripts/verify_ci_python.py --h5py-first
-mpiexec -n 2 "$python_bin" -S scripts/verify_ci_python.py --parallel
+"$mpi_launcher" -n 2 "$python_bin" -S scripts/verify_ci_python.py --parallel
 
 critical_runtime=(
     test/DNDS/test_runtime_array_bridge.py::test_one_pod_schema_spans_native_python_mpi_and_direct_io
@@ -53,14 +63,18 @@ if [[ "$level" == 0 ]]; then
         test/EulerP/test_basic_eulerP.py \
         test/Euler/test_restart_redistribute.py::test_restart_redistribute_same_np \
         test/Euler/test_restart_redistribute.py::test_restart_redistribute_different_np
-    mpiexec -n 2 "$python_bin" -S -m pytest "${pytest_args[@]}" "${critical_runtime[@]}" "${critical_mesh[@]}" test/Cauchy/test_operators.py
+    "$mpi_launcher" -n 2 "$python_bin" -S -m pytest "${pytest_args[@]}" "${critical_runtime[@]}" "${critical_mesh[@]}" test/Cauchy/test_operators.py
 else
     level_filter=()
     if [[ "$level" == 1 ]]; then
         level_filter=(-m 'not level2')
     fi
     "$python_bin" -S -m pytest "${pytest_args[@]}" "${level_filter[@]}" test/
-    mpiexec -n 2 "$python_bin" -S -m pytest "${pytest_args[@]}" "${level_filter[@]}" \
+    rank_wrapper=()
+    if grep -Eiq '^DNDS_USE_CUDA:BOOL=(ON|1|TRUE|YES|Y)$' "$cache"; then
+        rank_wrapper=("$python_bin" test/demos/one_rank_per_gpu.py)
+    fi
+    "$mpi_launcher" -n 2 "${rank_wrapper[@]}" "$python_bin" -S -m pytest "${pytest_args[@]}" "${level_filter[@]}" \
         test/DNDS/test_runtime_*.py test/demos/test_runtime_solver.py \
         "${critical_mesh[@]}" test/Cauchy/test_operators.py
 fi

@@ -659,6 +659,7 @@ add_custom_target(geom_benchmark_topology_np2
     DEPENDS geom_test_mesh_pipeline
     USES_TERMINAL)
 geom_add_unit_test(mesh_cgns_multizone "Geom/test_MeshCGNSMultiZone.cpp" "geom;dnds")
+set_property(TEST geom_mesh_cgns_multizone APPEND PROPERTY ENVIRONMENT "DNDS_EXTERNAL_LIB_CGNS=${DNDS_EXTERNAL_LIB_CGNS}")
 geom_add_mpi_test(mesh_audit "Geom/test_MeshAudit.cpp" "geom;dnds")
 geom_add_mpi_test(mesh_facade "Geom/test_MeshFacade.cpp" "geom;dnds")
 add_dependencies(geom_unit_tests geom_test_mesh_facade)
