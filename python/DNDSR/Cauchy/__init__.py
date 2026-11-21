@@ -27,5 +27,8 @@ __all__ += ["EquationDofs", "FiniteVolumeOperators", "AuxiliaryRequest", "Auxili
 
 from .implicit import advance_domain, solve_single_stage, apply_v_cycle
 from .ditr import DITREquations
+from .serialized_equations import BDFEquations, DIRKEquations
 
 __all__ += ["advance_domain", "solve_single_stage", "apply_v_cycle", "DITREquations"]
+
+__all__ += ["BDFEquations", "DIRKEquations"]

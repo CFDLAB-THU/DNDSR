@@ -1,4 +1,4 @@
-"""Distinguish physical mass and spatial rate terms in queued DITR arithmetic."""
+"""Distinguish physical mass and spatial rate terms in streamed time equations."""
 import json
 from pathlib import Path
 
@@ -40,6 +40,15 @@ def test_queued_acm_stage_sources_and_stopping_residual():
     h_scale = equations.midpoint_source(h_other, inv_dt, initial, endpoint, r0, re)
     i_scale = equations.endpoint_source(i_other, inv_dt, initial, r0, rm)
     equations.stopping_residual(stop, inv_dt, initial, middle, endpoint, r0, rm, re)
+    bdf_source, dirk_source = proto.zeros_like(), proto.zeros_like()
+    bdf = Cauchy.BDFEquations(stream, 2)
+    bdf_stage = bdf.source(bdf_source, initial, 1., 1 / inv_dt,
+                           previous=middle, previous_dt=.25)
+    assert bdf_stage == (8., .75, 1.125)
+    dirk = Cauchy.DIRKEquations(stream, "esdirk4")
+    assert dirk.stage_count == 6
+    assert dirk.stage_source(None, initial, [], 1., .125) == (0., 0., 1.)
+    assert dirk.stage_source(dirk_source, initial, [r0], 1., .125) == (8., .25, 1.0625)
     del fields, initial, middle, endpoint, r0, rm, re
     stream.record().wait()
 
@@ -54,7 +63,8 @@ def test_queued_acm_stage_sources_and_stopping_residual():
         return next(iter(field.fields.values())).owned.numpy()
     for field, expected in ((h_other, h + .75 * i + inv_dt * 3 * mass - h_scale * 11),
                             (i_other, i + inv_dt * 5 * mass - i_scale * 13),
-                            (stop, h + i)):
+                            (stop, h + i), (bdf_source, 15 * mass),
+                            (dirk_source, 16 * mass + 7 / 4)):
         actual = values(field)
         np.testing.assert_allclose(actual, np.broadcast_to(expected, actual.shape), atol=3e-14)
     engine.close()

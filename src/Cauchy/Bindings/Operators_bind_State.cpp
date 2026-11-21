@@ -2,6 +2,8 @@
 #include "Cauchy/Bindings/OperatorsBindInternal.hpp"
 #include "Cauchy/State/QueuedEquationOperations.hpp"
 #include "Solver/TimeIntegration/DITRCoefficients.hpp"
+#include "Solver/TimeIntegration/BDFCoefficients.hpp"
+#include "Solver/TimeIntegration/DIRKTableau.hpp"
 #include "DNDS/Runtime/Interop/Array_bind.hpp"
 #include <pybind11/stl.h>
 
@@ -98,6 +100,9 @@ namespace DNDS::Cauchy::Bindings
             .def(py::init<R::ExecutionStream>(), py::arg("stream"))
             .def("axpy", &Ops::Axpy, py::arg("out"), py::arg("alpha"), py::arg("x"),
                  py::call_guard<py::gil_scoped_release>())
+            .def("fill", &Ops::Fill, py::arg("out"), py::arg("value"), py::call_guard<py::gil_scoped_release>())
+            .def("mass_copy_scale", &Ops::PhysicalCopyScale, py::arg("out"), py::arg("alpha"), py::arg("state"),
+                 py::call_guard<py::gil_scoped_release>(), "out = alpha*M*state on the selected stream.")
             .def("mass_axpy", &Ops::PhysicalAxpy, py::arg("out"), py::arg("alpha"), py::arg("state"),
                  py::call_guard<py::gil_scoped_release>(), "out += alpha*M*state. M masks the ACM pressure component.")
             .def("mass_combination", &Ops::PhysicalLinearCombination, py::arg("out"), py::arg("a"), py::arg("x"),
@@ -105,6 +110,16 @@ namespace DNDS::Cauchy::Bindings
             .def("mass_state_and_rate", &Ops::PhysicalStateAndRate, py::arg("out"), py::arg("a"), py::arg("state"),
                  py::arg("b"), py::arg("rate"), py::call_guard<py::gil_scoped_release>(),
                  "out = a*M*state + b*rate. Every rate component participates.");
+        m.def("_bdf_weights", [](int order, real time, real dt, real previousDt, bool steady)
+        {
+            const ODE::BDFCoefficients c(order, time, dt, previousDt, steady);
+            return std::make_tuple(c.initial, c.previous, c.equation.inverseDt, c.equation.rhsScale, c.equation.time);
+        });
+        m.def("_dirk_tableau", [](const std::string &method)
+        {
+            const ODE::DIRKTableau tableau(method);
+            return std::make_pair(tableau.a, tableau.c);
+        });
         m.def("_ditr_weights", [](real fraction, real theta, const std::string &variant)
         {
             DNDS_check_throw_info(variant == "U2R1" || variant == "U2R2", "unknown DITR variant");

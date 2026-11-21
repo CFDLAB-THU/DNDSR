@@ -371,6 +371,23 @@ transfers and waits. Restart metadata records the selected policy name. Use
 the same registration and configuration when resuming an exact checkpoint.
 The standalone C++ executable registers its native policies.
 
+## Queued BDF and DIRK equations
+
+For a custom time controller, keep the accepted states and stage rates as
+`EquationDofs` and pass the compute stream to `Cauchy.BDFEquations` or
+`Cauchy.DIRKEquations`. Both return named `inverse_dt`, `rhs_scale` and
+`time` coefficients for the native nonlinear solver. BDF assembles its source
+from the current step's initial state and, for BDF2, the preceding accepted
+state and interval. Replace history only after step acceptance. Omitting
+history gives BDF1 startup. Steady BDF1 has a zero source and inverse dt.
+
+For DIRK, call `stage_source(out, initial, rates, time, dt)` in stage order.
+An empty rate list selects stage zero. Save its explicit spatial rate, then
+supply one more completed rate for each following implicit stage. The method
+reads the same tableau as C++, including the six-stage ESDIRK4 constants.
+Only state terms receive the physical mass matrix. Python controls the
+history lifetime and restart persistence when using these low-level operations.
+
 ## Queued DITR equations
 
 `Cauchy.DITREquations(stream, fraction, theta, variant)` uses the native
