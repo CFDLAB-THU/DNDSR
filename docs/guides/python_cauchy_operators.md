@@ -12,6 +12,28 @@ entrypoints for custom orchestration. The examples below use a CPU stream.
 
 Python can also order a bound halo transfer with `binding.submit_after(engine, comm_stream, producer.record())` and `operation.enqueue_wait(consumer)`. The ordinary MPI-to-CUDA edge currently requires controller progress. A prepared NCCL global reduction returns a CUDA event from `binding.submit(engine, comm_stream)`. Use `consumer.wait_for(event)` before reading its result on that stream. All ranks participate in matching collective order; a local Python reference may be released after submission.
 
+For host Arrays, bind the reduction on an explicitly selected MPI
+communication context during collective setup. A compact one-row table can
+hold several residual norms. The communication stream below is a CPU lane
+even when a CUDA producer stages its result into `local`.
+
+```python
+from DNDSR.DNDS import Runtime
+binding = context.bind_allreduce(local, total, Runtime.Reduction.Sum)
+communication.wait_for(producer.record())
+complete = binding.submit(engine, communication)
+consumer.wait_for(complete)  # CPU consumer
+```
+
+Submit all bindings sharing that MPI communicator on one lane per rank in
+matching order. Give unrelated host collectives their own communicator or
+finish the queued work before issuing them. The submitting MPI controller
+progresses the request when it observes an event or progresses the engine.
+For explicit host staging on CUDA, order D2H before the reduction. Call
+`complete.wait()` before importing it on the GPU lane and submitting H2D.
+The return-copy event orders later consumers. NCCL provides a native CUDA
+dependency when the reduction operands reside on the GPU.
+
 ## Step acceptance and failures
 
 `Domain.advance(dt)` and `Simulation.advance(dt)` return a `StepResult` with

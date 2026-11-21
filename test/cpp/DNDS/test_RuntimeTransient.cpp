@@ -2,6 +2,7 @@
 #include "doctest.h"
 #include "DNDS/Runtime/Communication/DynamicRowTransfer.hpp"
 #include "DNDS/Runtime/Communication/MPIProgress.hpp"
+#include "DNDS/Runtime/Communication/MPIGlobalReduction.hpp"
 #include "DNDS/Runtime/Execution/EagerArray.hpp"
 #include "DNDS/Runtime/Execution/EagerCopy.hpp"
 #include "DNDS/Runtime/Execution/CUDAExecution.hpp"
@@ -33,6 +34,47 @@ int main(int argc, char **argv)
     int result = context.run();
     MPI_Finalize();
     return result;
+}
+
+TEST_CASE("MPI allreduce queues behind a producer and orders the next reduction and consumer")
+{
+    DNDS::MPIInfo mpi(MPI_COMM_WORLD);
+    for (const int workers : {0, 1})
+    {
+        EagerEngine engine(workers, std::make_shared<AccessTrackingContext>());
+        const auto compute = engine.CreateCPUStream(), communication = engine.CreateCPUStream();
+        const DNDS::MPIInfo laneMPI(workers ? mpi.comm : MPI_COMM_SELF);
+        auto context = CommunicationContext::Duplicate(laneMPI.comm);
+        Array<double> src(RowLayout::Dense(1, 2)), result(src.Layout()), observed(src.Layout());
+        auto sum = BindMPIAllreduce(context, src, result, Reduction::Sum);
+        auto maximum = BindMPIAllreduce(context, result, result, Reduction::Max);
+        auto gate = std::make_shared<std::atomic<bool>>(!workers || mpi.rank != 0);
+        SubmitArrays(engine, compute, [gate, rank = mpi.rank](ExecutionContext, auto values)
+                     {
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+            while (!gate->load() && std::chrono::steady_clock::now() < deadline) std::this_thread::yield();
+            values(0, 0) = gate->load() ? rank + 1 : -1000;
+            values(0, 1) = rank * 2; }, Write(src));
+        communication.WaitFor(compute.Record());
+        sum->Submit(engine, communication);
+        const auto done = maximum->Submit(engine, communication);
+        compute.WaitFor(done);
+        SubmitArrays(engine, compute, [](ExecutionContext, auto in, auto out)
+                     {
+            out(0, 0) = 2 * in(0, 0);
+            out(0, 1) = 2 * in(0, 1); }, Read(result), Write(observed));
+        // Other host collectives use the caller's original communicator.
+        // Rank zero may still be waiting for its producer on the queued lane.
+        CHECK(DNDS::MPI::AllreduceValue<DNDS::MPI::Reduction::Sum>(mpi.rank + 1, mpi.comm) == mpi.size * (mpi.size + 1) / 2);
+        *gate = true;
+        sum.reset();
+        maximum.reset();
+        context.reset();
+        compute.Record().WaitHost();
+        const auto values = observed.Read();
+        CHECK(values.At(0, 0) == (workers ? mpi.size * (mpi.size + 1) : 2 * (mpi.rank + 1)));
+        CHECK(values.At(0, 1) == (workers ? 2 * mpi.size * (mpi.size - 1) : 4 * mpi.rank));
+    }
 }
 
 TEST_CASE("Direct transfers support SELF and reordered split communicators without inherited tag attributes")

@@ -55,6 +55,7 @@ Runtime/Communication/Exchange.cpp
 Runtime/Storage/ElementSchema.cpp
 Runtime/Communication/RowTransfer.cpp
 Runtime/Communication/RowTransfer_Route.cpp
+Runtime/Communication/MPIGlobalReduction.cpp
 Runtime/Communication/NCCLTransfer.cpp
 Algebra/DofAlgebra.cpp
 Algebra/AmgXPreconditioner.cpp

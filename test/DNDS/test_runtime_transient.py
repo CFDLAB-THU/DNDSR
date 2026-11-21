@@ -256,3 +256,32 @@ def test_completed_callback_does_not_retain_its_frame_and_transfer():
     callback = run()
     gc.collect()
     assert callback() is None
+
+
+@pytest.mark.mpi
+@pytest.mark.parametrize("staged_cuda", [False, True])
+def test_streamed_host_allreduce_orders_consumer_after_binding_release(staged_cuda):
+    if staged_cuda and not R.cuda_enabled:
+        pytest.skip("requires CUDA")
+    shape = R.RowLayout.dense(1, 2)
+    engine = R.EagerEngine(1, R.AccessTrackingContext())
+    compute = engine.cuda_stream(0) if staged_cuda else engine.cpu_stream()
+    device = R.Device.cuda(0) if staged_cuda else R.Device.host()
+    src, observed = [R.Array(shape, np.dtype("int32"), device) for _ in range(2)]
+    send, result = [R.Array(shape, src.dtype, R.Device.host()) for _ in range(2)]
+    rank, size = MPI.COMM_WORLD.rank, MPI.COMM_WORLD.size
+    src.assign(np.array([[rank, -rank]], dtype=np.int32))
+    context = channel()
+    binding = context.bind_allreduce(send, result, R.Reduction.Min)
+    comm = engine.cpu_stream()
+    engine.copy(compute, src, send)
+    comm.wait_for(compute.record())
+    reduced = binding.submit(engine, comm)
+    del binding, context, send, src
+    if staged_cuda:
+        reduced.wait()  # Portable MPI completion must be visible before CUDA import.
+    compute.wait_for(reduced)
+    engine.copy(compute, result, observed)
+    del result
+    compute.record().wait()
+    np.testing.assert_array_equal(observed.numpy(), [[0, 1 - size]])

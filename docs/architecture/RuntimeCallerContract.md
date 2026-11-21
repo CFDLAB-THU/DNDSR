@@ -335,6 +335,26 @@ cannot diagnose a missing remote submission. Default MPI behavior is unchanged.
 
 ## Schemas, reductions and redistribution
 
+`BindMPIAllreduce(context, source, destination, op)` binds two compact host
+tables or a single in-place table to a matched MPI sum, min or max. The
+binding shares the supplied communication context. The caller chooses the
+ordering namespace during setup and supplies one CPU communication lane per
+rank. A different host collective on that communicator must follow completion
+of queued reductions. Setup checks the shape, scalar, operation and alias
+mode across ranks. The bound count must fit the MPI integer count.
+
+On submission, the engine reserves the Arrays, observes the producer prefix
+and posts `MPI_Iallreduce` from the binding's MPI controller. The lane waits for
+request completion before publishing its destination write. The returned
+prefix can order another CPU lane or be observed by its controller. Dropping
+the binding or Array handles after submission leaves the accepted operation
+intact. Portable progress requires the controller to enter event observation
+or engine progress. For a CUDA caller with host staging, observe the MPI
+completion on the controller before importing it and queuing the return copy.
+Use NCCL for a native device collective. Open MPI's CUDA-awareness query
+alone does not establish support for nonblocking device-buffer reductions.
+[Open MPI 5.0.x CUDA operation support](https://docs.open-mpi.org/en/v5.0.x/tuning-apps/networking/cuda.html)
+
 An `ElementSchema` describes MPI fields with an extent equal to the POD element
 stride. Its typemap must be valid and nonoverlapping within an element, with the
 same signature and semantics on communicating ranks. Arithmetic and Python dtype

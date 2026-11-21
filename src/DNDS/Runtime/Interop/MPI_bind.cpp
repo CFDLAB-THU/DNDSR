@@ -1,6 +1,7 @@
 #include "DNDS/Runtime/Interop/Array_bind.hpp"
 #include "DNDS/Runtime/Communication/DynamicRowTransfer.hpp"
 #include "DNDS/Runtime/Communication/MPIProgress.hpp"
+#include "DNDS/Runtime/Communication/MPIGlobalReduction.hpp"
 #include "DNDS/Runtime/Communication/NCCLTransfer.hpp"
 #include <pybind11/stl.h>
 
@@ -10,14 +11,31 @@ namespace DNDS::Runtime
     std::string ArrayTypeIdentity(const PythonArray &array);
     namespace
     {
-        template <class T>
-        std::shared_ptr<const GlobalReductionBinding> BindGlobalReduction(const NCCLTransferProvider &provider,
-                                                                          const PythonArray &input, const PythonArray &output,
-                                                                          Reduction operation)
+        template <class T, class Bind>
+        std::shared_ptr<const GlobalReductionBinding> BindTypedReduction(const PythonArray &input, const PythonArray &output, Bind bind)
         {
             auto source = input.AsArray<T>(), destination = output.AsArray<T>();
             py::gil_scoped_release release;
-            return provider.BindAllreduce(source, destination, operation);
+            return bind(source, destination);
+        }
+        template <class Bind>
+        std::shared_ptr<const GlobalReductionBinding> BindGlobalReduction(MPI_Comm comm, const PythonArray &input, const PythonArray &output, Bind bind)
+        {
+            const bool f64 = input.MatchesType<double>() && output.MatchesType<double>();
+            const bool f32 = input.MatchesType<float>() && output.MatchesType<float>();
+            const bool i64 = input.MatchesType<int64_t>() && output.MatchesType<int64_t>();
+            const bool i32 = input.MatchesType<int32_t>() && output.MatchesType<int32_t>();
+            {
+                py::gil_scoped_release release;
+                CommunicationDetail::RequireAll(f64 || f32 || i64 || i32, comm, "global reduction requires matching native FP32/FP64/I32/I64 operands");
+            }
+            if (f64)
+                return BindTypedReduction<double>(input, output, bind);
+            if (f32)
+                return BindTypedReduction<float>(input, output, bind);
+            if (i64)
+                return BindTypedReduction<int64_t>(input, output, bind);
+            return BindTypedReduction<int32_t>(input, output, bind);
         }
         struct PythonDynamicTransfer
         {
@@ -52,20 +70,9 @@ namespace DNDS::Runtime
                           { return NCCLTransferProvider::Create(std::move(context), device); }),
                  py::arg("context"), py::arg("device"))
             .def("bind_allreduce", [](const NCCLTransferProvider &provider, const PythonArray &input, const PythonArray &output, Reduction operation)
-                 {
-                     const bool f64 = input.MatchesType<double>() && output.MatchesType<double>();
-                     const bool f32 = input.MatchesType<float>() && output.MatchesType<float>();
-                     const bool i64 = input.MatchesType<int64_t>() && output.MatchesType<int64_t>();
-                     const bool i32 = input.MatchesType<int32_t>() && output.MatchesType<int32_t>();
-                     {
-                         py::gil_scoped_release release;
-                         CommunicationDetail::RequireAll(f64 || f32 || i64 || i32, provider.ControlContext()->Communicator(),
-                                                         "global reduction requires matching native FP32/FP64/I32/I64 operands");
-                     }
-                     if (f64) return BindGlobalReduction<double>(provider, input, output, operation);
-                     if (f32) return BindGlobalReduction<float>(provider, input, output, operation);
-                     if (i64) return BindGlobalReduction<int64_t>(provider, input, output, operation);
-                     return BindGlobalReduction<int32_t>(provider, input, output, operation); }, py::arg("source"), py::arg("destination"), py::arg("operation"))
+                 { return BindGlobalReduction(provider.ControlContext()->Communicator(), input, output,
+                                              [&](const auto &src, auto &dst)
+                                              { return provider.BindAllreduce(src, dst, operation); }); }, py::arg("source"), py::arg("destination"), py::arg("operation"))
             .def_static("available", &NCCLTransferProvider::Available)
             .def("check_async_error", &NCCLTransferProvider::CheckAsyncError)
             .def("abort", &NCCLTransferProvider::Abort);
@@ -76,6 +83,10 @@ namespace DNDS::Runtime
             .def(py::init([](const MPIInfo &mpi, bool collectivePreflight)
                           { return std::make_shared<CommunicationContext>(mpi.comm, collectivePreflight); }),
                  py::arg("mpi"), py::arg("collective_preflight") = true)
+            .def("bind_allreduce", [](std::shared_ptr<CommunicationContext> context, const PythonArray &input, const PythonArray &output, Reduction operation)
+                 { return BindGlobalReduction(context->Communicator(), input, output,
+                                              [&](const auto &src, auto &dst)
+                                              { return BindMPIAllreduce(context, src, dst, operation); }); }, py::arg("source"), py::arg("destination"), py::arg("operation"), "Bind a host Array MPI allreduce. Issue all bindings on this communicator on one matched CPU lane. Drain before unrelated host collectives on it.")
             .def_property_readonly("collective_preflight", &CommunicationContext::ChecksCollectivePreflight);
         py::enum_<TransferMode>(m, "TransferMode").value("Persistent", TransferMode::Persistent).value("Transient", TransferMode::Transient);
         py::enum_<TransferPreflight>(m, "TransferPreflight", "Inherit resolves the immutable communication context by default. Collective agrees launch rejection before posting. AbortOnFailure omits that agreement and aborts on a local launch failure.")
