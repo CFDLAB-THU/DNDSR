@@ -92,7 +92,7 @@ namespace CauchyTest
     /// is used by ghost building or interface matching.
     inline std::shared_ptr<DNDS::Geom::UnstructuredMesh> VortexPatch(
         const DNDS::MPIInfo &mpi, bool disk, int subdivisions = 16, int circleSegments = 48,
-        VortexPointDistribution distribution = VortexPointDistribution::JitteredGrid)
+        VortexPointDistribution distribution = VortexPointDistribution::JitteredGrid, bool periodicBox = true)
     {
         namespace G = DNDS::Geom;
         namespace R = DNDS::Runtime;
@@ -139,7 +139,7 @@ namespace CauchyTest
                         edge.push_back(mesh.insert(side==0 ? K::Point_2(0,t) : side==1 ? K::Point_2(length,t)
                                                                : side==2 ? K::Point_2(t,0) : K::Point_2(t,length)));
                     }
-                    const int zone=side==0 ? G::BC_ID_PERIODIC_1 : side==1 ? G::BC_ID_PERIODIC_1_DONOR
+                    const int zone=!periodicBox ? 102 : side==0 ? G::BC_ID_PERIODIC_1 : side==1 ? G::BC_ID_PERIODIC_1_DONOR
                                         : side==2 ? G::BC_ID_PERIODIC_2 : G::BC_ID_PERIODIC_2_DONOR;
                     for(int i=0;i<subdivisions;++i)
                     {
@@ -210,7 +210,7 @@ namespace CauchyTest
                 boundaryIds.View()(iBnd,0)=iBnd;
             } });
         std::optional<G::NativePeriodicImportOptions> periodic;
-        if (!disk)
+        if (!disk && periodicBox)
         {
             periodic.emplace();
             periodic->frames.translation[1].map() = G::tPoint{length, 0, 0};

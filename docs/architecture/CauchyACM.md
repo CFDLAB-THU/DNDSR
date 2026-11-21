@@ -25,7 +25,7 @@ transported primitive scalar contributes `s/beta2` in this column. The
 steady scalar pseudo-equations use the identity scalar diagonal. Use
 `implicit.diagonal = "block"` and `jacobianAction = "assembled"`.
 
-Closed and periodic domains project pressure to one fixed volume-weighted
+Standalone closed and periodic domains project pressure to one fixed volume-weighted
 mean. Set `equation.acmPressureMean` to override the initialized mean in
 code units. Accepted and internal checkpoints carry the target. Older
 checkpoints derive it from the loaded accepted field. A pressure outlet
@@ -38,6 +38,16 @@ accepted state's spatial continuity residual. `mean_pressure` records the gauge.
 The default resolved ACM controls reject capped stages. Plain SSPRK3 cannot
 advance this singular physical system. The one-cycle vortex campaigns qualify
 individual implicit time methods separately.
+
+For reciprocal domain interfaces, an actual pressure outlet or farfield on any
+member supplies the datum for that connected component. The receiver consumes
+the interpolated pressure during its local solve. Applying a local mean shift
+at the receiver would erase physical pressure differences. All members omit
+the automatic mean projection, including coarse-level and coupled-stage
+solves. Startup checks the active mesh zones across the simulation communicator
+before publishing packets. A component with no physical reference requires a
+coordinated gauge and is rejected at setup pending implementation. One-way ACM
+connections also remain outside the qualified pressure policy.
 
 An analytical solenoidal velocity can still have a nonzero discrete continuity
 residual because the numerical flux includes pressure dissipation. Trapz and

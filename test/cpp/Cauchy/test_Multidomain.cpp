@@ -34,7 +34,7 @@ namespace
         const auto values = read.View<R::UniformTableRows>();
         std::vector<double> result;
         for (I iCell = 0; iCell < values.RowCount(); ++iCell)
-            for (int j = 0; j < 5; ++j)
+            for (I j = 0; j < values.Width(); ++j)
                 result.push_back(values(iCell, j));
         return result;
     }
@@ -154,6 +154,62 @@ TEST_CASE("Multi-domain BDF2 restart reserves every domain and redistributes by 
         RemoveCheckpoint(path);
     }
 }
+TEST_CASE("Moving ACM disk follows the pressure datum of the connected outer domain through restart")
+{
+    const auto factory = [](I iDomain, const auto &, const auto &domainMPI)
+    {
+        return CauchyTest::VortexPatch(domainMPI, iDomain == 1, 8, 20,
+                                       CauchyTest::VortexPointDistribution::JitteredGrid, false);
+    };
+    const auto state = [](double pressure) -> C::Json
+    { return {{"type", "primUP"}, {"state", {0., 0., 0., pressure}}}; };
+    C::Json input{
+        {"domains", Domains(mpi.size > 1)},
+        {"time", {{"method", "bdf1"}}},
+        {"defaults", {{"equation", {{"system", "incompressibleACM"}, {"eos", "none"}, {"acmPressureMean", 9.}, {"referenceScales", {{"rho0", 1}, {"U0", 1}, {"L0", 1}, {"T0", 300}}}}}, {"initialState", state(-2.)}, {"boundaries", {{"101", {{"kind", "interface"}}}}}, {"numerics", {{"reconstruction", "gradient"}, {"flux", "Roe"}, {"positivity", false}}}, {"implicit", {{"diagonal", "block"}, {"jacobianAction", "assembled"}, {"iterations", 3}, {"rejectUnconvergedStages", false}}}}},
+        {"interfaces", C::Json::array({{{"donor", "outer"}, {"receiver", "disk"}, {"donorZone", 101}, {"receiverZone", 101}, {"maxGap", .03}, {"refreshCadence", "nonlinearIteration"}},
+                                       {{"donor", "disk"}, {"receiver", "outer"}, {"donorZone", 101}, {"receiverZone", 101}, {"maxGap", .03}, {"refreshCadence", "nonlinearIteration"}}})}};
+    input["domains"][0]["overrides"]["boundaries"]["102"] = {{"kind", "pressureOutlet"}, {"state", state(-2.)}};
+    input["domains"][1]["overrides"] = {{"initialState", state(-1.99)}, {"equation", {{"acmPressureMean", 7.}}}, {"motion", {{"angularVelocity", {0., 0., .02}}, {"center", {5., 5., 0.}}}}};
+    const auto config = C::SimulationConfig::ResolveCollective(input, mpi.comm);
+    C::Simulation simulation(config, mpi.comm, factory);
+    for (I d = 0; d < 2; ++d)
+        if (simulation.Local(d))
+        {
+            const auto &domain = simulation.GetDomain(d);
+            CHECK(domain.Discretization().HasPressureBoundary() == (d == 0));
+            CHECK_FALSE(domain.CaptureStateSnapshot(false).PressureGauge().has_value());
+        }
+    constexpr double dt = .001;
+    REQUIRE(simulation.Advance(dt).accepted);
+    CHECK(simulation.GetInterfaceDiagnostics().queryPoints > 0);
+    auto path = CheckpointPath("acm-outlet-");
+    simulation.WriteCheckpoint(path, true);
+    C::Simulation resumed(config, mpi.comm, factory);
+    resumed.ReadCheckpoint(path);
+    REQUIRE(simulation.Advance(dt).accepted);
+    REQUIRE(resumed.Advance(dt).accepted);
+    for (I d = 0; d < 2; ++d)
+        if (simulation.Local(d))
+        {
+            const auto actual = Values(resumed.GetDomain(d)), expected = Values(simulation.GetDomain(d));
+            REQUIRE(actual.size() == expected.size());
+            for (size_t i = 0; i < actual.size(); ++i)
+                CHECK(actual[i] == doctest::Approx(expected[i]).epsilon(1e-11).scale(1));
+            if (d == 1)
+            {
+                double speed = 0;
+                for (size_t i = 0; i < actual.size(); i += 4)
+                {
+                    speed = std::max(speed, std::hypot(actual[i], actual[i + 1]));
+                    CHECK(std::abs(actual[i + 3] + 2.) < .1);
+                }
+                CHECK(DNDS::MPI::AllreduceValue<DNDS::MPI::Reduction::Max>(speed, resumed.GetDomain(d).Communicator()) > 1e-8);
+            }
+        }
+    RemoveCheckpoint(path);
+}
+
 TEST_CASE("Coordinated domains retain single-domain time equations and atomic publication")
 {
     for (const std::string method : {"ssprk3", "bdf2", "esdirk4", "ditr"})

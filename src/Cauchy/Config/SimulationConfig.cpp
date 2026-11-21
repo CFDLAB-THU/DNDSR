@@ -280,9 +280,15 @@ namespace DNDS::Cauchy
             // Packets carry code-unit state. Check the full resolved material
             // and scaling contract before allocating either domain's mesh.
             const auto &domains = data->root.at("domains");
-            const auto &donorEquation = domains.at(donor).at("settings").at("equation");
-            const auto &receiverEquation = domains.at(receiver).at("settings").at("equation");
-            DNDS_check_throw_info(donorEquation == receiverEquation,
+            const auto packetEquation = [&](index domain)
+            {
+                auto equation = domains.at(domain).at("settings").at("equation");
+                // A pressure gauge controls a nonlinear solve. It does not change
+                // the packet's units, fields, or pressure differences.
+                equation.erase("acmPressureMean");
+                return equation;
+            };
+            DNDS_check_throw_info(packetEquation(donor) == packetEquation(receiver),
                                   "interface " + connection.donor + " -> " + connection.receiver +
                                       " requires identical equation, material and scaling settings");
             const auto &boundaries = data->domains[receiver].settings.boundaries;

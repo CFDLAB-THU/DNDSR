@@ -546,8 +546,8 @@ namespace DNDS::Cauchy
         for (const auto &[zone, condition] : s.boundaries)
         {
             const bool common = condition.kind == "extrapolate" || condition.kind == "farfield" ||
-                                condition.kind == "slipWall" || condition.kind == "noSlipWall";
-            const bool familyBC = acm ? condition.kind == "velocityInlet" || condition.kind == "pressureOutlet" : condition.kind == "totalConditionInlet" || condition.kind == "analytic" || condition.kind == "doubleMachBottom" || condition.kind == "interface";
+                                condition.kind == "slipWall" || condition.kind == "noSlipWall" || condition.kind == "interface";
+            const bool familyBC = acm ? condition.kind == "velocityInlet" || condition.kind == "pressureOutlet" : condition.kind == "totalConditionInlet" || condition.kind == "analytic" || condition.kind == "doubleMachBottom";
             require(common || familyBC, "BC zone " + zone + ": " + condition.kind);
             require(!acm || condition.thermal == "adiabatic", "ACM has no thermal wall equation");
             require(condition.kind != "doubleMachBottom" || condition.profile.kind == "doubleMachReflection", "DMR bottom requires its analytic shock profile");

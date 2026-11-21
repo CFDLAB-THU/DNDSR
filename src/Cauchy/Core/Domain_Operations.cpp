@@ -216,10 +216,9 @@ namespace DNDS::Cauchy
         DNDS_check_throw_info(
             candidate._data &&
                 &candidate._data->domain.get() == this &&
-                candidate._data->candidate &&
-                candidate._data->candidate->equationGuess,
-            "interface checkpoint requires a variational reconstruction candidate");
-        auto &guess = *candidate._data->candidate->equationGuess;
+                candidate._data->candidate,
+            "interface checkpoint candidate belongs to another domain");
+        auto &guess = candidate._data->candidate->equationGuess;
         std::vector<Runtime::TransferOperation> means, coefficients;
         for (index iField = 0;
              iField < _state.trial.PhysicalFieldNumber(); ++iField)
@@ -227,16 +226,22 @@ namespace DNDS::Cauchy
             means.push_back(_problem.finiteVolume.BindHalo(
                                                      _state.trial.PhysicalField(iField))
                                 .Begin());
-            coefficients.push_back(_problem.finiteVolume.BindHalo(
-                                                            guess.PhysicalField(iField))
-                                       .Begin());
+            if (guess)
+                coefficients.push_back(_problem.finiteVolume.BindHalo(guess->PhysicalField(iField)).Begin());
         }
         for (auto &operation : means)
             operation.Wait();
         for (auto &operation : coefficients)
             operation.Wait();
-        return _problem.finiteVolume.PublishVariationalInterfaceDonor(
-            _state.trial, guess);
+        // Match the accepted-time predictor in Simulation::Advance. Direct P1
+        // publishes means here. It rebuilds gradients with stage-time packets
+        // when the next step prepares its first reconstruction.
+        if (guess)
+            return _problem.finiteVolume.PublishVariationalInterfaceDonor(_state.trial, *guess);
+        DNDS_check_throw_info(!_problem.finiteVolume.PolynomialReconstruction(),
+                              "missing variational checkpoint donor coefficients");
+        return _problem.finiteVolume.PublishInterfaceDonor(
+            _state.trial, *_state.reconstruction, *_execution.workspace, false);
     }
     void Domain::ReserveCheckpoint(CheckpointCandidate &candidate,
                                    bool collectiveChecks)

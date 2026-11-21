@@ -311,7 +311,9 @@ namespace DNDS::Cauchy
                         { _data = std::make_shared<Data>(discrete, state, std::move(reconstruction), std::move(workspace), engine, std::move(stream), settings, std::move(implicit), std::move(workers)); });
         MPI::LocalStage(mpi, [&]
                         { _data->ValidateMeans(state); });
-        if (discrete.Equation().IsACM() && !discrete.HasPressureBoundary())
+        // A frozen interface trace supplies pressure during the local solve.
+        // Simulation validates the reference across domains before the first exchange.
+        if (discrete.Equation().IsACM() && !discrete.HasPressureBoundary() && !discrete.HasInterfaces())
         {
             if (!pressureGauge)
             {

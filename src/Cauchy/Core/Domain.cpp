@@ -78,7 +78,9 @@ namespace DNDS::Cauchy
         _state.accepted.RequireSchema(_problem.equation.Schema());
         DNDS_check_throw_info(_problem.finiteVolume.Metrics().Dimension() == settings.mesh.dimension, "Cauchy config/mesh dimension differs");
         _problem.admissibility.emplace(_problem.finiteVolume.PrepareAdmissibility(_execution.ChemicalWorkers()));
-        if (_problem.equation.IsACM() && !_problem.finiteVolume.HasPressureBoundary())
+        // A frozen interface trace supplies pressure during the local solve.
+        // Simulation validates the reference across domains before the first exchange.
+        if (_problem.equation.IsACM() && !_problem.finiteVolume.HasPressureBoundary() && !_problem.finiteVolume.HasInterfaces())
         {
             auto &engine = _execution.Engine();
             const auto &lane = _execution.ComputeStream();
