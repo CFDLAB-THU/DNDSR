@@ -11,7 +11,7 @@ namespace DNDS::Cauchy
 {
     class FiniteVolume;
     class InterfaceDonorPublication;
-    class ThermalPolicy;
+    class AdmissibilityPolicy;
     class MeanStateCheck;
     namespace Detail
     {
@@ -79,7 +79,7 @@ namespace DNDS::Cauchy
         EquationDofs _quadrature;
         EquationDofs _faceCenters;
         EquationPropertyKey _property;
-        std::shared_ptr<const ThermalPolicy> _thermal;
+        std::shared_ptr<const AdmissibilityPolicy> _admissibility;
         std::shared_ptr<const Detail::BoundaryPointLayout> _layout;
         /// Optional validated consumer of a superset packet, e.g. a pMG
         /// center-only reader of the live fine packet. Provider sections and
@@ -108,10 +108,10 @@ namespace DNDS::Cauchy
         }
         BoundaryInputs(EquationDofs quadrature, EquationDofs faceCenters,
                        EquationPropertyKey property,
-                       std::shared_ptr<const ThermalPolicy> thermal)
+                       std::shared_ptr<const AdmissibilityPolicy> admissibility)
             : _quadrature(std::move(quadrature)),
               _faceCenters(std::move(faceCenters)),
-              _property(std::move(property)), _thermal(std::move(thermal)) {}
+              _property(std::move(property)), _admissibility(std::move(admissibility)) {}
 
     public:
         /// O(1) identity of a completed publication, preserved by packet alias.

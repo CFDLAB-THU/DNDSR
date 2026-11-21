@@ -203,25 +203,9 @@ namespace DNDS::Cauchy::CPU
             return {}; });
     }
 
-    NumericalStatus ValidateInterfacePacketRows(Algebra::DofComponentView<const real> rows, BoundaryPointRows points,
-                                                ThermalView thermal, RANSStateView rans, EquationBlockReadView ransValues) noexcept
-    {
-        return OMP::ForRowsStatus(0, rows.RowCount(), [&](index iPoint) -> NumericalStatus
-                                  {
-            if (points(iPoint, 0).interface)
-            {
-                if (!(thermal.Admissible(
-                        ThermalAdmissibilityDetail::PointRow<decltype(rows)>{rows, iPoint})))
-                    return NumericalStatus{NumericalError::InvalidState, 1, iPoint};
-                if (rans.components)
-                    if (!(rans.Admissible(ransValues[iPoint])))
-                        return NumericalStatus{NumericalError::InvalidState, 2, iPoint};
-            }
-            return {}; });
-    }
     NumericalStatus ValidateInterfacePacketRanges(Algebra::DofComponentView<const real> rows,
                                                   Runtime::ArrayView<const BoundaryFaceRange, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> ranges,
-                                                  bool centers, ThermalView thermal, RANSStateView rans, EquationBlockReadView ransValues) noexcept
+                                                  bool centers, AdmissibilityView admissibility) noexcept
     {
         return OMP::ForRowsStatus(0, ranges.RowCount(), [&](index iFace) -> NumericalStatus
                                   {
@@ -232,10 +216,8 @@ namespace DNDS::Cauchy::CPU
             const index end = begin + (centers ? 1 : range.quadratureCount);
             for (index iPoint = begin; iPoint < end; ++iPoint)
             {
-                if (!thermal.Admissible(ThermalAdmissibilityDetail::PointRow<decltype(rows)>{rows, iPoint}))
+                if (!admissibility.Admissible(ThermalAdmissibilityDetail::PointRow<decltype(rows)>{rows, iPoint}))
                     return NumericalStatus{NumericalError::InvalidState, 1, iPoint};
-                if (rans.components && !rans.Admissible(ransValues[iPoint]))
-                    return NumericalStatus{NumericalError::InvalidState, 2, iPoint};
             }
             return {}; });
     }
@@ -276,21 +258,4 @@ namespace DNDS::Cauchy::CPU
                 force[d] += workerSums[iWorker][d];
         return force;
     }
-    NumericalStatus ValidateInterfaceAliasRows(Algebra::DofComponentView<const real> rows,
-                                               BoundaryPointRows a, BoundaryPointRows b, ThermalView thermal) noexcept
-    {
-        return OMP::ForRowsStatus(0, a.RowCount(), [&](index iPoint) -> NumericalStatus
-                                  {
-            if (!(a(iPoint, 0).cell == b(iPoint, 0).cell && a(iPoint, 0).face == b(iPoint, 0).face && a(iPoint, 0).quadrature == b(iPoint, 0).quadrature &&
-                  a(iPoint, 0).zone == b(iPoint, 0).zone && a(iPoint, 0).point == b(iPoint, 0).point && a(iPoint, 0).normal == b(iPoint, 0).normal && a(iPoint, 0).interface == b(iPoint, 0).interface))
-                return NumericalStatus{NumericalError::InvalidState, 1, iPoint};
-            if (b(iPoint, 0).interface)
-                if (!(
-                        thermal.Admissible(
-                            ThermalAdmissibilityDetail::PointRow<decltype(rows)>{
-                                rows, iPoint})))
-                    return NumericalStatus{NumericalError::InvalidState, 2, iPoint};
-            return {}; });
-    }
-
 }

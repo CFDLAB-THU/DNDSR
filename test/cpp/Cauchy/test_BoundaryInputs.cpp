@@ -215,6 +215,35 @@ TEST_CASE("Total inlet resolves physical vector input and applies static density
     CHECK(approximate.isZero());
 }
 
+TEST_CASE("An ACM interface publishes negative relative pressure and zero velocity")
+{
+    const auto mesh = CFVTest::CartesianHexes(mpi, 2);
+    C::DomainSettings settings;
+    settings.mesh.dimension = 3;
+    settings.equation.system = "incompressibleACM";
+    settings.equation.eos = "none";
+    settings.numerics.reconstruction = "gradient";
+    settings.numerics.positivity = false;
+    settings.boundaries["7"].kind = "interface";
+    const auto equation = C::EquationSystem::Resolve(settings.equation);
+    C::FiniteVolume fv(mesh, settings, equation);
+    auto packet = fv.BuildBoundaryInputs();
+    for (auto *section : {&packet.FaceCenterValues(), &packet.QuadratureValues()})
+    {
+        auto write = section->WriteOwned();
+        const auto rows = write.Block("flow");
+        for (I i = 0; i < rows.RowCount(); ++i)
+            for (int j = 0; j < 4; ++j)
+                rows(i, j) = j == 3 ? -3. : 0.;
+    }
+    fv.PublishBoundaryInputs(packet, 0.);
+    fv.ValidateBoundaryInputs(packet, 0.);
+    const auto read = packet.FaceCenterValues().ReadOwned();
+    const auto published = read.Block("flow");
+    REQUIRE(published.RowCount() > 0);
+    CHECK(published(0, 3) == -3.);
+}
+
 TEST_CASE("P1 least squares uses affine receiver face-center values from an interface packet")
 {
     const auto mesh = CFVTest::CartesianHexes(mpi, 3);

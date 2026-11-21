@@ -98,19 +98,13 @@ namespace DNDS::Cauchy::CPU
     NumericalStatus FillPrimitiveBoundary(const PrimitiveBoundaryRequest &request,
                                           SpanView<const BoundaryCondition> conditions) noexcept;
 
-    using BoundaryPointRows = Runtime::ArrayView<const BoundaryPoint, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>>;
-    NumericalStatus ValidateInterfacePacketRows(Algebra::DofComponentView<const real> rows, BoundaryPointRows points,
-                                                ThermalView thermal, RANSStateView rans, EquationBlockReadView ransValues) noexcept;
     NumericalStatus ValidateInterfacePacketRanges(Algebra::DofComponentView<const real> rows,
                                                   Runtime::ArrayView<const BoundaryFaceRange, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> ranges,
-                                                  bool centers, ThermalView thermal, RANSStateView rans, EquationBlockReadView ransValues) noexcept;
+                                                  bool centers, AdmissibilityView admissibility) noexcept;
     /// Optional caller-owned worker slots enable independent contiguous scans
     /// and an ordered FP sum. Empty slots retain the serial reference path.
     Vector3 AccumulateBoundaryForce(FiniteVolumeStencilView stencil,
                                     Runtime::ArrayView<const BoundaryFaceRange, Runtime::AccessBoundsChecks, Runtime::FixedRows<1>> ranges,
                                     Runtime::ArrayView<const real, Runtime::AccessBoundsChecks, Runtime::FixedRows<3>> values,
                                     SpanView<const int> zones, SpanView<Vector3> workerSums = {});
-    /// Check an alias between identical point layouts under retained scopes.
-    NumericalStatus ValidateInterfaceAliasRows(Algebra::DofComponentView<const real> rows,
-                                               BoundaryPointRows a, BoundaryPointRows b, ThermalView thermal) noexcept;
 }

@@ -183,11 +183,14 @@ namespace DNDS::Cauchy
         Metrics().Validate();
         DNDS_check_throw_info(_data->equation.HasMixture() == bool(workers),
                               "interface packet needs exactly its equation chemistry backend");
-        auto thermal = std::make_shared<const ThermalPolicy>(
+        const auto rans = _data->equation.HasRANS()
+                              ? RANSStateView{_data->equation.RANS().Kind(), _data->equation.RANS().ComponentNumber()}
+                              : RANSStateView{};
+        auto admissibility = std::make_shared<const AdmissibilityPolicy>(
             _data->equation, _data->settings.numerics.densityFloor,
             _data->settings.numerics.temperatureFloor,
             _data->settings.numerics.sensibleEnergyFloor,
-            _data->settings.numerics.pressureFloor,
+            _data->settings.numerics.pressureFloor, rans,
             workers ? workers->Acquire()
                     : Physics::Chemistry::ChemicalWorkerPool::Lease{});
         BoundaryInputs input(
@@ -197,7 +200,7 @@ namespace DNDS::Cauchy
             BuildPacketRows(_data->equation.Schema(),
                             _data->boundaryLayout->faces.RowCount(),
                             "boundary face centers", Device()),
-            _data->equation.PropertyKey(), std::move(thermal));
+            _data->equation.PropertyKey(), std::move(admissibility));
         input._layout = _data->boundaryLayout;
         BeginBoundaryUpdate(input, stream);
         return input;
@@ -209,7 +212,7 @@ namespace DNDS::Cauchy
         BoundaryInputs frozen(
             EquationDofOperations::NewVector(input._quadrature),
             EquationDofOperations::NewVector(input._faceCenters),
-            input._property, input._thermal);
+            input._property, input._admissibility);
         frozen._layout = input._layout;
         frozen._consumerLayout = _data->boundaryLayout;
         auto engine = stream ? stream->LockEngine() : R::EagerEngine{};
@@ -229,7 +232,7 @@ namespace DNDS::Cauchy
                                   (input._layout == _data->boundaryLayout || input._consumerLayout == _data->boundaryLayout),
                               "boundary packet point order or geometry differs");
         DNDS_check_throw_info(input._property == _data->equation.PropertyKey() &&
-                                  input._thermal,
+                                  input._admissibility,
                               "boundary packet physical model differs");
         const auto validate = [&](const EquationDofs &values, index rows)
         {
@@ -277,21 +280,17 @@ namespace DNDS::Cauchy
         ValidateBoundaryLayout(input);
         DNDS_check_throw_info(input._publication && !input.Published() && std::isfinite(time), "boundary publication needs a begun update and finite physical time");
         // PP POLICY -- an interface packet is a frozen complete mean-like point
-        // state, not a raw reconstruction polynomial. Flow/species therefore
-        // satisfy the stored-state simplex and clipped EOS/T invariant, while
-        // RANS uses its independent model bounds. Sampling never writes a
-        // temporary EOS composition back into these transported packet values.
+        // state. Compressible flow/species satisfy the stored-state simplex
+        // and clipped EOS/T invariant. ACM accepts any finite relative pressure
+        // and velocity. Both families apply their model-specific RANS bounds.
+        // Sampling keeps the transported composition intact.
         const auto validate = [&](const EquationDofs &values, bool centers)
         {
             const auto read = values.ReadOwned();
             const auto layout = read.ComponentLayout();
             const auto ranges = input._layout->faces.Read();
-            const auto rans = _data->equation.HasRANS()
-                                  ? RANSStateView{_data->equation.RANS().Kind(), _data->equation.RANS().ComponentNumber()}
-                                  : RANSStateView{};
-            const auto ransBlock = rans.components ? read.Block("rans") : EquationBlockReadView{};
             RequireNumericalSuccess(CPU::ValidateInterfacePacketRanges(layout.View(), ranges.View<R::FixedRows<1>>(),
-                                                                       centers, input._thermal->View(), rans, ransBlock),
+                                                                       centers, input._admissibility->View()),
                                     "ValidateInterfacePacketRows");
         };
         if (Device() == R::Device::Host())
@@ -331,13 +330,7 @@ namespace DNDS::Cauchy
                                 flags(i, 0) = 1;
                         }
                     }
-                    const auto &n = _data->settings.numerics;
-                    const auto rans = _data->equation.HasRANS()
-                                          ? RANSStateView{_data->equation.RANS().Kind(), _data->equation.RANS().ComponentNumber()}
-                                          : RANSStateView{};
-                    checker = std::make_shared<MeanStateCheck>(values.Space(),
-                                                               AdmissibilityPolicy(_data->equation, n.densityFloor, n.temperatureFloor,
-                                                                                   n.sensibleEnergyFloor, n.pressureFloor, rans),
+                    checker = std::make_shared<MeanStateCheck>(values.Space(), *input._admissibility,
                                                                lane.Context(), active.To(Device(), lane.Context()));
                 }
                 RequireNumericalSuccess(checker->Evaluate(engine, lane, values), "ValidateInterfacePacketRows");
