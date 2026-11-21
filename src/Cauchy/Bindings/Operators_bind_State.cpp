@@ -1,6 +1,7 @@
 #include "Cauchy/Bindings/Operators_bind.hpp"
 #include "Cauchy/Bindings/OperatorsBindInternal.hpp"
-#include "Cauchy/State/EquationDofAlgebra.hpp"
+#include "Cauchy/State/QueuedEquationOperations.hpp"
+#include "Solver/TimeIntegration/DITRCoefficients.hpp"
 #include "DNDS/Runtime/Interop/Array_bind.hpp"
 #include <pybind11/stl.h>
 
@@ -90,6 +91,29 @@ namespace DNDS::Cauchy::Bindings
                      &EquationDofOperations::LinearCombination),
                  py::arg("alpha"), py::arg("x"), py::arg("beta"), py::arg("y"),
                  py::call_guard<py::gil_scoped_release>(), Local);
+        using Ops = QueuedEquationOperations;
+        py::class_<Ops>(
+            m, "EquationOperations",
+            "Owned equation algebra on one Runtime stream. Record a stream event before cross-stream use or host observation.")
+            .def(py::init<R::ExecutionStream>(), py::arg("stream"))
+            .def("axpy", &Ops::Axpy, py::arg("out"), py::arg("alpha"), py::arg("x"),
+                 py::call_guard<py::gil_scoped_release>())
+            .def("mass_axpy", &Ops::PhysicalAxpy, py::arg("out"), py::arg("alpha"), py::arg("state"),
+                 py::call_guard<py::gil_scoped_release>(), "out += alpha*M*state. M masks the ACM pressure component.")
+            .def("mass_combination", &Ops::PhysicalLinearCombination, py::arg("out"), py::arg("a"), py::arg("x"),
+                 py::arg("b"), py::arg("y"), py::call_guard<py::gil_scoped_release>(), "out = a*M*x + b*M*y.")
+            .def("mass_state_and_rate", &Ops::PhysicalStateAndRate, py::arg("out"), py::arg("a"), py::arg("state"),
+                 py::arg("b"), py::arg("rate"), py::call_guard<py::gil_scoped_release>(),
+                 "out = a*M*state + b*rate. Every rate component participates.");
+        m.def("_ditr_weights", [](real fraction, real theta, const std::string &variant)
+        {
+            DNDS_check_throw_info(variant == "U2R1" || variant == "U2R2", "unknown DITR variant");
+            ODE::DITRSettings settings{fraction, theta,
+                                       variant == "U2R1" ? ODE::DITRVariant::U2R1 : ODE::DITRVariant::U2R2};
+            settings.Validate();
+            const ODE::DITRCoefficients weights(fraction, settings.variant);
+            return std::make_pair(weights.interpolation, weights.integration);
+        });
         py::class_<AuxiliaryRequest>(m, "AuxiliaryRequest")
             .def(py::init<>())
             .def_readwrite("cell_turbulent_viscosity", &AuxiliaryRequest::cellTurbulentViscosity)

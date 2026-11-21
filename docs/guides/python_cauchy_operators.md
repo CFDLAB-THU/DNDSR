@@ -267,6 +267,19 @@ introduced. A caller building its own iteration loop owns CFL progression,
 convergence and trial rollback. Native Domain/Simulation remain the simple
 way to obtain method-owned stage/step history and accepted-step transactions.
 
+## Queued DITR equations
+
+`Cauchy.DITREquations(stream, fraction, theta, variant)` uses the native
+U2R1/U2R2 weights. Pass the resolved time settings from the case. With caller-owned
+means and volume-normalized rates, `midpoint_source` and `endpoint_source`
+write their respective frozen source to the supplied destination and return the
+multiplier of the unknown stage's spatial rate. After both corrections and rate
+refreshes, `stopping_residual` writes I+H. These calls enqueue native operations
+on the supplied stream. Before reading a field on the host, call
+`stream.record().wait()`. This algebra can also feed another computation on the
+same stream. The solver's stage-specific convergence and ACM continuity gates
+remain separate from equation assembly.
+
 ## Scope and verification
 
 The Python interface is a thin operator composition boundary, not a binding of

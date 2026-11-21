@@ -4,11 +4,12 @@
 nonlinear loop. `StateDITR.hpp` is a forwarding alias. `FieldDITR` and Cauchy's
 `EquationDITR` select storage/algebra adapters. Legacy Euler ODE is unchanged.
 
-For initial, intermediate and endpoint states U0,Um,Ue and rates F=dU/dt:
+For initial, intermediate and endpoint states U0, Um, Ue, spatial rates
+F0, Fm, Fe, and physical mass map M, the two equations are
 
 ```text
-H = (c0 U0+c1 Ue-Um)/dt + c2 F0+c3 Fe
-I = (U0-Ue)/dt + w0 F0+w1 Fm+w2 Fe
+H = M(c0 U0+c1 Ue-Um)/dt + c2 F0+c3 Fe
+I = M(U0-Ue)/dt + w0 F0+w1 Fm+w2 Fe
 U2R2: c = [1-3a²+2a³, 3a²-2a³, a-2a²+a³, -a²+a³]
 U2R1: c = [(1-a)², 2a-a², 0, -a+a²]
 w = [1/2-1/(6a), -1/(6a(a-1)), 1/2+1/(6(a-1))]
@@ -31,7 +32,7 @@ CoupledStage enforce intermediate/endpoint order. AssembleStoppingResidual
 closes each iteration. The method does not choose convergence, mutate accepted
 state, advance a clock or retain accepted-step history.
 
-Prepared equations use resOther + alpha*F(U,t) - U/dt. resOther excludes the
+Prepared equations use resOther + alpha*F(U,t) - M*U/dt. resOther excludes the
 current unknown and its RHS; the other state/rate and forcing remain frozen
 through the whole correction, including a spatial V-cycle. CurrentRate exposes
 the initial guess or last refreshed rate for that stage. Correction operators
@@ -42,21 +43,29 @@ Callbacks may refresh ghosts but preserve owned rate-input values, bindings,
 other-stage inputs and forcing. Version/binding checks stay outside hot loops.
 The controller serializes calls, agrees ordering and coordinates failures before
 MPI. Callbacks complete outputs before returning and retain no temporary raw
-views. Outputs guarantee owned values only. This is synchronous CPU execution.
+views. Outputs guarantee owned values only. The equation operations use the
+domain compute stream. A host observation must wait for its producing work.
 
-Domain binds separate intermediate reconstruction/auxiliary/linear and optional
-pMG workspace to the method's intermediate allocation, sharing immutable FV
-geometry. Each trial cold-starts its intermediate polynomial; Begin resets
-means/rate guesses on retry. Fresh time storage gets a fresh operator binding.
-Accepted reconstruction rollback remains the Domain transaction. No persistent
-intermediate polynomial dataset is needed in a restart.
+The midpoint and endpoint have independent states, rates, source derivatives
+and durable reconstruction coefficients. Their serialized corrections share
+temporary FV scratch. On a new trial the midpoint copies the endpoint's warm
+reconstruction, and both rates start at F(U0,t0). Exact internal restart
+restores the saved midpoint and endpoint reconstructions and the active
+method fields. Accepted-step restart uses the configured checkpoint contents.
+
+Python can assemble the same two sources and the stopping residual with
+`Cauchy.DITREquations`. It uses the native interpolation and integration
+weights and queues owned row arithmetic on the supplied Runtime stream.
+The pressure component of an ACM state has zero physical mass. Its rate
+still contributes to the midpoint and endpoint equations.
 
 ## Common control and current validation
 
-NonlinearDetail::Iterate observes after both corrections, once per iteration.
+`DITRSequential2StagePolicy` observes after both corrections, once per iteration.
 LastCoupledTargetRatio is the same selected-component I+H ratio as the single
-nonlinear report. All component norms remain observable. Selection defaults to
-density; reacting cases must explicitly select species/all. A finite admissible
+nonlinear report. All component norms remain observable. Compressible flow defaults to density.
+ACM uses its configured velocity components and independently checks continuity
+at both stages. Reacting domains can select species by name. A finite admissible
 capped iterate may be accepted by default, retaining converged=false; explicit
 implicit.rejectUnconvergedStages rejects it.
 
