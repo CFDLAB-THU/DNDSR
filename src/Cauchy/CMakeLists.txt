@@ -115,6 +115,7 @@ set(CPPS
     Implicit/LinearProblem_Inverse.cpp
     Implicit/LinearProblem_ActionStatus.cpp
     Implicit/FrozenJacobianOperator.cpp
+    Implicit/CPU/LocalAggregationAMG.cpp
     Implicit/CPU/LinearBlockKernels_Array.cpp
     Implicit/CPU/LinearBlockKernels_Dof.cpp
     Implicit/CPU/LinearBlockKernels_ILU.cpp

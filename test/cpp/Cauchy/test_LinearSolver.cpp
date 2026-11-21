@@ -858,3 +858,37 @@ TEST_CASE("CPU AMG preserves distributed action and CPU column-major blocks")
         }
     }
 }
+
+TEST_CASE("One CPU AMG correction follows logical block order in a permuted equation field")
+{
+    Fixture fixture(1, false, true);
+    C::EquationSchema schema{"permuted", "identity", "identity", {}};
+    schema.blocks = {{"velocity", {{"u"}, {"v"}, {"w"}}, {}}, {"scalars", {{"a"}, {"b"}}, {}}};
+    A::DofBundle fields(fixture.space);
+    fields.Add("combined", Field(fixture.space, R::RowLayout::ColMajor(0, 5)));
+    C::EquationDofs rhs(schema, std::move(fields), {{"velocity", "combined", 2}, {"scalars", "combined", 0}});
+    {
+        const auto src = fixture.rhs.Owned().Read();
+        auto write = rhs.WriteOwned();
+        const auto layout = write.ComponentLayout();
+        for (DNDS::index i = 0; i < 4; ++i)
+            for (int j = 0; j < 5; ++j)
+                layout.View()(i, j) = src.At(i, j);
+    }
+    C::LinearSolveSettings settings;
+    settings.method = "amg";
+    settings.stopping = "fixedCount";
+    settings.maxIterations = 1;
+    const auto bind = [&](Field &field)
+    { return fixture.Bind(field); };
+    C::LinearSolver canonical(fixture.problem, fixture.rhs, bind, settings);
+    C::DofLinearSolver permuted(fixture.problem, rhs, bind, settings);
+    REQUIRE(canonical.Solve(fixture.rhs).usable);
+    REQUIRE(permuted.Solve(rhs).usable);
+    const auto expected = canonical.Solution().Owned().Read();
+    const auto read = permuted.Solution().ReadOwned();
+    const auto layout = read.ComponentLayout();
+    for (DNDS::index i = 0; i < 4; ++i)
+        for (int j = 0; j < 5; ++j)
+            CHECK(layout.View()(i, j) == doctest::Approx(expected.At(i, j)).epsilon(1e-13));
+}

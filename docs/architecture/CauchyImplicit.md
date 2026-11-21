@@ -13,9 +13,9 @@ two corrections, irrespective of the tolerance fields:
 
 More iterations repeat the second operation. A supplied nonzero initial guess
 requires the residual before the first correction too. `P_local` is the existing
-fixed, zero-started single-device AmgX V-cycle on each rank's owned-owned
-principal matrix. It owns no MPI communicator. DNDS performs the global action
-and communication, exactly as in the ILU stationary correction path. AmgX uses
+fixed, zero-started single-device AmgX V-cycle. The Cauchy AmgX adapter
+requires one MPI rank per domain and a full assembled block matrix.
+DNDS owns communication and the outer operator application. AmgX uses
 fixed smoother/coarse sweeps and has neither residual stopping nor a hidden
 Krylov solver. `method="gmres", preconditioner="amgx"` remains a distinct,
 explicitly requested algorithm. The `preconditioner` string is unused by
@@ -24,9 +24,19 @@ stationary methods.
 For flow AmgX, `implicit.linear.amgxAggregateSize` defaults to 0, which selects
 `SIZE_4` on 2D meshes and `SIZE_8` on 3D meshes. Set 2, 4 or 8 to select a
 target explicitly. This is an aggregation target in cells per coarse unknown.
-All equation components stay together in the coarse block. The current provider
-scores edges using matrix coefficients and refreshes the hierarchy when the
-assembled coefficient epochs change.
+All equation components stay together in the coarse block. Cauchy supplies
+geometric edge strengths from face area divided by center distance. Replacing
+matrix coefficients updates the coarse operators and smoother numerics. The
+aggregate memberships and hierarchy structure are reused.
+
+For CPU, select `amg` as the stationary method or GMRES preconditioner.
+Each rank builds aggregates on its owned-owned submatrix and retains a map
+from those edge slots to the assembled matrix. When a diagonal or off-diagonal
+epoch changes, the adapter refreshes its row-major blocks. Applying a cycle
+synchronizes the engine, packs the owned RHS in logical equation order and
+scatters the correction back to the caller's layout. This includes split
+arrays and permuted components within one array. Both AMG providers require
+full assembled blocks on every level that selects them.
 
 `DNDS_CAUCHY_DIAG_LINEAR=1` emits one `CAUCHY_LINEAR_REPORT` JSON record per
 completed solve on the domain master (all ranks only when
@@ -644,7 +654,9 @@ different-mesh hierarchy must supply its own transfer. Cell identity/order is
 checked during setup. Means, fine/coarse matrices and mutable auxiliary/gradient
 buffers are distinct. Cauchy defaults to the whole logical equation state.
 `implicit.multigrid.updateComponents` optionally selects distinct logical indices
-for every level's smoothing and correction; empty selects all. Other means stay
+for every level's smoothing and correction; empty selects all. Indices use
+the resolved physical equation width, including RANS or species components.
+For mixtures the definitive width check follows mechanism loading. Other means stay
 bit-identical. Generic FAS supports the same contract for arbitrary component
 widths through explicit principal-system smoother callbacks.
 

@@ -485,7 +485,7 @@ namespace DNDS::Cauchy
                 else if (cpuAMG)
                 {
                     auto engine = compute.LockEngine();
-                    cpuAMG->template Apply<Ops>(engine, rhs, output);
+                    cpuAMG->Apply(engine, rhs, output);
                 }
                 else if (settings.preconditioner == "jacobi")
                 {
@@ -544,7 +544,7 @@ namespace DNDS::Cauchy
                 else if (cpuAMG)
                 {
                     auto engine = compute.LockEngine();
-                    cpuAMG->template Apply<Ops>(engine, rhs, output);
+                    cpuAMG->Apply(engine, rhs, output);
                 }
                 else
                     ApplyILU(rhs, output);
