@@ -194,6 +194,26 @@ TEST_CASE("Reconstruction kernel selection is explicit and retains the FP64 defa
     domain.settings.execution.reconstructionKernel = "automatic-low-precision";
     CHECK_THROWS_WITH(C::ResolvedExecutionPlan::Resolve(domain), doctest::Contains("unknown reconstruction kernel"));
 }
+TEST_CASE("Coarse solver resolution respects equation width and the selected matrix provider")
+{
+    // The sixth slot is the transported SA variable in compressible flow.
+    C::Json input{{"time", {{"method", "bdf1"}}}};
+    auto &defaults = input["defaults"];
+    defaults["equation"] = {{"transport", "NewtonianFourier"}, {"viscosity", .001}, {"rans", {{"model", "SA"}, {"viscosityReference", .001}}}};
+    defaults["numerics"] = {{"reconstruction", "variational"}, {"cfv", {{"maxOrder", 2}}}, {"faceFallback", false}, {"viscousGradient", "polynomial"}};
+    defaults["implicit"]["multigrid"] = {{"levels", 1}, {"updateComponents", {5}}, {"coarseLevelSettings", {{"1", {{"solver", {{"linear", {{"method", "jacobi"}}}}}}}}}};
+    CHECK_NOTHROW(C::SimulationConfig::Resolve(input, 1));
+
+    C::DomainConfig domain;
+    domain.placement = {"fluid", {0}};
+    domain.settings.numerics.reconstruction = "variational";
+    domain.settings.numerics.cfv.maxOrder = 2;
+    auto &implicit = domain.settings.implicit;
+    implicit.multigrid.levels = 1;
+    implicit.multigrid.coarseLevelSettings["1"].solver = {{"diagonal", "block"}, {"jacobianAction", "directEvaluated"}, {"linear", {{"method", "gmres"}, {"preconditioner", "amg"}}}};
+    CHECK_THROWS_WITH(C::ResolvedExecutionPlan::Resolve(domain), doctest::Contains("pMG level 1 CPU AMG"));
+}
+
 TEST_CASE("Linear matrix storage round-trips independently and rejects hidden AmgX repacking")
 {
     C::DomainSettings settings;
@@ -254,6 +274,7 @@ TEST_CASE("CUDA capability resolution requires a complete combined perfect gas p
     settings.numerics.limiter = "none";
     settings.execution.reconstructionKernel = "fp64";
     settings.implicit.linear.method = "amgx";
+    settings.implicit.diagonal = "block";
     settings.implicit.linear.stopping = "fixedCount";
     CHECK_NOTHROW(settings.implicit.Validate());
     // Provider compile definitions are private to DNDS; query the linked

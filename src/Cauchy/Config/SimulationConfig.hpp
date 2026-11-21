@@ -576,6 +576,12 @@ namespace DNDS::Cauchy
             config.field_section(&T::positivity, "positivity", "Euler-derived implicit PP controls");
             config.field_section(&T::multigrid, "multigrid", "Same-cell polynomial FAS hierarchy");
         }
+
+    private:
+        friend class SimulationConfig;
+        /// Before mixture setup only component-independent controls can be checked.
+        void ValidateControls(std::optional<index> components) const;
+        ImplicitSettings ResolveCoarseControls(index level, std::optional<index> components) const;
     };
     struct BoxInitializer
     {

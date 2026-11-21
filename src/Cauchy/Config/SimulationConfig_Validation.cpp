@@ -21,7 +21,6 @@ namespace DNDS::Cauchy
     void SimulationConfig::ValidateDomain(const DomainConfig &domain, int size)
     {
         const auto &settings = domain.settings;
-        settings.implicit.ValidateComponents(settings.equation.eos == "perfectGas" ? 5 : INT_MAX - 1);
         settings.motion.Validate(settings.mesh.dimension);
         DNDS_check_throw_info(!settings.implicit.requireConvergedReconstruction || settings.numerics.reconstruction != "variational" || settings.numerics.reconstructionTolerance > 0,
                               "strict implicit VR acceptance requires a positive reconstructionTolerance");
@@ -36,7 +35,12 @@ namespace DNDS::Cauchy
                               "invalid Cauchy constitutive constants");
         DNDS_check_throw_info(equation.transport != "inviscid" || equation.viscosity == 0, "inviscid configuration has unused nonzero viscosity");
         if (equation.eos == "perfectGas" || equation.system == "incompressibleACM")
-            EquationSystem::Resolve(equation);
+        {
+            const auto system = EquationSystem::Resolve(equation);
+            settings.implicit.ValidateComponents(index(system.Schema().LogicalComponents().size()));
+        }
+        else
+            settings.implicit.ValidateControls(std::nullopt);
         DNDS_check_throw_info(settings.mesh.dimension == 2 || settings.mesh.dimension == 3, "Cauchy geometric dimension must be 2 or 3");
         DNDS_check_throw_info(settings.initialField.integrationOrder >= 0 &&
                                   settings.initialField.integrationOrder <= Geom::Elem::INT_ORDER_MAX,
@@ -167,6 +171,10 @@ namespace DNDS::Cauchy
     void ImplicitSettings::ValidateComponents(index components) const
     {
         DNDS_check_throw_info(components > 0 && components < INT_MAX, "invalid implicit equation dimension");
+        ValidateControls(components);
+    }
+    void ImplicitSettings::ValidateControls(std::optional<index> components) const
+    {
         DNDS_check_throw_info(nIterCellSmoothScale >= 0, "nIterCellSmoothScale must be nonnegative");
         DNDS_check_throw_info(linear.amgxAggregateSize == 0 || linear.amgxAggregateSize == 2 || linear.amgxAggregateSize == 4 || linear.amgxAggregateSize == 8, "amgxAggregateSize must be 0, 2, 4 or 8");
         const auto validMatrixTable = [](const ImplicitMatrixTableSettings &table)
@@ -175,6 +183,7 @@ namespace DNDS::Cauchy
             return (table.layout == "aos" || table.layout == "soa" || table.layout == "aosoa32") && table.rowPaddingMultiple > 0 &&
                    table.rowStridePaddingMultiple > 0 && (!alignment || !(alignment & (alignment - 1)));
         };
+        const index width = components.value_or(0); // Only used for a known equation width.
         const bool usesAMG = EffectiveLinearProvider(linear) == "amgx";
         DNDS_check_throw_info(validMatrixTable(linear.matrixStorage.diagonal) && validMatrixTable(linear.matrixStorage.inverse) &&
                                   validMatrixTable(linear.matrixStorage.offDiagonal) &&
@@ -186,8 +195,8 @@ namespace DNDS::Cauchy
                               "native AmgX storage requires the AmgX backend with compact block rows");
         DNDS_check_throw_info(!usesAMG || (linear.matrixStorage.indices != "int64" && linear.matrixStorage.diagonal.layout == "aos" &&
                                            linear.matrixStorage.offDiagonal.layout == "aos" &&
-                                           (components * components) % linear.matrixStorage.diagonal.rowStridePaddingMultiple == 0 &&
-                                           (components * components) % linear.matrixStorage.offDiagonal.rowStridePaddingMultiple == 0),
+                                           (!components || ((width * width) % linear.matrixStorage.diagonal.rowStridePaddingMultiple == 0 &&
+                                                            (width * width) % linear.matrixStorage.offDiagonal.rowStridePaddingMultiple == 0))),
                               "copy-free AmgX requires primary int32 sparse indices and aos diagonal/off-diagonal blocks");
         DNDS_check_throw_info((normOrder == 1 || normOrder == 2) &&
                                   (residualReference == "initial" || residualReference == "runningMaximum"),
@@ -203,7 +212,7 @@ namespace DNDS::Cauchy
         std::vector<int> updated;
         for (const auto component : multigrid.updateComponents)
         {
-            DNDS_check_throw_info(component >= 0 && component < components && std::find(updated.begin(), updated.end(), component) == updated.end(), "pMG update components must be distinct equation indices");
+            DNDS_check_throw_info(component >= 0 && (!components || component < *components) && std::find(updated.begin(), updated.end(), component) == updated.end(), "pMG update components must be distinct equation indices");
             updated.push_back(component);
         }
         DNDS_check_throw_info((diagonal == "entries" || diagonal == "block") && (!roeDissipation || diagonal == "block") &&
@@ -255,10 +264,16 @@ namespace DNDS::Cauchy
                 const index post = level.postSmooth < 0 ? 0 : level.postSmooth;
                 DNDS_check_throw_info(pre <= iterations - post && pre + post > 0, "invalid bottom-level correction count");
             }
-            ResolveCoarseLevel(number);
+            ResolveCoarseControls(number, components);
         }
     }
     ImplicitSettings ImplicitSettings::ResolveCoarseLevel(index level) const
+    {
+        // Parent validation checks dimensions against the resolved fine state.
+        // Merging a level alone does not determine the physical component count.
+        return ResolveCoarseControls(level, std::nullopt);
+    }
+    ImplicitSettings ImplicitSettings::ResolveCoarseControls(index level, std::optional<index> components) const
     {
         DNDS_check_throw_info(level == 1 || level == 2, "coarse smoother level must be 1 or 2");
         auto result = *this;
@@ -273,7 +288,7 @@ namespace DNDS::Cauchy
             merged.merge_patch(found->second.solver);
             result = merged.get<ImplicitSettings>();
         }
-        result.Validate();
+        result.ValidateControls(components);
         return result;
     }
     DomainSettings ResolveSweepOrdering(DomainSettings settings)
@@ -449,15 +464,25 @@ namespace DNDS::Cauchy
             require(solver >= Riemann::Solver::Roe && solver <= Riemann::Solver::Roe_M9,
                     "reduced dissipation currently requires the Roe family");
         }
-        const auto requireAMGX = [&](const ImplicitSettings &implicit, const std::string &level)
+        const auto requireLinear = [&](const ImplicitSettings &implicit, const std::string &level)
         {
-            require(EffectiveLinearProvider(implicit.linear) != "amgx" || (cuda && implicit.jacobianAction == "assembled" && Algebra::AmgXPreconditioner::Available() &&
-                                                                           domain.placement.ranks.size() == 1),
-                    level + " AmgX requires assembled CUDA storage, one rank and the single-device provider in this build");
+            const auto provider = EffectiveLinearProvider(implicit.linear);
+            const bool assembledBlocks = implicit.jacobianAction == "assembled" && implicit.diagonal == "block";
+            if (provider == "amg")
+                require(!cuda && assembledBlocks, level + " CPU AMG requires assembled host full blocks");
+            if (provider == "amgx")
+                require(cuda && assembledBlocks && Algebra::AmgXPreconditioner::Available() && domain.placement.ranks.size() == 1,
+                        level + " AmgX requires assembled CUDA full blocks, one rank and the single-device provider in this build");
+            if (cuda)
+            {
+                require(DeviceLinearProvider(provider), level + " CUDA linear solve requires Jacobi, AmgX defect correction or GMRES with Jacobi/AmgX");
+                require(implicit.linear.cudaJacobiMapping != "componentGroup" || implicit.jacobianAction == "assembled",
+                        level + " CUDA componentGroup mapping requires assembled off-diagonal blocks");
+            }
         };
-        requireAMGX(s.implicit, "finest");
+        requireLinear(s.implicit, "finest");
         for (index level = 1; level <= s.implicit.multigrid.levels; ++level)
-            requireAMGX(s.implicit.ResolveCoarseLevel(level), "pMG level " + std::to_string(level));
+            requireLinear(s.implicit.ResolveCoarseLevel(level), "pMG level " + std::to_string(level));
         if (cuda)
         {
             // Resolve the selected numerical profile without probing hardware
@@ -475,15 +500,6 @@ namespace DNDS::Cauchy
                     "CUDA RANS profile " + s.equation.rans.model);
             require(s.numerics.reconstruction != "variational" || amgVR || !s.numerics.cfv.SORInstead,
                     "CUDA variational reconstruction requires Jacobi (SORInstead=false)");
-            const auto requireLinear = [&](const ImplicitSettings &implicit, const std::string &level)
-            {
-                const auto &linear = implicit.linear;
-                require(DeviceLinearProvider(EffectiveLinearProvider(linear)),
-                        level + " CUDA linear solve requires Jacobi, AmgX defect correction or GMRES with Jacobi/AmgX");
-            };
-            requireLinear(s.implicit, "finest");
-            for (index level = 1; level <= s.implicit.multigrid.levels; ++level)
-                requireLinear(s.implicit.ResolveCoarseLevel(level), "pMG level " + std::to_string(level));
         }
         require(rans || s.initialRANS.empty(), "initialRANS without a RANS model");
         if (rans)
