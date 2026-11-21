@@ -172,10 +172,12 @@ namespace DNDS::Cauchy::Bindings
                  py::arg_v("off_diagonal", OffDiagonalStorage::Assembled, "OffDiagonalStorage.Assembled"),
                  py::arg("storage") = LinearMatrixOptions{}, py::keep_alive<0, 1>(),
                  py::call_guard<py::gil_scoped_release>(), Collective)
-            .def("prepare_jacobian",
-                 [](const FiniteVolumeOperators &op, const EquationDofs &u, const AuxiliaryValues &a,
-                    const R::PythonArray &inverseDt, LinearProblemContext &p, JacobianPreparation c, real t,
-                    const Workspace *w, const std::optional<R::PythonArray> &sourceDerivative)
+            .def(
+                "prepare_jacobian",
+                [](const FiniteVolumeOperators &op, const EquationDofs &u, const AuxiliaryValues &a,
+                   const R::PythonArray &inverseDt, LinearProblemContext &p, JacobianPreparation c, real t,
+                   const Workspace *w, const std::optional<R::PythonArray> &sourceDerivative,
+                   const std::optional<R::ExecutionStream> &stream)
         {
             // Dtype resolution uses Python. Freeze the native sharing
             // handle before releasing the GIL for numerical execution.
@@ -183,6 +185,11 @@ namespace DNDS::Cauchy::Bindings
             const auto record = sourceDerivative ? std::optional(sourceDerivative->AsArray<real>()) : std::nullopt;
             auto context =
                 w ? std::optional(FiniteVolume::JacobianContext{*w->reconstruction, *w->value}) : std::nullopt;
+            if (stream)
+            {
+                DNDS_check_throw_info(context, "Jacobian stream requires its source workspace");
+                context->stream = stream;
+            }
             if (record)
             {
                 DNDS_check_throw_info(context, "a source derivative requires its source workspace");
@@ -191,9 +198,11 @@ namespace DNDS::Cauchy::Bindings
             py::gil_scoped_release release;
             op.fv.PrepareJacobian(u, a, native, p, c, t, op.workers, context);
         },
-                 py::arg("state"), py::arg("auxiliary"), py::arg("inverse_pseudo_time"), py::arg("output"),
-                 py::arg_v("controls", JacobianPreparation{}, "JacobianPreparation()"), py::arg("time") = 0,
-                 py::arg("source_workspace") = nullptr, py::arg("source_derivative") = std::nullopt, Local)
+                py::arg("state"), py::arg("auxiliary"), py::arg("inverse_pseudo_time"), py::arg("output"),
+                py::arg_v("controls", JacobianPreparation{}, "JacobianPreparation()"), py::arg("time") = 0,
+                py::arg("source_workspace") = nullptr, py::arg("source_derivative") = std::nullopt,
+                py::arg("stream") = std::nullopt,
+                "Prepare the frozen approximate matrix. CUDA requires the source workspace and its compute stream. Completes before returning.")
             .def("build_linear_solver",
                  [](const FiniteVolumeOperators &op, std::shared_ptr<LinearProblemContext> p, const EquationDofs &u,
                     LinearSolveSettings settings, LinearExecution execution)

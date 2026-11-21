@@ -114,7 +114,7 @@ namespace DNDS::Cauchy
                 for (const auto &rows : JacobianRowBatches(scratch->stencil.View(), owned.RowCount(), scratch->owner->settings.execution.overlap))
                     CUDA::PrepareACMFluxJacobian(where,q,rows,status); }, R::ReadAs<R::TableRows>(field.Owned()), R::ReadAs<R::TableRows>(field.Ghost()), R::ReadAs<R::TableRows>(inversePseudoTime), R::ReadAs<R::TableRows>(*auxiliary.faceSpectralRadius), R::ReadAs<R::TableRows>(incoming), R::ReadAs<R::FixedRows<1>>(output.OffDiagonal().OffsetArray()), R::ReadWriteAs<R::UniformTableRows>(output.Diagonal()), R::WriteAs<R::UniformTableRows>(blocks), R::WriteAs<R::FixedRows<1>>(scratch->rowsStatus));
             scratch->AppendStatus(engine, lane, scratch->rowsStatus);
-            engine.Synchronize();
+            lane.Record().WaitHost();
             const auto result = scratch->result.To(R::Device::Host(), lane.Context());
             RequireNumericalSuccess(result.Read().View()(0, 0), "CUDA ACM Jacobian preparation");
             return;
@@ -231,7 +231,7 @@ namespace DNDS::Cauchy
         // Explicit publication boundary, not a per-kernel wait. The CPU path
         // is synchronous too. A future queued publication can retain the same
         // operation records and defer this status decision to the linear solve.
-        engine.Synchronize();
+        stream.Record().WaitHost();
         const auto result = scratch->result.To(R::Device::Host(), stream.Context());
         RequireNumericalSuccess(result.Read().View()(0, 0), "device Jacobian preparation");
         if (!output.HasAssembledOffDiagonal())

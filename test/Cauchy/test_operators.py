@@ -174,6 +174,37 @@ def test_finite_volume_operator_frontend_composes_native_residual_and_linear_sol
         rhs = exact.zeros_like()
         problem.apply(exact, rhs)
         expected = block_values(exact)
+        # A*x followed by Jacobi with x as the old iterate must return x.
+        # The second lane consumes the action event, including when both
+        # regions write into the same logical field through strided views.
+        consumer = engine.cpu_stream()
+        regions = [C.LinearRegion.Core, C.LinearRegion.HaloDependent] if overlap else [C.LinearRegion.All]
+        right, fixed, from_zero = (state.zeros_like() for _ in range(3))
+        problem.reset_action_status(stream)
+        for region in regions:
+            ready = problem.submit_apply(stream, exact, right, region)
+        consumer.wait_for(ready)
+        for region in regions:
+            problem.submit_jacobi(consumer, right, fixed, input=exact, region=region)
+        done = problem.submit_jacobi(consumer, right, from_zero)
+        del right, ready
+        done.wait()
+        problem.check_action_status(consumer)
+        assert_state_equal(fixed, expected, rtol=2e-12, atol=1e-13)
+        # The zero-start result solves each diagonal block independently.
+        def logical_rows(value):
+            columns = block_values(value)
+            result = np.empty((value.space.owned_rows, value.components))
+            for name, components in value.blocks.items():
+                indices = value.resolve_components([f"{name}.{c}" for c in components])
+                result[:, indices] = columns[name]
+            return result
+        widths = state.components
+        diagonal = problem.diagonal.numpy().reshape((-1, widths, widths))
+        if not problem.row_major_blocks:
+            diagonal = diagonal.swapaxes(1, 2)
+        np.testing.assert_allclose((diagonal @ logical_rows(from_zero)[..., None])[..., 0],
+                                   logical_rows(rhs), rtol=2e-12, atol=1e-11)
         problem.prepare_ilu(ordering="rcm")
         for method in ["sgs", "gmres", "ilu"]:
             settings = C.LinearSolveSettings()

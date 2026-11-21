@@ -218,6 +218,32 @@ After changing coefficients, explicitly invert diagonals or factor ILU before
 their low-level uses. The numerical snapshot follows the existing Euler-style
 approximate operator; it is not the complete differentiated nonlinear residual.
 
+For a CUDA matrix, pass `source_workspace=work, stream=producer` to
+`prepare_jacobian`. Supply the inverse pseudo-time and auxiliary arrays on the
+same device. `problem.invert_diagonal(stream=producer)` returns after checking
+the numerical status. Both preparation calls are host observation points.
+
+Python can submit the matrix action and individual Jacobi sweeps on CPU or CUDA.
+Each returns a Runtime event for its output rows. For example, after preparing
+the input halo and inverse, a caller can enqueue a fixed-point check:
+
+```python
+ready = problem.submit_apply(producer, x, rhs)
+consumer.wait_for(ready)
+done = problem.submit_jacobi(consumer, rhs, corrected, input=x)
+done.wait()  # host observation; corrected now contains x to roundoff
+```
+
+Omitting `input` selects the zero-start sweep and reads only the owned RHS.
+All other sweeps and matrix actions require ready input halos for `All` or
+`HaloDependent`. A `Core` submission may overlap input halo transfer. Use
+distinct input and output storage and keep the matrix coefficients frozen
+through the batch. For a CUDA evaluated off-diagonal operator, enqueue
+`reset_action_status(stream)` before the first action and call
+`check_action_status(stream)` after the last one. Order both with the actions
+using stream events when switching lanes. The check observes the status
+reduction on that lane. Assembled matrices and host operators need neither call.
+
 `build_linear_solver` constructs the existing native SGS, left-GMRES or
 standalone ILU controller using the canonical halo binder. `solve` is collective
 and handles its own input exchanges. Always inspect `report.usable`,

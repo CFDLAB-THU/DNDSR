@@ -62,7 +62,7 @@ namespace DNDS::Cauchy
 #ifdef DNDS_USE_CUDA
         R::SubmitArrays(engine, stream, [](R::ExecutionContext context, auto rows, auto partial, auto result)
                         { CUDA::ReduceNumericalStatus(context, rows, {}, partial, result); }, R::ReadAs<R::FixedRows<1>>(_actionWorkspace->rows), R::WriteAs<R::FixedRows<1>>(_actionWorkspace->partial), R::WriteAs<R::FixedRows<1>>(_actionWorkspace->result));
-        engine.Synchronize();
+        stream.Record().WaitHost();
         const auto host = _actionWorkspace->result.To(R::Device::Host(), stream.Context());
         const auto read = host.Read();
         RequireNumericalSuccess(read.View<R::FixedRows<1>>()(0, 0), "evaluated linear action");

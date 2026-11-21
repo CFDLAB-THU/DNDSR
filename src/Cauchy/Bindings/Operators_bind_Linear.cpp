@@ -71,13 +71,67 @@ namespace DNDS::Cauchy::Bindings
             .def_property_readonly("core", &LinearProblemContext::Core)
             .def_property_readonly("row_major_blocks", &LinearProblemContext::RowMajorBlocks)
             .def_property_readonly("halo_dependent", &LinearProblemContext::HaloDependent)
-            .def("invert_diagonal", &LinearProblemContext::InvertDiagonal, py::arg("refinement_steps") = 0,
-                 py::call_guard<py::gil_scoped_release>(), Local)
+            .def(
+                "invert_diagonal",
+                [](LinearProblemContext &problem, int refinementSteps, const std::optional<R::ExecutionStream> &stream)
+        {
+            if (!stream)
+                return problem.InvertDiagonal(refinementSteps);
+            auto engine = stream->LockEngine();
+            problem.PrepareDiagonalInverse(stream->Context());
+            problem.SubmitInvertDiagonal(engine, *stream, refinementSteps);
+            stream->Record().WaitHost();
+            problem.ObserveDiagonalInverse();
+        }, py::arg("refinement_steps") = 0, py::arg("stream") = std::nullopt, py::call_guard<py::gil_scoped_release>(),
+                "Prepare and validate diagonal inverses. CUDA requires its compute stream. Returns after numerical status is known.")
             .def("apply",
                  py::overload_cast<const EquationDofs &, EquationDofs &, LinearRegion>(&LinearProblemContext::Apply,
                                                                                        py::const_),
                  py::arg("input"), py::arg("output"), py::arg_v("region", LinearRegion::All, "LinearRegion.All"),
                  py::call_guard<py::gil_scoped_release>(), Local)
+            .def(
+                "submit_apply",
+                [](const LinearProblemContext &problem, const R::ExecutionStream &stream, const EquationDofs &input,
+                   EquationDofs &output, LinearRegion region)
+        {
+            auto engine = stream.LockEngine();
+            problem.SubmitApply(engine, stream, input, output, region);
+            return stream.Record();
+        },
+                py::arg("stream"), py::arg("input"), py::arg("output"),
+                py::arg_v("region", LinearRegion::All, "LinearRegion.All"), py::call_guard<py::gil_scoped_release>(),
+                "Queue A*x on owned rows. Supply ready input halos for All/HaloDependent. Returns the output-ready stream event.")
+            .def(
+                "submit_jacobi",
+                [](const LinearProblemContext &problem, const R::ExecutionStream &stream, const EquationDofs &rhs,
+                   EquationDofs &output, const std::optional<std::reference_wrapper<const EquationDofs>> &input,
+                   LinearRegion region)
+        {
+            auto engine = stream.LockEngine();
+            if (input)
+                problem.SubmitJacobi(engine, stream, rhs, input->get(), output, region);
+            else
+                problem.SubmitJacobiZero(engine, stream, rhs, output, region);
+            return stream.Record();
+        },
+                py::arg("stream"), py::arg("rhs"), py::arg("output"), py::arg("input") = py::none(),
+                py::arg_v("region", LinearRegion::All, "LinearRegion.All"), py::call_guard<py::gil_scoped_release>(),
+                "Queue one block Jacobi sweep with the prepared inverse. Omit input for zero start without an input halo. Output is distinct.")
+            .def(
+                "reset_action_status",
+                [](const LinearProblemContext &problem, const R::ExecutionStream &stream)
+        {
+            auto engine = stream.LockEngine();
+            problem.ResetQueuedActionStatus(engine, stream);
+        }, py::arg("stream"), py::call_guard<py::gil_scoped_release>(),
+                "Begin a CUDA evaluated-matrix action batch on this stream. Assembled and CPU actions need no status storage.")
+            .def("check_action_status",
+                 [](const LinearProblemContext &problem, const R::ExecutionStream &stream)
+        {
+            auto engine = stream.LockEngine();
+            problem.CheckQueuedActions(engine, stream);
+        }, py::arg("stream"), py::call_guard<py::gil_scoped_release>(),
+                 "Observe CUDA evaluated-matrix numerical status after all batch actions have joined this stream.")
             .def("begin_sgs",
                  py::overload_cast<const EquationDofs &, const EquationDofs &, EquationDofs &, EquationDofs &, bool>(
                      &LinearProblemContext::BeginSGS, py::const_),

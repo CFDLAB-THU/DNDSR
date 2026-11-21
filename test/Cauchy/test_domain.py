@@ -633,3 +633,44 @@ def test_native_lvr_config_and_warm_restart_through_shared_python_arrays(tmp_pat
     assert domain.fields["flow"].identity == flow.identity
     assert domain.step == 1 and domain.time == .001
     np.testing.assert_allclose(flow.numpy(), before, atol=3e-14)
+
+
+@pytest.mark.cuda
+@pytest.mark.mpi
+def test_queued_device_matrix_action_and_jacobi_fixed_point():
+    """One device matrix, two streams and an independently known fixed point."""
+    from DNDSR import Cauchy as C
+    if not R.cuda_enabled or MPI.COMM_WORLD.size != 1:
+        pytest.skip("uses one CUDA domain with no input halos")
+
+    domain, _ = build_domain(method="bdf1", device="cuda")
+    state = domain.dofs
+    operators = C.FiniteVolumeOperators(domain)
+    engine = R.EagerEngine(0, R.AccessTrackingContext())
+    producer, consumer = (engine.cuda_stream(0) for _ in range(2))
+    work = operators.build_workspace(state)
+    request = C.AuxiliaryRequest()
+    request.face_spectral_radius = True
+    request.cell_spectral_sum = True
+    aux = operators.build_auxiliary_values(request)
+    operators.prepare_correction_aux(state, work, aux, engine, producer)
+    problem = operators.build_linear_problem(state, off_diagonal=C.OffDiagonalStorage.DirectEvaluated)
+    inv_dt = R.Array(R.RowLayout.dense(state.space.owned_rows, 1), np.dtype("float64"))
+    for row in range(state.space.owned_rows):
+        inv_dt[row, 0] = 100.
+    controls = C.JacobianPreparation()
+    controls.physical_mass = 10.
+    operators.prepare_jacobian(state, aux, inv_dt.to(R.Device.cuda(0)), problem, controls,
+                               source_workspace=work, stream=producer)
+    problem.invert_diagonal(stream=producer)
+    rhs, result = state.zeros_like(), state.zeros_like()
+    problem.reset_action_status(producer)
+    consumer.wait_for(problem.submit_apply(producer, state, rhs))
+    done = problem.submit_jacobi(consumer, rhs, result, input=state)
+    del rhs
+    problem.check_action_status(consumer)
+    done.wait()
+    for name, field in state.fields.items():
+        np.testing.assert_allclose(result.fields[name].owned.to(R.Device.host()).numpy(),
+                                   field.owned.to(R.Device.host()).numpy(), rtol=2e-12, atol=1e-13)
+    engine.close()
