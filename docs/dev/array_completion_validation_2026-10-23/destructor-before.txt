@@ -1,4 +1,0 @@
-Before EagerEngine release_gil_before_calling_cpp_dtor fix:
-Command: timeout 8s venv-interop/bin/python -m pytest test/DNDS/test_runtime_dlpack.py::test_engine_destructor_drains_foreign_owner_without_holding_gil -q
-Observed exit status: 124 (timeout). No test completion output.
-Same regression passes in the final suites and DLPack memcheck.

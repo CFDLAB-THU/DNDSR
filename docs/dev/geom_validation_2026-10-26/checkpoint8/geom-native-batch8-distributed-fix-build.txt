@@ -1,2 +1,0 @@
-[ 96%] Building CXX object test/cpp/CMakeFiles/geom_test_mesh_distributed_read.dir/Geom/test_MeshDistributedRead.cpp.o
-[100%] Linking CXX executable geom_test_mesh_distributed_read

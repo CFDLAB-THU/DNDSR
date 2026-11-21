@@ -1,8 +1,0 @@
-Internal ctest changing into directory: /home/harry/projects/DNDSR-array-geom/build-refactor-cuda
-Test project /home/harry/projects/DNDSR-array-geom/build-refactor-cuda
-    Start 248: geom_mesh_facade_cuda
-1/1 Test #248: geom_mesh_facade_cuda ............   Passed    1.11 sec
-
-100% tests passed, 0 tests failed out of 1
-
-Total Test time (real) =   1.12 sec

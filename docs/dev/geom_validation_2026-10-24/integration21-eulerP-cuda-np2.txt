@@ -1,86 +1,0 @@
-local rank 0: GPU-c1ca6727-774a-bf06-1299-f60ad9cecec6 as CUDA device 0
-local rank 1: GPU-0848655f-4530-ea83-ca9b-c091c5c6f36a as CUDA device 0
-<class 'DNDSR.DNDS._ext.dnds_pybind11.ArrayDOF_1_1'>
-<class 'DNDSR.DNDS._ext.dnds_pybind11.ArrayDOF_1_1'>
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 1089
-CGNS === Vol Elem [  1024  ],  Bnd Elem [  128  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   8% [=>        ]  10% [=>        ]  12% [=>        ]  14% [=>        ]  16% [=>        ]  18% [==>       ]  20% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  34% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  47% [====>     ]  49% [=====>    ]  51% [=====>    ]  53% [=====>    ]  55% [=====>    ]  57% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  71% [=======>  ]  73% [=======>  ]  75% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  84% [========> ]  86% [========> ]  88% [=========>]  90% [=========>]  92% [=========>]  94% [=========>]  96% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   8% [=>        ]  10% [=>        ]  12% [=>        ]  14% [=>        ]  16% [=>        ]  18% [==>       ]  20% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  34% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  47% [====>     ]  49% [=====>    ]  51% [=====>    ]  53% [=====>    ]  55% [=====>    ]  57% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  71% [=======>  ]  73% [=======>  ]  75% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  84% [========> ]  86% [========> ]  88% [=========>]  90% [=========>]  92% [=========>]  94% [=========>]  96% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.002152]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.004
-     Coarsening: 		   0.001
-            Matching: 			   0.000
-            Contract: 			   0.001
-     Initial Partition: 	   0.002
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [512], min [512], max [512], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 512] [1: nCell 512] [1: nNode 480] [1: nBnd 32] 
-[0: nNode 544] 
-[0: nBnd 96] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-=== Mesh Elevation: Num NewNode 3072 
-Mesh Direct Bisect 1 done, nCell [4096], nNode [4096]
-=== Mesh Elevation: Num NewNode 12288 
-Mesh Direct Bisect 2 done, nCell [16384], nNode [16384]
-=== Mesh Elevation: Num NewNode 49152 
-Mesh Direct Bisect 3 done, nCell [65536], nNode [65536]
-=== Mesh Elevation: Num NewNode 196608 
-Mesh Direct Bisect 4 done, nCell [262144], nNode [262144]
-UnstructuredMesh === ReorderLocalCells, nPart0 [1], got reordering, bw [7982] to [108]
-UnstructuredMesh === ReorderLocalCells finished
-UnstructuredMesh === InterpolateFace: total faces 524288
-0, NumBndGhost 4
-1, NumBndGhost 4
-UnstructuredMeshSerialRW === BuildSerialOut Done 
-=== RecreatePeriodicNodes: new nNodes [263169]
-UnstructuredMesh === ConstructBndMesh Done
-UnstructuredMeshSerialRW === BuildSerialOut Done 
-=== RecreatePeriodicNodes: new nNodes [1023]
-{'ignoreMeshGeometryDeficiency': False, 'intOrder': 3, 'maxOrder': 3, 'nIterCellSmoothScale': 15}
-=== cellSmoothScale min [1]
-Bytes     : 209 MB
-Bytes mesh: 97.8 MB
-{'bc-2DRiemannFar': 14, 'bc-RTFar': 12, 'PERIODIC_1': -1, 'bc-IVFar': 13, 'PERIODIC_3_DONOR': -6, 'FAR': 3, 'PERIODIC_2': -2, 'WALL_INVIS': 4, 'PERIODIC_1_DONOR': -4, 'PERIODIC_2_DONOR': -5, 'WALL': 2, 'bc-4': 2, 'PERIODIC_3': -3, 'bc-2': 3, 'bc-3': 4, 'bc-DMRFar': 11}
-False
-{'bc-2DRiemannFar': 14, 'bc-RTFar': 12, 'PERIODIC_1': -1, 'bc-IVFar': 13, 'PERIODIC_3_DONOR': -6, 'FAR': 3, 'PERIODIC_2': -2, 'WALL_INVIS': 4, 'PERIODIC_1_DONOR': -4, 'PERIODIC_2_DONOR': -5, 'WALL': 2, 'bc-4': 2, 'PERIODIC_3': -3, 'bc-2': 3, 'bc-3': 4, 'bc-DMRFar': 11}
-False
-Physics:
-Physics:
-{'params': {'Rg': 1.0, 'TRef': 273.15, 'cp': 1.0, 'gamma': 1.4, 'mu0': 1e-10, 'muModel': 0}, 'reference_values': [1.0, 1.0, 1.0, 1.0, 1.0]}
-{'params': {'Rg': 1.0, 'TRef': 273.15, 'cp': 1.0, 'gamma': 1.4, 'mu0': 1e-10, 'muModel': 0}, 'reference_values': [1.0, 1.0, 1.0, 1.0, 1.0]}
-BCType.Unknown
-BCType.Unknown
-DeviceBackend.CUDA
-DeviceBackend.CUDA
-<DNDSR.DNDS._ext.dnds_pybind11.ArrayEigenMatrix_5x1_5x1_N object at 0x7d74e1394c70>
-<DNDSR.DNDS._ext.dnds_pybind11.ArrayEigenMatrix_5x1_5x1_N object at 0x77b676fc3030>
-198296.74732581974
-198296.74732581974
-pFMin, 0.9545961850649348
-pFMin, 0.9545961850649348
-p norm, 511.99999999999994
-p norm, 511.99999999999994
-p min, 0.9999999999999998
-p min, 0.9999999999999998
-p min, 0.9999999999999998
-p min, 0.9999999999999998

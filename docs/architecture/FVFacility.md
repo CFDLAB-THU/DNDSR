@@ -5,7 +5,7 @@ native Runtime storage, Geom entity identity, prepared metric/matrix buffers,
 and explicit numerical operators. They do not wrap the legacy VR owner. The
 existing `FiniteVolume` and `VariationalReconstruction<dim>` remain available.
 This page describes the CPU envelope. The explicit [CUDA publication and Jacobi/WBAP baseline](DeviceReconstruction.md) uses these same prepared numerical buffers. Neither facility is a complete flow solver.
-The [2026-10-31 next-step decisions](../dev/facilities_next_steps_2026-10-31.md)
+The [2026-10-31 next-step decisions](https://github.com/harryzhou2000/DNDSR/blob/cfab6865f30aa8ec21a31cbbdeada70e12d9d15b/docs/dev/facilities_next_steps_2026-10-31.md)
 record planned extensions; those features are not implied by this implemented API.
 
 ## Ownership and responsibilities

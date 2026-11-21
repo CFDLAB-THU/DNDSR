@@ -1,3 +1,0 @@
-========= COMPUTE-SANITIZER
-========= Error: No attachable process found. compute-sanitizer timed-out.
-========= Default timeout can be adjusted with --launch-timeout. Awaiting target completion.

@@ -1,8 +1,0 @@
-[  0%] Built target fmt
-[ 60%] Built target dnds
-[ 70%] Building CXX object src/Geom/CMakeFiles/geom.dir/Mesh/NativeMeshState.cpp.o
-[ 70%] Linking CXX static library libgeom.a
-[100%] Built target geom
-[100%] Linking CUDA device code CMakeFiles/geom_test_mesh_facade_cuda.dir/cmake_device_link.o
-[100%] Linking CXX executable geom_test_mesh_facade_cuda
-[100%] Built target geom_test_mesh_facade_cuda

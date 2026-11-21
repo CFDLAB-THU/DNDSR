@@ -12,7 +12,7 @@ CUDA supports the combined-AoS perfect-gas and ACM profiles in the
 [kernel dispatch catalog](CauchyDispatch.md). Pressure-referenced reciprocal
 ACM interfaces have moving-domain coverage. Closed-component gauge projection
 and cross-domain moving-wall distances have separate qualification requirements.
-The [equation-state and implicit implementation history](../dev/cauchy_state_implicit_history.md)
+The [equation-state and implicit implementation history](https://github.com/harryzhou2000/DNDSR/blob/cfab6865f30aa8ec21a31cbbdeada70e12d9d15b/docs/dev/cauchy_state_implicit_history.md)
 records earlier CPU-only milestones and case limitations.
 
 ```mermaid

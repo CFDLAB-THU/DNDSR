@@ -1,8 +1,0 @@
-Internal ctest changing into directory: /home/harry/projects/DNDSR-array-geom/build-refactor-cuda
-Test project /home/harry/projects/DNDSR-array-geom/build-refactor-cuda
-    Start 248: cfv_device_transferable_np1
-1/1 Test #248: cfv_device_transferable_np1 ......   Passed    0.59 sec
-
-100% tests passed, 0 tests failed out of 1
-
-Total Test time (real) =   0.60 sec

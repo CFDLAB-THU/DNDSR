@@ -1,6 +1,6 @@
 # Cauchy equation state and kernel boundary
 
-Historical case results and earlier capability limits are retained in the [implementation history](../dev/cauchy_state_implicit_history.md).
+Historical case results and earlier capability limits are retained in the [implementation history](https://github.com/harryzhou2000/DNDSR/blob/cfab6865f30aa8ec21a31cbbdeada70e12d9d15b/docs/dev/cauchy_state_implicit_history.md).
 
 `EquationSchema` describes component meaning, logical order, vector triples,
 energy convention and physical accumulation. `EquationDofs` binds that schema
@@ -1307,4 +1307,4 @@ unannounced mutation on a different rank.
 two-equation models. The quadrature RHS/source still uses reconstructed gradients;
 auxiliary mean-gradient preparation does not replace or change those coefficients.
 
-For the Euler comparison and introducing revision, see the [mean-gradient audit record](../dev/cauchy_audit_fix.md#historical-euler-mean-gradient-input).
+For the Euler comparison and introducing revision, see the [mean-gradient audit record](https://github.com/harryzhou2000/DNDSR/blob/cfab6865f30aa8ec21a31cbbdeada70e12d9d15b/docs/dev/cauchy_audit_fix.md#historical-euler-mean-gradient-input).

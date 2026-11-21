@@ -1,319 +1,0 @@
-/home/harry/projects/DNDSR-array-geom/python/DNDSR/DNDS/__init__.py
-/home/harry/projects/DNDSR-array-geom/python/DNDSR/DNDS/__init__.py
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 1089
-CGNS === Vol Elem [  1024  ],  Bnd Elem [  128  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   8% [=>        ]  10% [=>        ]  12% [=>        ]  14% [=>        ]  16% [=>        ]  18% [==>       ]  20% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  34% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  47% [====>     ]  49% [=====>    ]  51% [=====>    ]  53% [=====>    ]  55% [=====>    ]  57% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  71% [=======>  ]  73% [=======>  ]  75% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  84% [========> ]  86% [========> ]  88% [=========>]  90% [=========>]  92% [=========>]  94% [=========>]  96% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   8% [=>        ]  10% [=>        ]  12% [=>        ]  14% [=>        ]  16% [=>        ]  18% [==>       ]  20% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  34% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  47% [====>     ]  49% [=====>    ]  51% [=====>    ]  53% [=====>    ]  55% [=====>    ]  57% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  71% [=======>  ]  73% [=======>  ]  75% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  84% [========> ]  86% [========> ]  88% [=========>]  90% [=========>]  92% [=========>]  94% [=========>]  96% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.001674]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.004
-     Coarsening: 		   0.001
-            Matching: 			   0.000
-            Contract: 			   0.001
-     Initial Partition: 	   0.002
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [512], min [512], max [512], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 512] [1: nCell 512] [1: nNode 475] 
-[0: nNode 549] 
-[0: nBnd 30] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nBnd 98]   nLayers=1: owned=512, cellGhost=74, nodeGhost=74, bndGhost=4
-UnstructuredMesh === ReorderLocalCells, nPart0 [1], got reordering, bw [497] to [36]
-UnstructuredMesh === ReorderLocalCells finished
-UnstructuredMesh === InterpolateFace: total faces 2048
-0, NumBndGhost 4
-1, NumBndGhost 4
-=== RecreatePeriodicNodes: new nNodes [1089]
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 1089
-CGNS === Vol Elem [  1024  ],  Bnd Elem [  128  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   8% [=>        ]  10% [=>        ]  12% [=>        ]  14% [=>        ]  16% [=>        ]  18% [==>       ]  20% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  34% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  47% [====>     ]  49% [=====>    ]  51% [=====>    ]  53% [=====>    ]  55% [=====>    ]  57% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  71% [=======>  ]  73% [=======>  ]  75% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  84% [========> ]  86% [========> ]  88% [=========>]  90% [=========>]  92% [=========>]  94% [=========>]  96% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   8% [=>        ]  10% [=>        ]  12% [=>        ]  14% [=>        ]  16% [=>        ]  18% [==>       ]  20% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  34% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  47% [====>     ]  49% [=====>    ]  51% [=====>    ]  53% [=====>    ]  55% [=====>    ]  57% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  71% [=======>  ]  73% [=======>  ]  75% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  84% [========> ]  86% [========> ]  88% [=========>]  90% [=========>]  92% [=========>]  94% [=========>]  96% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.001635]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.004
-     Coarsening: 		   0.001
-            Matching: 			   0.000
-            Contract: 			   0.001
-     Initial Partition: 	   0.002
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [512], min [512], max [512], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 512] 
-[0: nNode 549] [1: nCell 512] 
-[0: nBnd 30] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nNode 475] [1: nBnd 98]   nLayers=2: owned=512, cellGhost=148, nodeGhost=147, bndGhost=4
-UnstructuredMesh === ReorderLocalCells, nPart0 [1], got reordering, bw [497] to [36]
- 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/python/DNDSR/_lib/libdnds_shared.so
- 1# DNDS::assert_false_info(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/python/DNDSR/_lib/libdnds_shared.so
- 2# DNDS::PermutationTransfer::LookupResult::resolve(long) const in /home/harry/projects/DNDSR-array-geom/python/DNDSR/_lib/libgeom_shared.so
- 3# DNDS::Geom::UnstructuredMesh::ReorderLocalCells(int, int) in /home/harry/projects/DNDSR-array-geom/python/DNDSR/_lib/libgeom_shared.so
- 4# 0x000071AD18481CA6 in /home/harry/projects/DNDSR-array-geom/python/DNDSR/Geom/_ext/geom_pybind11.cpython-312-x86_64-linux-gnu.so
- 5# 0x000071AD1844206C in /home/harry/projects/DNDSR-array-geom/python/DNDSR/Geom/_ext/geom_pybind11.cpython-312-x86_64-linux-gnu.so
- 6# 0x000000000058216F in venv-interop/bin/python
- 7# _PyObject_MakeTpCall in venv-interop/bin/python
- 8# _PyEval_EvalFrameDefault in venv-interop/bin/python
- 9# _PyObject_Call_Prepend in venv-interop/bin/python
-10# 0x00000000005A3778 in venv-interop/bin/python
-11# _PyObject_MakeTpCall in venv-interop/bin/python
-12# _PyEval_EvalFrameDefault in venv-interop/bin/python
-13# _PyObject_Call_Prepend in venv-interop/bin/python
-14# 0x00000000005A3778 in venv-interop/bin/python
-15# PyObject_Call in venv-interop/bin/python
-16# _PyEval_EvalFrameDefault in venv-interop/bin/python
-17# _PyObject_Call_Prepend in venv-interop/bin/python
-18# 0x00000000005A3778 in venv-interop/bin/python
-19# _PyObject_MakeTpCall in venv-interop/bin/python
-20# _PyEval_EvalFrameDefault in venv-interop/bin/python
-21# _PyObject_Call_Prepend in venv-interop/bin/python
-22# 0x00000000005A3778 in venv-interop/bin/python
-23# _PyObject_MakeTpCall in venv-interop/bin/python
-24# _PyEval_EvalFrameDefault in venv-interop/bin/python
-25# _PyObject_Call_Prepend in venv-interop/bin/python
-26# 0x00000000005A3778 in venv-interop/bin/python
-27# _PyObject_MakeTpCall in venv-interop/bin/python
-28# _PyEval_EvalFrameDefault in venv-interop/bin/python
-29# PyEval_EvalCode in venv-interop/bin/python
-30# 0x00000000005D33DC in venv-interop/bin/python
-31# 0x0000000000581FED in venv-interop/bin/python
-32# PyObject_Vectorcall in venv-interop/bin/python
-33# _PyEval_EvalFrameDefault in venv-interop/bin/python
-34# 0x00000000006BCF22 in venv-interop/bin/python
-35# Py_RunMain in venv-interop/bin/python
-36# Py_BytesMain in venv-interop/bin/python
-37# 0x000071AD2D62A1CA in /lib/x86_64-linux-gnu/libc.so.6
-38# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-39# _start in venv-interop/bin/python
-
-[91m DNDS_assertion failed[39m: "found"  at [  /home/harry/projects/DNDSR-array-geom/src/DNDS/PermutationTransfer.hpp:111  ]
-LookupResult::resolve: old global 522 not found
-Fatal Python error: Aborted
-
-Current thread 0x000071ad2d8aa300 (most recent call first):
-  File "/home/harry/projects/DNDSR-array-geom/python/DNDSR/Geom/utils.py", line 306 in prepare_mesh
-  File "/home/harry/projects/DNDSR-array-geom/test/Geom/test_basic_geom.py", line 205 in test_multi_layer_ghost
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/python.py", line 167 in pytest_pyfunc_call
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_execution.py", line 147 in _multicall
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_manager.py", line 183 in _hookexec
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_caller.py", line 197 in __call__
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/python.py", line 1707 in runtest
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/runner.py", line 184 in pytest_runtest_call
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_execution.py", line 147 in _multicall
-  File "/home/harry/projects/DNDSR-array-ge 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/python/DNDSR/_lib/libdnds_shared.so
- 1# DNDS::assert_false_info(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/python/DNDSR/_lib/libdnds_shared.so
- 2# DNDS::PermutationTransfer::LookupResult::resolve(long) const in /home/harry/projects/DNDSR-array-geom/python/DNDSR/_lib/libgeom_shared.so
- 3# DNDS::Geom::UnstructuredMesh::ReorderLocalCells(int, int) in /home/harry/projects/DNDSR-array-geom/python/DNDSR/_lib/libgeom_shared.so
- 4# 0x00007D5804481CA6 in /home/harry/projects/DNDSR-array-geom/python/DNDSR/Geom/_ext/geom_pybind11.cpython-312-x86_64-linux-gnu.so
- 5# 0x00007D580444206C in /home/harry/projects/DNDSR-array-geom/python/DNDSR/Geom/_ext/geom_pybind11.cpython-312-x86_64-linux-gnu.so
- 6# 0x000000000058216F in venv-interop/bin/python
- 7# _PyObject_MakeTpCall in venv-interop/bin/python
- 8# _PyEval_EvalFrameDefault in venv-interop/bin/python
- 9# _PyObject_Call_Prepend in venv-interop/bin/python
-10# 0x00000000005A3778 in venv-interop/bin/python
-11# _PyObject_MakeTpCall in venv-interop/bin/python
-12# _PyEval_EvalFrameDefault in venv-interop/bin/python
-13# _PyObject_Call_Prepend in venv-interop/bin/python
-14# 0x00000000005A3778 in venv-interop/bin/python
-15# PyObject_Call in venv-interop/bin/python
-16# _PyEval_EvalFrameDefault in venv-interop/bin/python
-17# _PyObject_Call_Prepend in venv-interop/bin/python
-18# 0x00000000005A3778 in venv-interop/bin/python
-19# _PyObject_MakeTpCall in venv-interop/bin/python
-20# _PyEval_EvalFrameDefault in venv-interop/bin/python
-21# _PyObject_Call_Prepend in venv-interop/bin/python
-22# 0x00000000005A3778 in venv-interop/bin/python
-23# _PyObject_MakeTpCall in venv-interop/bin/python
-24# _PyEval_EvalFrameDefault in venv-interop/bin/python
-25# _PyObject_Call_Prepend in venv-interop/bin/python
-26# 0x00000000005A3778 in venv-interop/bin/python
-27# _PyObject_MakeTpCall in venv-interop/bin/python
-28# _PyEval_EvalFrameDefault in venv-interop/bin/python
-29# PyEval_EvalCode in venv-interop/bin/python
-30# 0x00000000005D33DC in venv-interop/bin/python
-31# 0x0000000000581FED in venv-interop/bin/python
-32# PyObject_Vectorcall in venv-interop/bin/python
-33# _PyEval_EvalFrameDefault in venv-interop/bin/python
-34# 0x00000000006BCF22 in venv-interop/bin/python
-35# Py_RunMain in venv-interop/bin/python
-36# Py_BytesMain in venv-interop/bin/python
-37# 0x00007D581C42A1CA in /lib/x86_64-linux-gnu/libc.so.6
-38# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-39# _start in venv-interop/bin/python
-
-[91m DNDS_assertion failed[39m: "found"  at [  /home/harry/projects/DNDSR-array-geom/src/DNDS/PermutationTransfer.hpp:111  ]
-LookupResult::resolve: old global 1 not found
-Fatal Python error: Aborted
-
-Current thread 0x00007d581c6dc300 (most recent call first):
-  File "/home/harry/projects/DNDSR-array-geom/python/DNDSR/Geom/utils.py", line 306 in prepare_mesh
-  File "/home/harry/projects/DNDSR-array-geom/test/Geom/test_basic_geom.py", line 205 in test_multi_layer_ghost
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/python.py", line 167 in pytest_pyfunc_call
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_execution.py", line 147 in _multicall
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_manager.py", line 183 in _hookexec
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_caller.py", line 197 in __call__
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/python.py", line 1707 in runtest
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/runner.py", line 184 in pytest_runtest_call
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_execution.py", line 147 in _multicall
-  File "/home/harry/projects/DNDSR-array-geomom/venv-interop/lib/python3.12/site-packages/pluggy/_manager.py", line 183 in _hookexec
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_caller.py", line 197 in __call__
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/runner.py", line 250 in <lambda>
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/runner.py", line 361 in from_call
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/runner.py", line 249 in call_and_report
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/runner.py", line 139 in runtestprotocol
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/runner.py", line 118 in pytest_runtest_protocol
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_execution.py", line 147 in _multicall
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_manager.py", line 183 in _hookexec
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_caller.py", line 197 in __call__
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/main.py", line 408 in pytest_runtestloop
-/venv-interop/lib/python3.12/site-packages/pluggy/_manager.py", line 183 in _hookexec
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_caller.py", line 197 in __call__
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/runner.py", line 250 in <lambda>
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/runner.py", line 361 in from_call
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/runner.py", line 249 in call_and_report
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/runner.py", line 139 in runtestprotocol
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/runner.py", line 118 in pytest_runtest_protocol
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_execution.py", line 147 in _multicall
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_manager.py", line 183 in _hookexec
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_caller.py"  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_execution.py", line 147 in _multicall
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_manager.py", line 183 in _hookexec, line 197 in __call__
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/main.py", line 408 in 
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_caller.py", line 197 in __call__
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/main.py"pytest_runtestloop
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_execution.py", line 147 in _multicall
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_manager.py", line , line 384 in _main
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/main.py", line 330 in wrap_session
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/main.py183 in _hookexec
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_caller.py", line 197 in __call__
-  File ", line 377 in pytest_cmdline_main
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_execution.py", line 147 in "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/main.py", line 384 in _main
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/main.py", line 330 in _multicall
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_manager.py", line 183 in _hookexec
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_caller.py", line 197wrap_session
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/main.py", line 377 in pytest_cmdline_main
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_execution.py" in __call__
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/config/__init__.py", line 229 in _main
-, line 147 in _multicall
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_manager.py", line   File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/config/__init__.py", line 253 in _console_main
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pytest/__main__.py"183 in _hookexec
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pluggy/_caller.py", line 197 in __call__
-  File , line 9 in <module>
-  File "<frozen runpy>", line 88 in _run_code
-  File "<frozen runpy>"/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/config/__init__.py", line 229 in _main
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/_pytest/config/__init__.py", line 253 in _console_main
-  File "/home/harry/projects/DNDSR-array-geom/venv-interop/lib/python3.12/site-packages/pytest/__main__.py", line 198 in _run_module_as_main
-", line 9 in <module>
-  File "<frozen runpy>", line 88 in _run_code
-  File "<frozen runpy>", line 198 in _run_module_as_main
-
-Extension modules: numpy._core._multiarray_umath, numpy.linalg._umath_linalg
-Extension modules: numpy._core._multiarray_umath, mpi4py.MPI (total: 3)
-, numpy.linalg._umath_linalg, mpi4py.MPI (total: 3)[gpu704:698988] *** Process received signal ***
-
-[gpu704:698988] Signal: Aborted (6)
-[gpu704:698988] Signal code:  (-6)
-[gpu704:698989] *** Process received signal ***
-[gpu704:698989] Signal: Aborted (6)
-[gpu704:698989] Signal code:  (-6)
-[gpu704:698988] [ 0] [gpu704:698989] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x7d581c445330]
-[gpu704:698989] [ 1] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x71ad2d645330]
-[gpu704:698988] [ 1] /lib/x86_64-linux-gnu/libc.so.6(pthread_kill+0x11c)[0x71ad2d69ec0c]
-[gpu704:698988] [ 2] /lib/x86_64-linux-gnu/libc.so.6(pthread_kill+0x11c)[0x7d581c49ec0c]
-[gpu704:698989] [ 2] /lib/x86_64-linux-gnu/libc.so.6(gsignal+0x1e)[0x7d581c44527e]
-[gpu704:698989] [ 3] /lib/x86_64-linux-gnu/libc.so.6(gsignal+0x1e)[0x71ad2d64527e]
-[gpu704:698988] [ 3] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x71ad2d645330]
-[gpu704:698988] [ 4] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x7d581c445330]
-[gpu704:698989] [ 4] /lib/x86_64-linux-gnu/libc.so.6(pthread_kill+0x11c)[0x71ad2d69ec0c]
-[gpu704:698988] [ 5] /lib/x86_64-linux-gnu/libc.so.6(pthread_kill+0x11c)[0x7d581c49ec0c]
-[gpu704:698989] [ 5] /lib/x86_64-linux-gnu/libc.so.6(gsignal+0x1e)[0x71ad2d64527e]
-[gpu704:698988] [ 6] /lib/x86_64-linux-gnu/libc.so.6(gsignal+0x1e)[0x7d581c44527e]
-[gpu704:698989] [ 6] /lib/x86_64-linux-gnu/libc.so.6(abort+0xdf)[0x7d581c4288ff]
-[gpu704:698989] [ 7] /lib/x86_64-linux-gnu/libc.so.6(abort+0xdf)[0x71ad2d6288ff]
-[gpu704:698988] [ 7] /home/harry/projects/DNDSR-array-geom/python/DNDSR/_lib/libdnds_shared.so(_ZN4DNDS17assert_false_infoEPKcS1_iRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE+0x128)[0x7d58197464e8]
-[gpu704:698989] [ 8] /home/harry/projects/DNDSR-array-geom/python/DNDSR/_lib/libdnds_shared.so(_ZN4DNDS17assert_false_infoEPKcS1_iRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE+0x128)[0x71ad2a9464e8]
-[gpu704:698988] [ 8] /home/harry/projects/DNDSR-array-geom/python/DNDSR/_lib/libgeom_shared.so(_ZNK4DNDS19PermutationTransfer12LookupResult7resolveEl+0xf1)[0x71ad100a7e31]
-[gpu704:698988] [ 9] /home/harry/projects/DNDSR-array-geom/python/DNDSR/_lib/libgeom_shared.so(_ZNK4DNDS19PermutationTransfer12LookupResult7resolveEl+0xf1)[0x7d57feea7e31]
-[gpu704:698989] [ 9] /home/harry/projects/DNDSR-array-geom/python/DNDSR/_lib/libgeom_shared.so(_ZN4DNDS4Geom16UnstructuredMesh17ReorderLocalCellsEii+0xc3d)[0x71ad100a568d]
-[gpu704:698988] [10] /home/harry/projects/DNDSR-array-geom/python/DNDSR/Geom/_ext/geom_pybind11.cpython-312-x86_64-linux-gnu.so(+0xb3ca6)[0x71ad18481ca6]
-/home/harry/projects/DNDSR-array-geom/python/DNDSR/_lib/libgeom_shared.so(_ZN4DNDS4Geom16UnstructuredMesh17ReorderLocalCellsEii+0xc3d)[0x7d57feea568d]
-[gpu704:698989] [10] [gpu704:698988] [11] /home/harry/projects/DNDSR-array-geom/python/DNDSR/Geom/_ext/geom_pybind11.cpython-312-x86_64-linux-gnu.so(+0x7406c)[0x71ad1844206c]
-[gpu704:698988] [12] /home/harry/projects/DNDSR-array-geom/python/DNDSR/Geom/_ext/geom_pybind11.cpython-312-x86_64-linux-gnu.so(+0xb3ca6)[0x7d5804481ca6]
-[gpu704:698989] [11] /home/harry/projects/DNDSR-array-geom/python/DNDSR/Geom/_ext/geom_pybind11.cpython-312-x86_64-linux-gnu.so(+0x7406c)[0x7d580444206c]
-[gpu704:698989] [12] venv-interop/bin/python[0x58216f]
-[gpu704:698988] [13] venv-interop/bin/python[0x58216f]
-[gpu704:698989] [13] venv-interop/bin/python(_PyObject_MakeTpCall+0x13e)[0x54907e]
-[gpu704:698988] [14] venv-interop/bin/python(_PyObject_MakeTpCall+0x13e)[0x54907e]
-[gpu704:698989] [14] venv-interop/bin/python(_PyEval_EvalFrameDefault+0xadf)[0x5d710f]
-[gpu704:698988] [15] venv-interop/bin/python(_PyEval_EvalFrameDefault+0xadf)[0x5d710f]
-[gpu704:698989] [15] venv-interop/bin/python(_PyObject_Call_Prepend+0x18a)[0x54a8ca]
-[gpu704:698988] [16] venv-interop/bin/python(_PyObject_Call_Prepend+0x18a)[0x54a8ca]
-[gpu704:698989] [16] venv-interop/bin/python[0x5a3778]
-[gpu704:698989] [17] venv-interop/bin/python[0x5a3778]
-[gpu704:698988] [17] venv-interop/bin/python(_PyObject_MakeTpCall+0x13e)[0x54907e]
-[gpu704:698989] [18] venv-interop/bin/python(_PyObject_MakeTpCall+0x13e)[0x54907e]
-[gpu704:698988] [18] venv-interop/bin/python(_PyEval_EvalFrameDefault+0xadf)[0x5d710f]
-[gpu704:698989] [19] venv-interop/bin/python(_PyEval_EvalFrameDefault+0xadf)[0x5d710f]
-[gpu704:698988] [19] venv-interop/bin/python(_PyObject_Call_Prepend+0x18a)[0x54a8ca]
-[gpu704:698989] [20] venv-interop/bin/python(_PyObject_Call_Prepend+0x18a)[0x54a8ca]
-[gpu704:698988] [20] venv-interop/bin/python[0x5a3778]
-[gpu704:698989] [21] venv-interop/bin/python(PyObject_Call+0x6c)[0x54b12c]
-[gpu704:698989] [22] venv-interop/bin/python[0x5a3778]
-[gpu704:698988] [21] venv-interop/bin/python(PyObject_Call+0x6c)[0x54b12c]
-[gpu704:698988] [22] venv-interop/bin/python(_PyEval_EvalFrameDefault+0x4cbe)[0x5db2ee]
-[gpu704:698989] [23] venv-interop/bin/python(_PyObject_Call_Prepend+0x18a)[0x54a8ca]
-[gpu704:698989] [24] venv-interop/bin/python(_PyEval_EvalFrameDefault+0x4cbe)[0x5db2ee]
-[gpu704:698988] [23] venv-interop/bin/python[0x5a3778]
-[gpu704:698989] [25] venv-interop/bin/python(_PyObject_Call_Prepend+0x18a)[0x54a8ca]
-[gpu704:698988] [24] venv-interop/bin/python(_PyObject_MakeTpCall+0x13e)[0x54907e]
-[gpu704:698989] [26] venv-interop/bin/python[0x5a3778]
-[gpu704:698988] [25] venv-interop/bin/python(_PyEval_EvalFrameDefault+0xadf)[0x5d710f]
-[gpu704:698989] [27] venv-interop/bin/python(_PyObject_MakeTpCall+0x13e)[0x54907e]
-[gpu704:698988] [26] venv-interop/bin/python(_PyObject_Call_Prepend+0x18a)[0x54a8ca]
-[gpu704:698989] [28] venv-interop/bin/python(_PyEval_EvalFrameDefault+0xadf)[0x5d710f]
-[gpu704:698988] [27] venv-interop/bin/python[0x5a3778]
-[gpu704:698989] [29] venv-interop/bin/python(_PyObject_Call_Prepend+0x18a)[0x54a8ca]
-[gpu704:698988] [28] venv-interop/bin/python(_PyObject_MakeTpCall+0x13e)[0x54907e]
-[gpu704:698989] *** End of error message ***
-venv-interop/bin/python[0x5a3778]
-[gpu704:698988] [29] venv-interop/bin/python(_PyObject_MakeTpCall+0x13e)[0x54907e]
-[gpu704:698988] *** End of error message ***
---------------------------------------------------------------------------
-prterun noticed that process rank 0 with PID 698988 on node gpu704 exited on
-signal 6 (Aborted).
---------------------------------------------------------------------------

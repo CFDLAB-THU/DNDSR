@@ -1,6 +1,6 @@
 # Cauchy native implicit operator contracts
 
-Historical case results and earlier capability limits are retained in the [implementation history](../dev/cauchy_state_implicit_history.md).
+Historical case results and earlier capability limits are retained in the [implementation history](https://github.com/harryzhou2000/DNDSR/blob/cfab6865f30aa8ec21a31cbbdeada70e12d9d15b/docs/dev/cauchy_state_implicit_history.md).
 
 ## Preconditioner-only AmgX iteration
 

@@ -277,8 +277,8 @@ speedup, multi-GPU capability or native async allocator behavior.
 
 The subsequent memory slice adds provider-aware release and cudaMallocAsync,
 with seven CUDA cases passing 3890 assertions and zero memcheck errors; see
-[its separate snapshot](../dev/array_async_memory_validation_2026-10-21/).
-The [final phase report](../dev/array_runtime_phase_2026-10-21.md) records the
+[its separate snapshot](https://github.com/harryzhou2000/DNDSR/tree/cfab6865f30aa8ec21a31cbbdeada70e12d9d15b/docs/dev/array_async_memory_validation_2026-10-21).
+The [final phase report](https://github.com/harryzhou2000/DNDSR/blob/cfab6865f30aa8ec21a31cbbdeada70e12d9d15b/docs/dev/array_runtime_phase_2026-10-21.md) records the
 complete native/Python matrices and the MPI sanitizer dependency control.
 Optional schedule validation, prepared regions and graph capture are not
 implemented by this foundation.

@@ -462,7 +462,7 @@ Use an installed toolkit path appropriate for the host. CUDA-dependent binary
 providers must match that selection too: in particular, rebuild AmgX into a
 separate prefix because CUDA13 changes cuBLAS/cuSOLVER library major versions.
 Check the resulting executable's resolved libraries, not only `nvcc --version`.
-See [AmgX](amgx.md) and the [optimization record](../dev/plan612_cuda_optimization.md)
+See [AmgX](amgx.md) and the [optimization record](https://github.com/harryzhou2000/DNDSR/blob/cfab6865f30aa8ec21a31cbbdeada70e12d9d15b/docs/dev/plan612_cuda_optimization.md)
 for qualification scope and the optional source-CCCL arithmetic dependency.
 
 ### CUDA 13.1 (CCCL 3.x) Compatibility

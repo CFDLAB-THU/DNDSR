@@ -1,4 +1,0 @@
-test/Geom/test_mesh_demos.py::test_cart_demo_native_setup_has_exact_geometry
-test/Geom/test_mesh_demos.py::test_draw_demo_retains_owned_and_ghost_polygons
-
-2 tests collected in 0.01s

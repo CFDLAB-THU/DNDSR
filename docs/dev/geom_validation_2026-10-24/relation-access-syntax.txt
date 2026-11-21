@@ -1,4 +1,0 @@
-src/Geom/Mesh/MeshConnectivity_Native.cpp
-exit=0
-test/cpp/Geom/test_RelationAccess.cpp
-exit=0

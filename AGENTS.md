@@ -6,6 +6,16 @@
 > "Looks good", "ok", or passive approval is NOT sufficient.  If in doubt,
 > ask: "Proceed with commit?"
 
+> **CRITICAL RULE — KEEP EXPERIMENT AND EXECUTION ARTIFACTS OUT OF DNDSR.**
+> Track an experiment artifact, temporary script, execution plan, execution
+> record or experimental evidence in DNDSR only when the user **explicitly
+> requests that item and gives a concrete justification for keeping it here**.
+> Permission to run an experiment or push a branch does not cover this exception.
+> Keep lightweight summaries, numerical evidence and experiment helpers in the
+> plan repository. Keep raw test transcripts, profiler captures and temporary
+> outputs in an ignored workspace while they are needed. Maintained unit tests,
+> released case inputs and documentation of supported behavior belong in DNDSR.
+
 DNDSR is a C++17 / Python CFD (Computational Fluid Dynamics) research code implementing
 Compact Finite Volume methods with MPI parallelism and optional CUDA GPU support.
 

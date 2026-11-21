@@ -1,2 +1,0 @@
-s.................s.ssssssss.s...s.s.s.s..s.s.s.sss.....s............... [100%]
-50 passed, 22 skipped in 1.52s

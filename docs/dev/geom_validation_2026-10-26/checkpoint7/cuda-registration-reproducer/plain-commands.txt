@@ -1,4 +1,0 @@
-['/usr/local/cuda-13.2/bin/nvcc', '-std=c++17', '-O3', '-arch=sm_80', '--cudart=shared', '-rdc=true', '/tmp/geom-cub-registration-repro/plain_a.cu', '/tmp/geom-cub-registration-repro/plain_b.cu', '-o', '/tmp/geom-cub-registration-repro/plain']
-compile_exit=0
-['/mnt/ssd-SATARAID5/harry/tools/openmpi-5.0.9/install/bin/mpirun', '-np', '1', '/usr/local/cuda-13.2/bin/compute-sanitizer', '--tool', 'memcheck', '--error-exitcode', '91', '/tmp/geom-cub-registration-repro/plain'] env CUDA_VISIBLE_DEVICES=1 OMPI_MCA_accelerator=null
-memcheck_exit=91

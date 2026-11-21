@@ -1246,7 +1246,7 @@ dnds_check_registered_test_targets(all_unit_tests)
 # Higher-rank repetitions of these application/operator suites remain runnable
 # in the extended tier. Their routine np1/2 entries cover local and distributed
 # semantics; distinct empty-rank/rank-subset/multidomain contracts keep np4/8.
-# See docs/dev/plan53_validation/test-tiers.md for the per-suite rationale.
+# See docs/tests/catalog-cpp.md for the suite levels and rank selections.
 set(_dnds_extended_rank_suites
     cauchy_boundary_inputs cauchy_wall_distance cauchy_rans_fv
     cauchy_equation_source cauchy_viscous_flux cauchy_auxiliary_preparation

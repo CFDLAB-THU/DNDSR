@@ -1,3 +1,0 @@
-PASS: 23 original topics; 23 traceability rows; 18 Markdown files; 66 local links; 2 JSON files; 29 source records; brief hash unchanged.
-PASS: pinned source HEAD and all referenced source hashes match.
-Scope: document/provenance integrity only; no solver, numerical or GPU validation.

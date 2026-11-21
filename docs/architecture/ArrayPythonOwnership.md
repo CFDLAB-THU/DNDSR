@@ -65,7 +65,7 @@ once, then derive ranges from that `Allocation` handle; independent imports
 cannot discover hidden external aliases. `ArrayStorage::WithValues` creates
 another field sharing the complete metadata (including device offsets), with
 independent value allocation/access. Copying `RowLayout` also shares its host
-offset Buffer. See [the follow-up implementation record](../dev/array_runtime_followup_2026-10-21.md)
+offset Buffer. See [the follow-up implementation record](https://github.com/harryzhou2000/DNDSR/blob/cfab6865f30aa8ec21a31cbbdeada70e12d9d15b/docs/dev/array_runtime_followup_2026-10-21.md)
 for the implementation checkpoints and validation limits. The completed shape
 and eager contracts are described in [row editing](ArrayRowEditing.md),
 [allocation lifetime](ArrayAllocationLifetime.md), and [eager execution](EagerExecution.md).
@@ -279,4 +279,4 @@ observe record/layout lifetime without retaining either.
 controllers, dtype/width rejection, CSR metadata retention, nested slices,
 proxy/saved-method lifetime, parent resets, last-owner release, class MPI and
 parallel HDF5 I/O. Reproduction and measured results are recorded in
-[the bridge validation report](../dev/array_python_bridge_2026-10-21.md).
+[the bridge validation report](https://github.com/harryzhou2000/DNDSR/blob/cfab6865f30aa8ec21a31cbbdeada70e12d9d15b/docs/dev/array_python_bridge_2026-10-21.md).

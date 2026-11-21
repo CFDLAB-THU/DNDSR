@@ -1,2 +1,0 @@
-rank=0 size=1 init=MPI-before-CUDA device=NVIDIA A100 80GB PCIe value=37 total=37 expected=37
-MPI_Finalize returned

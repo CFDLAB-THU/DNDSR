@@ -1,8 +1,0 @@
-Internal ctest changing into directory: /home/harry/projects/DNDSR-array-geom/build-refactor
-Test project /home/harry/projects/DNDSR-array-geom/build-refactor
-    Start 64: geom_mesh_index_conversion_np8
-1/1 Test #64: geom_mesh_index_conversion_np8 ...   Passed  138.26 sec
-
-100% tests passed, 0 tests failed out of 1
-
-Total Test time (real) = 138.27 sec

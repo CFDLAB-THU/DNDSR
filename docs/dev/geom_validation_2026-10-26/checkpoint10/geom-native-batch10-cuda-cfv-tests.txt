@@ -1,3 +1,0 @@
-Internal ctest changing into directory: /home/harry/projects/DNDSR-array-geom/build-refactor-cuda
-Test project /home/harry/projects/DNDSR-array-geom/build-refactor-cuda
-No tests were found!!!

@@ -1,140 +1,0 @@
-[doctest] doctest version is "2.4.11"
-[doctest] run with "--help" for options
-[doctest] doctest version is "2.4.11"
-[doctest] run with "--help" for options
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0005347]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.001
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.000
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [50], min [50], max [50], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 50] [1: nCell 50] [1: nNode 54] [1: nBnd 20] 
-[0: nNode 67] 
-[0: nBnd 20] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-UnstructuredMesh === InterpolateFace: total faces 220
- 0# DNDS::getTraceString[abi:cxx11]() in build-refactor/test/cpp/geom_test_mesh_facade_pipeline
- 1# DNDS::assert_false_info(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in build-refactor/test/cpp/geom_test_mesh_facade_pipeline
- 2# 0x000060E9E3E15B26 in build-refactor/test/cpp/geom_test_mesh_facade_pipeline
- 3# 0x000060E9E3E15E0F in build-refactor/test/cpp/geom_test_mesh_facade_pipeline
- 4# doctest::Context::run() in build-refactor/test/cpp/geom_test_mesh_facade_pipeline
- 5# main in build-refactor/test/cpp/geom_test_mesh_facade_pipeline
- 6# 0x0000734FCF42A1CA in /lib/x86_64-linux-gnu/libc.so.6
- 7# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
- 8# _start in build-refactor/test/cpp/geom_test_mesh_facade_pipeline
-
-[91m DNDS_assertion failed[39m: "_state != Adj_PointToLocal"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/AdjIndexInfo.hpp:97  ]
-wireTargetMapping called while indices are local — convert to global first, or the stored mapping will be inconsistent with the index values
-===============================================================================
-/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshFacadePipeline.cpp:257:
-TEST CASE:  Mesh facade real CGNS pipeline preserves serial geometry through transitions
-  ordinary UniformSquare_10
-
-/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshFacadePipeline.cpp:257: FATAL ERROR: test case CRASHED: SIGABRT - Abort (abnormal termination) signal
-
-===============================================================================
-/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshFacadePipeline.cpp:257:
-TEST CASE:  Mesh facade real CGNS pipeline preserves serial geometry through transitions
-
-DEEPEST SUBCASE STACK REACHED (DIFFERENT FROM THE CURRENT ONE):
-  ordinary UniformSquare_10
-
-===============================================================================
-===============================================================================
-/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshFacadePipeline.cpp:257:
- 0# DNDS::getTraceString[abi:cxx11]() in build-refactor/test/cpp/geom_test_mesh_facade_pipeline
- 1# DNDS::assert_false_info(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in build-refactor/test/cpp/geom_test_mesh_facade_pipeline
- 2# 0x000058C996DF8B26 in build-refactor/test/cpp/geom_test_mesh_facade_pipeline
- 3# 0x000058C996DF8E0F in build-refactor/test/cpp/geom_test_mesh_facade_pipeline
- 4# doctest::Context::run() in build-refactor/test/cpp/geom_test_mesh_facade_pipeline
- 5# main in build-refactor/test/cpp/geom_test_mesh_facade_pipeline
- 6# 0x000076569C82A1CA in /lib/x86_64-linux-gnu/libc.so.6
- 7# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
- 8# _start in build-refactor/test/cpp/geom_test_mesh_facade_pipeline
-
-[91m DNDS_assertion failed[39m: "_state != Adj_PointToLocal"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/AdjIndexInfo.hpp:97  ]
-wireTargetMapping called while indices are local — convert to global first, or the stored mapping will be inconsistent with the index values
-TEST CASE:  Mesh facade real CGNS pipeline preserves serial geometry through transitions
-  ordinary UniformSquare_10
-
-/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshFacadePipeline.cpp:257: FATAL ERROR: test case CRASHED: SIGABRT - Abort (abnormal termination) signal
-
-===============================================================================
-/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshFacadePipeline.cpp:257:
-TEST CASE:  Mesh facade real CGNS pipeline preserves serial geometry through transitions
-
-DEEPEST SUBCASE STACK REACHED (DIFFERENT FROM THE CURRENT ONE):
-  ordinary UniformSquare_10
-
-===============================================================================
-[doctest] test cases:    1 |    0 passed | 1 failed | 0 skipped
-[doctest] assertions: 4040 | 4040 passed | 0 failed |
-[doctest] Status: FAILURE!
-[doctest] test cases:    1 |    0 passed | 1 failed | 0 skipped
-[doctest] assertions: 4040 | 4040 passed | 0 failed |
-[doctest] Status: FAILURE!
-[gpu704:590443] *** Process received signal ***
-[gpu704:590443] Signal: Aborted (6)
-[gpu704:590443] Signal code:  (-6)
-[gpu704:590444] *** Process received signal ***
-[gpu704:590444] Signal: Aborted (6)
-[gpu704:590444] Signal code:  (-6)
-[gpu704:590443] [ 0] [gpu704:590444] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x734fcf445330]
-[gpu704:590444] [ 1] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x76569c845330]
-[gpu704:590443] [ 1] /lib/x86_64-linux-gnu/libc.so.6(pthread_kill+0x11c)[0x734fcf49ec0c]
-[gpu704:590444] [ 2] /lib/x86_64-linux-gnu/libc.so.6(pthread_kill+0x11c)[0x76569c89ec0c]
-[gpu704:590443] [ 2] /lib/x86_64-linux-gnu/libc.so.6(gsignal+0x1e)[0x734fcf44527e]
-[gpu704:590444] [ 3] /lib/x86_64-linux-gnu/libc.so.6(gsignal+0x1e)[0x76569c84527e]
-[gpu704:590443] [ 3] /lib/x86_64-linux-gnu/libc.so.6(abort+0xdf)[0x734fcf4288ff]
-[gpu704:590444] [ 4] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x76569c845330]
-[gpu704:590443] [ 4] build-refactor/test/cpp/geom_test_mesh_facade_pipeline(_ZN4DNDS17assert_false_infoEPKcS1_iRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE+0xdf)[0x60e9e3e17f3f]
-[gpu704:590444] [ 5] /lib/x86_64-linux-gnu/libc.so.6(pthread_kill+0x11c)[0x76569c89ec0c]
-[gpu704:590443] [ 5] build-refactor/test/cpp/geom_test_mesh_facade_pipeline(+0xa8b26)[0x60e9e3e15b26]
-[gpu704:590444] [ 6] /lib/x86_64-linux-gnu/libc.so.6(gsignal+0x1e)[0x76569c84527e]
-[gpu704:590443] [ 6] build-refactor/test/cpp/geom_test_mesh_facade_pipeline(+0xa8e0f)[0x60e9e3e15e0f]
-[gpu704:590444] [ 7] /lib/x86_64-linux-gnu/libc.so.6(abort+0xdf)[0x76569c8288ff]
-[gpu704:590443] [ 7] build-refactor/test/cpp/geom_test_mesh_facade_pipeline(_ZN7doctest7Context3runEv+0xe8e)[0x60e9e3e10bee]
-[gpu704:590444] [ 8] build-refactor/test/cpp/geom_test_mesh_facade_pipeline(main+0x4c)[0x60e9e3dead9c]
-[gpu704:590444] [ 9] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x734fcf42a1ca]
-[gpu704:590444] [10] build-refactor/test/cpp/geom_test_mesh_facade_pipeline(_ZN4DNDS17assert_false_infoEPKcS1_iRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE+0xdf)[0x58c996dfaf3f]
-[gpu704:590443] [ 8] build-refactor/test/cpp/geom_test_mesh_facade_pipeline(+0xa8b26)[0x58c996df8b26]
-[gpu704:590443] [ 9] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x734fcf42a28b]
-[gpu704:590444] [11] build-refactor/test/cpp/geom_test_mesh_facade_pipeline(_start+0x25)[0x60e9e3def1d5]
-[gpu704:590444] *** End of error message ***
-build-refactor/test/cpp/geom_test_mesh_facade_pipeline(+0xa8e0f)[0x58c996df8e0f]
-[gpu704:590443] [10] build-refactor/test/cpp/geom_test_mesh_facade_pipeline(_ZN7doctest7Context3runEv+0xe8e)[0x58c996df3bee]
-[gpu704:590443] [11] build-refactor/test/cpp/geom_test_mesh_facade_pipeline(main+0x4c)[0x58c996dcdd9c]
-[gpu704:590443] [12] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x76569c82a1ca]
-[gpu704:590443] [13] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x76569c82a28b]
-[gpu704:590443] [14] build-refactor/test/cpp/geom_test_mesh_facade_pipeline(_start+0x25)[0x58c996dd21d5]
-[gpu704:590443] *** End of error message ***
---------------------------------------------------------------------------
-prterun noticed that process rank 0 with PID 590443 on node gpu704 exited on
-signal 6 (Aborted).
---------------------------------------------------------------------------

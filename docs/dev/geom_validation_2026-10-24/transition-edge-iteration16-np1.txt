@@ -1,8 +1,0 @@
-Internal ctest changing into directory: /home/harry/projects/DNDSR-array-geom/build-refactor
-Test project /home/harry/projects/DNDSR-array-geom/build-refactor
-    Start 118: geom_mesh_transition_np1
-1/1 Test #118: geom_mesh_transition_np1 .........   Passed    9.69 sec
-
-100% tests passed, 0 tests failed out of 1
-
-Total Test time (real) =   9.69 sec

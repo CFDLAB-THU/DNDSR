@@ -74,8 +74,8 @@ transition invalidation contract.
 **Construction correction, 2026-10-28:** primary and face/edge builders now
 produce owned topology; finalization belongs to the assembler and takes an
 explicit GhostSpec. Owned ingress, partition, local permutation and refinement
-operations are available. The [semantic audit](../dev/mesh_construction_semantics_2026-10-28.md)
-and [fixture/purpose ledger](../dev/mesh_connectivity_test_port_2026-10-28.md)
+operations are available. The [semantic audit](https://github.com/harryzhou2000/DNDSR/blob/cfab6865f30aa8ec21a31cbbdeada70e12d9d15b/docs/dev/mesh_construction_semantics_2026-10-28.md)
+and [fixture/purpose ledger](https://github.com/harryzhou2000/DNDSR/blob/cfab6865f30aa8ec21a31cbbdeada70e12d9d15b/docs/dev/mesh_connectivity_test_port_2026-10-28.md)
 record regression coverage and the explicit legacy periodic-frame exception.
 
 ```mermaid

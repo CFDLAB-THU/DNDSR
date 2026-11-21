@@ -72,7 +72,11 @@ Place it in the appropriate directory under `docs/`:
 | Architecture | `docs/architecture/` | `docs/architecture/my_design.md` |
 | Theory | `docs/theory/` | `docs/theory/my_method.md` |
 | Tests | `docs/tests/` | `docs/tests/my_tests.md` |
-| Dev notes | `docs/dev/` | `docs/dev/my_notes.md` |
+| Developer guidance | `docs/dev/` | `docs/dev/cuda_assertions.md` |
+
+Keep execution plans, run records, experiment helpers and numerical evidence
+in the plan repository. See the [repository artifact rule](../../AGENTS.md)
+for exceptions.
 
 The file **must** start with a heading that includes a `{#page_id}` anchor:
 

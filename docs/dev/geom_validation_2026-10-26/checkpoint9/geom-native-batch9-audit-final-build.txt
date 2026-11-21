@@ -1,6 +1,0 @@
-[  7%] Built target fmt
-[ 35%] Built target dnds
-[ 92%] Built target geom
-[ 92%] Building CXX object test/cpp/CMakeFiles/geom_test_mesh_audit.dir/Geom/test_MeshAudit.cpp.o
-[100%] Linking CXX executable geom_test_mesh_audit
-[100%] Built target geom_test_mesh_audit

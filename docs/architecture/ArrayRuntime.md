@@ -49,12 +49,12 @@ The detailed contracts and ownership graphs are in
 [transient MPI](ArrayTransientMPI.md). The unstructured mesh now owns Runtime
 arrays; legacy solver fields continue to use their historical containers.
 Runtime Array itself does not depend on Geom or the solver.
-The [2026-10-22 audit](../dev/array_runtime_audit_2026-10-22.md) summarizes
+The [2026-10-22 audit](https://github.com/harryzhou2000/DNDSR/blob/cfab6865f30aa8ec21a31cbbdeada70e12d9d15b/docs/dev/array_runtime_audit_2026-10-22.md) summarizes
 coverage, reviewed contracts and the retained-transfer-error correction.
 
 ## Element types and device dispatch
 
-The [Euler workload and overlap audit](../dev/array_runtime_scenarios_2026-10-22.md)
+The [Euler workload and overlap audit](https://github.com/harryzhou2000/DNDSR/blob/cfab6865f30aa8ec21a31cbbdeada70e12d9d15b/docs/dev/array_runtime_scenarios_2026-10-22.md)
 maps production data patterns to CPU/MPI/CUDA tests, including detected type
 mismatches and deliberately unchecked eager ordering mistakes.
 
@@ -495,4 +495,4 @@ new callers. In-place mesh mutation is allowed under its version scope;
 field migration retains old allocations through the transition.
 
 Validation commands and actual results belong in
-[the phase report](../dev/array_geom_native_phase_2026-10-21.md).
+[the phase report](https://github.com/harryzhou2000/DNDSR/blob/cfab6865f30aa8ec21a31cbbdeada70e12d9d15b/docs/dev/array_geom_native_phase_2026-10-21.md).

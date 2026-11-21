@@ -163,7 +163,7 @@ core completion. A deliberately omitted producer edge demonstrates stale epoch
 transfer in unchecked mode without causing an actual concurrent data race.
 The CFV CUDA suite has NCCL and combined NCCL/FP64-MMA modes;
 Python tests cover retained array/slice ownership and the public provider API.
-See the [execution record](../dev/nccl_fp64_2026-11-01.md) for completed runs and
+See the [execution record](https://github.com/harryzhou2000/DNDSR/blob/cfab6865f30aa8ec21a31cbbdeada70e12d9d15b/docs/dev/nccl_fp64_2026-11-01.md) for completed runs and
 sanitizer/performance limits.
 
 References: [NCCL point-to-point](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/p2p.html)

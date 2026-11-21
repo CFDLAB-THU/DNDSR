@@ -1,9 +1,0 @@
-[  5%] Built target fmt
-[ 29%] Built target dnds
-[ 52%] Built target cfv
-[100%] Built target geom
-[100%] Building CXX object test/cpp/CMakeFiles/cfv_test_reconstruction.dir/CFV/test_Reconstruction.cpp.o
-[100%] Linking CXX executable cfv_test_reconstruction
-[100%] Built target cfv_test_reconstruction
-
-EXIT_STATUS=0

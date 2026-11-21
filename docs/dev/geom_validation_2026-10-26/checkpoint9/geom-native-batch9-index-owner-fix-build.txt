@@ -1,6 +1,0 @@
-[  7%] Built target fmt
-[ 38%] Built target dnds
-[100%] Built target geom
-[100%] Building CXX object test/cpp/CMakeFiles/geom_test_mesh_index_conversion.dir/Geom/test_MeshIndexConversion.cpp.o
-[100%] Linking CXX executable geom_test_mesh_index_conversion
-[100%] Built target geom_test_mesh_index_conversion

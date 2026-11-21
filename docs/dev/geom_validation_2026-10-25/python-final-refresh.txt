@@ -1,7 +1,0 @@
-[  8%] Built target fmt
-[ 50%] Built target dnds_shared
-[ 50%] Building CXX object src/Geom/CMakeFiles/geom_shared.dir/Mesh/NativeMeshState.cpp.o
-[ 58%] Linking CXX shared library libgeom_shared.so
-[108%] Built target geom_shared
-[108%] Linking CXX shared module geom_pybind11.cpython-312-x86_64-linux-gnu.so
-[150%] Built target geom_pybind11

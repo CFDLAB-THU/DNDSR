@@ -7,7 +7,7 @@ public mesh facade. Neither operation constructs a legacy mesh array. The
 construction/closure distinction and current correction status are documented
 in [Mesh connectivity](MeshConnectivity.md).
 Current construction, ownership, setup and output are native-only. The migration history and validation ledger are tracked in
-[the Geom work ledger](../dev/geom_native_migration_2026-10-25.md).
+[the Geom work ledger](https://github.com/harryzhou2000/DNDSR/blob/cfab6865f30aa8ec21a31cbbdeada70e12d9d15b/docs/dev/geom_native_migration_2026-10-25.md).
 
 ## Ownership and publication
 
@@ -279,7 +279,7 @@ new namespace because the old format has none. It rejects duplicate stored IDs.
 A frozen legacy IV10_10 probe on one and two ranks produces unique IDs 0–99
 after periodic pruning and 0–399 after elevation. An earlier claim of sparse
 retained IDs causing historical duplicates was incorrect; see the
-[semantic audit](../dev/mesh_construction_semantics_2026-10-28.md). Duplicate-ID
+[semantic audit](https://github.com/harryzhou2000/DNDSR/blob/cfab6865f30aa8ec21a31cbbdeada70e12d9d15b/docs/dev/mesh_construction_semantics_2026-10-28.md). Duplicate-ID
 rejection tests now deliberately corrupt a valid periodic high-order snapshot.
 The decoder never silently renumbers malformed input.
 

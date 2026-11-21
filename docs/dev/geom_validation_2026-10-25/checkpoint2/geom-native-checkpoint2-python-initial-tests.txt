@@ -1,6 +1,0 @@
-native 1 1
-Traceback (most recent call last):
-  File "/tmp/geom-native-checkpoint2-python-run.py", line 8, in <module>
-    exec(compile(runner, __file__, 'exec'))
-  File "/tmp/geom-native-checkpoint2-python-run.py", line 49, in <module>
-RuntimeError: test failed: /tmp/geom-native-checkpoint2-python-native-np1.log

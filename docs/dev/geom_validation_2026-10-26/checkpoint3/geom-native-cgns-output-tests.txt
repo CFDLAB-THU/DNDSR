@@ -1,3 +1,0 @@
-Internal ctest changing into directory: /home/harry/projects/DNDSR-array-geom/build-refactor
-Test project /home/harry/projects/DNDSR-array-geom/build-refactor
-    Start 189: geom_mesh_current_output_np8

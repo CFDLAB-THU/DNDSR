@@ -1,1 +1,0 @@
-sbatch --parsable --partition=amd_256,amd_512,amd_1T,amd_2T --output=<taskroot>/logs/e3-%j.out --error=<taskroot>/logs/e3-%j.err <taskroot>/submitted-e3.sbatch <taskroot> 43e099fe6e74ee26b6ac11342df17b62d1783b0a

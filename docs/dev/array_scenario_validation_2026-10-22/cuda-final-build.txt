@@ -1,6 +1,0 @@
-[ 12%] Built target fmt
-[ 87%] Built target dnds
-[ 87%] Building CXX object test/cpp/CMakeFiles/dnds_test_runtime_engine.dir/DNDS/test_EagerEngine.cpp.o
-[100%] Linking CUDA device code CMakeFiles/dnds_test_runtime_engine.dir/cmake_device_link.o
-[100%] Linking CXX executable dnds_test_runtime_engine
-[100%] Built target dnds_test_runtime_engine

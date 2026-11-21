@@ -1,8 +1,0 @@
-..............ss.............................................................................................                  [100%]
-=========================== short test summary info ============================
-SKIPPED [1] test/Geom/test_mesh_facade.py:151: CPU-only build; run the CUDA binding profile for this case
-54 passed, 1 skipped in 13.37s
-.                  [100%]
-=========================== short test summary info ============================
-SKIPPED [1] test/Geom/test_mesh_facade.py:151: CPU-only build; run the CUDA binding profile for this case
-54 passed, 1 skipped in 13.38s

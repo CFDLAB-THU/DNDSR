@@ -1,8 +1,0 @@
-src/Geom/Mesh/MeshTransition.cpp
-exit=0
-
-src/Geom/Mesh/Mesh_Reorder.cpp
-exit=0
-
-test/cpp/Geom/test_MeshEntityField.cpp
-exit=0

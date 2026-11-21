@@ -1,5 +1,0 @@
-[ 12%] Built target fmt
-[ 87%] Built target dnds
-[ 87%] Building CXX object test/cpp/CMakeFiles/dnds_test_runtime_row_transfer.dir/DNDS/test_RuntimeRowTransfer.cpp.o
-[100%] Linking CXX executable dnds_test_runtime_row_transfer
-[100%] Built target dnds_test_runtime_row_transfer

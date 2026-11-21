@@ -1,9 +1,0 @@
-src/Euler/_explicit_instantiation/EulerEvaluator_NS_2EQ.cpp status=0 elapsed=40.438
-src/Euler/_explicit_instantiation/EulerEvaluator_EvaluateDt_NS_2EQ.cpp status=0 elapsed=41.286
-src/Euler/_explicit_instantiation/EulerEvaluator_EvaluateRHS_NS_2EQ.cpp status=0 elapsed=25.216
-src/Euler/_explicit_instantiation/EulerEvaluator_NS_EX.cpp status=0 elapsed=38.049
-src/Euler/_explicit_instantiation/EulerEvaluator_EvaluateDt_NS_EX.cpp status=0 elapsed=47.026
-src/Euler/_explicit_instantiation/EulerEvaluator_EvaluateRHS_NS_EX.cpp status=0 elapsed=22.516
-src/Euler/_explicit_instantiation/EulerSolver_Init_NS_2EQ.cpp status=0 elapsed=17.957
-src/Euler/_explicit_instantiation/EulerSolver_PrintData_NS_EX.cpp status=0 elapsed=21.372
-source_unchanged=True

@@ -1,5 +1,0 @@
-========= COMPUTE-SANITIZER
-Authorization required, but no authorization protocol specified
-
-========= Error: No attachable process found. compute-sanitizer timed-out.
-========= Default timeout can be adjusted with --launch-timeout. Awaiting target completion.

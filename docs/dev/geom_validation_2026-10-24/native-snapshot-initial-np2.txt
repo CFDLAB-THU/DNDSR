@@ -1,130 +1,0 @@
-[doctest] doctest version is "2.4.11"
-[doctest] run with "--help" for options
-[doctest] doctest version is "2.4.11"
-[doctest] run with "--help" for options
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0004547]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.001
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.001
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [50], min [50], max [50], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 50] [1: nCell 50] [1: nNode 54] 
-[0: nNode 67] 
-[0: nBnd 20] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nBnd 20] UnstructuredMesh === InterpolateFace: total faces 220
-UnstructuredMesh === ReorderLocalCells, nPart0 [2], got reordering, bw [6] to [6]
-UnstructuredMesh === ReorderLocalCells finished
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0003805]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.001
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.001
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [50], min [50], max [50], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 50] [1: nCell 50] [1: nNode 54] [1: nBnd 20] 
-[0: nNode 67] 
-[0: nBnd 20] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-UnstructuredMesh === InterpolateFace: total faces 220
-===============================================================================
-/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_NativeMeshSnapshot.cpp:42:
-TEST CASE:  Detached snapshot publication retains validation and explicit placement
-
-/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_NativeMeshSnapshot.cpp:42: FATAL ERROR: test case CRASHED: SIGSEGV - Segmentation violation signal
-
-===============================================================================
-[doctest] test cases:  2 |  1 passed | 1 failed | 0 skipped
-[doctest] assertions: 20 | 20 passed | 0 failed |
-[doctest] Status: FAILURE!
-[gpu704:664052] *** Process received signal ***
-[gpu704:664052] Signal: Segmentation fault (11)
-[gpu704:664052] Signal code:  (-6)
-[gpu704:664052] Failing at address: 0x3ec000a21f4
-[gpu704:664052] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x793adac45330]
-[gpu704:664052] [ 1] build-refactor-cuda/test/cpp/geom_test_native_mesh_snapshot(_ZN4DNDS4Geom14MeshReadAccessC2ERKNS0_18NativeMeshSnapshotENS_7Runtime16ExecutionContextE+0x40)[0x636defda6040]
-[gpu704:664052] [ 2] build-refactor-cuda/test/cpp/geom_test_native_mesh_snapshot(+0x34de78)[0x636defcfde78]
-[gpu704:664052] [ 3] build-refactor-cuda/test/cpp/geom_test_native_mesh_snapshot(_ZN7doctest7Context3runEv+0xe8e)[0x636defd022ae]
-[gpu704:664052] [ 4] build-refactor-cuda/test/cpp/geom_test_native_mesh_snapshot(main+0x4c)[0x636defcdea7c]
-[gpu704:664052] [ 5] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x793adac2a1ca]
-[gpu704:664052] [ 6] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x793adac2a28b]
-===============================================================================
-/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_NativeMeshSnapshot.cpp:42:
-TEST CASE:  Detached snapshot publication retains validation and explicit placement
-
-/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_NativeMeshSnapshot.cpp:42: FATAL ERROR: test case CRASHED: SIGSEGV - Segmentation violation signal
-
-===============================================================================
-[doctest] test cases:  2 |  1 passed | 1 failed | 0 skipped
-[doctest] assertions: 20 | 20 passed | 0 failed |
-[doctest] Status: FAILURE!
-[gpu704:664052] [ 7] build-refactor-cuda/test/cpp/geom_test_native_mesh_snapshot(_start+0x25)[0x636defce5d85]
-[gpu704:664052] *** End of error message ***
-[gpu704:664053] *** Process received signal ***
-[gpu704:664053] Signal: Segmentation fault (11)
-[gpu704:664053] Signal code:  (-6)
-[gpu704:664053] Failing at address: 0x3ec000a21f5
-[gpu704:664053] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x766422445330]
-[gpu704:664053] [ 1] build-refactor-cuda/test/cpp/geom_test_native_mesh_snapshot(_ZN4DNDS4Geom14MeshReadAccessC2ERKNS0_18NativeMeshSnapshotENS_7Runtime16ExecutionContextE+0x40)[0x5fecde854040]
-[gpu704:664053] [ 2] build-refactor-cuda/test/cpp/geom_test_native_mesh_snapshot(+0x34de78)[0x5fecde7abe78]
-[gpu704:664053] [ 3] build-refactor-cuda/test/cpp/geom_test_native_mesh_snapshot(_ZN7doctest7Context3runEv+0xe8e)[0x5fecde7b02ae]
-[gpu704:664053] [ 4] build-refactor-cuda/test/cpp/geom_test_native_mesh_snapshot(main+0x4c)[0x5fecde78ca7c]
-[gpu704:664053] [ 5] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x76642242a1ca]
-[gpu704:664053] [ 6] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x76642242a28b]
-[gpu704:664053] [ 7] build-refactor-cuda/test/cpp/geom_test_native_mesh_snapshot(_start+0x25)[0x5fecde793d85]
-[gpu704:664053] *** End of error message ***
---------------------------------------------------------------------------
-prterun noticed that process rank 1 with PID 664053 on node gpu704 exited on
-signal 11 (Segmentation fault).
---------------------------------------------------------------------------

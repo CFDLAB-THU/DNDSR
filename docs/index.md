@@ -12,7 +12,7 @@ CUDA GPU support.
 | Install dependencies and build | [Build guide](guides/building.md) |
 | Run a first case | [Worked examples](guides/examples.md) |
 | Write or run tests | [Test guide](sphinx/tests.md) |
-| Find past results and numerical corrections | [Validation records](dev/validation_records.md) |
+| Find historical results (plan repo access required) | [Validation records](https://github.com/harryzhou2000/dndsr-next-plan/blob/cbc82dcae48f8fa139df5ed3e1abfb84b04f2668/evidence/pr26-validation/docs/dev/validation_records.md) |
 
 ## Architecture entry points
 
@@ -22,13 +22,12 @@ device bounds checks and the optional per-source production-kernel opt-out.
 The [stream resource ownership contract](architecture/StreamResourceOwnership.md)
 describes shared CPU/CUDA contexts and safe lease retirement after engine close.
 
-The [Plan 61-2 profiling guide](dev/plan612_cuda_optimization.md) describes
-opt-in CUDA timeline ranges and the fixed uncached TGV optimization baseline.
+The [profiling guide](guides/cuda_profiling.md) describes CPU and CUDA timeline ranges and how to interpret host and device timings.
 
 The [automatic A100 kernel defaults](dev/cauchy_a100_kernel_defaults.md) describe
 setup-time device/shape selection and explicit reproducibility overrides.
 
-The [experimental FV and VR matrix storage guide](dev/plan613_matrix_storage.md)
+The [experimental FV and VR matrix storage guide](architecture/FVMatrixStorage.md)
 describes independent layouts, raw VR sweeps, and allocation controls.
 
 Cauchy development starts at the [solver contracts and ledger](architecture/Cauchy.md).
@@ -82,7 +81,6 @@ snapping and nonlinear checkpoints.
 | Shared PP/RHS quadrature, cache placement and direct evaluation | [Quadrature and basis ownership](architecture/QuadratureBasis.md) |
 | CPU reconstruction operation profiles and storage accounting | [Reconstruction capabilities](architecture/ReconstructionCapabilities.md) |
 | Reusable element projection and distributed surface location | [Surface geometry and location](architecture/SurfaceLocation.md) |
-| Completed CFV/Geom work orders and validation limits | [Facility completion ledger](dev/fv_completion_2026-10-31.md) |
 | Entity-associated fields and migration layouts | [EntityField](architecture/EntityField.md) |
 | Physical table formats, strides and local dense adapters | [Physical Array layouts](architecture/PhysicalArrayLayouts.md) |
 | Python Cauchy logical-state, FV and linear operator composition | [Python Cauchy operators](guides/python_cauchy_operators.md) |

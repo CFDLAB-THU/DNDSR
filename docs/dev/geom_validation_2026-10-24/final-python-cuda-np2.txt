@@ -1,6 +1,0 @@
-local rank 0: GPU-c1ca6727-774a-bf06-1299-f60ad9cecec6 as CUDA device 0
-local rank 1: GPU-0848655f-4530-ea83-ca9b-c091c5c6f36a as CUDA device 0
-.............................................................................................................                  [100%]
-55 passed in 15.04s
-.                  [100%]
-55 passed in 15.05s

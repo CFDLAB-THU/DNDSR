@@ -1,9 +1,0 @@
-/home/harry/projects/DNDSR-array-geom/python/DNDSR/DNDS/_ext/dnds_pybind11.cpython-312-x86_64-linux-gnu.so Build ID: e6d05c8d0edf0e48544fd524070f1f8190e574de /home/harry/projects/DNDSR-array-geom/build-refactor-cuda/src/DNDS/dnds_pybind11.cpython-312-x86_64-linux-gnu.so Build ID: e6d05c8d0edf0e48544fd524070f1f8190e574de
-/home/harry/projects/DNDSR-array-geom/python/DNDSR/_lib/libdnds_shared.so Build ID: a014589647f558d73e035f2696c8fa76b235419d
-/home/harry/projects/DNDSR-array-geom/python/DNDSR/Geom/_ext/geom_pybind11.cpython-312-x86_64-linux-gnu.so Build ID: 0a35ee32be067871c78bdd911f9f04eaa8e2bef4 /home/harry/projects/DNDSR-array-geom/build-refactor-cuda/src/Geom/geom_pybind11.cpython-312-x86_64-linux-gnu.so Build ID: 0a35ee32be067871c78bdd911f9f04eaa8e2bef4
-/home/harry/projects/DNDSR-array-geom/python/DNDSR/_lib/libgeom_shared.so Build ID: e1ed90b331723c9e3ce2d096b1307dff17a38002
-/home/harry/projects/DNDSR-array-geom/python/DNDSR/CFV/_ext/cfv_pybind11.cpython-312-x86_64-linux-gnu.so Build ID: c83afe8e3f5aba100b7a11359775d4fa4b5d3d08 /home/harry/projects/DNDSR-array-geom/build-refactor-cuda/src/CFV/cfv_pybind11.cpython-312-x86_64-linux-gnu.so Build ID: c83afe8e3f5aba100b7a11359775d4fa4b5d3d08
-/home/harry/projects/DNDSR-array-geom/python/DNDSR/_lib/libcfv_shared.so Build ID: 64e2b53ea8a557cdb37ca976e33ba0f6fda59688
-/home/harry/projects/DNDSR-array-geom/python/DNDSR/EulerP/_ext/eulerP_pybind11.cpython-312-x86_64-linux-gnu.so Build ID: 30c0b846fb7c472a3ac8b6f9d26b36032ca380c9 /home/harry/projects/DNDSR-array-geom/build-refactor-cuda/src/EulerP/eulerP_pybind11.cpython-312-x86_64-linux-gnu.so Build ID: 30c0b846fb7c472a3ac8b6f9d26b36032ca380c9
-/home/harry/projects/DNDSR-array-geom/python/DNDSR/_lib/libeulerP_shared.so Build ID: 56da19bb468a3892bb327b44ddfbbc609ecf28e2
-Verified CUDA extension and implementation libraries

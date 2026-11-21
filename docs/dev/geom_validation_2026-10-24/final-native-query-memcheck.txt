@@ -1,9 +1,0 @@
-local rank 0: GPU-c1ca6727-774a-bf06-1299-f60ad9cecec6 as CUDA device 0
-========= COMPUTE-SANITIZER
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0m[0m[0m[0m[0m[0m[0m[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases:   9 | [0;32m  9 passed[0m | [0m0 failed[0m | [0;33m1 skipped[0m
-[0;36m[doctest] [0massertions: 768 | [0;32m768 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;32mSUCCESS![0m
-========= ERROR SUMMARY: 0 errors

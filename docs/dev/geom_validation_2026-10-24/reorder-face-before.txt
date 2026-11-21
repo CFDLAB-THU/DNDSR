@@ -1,118 +1,0 @@
-[doctest] doctest version is "2.4.11"
-[doctest] run with "--help" for options
-[doctest] doctest version is "2.4.11"
-[doctest] run with "--help" for options
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0005617]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.002
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.002
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [50], min [50], max [50], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 50] [1: nCell 50] [1: nNode 54] 
-[0: nNode 67] 
-[0: nBnd 20] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nBnd 20] UnstructuredMesh === InterpolateFace: total faces 220
- 0# DNDS::getTraceString[abi:cxx11]() in build-refactor/test/cpp/geom_test_mesh_reorder
- 1# DNDS::assert_false(char const*, char const*, int) in build-refactor/test/cpp/geom_test_mesh_reorder
- 2# DNDS::Geom::UnstructuredMesh::AssertOnFaces() in build-refactor/test/cpp/geom_test_mesh_reorder
- 3# 0x000060D130958054 in build-refactor/test/cpp/geom_test_mesh_reorder
- 4# doctest::Context::run() in build-refactor/test/cpp/geom_test_mesh_reorder
- 5# main in build-refactor/test/cpp/geom_test_mesh_reorder
- 6# 0x0000758CFA82A1CA in /lib/x86_64-linux-gnu/libc.so.6
- 7# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
- 8# _start in build-refactor/test/cpp/geom_test_mesh_reorder
-
-[91m DNDS_assertion failed[39m: "iFace >= 0 && iFace < face2cell.Size()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh.cpp:1440  ]
-===============================================================================
-/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshReorder.cpp:2124:
-TEST CASE:  ReorderEntities: Face-explicit identity and arriving cell rows
-
-DEEPEST SUBCASE STACK REACHED (DIFFERENT FROM THE CURRENT ONE):
-  identity
-
-/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshReorder.cpp:2124: FATAL ERROR: test case CRASHED: SIGABRT - Abort (abnormal termination) signal
-
-===============================================================================
-/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshReorder.cpp:2124:
-TEST CASE:  ReorderEntities: Face-explicit identity and arriving cell rows
-  identity
-  1
-  0
-  @
-  ø´0Ñ`
-[gpu704:520567] *** Process received signal ***
-[gpu704:520567] Signal: Segmentation fault (11)
-[gpu704:520567] Signal code: Address not mapped (1)
-[gpu704:520567] Failing at address: 0xffffffff00000000
-[gpu704:520567] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x758cfa845330]
-[gpu704:520567] [ 1] build-refactor/test/cpp/geom_test_mesh_reorder(+0x8f9d7)[0x60d1309209d7]
-[gpu704:520567] [ 2] build-refactor/test/cpp/geom_test_mesh_reorder(+0x8fd2a)[0x60d130920d2a]
-[gpu704:520567] [ 3] build-refactor/test/cpp/geom_test_mesh_reorder(+0x93340)[0x60d130924340]
-[gpu704:520567] [ 4] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x758cfa845330]
-[gpu704:520567] [ 5] /lib/x86_64-linux-gnu/libc.so.6(pthread_kill+0x11c)[0x758cfa89ec0c]
-[gpu704:520567] [ 6] /lib/x86_64-linux-gnu/libc.so.6(gsignal+0x1e)[0x758cfa84527e]
-[gpu704:520567] [ 7] /lib/x86_64-linux-gnu/libc.so.6(abort+0xdf)[0x758cfa8288ff]
-[gpu704:520567] [ 8] build-refactor/test/cpp/geom_test_mesh_reorder(_ZN4DNDS12assert_falseEPKcS1_i+0xcb)[0x60d13096ab1b]
-[gpu704:520567] [ 9] build-refactor/test/cpp/geom_test_mesh_reorder(_ZN4DNDS4Geom16UnstructuredMesh13AssertOnFacesEv+0x86f)[0x60d1309a63cf]
-[gpu704:520567] [10] build-refactor/test/cpp/geom_test_mesh_reorder(+0xc7054)[0x60d130958054]
-[gpu704:520567] [11] build-refactor/test/cpp/geom_test_mesh_reorder(_ZN7doctest7Context3runEv+0xe8e)[0x60d13095998e]
-[gpu704:520567] [12] build-refactor/test/cpp/geom_test_mesh_reorder(main+0x58)[0x60d130917d88]
-[gpu704:520567] [13] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x758cfa82a1ca]
-[gpu704:520567] [14] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x758cfa82a28b]
-[gpu704:520567] [15] build-refactor/test/cpp/geom_test_mesh_reorder(_start+0x25)[0x60d13091be15]
-[gpu704:520567] *** End of error message ***
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0004161]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-===============================================================================
-/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshReorder.cpp:2124:
-TEST CASE:  ReorderEntities: Face-explicit identity and arriving cell rows
-
-/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshReorder.cpp:2124: FATAL ERROR: test case CRASHED: SIGTERM - Termination request signal
-
-===============================================================================
-[doctest] test cases:    1 |    0 passed | 1 failed | 36 skipped
-[doctest] assertions: 1200 | 1200 passed | 0 failed |
-[doctest] Status: FAILURE!
---------------------------------------------------------------------------
-prterun noticed that process rank 1 with PID 520567 on node gpu704 exited on
-signal 11 (Segmentation fault).
---------------------------------------------------------------------------

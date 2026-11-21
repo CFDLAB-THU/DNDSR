@@ -4,9 +4,9 @@ See the [caller contract](RuntimeCallerContract.md) for required joins before
 final release, foreign allocation ownership and borrowed native stream lifetime.
 
 Status: native ordered release and async allocation passed the focused CPU
-and CUDA checks in [the memory validation snapshot](../dev/array_async_memory_validation_2026-10-21/).
+and CUDA checks in [the memory validation snapshot](https://github.com/harryzhou2000/DNDSR/tree/cfab6865f30aa8ec21a31cbbdeada70e12d9d15b/docs/dev/array_async_memory_validation_2026-10-21).
 Seven CUDA engine cases passed 3890 assertions, including Compute Sanitizer
-with zero errors. The [final phase report](../dev/array_runtime_phase_2026-10-21.md)
+with zero errors. The [final phase report](https://github.com/harryzhou2000/DNDSR/blob/cfab6865f30aa8ec21a31cbbdeada70e12d9d15b/docs/dev/array_runtime_phase_2026-10-21.md)
 also records the completed Python and full MPI matrices. The earlier eager
 snapshot predates this slice.
 

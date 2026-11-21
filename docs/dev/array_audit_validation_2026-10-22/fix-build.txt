@@ -1,8 +1,0 @@
-[ 14%] Built target fmt
-[ 14%] Building CXX object src/DNDS/CMakeFiles/dnds.dir/Runtime/Exchange.cpp.o
-[ 14%] Building CXX object src/DNDS/CMakeFiles/dnds.dir/Runtime/RowTransfer.cpp.o
-[ 14%] Linking CXX static library libdnds.a
-[100%] Built target dnds
-[100%] Building CXX object test/cpp/CMakeFiles/dnds_test_runtime_transient.dir/DNDS/test_RuntimeTransient.cpp.o
-[100%] Linking CXX executable dnds_test_runtime_transient
-[100%] Built target dnds_test_runtime_transient

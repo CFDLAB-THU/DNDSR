@@ -1,5 +1,0 @@
-slurm_load_jobs error: Invalid job id specified
-JobID|JobName|Partition|State|ExitCode|Elapsed|Timelimit|AllocCPUS|NodeList
-12442563|cauchy-audit-e3|amd_512|COMPLETED|0:0|00:02:16|00:15:00|64|o2415
-12442563.batch|batch||COMPLETED|0:0|00:02:16||64|o2415
-12442563.extern|extern||COMPLETED|0:0|00:02:16||64|o2415

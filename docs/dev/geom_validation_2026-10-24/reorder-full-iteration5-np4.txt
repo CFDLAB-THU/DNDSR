@@ -1,553 +1,0 @@
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0m[0m[0m[0mCGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.00589]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.002
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.002
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [25], min [25], max [25], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 25] [0m[0m[0m[0m[1: nCell 25] [0m[0m[0m[0m[2: nCell 25] [0m[0m[0m[0m[3: nCell 25] 
-[0: nNode 36] 
-[0: nBnd 15] [1: nNode 24] [1: nBnd 5] [2: nNode 24] [2: nBnd 15] [3: nNode 16] [3: nBnd 5] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-UnstructuredMesh === InterpolateFace: total faces 200
-UnstructuredMesh === ReorderLocalCells, nPart0 [2], got reordering, bw [11] to [3]
-UnstructuredMesh === ReorderLocalCells finished
-[0mCGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.01593]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.001
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.001
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [25], min [25], max [25], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 25] [0m[1: nCell 25] [1: nNode 30] [1: nBnd 10] [0m[2: nCell 25] [2: nNode 30] [2: nBnd 10] [0m[3: nCell 25] [3: nNode 25] [3: nBnd 10] 
-[0: nNode 36] 
-[0: nBnd 10] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[0mCGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.01612]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.001
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.001
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [25], min [25], max [25], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 25] [0m[1: nCell 25] [0m[2: nCell 25] [2: nNode 30] [0m[3: nCell 25] [3: nNode 25] [3: nBnd 10] 
-[0: nNode 36] 
-[0: nBnd 10] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nNode 30] [1: nBnd 10] [2: nBnd 10] UnstructuredMesh === InterpolateFace: total faces 220
-UnstructuredMesh === InterpolateFace: total faces 220
-[0mCGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.006396]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.002
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.002
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [25], min [25], max [25], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 25] [0m[1: nCell 25] [1: nNode 30] [0m[2: nCell 25] [2: nNode 30] [0m[3: nCell 25] [3: nNode 25] [3: nBnd 10] 
-[0: nNode 36] 
-[0: nBnd 10] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nBnd 10] [2: nBnd 10] [0mCGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.01607]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.001
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.001
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [25], min [25], max [25], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 25] [0m[1: nCell 25] [1: nNode 30] [0m[2: nCell 25] [2: nNode 30] [2: nBnd 10] [0m[3: nCell 25] [3: nNode 25] [3: nBnd 10] 
-[0: nNode 36] 
-[0: nBnd 10] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nBnd 10] UnstructuredMesh === InterpolateFace: total faces 220
-[0m[0m[0m[0mCGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0003757]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.005
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.001
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [25], min [25], max [25], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 25] [0m[0m[0m[0m[1: nCell 25] [1: nNode 30] [0m[0m[0m[0m[2: nCell 25] [2: nNode 30] [0m[0m[0m[0m[3: nCell 25] [3: nNode 25] [3: nBnd 10] 
-[0: nNode 36] 
-[0: nBnd 10] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nBnd 10] [2: nBnd 10] [0m[0m[0mCGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.01242]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.001
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.001
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [25], min [25], max [25], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 25] [0m[0m[0m[1: nCell 25] [1: nNode 30] [0m[0m[0m[2: nCell 25] [2: nNode 30] [2: nBnd 10] [0m[0m[0m[3: nCell 25] [3: nNode 25] [3: nBnd 10] 
-[0: nNode 36] 
-[0: nBnd 10] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nBnd 10] [0mCGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 35937
-CGNS === Vol Elem [  32768  ],  Bnd Elem [  6144  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   8% [=>        ]  10% [=>        ]  12% [=>        ]  14% [=>        ]  16% [=>        ]  18% [==>       ]  20% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  34% [===>      ]  36% [===>      ]  38% [====>     ]  40% [====>     ]  42% [====>     ]  44% [====>     ]  46% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  58% [======>   ]  60% [======>   ]  62% [======>   ]  64% [======>   ]  66% [======>   ]  68% [=======>  ]  70% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  84% [========> ]  86% [========> ]  88% [=========>]  90% [=========>]  92% [=========>]  94% [=========>]  96% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   8% [=>        ]  10% [=>        ]  12% [=>        ]  14% [=>        ]  16% [=>        ]  18% [==>       ]  20% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  34% [===>      ]  36% [===>      ]  38% [====>     ]  40% [====>     ]  42% [====>     ]  44% [====>     ]  46% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  58% [======>   ]  60% [======>   ]  62% [======>   ]  64% [======>   ]  66% [======>   ]  68% [=======>  ]  70% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  84% [========> ]  86% [========> ]  88% [=========>]  90% [=========>]  92% [=========>]  94% [=========>]  96% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.2883]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.024
-     Coarsening: 		   0.010
-            Matching: 			   0.003
-            Contract: 			   0.006
-     Initial Partition: 	   0.007
-     Uncoarsening: 		   0.008
-          Refinement: 			   0.005
-          Projection: 			   0.002
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [8192], min [8187], max [8197], ratio [0.9988] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 8188] [0m[1: nCell 8187] [0m[2: nCell 8197] [2: nNode 8901] [2: nBnd 1520] [0m[3: nCell 8196] [3: nNode 8391] [3: nBnd 1535] 
-[0: nNode 9611] 
-[0: nBnd 1531] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nNode 9034] [1: nBnd 1558] UnstructuredMesh === InterpolateFace: total faces 101376
-UnstructuredMesh === InterpolateEdge: total edges 104544
-[0mCGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 35937
-CGNS === Vol Elem [  32768  ],  Bnd Elem [  6144  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   8% [=>        ]  10% [=>        ]  12% [=>        ]  14% [=>        ]  16% [=>        ]  18% [==>       ]  20% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  34% [===>      ]  36% [===>      ]  38% [====>     ]  40% [====>     ]  42% [====>     ]  44% [====>     ]  46% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  58% [======>   ]  60% [======>   ]  62% [======>   ]  64% [======>   ]  66% [======>   ]  68% [=======>  ]  70% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  84% [========> ]  86% [========> ]  88% [=========>]  90% [=========>]  92% [=========>]  94% [=========>]  96% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   8% [=>        ]  10% [=>        ]  12% [=>        ]  14% [=>        ]  16% [=>        ]  18% [==>       ]  20% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  34% [===>      ]  36% [===>      ]  38% [====>     ]  40% [====>     ]  42% [====>     ]  44% [====>     ]  46% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  58% [======>   ]  60% [======>   ]  62% [======>   ]  64% [======>   ]  66% [======>   ]  68% [=======>  ]  70% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  84% [========> ]  86% [========> ]  88% [=========>]  90% [=========>]  92% [=========>]  94% [=========>]  96% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.1974]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.024
-     Coarsening: 		   0.010
-            Matching: 			   0.003
-            Contract: 			   0.006
-     Initial Partition: 	   0.007
-     Uncoarsening: 		   0.007
-          Refinement: 			   0.005
-          Projection: 			   0.002
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [8192], min [8187], max [8197], ratio [0.9988] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 8188] [0m[1: nCell 8187] [0m[2: nCell 8197] [2: nNode 8901] [2: nBnd 1520] [0m[3: nCell 8196] [3: nNode 8391] [3: nBnd 1535] 
-[0: nNode 9611] 
-[0: nBnd 1531] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nNode 9034] [1: nBnd 1558] UnstructuredMesh === InterpolateFace: total faces 101376
-UnstructuredMesh === InterpolateEdge: total edges 104544
-[0mCGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.01226]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.001
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.001
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [25], min [25], max [25], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 25] [0m[1: nCell 25] [0m[2: nCell 25] [2: nNode 24] [2: nBnd 10] [0m[3: nCell 25] [3: nNode 16] [3: nBnd 20] 
-[0: nNode 36] 
-[0: nBnd 5] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nNode 24] [1: nBnd 5] UnstructuredMesh === InterpolateFace: total faces 200
-[0mCGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.01012]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.001
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.001
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [25], min [25], max [25], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 25] [0m[1: nCell 25] [0m[2: nCell 25] [2: nNode 30] [0m[3: nCell 25] [3: nNode 25] 
-[0: nNode 36] 
-[0: nBnd 10] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nNode 30] [1: nBnd 10] [2: nBnd 10] [3: nBnd 10] UnstructuredMesh === InterpolateFace: total faces 220
- 0# DNDS::getTraceString[abi:cxx11]() in build-refactor/test/cpp/geom_test_mesh_reorder
- 1# DNDS::assert_false_info(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in build-refactor/test/cpp/geom_test_mesh_reorder
- 2# DNDS::ArrayAdjacency<-2, -2, -1024>::operator[](long) in build-refactor/test/cpp/geom_test_mesh_reorder
- 3# DNDS::Geom::UnstructuredMesh::AssertOnFaces() in build-refactor/test/cpp/geom_test_mesh_reorder
- 4# 0x00006060C7B73F1F in build-refactor/test/cpp/geom_test_mesh_reorder
- 5# doctest::Context::run() in build-refactor/test/cpp/geom_test_mesh_reorder
- 6# main in build-refactor/test/cpp/geom_test_mesh_reorder
- 7# 0x000077465482A1CA in /lib/x86_64-linux-gnu/libc.so.6
- 8# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
- 9# _start in build-refactor/test/cpp/geom_test_mesh_reorder
-
-[91m DNDS_assertion failed[39m: "i < this->Size()"  at [  /home/harry/projects/DNDSR-array-geom/src/DNDS/ArrayDerived/ArrayAdjacency.hpp:63  ]
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshReorder.cpp:1380:
-[0;33mTEST CASE:  [0mReorderEntities: face-preserving cell reorder reattaches face arrays
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshReorder.cpp:1380: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGABRT - Abort (abnormal termination) signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases:   20 | [0m  19 passed[0m | [0;31m1 failed[0m | [0;33m17 skipped[0m
-[0;36m[doctest] [0massertions: 1076 | [0m1076 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-i 6, Size 0, array: reorder.son(CSR__l_8_I_I_N)
-[gpu704:544214] *** Process received signal ***
-[gpu704:544214] Signal: Aborted (6)
-[gpu704:544214] Signal code:  (-6)
-[gpu704:544214] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x774654845330]
-[gpu704:544214] [ 1] /lib/x86_64-linux-gnu/libc.so.6(pthread_kill+0x11c)[0x77465489ec0c]
-[gpu704:544214] [ 2] /lib/x86_64-linux-gnu/libc.so.6(gsignal+0x1e)[0x77465484527e]
-[gpu704:544214] [ 3] /lib/x86_64-linux-gnu/libc.so.6(abort+0xdf)[0x7746548288ff]
-[gpu704:544214] [ 4] build-refactor/test/cpp/geom_test_mesh_reorder(_ZN4DNDS17assert_false_infoEPKcS1_iRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE+0xdf)[0x6060c7b96d0f]
-[gpu704:544214] [ 5] build-refactor/test/cpp/geom_test_mesh_reorder(_ZN4DNDS14ArrayAdjacencyILin2ELin2ELin1024EEixEl+0x241)[0x6060c7c01181]
-[gpu704:544214] [ 6] build-refactor/test/cpp/geom_test_mesh_reorder(_ZN4DNDS4Geom16UnstructuredMesh13AssertOnFacesEv+0x425)[0x6060c7bd0da5]
-[gpu704:544214] [ 7] build-refactor/test/cpp/geom_test_mesh_reorder(+0xbaf1f)[0x6060c7b73f1f]
-[gpu704:544214] [ 8] build-refactor/test/cpp/geom_test_mesh_reorder(_ZN7doctest7Context3runEv+0xe8e)[0x6060c7b85dbe]
-[gpu704:544214] [ 9] build-refactor/test/cpp/geom_test_mesh_reorder(main+0x58)[0x6060c7b408e8]
-[gpu704:544214] [10] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x77465482a1ca]
-[gpu704:544214] [11] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x77465482a28b]
-[gpu704:544214] [12] build-refactor/test/cpp/geom_test_mesh_reorder(_start+0x25)[0x6060c7b44975]
-[gpu704:544214] *** End of error message ***
- 0# DNDS::getTraceString[abi:cxx11]() in build-refactor/test/cpp/geom_test_mesh_reorder
- 1# DNDS::assert_false_info(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in build-refactor/test/cpp/geom_test_mesh_reorder
- 2# DNDS::ArrayAdjacency<-2, -2, -1024>::operator[](long) in build-refactor/test/cpp/geom_test_mesh_reorder
- 3# DNDS::Geom::UnstructuredMesh::AssertOnFaces() in build-refactor/test/cpp/geom_test_mesh_reorder
- 4# 0x00005AAC10FB1F1F in build-refactor/test/cpp/geom_test_mesh_reorder
- 5# doctest::Context::run() in build-refactor/test/cpp/geom_test_mesh_reorder
- 6# main in build-refactor/test/cpp/geom_test_mesh_reorder
- 7# 0x00007A506BC2A1CA in /lib/x86_64-linux-gnu/libc.so.6
- 8# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
- 9# _start in build-refactor/test/cpp/geom_test_mesh_reorder
-
-[91m DNDS_assertion failed[39m: "i < this->Size()"  at [  /home/harry/projects/DNDSR-array-geom/src/DNDS/ArrayDerived/ArrayAdjacency.hpp:63  ]
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshReorder.cpp:1380:
-[0;33mTEST CASE:  [0mReorderEntities: face-preserving cell reorder reattaches face arrays
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshReorder.cpp:1380: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGABRT - Abort (abnormal termination) signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases:   20 | [0m  19 passed[0m | [0;31m1 failed[0m | [0;33m17 skipped[0m
-[0;36m[doctest] [0massertions: 1075 | [0m1075 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-i 6, Size 0, array: reorder.son(CSR__l_8_I_I_N)
-[gpu704:544213] *** Process received signal ***
-[gpu704:544213] Signal: Aborted (6)
-[gpu704:544213] Signal code:  (-6)
-[gpu704:544213] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x7a506bc45330]
-[gpu704:544213] [ 1] /lib/x86_64-linux-gnu/libc.so.6(pthread_kill+0x11c)[0x7a506bc9ec0c]
-[gpu704:544213] [ 2] /lib/x86_64-linux-gnu/libc.so.6(gsignal+0x1e)[0x7a506bc4527e]
-[gpu704:544213] [ 3] /lib/x86_64-linux-gnu/libc.so.6(abort+0xdf)[0x7a506bc288ff]
-[gpu704:544213] [ 4] build-refactor/test/cpp/geom_test_mesh_reorder(_ZN4DNDS17assert_false_infoEPKcS1_iRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE+0xdf)[0x5aac10fd4d0f]
-[gpu704:544213] [ 5] build-refactor/test/cpp/geom_test_mesh_reorder(_ZN4DNDS14ArrayAdjacencyILin2ELin2ELin1024EEixEl+0x241)[0x5aac1103f181]
-[gpu704:544213] [ 6] build-refactor/test/cpp/geom_test_mesh_reorder(_ZN4DNDS4Geom16UnstructuredMesh13AssertOnFacesEv+0x425)[0x5aac1100eda5]
-[gpu704:544213] [ 7] build-refactor/test/cpp/geom_test_mesh_reorder(+0xbaf1f)[0x5aac10fb1f1f]
-[gpu704:544213] [ 8] build-refactor/test/cpp/geom_test_mesh_reorder(_ZN7doctest7Context3runEv+0xe8e)[0x5aac10fc3dbe]
-[gpu704:544213] [ 9] build-refactor/test/cpp/geom_test_mesh_reorder(main+0x58)[0x5aac10f7e8e8]
-[gpu704:544213] [10] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7a506bc2a1ca]
-[gpu704:544213] [11] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7a506bc2a28b]
-[gpu704:544213] [12] build-refactor/test/cpp/geom_test_mesh_reorder(_start+0x25)[0x5aac10f82975]
-[gpu704:544213] *** End of error message ***
- 0# DNDS::getTraceString[abi:cxx11]() in build-refactor/test/cpp/geom_test_mesh_reorder
- 1# DNDS::assert_false_info(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in build-refactor/test/cpp/geom_test_mesh_reorder
- 2# DNDS::ArrayAdjacency<-2, -2, -1024>::operator[](long) in build-refactor/test/cpp/geom_test_mesh_reorder
- 3# DNDS::Geom::UnstructuredMesh::AssertOnFaces() in build-refactor/test/cpp/geom_test_mesh_reorder
- 4# 0x00006075E4BD7F1F in build-refactor/test/cpp/geom_test_mesh_reorder
- 5# doctest::Context::run() in build-refactor/test/cpp/geom_test_mesh_reorder
- 6# main in build-refactor/test/cpp/geom_test_mesh_reorder
- 7# 0x00007AED56C2A1CA in /lib/x86_64-linux-gnu/libc.so.6
- 8# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
- 9# _start in build-refactor/test/cpp/geom_test_mesh_reorder
-
-[91m DNDS_assertion failed[39m: "i < this->Size()"  at [  /home/harry/projects/DNDSR-array-geom/src/DNDS/ArrayDerived/ArrayAdjacency.hpp:63  ]
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshReorder.cpp:1380:
-[0;33mTEST CASE:  [0mReorderEntities: face-preserving cell reorder reattaches face arrays
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshReorder.cpp:1380: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGABRT - Abort (abnormal termination) signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases:   20 | [0m  19 passed[0m | [0;31m1 failed[0m | [0;33m17 skipped[0m
-[0;36m[doctest] [0massertions: 1097 | [0m1097 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-i 5, Size 0, array: reorder.son(CSR__l_8_I_I_N)
-[gpu704:544212] *** Process received signal ***
-[gpu704:544212] Signal: Aborted (6)
-[gpu704:544212] Signal code:  (-6)
-[gpu704:544212] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x7aed56c45330]
-[gpu704:544212] [ 1] /lib/x86_64-linux-gnu/libc.so.6(pthread_kill+0x11c)[0x7aed56c9ec0c]
-[gpu704:544212] [ 2] /lib/x86_64-linux-gnu/libc.so.6(gsignal+0x1e)[0x7aed56c4527e]
-[gpu704:544212] [ 3] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x7aed56c45330]
-[gpu704:544212] [ 4] /lib/x86_64-linux-gnu/libc.so.6(pthread_kill+0x11c)[0x7aed56c9ec0c]
-[gpu704:544212] [ 5] /lib/x86_64-linux-gnu/libc.so.6(gsignal+0x1e)[0x7aed56c4527e]
-[gpu704:544212] [ 6] /lib/x86_64-linux-gnu/libc.so.6(abort+0xdf)[0x7aed56c288ff]
-[gpu704:544212] [ 7] build-refactor/test/cpp/geom_test_mesh_reorder(_ZN4DNDS17assert_false_infoEPKcS1_iRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE+0xdf)[0x6075e4bfad0f]
-[gpu704:544212] [ 8] build-refactor/test/cpp/geom_test_mesh_reorder(_ZN4DNDS14ArrayAdjacencyILin2ELin2ELin1024EEixEl+0x241)[0x6075e4c65181]
-[gpu704:544212] [ 9] build-refactor/test/cpp/geom_test_mesh_reorder(_ZN4DNDS4Geom16UnstructuredMesh13AssertOnFacesEv+0x425)[0x6075e4c34da5]
-[gpu704:544212] [10] build-refactor/test/cpp/geom_test_mesh_reorder(+0xbaf1f)[0x6075e4bd7f1f]
-[gpu704:544212] [11] build-refactor/test/cpp/geom_test_mesh_reorder(_ZN7doctest7Context3runEv+0xe8e)[0x6075e4be9dbe]
-[gpu704:544212] [12] build-refactor/test/cpp/geom_test_mesh_reorder(main+0x58)[0x6075e4ba48e8]
-[gpu704:544212] [13] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7aed56c2a1ca]
-[gpu704:544212] [14] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7aed56c2a28b]
-[gpu704:544212] [15] build-refactor/test/cpp/geom_test_mesh_reorder(_start+0x25)[0x6075e4ba8975]
-[gpu704:544212] *** End of error message ***
-[0m[0m[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshReorder.cpp:1496:
-[0;33mTEST CASE:  [0mbuildReorderRegistry rejects non-global face adj after face interpolation
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshReorder.cpp:1496: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGTERM - Termination request signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases:   22 | [0m  21 passed[0m | [0;31m1 failed[0m | [0;33m15 skipped[0m
-[0;36m[doctest] [0massertions: 1089 | [0m1089 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
---------------------------------------------------------------------------
-prterun noticed that process rank 2 with PID 544214 on node gpu704 exited on
-signal 6 (Aborted).
---------------------------------------------------------------------------

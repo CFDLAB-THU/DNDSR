@@ -1,9 +1,0 @@
-[  0%] Built target fmt
-[ 50%] Built target dnds
-[ 50%] Building CXX object src/Geom/CMakeFiles/geom.dir/Mesh/Mesh_Plts.cpp.o
-[ 60%] Building CXX object src/Geom/CMakeFiles/geom.dir/Mesh/Mesh_Serial_BuildCell2Cell.cpp.o
-[ 70%] Linking CXX static library libgeom.a
-[100%] Built target geom
-[100%] Building CXX object test/cpp/CMakeFiles/geom_test_mesh_transition.dir/Geom/test_MeshTransition.cpp.o
-[100%] Linking CXX executable geom_test_mesh_transition
-[100%] Built target geom_test_mesh_transition

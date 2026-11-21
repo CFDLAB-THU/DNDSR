@@ -1,2122 +1,0 @@
-Internal ctest changing into directory: /home/harry/projects/DNDSR-array-geom/build-refactor
-Test project /home/harry/projects/DNDSR-array-geom/build-refactor
-    Start 102: cfv_reconstruction_np1
-1/9 Test #102: cfv_reconstruction_np1 ...........***Failed    1.57 sec
-=== Building meshes ===
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 16
-CGNS === Vol Elem [  9  ],  Bnd Elem [  12  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[=>        ]  11% [==>       ]  22% [===>      ]  33% [====>     ]  44% [=====>    ]  55% [======>   ]  66% [=======>  ]  77% [========> ]  88% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[=>        ]  11% [==>       ]  22% [===>      ]  33% [====>     ]  44% [=====>    ]  55% [======>   ]  66% [=======>  ]  77% [========> ]  88% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0003873]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [9], min [9], max [9], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 9] 
-[0: nNode 16] 
-[0: nBnd 12] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-UnstructuredMesh === InterpolateFace: total faces 24
-  IV10_10 bisect=0
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0003368]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [100], min [100], max [100], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 100] 
-[0: nNode 100] 
-[0: nBnd 40] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-UnstructuredMesh === InterpolateFace: total faces 200
-  IV10_10 bisect=1
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0004673]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [100], min [100], max [100], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 100] 
-[0: nNode 100] 
-[0: nBnd 40] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-=== Mesh Elevation: Num NewNode 300 
-UnstructuredMesh === InterpolateFace: total faces 800
-  IV10_10 bisect=2
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0003946]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [100], min [100], max [100], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 100] 
-[0: nNode 100] 
-[0: nBnd 40] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-=== Mesh Elevation: Num NewNode 300 
-=== Mesh Elevation: Num NewNode 1200 
-UnstructuredMesh === InterpolateFace: total faces 3200
-  IV10U_10 bisect=0
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 182
-CGNS === Vol Elem [  322  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   9% [=>        ]  11% [=>        ]  13% [=>        ]  15% [=>        ]  17% [=>        ]  19% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  35% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  85% [========> ]  87% [========> ]  89% [=========>]  91% [=========>]  93% [=========>]  95% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   9% [=>        ]  11% [=>        ]  13% [=>        ]  15% [=>        ]  17% [=>        ]  19% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  35% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  85% [========> ]  87% [========> ]  89% [=========>]  91% [=========>]  93% [=========>]  95% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0007841]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [322], min [322], max [322], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 322] 
-[0: nNode 161] 
-[0: nBnd 40] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-UnstructuredMesh === InterpolateFace: total faces 483
-  IV10U_10 bisect=1
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 182
-CGNS === Vol Elem [  322  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   9% [=>        ]  11% [=>        ]  13% [=>        ]  15% [=>        ]  17% [=>        ]  19% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  35% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  85% [========> ]  87% [========> ]  89% [=========>]  91% [=========>]  93% [=========>]  95% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   9% [=>        ]  11% [=>        ]  13% [=>        ]  15% [=>        ]  17% [=>        ]  19% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  35% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  85% [========> ]  87% [========> ]  89% [=========>]  91% [=========>]  93% [=========>]  95% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0008577]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [322], min [322], max [322], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 322] 
-[0: nNode 161] 
-[0: nBnd 40] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-=== Mesh Elevation: Num NewNode 483 
-UnstructuredMesh === InterpolateFace: total faces 1932
-  IV10U_10 bisect=2
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 182
-CGNS === Vol Elem [  322  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   9% [=>        ]  11% [=>        ]  13% [=>        ]  15% [=>        ]  17% [=>        ]  19% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  35% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  85% [========> ]  87% [========> ]  89% [=========>]  91% [=========>]  93% [=========>]  95% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   9% [=>        ]  11% [=>        ]  13% [=>        ]  15% [=>        ]  17% [=>        ]  19% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  35% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  85% [========> ]  87% [========> ]  89% [=========>]  91% [=========>]  93% [=========>]  95% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.001241]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [322], min [322], max [322], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 322] 
-[0: nNode 161] 
-[0: nBnd 40] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-=== Mesh Elevation: Num NewNode 483 
-=== Mesh Elevation: Num NewNode 1932 
-UnstructuredMesh === InterpolateFace: total faces 7728
-=== Meshes built ===
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-VariationalReconstruction<dim>::ConstructMetrics() === 
- ===Sum/Min/Max Volume [9;  1, 1]
-=== cellSmoothScale min [1]
-VariationalReconstruction<dim>::ConstructBaseAndWeight() done
-VariationalReconstruction<dim>::ConstructRecCoeff() === A cond Max: [ 1.000e+00] 
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473:
-[0;33mTEST CASE:  [0mWall/const/GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m23 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[gpu704:600911] *** Process received signal ***
-[gpu704:600911] Signal: Segmentation fault (11)
-[gpu704:600911] Signal code:  (-6)
-[gpu704:600911] Failing at address: 0x3ec00092b4f
-[gpu704:600911] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x7701a9845330]
-[gpu704:600911] [ 1] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZNSt16_Sp_counted_baseILN9__gnu_cxx12_Lock_policyE2EE10_M_releaseEv+0xe)[0x5d8c675a534e]
-[gpu704:600911] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS4Geom11EntitySpaceD1Ev+0x19)[0x5d8c675aa4b9]
-[gpu704:600911] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x75a)[0x5d8c675f346a]
-[gpu704:600911] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0xfff4c)[0x5d8c67589f4c]
-[gpu704:600911] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x106260)[0x5d8c67590260]
-[gpu704:600911] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x107764)[0x5d8c67591764]
-[gpu704:600911] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN7doctest7Context3runEv+0xe8e)[0x5d8c67587c7e]
-[gpu704:600911] [ 8] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(main+0x2ca)[0x5d8c6755de1a]
-[gpu704:600911] [ 9] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7701a982a1ca]
-[gpu704:600911] [10] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7701a982a28b]
-[gpu704:600911] [11] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_start+0x25)[0x5d8c67563f05]
-[gpu704:600911] *** End of error message ***
---------------------------------------------------------------------------
-prterun noticed that process rank 0 with PID 600911 on node gpu704 exited on
-signal 11 (Segmentation fault).
---------------------------------------------------------------------------
-
-    Start 103: cfv_reconstruction_np2
-2/9 Test #103: cfv_reconstruction_np2 ...........***Failed    2.10 sec
-=== Building meshes ===
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 16
-CGNS === Vol Elem [  9  ],  Bnd Elem [  12  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[=>        ]  11% [==>       ]  22% [===>      ]  33% [====>     ]  44% [=====>    ]  55% [======>   ]  66% [=======>  ]  77% [========> ]  88% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[=>        ]  11% [==>       ]  22% [===>      ]  33% [====>     ]  44% [=====>    ]  55% [======>   ]  66% [=======>  ]  77% [========> ]  88% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0006169]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.000
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.000
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [4.5], min [4], max [5], ratio [0.8000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 5] [1: nCell 4] 
-[0: nNode 11] 
-[0: nBnd 6] [1: nNode 5] [1: nBnd 6] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-UnstructuredMesh === InterpolateFace: total faces 24
-  IV10_10 bisect=0
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0006133]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.004
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.004
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [50], min [50], max [50], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 50] 
-[0: nNode 60] [1: nCell 50] [1: nNode 40] [1: nBnd 10] 
-[0: nBnd 30] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-UnstructuredMesh === InterpolateFace: total faces 200
-  IV10_10 bisect=1
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.000549]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.003
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.003
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [50], min [50], max [50], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 50] 
-[0: nNode 60] [1: nCell 50] [1: nNode 40] [1: nBnd 10] 
-[0: nBnd 30] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-=== Mesh Elevation: Num NewNode 300 
-UnstructuredMesh === InterpolateFace: total faces 800
-  IV10_10 bisect=2
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0004954]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.002
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.002
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [50], min [50], max [50], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 50] [1: nCell 50] [1: nNode 40] 
-[0: nNode 60] 
-[0: nBnd 30] 
-[1: nBnd 10] UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-=== Mesh Elevation: Num NewNode 300 
-=== Mesh Elevation: Num NewNode 1200 
-UnstructuredMesh === InterpolateFace: total faces 3200
-  IV10U_10 bisect=0
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 182
-CGNS === Vol Elem [  322  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   9% [=>        ]  11% [=>        ]  13% [=>        ]  15% [=>        ]  17% [=>        ]  19% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  35% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  85% [========> ]  87% [========> ]  89% [=========>]  91% [=========>]  93% [=========>]  95% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   9% [=>        ]  11% [=>        ]  13% [=>        ]  15% [=>        ]  17% [=>        ]  19% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  35% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  85% [========> ]  87% [========> ]  89% [=========>]  91% [=========>]  93% [=========>]  95% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.001189]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.003
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.003
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [161], min [159], max [163], ratio [0.9755] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 159] [1: nCell 163] [1: nNode 70] [1: nBnd 10] 
-[0: nNode 91] 
-[0: nBnd 30] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-UnstructuredMesh === InterpolateFace: total faces 483
-  IV10U_10 bisect=1
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 182
-CGNS === Vol Elem [  322  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   9% [=>        ]  11% [=>        ]  13% [=>        ]  15% [=>        ]  17% [=>        ]  19% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  35% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  85% [========> ]  87% [========> ]  89% [=========>]  91% [=========>]  93% [=========>]  95% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   9% [=>        ]  11% [=>        ]  13% [=>        ]  15% [=>        ]  17% [=>        ]  19% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  35% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  85% [========> ]  87% [========> ]  89% [=========>]  91% [=========>]  93% [=========>]  95% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.001173]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.002
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.002
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [161], min [159], max [163], ratio [0.9755] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 159] 
-[0: nNode 91] 
-[0: nBnd 30] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nCell 163] [1: nNode 70] [1: nBnd 10] === Mesh Elevation: Num NewNode 483 
-UnstructuredMesh === InterpolateFace: total faces 1932
-  IV10U_10 bisect=2
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 182
-CGNS === Vol Elem [  322  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   9% [=>        ]  11% [=>        ]  13% [=>        ]  15% [=>        ]  17% [=>        ]  19% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  35% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  85% [========> ]  87% [========> ]  89% [=========>]  91% [=========>]  93% [=========>]  95% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   9% [=>        ]  11% [=>        ]  13% [=>        ]  15% [=>        ]  17% [=>        ]  19% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  35% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  85% [========> ]  87% [========> ]  89% [=========>]  91% [=========>]  93% [=========>]  95% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.001169]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.002
-     Coarsening: 		   0.001
-            Matching: 			   0.000
-            Contract: 			   0.001
-     Initial Partition: 	   0.001
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [161], min [159], max [163], ratio [0.9755] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 159] [1: nCell 163] [1: nNode 70] [1: nBnd 10] 
-[0: nNode 91] 
-[0: nBnd 30] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-=== Mesh Elevation: Num NewNode 483 
-=== Mesh Elevation: Num NewNode 1932 
-UnstructuredMesh === InterpolateFace: total faces 7728
-=== Meshes built ===
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-VariationalReconstruction<dim>::ConstructMetrics() === 
- ===Sum/Min/Max Volume [9;  1, 1]
-=== cellSmoothScale min [1]
-VariationalReconstruction<dim>::ConstructBaseAndWeight() done
-VariationalReconstruction<dim>::ConstructRecCoeff() === A cond Max: [ 1.000e+00] 
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473:
-[0;33mTEST CASE:  [0mWall/const/GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m23 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473:
-[0;33mTEST CASE:  [0mWall/const/GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m23 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[gpu704:601027] *** Process received signal ***
-[gpu704:601027] Signal: Segmentation fault (11)
-[gpu704:601027] Signal code:  (-6)
-[gpu704:601027] Failing at address: 0x3ec00092bc3
-[gpu704:601028] *** Process received signal ***
-[gpu704:601028] Signal: Segmentation fault (11)
-[gpu704:601028] Signal code:  (-6)
-[gpu704:601028] Failing at address: 0x3ec00092bc4
-[gpu704:601027] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x76b20b845330]
-[gpu704:601027] [ 1] [gpu704:601028] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x747114a45330]
-[gpu704:601028] [ 1] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZNSt16_Sp_counted_baseILN9__gnu_cxx12_Lock_policyE2EE10_M_releaseEv+0xe)[0x649c5d50d34e]
-[gpu704:601027] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZNSt16_Sp_counted_baseILN9__gnu_cxx12_Lock_policyE2EE10_M_releaseEv+0xe)[0x5689b0a2c34e]
-[gpu704:601028] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS4Geom11EntitySpaceD1Ev+0x19)[0x5689b0a314b9]
-[gpu704:601028] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS4Geom11EntitySpaceD1Ev+0x19)[0x649c5d5124b9]
-[gpu704:601027] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x75a)[0x5689b0a7a46a]
-[gpu704:601028] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x75a)[0x649c5d55b46a]
-[gpu704:601027] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0xfff4c)[0x5689b0a10f4c]
-[gpu704:601028] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0xfff4c)[0x649c5d4f1f4c]
-[gpu704:601027] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x106260)[0x5689b0a17260]
-[gpu704:601028] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x106260)[0x649c5d4f8260]
-[gpu704:601027] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x107764)[0x5689b0a18764]
-[gpu704:601028] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN7doctest7Context3runEv+0xe8e)[0x5689b0a0ec7e]
-[gpu704:601028] [ 8] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x107764)[0x649c5d4f9764]
-[gpu704:601027] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN7doctest7Context3runEv+0xe8e)[0x649c5d4efc7e]
-[gpu704:601027] [ 8] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(main+0x2ca)[0x5689b09e4e1a]
-[gpu704:601028] [ 9] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(main+0x2ca)[0x649c5d4c5e1a]
-[gpu704:601027] [ 9] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x747114a2a1ca]
-[gpu704:601028] [10] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x747114a2a28b]
-[gpu704:601028] [11] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x76b20b82a1ca]
-[gpu704:601027] [10] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x76b20b82a28b]
-[gpu704:601027] [11] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_start+0x25)[0x649c5d4cbf05]
-[gpu704:601027] *** End of error message ***
-/home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_start+0x25)[0x5689b09eaf05]
-[gpu704:601028] *** End of error message ***
---------------------------------------------------------------------------
-prterun noticed that process rank 1 with PID 601028 on node gpu704 exited on
-signal 11 (Segmentation fault).
---------------------------------------------------------------------------
-
-    Start 104: cfv_reconstruction_np4
-3/9 Test #104: cfv_reconstruction_np4 ...........***Failed    2.08 sec
-=== Building meshes ===
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 16
-CGNS === Vol Elem [  9  ],  Bnd Elem [  12  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[=>        ]  11% [==>       ]  22% [===>      ]  33% [====>     ]  44% [=====>    ]  55% [======>   ]  66% [=======>  ]  77% [========> ]  88% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[=>        ]  11% [==>       ]  22% [===>      ]  33% [====>     ]  44% [=====>    ]  55% [======>   ]  66% [=======>  ]  77% [========> ]  88% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0003112]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.001
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.001
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [2.25], min [2], max [3], ratio [0.6667] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 2] [1: nCell 2] [2: nCell 3] [3: nCell 2] 
-[0: nNode 6] [1: nNode 4] [2: nNode 4] [2: nBnd 3] [3: nNode 2] [3: nBnd 3] 
-[0: nBnd 3] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nBnd 3] UnstructuredMesh === InterpolateFace: total faces 24
-  IV10_10 bisect=0
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0005591]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.009
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.009
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [25], min [25], max [25], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 25] [1: nCell 25] [2: nCell 25] [3: nCell 25] 
-[0: nNode 36] 
-[0: nBnd 15] [1: nNode 24] [1: nBnd 5] [2: nNode 24] [2: nBnd 15] [3: nNode 16] [3: nBnd 5] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-UnstructuredMesh === InterpolateFace: total faces 200
-  IV10_10 bisect=1
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0004343]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.006
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.006
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [25], min [25], max [25], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 25] [1: nCell 25] [2: nCell 25] [3: nCell 25] [3: nNode 16] 
-[0: nNode 36] 
-[0: nBnd 15] [1: nNode 24] [1: nBnd 5] [2: nNode 24] [2: nBnd 15] [3: nBnd 5] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-=== Mesh Elevation: Num NewNode 300 
-UnstructuredMesh === InterpolateFace: total faces 800
-  IV10_10 bisect=2
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  85% [========> ]  82% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0006567]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.006
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.006
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [25], min [25], max [25], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 25] [1: nCell 25] [2: nCell 25] [3: nCell 25] 
-[0: nNode 36] 
-[0: nBnd 15] [1: nNode 24] [1: nBnd 5] [2: nNode 24] [2: nBnd 15] [3: nNode 16] [3: nBnd 5] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-=== Mesh Elevation: Num NewNode 300 
-=== Mesh Elevation: Num NewNode 1200 
-UnstructuredMesh === InterpolateFace: total faces 3200
-  IV10U_10 bisect=0
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 182
-CGNS === Vol Elem [  322  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   9% [=>        ]  11% [=>        ]  13% [=>        ]  15% [=>        ]  17% [=>        ]  19% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  35% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  85% [========> ]  87% [========> ]  89% [=========>]  91% [=========>]  93% [=========>]  95% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   9% [=>        ]  11% [=>        ]  13% [=>        ]  15% [=>        ]  17% [=>        ]  19% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  35% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  85% [========> ]  87% [========> ]  89% [=========>]  91% [=========>]  93% [=========>]  95% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0008394]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.006
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.006
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [80.5], min [78], max [82], ratio [0.9512] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 81] [1: nCell 81] [2: nCell 78] [3: nCell 82] 
-[0: nNode 52] [1: nNode 41] [2: nNode 37] [3: nNode 31] [3: nBnd 8] 
-[0: nBnd 4] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nBnd 8] [2: nBnd 20] UnstructuredMesh === InterpolateFace: total faces 483
-  IV10U_10 bisect=1
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 182
-CGNS === Vol Elem [  322  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   9% [=>        ]  11% [=>        ]  13% [=>        ]  15% [=>        ]  17% [=>        ]  19% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  35% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  85% [========> ]  87% [========> ]  89% [=========>]  91% [=========>]  93% [=========>]  95% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   9% [=>        ]  11% [=>        ]  13% [=>        ]  15% [=>        ]  17% [=>        ]  19% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  35% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  85% [========> ]  87% [========> ]  89% [=========>]  91% [=========>]  93% [=========>]  95% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.00119]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.009
-     Coarsening: 		   0.001
-            Matching: 			   0.000
-            Contract: 			   0.001
-     Initial Partition: 	   0.008
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [80.5], min [78], max [82], ratio [0.9512] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 81] [1: nCell 81] [2: nCell 78] [3: nCell 82] 
-[0: nNode 52] [1: nNode 41] [2: nNode 37] [3: nNode 31] [3: nBnd 8] 
-[0: nBnd 4] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nBnd 8] [2: nBnd 20] === Mesh Elevation: Num NewNode 483 
-UnstructuredMesh === InterpolateFace: total faces 1932
-  IV10U_10 bisect=2
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 182
-CGNS === Vol Elem [  322  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   9% [=>        ]  11% [=>        ]  13% [=>        ]  15% [=>        ]  17% [=>        ]  19% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  35% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  85% [========> ]  87% [========> ]  89% [=========>]  91% [=========>]  93% [=========>]  95% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   9% [=>        ]  11% [=>        ]  13% [=>        ]  15% [=>        ]  17% [=>        ]  19% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  35% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  85% [========> ]  87% [========> ]  89% [=========>]  91% [=========>]  93% [=========>]  95% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.001109]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.006
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.006
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [80.5], min [78], max [82], ratio [0.9512] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 81] [1: nCell 81] [2: nCell 78] [3: nCell 82] 
-[0: nNode 52] 
-[0: nBnd 4] [1: nNode 41] [1: nBnd 8] [2: nNode 37] [2: nBnd 20] [3: nNode 31] [3: nBnd 8] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-=== Mesh Elevation: Num NewNode 483 
-=== Mesh Elevation: Num NewNode 1932 
-UnstructuredMesh === InterpolateFace: total faces 7728
-=== Meshes built ===
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-VariationalReconstruction<dim>::ConstructMetrics() === 
- ===Sum/Min/Max Volume [9;  1, 1]
-=== cellSmoothScale min [1]
-VariationalReconstruction<dim>::ConstructBaseAndWeight() done
-VariationalReconstruction<dim>::ConstructRecCoeff() === A cond Max: [ 1.000e+00] 
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473:
-[0;33mTEST CASE:  [0mWall/const/GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m23 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473:
-[0;33mTEST CASE:  [0mWall/const/GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m23 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473:
-[0;33mTEST CASE:  [0mWall/const/GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m23 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473:
-[0;33mTEST CASE:  [0mWall/const/GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m23 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[gpu704:601394] *** Process received signal ***
-[gpu704:601394] Signal: Segmentation fault (11)
-[gpu704:601394] Signal code:  (-6)
-[gpu704:601394] Failing at address: 0x3ec00092d32
-[gpu704:601394] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x75ab54445330]
-[gpu704:601394] [ 1] [gpu704:601395] *** Process received signal ***
-[gpu704:601395] Signal: Segmentation fault (11)
-[gpu704:601395] Signal code:  (-6)
-[gpu704:601395] Failing at address: 0x3ec00092d33
-[gpu704:601395] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x7c84ba645330]
-[gpu704:601395] [ 1] [gpu704:601398] *** Process received signal ***
-[gpu704:601398] Signal: Segmentation fault (11)
-[gpu704:601398] Signal code:  (-6)
-[gpu704:601398] Failing at address: 0x3ec00092d36
-[gpu704:601398] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x79704fe45330]
-[gpu704:601398] [ 1] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZNSt16_Sp_counted_baseILN9__gnu_cxx12_Lock_policyE2EE10_M_releaseEv+0xe)[0x5b8ad2d4134e]
-[gpu704:601398] [ 2] [gpu704:601397] *** Process received signal ***
-[gpu704:601397] Signal: Segmentation fault (11)
-[gpu704:601397] Signal code:  (-6)
-[gpu704:601397] Failing at address: 0x3ec00092d35
-[gpu704:601397] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x764c49245330]
-[gpu704:601397] [ 1] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZNSt16_Sp_counted_baseILN9__gnu_cxx12_Lock_policyE2EE10_M_releaseEv+0xe)[0x5ab57055134e]
-[gpu704:601397] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZNSt16_Sp_counted_baseILN9__gnu_cxx12_Lock_policyE2EE10_M_releaseEv+0xe)[0x569bae55234e]
-[gpu704:601394] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS4Geom11EntitySpaceD1Ev+0x19)[0x569bae5574b9]
-[gpu704:601394] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZNSt16_Sp_counted_baseILN9__gnu_cxx12_Lock_policyE2EE10_M_releaseEv+0xe)[0x60e93100934e]
-[gpu704:601395] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS4Geom11EntitySpaceD1Ev+0x19)[0x60e93100e4b9]
-[gpu704:601395] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS4Geom11EntitySpaceD1Ev+0x19)[0x5b8ad2d464b9]
-[gpu704:601398] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS4Geom11EntitySpaceD1Ev+0x19)[0x5ab5705564b9]
-[gpu704:601397] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x75a)[0x5b8ad2d8f46a]
-[gpu704:601398] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x75a)[0x569bae5a046a]
-[gpu704:601394] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x75a)[0x60e93105746a]
-[gpu704:601395] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0xfff4c)[0x60e930fedf4c]
-[gpu704:601395] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x75a)[0x5ab57059f46a]
-[gpu704:601397] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0xfff4c)[0x5ab570535f4c]
-[gpu704:601397] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0xfff4c)[0x5b8ad2d25f4c]
-[gpu704:601398] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x106260)[0x5b8ad2d2c260]
-[gpu704:601398] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x107764)[0x5b8ad2d2d764]
-[gpu704:601398] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0xfff4c)[0x569bae536f4c]
-[gpu704:601394] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x106260)[0x569bae53d260]
-[gpu704:601394] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x107764)[0x569bae53e764]
-[gpu704:601394] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN7doctest7Context3runEv+0xe8e)[0x569bae534c7e]
-[gpu704:601394] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x106260)[0x60e930ff4260]
-[gpu704:601395] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x107764)[0x60e930ff5764]
-[gpu704:601395] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN7doctest7Context3runEv+0xe8e)[0x60e930febc7e]
-[gpu704:601395] [ 8] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x106260)[0x5ab57053c260]
-[gpu704:601397] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x107764)[0x5ab57053d764]
-[gpu704:601397] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN7doctest7Context3runEv+0xe8e)[0x5ab570533c7e]
-[gpu704:601397] [ 8] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN7doctest7Context3runEv+0xe8e)[0x5b8ad2d23c7e]
-[gpu704:601398] [ 8] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(main+0x2ca)[0x5b8ad2cf9e1a]
-[gpu704:601398] [ 9] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x79704fe2a1ca]
-[gpu704:601398] [10] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x79704fe2a28b]
-[ 8] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(main+0x2ca)[0x569bae50ae1a]
-[gpu704:601394] [ 9] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x75ab5442a1ca]
-[gpu704:601394] [10] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x75ab5442a28b]
-[gpu704:601394] [11] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(main+0x2ca)[0x60e930fc1e1a]
-[gpu704:601395] [ 9] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7c84ba62a1ca]
-[gpu704:601395] [10] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7c84ba62a28b]
-[gpu704:601395] [11] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_start+0x25)[0x60e930fc7f05]
-[gpu704:601395] *** End of error message ***
-/home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(main+0x2ca)[0x5ab570509e1a]
-[gpu704:601397] [ 9] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x764c4922a1ca]
-[gpu704:601397] [10] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x764c4922a28b]
-[gpu704:601397] [11] [gpu704:601398] [11] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_start+0x25)[0x5b8ad2cfff05]
-[gpu704:601398] *** End of error message ***
-/home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_start+0x25)[0x569bae510f05]
-[gpu704:601394] *** End of error message ***
-/home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_start+0x25)[0x5ab57050ff05]
-[gpu704:601397] *** End of error message ***
---------------------------------------------------------------------------
-prterun noticed that process rank 3 with PID 601398 on node gpu704 exited on
-signal 11 (Segmentation fault).
---------------------------------------------------------------------------
-
-    Start 105: cfv_reconstruction_np8
-4/9 Test #105: cfv_reconstruction_np8 ...........***Failed    2.15 sec
-=== Building meshes ===
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 16
-CGNS === Vol Elem [  9  ],  Bnd Elem [  12  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[=>        ]  11% [==>       ]  22% [===>      ]  33% [====>     ]  44% [=====>    ]  55% [======>   ]  66% [=======>  ]  77% [========> ]  88% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[=>        ]  11% [==>       ]  22% [===>      ]  33% [====>     ]  44% [=====>    ]  55% [======>   ]  66% [=======>  ]  77% [========> ]  88% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0004753]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.002
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.002
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [1.125], min [0], max [3], ratio [0.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 3] [1: nCell 0] [2: nCell 0] [3: nCell 0] [4: nCell 0] [5: nCell 0] [6: nCell 3] [7: nCell 3] 
-[0: nNode 8] [1: nNode 0] [2: nNode 0] [3: nNode 0] [3: nBnd 0] [4: nNode 0] [4: nBnd 0] [5: nNode 0] [5: nBnd 0] [6: nNode 5] [6: nBnd 5] [7: nNode 3] [7: nBnd 4] 
-[0: nBnd 3] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nBnd 0] [2: nBnd 0] UnstructuredMesh === InterpolateFace: total faces 24
-  IV10_10 bisect=0
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0003716]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.012
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.012
-     Uncoarsening: 		   0.001
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [12.5], min [12], max [13], ratio [0.9231] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 13] [1: nCell 12] [2: nCell 12] [3: nCell 13] [4: nCell 12] [5: nCell 13] [5: nNode 8] [6: nCell 13] [6: nNode 5] [7: nCell 12] [7: nNode 3] [7: nBnd 2] 
-[0: nNode 25] 
-[0: nBnd 5] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nNode 22] [1: nBnd 3] [2: nNode 21] [2: nBnd 0] [3: nNode 5] [3: nBnd 2] [4: nNode 11] [4: nBnd 14] [5: nBnd 10] [6: nBnd 4] UnstructuredMesh === InterpolateFace: total faces 200
-  IV10_10 bisect=1
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0003419]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.013
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.011
-     Uncoarsening: 		   0.002
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [12.5], min [12], max [13], ratio [0.9231] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 13] [1: nCell 12] [2: nCell 12] [3: nCell 13] [4: nCell 12] [5: nCell 13] [5: nNode 8] [6: nCell 13] [6: nNode 5] [7: nCell 12] [7: nNode 3] 
-[0: nNode 25] 
-[0: nBnd 5] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nNode 22] [1: nBnd 3] [2: nNode 21] [2: nBnd 0] [3: nNode 5] [3: nBnd 2] [4: nNode 11] [4: nBnd 14] [5: nBnd 10] [6: nBnd 4] [7: nBnd 2] === Mesh Elevation: Num NewNode 300 
-UnstructuredMesh === InterpolateFace: total faces 800
-  IV10_10 bisect=2
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0003834]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.012
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.012
-     Uncoarsening: 		   0.001
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [12.5], min [12], max [13], ratio [0.9231] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 13] [1: nCell 12] [2: nCell 12] [3: nCell 13] [4: nCell 12] [5: nCell 13] [5: nNode 8] [6: nCell 13] [6: nNode 5] [6: nBnd 4] [7: nCell 12] [7: nNode 3] [7: nBnd 2] 
-[0: nNode 25] 
-[0: nBnd 5] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nNode 22] [1: nBnd 3] [2: nNode 21] [2: nBnd 0] [3: nNode 5] [3: nBnd 2] [4: nNode 11] [4: nBnd 14] [5: nBnd 10] === Mesh Elevation: Num NewNode 300 
-=== Mesh Elevation: Num NewNode 1200 
-UnstructuredMesh === InterpolateFace: total faces 3200
-  IV10U_10 bisect=0
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 182
-CGNS === Vol Elem [  322  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   9% [=>        ]  11% [=>        ]  13% [=>        ]  15% [=>        ]  17% [=>        ]  19% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  35% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  85% [========> ]  87% [========> ]  89% [=========>]  91% [=========>]  93% [=========>]  95% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   9% [=>        ]  11% [=>        ]  13% [=>        ]  15% [=>        ]  17% [=>        ]  19% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  35% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  85% [========> ]  87% [========> ]  89% [=========>]  91% [=========>]  93% [=========>]  95% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.001099]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.012
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.012
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [40.25], min [39], max [41], ratio [0.9512] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 39] [1: nCell 40] [2: nCell 41] [3: nCell 39] [4: nCell 41] [5: nCell 41] [6: nCell 41] 
-[0: nNode 29] [7: nCell 40] [1: nNode 23] [2: nNode 24] [3: nNode 18] [4: nNode 21] [4: nBnd 3] [5: nNode 17] [5: nBnd 12] [6: nNode 17] [6: nBnd 8] [7: nNode 12] [7: nBnd 0] 
-[0: nBnd 5] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nBnd 0] [2: nBnd 7] [3: nBnd 5] UnstructuredMesh === InterpolateFace: total faces 483
-  IV10U_10 bisect=1
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 182
-CGNS === Vol Elem [  322  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   9% [=>        ]  11% [=>        ]  13% [=>        ]  15% [=>        ]  17% [=>        ]  19% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  35% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  85% [========> ]  87% [========> ]  89% [=========>]  91% [=========>]  93% [=========>]  95% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   9% [=>        ]  11% [=>        ]  13% [=>        ]  15% [=>        ]  17% [=>        ]  19% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  35% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  85% [========> ]  87% [========> ]  89% [=========>]  91% [=========>]  93% [=========>]  95% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.001286]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.012
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.012
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [40.25], min [39], max [41], ratio [0.9512] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 39] [1: nCell 40] [2: nCell 41] [3: nCell 39] [4: nCell 41] [5: nCell 41] [5: nNode 17] [6: nCell 41] [6: nNode 17] [7: nCell 40] [7: nNode 12] 
-[0: nNode 29] 
-[0: nBnd 5] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nNode 23] [1: nBnd 0] [2: nNode 24] [2: nBnd 7] [3: nNode 18] [3: nBnd 5] [4: nNode 21] [4: nBnd 3] [5: nBnd 12] [6: nBnd 8] [7: nBnd 0] === Mesh Elevation: Num NewNode 483 
-UnstructuredMesh === InterpolateFace: total faces 1932
-  IV10U_10 bisect=2
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 182
-CGNS === Vol Elem [  322  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   9% [=>        ]  11% [=>        ]  13% [=>        ]  15% [=>        ]  17% [=>        ]  19% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  35% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  85% [========> ]  87% [========> ]  89% [=========>]  91% [=========>]  93% [=========>]  95% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   9% [=>        ]  11% [=>        ]  13% [=>        ]  15% [=>        ]  17% [=>        ]  19% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  35% [===>      ]  37% [===>      ]  39% [====>     ]  41% [====>     ]  43% [====>     ]  45% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  59% [======>   ]  61% [======>   ]  63% [======>   ]  65% [======>   ]  67% [======>   ]  69% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  85% [========> ]  87% [========> ]  89% [=========>]  91% [=========>]  93% [=========>]  95% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0009874]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.013
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.012
-     Uncoarsening: 		   0.001
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [40.25], min [39], max [41], ratio [0.9512] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 39] [1: nCell 40] [2: nCell 41] [3: nCell 39] [4: nCell 41] [5: nCell 41] [6: nCell 41] [7: nCell 40] 
-[0: nNode 29] 
-[0: nBnd 5] [1: nNode 23] [1: nBnd 0] [2: nNode 24] [2: nBnd 7] [3: nNode 18] [3: nBnd 5] [4: nNode 21] [4: nBnd 3] [5: nNode 17] [5: nBnd 12] [6: nNode 17] [6: nBnd 8] [7: nNode 12] [7: nBnd 0] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-=== Mesh Elevation: Num NewNode 483 
-=== Mesh Elevation: Num NewNode 1932 
-UnstructuredMesh === InterpolateFace: total faces 7728
-=== Meshes built ===
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-VariationalReconstruction<dim>::ConstructMetrics() === 
- ===Sum/Min/Max Volume [9;  1, 1]
-=== cellSmoothScale min [1]
-VariationalReconstruction<dim>::ConstructBaseAndWeight() done
-VariationalReconstruction<dim>::ConstructRecCoeff() === A cond Max: [ 1.000e+00] 
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473:
-[0;33mTEST CASE:  [0mWall/const/GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m23 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473:
-[0;33mTEST CASE:  [0mWall/const/GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m23 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473:
-[0;33mTEST CASE:  [0mWall/const/GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m23 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473:
-[0;33mTEST CASE:  [0mWall/const/GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m23 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473:
-[0;33mTEST CASE:  [0mWall/const/GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m23 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473:
-[0;33mTEST CASE:  [0mWall/const/GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473:
-[0;33mTEST CASE:  [0mWall/const/GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m23 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m23 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473:
-[0;33mTEST CASE:  [0mWall/const/GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction.cpp:473: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m23 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[gpu704:601686] *** Process received signal ***
-[gpu704:601686] Signal: Segmentation fault (11)
-[gpu704:601686] Signal code:  (-6)
-[gpu704:601686] Failing at address: 0x3ec00092e56
-[gpu704:601686] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x73bbe5845330]
-[gpu704:601686] [ 1] [gpu704:601691] *** Process received signal ***
-[gpu704:601691] Signal: Segmentation fault (11)
-[gpu704:601691] Signal code:  (-6)
-[gpu704:601691] Failing at address: 0x3ec00092e5b
-[gpu704:601691] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x76b33b445330]
-[gpu704:601691] [ 1] [gpu704:601689] *** Process received signal ***
-[gpu704:601689] Signal: Segmentation fault (11)
-[gpu704:601689] Signal code:  (-6)
-[gpu704:601689] Failing at address: 0x3ec00092e59
-[gpu704:601689] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x772c9b445330]
-[gpu704:601689] [ 1] [gpu704:601688] *** Process received signal ***
-[gpu704:601688] Signal: Segmentation fault (11)
-[gpu704:601688] Signal code:  (-6)
-[gpu704:601688] Failing at address: 0x3ec00092e58
-[gpu704:601688] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x761444a45330]
-[gpu704:601688] [ 1] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZNSt16_Sp_counted_baseILN9__gnu_cxx12_Lock_policyE2EE10_M_releaseEv+0xe)[0x5e4c7235734e]
-[gpu704:601688] [ 2] [gpu704:601687] *** Process received signal ***
-[gpu704:601687] Signal: Segmentation fault (11)
-[gpu704:601687] Signal code:  (-6)
-[gpu704:601687] Failing at address: 0x3ec00092e57
-[gpu704:601687] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x793976445330]
-[gpu704:601687] [ 1] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZNSt16_Sp_counted_baseILN9__gnu_cxx12_Lock_policyE2EE10_M_releaseEv+0xe)[0x5bbe2e7fd34e]
-[gpu704:601687] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZNSt16_Sp_counted_baseILN9__gnu_cxx12_Lock_policyE2EE10_M_releaseEv+0xe)[0x650ed74a834e]
-[gpu704:601686] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS4Geom11EntitySpaceD1Ev+0x19)[0x650ed74ad4b9]
-[gpu704:601686] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZNSt16_Sp_counted_baseILN9__gnu_cxx12_Lock_policyE2EE10_M_releaseEv+0xe)[0x5cf7bf6f534e]
-[gpu704:601691] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS4Geom11EntitySpaceD1Ev+0x19)[0x5cf7bf6fa4b9]
-[gpu704:601691] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZNSt16_Sp_counted_baseILN9__gnu_cxx12_Lock_policyE2EE10_M_releaseEv+0xe)[0x5899e693334e]
-[gpu704:601689] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS4Geom11EntitySpaceD1Ev+0x19)[0x5899e69384b9]
-[gpu704:601689] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS4Geom11EntitySpaceD1Ev+0x19)[0x5bbe2e8024b9]
-[gpu704:601687] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS4Geom11EntitySpaceD1Ev+0x19)[0x5e4c7235c4b9]
-[gpu704:601688] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x75a)[0x650ed74f646a]
-[gpu704:601686] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0xfff4c)[0x650ed748cf4c]
-[gpu704:601686] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x75a)[0x5cf7bf74346a]
-[gpu704:601691] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0xfff4c)[0x5cf7bf6d9f4c]
-[gpu704:601691] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x75a)[0x5899e698146a]
-[gpu704:601689] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0xfff4c)[0x5899e6917f4c]
-[gpu704:601689] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x75a)[0x5bbe2e84b46a]
-[gpu704:601687] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0xfff4c)[0x5bbe2e7e1f4c]
-[gpu704:601687] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x106260)[0x5bbe2e7e8260]
-[gpu704:601687] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x75a)[0x5e4c723a546a]
-[gpu704:601688] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0xfff4c)[0x5e4c7233bf4c]
-[gpu704:601688] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x106260)[0x5e4c72342260]
-[gpu704:601688] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x107764)[0x5e4c72343764]
-[gpu704:601688] [ 7] [gpu704:601692] *** Process received signal ***
-[gpu704:601692] Signal: Segmentation fault (11)
-[gpu704:601692] Signal code:  (-6)
-[gpu704:601692] Failing at address: 0x3ec00092e5c
-[gpu704:601692] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x71f482e45330]
-[gpu704:601692] [ 1] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x106260)[0x650ed7493260]
-[gpu704:601686] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x107764)[0x650ed7494764]
-[gpu704:601686] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN7doctest7Context3runEv+0xe8e)[0x650ed748ac7e]
-[gpu704:601686] [ 8] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(main+0x2ca)[0x650ed7460e1a]
-[gpu704:601686] [ 9] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x106260)[0x5cf7bf6e0260]
-[gpu704:601691] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x107764)[0x5cf7bf6e1764]
-[gpu704:601691] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN7doctest7Context3runEv+0xe8e)[0x5cf7bf6d7c7e]
-[gpu704:601691] [ 8] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(main+0x2ca)[0x5cf7bf6ade1a]
-[gpu704:601691] [ 9] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x76b33b42a1ca]
-[gpu704:601691] [10] [gpu704:601690] *** Process received signal ***
-[gpu704:601690] Signal: Segmentation fault (11)
-[gpu704:601690] Signal code:  (-6)
-[gpu704:601690] Failing at address: 0x3ec00092e5a
-[gpu704:601690] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x7e41bcc45330]
-[gpu704:601690] [ 1] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x106260)[0x5899e691e260]
-[gpu704:601689] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x107764)[0x5899e691f764]
-[gpu704:601689] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN7doctest7Context3runEv+0xe8e)[0x5899e6915c7e]
-[gpu704:601689] [ 8] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(main+0x2ca)[0x5899e68ebe1a]
-[gpu704:601689] [ 9] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x772c9b42a1ca]
-[gpu704:601689] [10] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x772c9b42a28b]
-[gpu704:601689] [11] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x107764)[0x5bbe2e7e9764]
-[gpu704:601687] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN7doctest7Context3runEv+0xe8e)[0x5bbe2e7dfc7e]
-[gpu704:601687] [ 8] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(main+0x2ca)[0x5bbe2e7b5e1a]
-[gpu704:601687] [ 9] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x79397642a1ca]
-[gpu704:601687] [10] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x79397642a28b]
-[gpu704:601687] [11] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_start+0x25)[0x5bbe2e7bbf05]
-[gpu704:601687] *** End of error message ***
-/home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN7doctest7Context3runEv+0xe8e)[0x5e4c72339c7e]
-[gpu704:601688] [ 8] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(main+0x2ca)[0x5e4c7230fe1a]
-[gpu704:601688] [ 9] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x761444a2a1ca]
-[gpu704:601688] [10] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x761444a2a28b]
-[gpu704:601688] [11] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_start+0x25)[0x5e4c72315f05]
-[gpu704:601688] *** End of error message ***
-[gpu704:601693] *** Process received signal ***
-[gpu704:601693] Signal: Segmentation fault (11)
-[gpu704:601693] Signal code:  (-6)
-[gpu704:601693] Failing at address: 0x3ec00092e5d
-[gpu704:601693] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x75924c845330]
-[gpu704:601693] [ 1] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x73bbe582a1ca]
-[gpu704:601686] [10] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x73bbe582a28b]
-[gpu704:601686] [11] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_start+0x25)[0x650ed7466f05]
-[gpu704:601686] *** End of error message ***
-/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x76b33b42a28b]
-[gpu704:601691] [11] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_start+0x25)[0x5cf7bf6b3f05]
-[gpu704:601691] *** End of error message ***
-/home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZNSt16_Sp_counted_baseILN9__gnu_cxx12_Lock_policyE2EE10_M_releaseEv+0xe)[0x602ad33c934e]
-[gpu704:601692] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS4Geom11EntitySpaceD1Ev+0x19)[0x602ad33ce4b9]
-[gpu704:601692] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_start+0x25)[0x5899e68f1f05]
-[gpu704:601689] *** End of error message ***
-/home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZNSt16_Sp_counted_baseILN9__gnu_cxx12_Lock_policyE2EE10_M_releaseEv+0xe)[0x590ece86734e]
-[gpu704:601690] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS4Geom11EntitySpaceD1Ev+0x19)[0x590ece86c4b9]
-[gpu704:601690] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x75a)[0x590ece8b546a]
-[gpu704:601690] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZNSt16_Sp_counted_baseILN9__gnu_cxx12_Lock_policyE2EE10_M_releaseEv+0xe)[0x654821def34e]
-[gpu704:601693] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS4Geom11EntitySpaceD1Ev+0x19)[0x654821df44b9]
-[gpu704:601693] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x75a)[0x602ad341746a]
-[gpu704:601692] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0xfff4c)[0x602ad33adf4c]
-[gpu704:601692] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x106260)[0x602ad33b4260]
-[gpu704:601692] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0xfff4c)[0x590ece84bf4c]
-[gpu704:601690] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x106260)[0x590ece852260]
-/home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x75a)[0x654821e3d46a]
-[gpu704:601693] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x107764)[0x602ad33b5764]
-[gpu704:601692] [ 7] [gpu704:601690] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x107764)[0x590ece853764]
-[gpu704:601690] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN7doctest7Context3runEv+0xe8e)[0x602ad33abc7e]
-[gpu704:601692] [ 8] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0xfff4c)[0x654821dd3f4c]
-[gpu704:601693] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN7doctest7Context3runEv+0xe8e)[0x590ece849c7e]
-[gpu704:601690] [ 8] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(main+0x2ca)[0x602ad3381e1a]
-[gpu704:601692] [ 9] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x106260)[0x654821dda260]
-[gpu704:601693] [ 6] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x71f482e2a1ca]
-[gpu704:601692] [10] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(main+0x2ca)[0x590ece81fe1a]
-[gpu704:601690] [ 9] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7e41bcc2a1ca]
-/home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(+0x107764)[0x654821ddb764]
-[gpu704:601693] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_ZN7doctest7Context3runEv+0xe8e)[0x654821dd1c7e]
-[gpu704:601693] [ 8] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x71f482e2a28b]
-[gpu704:601692] [11] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_start+0x25)[0x602ad3387f05]
-[gpu704:601690] [10] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7e41bcc2a28b]
-[gpu704:601690] [11] [gpu704:601692] *** End of error message ***
-/home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(main+0x2ca)[0x654821da7e1a]
-[gpu704:601693] [ 9] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_start+0x25)[0x590ece825f05]
-[gpu704:601690] *** End of error message ***
-/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x75924c82a1ca]
-[gpu704:601693] [10] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x75924c82a28b]
-[gpu704:601693] [11] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction(_start+0x25)[0x654821dadf05]
-[gpu704:601693] *** End of error message ***
---------------------------------------------------------------------------
-prterun noticed that process rank 0 with PID 601686 on node gpu704 exited on
-signal 11 (Segmentation fault).
---------------------------------------------------------------------------
-
-    Start 106: cfv_limiters
-5/9 Test #106: cfv_limiters .....................   Passed    0.01 sec
-    Start 107: cfv_reconstruction3d_np1
-6/9 Test #107: cfv_reconstruction3d_np1 .........***Failed    4.96 sec
-=== Building 3D mesh ===
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 35937
-CGNS === Vol Elem [  32768  ],  Bnd Elem [  6144  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   8% [=>        ]  10% [=>        ]  12% [=>        ]  14% [=>        ]  16% [=>        ]  18% [==>       ]  20% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  34% [===>      ]  36% [===>      ]  38% [====>     ]  40% [====>     ]  42% [====>     ]  44% [====>     ]  46% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  58% [======>   ]  60% [======>   ]  62% [======>   ]  64% [======>   ]  66% [======>   ]  68% [=======>  ]  70% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  84% [========> ]  86% [========> ]  88% [=========>]  90% [=========>]  92% [=========>]  94% [=========>]  96% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   8% [=>        ]  10% [=>        ]  12% [=>        ]  14% [=>        ]  16% [=>        ]  18% [==>       ]  20% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  34% [===>      ]  36% [===>      ]  38% [====>     ]  40% [====>     ]  42% [====>     ]  44% [====>     ]  46% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  58% [======>   ]  60% [======>   ]  62% [======>   ]  64% [======>   ]  66% [======>   ]  68% [=======>  ]  70% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  84% [========> ]  86% [========> ]  88% [=========>]  90% [=========>]  92% [=========>]  94% [=========>]  96% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.07349]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [32768], min [32768], max [32768], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 32768] 
-[0: nNode 32768] 
-[0: nBnd 6144] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-UnstructuredMesh === InterpolateFace: total faces 98304
-=== 3D mesh built, nCellGlobal=32768 ===
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-VariationalReconstruction<dim>::ConstructMetrics() === 
- ===Sum/Min/Max Volume [1;  3.0518e-05, 3.0518e-05]
-=== cellSmoothScale min [1]
-VariationalReconstruction<dim>::ConstructBaseAndWeight() done
-VariationalReconstruction<dim>::ConstructRecCoeff() === A cond Max: [ 1.000e+00] 
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337:
-[0;33mTEST CASE:  [0m3D: constant exactness with GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m6 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[gpu704:601802] *** Process received signal ***
-[gpu704:601802] Signal: Segmentation fault (11)
-[gpu704:601802] Signal code:  (-6)
-[gpu704:601802] Failing at address: 0x3ec00092eca
-[gpu704:601802] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x732689645330]
-[gpu704:601802] [ 1] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xd8730)[0x5cfe8d072730]
-[gpu704:601802] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS4Geom17LegacyFieldBridge14BorrowIndexingINS_16ArrayTransformerIdLi1ELi1ELin1024EEEEEvRT_RKNS0_11EntitySpaceE+0x1b8)[0x5cfe8d0a88d8]
-[gpu704:601802] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x318)[0x5cfe8d0d04e8]
-[gpu704:601802] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xee4e7)[0x5cfe8d0884e7]
-[gpu704:601802] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xf0959)[0x5cfe8d08a959]
-[gpu704:601802] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN7doctest7Context3runEv+0xd48)[0x5cfe8d0811f8]
-[gpu704:601802] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(main+0xf6)[0x5cfe8d0602f6]
-[gpu704:601802] [ 8] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x73268962a1ca]
-[gpu704:601802] [ 9] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x73268962a28b]
-[gpu704:601802] [10] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_start+0x25)[0x5cfe8d065745]
-[gpu704:601802] *** End of error message ***
---------------------------------------------------------------------------
-prterun noticed that process rank 0 with PID 601802 on node gpu704 exited on
-signal 11 (Segmentation fault).
---------------------------------------------------------------------------
-
-    Start 108: cfv_reconstruction3d_np2
-7/9 Test #108: cfv_reconstruction3d_np2 .........***Failed    4.05 sec
-=== Building 3D mesh ===
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 35937
-CGNS === Vol Elem [  32768  ],  Bnd Elem [  6144  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   8% [=>        ]  10% [=>        ]  12% [=>        ]  14% [=>        ]  16% [=>        ]  18% [==>       ]  20% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  34% [===>      ]  36% [===>      ]  38% [====>     ]  40% [====>     ]  42% [====>     ]  44% [====>     ]  46% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  58% [======>   ]  60% [======>   ]  62% [======>   ]  64% [======>   ]  66% [======>   ]  68% [=======>  ]  70% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  84% [========> ]  86% [========> ]  88% [=========>]  90% [=========>]  92% [=========>]  94% [=========>]  96% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   8% [=>        ]  10% [=>        ]  12% [=>        ]  14% [=>        ]  16% [=>        ]  18% [==>       ]  20% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  34% [===>      ]  36% [===>      ]  38% [====>     ]  40% [====>     ]  42% [====>     ]  44% [====>     ]  46% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  58% [======>   ]  60% [======>   ]  62% [======>   ]  64% [======>   ]  66% [======>   ]  68% [=======>  ]  70% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  84% [========> ]  86% [========> ]  88% [=========>]  90% [=========>]  92% [=========>]  94% [=========>]  96% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.07591]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.051
-     Coarsening: 		   0.020
-            Matching: 			   0.008
-            Contract: 			   0.012
-     Initial Partition: 	   0.017
-     Uncoarsening: 		   0.013
-          Refinement: 			   0.007
-          Projection: 			   0.003
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [16384], min [16383], max [16385], ratio [0.9999] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 16383] [1: nCell 16385] [1: nNode 15334] [1: nBnd 2078] 
-[0: nNode 17434] 
-[0: nBnd 4066] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-UnstructuredMesh === InterpolateFace: total faces 98304
-=== 3D mesh built, nCellGlobal=32768 ===
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-VariationalReconstruction<dim>::ConstructMetrics() === 
- ===Sum/Min/Max Volume [1;  3.0518e-05, 3.0518e-05]
-=== cellSmoothScale min [1]
-VariationalReconstruction<dim>::ConstructBaseAndWeight() done
-VariationalReconstruction<dim>::ConstructRecCoeff() === A cond Max: [ 1.000e+00] 
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337:
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337:
-[0;33mTEST CASE:  [0m3D: constant exactness with GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;33mTEST CASE:  [0m3D: constant exactness with GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m6 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m6 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[gpu704:601896] *** Process received signal ***
-[gpu704:601896] Signal: Segmentation fault (11)
-[gpu704:601896] Signal code:  (-6)
-[gpu704:601896] Failing at address: 0x3ec00092f28
-[gpu704:601895] *** Process received signal ***
-[gpu704:601895] Signal: Segmentation fault (11)
-[gpu704:601895] Signal code:  (-6)
-[gpu704:601895] Failing at address: 0x3ec00092f27
-[gpu704:601896] [ 0] [gpu704:601895] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x70c563045330]
-[gpu704:601896] [ 1] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x77e8df245330]
-[gpu704:601895] [ 1] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xd8730)[0x5d6612d1f730]
-[gpu704:601895] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xd8730)[0x5f8239fec730]
-[gpu704:601896] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS4Geom17LegacyFieldBridge14BorrowIndexingINS_16ArrayTransformerIdLi1ELi1ELin1024EEEEEvRT_RKNS0_11EntitySpaceE+0x1b8)[0x5d6612d558d8]
-[gpu704:601895] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS4Geom17LegacyFieldBridge14BorrowIndexingINS_16ArrayTransformerIdLi1ELi1ELin1024EEEEEvRT_RKNS0_11EntitySpaceE+0x1b8)[0x5f823a0228d8]
-[gpu704:601896] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x318)[0x5d6612d7d4e8]
-[gpu704:601895] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x318)[0x5f823a04a4e8]
-[gpu704:601896] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xee4e7)[0x5d6612d354e7]
-[gpu704:601895] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xee4e7)[0x5f823a0024e7]
-[gpu704:601896] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xf0959)[0x5d6612d37959]
-[gpu704:601895] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xf0959)[0x5f823a004959]
-[gpu704:601896] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN7doctest7Context3runEv+0xd48)[0x5d6612d2e1f8]
-[gpu704:601895] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN7doctest7Context3runEv+0xd48)[0x5f8239ffb1f8]
-[gpu704:601896] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(main+0xf6)[0x5d6612d0d2f6]
-[gpu704:601895] [ 8] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(main+0xf6)[0x5f8239fda2f6]
-[gpu704:601896] [ 8] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x77e8df22a1ca]
-[gpu704:601895] [ 9] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x70c56302a1ca]
-[gpu704:601896] [ 9] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x77e8df22a28b]
-[gpu704:601895] [10] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x70c56302a28b]
-[gpu704:601896] [10] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_start+0x25)[0x5d6612d12745]
-[gpu704:601895] *** End of error message ***
-/home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_start+0x25)[0x5f8239fdf745]
-[gpu704:601896] *** End of error message ***
---------------------------------------------------------------------------
-prterun noticed that process rank 0 with PID 601895 on node gpu704 exited on
-signal 11 (Segmentation fault).
---------------------------------------------------------------------------
-
-    Start 109: cfv_reconstruction3d_np4
-8/9 Test #109: cfv_reconstruction3d_np4 .........***Failed    3.53 sec
-=== Building 3D mesh ===
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 35937
-CGNS === Vol Elem [  32768  ],  Bnd Elem [  6144  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   8% [=>        ]  10% [=>        ]  12% [=>        ]  14% [=>        ]  16% [=>        ]  18% [==>       ]  20% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  34% [===>      ]  36% [===>      ]  38% [====>     ]  40% [====>     ]  42% [====>     ]  44% [====>     ]  46% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  58% [======>   ]  60% [======>   ]  62% [======>   ]  64% [======>   ]  66% [======>   ]  68% [=======>  ]  70% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  84% [========> ]  86% [========> ]  88% [=========>]  90% [=========>]  92% [=========>]  94% [=========>]  96% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   8% [=>        ]  10% [=>        ]  12% [=>        ]  14% [=>        ]  16% [=>        ]  18% [==>       ]  20% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  34% [===>      ]  36% [===>      ]  38% [====>     ]  40% [====>     ]  42% [====>     ]  44% [====>     ]  46% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  58% [======>   ]  60% [======>   ]  62% [======>   ]  64% [======>   ]  66% [======>   ]  68% [=======>  ]  70% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  84% [========> ]  86% [========> ]  88% [=========>]  90% [=========>]  92% [=========>]  94% [=========>]  96% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0856]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.085
-     Coarsening: 		   0.024
-            Matching: 			   0.012
-            Contract: 			   0.011
-     Initial Partition: 	   0.025
-     Uncoarsening: 		   0.037
-          Refinement: 			   0.028
-          Projection: 			   0.005
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [8192], min [8183], max [8210], ratio [0.9967] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 8187] [1: nCell 8188] [2: nCell 8210] [3: nCell 8183] [3: nNode 7119] [3: nBnd 2136] 
-[0: nNode 9294] 
-[0: nBnd 1317] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nNode 8212] [1: nBnd 731] [2: nNode 8143] [2: nBnd 1960] UnstructuredMesh === InterpolateFace: total faces 98304
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-=== 3D mesh built, nCellGlobal=32768 ===
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-VariationalReconstruction<dim>::ConstructMetrics() === 
- ===Sum/Min/Max Volume [1;  3.0518e-05, 3.0518e-05]
-=== cellSmoothScale min [1]
-VariationalReconstruction<dim>::ConstructBaseAndWeight() done
-VariationalReconstruction<dim>::ConstructRecCoeff() === A cond Max: [ 1.000e+00] 
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337:
-[0;33mTEST CASE:  [0m3D: constant exactness with GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337:
-[0;33mTEST CASE:  [0m3D: constant exactness with GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m6 skipped[0m
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337:
-[0;33mTEST CASE:  [0m3D: constant exactness with GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m6 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m6 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337:
-[0;33mTEST CASE:  [0m3D: constant exactness with GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m6 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[gpu704:601971] *** Process received signal ***
-[gpu704:601971] Signal: Segmentation fault (11)
-[gpu704:601971] Signal code:  (-6)
-[gpu704:601971] Failing at address: 0x3ec00092f73
-[gpu704:601968] *** Process received signal ***
-[gpu704:601968] Signal: Segmentation fault (11)
-[gpu704:601968] Signal code:  (-6)
-[gpu704:601968] Failing at address: 0x3ec00092f70
-[gpu704:601969] *** Process received signal ***
-[gpu704:601969] Signal: Segmentation fault (11)
-[gpu704:601969] Signal code:  (-6)
-[gpu704:601969] Failing at address: 0x3ec00092f71
-[gpu704:601970] *** Process received signal ***
-[gpu704:601970] Signal: Segmentation fault (11)
-[gpu704:601970] Signal code:  (-6)
-[gpu704:601970] Failing at address: 0x3ec00092f72
-[gpu704:601968] [ 0] [gpu704:601969] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x771127845330]
-[gpu704:601971] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x777a6c845330]
-[gpu704:601971] [ 1] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x7406daa45330]
-[gpu704:601968] [ 1] [gpu704:601969] [ 1] [gpu704:601970] [ 0] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xd8730)[0x5aaafbdec730]
-[gpu704:601971] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS4Geom17LegacyFieldBridge14BorrowIndexingINS_16ArrayTransformerIdLi1ELi1ELin1024EEEEEvRT_RKNS0_11EntitySpaceE+0x1b8)[0x5aaafbe228d8]
-[gpu704:601971] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xd8730)[0x5e16c3796730]
-[gpu704:601969] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS4Geom17LegacyFieldBridge14BorrowIndexingINS_16ArrayTransformerIdLi1ELi1ELin1024EEEEEvRT_RKNS0_11EntitySpaceE+0x1b8)[0x5e16c37cc8d8]
-[gpu704:601969] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xd8730)[0x62950871a730]
-[gpu704:601968] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS4Geom17LegacyFieldBridge14BorrowIndexingINS_16ArrayTransformerIdLi1ELi1ELin1024EEEEEvRT_RKNS0_11EntitySpaceE+0x1b8)[0x6295087508d8]
-[gpu704:601968] [ 3] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x7e5508a45330]
-[gpu704:601970] [ 1] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xd8730)[0x55ca2e562730]
-[gpu704:601970] [ 2] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x318)[0x5aaafbe4a4e8]
-[gpu704:601971] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x318)[0x5e16c37f44e8]
-[gpu704:601969] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x318)[0x6295087784e8]
-[gpu704:601968] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xee4e7)[0x5aaafbe024e7]
-[gpu704:601971] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xf0959)[0x5aaafbe04959]
-[gpu704:601971] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS4Geom17LegacyFieldBridge14BorrowIndexingINS_16ArrayTransformerIdLi1ELi1ELin1024EEEEEvRT_RKNS0_11EntitySpaceE+0x1b8)[0x55ca2e5988d8]
-[gpu704:601970] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xee4e7)[0x5e16c37ac4e7]
-[gpu704:601969] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xee4e7)[0x6295087304e7]
-[gpu704:601968] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xf0959)[0x629508732959]
-[gpu704:601968] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN7doctest7Context3runEv+0xd48)[0x5aaafbdfb1f8]
-[gpu704:601971] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(main+0xf6)[0x5aaafbdda2f6]
-[gpu704:601971] [ 8] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xf0959)[0x5e16c37ae959]
-[gpu704:601969] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x318)[0x55ca2e5c04e8]
-[gpu704:601970] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xee4e7)[0x55ca2e5784e7]
-/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x777a6c82a1ca]
-[gpu704:601971] [ 9] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x777a6c82a28b]
-[gpu704:601971] [10] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_start+0x25)[0x5aaafbddf745]
-[gpu704:601971] *** End of error message ***
-/home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN7doctest7Context3runEv+0xd48)[0x6295087291f8]
-[gpu704:601968] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(main+0xf6)[0x6295087082f6]
-[gpu704:601968] [ 8] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7406daa2a1ca]
-/home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN7doctest7Context3runEv+0xd48)[0x5e16c37a51f8]
-[gpu704:601969] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(main+0xf6)[0x5e16c37842f6]
-[gpu704:601969] [ 8] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x77112782a1ca]
-[gpu704:601969] [ 9] [gpu704:601970] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xf0959)[0x55ca2e57a959]
-[gpu704:601970] [ 6] [gpu704:601968] [ 9] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7406daa2a28b]
-[gpu704:601968] [10] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN7doctest7Context3runEv+0xd48)[0x55ca2e5711f8]
-[gpu704:601970] [ 7] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x77112782a28b]
-[gpu704:601969] [10] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_start+0x25)[0x5e16c3789745]
-/home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_start+0x25)[0x62950870d745]
-[gpu704:601968] *** End of error message ***
-/home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(main+0xf6)[0x55ca2e5502f6]
-[gpu704:601970] [ 8] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7e5508a2a1ca]
-[gpu704:601970] [ 9] [gpu704:601969] *** End of error message ***
-/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7e5508a2a28b]
-[gpu704:601970] [10] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_start+0x25)[0x55ca2e555745]
-[gpu704:601970] *** End of error message ***
---------------------------------------------------------------------------
-prterun noticed that process rank 2 with PID 601970 on node gpu704 exited on
-signal 11 (Segmentation fault).
---------------------------------------------------------------------------
-
-    Start 110: cfv_reconstruction3d_np8
-9/9 Test #110: cfv_reconstruction3d_np8 .........***Failed    3.44 sec
-=== Building 3D mesh ===
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 35937
-CGNS === Vol Elem [  32768  ],  Bnd Elem [  6144  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   8% [=>        ]  10% [=>        ]  12% [=>        ]  14% [=>        ]  16% [=>        ]  18% [==>       ]  20% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  34% [===>      ]  36% [===>      ]  38% [====>     ]  40% [====>     ]  42% [====>     ]  44% [====>     ]  46% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  58% [======>   ]  60% [======>   ]  62% [======>   ]  64% [======>   ]  66% [======>   ]  68% [=======>  ]  70% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  84% [========> ]  86% [========> ]  88% [=========>]  90% [=========>]  92% [=========>]  94% [=========>]  96% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   0% [>         ]   2% [>         ]   4% [>         ]   6% [>         ]   8% [=>        ]  10% [=>        ]  12% [=>        ]  14% [=>        ]  16% [=>        ]  18% [==>       ]  20% [==>       ]  22% [==>       ]  24% [==>       ]  26% [==>       ]  28% [===>      ]  30% [===>      ]  32% [===>      ]  34% [===>      ]  36% [===>      ]  38% [====>     ]  40% [====>     ]  42% [====>     ]  44% [====>     ]  46% [====>     ]  48% [=====>    ]  50% [=====>    ]  52% [=====>    ]  54% [=====>    ]  56% [=====>    ]  58% [======>   ]  60% [======>   ]  62% [======>   ]  64% [======>   ]  66% [======>   ]  68% [=======>  ]  70% [=======>  ]  72% [=======>  ]  74% [=======>  ]  76% [=======>  ]  78% [========> ]  80% [========> ]  82% [========> ]  84% [========> ]  86% [========> ]  88% [=========>]  90% [=========>]  92% [=========>]  94% [=========>]  96% [=========>]  98% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.1012]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.114
-     Coarsening: 		   0.023
-            Matching: 			   0.011
-            Contract: 			   0.012
-     Initial Partition: 	   0.031
-     Uncoarsening: 		   0.060
-          Refinement: 			   0.050
-          Projection: 			   0.006
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [4096], min [4059], max [4118], ratio [0.9857] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 4081] [1: nCell 4106] [2: nCell 4115] [3: nCell 4118] [4: nCell 4104] [5: nCell 4104] [6: nCell 4081] [7: nCell 4059] 
-[0: nNode 4930] 
-[0: nBnd 594] [1: nNode 4502] [1: nBnd 1157] [2: nNode 4417] [2: nBnd 1422] [3: nNode 3898] [3: nBnd 576] [4: nNode 4247] [4: nBnd 1249] [5: nNode 3784] [5: nBnd 347] [6: nNode 3705] [6: nBnd 182] [7: nNode 3285] [7: nBnd 617] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-UnstructuredMesh === InterpolateFace: total faces 98304
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-=== 3D mesh built, nCellGlobal=32768 ===
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-VariationalReconstruction<dim>::ConstructMetrics() === 
- ===Sum/Min/Max Volume [1;  3.0518e-05, 3.0518e-05]
-=== cellSmoothScale min [1]
-VariationalReconstruction<dim>::ConstructBaseAndWeight() done
-VariationalReconstruction<dim>::ConstructRecCoeff() === A cond Max: [ 1.000e+00] 
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337:
-[0;33mTEST CASE:  [0m3D: constant exactness with GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337:
-[0;33mTEST CASE:  [0m3D: constant exactness with GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m6 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337:
-[0;33mTEST CASE:  [0m3D: constant exactness with GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m6 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337:
-[0;33mTEST CASE:  [0m3D: constant exactness with GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m6 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337:
-[0;33mTEST CASE:  [0m3D: constant exactness with GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m6 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337:
-[0;33mTEST CASE:  [0m3D: constant exactness with GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m6 skipped[0m
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337:
-[0;33mTEST CASE:  [0m3D: constant exactness with GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m6 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m6 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337:
-[0;33mTEST CASE:  [0m3D: constant exactness with GaussGreen
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/CFV/test_Reconstruction3D.cpp:337: [0;31mFATAL ERROR: [0;31mtest case CRASHED: [0;36mSIGSEGV - Segmentation violation signal
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases: 1 | [0m0 passed[0m | [0;31m1 failed[0m | [0;33m6 skipped[0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;36m[doctest] [0massertions: 0 | [0m0 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[gpu704:602243] *** Process received signal ***
-[gpu704:602243] Signal: Segmentation fault (11)
-[gpu704:602243] Signal code:  (-6)
-[gpu704:602243] Failing at address: 0x3ec00093083
-[gpu704:602246] *** Process received signal ***
-[gpu704:602246] Signal: Segmentation fault (11)
-[gpu704:602246] Signal code:  (-6)
-[gpu704:602246] Failing at address: 0x3ec00093086
-[gpu704:602245] *** Process received signal ***
-[gpu704:602245] Signal: Segmentation fault (11)
-[gpu704:602245] Signal code:  (-6)
-[gpu704:602245] Failing at address: 0x3ec00093085
-[gpu704:602249] *** Process received signal ***
-[gpu704:602249] Signal: Segmentation fault (11)
-[gpu704:602249] Signal code:  (-6)
-[gpu704:602249] Failing at address: 0x3ec00093089
-[gpu704:602248] *** Process received signal ***
-[gpu704:602248] Signal: Segmentation fault (11)
-[gpu704:602248] Signal code:  (-6)
-[gpu704:602248] Failing at address: 0x3ec00093088
-[gpu704:602244] *** Process received signal ***
-[gpu704:602244] Signal: Segmentation fault (11)
-[gpu704:602244] Signal code:  (-6)
-[gpu704:602244] Failing at address: 0x3ec00093084
-[gpu704:602242] *** Process received signal ***
-[gpu704:602242] Signal: Segmentation fault (11)
-[gpu704:602242] Signal code:  (-6)
-[gpu704:602242] Failing at address: 0x3ec00093082
-[gpu704:602247] *** Process received signal ***
-[gpu704:602247] Signal: Segmentation fault (11)
-[gpu704:602247] Signal code:  (-6)
-[gpu704:602247] Failing at address: 0x3ec00093087
-[gpu704:602243] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x755693a45330]
-[gpu704:602243] [ 1] [gpu704:602246] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x73147c645330]
-[gpu704:602246] [ 1] [gpu704:602249] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x7a29bda45330]
-[gpu704:602249] [ 1] [gpu704:602245] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x7a9747a45330]
-[gpu704:602245] [ 1] [gpu704:602244] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x7f7ad0445330]
-[gpu704:602244] [ 1] [gpu704:602248] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x745498245330]
-[gpu704:602248] [ 1] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xd8730)[0x61c1cfb9f730]
-[gpu704:602243] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xd8730)[0x5d722c553730]
-[gpu704:602246] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xd8730)[0x62e059dcc730]
-[gpu704:602249] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xd8730)[0x5574f31f8730]
-[gpu704:602245] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xd8730)[0x6069b6bbd730]
-[gpu704:602244] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS4Geom17LegacyFieldBridge14BorrowIndexingINS_16ArrayTransformerIdLi1ELi1ELin1024EEEEEvRT_RKNS0_11EntitySpaceE+0x1b8)[0x61c1cfbd58d8]
-[gpu704:602243] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xd8730)[0x5c0fa3363730]
-[gpu704:602248] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS4Geom17LegacyFieldBridge14BorrowIndexingINS_16ArrayTransformerIdLi1ELi1ELin1024EEEEEvRT_RKNS0_11EntitySpaceE+0x1b8)[0x5d722c5898d8]
-[gpu704:602246] [ 3] [gpu704:602247] [ 0] [gpu704:602242] [ 0] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS4Geom17LegacyFieldBridge14BorrowIndexingINS_16ArrayTransformerIdLi1ELi1ELin1024EEEEEvRT_RKNS0_11EntitySpaceE+0x1b8)[0x5574f322e8d8]
-[gpu704:602245] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS4Geom17LegacyFieldBridge14BorrowIndexingINS_16ArrayTransformerIdLi1ELi1ELin1024EEEEEvRT_RKNS0_11EntitySpaceE+0x1b8)[0x62e059e028d8]
-[gpu704:602249] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS4Geom17LegacyFieldBridge14BorrowIndexingINS_16ArrayTransformerIdLi1ELi1ELin1024EEEEEvRT_RKNS0_11EntitySpaceE+0x1b8)[0x6069b6bf38d8]
-[gpu704:602244] [ 3] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x7cc2f0045330]
-[gpu704:602247] [ 1] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x732eb6c45330]
-[gpu704:602242] [ 1] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS4Geom17LegacyFieldBridge14BorrowIndexingINS_16ArrayTransformerIdLi1ELi1ELin1024EEEEEvRT_RKNS0_11EntitySpaceE+0x1b8)[0x5c0fa33998d8]
-[gpu704:602248] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x318)[0x61c1cfbfd4e8]
-[gpu704:602243] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x318)[0x5d722c5b14e8]
-[gpu704:602246] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xee4e7)[0x5d722c5694e7]
-[gpu704:602246] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x318)[0x62e059e2a4e8]
-[gpu704:602249] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x318)[0x5574f32564e8]
-[gpu704:602245] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x318)[0x6069b6c1b4e8]
-[gpu704:602244] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xd8730)[0x634714ba4730]
-[gpu704:602247] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xd8730)[0x5ccfd20b0730]
-[gpu704:602242] [ 2] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xee4e7)[0x61c1cfbb54e7]
-[gpu704:602243] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xf0959)[0x61c1cfbb7959]
-[gpu704:602243] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x318)[0x5c0fa33c14e8]
-[gpu704:602248] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xee4e7)[0x5c0fa33794e7]
-[gpu704:602248] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xee4e7)[0x62e059de24e7]
-[gpu704:602249] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xf0959)[0x62e059de4959]
-[gpu704:602249] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xf0959)[0x5d722c56b959]
-[gpu704:602246] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN7doctest7Context3runEv+0xd48)[0x5d722c5621f8]
-[gpu704:602246] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xee4e7)[0x5574f320e4e7]
-[gpu704:602245] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xf0959)[0x5574f3210959]
-[gpu704:602245] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xee4e7)[0x6069b6bd34e7]
-[gpu704:602244] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xf0959)[0x6069b6bd5959]
-[gpu704:602244] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS4Geom17LegacyFieldBridge14BorrowIndexingINS_16ArrayTransformerIdLi1ELi1ELin1024EEEEEvRT_RKNS0_11EntitySpaceE+0x1b8)[0x634714bda8d8]
-[gpu704:602247] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS4Geom17LegacyFieldBridge14BorrowIndexingINS_16ArrayTransformerIdLi1ELi1ELin1024EEEEEvRT_RKNS0_11EntitySpaceE+0x1b8)[0x5ccfd20e68d8]
-[gpu704:602242] [ 3] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x318)[0x5ccfd210e4e8]
-[gpu704:602242] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN7doctest7Context3runEv+0xd48)[0x61c1cfbae1f8]
-[gpu704:602243] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(main+0xf6)[0x61c1cfb8d2f6]
-[gpu704:602243] [ 8] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x755693a2a1ca]
-[gpu704:602243] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xf0959)[0x5c0fa337b959]
-[gpu704:602248] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN7doctest7Context3runEv+0xd48)[0x5c0fa33721f8]
-[gpu704:602248] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN7doctest7Context3runEv+0xd48)[0x62e059ddb1f8]
-[gpu704:602249] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(main+0xf6)[0x62e059dba2f6]
-[gpu704:602249] [ 8] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN4DNDS3CFV15BuildUDofOnMeshILi1EEEvRNS_8ArrayDofIXT_ELi1EEERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEERKNS_7MPIInfoERKSt10shared_ptrINS_4Geom16UnstructuredMeshEEibbNSH_7MeshLocE+0x318)[0x634714c024e8]
-[gpu704:602247] [ 4] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xee4e7)[0x634714bba4e7]
-[gpu704:602247] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(main+0xf6)[0x5d722c5412f6]
-[gpu704:602246] [ 8] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x73147c62a1ca]
-[gpu704:602246] [ 9] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x73147c62a28b]
-[gpu704:602246] [10] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN7doctest7Context3runEv+0xd48)[0x5574f32071f8]
-[gpu704:602245] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(main+0xf6)[0x5574f31e62f6]
-[gpu704:602245] [ 8] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7a9747a2a1ca]
-[gpu704:602245] [ 9] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN7doctest7Context3runEv+0xd48)[0x6069b6bcc1f8]
-[gpu704:602244] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(main+0xf6)[0x6069b6bab2f6]
-[gpu704:602244] [ 8] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7f7ad042a1ca]
-[gpu704:602244] [ 9] [ 9] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x755693a2a28b]
-[gpu704:602243] [10] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xee4e7)[0x5ccfd20c64e7]
-[gpu704:602242] [ 5] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xf0959)[0x5ccfd20c8959]
-[gpu704:602242] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN7doctest7Context3runEv+0xd48)[0x5ccfd20bf1f8]
-/home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(main+0xf6)[0x5c0fa33512f6]
-[gpu704:602248] [ 8] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x74549822a1ca]
-[gpu704:602248] [ 9] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x74549822a28b]
-[gpu704:602248] [10] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7a29bda2a1ca]
-[gpu704:602249] [ 9] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7a29bda2a28b]
-[gpu704:602249] [10] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_start+0x25)[0x62e059dbf745]
-[gpu704:602249] *** End of error message ***
-/home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(+0xf0959)[0x634714bbc959]
-[gpu704:602247] [ 6] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_ZN7doctest7Context3runEv+0xd48)[0x634714bb31f8]
-[gpu704:602247] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(main+0xf6)[0x634714b922f6]
-[gpu704:602247] [ 8] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_start+0x25)[0x5d722c546745]
-[gpu704:602246] *** End of error message ***
-/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7a9747a2a28b]
-[gpu704:602245] [10] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_start+0x25)[0x5574f31eb745]
-[gpu704:602245] *** End of error message ***
-/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7f7ad042a28b]
-[gpu704:602244] [10] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_start+0x25)[0x6069b6bb0745]
-[gpu704:602244] *** End of error message ***
-/home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_start+0x25)[0x61c1cfb92745]
-[gpu704:602243] *** End of error message ***
-[gpu704:602242] [ 7] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(main+0xf6)[0x5ccfd209e2f6]
-[gpu704:602242] [ 8] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x732eb6c2a1ca]
-[gpu704:602242] [ 9] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_start+0x25)[0x5c0fa3356745]
-[gpu704:602248] *** End of error message ***
-/lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x7cc2f002a1ca]
-[gpu704:602247] [ 9] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x7cc2f002a28b]
-[gpu704:602247] [10] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x732eb6c2a28b]
-[gpu704:602242] [10] /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_start+0x25)[0x634714b97745]
-[gpu704:602247] *** End of error message ***
-/home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/cfv_test_reconstruction3d(_start+0x25)[0x5ccfd20a3745]
-[gpu704:602242] *** End of error message ***
---------------------------------------------------------------------------
-prterun noticed that process rank 2 with PID 602244 on node gpu704 exited on
-signal 11 (Segmentation fault).
---------------------------------------------------------------------------
-
-
-11% tests passed, 8 tests failed out of 9
-
-Total Test time (real) =  23.91 sec
-
-The following tests FAILED:
-	102 - cfv_reconstruction_np1 (Failed)
-	103 - cfv_reconstruction_np2 (Failed)
-	104 - cfv_reconstruction_np4 (Failed)
-	105 - cfv_reconstruction_np8 (Failed)
-	107 - cfv_reconstruction3d_np1 (Failed)
-	108 - cfv_reconstruction3d_np2 (Failed)
-	109 - cfv_reconstruction3d_np4 (Failed)
-	110 - cfv_reconstruction3d_np8 (Failed)
-Errors while running CTest

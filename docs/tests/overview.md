@@ -20,7 +20,7 @@ Browse the [C++ catalog](catalog-cpp.md) by executable and source case, or the [
 | CFV | @ref cfv_unit_tests | `cfv_unit_tests` | `test/CFV` |
 | Euler/shared Physics | @ref euler_unit_tests | `euler_unit_tests` | `test/Euler` |
 | Solver | @ref solver_unit_tests | `solver_unit_tests` | — |
-| Cauchy | [audit execution](../dev/plan53_audit_execution.md) | `cauchy_unit_tests` | `test/Cauchy` |
+| Cauchy | [C++ catalog](catalog-cpp.md) | `cauchy_unit_tests` | `test/Cauchy` |
 
 Executable/registration counts depend on CUDA, Cantera, Python and configured
 MPI sizes. Inspect the configured suite with `ctest -N` or

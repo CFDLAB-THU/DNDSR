@@ -1,1 +1,0 @@
-cmake --build source/build-cpu --target cfv_benchmark_coefficient_publication -j16

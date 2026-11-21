@@ -1,6 +1,0 @@
-src/Geom/Mesh/Mesh.cpp
-exit=0
-src/Geom/Mesh/Mesh_Elevation.cpp
-exit=0
-test/cpp/Geom/test_MeshMutation.cpp
-exit=0

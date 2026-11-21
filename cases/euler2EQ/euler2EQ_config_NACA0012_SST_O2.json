@@ -5,8 +5,8 @@
             "NACA0012 H2: SST, O2 flow and turbulence, Mach 0.15, Re 2.88e6, AoA 5.0025 degrees.",
             "Run from build/: OMP_NUM_THREADS=1 mpirun -np 16 ./app/euler2EQ.exe ../cases/euler2EQ/euler2EQ_config_NACA0012_SST_O2.json",
             "Requires the corrected viscous-wall turbulence Jacobian. ILU(2) only; Roe Jacobian; CFL 0.1 to 20 over 1000 updates.",
-            "The recorded cs run reached the density-only tolerance in 4619 updates (435 s). Forces and all turbulence components were not independently converged.",
-            "See docs/dev/euler_sst_convergence_2026-11-05.md. Override nTimeStepInternal/rhsThresholdInternal for a tighter steady assessment. No launcher wall-time limit is imposed by this JSON."
+            "The convergence criterion monitors density. Check forces and turbulence components independently for steady assessments.",
+            "Override nTimeStepInternal/rhsThresholdInternal for a tighter steady assessment. No launcher wall-time limit is imposed by this JSON."
         ]
     },
     "timeMarchControl": {

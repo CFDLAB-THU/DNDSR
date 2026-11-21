@@ -1,6 +1,0 @@
-[  7%] Built target fmt
-[ 38%] Built target dnds
-[ 92%] Built target geom
-[100%] Building CXX object test/cpp/CMakeFiles/geom_test_native_mesh_scenarios.dir/Geom/test_NativeMeshScenarios.cpp.o
-[100%] Linking CXX executable geom_test_native_mesh_scenarios
-[100%] Built target geom_test_native_mesh_scenarios

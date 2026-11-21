@@ -1,6 +1,0 @@
-[  0%] Built target fmt
-[ 33%] Built target dnds
-[100%] Built target geom
-[100%] Building CXX object test/cpp/CMakeFiles/geom_test_native_relation_conversion.dir/Geom/test_NativeRelationConversion.cpp.o
-[100%] Linking CXX executable geom_test_native_relation_conversion
-[100%] Built target geom_test_native_relation_conversion

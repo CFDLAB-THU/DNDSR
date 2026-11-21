@@ -1,1236 +1,0 @@
-Internal ctest changing into directory: /home/harry/projects/DNDSR-array-geom/build-refactor
-Test project /home/harry/projects/DNDSR-array-geom/build-refactor
-      Start  94: geom_mesh_facade_np1
- 1/20 Test  #94: geom_mesh_facade_np1 ...............   Passed    0.43 sec
-      Start  95: geom_mesh_facade_np2
- 2/20 Test  #95: geom_mesh_facade_np2 ...............   Passed    0.48 sec
-      Start  96: geom_mesh_facade_np4
- 3/20 Test  #96: geom_mesh_facade_np4 ...............   Passed    0.62 sec
-      Start  97: geom_mesh_facade_np8
- 4/20 Test  #97: geom_mesh_facade_np8 ...............   Passed    0.69 sec
-      Start 114: geom_native_mesh_publication_np1
- 5/20 Test #114: geom_native_mesh_publication_np1 ...   Passed    0.47 sec
-      Start 115: geom_native_mesh_publication_np2
- 6/20 Test #115: geom_native_mesh_publication_np2 ...   Passed    0.51 sec
-      Start 116: geom_native_mesh_publication_np4
- 7/20 Test #116: geom_native_mesh_publication_np4 ...   Passed    0.92 sec
-      Start 117: geom_native_mesh_publication_np8
- 8/20 Test #117: geom_native_mesh_publication_np8 ...   Passed    1.52 sec
-      Start 118: geom_mesh_edit_np1
- 9/20 Test #118: geom_mesh_edit_np1 .................***Failed    0.50 sec
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.001131]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [100], min [100], max [100], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 100] 
-[0: nNode 121] 
-[0: nBnd 40] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-UnstructuredMesh === InterpolateFace: total faces 220
-[0mCGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0007105]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [100], min [100], max [100], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 100] 
-[0: nNode 121] 
-[0: nBnd 40] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-UnstructuredMesh === InterpolateFace: total faces 220
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48:
-[0;33mTEST CASE:  [0mStaged metadata and neighbor-order edits validate before publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x00005967F58B7689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x00005967F58C450D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x00005967F581F1AF in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x0000705C81C2A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0m[0mCGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.001647]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [100], min [100], max [100], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 100] 
-[0: nNode 121] 
-[0: nBnd 40] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-UnstructuredMesh === InterpolateFace: total faces 220
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131:
-[0;33mTEST CASE:  [0mUncommitted scopes discard copies and active reads block edit publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x00005967F58B7689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x00005967F58C450D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x00005967F581C28C in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x0000705C81C2A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases:   3 | [0m  1 passed[0m | [0;31m2 failed[0m | [0m0 skipped[0m
-[0;36m[doctest] [0massertions: 130 | [0m130 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-
-      Start 119: geom_mesh_edit_np2
-10/20 Test #119: geom_mesh_edit_np2 .................***Failed    0.75 sec
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.01408]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.002
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.001
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [50], min [50], max [50], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 50] [1: nCell 50] 
-[0: nNode 67] [1: nNode 54] 
-[0: nBnd 20] [1: nBnd 20] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-UnstructuredMesh === InterpolateFace: total faces 220
-[0mCGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=>        ]  10% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [>         ]   4% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.001108]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.000
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.000
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [50], min [50], max [50], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 50] [0m[1: nCell 50] 
-[0: nNode 67] [1: nNode 54] 
-[0: nBnd 20] [1: nBnd 20] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-UnstructuredMesh === InterpolateFace: total faces 220
-[0;33m===============================================================================
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48:
-[0;33mTEST CASE:  [0mStaged metadata and neighbor-order edits validate before publication
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48:
-[0;33mTEST CASE:  [0mStaged metadata and neighbor-order edits validate before publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x00005FA66FA45689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x00005FA66FA5250D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x00005FA66F9AD1AF in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x000072291142A1CA in /lib/x86_64-linux-gnu/libc.so.6
-
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x000055A6734A2689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x000055A6734AF50D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x000055A67340A1AF in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x00007109B4E2A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0m[0mCGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [>         ]   7% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [>         ]   7% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0009108]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.000
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.000
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [50], min [50], max [50], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 50] [0m[0m[1: nCell 50] 
-[0: nNode 67] [1: nNode 54] 
-[0: nBnd 20] [1: nBnd 20] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-UnstructuredMesh === InterpolateFace: total faces 220
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131:
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131:
-[0;33mTEST CASE:  [0mUncommitted scopes discard copies and active reads block edit publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x000055A6734A2689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x000055A6734AF50D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-[0;33mTEST CASE:  [0mUncommitted scopes discard copies and active reads block edit publication
-
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x000055A67340728C in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x00007109B4E2A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0m[0m[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x00005FA66FA45689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x00005FA66FA5250D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x00005FA66F9AA28C in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-[0;36m[doctest] [0mtest cases:  3 | [0m 1 passed[0m | [0;31m2 failed[0m | [0m0 skipped[0m
-[0;36m[doctest] [0massertions: 89 | [0m89 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x000072291142A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases:  3 | [0m 1 passed[0m | [0;31m2 failed[0m | [0m0 skipped[0m
-[0;36m[doctest] [0massertions: 89 | [0m89 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
---------------------------------------------------------------------------
-prterun detected that one or more processes exited with non-zero status,
-thus causing the job to be terminated. The first process to do so was:
-
-   Process name: [prterun-gpu704-829278@1,1]
-   Exit code:    1
---------------------------------------------------------------------------
-
-      Start 120: geom_mesh_edit_np4
-11/20 Test #120: geom_mesh_edit_np4 .................***Failed    0.49 sec
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mrun with "--help" for options
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.01454]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.002
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.002
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [25], min [25], max [25], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 25] [1: nCell 25] [2: nCell 25] [3: nCell 25] 
-[0: nNode 36] [1: nNode 30] [1: nBnd 10] [2: nNode 30] [2: nBnd 10] [3: nNode 25] [3: nBnd 10] 
-[0: nBnd 10] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-UnstructuredMesh === InterpolateFace: total faces 220
-[0mCGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-[0m[1: nCell 25] [1: nNode 30] [1: nBnd 10] [0m[2: nCell 25] [2: nNode 30] [2: nBnd 10] [0m[3: nCell 25] [3: nNode 25] [3: nBnd 10] UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0006394]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.002
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.002
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [25], min [25], max [25], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 25] 
-[0: nNode 36] 
-[0: nBnd 10] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-UnstructuredMesh === InterpolateFace: total faces 220
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48:
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48:
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48:
-[0;33mTEST CASE:  [0mStaged metadata and neighbor-order edits validate before publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x00005F24CB762689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x00005F24CB76F50D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48:
-[0;33mTEST CASE:  [0mStaged metadata and neighbor-order edits validate before publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x0000570A51579689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x0000570A5158650D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x0000570A514E11AF in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x0000751717E2A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0;33mTEST CASE:  [0mStaged metadata and neighbor-order edits validate before publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x000056381EC1F689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x000056381EC2C50D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x000056381EB871AF in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x0000788ECB42A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0;33mTEST CASE:  [0mStaged metadata and neighbor-order edits validate before publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x0000613758ABD689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x0000613758ACA50D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x0000613758A251AF in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x0000733F0882A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
- 7# 0x00005F24CB6CA1AF in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x000075957782A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0m[0mCGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.0008317]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.002
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.002
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [25], min [25], max [25], ratio [1.0000] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-[0m[0m[1: nCell 25] [0m[0m[2: nCell 25] [1: nNode 30] [2: nNode 30] [1: nBnd 10] [2: nBnd 10] UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 25] 
-[0: nNode 36] 
-[0: nBnd 10] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-UnstructuredMesh === InterpolateFace: total faces 220
-[0m[0m[3: nCell 25] [3: nNode 25] [3: nBnd 10] [0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131:
-[0;33mTEST CASE:  [0mUncommitted scopes discard copies and active reads block edit publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x0000613758ABD689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x0000613758ACA50D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x0000613758A2228C in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x0000733F0882A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases:  3 | [0m 1 passed[0m | [0;31m2 failed[0m | [0m0 skipped[0m
-[0;36m[doctest] [0massertions: 58 | [0m58 passed[0m | [0m0 failed[0m |
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131:
-[0;33mTEST CASE:  [0mUncommitted scopes discard copies and active reads block edit publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x000056381EC1F689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x000056381EC2C50D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x000056381EB8428C in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x0000788ECB42A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0m[0m[0;33m===============================================================================
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131:
-[0;33mTEST CASE:  [0mUncommitted scopes discard copies and active reads block edit publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x0000570A51579689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x0000570A5158650D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x0000570A514DE28C in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x0000751717E2A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;36m[doctest] [0mtest cases:  3 | [0m 1 passed[0m | [0;31m2 failed[0m | [0m0 skipped[0m
-[0;36m[doctest] [0massertions: 58 | [0m58 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mtest cases:  3 | [0m 1 passed[0m | [0;31m2 failed[0m | [0m0 skipped[0m
-[0;36m[doctest] [0massertions: 58 | [0m58 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131:
-[0;33mTEST CASE:  [0mUncommitted scopes discard copies and active reads block edit publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x00005F24CB762689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x00005F24CB76F50D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x00005F24CB6C728C in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x000075957782A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases:  3 | [0m 1 passed[0m | [0;31m2 failed[0m | [0m0 skipped[0m
-[0;36m[doctest] [0massertions: 58 | [0m58 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
---------------------------------------------------------------------------
-prterun detected that one or more processes exited with non-zero status,
-thus causing the job to be terminated. The first process to do so was:
-
-   Process name: [prterun-gpu704-829311@1,3]
-   Exit code:    1
---------------------------------------------------------------------------
-
-      Start 121: geom_mesh_edit_np8
-12/20 Test #121: geom_mesh_edit_np8 .................***Failed    0.84 sec
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-[0;36m[doctest] [0mdoctest version is "2.4.11"
-[0;36m[doctest] [0mrun with "--help" for options
-CGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.003587]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.002
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.002
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [12.5], min [12], max [13], ratio [0.9231] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 13] [1: nCell 13] [2: nCell 12] [3: nCell 13] [4: nCell 12] [5: nCell 12] [6: nCell 13] [7: nCell 12] 
-[0: nNode 26] [1: nNode 14] [2: nNode 22] [3: nNode 10] [4: nNode 22] [5: nNode 8] [6: nNode 10] [7: nNode 9] 
-[0: nBnd 4] [1: nBnd 8] [2: nBnd 2] [3: nBnd 8] [4: nBnd 8] [5: nBnd 3] [6: nBnd 1] [7: nBnd 6] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-UnstructuredMesh === InterpolateFace: total faces 220
-[0mCGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.01503]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.004
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.004
-     Uncoarsening: 		   0.000
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [12.5], min [12], max [13], ratio [0.9231] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 13] [0m[1: nCell 13] [0m[2: nCell 12] [0m[3: nCell 13] [0m[4: nCell 12] [0m[5: nCell 12] [0m[6: nCell 13] [0m[7: nCell 12] [7: nNode 9] [7: nBnd 6] 
-[0: nNode 26] 
-[0: nBnd 4] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-[1: nNode 14] [1: nBnd 8] [2: nNode 22] [2: nBnd 2] [3: nNode 10] [3: nBnd 8] [4: nNode 22] [4: nBnd 8] [5: nNode 8] [5: nBnd 3] [6: nNode 10] [6: nBnd 1] UnstructuredMesh === InterpolateFace: total faces 220
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48:
-[0;33mTEST CASE:  [0mStaged metadata and neighbor-order edits validate before publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x000056E7CD07E689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x000056E7CD08B50D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x000056E7CCFE61AF in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x000079E23042A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48:
-[0;33mTEST CASE:  [0mStaged metadata and neighbor-order edits validate before publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x00005BB429EDF689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x00005BB429EEC50D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x00005BB429E471AF in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x00007D938A02A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[0;33m===============================================================================
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48:
-[0;33mTEST CASE:  [0mStaged metadata and neighbor-order edits validate before publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x00005D067570E689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48:
-[0;33mTEST CASE:  [0mStaged metadata and neighbor-order edits validate before publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x00006363C381D689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x00006363C382A50D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x00005D067571B50D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x00005D06756761AF in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x00006363C37851AF in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x00007CF0CBC2A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-10# 0x00007A607822A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48:
-[0;33mTEST CASE:  [0mStaged metadata and neighbor-order edits validate before publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x0000587122C18689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x0000587122C2550D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x0000587122B801AF in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x0000702392A2A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48:
-[0;33mTEST CASE:  [0mStaged metadata and neighbor-order edits validate before publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x000063B0FBCD5689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x000063B0FBCE250D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x000063B0FBC3D1AF in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x000070800AC2A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0m[0mCGNS === N bases: 1
-CGNS === Zone 1 Coords Reading Done
-CGNS === Zone 1 Elems Reading Done
-CGNS === Zone 1 BCs Reading Done
-CGNS === (Union-Find) Assembled Zones have NNodes 121
-CGNS === Vol Elem [  100  ],  Bnd Elem [  40  ]
-CGNS === Serial Read Done
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Using OMP [2]
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 1
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Doing  BuildCell2Cell Part 2
-[>         ]   1% [>         ]   4% [>         ]   7% [=>        ]  10% [=>        ]  13% [=>        ]  16% [=>        ]  19% [==>       ]  22% [==>       ]  25% [==>       ]  28% [===>      ]  31% [===>      ]  34% [===>      ]  37% [====>     ]  40% [====>     ]  43% [====>     ]  46% [====>     ]  49% [=====>    ]  52% [=====>    ]  55% [=====>    ]  57% [======>   ]  61% [======>   ]  64% [======>   ]  67% [=======>  ]  70% [=======>  ]  73% [=======>  ]  76% [=======>  ]  79% [========> ]  82% [========> ]  85% [========> ]  88% [=========>]  91% [=========>]  94% [=========>]  97% [==========] 100% 
-UnstructuredMeshSerialRW === Done  BuildCell2Cell time [0.003458]
-UnstructuredMeshSerialRW === Doing  MeshPartitionCell2Cell
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48:
-[0;33mTEST CASE:  [0mStaged metadata and neighbor-order edits validate before publication
-
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48:
-[0;33mTEST CASE:  [0mStaged metadata and neighbor-order edits validate before publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x00005DA78FA7D689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x00005DA78FA8A50D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x00005DA78F9E51AF in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x00007CA02B62A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:48: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x00005BEB5216A689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x00005BEB5217750D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x00005BEB520D21AF in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x00007362F122A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-
-Timing Information -------------------------------------------------
- Multilevel: 		   0.004
-     Coarsening: 		   0.000
-            Matching: 			   0.000
-            Contract: 			   0.000
-     Initial Partition: 	   0.003
-     Uncoarsening: 		   0.001
-          Refinement: 			   0.000
-          Projection: 			   0.000
-     Splitting: 		   0.000
-********************************************************************
-UnstructuredMeshSerialRW === Done  MeshPartitionCell2Cell ave [12.5], min [12], max [13], ratio [0.9231] 
-UnstructuredMeshSerialRW === Doing  PartitionReorderToMeshCell2Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell ConvertAdjSerial2Global
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Coord
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Cell
-UnstructuredMeshSerialRW === Doing PartitionReorderToMeshCell2Cell Trasfer Data Bnd
-[0: nCell 13] [0m[0m[1: nCell 13] [0m[0m[2: nCell 12] [0m[0m[3: nCell 13] [0m[0m[4: nCell 12] [0m[0m[5: nCell 12] [0m[0m[6: nCell 13] [0m[0m[7: nCell 12] 
-[0: nNode 26] 
-[0: nBnd 4] 
-UnstructuredMeshSerialRW === Done  PartitionReorderToMeshCell2Cell
-UnstructuredMesh === InterpolateFace: total faces 220
-[1: nNode 14] [1: nBnd 8] [2: nNode 22] [2: nBnd 2] [3: nNode 10] [3: nBnd 8] [4: nNode 22] [4: nBnd 8] [5: nNode 8] [5: nBnd 3] [6: nNode 10] [6: nBnd 1] [7: nNode 9] [7: nBnd 6] [0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131:
-[0;33mTEST CASE:  [0mUncommitted scopes discard copies and active reads block edit publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x00006363C381D689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x00006363C382A50D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x00006363C378228C in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x00007CF0CBC2A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0m[0m[0;33m===============================================================================
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131:
-[0;33mTEST CASE:  [0mUncommitted scopes discard copies and active reads block edit publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x00005BB429EDF689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x00005BB429EEC50D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x00005BB429E4428C in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x00007D938A02A1CA in /lib/x86_64-linux-gnu/libc.so.6
-[0;36m[doctest] [0mtest cases:  3 | [0m 1 passed[0m | [0;31m2 failed[0m | [0m0 skipped[0m
-[0;36m[doctest] [0massertions: 58 | [0m58 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131:
-[0;33mTEST CASE:  [0mUncommitted scopes discard copies and active reads block edit publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x0000587122C18689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x0000587122C2550D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x0000587122B7D28C in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x0000702392A2A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131:
-[0;33mTEST CASE:  [0mUncommitted scopes discard copies and active reads block edit publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x000056E7CD07E689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x000056E7CD08B50D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x000056E7CCFE328C in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x000079E23042A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0m[0m[0;33m===============================================================================
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0m[0m[0;33m===============================================================================
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases:  3 | [0m 1 passed[0m | [0;31m2 failed[0m | [0m0 skipped[0m
-[0;36m[doctest] [0massertions: 47 | [0m47 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;36m[doctest] [0mtest cases:  3 | [0m 1 passed[0m | [0;31m2 failed[0m | [0m0 skipped[0m
-[0;36m[doctest] [0massertions: 45 | [0m45 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131:
-[0;33mTEST CASE:  [0mUncommitted scopes discard copies and active reads block edit publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x00005BEB5216A689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x00005BEB5217750D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x00005BEB520CF28C in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x00007362F122A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases:  3 | [0m 1 passed[0m | [0;31m2 failed[0m | [0m0 skipped[0m
-[0;36m[doctest] [0massertions: 61 | [0m61 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;36m[doctest] [0mtest cases:  3 | [0m 1 passed[0m | [0;31m2 failed[0m | [0m0 skipped[0m
-[0;36m[doctest] [0massertions: 46 | [0m46 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131:
-[0;33mTEST CASE:  [0mUncommitted scopes discard copies and active reads block edit publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x00005DA78FA7D689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x00005DA78FA8A50D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x00005DA78F9E228C in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x00007CA02B62A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases:  3 | [0m 1 passed[0m | [0;31m2 failed[0m | [0m0 skipped[0m
-[0;36m[doctest] [0massertions: 57 | [0m57 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131:
-[0;33mTEST CASE:  [0mUncommitted scopes discard copies and active reads block edit publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x000063B0FBCD5689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x000063B0FBCE250D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x000063B0FBC3A28C in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x000070800AC2A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases:  3 | [0m 1 passed[0m | [0;31m2 failed[0m | [0m0 skipped[0m
-[0;36m[doctest] [0massertions: 55 | [0m55 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
-[0;33m===============================================================================
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131:
-[0;33mTEST CASE:  [0mUncommitted scopes discard copies and active reads block edit publication
-
-[0;37m/home/harry/projects/DNDSR-array-geom/test/cpp/Geom/test_MeshEdit.cpp:131: [0;31mERROR: [0;31mtest case THREW exception: [0;36m 0# DNDS::getTraceString[abi:cxx11]() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 1# void DNDS::assert_false_info_throw<std::runtime_error>(char const*, char const*, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 2# 0x00005D067570E689 in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 3# DNDS::Geom::MeshReadAccess::MeshReadAccess(DNDS::Geom::UnstructuredMesh&, DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 4# DNDS::Geom::UnstructuredMesh::AcquireRead(DNDS::Geom::MeshReadRequirements, DNDS::Runtime::ExecutionContext) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 5# 0x00005D067571B50D in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 6# DNDS::Geom::MeshEdit::Begin(std::shared_ptr<DNDS::Geom::UnstructuredMesh>, int) in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 7# 0x00005D067567328C in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 8# doctest::Context::run() in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
- 9# main in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-10# 0x00007A607822A1CA in /lib/x86_64-linux-gnu/libc.so.6
-11# __libc_start_main in /lib/x86_64-linux-gnu/libc.so.6
-12# _start in /home/harry/projects/DNDSR-array-geom/build-refactor/test/cpp/geom_test_mesh_edit
-
-[91m DNDS_assertion failed[39m: "pair.isLocal()"  at [  /home/harry/projects/DNDSR-array-geom/src/Geom/Mesh/Mesh_Access.cpp:91  ]
-mesh query requires a published local adjacency
-
-
-[0m[0m[0;33m===============================================================================
-[0;36m[doctest] [0mtest cases:  3 | [0m 1 passed[0m | [0;31m2 failed[0m | [0m0 skipped[0m
-[0;36m[doctest] [0massertions: 44 | [0m44 passed[0m | [0m0 failed[0m |
-[0;36m[doctest] [0mStatus: [0;31mFAILURE![0m
---------------------------------------------------------------------------
-prterun detected that one or more processes exited with non-zero status,
-thus causing the job to be terminated. The first process to do so was:
-
-   Process name: [prterun-gpu704-829335@1,7]
-   Exit code:    1
---------------------------------------------------------------------------
-
-      Start 122: geom_mesh_transition_np1
-13/20 Test #122: geom_mesh_transition_np1 ...........   Passed   16.23 sec
-      Start 123: geom_mesh_transition_np2
-14/20 Test #123: geom_mesh_transition_np2 ...........   Passed   11.48 sec
-      Start 124: geom_mesh_transition_np4
-15/20 Test #124: geom_mesh_transition_np4 ...........   Passed    7.70 sec
-      Start 125: geom_mesh_transition_np8
-16/20 Test #125: geom_mesh_transition_np8 ...........   Passed    7.06 sec
-      Start 134: geom_mesh_current_output_np1
-17/20 Test #134: geom_mesh_current_output_np1 .......   Passed    0.45 sec
-      Start 135: geom_mesh_current_output_np2
-18/20 Test #135: geom_mesh_current_output_np2 .......   Passed    0.46 sec
-      Start 136: geom_mesh_current_output_np4
-19/20 Test #136: geom_mesh_current_output_np4 .......   Passed    0.49 sec
-      Start 137: geom_mesh_current_output_np8
-20/20 Test #137: geom_mesh_current_output_np8 .......   Passed    0.58 sec
-
-80% tests passed, 4 tests failed out of 20
-
-Total Test time (real) =  52.68 sec
-
-The following tests FAILED:
-	118 - geom_mesh_edit_np1 (Failed)
-	119 - geom_mesh_edit_np2 (Failed)
-	120 - geom_mesh_edit_np4 (Failed)
-	121 - geom_mesh_edit_np8 (Failed)
-Errors while running CTest
