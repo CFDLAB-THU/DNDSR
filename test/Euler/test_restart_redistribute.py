@@ -372,6 +372,7 @@ def test_restart_redistribute_same_np(work_dir, small_restart):
     print("=== PASS ===")
 
 
+@pytest.mark.level2
 def test_restart_redistribute_different_np(work_dir, small_restart):
     """Write restart at np=2, read at np=3 (cross-np redistribution)."""
     restart_h5, reference = small_restart

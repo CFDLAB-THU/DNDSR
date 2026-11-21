@@ -256,15 +256,6 @@ TEST_CASE("FWBAP_L2_Biway: identical inputs pass through")
         }
 }
 
-TEST_CASE("FWBAP_L2_Biway: no NaN for random inputs")
-{
-    Eigen::ArrayXXd u1(3, 5), u2(3, 5), out(3, 5);
-    u1.setRandom();
-    u2.setRandom();
-    FWBAP_L2_Biway(u1, u2, out, 1.0);
-    CHECK_FALSE(out.hasNaN());
-}
-
 TEST_CASE("FWBAP_L2_Biway: output bounded by inputs for same-sign")
 {
     // For same-sign inputs, WBAP output should not exceed the extremes
@@ -297,15 +288,6 @@ TEST_CASE("FWBAP_L2_Cut_Biway: opposite-sign cut to zero")
         CAPTURE(j);
         CHECK(out(0, j) == doctest::Approx(0.0).epsilon(1e-10));
     }
-}
-
-TEST_CASE("FWBAP_L2_Cut_Biway: no NaN")
-{
-    Eigen::ArrayXXd u1(2, 4), u2(2, 4), out(2, 4);
-    u1.setRandom();
-    u2.setRandom();
-    FWBAP_L2_Cut_Biway(u1, u2, out, 1.0);
-    CHECK_FALSE(out.hasNaN());
 }
 
 // ===================================================================

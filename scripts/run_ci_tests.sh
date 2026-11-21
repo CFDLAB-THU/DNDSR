@@ -41,40 +41,17 @@ export PYTHONPATH="$PWD/python:$DNDS_BUILD_DIR/test/cpp:$python_site"
 export LD_LIBRARY_PATH="$PWD/python/DNDSR/_lib/dndsr_external${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export OPENBLAS_NUM_THREADS=1
 
-test -x "$DNDS_BUILD_DIR/app/euler.exe"
-"$python_bin" -S scripts/verify_ci_python.py
-"$python_bin" -S scripts/verify_ci_python.py --h5py-first
-"$mpi_launcher" -n 2 "$python_bin" -S scripts/verify_ci_python.py --parallel
-
-critical_runtime=(
-    test/DNDS/test_runtime_array_bridge.py::test_one_pod_schema_spans_native_python_mpi_and_direct_io
-    test/DNDS/test_runtime_transient.py::test_shared_context_known_route_and_tag_reuse
-)
-
-critical_mesh=(
-    test/Geom/test_native_mesh_helpers.py::test_default_native_archive_file_faults_reject_collectively_and_retry
-    test/CFV/test_fv_facility.py::test_reconstruction_shared_buffers_explicit_halo_and_point_sampling
-)
-pytest_args=(--with-mpi --timeout=600 --strict-markers -ra)
-if [[ "$level" == 0 ]]; then
-    "$python_bin" -S -m pytest "${pytest_args[@]}" \
-        "${critical_runtime[@]}" "${critical_mesh[@]}" \
-        test/DNDS/test_view_ownership.py::test_flat_view_retains_allocation_not_array \
-        test/EulerP/test_basic_eulerP.py \
-        test/Euler/test_restart_redistribute.py::test_restart_redistribute_same_np \
-        test/Euler/test_restart_redistribute.py::test_restart_redistribute_different_np
-    "$mpi_launcher" -n 2 "$python_bin" -S -m pytest "${pytest_args[@]}" "${critical_runtime[@]}" "${critical_mesh[@]}" test/Cauchy/test_operators.py
-else
-    level_filter=()
-    if [[ "$level" == 1 ]]; then
-        level_filter=(-m 'not level2')
-    fi
-    "$python_bin" -S -m pytest "${pytest_args[@]}" "${level_filter[@]}" test/
-    rank_wrapper=()
-    if grep -Eiq '^DNDS_USE_CUDA:BOOL=(ON|1|TRUE|YES|Y)$' "$cache"; then
-        rank_wrapper=("$python_bin" test/demos/one_rank_per_gpu.py)
-    fi
-    "$mpi_launcher" -n 2 "${rank_wrapper[@]}" "$python_bin" -S -m pytest "${pytest_args[@]}" "${level_filter[@]}" \
-        test/DNDS/test_runtime_*.py test/demos/test_runtime_solver.py \
-        "${critical_mesh[@]}" test/Cauchy/test_operators.py
+if ((level >= 1)); then
+    test -x "$DNDS_BUILD_DIR/app/euler.exe"
 fi
+"$python_bin" -S scripts/verify_ci_python.py --test-level "$level"
+"$python_bin" -S scripts/verify_ci_python.py --test-level "$level" --h5py-first
+"$mpi_launcher" -n 2 "$python_bin" -S scripts/verify_ci_python.py --test-level "$level" --parallel
+
+pytest_args=(--with-mpi --timeout=600 --strict-markers -ra --dnds-test-level="$level")
+"$python_bin" -S -m pytest "${pytest_args[@]}" --dnds-ci-lane=serial test/
+rank_wrapper=()
+if grep -Eiq '^DNDS_USE_CUDA:BOOL=(ON|1|TRUE|YES|Y)$' "$cache"; then
+    rank_wrapper=("$python_bin" test/demos/one_rank_per_gpu.py)
+fi
+"$mpi_launcher" -n 2 "${rank_wrapper[@]}" "$python_bin" -S -m pytest "${pytest_args[@]}" --dnds-ci-lane=mpi test/

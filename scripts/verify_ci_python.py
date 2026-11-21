@@ -18,18 +18,23 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--h5py-first", action="store_true")
     parser.add_argument("--parallel", action="store_true")
+    parser.add_argument("--test-level", type=int, choices=(0, 1, 2), default=2)
     args = parser.parse_args()
 
     if args.h5py_first:
         import h5py
-    from DNDSR import CFV, Cauchy, DNDS, EulerP, Geom
+    from DNDSR import CFV, DNDS, EulerP, Geom
+    modules = [CFV, DNDS, EulerP, Geom]
+    if args.test_level >= 1:
+        from DNDSR import Cauchy
+        modules.append(Cauchy)
     import runtime_array_bridge_test
     if not args.h5py_first:
         import h5py
     from mpi4py import MPI
 
     python_root = (Path.cwd() / "python").resolve()
-    for module in (CFV, Cauchy, DNDS, EulerP, Geom):
+    for module in modules:
         assert Path(module.__file__).resolve().is_relative_to(python_root), module.__file__
     bridge_root = Path(os.environ["DNDS_BUILD_DIR"]).resolve() / "test/cpp"
     assert Path(runtime_array_bridge_test.__file__).resolve().is_relative_to(bridge_root)

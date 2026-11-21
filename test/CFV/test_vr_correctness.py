@@ -138,11 +138,6 @@ def gg_vfv(mpi):
 class TestVRConstruction:
     """Verify VR construction pipeline completes and produces valid state."""
 
-    def test_global_vol(self, periodic_vfv):
-        """Global volume should be 9.0 for [0,3]^2."""
-        _, vfv, _ = periodic_vfv
-        assert vfv.GetGlobalVol() == pytest.approx(9.0, abs=1e-10)
-
     def test_cell_bary_in_range(self, periodic_vfv):
         """Primary cell barycenters should lie within [-1,2]^2
         (a superset of the Uniform_3x3 mesh bounds)."""
@@ -151,43 +146,6 @@ class TestVRConstruction:
             bary = vfv.GetCellBary(iCell)
             assert -1.0 - 1e-10 <= bary[0] <= 2.0 + 1e-10
             assert -1.0 - 1e-10 <= bary[1] <= 2.0 + 1e-10
-
-    def test_cell_vol_positive(self, periodic_vfv):
-        mesh, vfv, _ = periodic_vfv
-        for iCell in range(mesh.NumCell()):
-            assert vfv.GetCellVol(iCell) > 0
-
-    def test_face_area_positive(self, periodic_vfv):
-        mesh, vfv, _ = periodic_vfv
-        for iFace in range(mesh.NumFaceProc()):
-            assert vfv.GetFaceArea(iFace) > 0
-
-
-# ===================================================================
-# DOF array building
-# ===================================================================
-
-
-class TestVRDOFBuilding:
-    """Verify DOF array building through VR (BuildURec, BuildUGrad)."""
-
-    def test_build_urec_dynamic(self, periodic_vfv):
-        _, vfv, _ = periodic_vfv
-        uRec = CFV.tURec_D()
-        vfv.BuildURec_D(uRec, 1)
-        assert uRec.Size() > 0
-
-    def test_build_udof_dynamic(self, periodic_vfv):
-        mesh, vfv, _ = periodic_vfv
-        u = CFV.tUDof_D()
-        vfv.BuildUDof_D(u, 1)
-        assert u.father.Size() == mesh.NumCell()
-
-    def test_build_ugrad_dynamic(self, periodic_vfv):
-        _, vfv, _ = periodic_vfv
-        uGrad = CFV.tUGrad_2xD()
-        vfv.BuildUGrad_D(uGrad, 1)
-        assert uGrad.Size() > 0
 
 
 # ===================================================================

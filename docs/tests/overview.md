@@ -9,6 +9,8 @@ tests and [pytest](https://docs.pytest.org/) (with
 MPI-aware C++ tests are registered with CTest at multiple process counts
 to verify parallel correctness.
 
+Browse the [C++ catalog](catalog-cpp.md) by executable and source case, or the [Python catalog](catalog-python.md) by module, parameterization and CI rank count.
+
 ## Module Test Pages
 
 | Module | Page | Aggregate target | Python suite |
@@ -37,10 +39,10 @@ cmake --build build -t all_unit_tests -j8
 ctest --test-dir build -L cpp --output-on-failure
 
 # 4. Run Python tests (requires pybind11 shared libraries)
-cmake --build build -t dnds_pybind11 geom_pybind11 cfv_pybind11 eulerP_pybind11 -j32
+cmake --build build --target ci_python_level2 -j32
 cmake --install build --component py
 source venv/bin/activate
-PYTHONPATH=python pytest test/ -v
+DNDS_BUILD_DIR="$PWD/build" PYTHONPATH=python:build/test/cpp python -m pytest test/ --with-mpi -v
 ```
 
 ## Aggregate CMake Targets
@@ -94,15 +96,28 @@ critical gate, `/ci-run 1` for extended coverage, or `/ci-run full` for all
 levels. `/ci-run-self-hosted` accepts the same suffixes. The manual workflow
 uses the numeric level.
 
-From a configured CPU test build, use `ci_critical_tests` and
-`ci_python_tests` to build Level 0. Build `all_unit_tests` and
-`ci_python_tests` for either higher level. Install the `py` component and
-run `bash scripts/run_ci_tests.sh 0 <build> <venv>/bin/python` from this
-checkout. Use the pinned CI meshes when validating a clean checkout.
-The C++ registrations carry their minimum level as a CTest label.
-`ci_critical_tests` builds the executables selected by the `level0` label.
-Some np4 registrations split a named critical case from the rest of the
-executable so the full run executes each case once.
+Set the highest tier when configuring a test build. CI uses the same target and level selector as a local build.
+
+```sh
+cmake -S . -B build -DDNDS_BUILD_TESTS=ON -DDNDS_TEST_LEVEL=0
+cmake --build build --target ci_tests -j8
+cmake --install build --component py
+bash scripts/run_ci_tests.sh 0 build venv/bin/python
+```
+
+| Minimum level | What enters at this level |
+|---|---|
+| 0 | One representative execution for Array and eager execution, distributed transfer, mesh/CGNS geometry, CFV gradient, FV physics and ODE arithmetic. CUDA builds add device execution and two-rank packing. Python checks view lifetime, native/Python HDF5 transfer and distributed CFV sampling. |
+| 1 | Routine per-module correctness, Cauchy Python operators, same-rank Euler restart, failure handling and standalone tooling. Selected four-rank runs exercise empty owners or changes in writer/reader membership. |
+| 2 | Larger meshes and numerical reference suites, complete method/backend qualification, additional MPI sizes, cross-partition Euler restart and optional Python interoperability. |
+
+Targets `ci_tests_level0`, `ci_tests_level1` and `ci_tests_level2` can be built in the same configured tree. Each includes the lower tiers and its Python dependencies. For C++ or Python dependencies alone use `ci_cpp_levelN` or `ci_python_levelN`. The four core extension modules are imported together by the package. Cauchy bindings and the Euler executable enter at level 1. Shared production dependencies still compile whenever a selected executable needs them.
+
+**Where to change a level.** Native minimum levels are assigned per registration in [DndsCITestLevels.cmake](../../cmake/DndsCITestLevels.cmake). The registration identifies the actual executable, including executables launched by a script. CTest uses its label and CMake builds that same executable. On the Python side [conftest.py](../../test/conftest.py) identifies the three smoke parameterizations and their lanes. Other tests default to level 1. Apply `@pytest.mark.level2` to a test or set `pytestmark = pytest.mark.level2` on a module for qualification.
+
+With the matching bindings installed and the source Python and build bridge directories on `PYTHONPATH`, use `python -m pytest test/ --with-mpi --dnds-test-level=1` for cumulative selection. Add `-m level1` for the exact level. CI also specifies `--dnds-ci-lane=serial` or `mpi` under the corresponding launcher. CTest's `pytest_levelN` entries run exact tiers in a single process. For the distributed lanes use the CI runner above.
+
+Regenerate both lists with the active Python environment and bridge on `PYTHONPATH` using `python scripts/test_catalog.py <test-build> [other-test-build ...]`. Supply CUDA and SYCL configurations to include both hardware catalogs.
 
 MPI-aware tests are registered at multiple process counts.  The CTest
 name encodes the count:
@@ -167,7 +182,7 @@ Before running Python tests, always rebuild and reinstall the pybind11
 shared libraries:
 
 ```sh
-cmake --build build -t dnds_pybind11 geom_pybind11 cfv_pybind11 eulerP_pybind11 -j32
+cmake --build build --target ci_python_level2 -j32
 cmake --install build --component py
 ```
 

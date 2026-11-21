@@ -1,5 +1,7 @@
 # Plan 53: focused test tiers and MPI ranks
 
+For the current cumulative CI levels, build targets and full catalogs, see the [test guide](../../tests/overview.md). The labels below document the original workload classifications.
+
 Tier labels select a routine correctness gate without removing any executable,
 case, assertion or MPI registration. Unfiltered CTest still runs all tiers.
 `ctest --test-dir build-audit -L routine --output-on-failure` selects routine

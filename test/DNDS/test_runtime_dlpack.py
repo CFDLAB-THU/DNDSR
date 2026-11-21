@@ -11,6 +11,9 @@ import pytest
 from DNDSR.DNDS import Runtime as R
 
 
+pytestmark = pytest.mark.level2
+
+
 @pytest.fixture
 def torch():
     if importlib.util.find_spec("torch") is None:

@@ -89,7 +89,6 @@ Weighted squared norms used internally by polynomial-aware limiters.
 | Test case | Description |
 |---|---|
 | `identical inputs pass through` | WBAP(u,u) = u for any u. |
-| `no NaN for random inputs` | Robustness: random arrays produce finite results. |
 | `output bounded by inputs for same-sign` | All-positive inputs yield non-negative output. |
 
 ### FWBAP_L2_Cut_Biway
@@ -97,7 +96,6 @@ Weighted squared norms used internally by polynomial-aware limiters.
 | Test case | Description |
 |---|---|
 | `opposite-sign cut to zero` | Opposite-sign pairs are hard-zeroed. |
-| `no NaN` | Random inputs produce finite results. |
 
 ### Multiway Limiters
 
@@ -254,57 +252,25 @@ All methods reproduce f=1 with error < 1e-12:
 ## FiniteVolume Python Tests (test_fv_correctness.py) {#cfv_test_fv_python}
 @see test_fv_correctness.py
 
-Pytest tests (16 tests) for the `CFV.FiniteVolume` Python bindings.
-Uses the Uniform_3x3_wall mesh (9 quads, [-1,2]^2) and IV10_10
-periodic mesh (100 quads, [0,10]^2).
-
-### Test Classes
-
-**TestCellVolumes** — Cell volumes are positive and match known values
-(1.0 per quad for 3x3 wall; sum = 100 for IV10 periodic).
-
-**TestGlobalVolume** — Global volume sums correctly: 9.0 for wall mesh,
-100.0 for periodic mesh.
-
-**TestFaceAreas** — Face areas are positive; internal face areas equal
-1.0 for a uniform grid.
-
-**TestCellBarycenters** — Barycenters lie within the domain; for the
-3x3 wall mesh, barycenters are at half-integer coordinates.
-
-**TestDOFArrays** — `BuildUDof` (dynamic and fixed-5), `BuildUGrad`
-allocate arrays with correct sizes; DOF write-then-read round-trips.
-
-**TestArrayBytes** — `DataSizeBytes()` returns a positive value for
-both DOF and adjacency arrays.
-
-**TestSmoothScale** — `GetSmoothScale` returns a sensible ratio
-(between 0.1 and 10 for uniform grids).
-
-**TestJacobiDet** — Cell and face Jacobian determinants are positive.
-
----
+The FV tests compare cell volumes, face areas and barycenters on nine-cell
+periodic and wall meshes. They also check Jacobian determinants, smoothing
+scales and the shape and contents of fields allocated through the Python API.
 
 ## VR and ModelEvaluator Python Tests (test_vr_correctness.py) {#cfv_test_vr_python}
 @see test_vr_correctness.py
 
-Pytest tests (16 tests) for `CFV.VariationalReconstruction` and
-`CFV.ModelEvaluator` through Python bindings.  Uses the Uniform_3x3
-periodic mesh (9 quads, [0,3]^2).
+The Python reconstruction tests use the nine-cell periodic Uniform_3x3 mesh.
 
 ### Test Classes
 
-**TestVRConstruction** — Global volume matches 9.0; barycenters lie in
-[0,3]^2; cell volumes and face areas are positive.
+**TestVRConstruction** checks the primary cell barycenters against the mesh bounds.
+The FV metric tests independently check cell volumes and face areas.
 
-**TestVRDOFBuilding** — `BuildURec`, `BuildUDof`, `BuildUGrad` produce
-arrays with correct shapes.
+**TestConstantExactness** allocates the mean and coefficient fields, reconstructs
+a uniform state and checks the coefficients against zero.
 
-**TestConstantExactness** — A constant field (u=1 everywhere) produces
-zero uRec coefficients after reconstruction.
-
-**TestLinearFieldReconstruction** — Linear field f(x)=x produces uRec
-coefficients with a dominant first component (approximating df/dx).
+**TestLinearFieldReconstruction** checks that a nonuniform mean produces nonzero
+coefficients after reconstruction.
 
 **TestModelEvaluatorRHS** — `EvaluateRHS` produces finite results; a
 non-uniform field gives nonzero RHS; a constant field gives near-zero RHS.

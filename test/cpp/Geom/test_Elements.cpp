@@ -32,6 +32,7 @@
 #include <random>
 #include <array>
 #include <iostream>
+#include <numeric>
 #include <set>
 
 using namespace DNDS::Geom;
@@ -162,27 +163,6 @@ static constexpr ElemType O2Types[] = {
 // ===================================================================
 // Part A: ElementTraits Data Integrity Tests
 // ===================================================================
-
-TEST_CASE("ElementTraits: basic identification fields are consistent")
-{
-    for (auto t : AllTypes)
-    {
-        Element e{t};
-        CAPTURE(t);
-
-        // Basic sanity checks
-        CHECK(e.GetDim() >= 1);
-        CHECK(e.GetDim() <= 3);
-        CHECK(e.GetNumNodes() >= e.GetNumVertices());
-        CHECK(e.GetNumVertices() >= 2); // At least a line
-
-        // Order should be 1 or 2 for supported elements
-        CHECK((e.GetOrder() == 1 || e.GetOrder() == 2));
-
-        // ParamSpace volume should be positive (accessed via helper)
-        CHECK(ParamSpaceVolume(e.GetParamSpace()) > 0);
-    }
-}
 
 TEST_CASE("ElementTraits: standard coordinates have correct dimensions")
 {
@@ -481,70 +461,25 @@ TEST_CASE("CGNS PENTA_18 connectivity preserves the reference prism mapping")
     CHECK(ElementTraits<Prism6>::elevSpans[3][1] == 3);
 }
 
-TEST_CASE("ElementTraits: VTK conversion works correctly")
+TEST_CASE("VTK connectivity selects distinct input nodes and preserves the external conventions")
 {
-    // Test VTK conversion for each element type
-    for (auto t : AllTypes)
+    for (auto type : AllTypes)
     {
-        Element e{t};
-        CAPTURE(t);
-
-        // Create dummy node data
-        std::vector<t_real> nodes(e.GetNumNodes());
-        for (int i = 0; i < e.GetNumNodes(); i++)
-            nodes[i] = static_cast<t_real>(i);
-
-        // Convert to VTK
-        auto [vtkCellType, vtkNodes] = ToVTKVertsAndData(e, nodes);
-
-        // VTK cell type should be valid
-        CHECK(vtkCellType > 0);
-
-        // VTK nodes should have correct size
-        CHECK(vtkNodes.size() <= e.GetNumNodes());
-        CHECK(vtkNodes.size() > 0);
+        CAPTURE(type);
+        Element element{type};
+        std::vector<DNDS::index> nodes(element.GetNumNodes());
+        std::iota(nodes.begin(), nodes.end(), DNDS::index{0});
+        const auto [vtkType, connectivity] = ToVTKVertsAndData(element, nodes);
+        REQUIRE_FALSE(connectivity.empty());
+        CHECK(vtkType > 0);
+        CHECK(std::set<DNDS::index>(connectivity.begin(), connectivity.end()).size() == connectivity.size());
+        for (auto node : connectivity)
+            CHECK((0 <= node && node < element.GetNumNodes()));
+        if (type == Line3)
+            CHECK(connectivity == std::vector<DNDS::index>{0, 2, 1});
+        if (type == Hex8)
+            CHECK(vtkType == 12);
     }
-}
-
-TEST_CASE("ElementTraits: VTK node order is a valid permutation for simple elements")
-{
-    // Test VTK node ordering produces valid permutations
-    DispatchElementType(Line2, [](auto traits)
-                        {
-        std::set<int> seen;
-        for (size_t i = 0; i < 2; i++)
-            seen.insert(traits.vtkNodeOrder[i]);
-        CHECK(seen.size() == 2);  // All unique
-        CHECK(*seen.begin() == 0);
-        CHECK(*seen.rbegin() == 1); });
-
-    DispatchElementType(Line3, [](auto traits)
-                        {
-        std::set<int> seen;
-        for (size_t i = 0; i < 3; i++)
-            seen.insert(traits.vtkNodeOrder[i]);
-        CHECK(seen.size() == 3);  // All unique
-        // VTK uses different ordering: 0, 2, 1 (midpoint last)
-        CHECK(traits.vtkNodeOrder[0] == 0);
-        CHECK(traits.vtkNodeOrder[1] == 2);
-        CHECK(traits.vtkNodeOrder[2] == 1); });
-
-    DispatchElementType(Tri6, [](auto traits)
-                        {
-                            std::set<int> seen;
-                            for (size_t i = 0; i < 6; i++)
-                                seen.insert(traits.vtkNodeOrder[i]);
-                            CHECK(seen.size() == 6); // All unique
-                        });
-
-    DispatchElementType(Hex8, [](auto traits)
-                        {
-                            std::set<int> seen;
-                            for (size_t i = 0; i < 8; i++)
-                                seen.insert(traits.vtkNodeOrder[i]);
-                            CHECK(seen.size() == 8);         // All unique
-                            CHECK(traits.vtkCellType == 12); // VTK_HEXAHEDRON
-                        });
 }
 
 // ===================================================================

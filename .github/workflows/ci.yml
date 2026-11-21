@@ -367,7 +367,7 @@ jobs:
           source venv/bin/activate
           CC=mpicc CXX=mpicxx cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DDNDS_BUILD_TESTS=ON -DDNDS_USE_CUDA=OFF -DDNDS_USE_CANTERA=ON \
+            -DDNDS_BUILD_TESTS=ON -DDNDS_TEST_LEVEL="$DNDS_CI_LEVEL" -DDNDS_USE_CUDA=OFF -DDNDS_USE_CANTERA=ON \
             -DDNDS_USE_OMP=ON -DDNDS_DIST_MT_USE_OMP=ON \
             -DPython_EXECUTABLE="$VIRTUAL_ENV/bin/python" \
             -DPython3_EXECUTABLE="$VIRTUAL_ENV/bin/python"
@@ -380,12 +380,7 @@ jobs:
       # ------------------------------------------------------------------
       - name: Build selected test and Python targets
         run: |
-          if [ "$DNDS_CI_LEVEL" = "0" ]; then
-            cpp_target=ci_critical_tests
-          else
-            cpp_target=all_unit_tests
-          fi
-          cmake --build build --target "$cpp_target" ci_python_tests --parallel "$(nproc)"
+          cmake --build build --target ci_tests --parallel "$(nproc)"
 
       - name: Show ccache stats
         if: needs.resolve.outputs.use-ccache == 'true'

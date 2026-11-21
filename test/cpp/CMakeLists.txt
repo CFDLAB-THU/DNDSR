@@ -75,6 +75,13 @@ find_path(DNDS_EXTERNAL_INCLUDE_DOCTEST doctest.h PATHS
     "${PROJECT_SOURCE_DIR}/external/doctest"
     NO_DEFAULT_PATH REQUIRED)
 
+# Keep the executable owner explicit even for tests launched by MPI or a script.
+function(dnds_register_test owner name)
+    cmake_parse_arguments(PARSE_ARGV 2 test "" "" "COMMAND")
+    add_test(NAME ${name} COMMAND ${test_COMMAND})
+    set_property(TEST ${name} PROPERTY DNDS_TEST_TARGET ${owner})
+endfunction()
+
 # --- helper: add a serial unit test executable (DNDS) ---
 function(dnds_add_unit_test TEST_NAME SRC_FILE LIBS)
     cmake_parse_arguments(PARSE_ARGV 3 test "TARGET_LINK_ONLY" "" "")
@@ -95,7 +102,7 @@ function(dnds_add_unit_test TEST_NAME SRC_FILE LIBS)
     set_target_properties(${TARGET_NAME} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
-    add_test(NAME dnds_${TEST_NAME} COMMAND ${TARGET_NAME})
+    dnds_register_test(${TARGET_NAME} dnds_${TEST_NAME} COMMAND ${TARGET_NAME})
     _dnds_maybe_set_timeout(dnds_${TEST_NAME} ${DNDS_TEST_TIMEOUT})
     set_tests_properties(dnds_${TEST_NAME} PROPERTIES
         ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
@@ -104,7 +111,7 @@ endfunction()
 # --- helper: add an MPI unit test executable (DNDS) ---
 # MPI tests run all TEST_CASEs together per NP value (avoids mpirun overhead per test case).
 function(dnds_add_mpi_test TEST_NAME SRC_FILE LIBS)
-    cmake_parse_arguments(PARSE_ARGV 3 _test "LOCAL_CASES_ONCE" "" "CRITICAL_NP4")
+    cmake_parse_arguments(PARSE_ARGV 3 _test "LOCAL_CASES_ONCE" "" "")
     set(TARGET_NAME "dnds_test_${TEST_NAME}")
     add_executable(${TARGET_NAME} ${SRC_FILE})
     set_property(GLOBAL APPEND PROPERTY DNDS_CPP_TEST_TARGETS ${TARGET_NAME})
@@ -134,20 +141,7 @@ function(dnds_add_mpi_test TEST_NAME SRC_FILE LIBS)
             set(_case_filter --test-suite-exclude=rank-local)
         endif()
         _dnds_np_timeout(${NP} _TIMEOUT)
-        if(NP EQUAL 4 AND _test_CRITICAL_NP4)
-            list(JOIN _test_CRITICAL_NP4 "," _critical_cases)
-            set(_critical_name dnds_${TEST_NAME}_np4_critical)
-            add_test(NAME ${_critical_name}
-                COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${NP}
-                        ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS}
-                        "--test-case=${_critical_cases}")
-            _dnds_maybe_set_timeout(${_critical_name} ${_TIMEOUT})
-            set_tests_properties(${_critical_name} PROPERTIES PROCESSORS 4
-                ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}" LABELS "mpi-high")
-            set_property(GLOBAL APPEND PROPERTY DNDS_CRITICAL_MPI_TESTS "${_critical_name}:${TARGET_NAME}")
-            list(APPEND _case_filter "--test-case-exclude=${_critical_cases}")
-        endif()
-        add_test(NAME dnds_${TEST_NAME}_np${NP}
+        dnds_register_test(${TARGET_NAME} dnds_${TEST_NAME}_np${NP}
             COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${NP}
                     ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS} ${_case_filter})
         _dnds_maybe_set_timeout(dnds_${TEST_NAME}_np${NP} ${_TIMEOUT})
@@ -173,7 +167,7 @@ function(geom_add_unit_test TEST_NAME SRC_FILE LIBS)
     set_target_properties(${TARGET_NAME} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
-    add_test(NAME geom_${TEST_NAME} COMMAND ${TARGET_NAME})
+    dnds_register_test(${TARGET_NAME} geom_${TEST_NAME} COMMAND ${TARGET_NAME})
     _dnds_maybe_set_timeout(geom_${TEST_NAME} ${DNDS_TEST_TIMEOUT})
     set_tests_properties(geom_${TEST_NAME} PROPERTIES
         ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
@@ -198,7 +192,7 @@ function(geom_add_mpi_test TEST_NAME SRC_FILE LIBS)
         EXCLUDE_FROM_ALL ON)
     foreach(NP ${DNDS_TEST_NP_LIST})
         _dnds_np_timeout(${NP} _TIMEOUT)
-        add_test(NAME geom_${TEST_NAME}_np${NP}
+        dnds_register_test(${TARGET_NAME} geom_${TEST_NAME}_np${NP}
             COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${NP}
                     ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
         _dnds_maybe_set_timeout(geom_${TEST_NAME}_np${NP} ${_TIMEOUT})
@@ -262,8 +256,7 @@ dnds_add_mpi_test(cauchy_boundary_inputs "Cauchy/test_BoundaryInputs.cpp" "cauch
 dnds_add_mpi_test(cauchy_wall_distance "Cauchy/test_WallDistanceSamples.cpp" "cauchy;cfv;geom;dnds")
 dnds_add_mpi_test(cauchy_rans_fv "Cauchy/test_RANSFiniteVolume.cpp" "cauchy;physics;cfv;geom;dnds")
 dnds_add_mpi_test(cauchy_multidomain_mesh "Cauchy/test_MultidomainMesh.cpp" "cauchy;cfv;geom;dnds")
-dnds_add_mpi_test(cauchy_multidomain "Cauchy/test_Multidomain.cpp" "cauchy;cfv;geom;dnds"
-    CRITICAL_NP4 "Multi-domain BDF2 restart reserves every domain and redistributes by persistent IDs")
+dnds_add_mpi_test(cauchy_multidomain "Cauchy/test_Multidomain.cpp" "cauchy;cfv;geom;dnds")
 # Fixture-only exact predicates use CGAL's header-only Boost backend. Disable
 # automatic GMP selection too: the CORE setting alone leaves that enabled when
 # GMP/MPFR headers happen to exist, introducing an undeclared link dependency.
@@ -292,14 +285,14 @@ dnds_add_mpi_test(cauchy_foundation "Cauchy/test_Foundation.cpp" "cauchy;cfv;geo
 dnds_add_mpi_test(cauchy_interface_iteration "Cauchy/test_InterfaceIteration.cpp" "cauchy;cfv;geom;dnds")
 dnds_add_mpi_test(cauchy_linear "Cauchy/test_LinearProblem.cpp" "cauchy;cfv;geom;dnds")
 if(DNDS_USE_OMP AND DNDS_DIST_MT_USE_OMP)
-    add_test(NAME dnds_cauchy_sgs_subpartitions_omp_np2
+    dnds_register_test(dnds_test_cauchy_linear dnds_cauchy_sgs_subpartitions_omp_np2
         COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
             $<TARGET_FILE:dnds_test_cauchy_linear> "--test-case=SGS mesh subpartitions*" ${MPIEXEC_POSTFLAGS})
     set_tests_properties(dnds_cauchy_sgs_subpartitions_omp_np2 PROPERTIES
         PROCESSORS 4 TIMEOUT 120 ENVIRONMENT "OMP_NUM_THREADS=2;DNDS_DIST_OMP_NUM_THREADS=2")
 endif()
 dnds_add_mpi_test(cauchy_linear_solver "Cauchy/test_LinearSolver.cpp" "cauchy;cfv;geom;dnds")
-add_test(NAME dnds_cauchy_linear_solver_abort_np2
+dnds_register_test(dnds_test_cauchy_linear_solver dnds_cauchy_linear_solver_abort_np2
     COMMAND ${CMAKE_COMMAND}
         "-DTEST_COMMAND=${MPIEXEC_EXECUTABLE};${MPIEXEC_NUMPROC_FLAG};2;${MPIEXEC_PREFLAGS};$<TARGET_FILE:dnds_test_cauchy_linear_solver>;--test-case=Fixed-count final finite check*;${MPIEXEC_POSTFLAGS}"
         "-DEXPECTED_DIAGNOSTIC=nonfinite fixed-count linear correction"
@@ -315,7 +308,7 @@ set_target_properties(dnds_test_distributed_failure PROPERTIES EXCLUDE_FROM_ALL 
 foreach(NP ${DNDS_TEST_NP_LIST})
     if(NP GREATER 1)
         foreach(MODE factory transfer reducer-completion solver-checked-preflight solver-unchecked-preflight solver-worker)
-            add_test(NAME dnds_distributed_failure_${MODE}_np${NP}
+            dnds_register_test(dnds_test_distributed_failure dnds_distributed_failure_${MODE}_np${NP}
                 COMMAND ${CMAKE_COMMAND} "-DMPIEXEC=${MPIEXEC_EXECUTABLE}" "-DNP_FLAG=${MPIEXEC_NUMPROC_FLAG}"
                     "-DNP=${NP}" "-DMPI_FLAGS=${MPIEXEC_PREFLAGS}" "-DFIXTURE=$<TARGET_FILE:dnds_test_distributed_failure>"
                     "-DMODE=${MODE}" -P ${CMAKE_CURRENT_SOURCE_DIR}/Cauchy/ExpectDistributedFailure.cmake)
@@ -325,8 +318,7 @@ foreach(NP ${DNDS_TEST_NP_LIST})
     endif()
 endforeach()
 dnds_add_mpi_test(cauchy_implicit_domain "Cauchy/test_ImplicitDomain.cpp" "cauchy;cfv;geom;dnds")
-dnds_add_mpi_test(cauchy_checkpoint "Cauchy/test_Checkpoint.cpp" "cauchy;cfv;geom;dnds"
-    CRITICAL_NP4 "Checkpoint changes MPI partition and polynomial degree using persistent cell IDs with cold reconstruction")
+dnds_add_mpi_test(cauchy_checkpoint "Cauchy/test_Checkpoint.cpp" "cauchy;cfv;geom;dnds")
 if(DNDS_USE_CANTERA)
     foreach(NP ${DNDS_TEST_NP_LIST})
         set_property(TEST dnds_cauchy_checkpoint_np${NP} APPEND PROPERTY ENVIRONMENT
@@ -383,7 +375,7 @@ add_custom_target(cauchy_unit_tests)
 if(Python_EXECUTABLE)
     add_dependencies(cauchy_unit_tests cauchy_solver)
     foreach(NP 1 2)
-        add_test(NAME cauchy_frontend_np${NP}
+        dnds_register_test(cauchy_solver cauchy_frontend_np${NP}
             COMMAND ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/Cauchy/frontend_smoke.py
                 --exe $<TARGET_FILE:cauchy_solver> --source ${PROJECT_SOURCE_DIR}
                 --mpi ${MPIEXEC_EXECUTABLE} --np ${NP})
@@ -429,15 +421,15 @@ if(DNDS_USE_CUDA)
     add_executable(cfv_test_distributed_interface_sampling_cuda EXCLUDE_FROM_ALL CFV/test_DistributedInterfaceSamplingCUDA.cu)
     target_include_directories(cfv_test_distributed_interface_sampling_cuda PRIVATE ${DNDS_EXTERNAL_INCLUDE_DOCTEST} ${DNDS_EXTERNAL_INCLUDES} ${DNDS_INCLUDES})
     target_link_libraries(cfv_test_distributed_interface_sampling_cuda PRIVATE cfv geom dnds ${DNDS_EXTERNAL_LIBS})
-    add_test(NAME cfv_distributed_interface_sampling_cuda_np1 COMMAND $<TARGET_FILE:cfv_test_distributed_interface_sampling_cuda>)
-    add_test(NAME cfv_distributed_interface_sampling_cuda_np2 COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
+    dnds_register_test(cfv_test_distributed_interface_sampling_cuda cfv_distributed_interface_sampling_cuda_np1 COMMAND $<TARGET_FILE:cfv_test_distributed_interface_sampling_cuda>)
+    dnds_register_test(cfv_test_distributed_interface_sampling_cuda cfv_distributed_interface_sampling_cuda_np2 COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
         ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/demos/one_rank_per_gpu.py $<TARGET_FILE:cfv_test_distributed_interface_sampling_cuda> ${MPIEXEC_POSTFLAGS})
     set_tests_properties(cfv_distributed_interface_sampling_cuda_np1 cfv_distributed_interface_sampling_cuda_np2 PROPERTIES TIMEOUT 180 ENVIRONMENT "OMP_NUM_THREADS=1")
     add_executable(cauchy_test_interface_cuda EXCLUDE_FROM_ALL Cauchy/test_InterfaceCUDA.cu)
     target_include_directories(cauchy_test_interface_cuda PRIVATE ${DNDS_EXTERNAL_INCLUDE_DOCTEST} ${DNDS_EXTERNAL_INCLUDES} ${DNDS_INCLUDES})
     target_link_libraries(cauchy_test_interface_cuda PRIVATE cauchy physics cfv geom dnds ${DNDS_EXTERNAL_LIBS})
-    add_test(NAME cauchy_interface_cuda_np1 COMMAND $<TARGET_FILE:cauchy_test_interface_cuda>)
-    add_test(NAME cauchy_interface_cuda_np2 COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
+    dnds_register_test(cauchy_test_interface_cuda cauchy_interface_cuda_np1 COMMAND $<TARGET_FILE:cauchy_test_interface_cuda>)
+    dnds_register_test(cauchy_test_interface_cuda cauchy_interface_cuda_np2 COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
         ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/demos/one_rank_per_gpu.py $<TARGET_FILE:cauchy_test_interface_cuda> ${MPIEXEC_POSTFLAGS})
     set_tests_properties(cauchy_interface_cuda_np1 cauchy_interface_cuda_np2 PROPERTIES TIMEOUT 240 ENVIRONMENT "OMP_NUM_THREADS=1")
     add_dependencies(cauchy_unit_tests cauchy_test_interface_cuda)
@@ -458,22 +450,20 @@ target_sources(dnds_test_object_contracts PRIVATE DNDS/test_LocalChecks.cpp)
 dnds_add_mpi_test(serializer "DNDS/test_Serializer.cpp" "dnds")
 dnds_add_mpi_test(mpi "DNDS/test_MPI.cpp" "dnds")
 dnds_add_mpi_test(runtime_exchange "DNDS/test_RuntimeExchange.cpp" "dnds")
-dnds_add_mpi_test(runtime_row_transfer "DNDS/test_RuntimeRowTransfer.cpp" "dnds"
-    CRITICAL_NP4 "Prepared CPU transfer groups retain separate payloads and perform one optional agreement"
-                 "Communication worker preserves repeated packed and direct sparse transfers")
+dnds_add_mpi_test(runtime_row_transfer "DNDS/test_RuntimeRowTransfer.cpp" "dnds")
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_executable(dnds_benchmark_transfer_scheduling EXCLUDE_FROM_ALL DNDS/benchmark_TransferScheduling.cpp)
     target_include_directories(dnds_benchmark_transfer_scheduling PRIVATE ${DNDS_EXTERNAL_INCLUDES} ${DNDS_INCLUDES})
     target_link_libraries(dnds_benchmark_transfer_scheduling PRIVATE dnds ${DNDS_EXTERNAL_LIBS})
 endif()
 if(Python_EXECUTABLE)
-    add_test(NAME dnds_runtime_preflight_off_failure_np2
+    dnds_register_test(dnds_test_runtime_row_transfer dnds_runtime_preflight_off_failure_np2
         COMMAND ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/demos/check_preflight_failfast.py
                 --mpi ${MPIEXEC_EXECUTABLE} --exe $<TARGET_FILE:dnds_test_runtime_row_transfer>)
     set_tests_properties(dnds_runtime_preflight_off_failure_np2 PROPERTIES TIMEOUT 25
         PROCESSORS 2 ENVIRONMENT "OMP_NUM_THREADS=1;OMPI_MCA_rmaps_base_oversubscribe=1")
 endif()
-add_test(NAME dnds_runtime_row_transfer_abort_np2
+dnds_register_test(dnds_test_runtime_row_transfer dnds_runtime_row_transfer_abort_np2
     COMMAND ${CMAKE_COMMAND}
         "-DTEST_COMMAND=${MPIEXEC_EXECUTABLE};${MPIEXEC_NUMPROC_FLAG};2;${MPIEXEC_PREFLAGS};$<TARGET_FILE:dnds_test_runtime_row_transfer>;--test-abort-transfer-conflict;${MPIEXEC_POSTFLAGS}"
         "-DEXPECTED_DIAGNOSTIC=transfer access/stream preflight failed on a rank"
@@ -506,8 +496,8 @@ if(DNDS_USE_CUDA)
         add_executable(dnds_test_nccl_transfer EXCLUDE_FROM_ALL DNDS/test_NCCLTransfer.cu)
         target_include_directories(dnds_test_nccl_transfer PRIVATE ${DNDS_EXTERNAL_INCLUDE_DOCTEST} ${DNDS_EXTERNAL_INCLUDES} ${DNDS_INCLUDES})
         target_link_libraries(dnds_test_nccl_transfer PRIVATE dnds ${DNDS_EXTERNAL_LIBS})
-        add_test(NAME dnds_nccl_transfer_np1 COMMAND $<TARGET_FILE:dnds_test_nccl_transfer>)
-        add_test(NAME dnds_nccl_transfer_np2 COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
+        dnds_register_test(dnds_test_nccl_transfer dnds_nccl_transfer_np1 COMMAND $<TARGET_FILE:dnds_test_nccl_transfer>)
+        dnds_register_test(dnds_test_nccl_transfer dnds_nccl_transfer_np2 COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
             ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/demos/one_rank_per_gpu.py $<TARGET_FILE:dnds_test_nccl_transfer> ${MPIEXEC_POSTFLAGS})
         set_tests_properties(dnds_nccl_transfer_np1 dnds_nccl_transfer_np2 PROPERTIES TIMEOUT 180 ENVIRONMENT "OMP_NUM_THREADS=1")
         add_dependencies(dnds_unit_tests dnds_test_nccl_transfer)
@@ -515,8 +505,8 @@ if(DNDS_USE_CUDA)
     add_executable(dnds_test_device_packing EXCLUDE_FROM_ALL DNDS/test_DevicePacking.cu)
     target_include_directories(dnds_test_device_packing PRIVATE ${DNDS_EXTERNAL_INCLUDE_DOCTEST} ${DNDS_EXTERNAL_INCLUDES} ${DNDS_INCLUDES})
     target_link_libraries(dnds_test_device_packing PRIVATE dnds ${DNDS_EXTERNAL_LIBS})
-    add_test(NAME dnds_device_packing_np1 COMMAND $<TARGET_FILE:dnds_test_device_packing>)
-    add_test(NAME dnds_device_packing_np2 COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
+    dnds_register_test(dnds_test_device_packing dnds_device_packing_np1 COMMAND $<TARGET_FILE:dnds_test_device_packing>)
+    dnds_register_test(dnds_test_device_packing dnds_device_packing_np2 COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
         ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/demos/one_rank_per_gpu.py $<TARGET_FILE:dnds_test_device_packing> ${MPIEXEC_POSTFLAGS})
     set_tests_properties(dnds_device_packing_np1 dnds_device_packing_np2 PROPERTIES TIMEOUT 120 ENVIRONMENT "OMP_NUM_THREADS=1")
     add_dependencies(dnds_unit_tests dnds_test_device_packing)
@@ -550,20 +540,20 @@ if(DNDS_USE_CUDA)
     add_dependencies(cauchy_unit_tests dnds_test_cauchy_linear_solver_cuda)
     dnds_add_unit_test(cauchy_time_fas_cuda "Cauchy/test_TimeFASCUDA.cu" "cauchy;physics;cfv;geom;dnds")
     add_dependencies(cauchy_unit_tests dnds_test_cauchy_time_fas_cuda)
-    add_test(NAME dnds_cauchy_acm_interface_cuda
+    dnds_register_test(dnds_test_cauchy_multidomain dnds_cauchy_acm_interface_cuda
         COMMAND $<TARGET_FILE:dnds_test_cauchy_multidomain> "--test-case=Moving ACM disk*")
     set_tests_properties(dnds_cauchy_acm_interface_cuda PROPERTIES TIMEOUT 120
         ENVIRONMENT "DNDS_TEST_ACM_INTERFACE_CUDA=1;OMP_NUM_THREADS=1;DNDS_DIST_OMP_NUM_THREADS=1" LABELS "cuda;cauchy")
     dnds_add_unit_test(cauchy_domain_cuda "Cauchy/test_DomainCUDA.cpp" "cauchy;physics;cfv;geom;dnds")
     add_dependencies(cauchy_unit_tests dnds_test_cauchy_domain_cuda)
-    add_test(NAME dnds_cauchy_domain_cuda_np2
+    dnds_register_test(dnds_test_cauchy_domain_cuda dnds_cauchy_domain_cuda_np2
         COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
             ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/demos/one_rank_per_gpu.py
             $<TARGET_FILE:dnds_test_cauchy_domain_cuda> ${MPIEXEC_POSTFLAGS})
     set_tests_properties(dnds_cauchy_domain_cuda dnds_cauchy_domain_cuda_np2 PROPERTIES
         TIMEOUT 600 ENVIRONMENT "OMP_NUM_THREADS=1;DNDS_DIST_OMP_NUM_THREADS=1" LABELS "cuda;mpi")
     set_tests_properties(dnds_cauchy_time_fas_cuda PROPERTIES TIMEOUT 180 ENVIRONMENT "OMP_NUM_THREADS=1;DNDS_DIST_OMP_NUM_THREADS=1" LABELS "cuda")
-    add_test(NAME dnds_cauchy_linear_solver_cuda_np2
+    dnds_register_test(dnds_test_cauchy_linear_solver_cuda dnds_cauchy_linear_solver_cuda_np2
         COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
         $<TARGET_FILE:dnds_test_cauchy_linear_solver_cuda> ${MPIEXEC_POSTFLAGS})
     set_tests_properties(dnds_cauchy_linear_solver_cuda dnds_cauchy_linear_solver_cuda_np2 PROPERTIES
@@ -581,7 +571,7 @@ if(DNDS_USE_CUDA)
     add_dependencies(cauchy_unit_tests dnds_test_cauchy_state_cuda)
     dnds_add_unit_test(cauchy_spatial_schedule_cuda "Cauchy/test_SpatialScheduleCUDA.cu" "cauchy;physics;cfv;geom;dnds")
     add_dependencies(cauchy_unit_tests dnds_test_cauchy_spatial_schedule_cuda)
-    add_test(NAME dnds_cauchy_spatial_schedule_cuda_np2
+    dnds_register_test(dnds_test_cauchy_spatial_schedule_cuda dnds_cauchy_spatial_schedule_cuda_np2
         COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
         ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/demos/one_rank_per_gpu.py
         $<TARGET_FILE:dnds_test_cauchy_spatial_schedule_cuda> ${MPIEXEC_POSTFLAGS})
@@ -749,7 +739,7 @@ if(DNDS_USE_CUDA)
         ${DNDS_EXTERNAL_INCLUDE_DOCTEST} ${DNDS_EXTERNAL_INCLUDES} ${DNDS_INCLUDES})
     target_link_libraries(geom_test_mesh_facade_overlap_cuda PRIVATE geom dnds ${DNDS_EXTERNAL_LIBS})
     target_sources(geom_test_mesh_facade_overlap_cuda PRIVATE Geom/MeshFacadeOverlapKernel.cu)
-    add_test(NAME geom_mesh_facade_overlap_cuda_np2
+    dnds_register_test(geom_test_mesh_facade_overlap_cuda geom_mesh_facade_overlap_cuda_np2
         COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
             ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/demos/one_rank_per_gpu.py
             $<TARGET_FILE:geom_test_mesh_facade_overlap_cuda> ${MPIEXEC_POSTFLAGS})
@@ -760,7 +750,7 @@ if(DNDS_USE_CUDA)
     target_include_directories(geom_test_mesh_entity_field_cuda PRIVATE
         ${DNDS_EXTERNAL_INCLUDE_DOCTEST} ${DNDS_EXTERNAL_INCLUDES} ${DNDS_INCLUDES})
     target_link_libraries(geom_test_mesh_entity_field_cuda PRIVATE geom dnds ${DNDS_EXTERNAL_LIBS})
-    add_test(NAME geom_mesh_entity_field_cuda_np2
+    dnds_register_test(geom_test_mesh_entity_field_cuda geom_mesh_entity_field_cuda_np2
         COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
             ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/demos/one_rank_per_gpu.py
             $<TARGET_FILE:geom_test_mesh_entity_field_cuda> ${MPIEXEC_POSTFLAGS})
@@ -806,7 +796,7 @@ function(cfv_add_unit_test TEST_NAME SRC_FILE LIBS)
     set_target_properties(${TARGET_NAME} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
-    add_test(NAME cfv_${TEST_NAME} COMMAND ${TARGET_NAME})
+    dnds_register_test(${TARGET_NAME} cfv_${TEST_NAME} COMMAND ${TARGET_NAME})
     _dnds_maybe_set_timeout(cfv_${TEST_NAME} ${DNDS_TEST_TIMEOUT})
     set_tests_properties(cfv_${TEST_NAME} PROPERTIES
         ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
@@ -831,7 +821,7 @@ function(cfv_add_mpi_test TEST_NAME SRC_FILE LIBS)
         EXCLUDE_FROM_ALL ON)
     foreach(NP ${DNDS_TEST_NP_LIST})
         _dnds_np_timeout(${NP} _TIMEOUT)
-        add_test(NAME cfv_${TEST_NAME}_np${NP}
+        dnds_register_test(${TARGET_NAME} cfv_${TEST_NAME}_np${NP}
             COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${NP}
                     ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS} ${ARGN})
         _dnds_maybe_set_timeout(cfv_${TEST_NAME}_np${NP} ${_TIMEOUT})
@@ -858,7 +848,7 @@ foreach(NP ${DNDS_TEST_NP_LIST})
         ENVIRONMENT "DNDS_DIST_OMP_NUM_THREADS=1")
 endforeach()
 if(DNDS_USE_OMP AND DNDS_DIST_MT_USE_OMP)
-    add_test(NAME cfv_reconstruction_overlap_omp2_np2
+    dnds_register_test(cfv_test_reconstruction_overlap cfv_reconstruction_overlap_omp2_np2
         COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
         $<TARGET_FILE:cfv_test_reconstruction_overlap> ${MPIEXEC_POSTFLAGS})
     set_tests_properties(cfv_reconstruction_overlap_omp2_np2 PROPERTIES
@@ -891,7 +881,7 @@ cfv_add_mpi_test(reconstruction3d "CFV/test_Reconstruction3D.cpp" "cfv;geom;dnds
 # The same binary has a generated 64-cell contract fixture. Keep this routine
 # registration separate from the unchanged 32^3 numerical integration fixture.
 foreach(NP ${DNDS_TEST_NP_LIST})
-    add_test(NAME cfv_reconstruction3d_contract_np${NP}
+    dnds_register_test(cfv_test_reconstruction3d cfv_reconstruction3d_contract_np${NP}
         COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${NP}
                 ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cfv_test_reconstruction3d>
                 ${MPIEXEC_POSTFLAGS} --test-suite-exclude=integration)
@@ -928,7 +918,7 @@ if(DNDS_USE_CUDA)
             RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
             EXCLUDE_FROM_ALL ON)
         # np=1 only for CUDA tests (single GPU)
-        add_test(NAME cfv_${TEST_NAME}_np1
+        dnds_register_test(${TARGET_NAME} cfv_${TEST_NAME}_np1
             COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 1
                     ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
         _dnds_maybe_set_timeout(cfv_${TEST_NAME}_np1 ${DNDS_TEST_TIMEOUT})
@@ -956,13 +946,13 @@ if(DNDS_USE_CUDA)
     endif()
     cfv_add_cuda_mpi_test(limited_vr_cuda "CFV/test_LimitedVRCUDA.cu" "cfv;geom;dnds")
     cfv_add_cuda_mpi_test(characteristic_cuda "CFV/test_CharacteristicCUDA.cu" "cfv;geom;dnds")
-    add_test(NAME cfv_limited_vr_cuda_np2
+    dnds_register_test(cfv_test_limited_vr_cuda cfv_limited_vr_cuda_np2
         COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
             ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/demos/one_rank_per_gpu.py
             $<TARGET_FILE:cfv_test_limited_vr_cuda> ${MPIEXEC_POSTFLAGS})
     set_tests_properties(cfv_limited_vr_cuda_np2 PROPERTIES PROCESSORS 2 TIMEOUT 180 ENVIRONMENT "OMP_NUM_THREADS=1")
     cfv_add_cuda_mpi_test(device_transferable "CFV/test_DeviceTransferable.cu" "cfv;geom;dnds")
-    add_test(NAME cfv_reconstruction_cuda_np2
+    dnds_register_test(cfv_test_reconstruction_cuda cfv_reconstruction_cuda_np2
         COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
             ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/demos/one_rank_per_gpu.py
             $<TARGET_FILE:cfv_test_reconstruction_cuda> ${MPIEXEC_POSTFLAGS})
@@ -971,7 +961,7 @@ if(DNDS_USE_CUDA)
     # Repeat only provider-sensitive cases for NCCL.
     if(DNDS_USE_NCCL)
         foreach(_np 1 2)
-            add_test(NAME cfv_reconstruction_nccl_np${_np}
+            dnds_register_test(cfv_test_reconstruction_cuda cfv_reconstruction_nccl_np${_np}
                 COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${_np} ${MPIEXEC_PREFLAGS}
                     ${Python_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/demos/one_rank_per_gpu.py
                     $<TARGET_FILE:cfv_test_reconstruction_cuda> ${MPIEXEC_POSTFLAGS} --test-suite=halo)
@@ -1008,7 +998,7 @@ function(euler_add_unit_test TEST_NAME SRC_FILE LIBS)
     set_target_properties(${TARGET_NAME} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
-    add_test(NAME euler_${TEST_NAME} COMMAND ${TARGET_NAME})
+    dnds_register_test(${TARGET_NAME} euler_${TEST_NAME} COMMAND ${TARGET_NAME})
     _dnds_maybe_set_timeout(euler_${TEST_NAME} ${DNDS_TEST_TIMEOUT})
     set_tests_properties(euler_${TEST_NAME} PROPERTIES
         ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS};DNDS_MECH_PATH=${DNDS_CANTERA_DATA_DIR};CANTERA_DATA=${DNDS_CANTERA_DATA_DIR}")
@@ -1033,7 +1023,7 @@ function(euler_add_mpi_test TEST_NAME SRC_FILE LIBS)
         EXCLUDE_FROM_ALL ON)
     foreach(NP ${DNDS_TEST_NP_LIST})
         _dnds_np_timeout(${NP} _TIMEOUT)
-        add_test(NAME euler_${TEST_NAME}_np${NP}
+        dnds_register_test(${TARGET_NAME} euler_${TEST_NAME}_np${NP}
             COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${NP}
                     ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
         _dnds_maybe_set_timeout(euler_${TEST_NAME}_np${NP} ${_TIMEOUT})
@@ -1205,7 +1195,7 @@ function(solver_add_unit_test TEST_NAME SRC_FILE LIBS)
     set_target_properties(${TARGET_NAME} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
-    add_test(NAME solver_${TEST_NAME} COMMAND ${TARGET_NAME})
+    dnds_register_test(${TARGET_NAME} solver_${TEST_NAME} COMMAND ${TARGET_NAME})
     _dnds_maybe_set_timeout(solver_${TEST_NAME} ${DNDS_TEST_TIMEOUT_SOLVER})
     set_tests_properties(solver_${TEST_NAME} PROPERTIES
         ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS}")
@@ -1276,8 +1266,6 @@ foreach(_dnds_test IN LISTS _dnds_cpp_tests)
     endif()
 endforeach()
 
-include(${PROJECT_SOURCE_DIR}/cmake/DndsCITestLevels.cmake)
-
 if(DNDS_USE_CUDA)
     add_executable(cauchy_benchmark_rhs_face_mappings_cuda EXCLUDE_FROM_ALL Cauchy/benchmark_RHSFaceMappingsCUDA.cpp)
     target_include_directories(cauchy_benchmark_rhs_face_mappings_cuda PRIVATE ${DNDS_EXTERNAL_INCLUDES} ${DNDS_INCLUDES})
@@ -1295,8 +1283,10 @@ if(DNDS_USE_SYCL)
     target_link_libraries(geom_test_sycl_migration PRIVATE geom dnds ${DNDS_EXTERNAL_LIBS})
     add_dependencies(geom_unit_tests geom_test_sycl_migration)
     foreach(backend cpu cuda)
-        add_test(NAME geom_sycl_${backend}_migration_np2 COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
+        dnds_register_test(geom_test_sycl_migration geom_sycl_${backend}_migration_np2 COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
                  $<TARGET_FILE:geom_test_sycl_migration> ${MPIEXEC_POSTFLAGS} ${backend})
-        set_tests_properties(geom_sycl_${backend}_migration_np2 PROPERTIES LABELS "cpp;geom;sycl;level2" PROCESSORS 2 TIMEOUT 120)
+        set_tests_properties(geom_sycl_${backend}_migration_np2 PROPERTIES LABELS "cpp;geom;sycl" PROCESSORS 2 TIMEOUT 120)
     endforeach()
 endif()
+
+include(${PROJECT_SOURCE_DIR}/cmake/DndsCITestLevels.cmake)

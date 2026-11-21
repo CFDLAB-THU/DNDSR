@@ -9,6 +9,9 @@ import pytest
 from mpi4py import MPI
 
 
+pytestmark = pytest.mark.level2
+
+
 def _demo(name):
     path = Path(__file__).with_name(name + ".py")
     spec = importlib.util.spec_from_file_location(name, path)
