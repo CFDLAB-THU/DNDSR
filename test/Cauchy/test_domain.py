@@ -460,6 +460,70 @@ def test_python_coupled_iteration_matches_native_step_and_restart(tmp_path, devi
 
 
 @pytest.mark.mpi
+@pytest.mark.parametrize("method, split, policy", [
+    ("bdf1", False, "pythonSingleStageImplicit"),
+    ("ditr", True, "pythonDITRSequential2Stage"),
+])
+def test_registered_python_policy_matches_native_connected_domains(method, split, policy):
+    world = MPI.COMM_WORLD
+    if world.size != 2:
+        pytest.skip("connected controller oracle uses two ranks")
+    comm = world.Split(world.rank if split else 0, world.rank)
+    mpi = DNDS.MPIInfo(comm.handle)
+    root = Path(__file__).resolve().parents[2]
+    mesh = Geom.with_native_topology(Geom.read_native_cgns(mpi, str(root / "data/mesh/Uniform_3x3_wall.cgns"), 2))
+    with mesh.acquire_read(faces=True) as read:
+        local_zones = {int(read.boundary_info(i).zone) for i in range(mesh.NumBnd())}
+    zones = set().union(*world.allgather(local_zones))
+    coupled = min(zones)
+    domains = [{"name": str(i), "ranks": [i] if split else [0, 1]} for i in range(2)]
+    # A pressure jump across identical patches makes donor freshness observable.
+    domains[1]["overrides"] = {"initialPrimitive": [1., 0., 0., 0., 1.1]}
+    meshes = [mesh if world.rank in d["ranks"] else None for d in domains]
+    config = {
+        "domains": domains,
+        "defaults": {
+            "mesh": {"dimension": 2},
+            "numerics": {"reconstruction": "constant"},
+            "initialField": {"exprtkInitializers": [{"stateType": "primRhoP", "exprs": [
+                "inRegion := 1; UExprtk[0] := 1 + 0.02*x[0]; UExprtk[1] := 0.1; 0;"]}]},
+            "boundaries": {str(zone): {"kind": "interface" if zone == coupled else "farfield"}
+                           for zone in zones},
+            "implicit": {"iterations": 5, "minIterations": 2},
+        },
+        "interfaces": [{"donor": str(i), "receiver": str(1-i), "donorZone": coupled,
+                        "receiverZone": coupled, "refreshCadence": "nonlinearIteration"}
+                       for i in range(2)],
+        "time": {"method": method},
+    }
+    def run():
+        sim = Simulation(meshes, DNDS.MPIInfo(world.handle), json.dumps(config))
+        assert sim.advance(.001).accepted
+        diagnostics = sim.interface_diagnostics()
+        assert diagnostics.query_points > 0
+        results = []
+        for i in range(2):
+            if sim.local(i):
+                domain = sim.domain(i)
+                stage, = domain.implicit_stages
+                assert stage.linear_iterations > 0
+                field, = domain.fields.values()
+                results.append((field.numpy().copy(), stage.iterations, stage.residual))
+        return results, (diagnostics.query_points, diagnostics.map_builds)
+
+    expected, native_matching = run()
+    config["defaults"]["implicit"]["updatePolicy"] = policy
+    actual, matching = run()
+    assert matching == native_matching
+    for (field, iterations, residual), (ref, count, ref_residual) in zip(actual, expected, strict=True):
+        assert iterations == count
+        np.testing.assert_allclose(field, ref, rtol=1e-12, atol=1e-14)
+        np.testing.assert_allclose(residual, ref_residual, rtol=1e-12, atol=1e-14)
+    del meshes, mesh, mpi
+    comm.Free()
+
+
+@pytest.mark.mpi
 def test_rank_local_invalid_config_is_collectively_rejected():
     mpi = DNDS.MPIInfo()
     mpi.setWorld()

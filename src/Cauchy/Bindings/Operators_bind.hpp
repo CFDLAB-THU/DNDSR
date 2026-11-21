@@ -8,6 +8,7 @@ namespace DNDS::Cauchy::Bindings
     /// This binding does not implement another numerical orchestration path.
     void BindFiniteVolumeOperators(pybind11::module_ &module);
     /// Internal registration partitions, called in order by BindFiniteVolumeOperators.
+    void BindUpdatePolicies(pybind11::module_ &module);
     void BindOperatorState(pybind11::module_ &module);
     void BindOperatorLinear(pybind11::module_ &module);
     void BindOperatorNonlinear(pybind11::module_ &module);

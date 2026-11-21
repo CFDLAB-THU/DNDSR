@@ -9,5 +9,6 @@ namespace DNDS::Cauchy::Bindings
         BindOperatorLinear(m);
         BindOperatorNonlinear(m);
         BindOperatorFiniteVolume(m);
+        BindUpdatePolicies(m);
     }
 }

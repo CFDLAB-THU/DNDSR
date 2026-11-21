@@ -25,9 +25,9 @@ def _single_stage_iterations(session):
 
 
 def _solve_group(session, policy):
-    if policy == "singleStageImplicit":
+    if policy in ("singleStageImplicit", "pythonSingleStageImplicit"):
         _single_stage_iterations(session)
-    elif policy == "ditrSequential2Stage":
+    elif policy in ("ditrSequential2Stage", "pythonDITRSequential2Stage"):
         while not session.complete:
             session.begin_iteration()
             session.advance_stage(0)
@@ -36,6 +36,37 @@ def _solve_group(session, policy):
             session.finish_iteration(session.local_terminal)
     else:
         raise ValueError(f"No Python nonlinear controller for {policy!r}")
+
+
+def _solve_single_stage_group(group):
+    """One implicit stage across all local domains, including dislocated runs."""
+    domains = range(group.local_domains)
+    while True:
+        iteration = group.begin_iteration()
+        group.refresh_interfaces(0, iteration)
+        for domain in domains:
+            group.observe(domain)
+            if not group.local_terminal(domain):
+                group.advance_stage(domain, 0)
+        group.finish_interfaces()
+        if group.finish_iteration():
+            return
+
+
+def _solve_ditr_domain_group(group):
+    """Finish every midpoint correction before sampling any endpoint donor."""
+    domains = range(group.local_domains)
+    while True:
+        iteration = group.begin_iteration()
+        for stage in (0, 1):
+            group.refresh_interfaces(stage, iteration)
+            for domain in domains:
+                group.advance_stage(domain, stage)
+            group.finish_interfaces()
+        for domain in domains:
+            group.observe(domain)
+        if group.finish_iteration():
+            return
 
 
 def advance_domain(domain, dt):

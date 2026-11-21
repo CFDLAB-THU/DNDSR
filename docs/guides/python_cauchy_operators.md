@@ -277,6 +277,24 @@ numerical rejection the controller discards the trial and returns the reason.
 After acceptance it publishes the step. Call on all ranks of the domain.
 Connected domains require simulation-wide coordination of interface refreshes.
 
+## Registered multidomain iteration policies
+
+Importing `DNDSR.Cauchy` registers two additional choices for
+`defaults.implicit.updatePolicy`. Use `pythonSingleStageImplicit` for BDF or
+an implicit DIRK stage, or `pythonDITRSequential2Stage` for DITR. Then call
+`simulation.advance(dt)` on all control ranks. Each Python loop posts the
+configured interface refresh, advances the domains on its rank, finishes
+the publication, and agrees termination across domains. DITR does this for
+the midpoint before it samples the endpoint. Stage-frozen packets follow the
+existing stage cadence. The native FV operators still import the publication
+event at their first dependent operation.
+
+The group handle expires when the policy returns and can be used only by its
+MPI controller thread. The bindings release the GIL for numerical work,
+transfers and waits. Restart metadata records the selected policy name. Use
+the same registration and configuration when resuming an exact checkpoint.
+The standalone C++ executable registers its native policies.
+
 ## Queued DITR equations
 
 `Cauchy.DITREquations(stream, fraction, theta, variant)` uses the native
