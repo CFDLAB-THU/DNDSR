@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DNDS/Runtime/Execution/EagerEngine.hpp"
+#include "DNDS/Runtime/Storage/BufferAlias.hpp"
 
 namespace DNDS::Runtime
 {
@@ -17,9 +18,9 @@ namespace DNDS::Runtime
         const auto context = stream.Context();
         const auto srcDevice = source.GetDevice(), dstDevice = destination.GetDevice();
         const bool gpu = srcDevice != Device::Host() || dstDevice != Device::Host();
-        DNDS_check_throw_info(source.Identity() && destination.Identity() && source.Identity() != destination.Identity() &&
+        DNDS_check_throw_info(Detail::IndependentBuffers(source, destination) &&
                                   source.Bytes() == destination.Bytes(),
-                              "eager copy requires distinct equal-size buffers");
+                              "eager copy requires independent nonoverlapping equal-size buffers");
         DNDS_check_throw_info(gpu == (context.device.space == MemorySpace::CUDA) &&
                                   (srcDevice == Device::Host() || srcDevice == context.device) &&
                                   (dstDevice == Device::Host() || dstDevice == context.device),

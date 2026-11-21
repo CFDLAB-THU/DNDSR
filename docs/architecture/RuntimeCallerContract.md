@@ -349,8 +349,12 @@ request completion before publishing its destination write. The returned
 prefix can order another CPU lane or be observed by its controller. Dropping
 the binding or Array handles after submission leaves the accepted operation
 intact. Portable progress requires the controller to enter event observation
-or engine progress. For a CUDA caller with host staging, observe the MPI
-completion on the controller before importing it and queuing the return copy.
+or engine progress. With host staging, issue independent CUDA work first.
+At the first dependent CUDA consumer, call `reduced.WaitHost()` on the MPI
+controller (`reduced.wait()` in Python), import the completed event on the
+compute stream and queue the return copy. Ordinary MPI halo
+`TransferOperation::EnqueueWait` performs this same host observation
+internally. Native stream borrows keep their existing issue order.
 Use NCCL for a native device collective. Open MPI's CUDA-awareness query
 alone does not establish support for nonblocking device-buffer reductions.
 [Open MPI 5.0.x CUDA operation support](https://docs.open-mpi.org/en/v5.0.x/tuning-apps/networking/cuda.html)
@@ -365,6 +369,9 @@ type-erased ArrayStorage imports remain caller promises: equal byte
 size cannot establish a semantic type. Pointer/owning-object bytes are not
 portable payloads. Import foreign storage once with a genuine shared owner; derive
 aliases/ranges from that Allocation so they share one access controller.
+Copy and halo endpoints require separate access controllers and disjoint byte
+ranges. An in-place allreduce requires the same range on one controller, so
+every alias observes its pending write and its published mutation.
 
 Collision-free receives use copy. Collisions require an explicit reducer, using
 receiver staging; unordered multiple writes are rejected. Custom reducers must

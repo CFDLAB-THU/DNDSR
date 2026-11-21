@@ -1,4 +1,5 @@
 #include "DNDS/Runtime/Storage/Buffer.hpp"
+#include "DNDS/Runtime/Storage/BufferAlias.hpp"
 #include "DNDS/Runtime/Execution/CUDAStream.hpp"
 #include "DNDS/Runtime/Storage/AllocationResource.hpp"
 #ifdef DNDS_USE_SYCL
@@ -967,8 +968,8 @@ namespace DNDS::Runtime
 
     CopyOperation Copy(const Buffer &source, Buffer &destination, ExecutionContext context)
     {
-        DNDS_check_throw_info(source.Identity() && destination.Identity() && source.Identity() != destination.Identity(),
-                              "runtime: copy requires distinct allocated buffers");
+        DNDS_check_throw_info(Detail::IndependentBuffers(source, destination),
+                              "runtime: copy requires independent nonoverlapping buffers");
         DNDS_check_throw_info(source.Bytes() == destination.Bytes(), "runtime: copy size mismatch");
         ValidateDevice(context.device);
         auto sourceContext = source.GetDevice().space == MemorySpace::Host ? ExecutionContext::Host() : context;

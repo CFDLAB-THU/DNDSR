@@ -1,4 +1,5 @@
 #include "DNDS/Runtime/Communication/MPIGlobalReduction.hpp"
+#include "DNDS/Runtime/Storage/BufferAlias.hpp"
 #include <atomic>
 #include <thread>
 
@@ -100,7 +101,7 @@ namespace DNDS::Runtime
                                       "MPI allreduce needs a CPU stream on its binding controller");
                 auto pending = std::make_shared<Pending>();
                 auto operands = std::make_shared<Operands>();
-                const bool inPlace = src.SameRange(dst);
+                const bool inPlace = Detail::SameBufferOperand(src, dst);
                 const auto mode = inPlace ? AccessMode::ReadWrite : AccessMode::Write;
                 std::vector<ScheduledBufferAccess> accesses{{dst, mode}};
                 if (!inPlace)
@@ -148,9 +149,9 @@ namespace DNDS::Runtime
         const bool valid = src.Identity() && dst.Identity() && src.GetDevice() == Device::Host() && dst.GetDevice() == Device::Host() &&
                            in.Kind() == RowLayoutKind::Table && out.Kind() == RowLayoutKind::Table &&
                            in.Stride() == in.Width() && out.Stride() == out.Width() && in.Width() == out.Width() && in.Rows() == out.Rows() &&
-                           in.Elements() <= INT_MAX && (!src.Overlaps(dst) || src.SameRange(dst)) &&
+                           in.Elements() <= INT_MAX && (IndependentBuffers(src, dst) || SameBufferOperand(src, dst)) &&
                            (op == Reduction::Sum || op == Reduction::Min || op == Reduction::Max);
-        std::array<uint64_t, 5> descriptor{uint64_t(scalar), uint64_t(op), uint64_t(in.Rows()), uint64_t(in.Width()), uint64_t(src.SameRange(dst))};
+        std::array<uint64_t, 5> descriptor{uint64_t(scalar), uint64_t(op), uint64_t(in.Rows()), uint64_t(in.Width()), uint64_t(Detail::SameBufferOperand(src, dst))};
         auto reference = descriptor;
         MPI_Bcast(reference.data(), int(reference.size()), MPI_UINT64_T, 0, comm);
         CommunicationDetail::RequireAll(valid && reference == descriptor, comm, "MPI allreduce requires matching compact host tables, alias mode, scalar and operation");

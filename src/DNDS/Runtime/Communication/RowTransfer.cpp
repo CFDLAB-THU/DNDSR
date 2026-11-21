@@ -1,4 +1,5 @@
 #include "DNDS/Runtime/Communication/RowTransfer_Route.hpp"
+#include "DNDS/Runtime/Storage/BufferAlias.hpp"
 #include "DNDS/Runtime/Communication/DevicePacking.hpp"
 #include "DNDS/Runtime/Communication/TransferAccess.hpp"
 #include "DNDS/Runtime/Communication/CommunicationWorker.hpp"
@@ -410,7 +411,7 @@ namespace DNDS::Runtime
             MPI_Comm_dup(routeComm, &state->comm);
         }
         const auto &p = *state->plan;
-        valid = valid && state->source.Identity() && state->destination.Identity() && state->source.Identity() != state->destination.Identity();
+        valid = valid && Detail::IndependentBuffers(state->source, state->destination);
         valid = valid && state->source.Bytes() / p.schema.Extent() == p.source.Elements() && state->source.Bytes() % p.schema.Extent() == 0;
         valid = valid && state->destination.Bytes() / p.schema.Extent() == p.destination.Elements() && state->destination.Bytes() % p.schema.Extent() == 0;
         valid = valid && (!p.route.HasCollisions() || state->reducer);

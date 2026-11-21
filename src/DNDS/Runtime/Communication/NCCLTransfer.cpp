@@ -1,4 +1,5 @@
 #include "DNDS/Runtime/Execution/CUDAStream.hpp"
+#include "DNDS/Runtime/Storage/BufferAlias.hpp"
 #include "DNDS/Runtime/Communication/NCCLTransfer.hpp"
 #include "DNDS/Runtime/Communication/DevicePacking.hpp"
 #include "DNDS/Runtime/Communication/TransferAccess.hpp"
@@ -460,7 +461,7 @@ namespace DNDS::Runtime
             DNDS_check_throw_info(engine.Owns(stream) && context.device == owner->device &&
                                       std::this_thread::get_id() == owner->controller,
                                   "NCCL collective stream or controller differs");
-            const bool inPlace = source.SameRange(destination);
+            const bool inPlace = Detail::SameBufferOperand(source, destination);
             struct Operands
             {
                 ScheduledAccess source, destination;
@@ -517,7 +518,7 @@ namespace DNDS::Runtime
                            in.Kind() == RowLayoutKind::Table && out.Kind() == RowLayoutKind::Table &&
                            in.Width() == in.Stride() && out.Width() == out.Stride() &&
                            in.Width() == out.Width() && in.Rows() == out.Rows() &&
-                           (!src.Overlaps(dst) || src.SameRange(dst)) &&
+                           (Detail::IndependentBuffers(src, dst) || Detail::SameBufferOperand(src, dst)) &&
                            (op == Reduction::Sum || op == Reduction::Min || op == Reduction::Max);
         std::array<uint64_t, 4> descriptor{uint64_t(scalar), uint64_t(op), uint64_t(in.Rows()), uint64_t(in.Width())};
         auto reference = descriptor;
@@ -600,7 +601,7 @@ namespace DNDS::Runtime
         bool valid = layoutsValid && matchingProvider && !_state->aborted.load() && (comparison == MPI_IDENT || comparison == MPI_CONGRUENT) && !options.context && options.tag == 0 &&
                      !reducer && !payload.route.HasCollisions() && payload.route.Valid() &&
                      (transport == TransferTransport::Direct || transport == TransferTransport::DevicePacked) &&
-                     source.Identity() && destination.Identity() && source.Identity() != destination.Identity() &&
+                     Detail::IndependentBuffers(source, destination) &&
                      source.GetDevice() == _state->device && destination.GetDevice() == _state->device &&
                      extent && extent <= size_t(INT64_MAX) && !payload.schema.Fields().empty() &&
                      source.Bytes() <= size_t(INT64_MAX) && destination.Bytes() <= size_t(INT64_MAX) &&

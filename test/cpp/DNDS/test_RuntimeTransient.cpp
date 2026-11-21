@@ -77,6 +77,40 @@ TEST_CASE("MPI allreduce queues behind a producer and orders the next reduction 
     }
 }
 
+TEST_CASE("Foreign buffer aliases cannot bypass copy or collective reservations")
+{
+    DNDS::MPIInfo mpi(MPI_COMM_WORLD);
+    const auto context = CommunicationContext::Duplicate(mpi.comm);
+    const auto layout = RowLayout::Dense(1, 2);
+    const auto owner = std::make_shared<std::array<double, 4>>();
+    auto imported = [&](size_t offset)
+    {
+        constexpr size_t bytes = 2 * sizeof(double);
+        auto allocation = Allocation::Import(std::shared_ptr<void>(owner, owner->data() + offset), bytes);
+        return Array<double>::FromStorage(layout, Buffer::FromAllocation(allocation, 0, bytes));
+    };
+    auto source = imported(0);
+    auto partial = imported(1);
+    auto output = partial.Storage();
+    EagerEngine engine;
+    auto lane = engine.CreateCPUStream();
+    CHECK_THROWS(Copy(source.Storage(), output));
+    CHECK_THROWS(CopyAsync(engine, lane, source.Storage(), output));
+    CHECK(output.MutationEpoch() == 0);
+
+    // One overlapping halo endpoint on rank zero rejects the bind on every rank.
+    auto adjacent = imported(2);
+    auto sameAddress = imported(0);
+    auto route = RowTransferPlan(context, 1, 1, {{(mpi.rank + 1) % mpi.size, 0, 0}});
+    PayloadPlan payload(route, layout, layout, ElementSchema::Arithmetic<double>());
+    CHECK_THROWS(payload.Bind(source, mpi.rank == 0 ? partial : adjacent));
+    // A shared address with independent controllers cannot authorize an in-place write.
+    CHECK_THROWS(BindMPIAllreduce(context, source, sameAddress, Reduction::Sum));
+    source.Write().At(0, 0) = mpi.rank + 1;
+    BindMPIAllreduce(context, source, adjacent, Reduction::Sum)->Submit(engine, lane).WaitHost();
+    CHECK(adjacent.Read().At(0, 0) == mpi.size * (mpi.size + 1) / 2);
+}
+
 TEST_CASE("Direct transfers support SELF and reordered split communicators without inherited tag attributes")
 {
     int worldRank = -1;
