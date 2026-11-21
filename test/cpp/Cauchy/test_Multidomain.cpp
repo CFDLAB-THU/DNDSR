@@ -184,7 +184,7 @@ TEST_CASE("Moving ACM disk follows the pressure datum of the connected outer dom
         {
             input["defaults"]["implicit"]["multigrid"]["levels"] = 0;
         }
-        SUBCASE("modal P2 with one coarse level and frozen stage packets")
+        const auto modalWithCoarseLevel = [&]
         {
             expectMultigrid = true;
             auto &numerics = input["defaults"]["numerics"];
@@ -197,7 +197,37 @@ TEST_CASE("Moving ACM disk follows the pressure datum of the connected outer dom
             implicit["multigrid"] = {{"levels", 1}, {"coarseSmooth", 1}};
             for (auto &connection : input["interfaces"])
                 connection["refreshCadence"] = "stageFrozen";
+        };
+        const auto wallFreeRANS = [&](bool sst)
+        {
+            // No solid wall exists in either domain. A jump in the transported
+            // turbulence scalars distinguishes a real receiver from a copied mean.
+            auto &defaults = input["defaults"];
+            defaults["equation"]["transport"] = "Newtonian";
+            defaults["equation"]["viscosity"] = .001;
+            defaults["equation"]["rans"] = {{"model", sst ? "KOmegaSST" : "SA"}, {"viscosityReference", .001}};
+            defaults["numerics"]["faceFallback"] = false;
+            const auto field = [&](double p, bool disk)
+            {
+                auto value = state(p);
+                auto &components = value["state"];
+                components[0] = .15;
+                components.push_back(disk ? .04 : .03);
+                if (sst)
+                    components.push_back(disk ? 2.5 : 2.);
+                return value;
+            };
+            defaults["initialState"] = defaults["referenceState"] = field(-2., false);
+            input["domains"][0]["overrides"]["boundaries"]["102"]["state"] = field(-2., false);
+            input["domains"][1]["overrides"]["initialState"] = field(-1.99, true);
+        };
+        SUBCASE("modal P2 with one coarse level and frozen stage packets") { modalWithCoarseLevel(); }
+        SUBCASE("SA modal with one coarse level on a wall-free moving patch")
+        {
+            wallFreeRANS(false);
+            modalWithCoarseLevel();
         }
+        SUBCASE("SST direct P1 with nonlinear packets on a wall-free moving patch") { wallFreeRANS(true); }
         cpuConfig.emplace(C::SimulationConfig::ResolveCollective(input, mpi.comm));
         input["defaults"]["execution"]["device"] = "cuda";
     }
@@ -229,7 +259,8 @@ TEST_CASE("Moving ACM disk follows the pressure datum of the connected outer dom
             if (d == 1)
             {
                 double speed = 0;
-                for (size_t i = 0; i < actual.size(); i += 4)
+                const auto width = resumed.GetDomain(d).Dofs().ComponentNumber();
+                for (size_t i = 0; i < actual.size(); i += width)
                 {
                     speed = std::max(speed, std::hypot(actual[i], actual[i + 1]));
                     CHECK(std::abs(actual[i + 3] + 2.) < .1);
@@ -257,6 +288,32 @@ TEST_CASE("Moving ACM disk follows the pressure datum of the connected outer dom
                 for (size_t i = 0; i < actual.size(); ++i)
                     CHECK(actual[i] == doctest::Approx(reference[i]).epsilon(1e-9).scale(1));
             }
+        // Perturb only the outer donor. The disk initial state, physical data
+        // and topology are identical, so a response there requires an interface.
+        const auto width = input["defaults"]["initialState"]["state"].size();
+        if (width > 4)
+        {
+            input["defaults"]["execution"]["device"] = "cpu";
+            auto outer = input["defaults"]["initialState"];
+            for (size_t j = 4; j < width; ++j)
+                outer["state"][j] = 2 * outer["state"][j].get<double>();
+            input["domains"][0]["overrides"]["initialState"] = std::move(outer);
+            C::Simulation changed(C::SimulationConfig::ResolveCollective(input, mpi.comm), mpi.comm, factory);
+            REQUIRE(changed.Advance(dt).accepted);
+            REQUIRE(changed.Advance(dt).accepted);
+            if (changed.Local(1))
+            {
+                const auto a = Values(cpu.GetDomain(1)), b = Values(changed.GetDomain(1));
+                REQUIRE(a.size() == b.size());
+                for (size_t j = 4; j < width; ++j)
+                {
+                    double difference = 0;
+                    for (size_t i = j; i < a.size(); i += width)
+                        difference = std::max(difference, std::abs(a[i] - b[i]));
+                    CHECK(DNDS::MPI::AllreduceValue<DNDS::MPI::Reduction::Max>(difference, changed.GetDomain(1).Communicator()) > 1e-8);
+                }
+            }
+        }
     }
     RemoveCheckpoint(path);
 }

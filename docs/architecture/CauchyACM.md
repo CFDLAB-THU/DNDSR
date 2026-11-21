@@ -118,6 +118,14 @@ packets and one coarse pMG level. The latter checks that coarse cycles ran.
 These short tests cover transport and restart. A closed pressure-free
 component still requires coordinated anchoring.
 
+The wall-free rotating-disk fixture also exercises SA with P2 reconstruction,
+one coarse pMG level and stage-frozen packets, and SST with direct P1 and
+per-iteration packets. Changing only the outer donor's turbulence variables
+changes the inner disk's SA working variable or both SST scalars. CPU and CUDA
+accepted fields and CUDA restart are compared component by component. Both
+domains have a shared physical pressure datum. For interfaces near a moving
+solid wall, see the [multidomain wall-distance contract](../guides/cauchy_multidomain.md).
+
 SA appends the normalized working variable (`nuTilde / viscosityReference` in
 code units). A dimensional `primUP_phy` SA tail supplies kinematic viscosity
 in m²/s. Divide it by `U0 * L0 * viscosityReference` to obtain the stored
