@@ -1005,7 +1005,16 @@ function(euler_add_unit_test TEST_NAME SRC_FILE LIBS)
 endfunction()
 
 # --- helper: add an MPI unit test executable (Euler) ---
-# MPI tests run all TEST_CASEs together per NP value (avoids mpirun overhead per test case).
+function(euler_register_mpi_run target name np)
+    dnds_register_test(${target} ${name}
+        COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${np}
+                ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${target}> ${MPIEXEC_POSTFLAGS} ${ARGN})
+    _dnds_np_timeout(${np} _timeout)
+    _dnds_maybe_set_timeout(${name} ${_timeout})
+    set_tests_properties(${name} PROPERTIES PROCESSORS ${np}
+        ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS};DNDS_MECH_PATH=${DNDS_CANTERA_DATA_DIR};CANTERA_DATA=${DNDS_CANTERA_DATA_DIR}")
+endfunction()
+
 function(euler_add_mpi_test TEST_NAME SRC_FILE LIBS)
     set(TARGET_NAME "euler_test_${TEST_NAME}")
     add_executable(${TARGET_NAME} ${SRC_FILE})
@@ -1022,14 +1031,15 @@ function(euler_add_mpi_test TEST_NAME SRC_FILE LIBS)
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         EXCLUDE_FROM_ALL ON)
     foreach(NP ${DNDS_TEST_NP_LIST})
-        _dnds_np_timeout(${NP} _TIMEOUT)
-        dnds_register_test(${TARGET_NAME} euler_${TEST_NAME}_np${NP}
-            COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${NP}
-                    ${MPIEXEC_PREFLAGS} $<TARGET_FILE:${TARGET_NAME}> ${MPIEXEC_POSTFLAGS})
-        _dnds_maybe_set_timeout(euler_${TEST_NAME}_np${NP} ${_TIMEOUT})
-        set_tests_properties(euler_${TEST_NAME}_np${NP} PROPERTIES
-            PROCESSORS ${NP}
-            ENVIRONMENT "OMP_NUM_THREADS=${DNDS_TEST_OMP_THREADS};DNDS_MECH_PATH=${DNDS_CANTERA_DATA_DIR};CANTERA_DATA=${DNDS_CANTERA_DATA_DIR}")
+        set(name euler_${TEST_NAME}_np${NP})
+        if(TEST_NAME STREQUAL "evaluator_pipeline" AND NP EQUAL 2)
+            # Run both disjoint sets once in the full tier. Other rank counts
+            # keep the complete pipeline for qualification.
+            euler_register_mpi_run(${TARGET_NAME} euler_evaluator_small_np2 2 --test-suite-exclude=large-mesh)
+            euler_register_mpi_run(${TARGET_NAME} ${name} 2 --test-suite=large-mesh)
+        else()
+            euler_register_mpi_run(${TARGET_NAME} ${name} ${NP})
+        endif()
     endforeach()
 endfunction()
 

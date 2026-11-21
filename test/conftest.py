@@ -34,6 +34,11 @@ def mpi():
 # Select one representative parameterization in each smoke lane. Other variants
 # of these functions still run in routine testing, including at two MPI ranks.
 _SMOKE_LANES = {
+    "test/Cauchy/test_ditr_equations.py::test_queued_acm_stage_sources_and_stopping_residual": "serial",
+    "test/Cauchy/test_operators.py::test_finite_volume_operator_frontend_composes_native_residual_and_linear_solve[False]": "mpi",
+    "test/Cauchy/test_operators.py::test_finite_volume_operator_frontend_composes_native_residual_and_linear_solve[True]": "mpi",
+    "test/Geom/test_native_mesh_helpers.py::test_default_native_archive_file_faults_reject_collectively_and_retry": "mpi",
+    "test/DNDS/test_runtime_transient.py::test_shared_context_known_route_and_tag_reuse[transport0-mode0]": "mpi",
     "test/DNDS/test_view_ownership.py::test_flat_view_retains_allocation_not_array": "serial",
     "test/DNDS/test_runtime_array_bridge.py::test_one_pod_schema_spans_native_python_mpi_and_direct_io[True-h5]": "mpi",
     "test/CFV/test_fv_facility.py::test_reconstruction_shared_buffers_explicit_halo_and_point_sampling[True]": "mpi",

@@ -25,11 +25,11 @@ if(Python_EXECUTABLE)
         ENVIRONMENT "DNDS_HARNESS_CMAKE=${CMAKE_COMMAND}")
     _dnds_maybe_set_timeout(harness_tooling ${DNDS_TEST_TIMEOUT})
 
-    # Importing DNDSR loads the four core extension packages. Cauchy bindings
-    # and the Euler restart executable first enter the Python catalog at level 1.
+    # Level 0 needs the core bindings, Cauchy operators and the native bridge.
+    # Python restart qualification adds the Euler executable at level 1.
     add_custom_target(ci_python_level0 DEPENDS dnds_pybind11 geom_pybind11 cfv_pybind11
-        eulerP_pybind11 runtime_array_bridge_test)
-    add_custom_target(ci_python_level1 DEPENDS ci_python_level0 cauchy_pybind11 euler)
+        eulerP_pybind11 cauchy_pybind11 runtime_array_bridge_test)
+    add_custom_target(ci_python_level1 DEPENDS ci_python_level0 euler)
     add_custom_target(ci_python_level2 DEPENDS ci_python_level1)
     add_custom_target(ci_python_tests DEPENDS ci_python_level2)
     foreach(_level RANGE 0 2)

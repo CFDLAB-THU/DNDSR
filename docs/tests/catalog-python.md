@@ -71,7 +71,7 @@ Each row is a collected pytest case or parameterization. The columns show its mi
 
 | Level | MPI ranks | Case |
 |---|---|---|
-| 1 | 1 | `test_queued_acm_stage_sources_and_stopping_residual` |
+| 0 | 1 | `test_queued_acm_stage_sources_and_stopping_residual` |
 
 ## [test/Cauchy/test_domain.py](../../test/Cauchy/test_domain.py)
 
@@ -110,8 +110,8 @@ Each row is a collected pytest case or parameterization. The columns show its mi
 
 | Level | MPI ranks | Case |
 |---|---|---|
-| 1 | 1, 2 | `test_finite_volume_operator_frontend_composes_native_residual_and_linear_solve[False]` |
-| 1 | 1, 2 | `test_finite_volume_operator_frontend_composes_native_residual_and_linear_solve[True]` |
+| 0 | 2 | `test_finite_volume_operator_frontend_composes_native_residual_and_linear_solve[False]` |
+| 0 | 2 | `test_finite_volume_operator_frontend_composes_native_residual_and_linear_solve[True]` |
 
 ## [test/DNDS/test_arraydof.py](../../test/DNDS/test_arraydof.py)
 
@@ -364,6 +364,7 @@ Each row is a collected pytest case or parameterization. The columns show its mi
 
 | Level | MPI ranks | Case |
 |---|---|---|
+| 0 | 2 | `test_shared_context_known_route_and_tag_reuse[transport0-mode0]` |
 | 1 | 1, 2 | `test_completed_callback_does_not_retain_its_frame_and_transfer` |
 | 1 | 1, 2 | `test_preserved_transfer_layout_defaults_and_explicit_compaction[csr]` |
 | 1 | 1, 2 | `test_preserved_transfer_layout_defaults_and_explicit_compaction[padded]` |
@@ -376,7 +377,6 @@ Each row is a collected pytest case or parameterization. The columns show its mi
 | 1 | 1, 2 | `test_retained_binding_and_slice_follow_old_mesh_snapshot_after_reset[False]` |
 | 1 | 1, 2 | `test_retained_binding_and_slice_follow_old_mesh_snapshot_after_reset[True]` |
 | 1 | 1, 2 | `test_sender_ordering_returns_route_and_explicit_array_permutation` |
-| 1 | 1, 2 | `test_shared_context_known_route_and_tag_reuse[transport0-mode0]` |
 | 1 | 1, 2 | `test_shared_context_known_route_and_tag_reuse[transport0-mode1]` |
 | 1 | 1, 2 | `test_shared_context_known_route_and_tag_reuse[transport1-mode0]` |
 | 1 | 1, 2 | `test_shared_context_known_route_and_tag_reuse[transport1-mode1]` |
@@ -508,7 +508,7 @@ Each row is a collected pytest case or parameterization. The columns show its mi
 
 | Level | MPI ranks | Case |
 |---|---|---|
-| 1 | 1, 2 | `test_default_native_archive_file_faults_reject_collectively_and_retry` |
+| 0 | 2 | `test_default_native_archive_file_faults_reject_collectively_and_retry` |
 | 1 | 1 | `test_default_native_preparation_preserves_mesh_and_serial_adapter_contract` |
 | 1 | 1 | `test_h5_subset_writer_world_reader_changed_size_and_two_layer_closure` |
 | 1 | 1 | `test_native_bisection_and_default_frames_preserve_geometry` |

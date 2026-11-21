@@ -44,9 +44,9 @@ export OPENBLAS_NUM_THREADS=1
 if ((level >= 1)); then
     test -x "$DNDS_BUILD_DIR/app/euler.exe"
 fi
-"$python_bin" -S scripts/verify_ci_python.py --test-level "$level"
-"$python_bin" -S scripts/verify_ci_python.py --test-level "$level" --h5py-first
-"$mpi_launcher" -n 2 "$python_bin" -S scripts/verify_ci_python.py --test-level "$level" --parallel
+"$python_bin" -S scripts/verify_ci_python.py
+"$python_bin" -S scripts/verify_ci_python.py --h5py-first
+"$mpi_launcher" -n 2 "$python_bin" -S scripts/verify_ci_python.py --parallel
 
 pytest_args=(--with-mpi --timeout=600 --strict-markers -ra --dnds-test-level="$level")
 "$python_bin" -S -m pytest "${pytest_args[@]}" --dnds-ci-lane=serial test/

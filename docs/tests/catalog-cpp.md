@@ -2,6 +2,50 @@
 
 Each heading is a build target. The table gives the minimum CI level of each CTest invocation. The source lists below it give the doctest case names in that binary. Rank, build features and doctest filters can restrict an invocation to part of its binary. Template cases appear once per definition. The list combines the configured profiles supplied to the generator.
 
+## `cauchy_solver`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `cauchy_frontend_np2` |
+| 1 | `cauchy_frontend_np1` |
+
+[Frontend test driver](../../test/Cauchy/frontend_smoke.py)
+
+## `cfv_test_distributed_interface_sampling`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `cfv_distributed_interface_sampling_np2` |
+| 1 | `cfv_distributed_interface_sampling_np1` |
+| 2 | `cfv_distributed_interface_sampling_np4`, `cfv_distributed_interface_sampling_np8` |
+
+[test_DistributedInterfaceSampling.cpp](../../test/cpp/CFV/test_DistributedInterfaceSampling.cpp)
+
+- Distributed polynomial sampling evaluates on cell owners and returns query order
+- Warped quad interface projects offset queries before distributed polynomial sampling
+- Coupling participants without a donor mesh sample a reversed donor subgroup in query order
+
+## `cfv_test_fv_facility`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `cfv_fv_facility_np2` |
+| 1 | `cfv_fv_facility_np1` |
+| 2 | `cfv_fv_facility_np4`, `cfv_fv_facility_np8` |
+
+[test_FVFacility.cpp](../../test/cpp/CFV/test_FVFacility.cpp)
+
+- FV metrics share managed mesh communication with independent preflight policy
+- Midpoint face publication preserves integrated measures and cell metrics
+- Runtime FV matches legacy VR sweeps and reproduces cell-average polynomials
+- Independent functional weights and all-order boundary penalties match configured legacy sweeps
+- WBAP explicit five-component face transforms match legacy and preserve a passive sixth field
+- FV rejects wrong association and invalid shapes before writes
+- Periodic quad and triangle reconstruction matches relaxed legacy Jacobi and ordered SOR
+- Three-dimensional FV reproduces cubic cell-average polynomials on tetrahedron and hexahedron with empty ranks
+- SVD removes unconstrained modes and invalid settings fail collectively
+- Two-buffer SOR preserves its MPI input and split automatically selects core-first order
+
 ## `cfv_test_gradient_plan`
 
 | Level | CTest registrations |
@@ -19,6 +63,363 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Weighted P1 gradients use the curved triangular boundary sample locations
 - Gradient core phases exclude active MPI ghost writes across table layouts
 - Physical-gradient WBAP is direct, characteristic-optional, and split-equivalent
+
+## `cfv_test_limited_vr`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `cfv_limited_vr_np2` |
+| 1 | `cfv_limited_vr_np1` |
+| 2 | `cfv_limited_vr_np4`, `cfv_limited_vr_np8` |
+
+[test_LimitedVR.cpp](../../test/cpp/CFV/test_LimitedVR.cpp)
+
+- Native v2/v3 gates preserve legacy thresholds, contact response and expansion admission
+- Supported extremum seeds preserve incidence counts, retention and boundary exclusion
+- LVR neighbor rounds cross rank boundaries with synchronous Cartesian distance and saturation oracles
+- Distributed v2/v3 correction seeds distinguish mean contact support, transverse equality and history
+- A-weighted limited VR preserves generic components, relaxation and split SOR semantics
+
+## `cfv_test_limiters`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `cfv_limiters` |
+
+[test_Limiters.cpp](../../test/cpp/CFV/test_Limiters.cpp)
+
+- PolynomialSquaredNorm<2> with 2 rows (P1)
+- PolynomialSquaredNorm<2> with 3 rows (P2)
+- PolynomialSquaredNorm<2> with 4 rows (P3)
+- PolynomialSquaredNorm<3> with 3 rows (P1)
+- PolynomialSquaredNorm<3> with 6 rows (P2)
+- PolynomialSquaredNorm<3> with 10 rows (P3)
+- PolynomialDotProduct<2> self-product equals PolynomialSquaredNorm
+- PolynomialDotProduct<2> linearity
+- FMINMOD_Biway: same-sign inputs
+- FMINMOD_Biway: opposite-sign inputs produce zero
+- FMINMOD_Biway: zero input
+- FVanLeer_Biway: same-sign inputs
+- FVanLeer_Biway: opposite-sign produces zero
+- FVanLeer_Biway: equal inputs return same value
+- FWBAP_L2_Biway: identical inputs pass through
+- FWBAP_L2_Biway: output bounded by inputs for same-sign
+- FWBAP_L2_Cut_Biway: opposite-sign cut to zero
+- FWBAP_L2_Multiway: all identical inputs pass through
+- FWBAP_L2_Multiway: no NaN for random inputs
+- FWBAP_L2_Multiway_Polynomial2D: all identical pass through
+- FWBAP_L2_Multiway_Polynomial2D: no NaN for random inputs (nRows=2,3,4)
+- FMEMM_Multiway_Polynomial2D: center input unchanged when smallest
+- FMEMM_Multiway_Polynomial2D: no NaN for random inputs
+- FWBAP_L2_Multiway_PolynomialOrth: all identical pass through
+- FWBAP_L2_Multiway_PolynomialOrth: no NaN
+- FWBAP_L2_Biway_PolynomialNorm<2,1>: identical inputs pass through
+- FWBAP_L2_Biway_PolynomialNorm<2,Eigen::Dynamic>: no NaN
+- FWBAP_L2_Biway_PolynomialNorm<3,Eigen::Dynamic>: no NaN for 3D dims
+- FMEMM_Biway_PolynomialNorm<2,Eigen::Dynamic>: u2 smaller returns u2
+- FMEMM_Biway_PolynomialNorm<2,Eigen::Dynamic>: no NaN
+- FWBAP_L2_Biway_PolynomialOrth: identical inputs pass through
+- FWBAP_L2_Biway_PolynomialOrth: no NaN
+- Limiter ordering: FMINMOD output <= FWBAP output for same-sign
+- All limiters handle near-zero inputs without NaN
+
+## `cfv_test_reconstruction3d`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `cfv_reconstruction3d_contract_np2` |
+| 2 | `cfv_reconstruction3d_contract_np1`, `cfv_reconstruction3d_contract_np4`, `cfv_reconstruction3d_contract_np8`, `cfv_reconstruction3d_np1`, `cfv_reconstruction3d_np2`, `cfv_reconstruction3d_np4`, `cfv_reconstruction3d_np8` |
+
+[test_Reconstruction3D.cpp](../../test/cpp/CFV/test_Reconstruction3D.cpp)
+
+- 3D: constant exactness with GaussGreen
+- 3D static reconstruction mask is exchanged and survives GG and VR updates
+- 3D: constant exactness with VFV_P1_HQM
+- 3D: constant exactness with VFV_P2_HQM
+- 3D: smooth-function golden values, convergence and order
+- 3D: cell volumes sum to 1.0 (unit cube)
+- Small connected 3D cells preserve constants through GG and P1/P2 VR
+
+## `cfv_test_reconstruction_cuda`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `cfv_reconstruction_cuda_np2`, `cfv_reconstruction_nccl_np2` |
+| 2 | `cfv_reconstruction_cuda_np1`, `cfv_reconstruction_nccl_np1` |
+
+[test_ReconstructionCUDA.cu](../../test/cpp/CFV/test_ReconstructionCUDA.cu)
+
+- Queued FV gradients and linear-mode projection share CPU and CUDA incidence semantics
+- Queued polynomial sampling covers cached and direct derivatives on owned and ghost rows
+- Shared quadrature CUDA placement reuses face allocation and retains queued scatter inputs
+- Resident face basis supports direct and partial caches without unrelated metric payloads
+- Geometry-only FV metrics can live on CUDA without retaining a host metric plan or allocating VR
+- Device publications retain actual mesh metrics and basis with explicit optional capabilities
+- Device-only reconstruction placement releases host payloads and remains executable
+- CUDA sweep-only publication omits limiter matrices and scratch
+- Raw VR packs B and the full inverse independently while using the FP64 sweep
+- Opt-in FP32 sweep maps retain FP64 coefficients and avoid duplicate device matrix storage
+- CUDA Jacobi and WBAP agree with CPU for physical DOF layouts and direct MPI split work
+- CUDA preserves rotated periodic vectors and axisymmetric prepared operators
+- CUDA degree three 3D reconstruction supports 37 coupled components and empty peers
+- Device errors reject unsupported SOR stale publications and invalid indicators without silent output
+
+[test_ReconstructionCUDA_AMG.hpp](../../test/cpp/CFV/test_ReconstructionCUDA_AMG.hpp)
+
+- Single-device VR AMG preserves the projected modal matrix and fixed component corrections
+
+[test_ReconstructionCUDA_Staged.hpp](../../test/cpp/CFV/test_ReconstructionCUDA_Staged.hpp)
+
+- Stage-once VR pipelines preserve complete modal batches and queued dependencies
+- CUDA VR launch policy rejects a non-warp thread count
+- Float-float VR preserves low limbs through a cancelling modal product
+
+[test_ReconstructionCUDA_Storage.hpp](../../test/cpp/CFV/test_ReconstructionCUDA_Storage.hpp)
+
+- Contiguous VR payloads and raw face storage preserve oriented distributed sweeps
+- Face cross blocks transpose fully while only symmetric inverse entries use triangular storage
+
+## `cfv_test_reconstruction_math`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `cfv_reconstruction_math` |
+
+[test_ReconstructionMath.cpp](../../test/cpp/CFV/test_ReconstructionMath.cpp)
+
+- Compute scalar Taylor contexts preserve derivatives across explicit arithmetic choices
+- Prepared Taylor points preserve nonunit-scale physical derivatives and zero-mean modes
+- Taylor derivative pullback preserves Frobenius tensor norms through degree three
+- Central isotropic weight schemes preserve configured legacy formulas
+
+## `cfv_test_reconstruction_overlap`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `cfv_reconstruction_overlap_np2`, `cfv_reconstruction_overlap_omp2_np2` |
+| 1 | `cfv_reconstruction_overlap_np1` |
+| 2 | `cfv_reconstruction_overlap_np4`, `cfv_reconstruction_overlap_np8` |
+
+[test_ReconstructionOverlap.cpp](../../test/cpp/CFV/test_ReconstructionOverlap.cpp)
+
+- Jacobi and WBAP core work overlaps real direct MPI and preserves unsplit results
+- Core-first SOR uses a separate frozen send snapshot during split execution
+- One-cell OpenMP SOR blocks reduce to Jacobi with frozen cross-block reads
+- CFV split operators share eager ordering across inline and worker CPU launchers
+- Queued CPU reconstruction and WBAP retain operands through chained publications
+- CPU FV reconstruction limiter and linear actions agree across mixed DOF physical layouts
+
+## `dnds_test_access_tracking`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_access_tracking` |
+
+[test_AccessTracking.cpp](../../test/cpp/DNDS/test_AccessTracking.cpp)
+
+- Checked prefixes reject missing stale and incomplete fan-in dependencies
+- Backend rejection rolls back aliases without holding the ledger across work
+- Explicit cross-context events prevent independent alias authority
+- CPU worker checks submission before completion and preserves real event execution
+- Checked release consumes aliases only after an explicit fan-in
+- Immediate and unchecked boundaries reject pending conflicting checked accesses
+- Inline checked execution publishes immediately and concurrent issue stays ordered
+
+## `dnds_test_array`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_array` |
+
+[test_Array.cpp](../../test/cpp/DNDS/test_Array.cpp)
+
+- Ownership: host and Host-device leases retain fixed allocations
+- Ownership: CSR row leases survive reserve compression and deletion
+- Ownership: uncompressed row hashing preserves non-arithmetic values
+- CSR sharing: public row starts and const iterators are read only
+- Audit regression: compressed CSR hash includes row offsets
+- Audit regression: host mirror publishes the current allocation
+- Array TABLE_StaticFixed layout
+- Array TABLE_Fixed layout
+- Array TABLE_StaticMax layout
+- Array TABLE_Max layout
+- Array CSR layout
+- Array clone and copy
+- Array edge cases
+- Array serialization round-trip
+- Array signature
+- Array hash
+- Array resize-write-read
+
+## `dnds_test_cauchy_boundary_inputs`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_cauchy_boundary_inputs_np2` |
+| 1 | `dnds_cauchy_boundary_inputs_np1` |
+| 2 | `dnds_cauchy_boundary_inputs_np4`, `dnds_cauchy_boundary_inputs_np8` |
+
+[test_BoundaryInputs.cpp](../../test/cpp/Cauchy/test_BoundaryInputs.cpp)
+
+- Analytic boundary numerical failures return status through both equation entries
+- DMR bottom producer resolves prescribed and reflecting pieces in world coordinates
+- VR wall target selection preserves the selected physical boundary equation
+- Total inlet resolves physical vector input and applies static density to SA
+- Moving ACM interface packets preserve a uniform inertial flow under a common pressure shift
+- P1 least squares uses affine receiver face-center values from an interface packet
+- Published interface packets reproduce analytic P3 boundaries through auxiliary RHS and frozen Jacobian operators
+- Physical and interface gradient targets evaluate nonconstant fields at actual face centers
+
+## `dnds_test_cauchy_checkpoint`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_cauchy_checkpoint_np4` |
+| 1 | `dnds_cauchy_checkpoint_np1`, `dnds_cauchy_checkpoint_np2` |
+| 2 | `dnds_cauchy_checkpoint_np8` |
+
+[test_Checkpoint.cpp](../../test/cpp/Cauchy/test_Checkpoint.cpp)
+
+- Accepted domain snapshots pin one immutable mean generation
+- Prepared checkpoint owns its fields metadata and communicator beyond the domain
+- Detached host snapshots retain accepted values after the domain mutates
+- Asynchronous HDF output snapshots survive foreground field mutation and MPI
+- Boundary snapshot writes native zones and suppresses viscous slip-wall flux
+- Boundary snapshot follows the face owner when the boundary record is remote
+- Equation archive remaps coupled and split fields without confusing component ranges
+- Mixture restart redistributes every block and cold starts changed polynomial degree
+- Mixture BDF2 restart restores species history and warm reconstruction transactionally
+- Physical Strang source composes with transport and preserves retry and restart history semantics
+- Mixture visualization shares volume species fields with adjacent boundary cells
+- Configured RANS BDF2 restores all fields across layouts and rejects changed model metadata
+- Older viscous archives retain primitive gradients and reject a silent polynomial method change
+- Older physical-boundary archives omit inactive composition without invalidating restart
+- Checkpoint changes MPI partition and polynomial degree using persistent cell IDs with cold reconstruction
+- ACM BDF2 restart preserves the pressure gauge and differential history
+- A mean-only initial checkpoint can seed a different nonlinear stage policy
+- ACM internal restart adopts the stored absolute pressure target
+- Implicit restart preserves variable BDF2 history and rebuilds live DITR stage bindings
+- Restart dt growth reads the accepted scalar and supports files predating it
+- CGNS checkpoint remains physical across independently built MPI partitions
+- Rigid motion restart retains absolute-state convention and BDF history
+- Means-only restart selects the steady trial or the accepted transient state
+- Exact internal checkpoints resume BDF DIRK and DITR nonlinear iterations
+
+## `dnds_test_cauchy_config`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_cauchy_config` |
+
+[test_Config.cpp](../../test/cpp/Cauchy/test_Config.cpp)
+
+- Automatic CUDA policies select measured A100 kernels and preserve explicit overrides
+- CUDA RHS launch selection respects measured profiles and explicit values
+- Mesh preprocessing is explicit and validates a positive uniform scale
+- Programmed initialization preserves order six by default and validates overrides
+- Native AMG is selected independently for reconstruction and flow
+- Diagonal inverse refinement is opt-in and rejects unrelated inverse providers
+- Reconstruction kernel selection is explicit and retains the FP64 default
+- Coarse solver resolution respects equation width and the selected matrix provider
+- Linear matrix storage round-trips independently and rejects hidden AmgX repacking
+- CUDA capability resolution requires a complete combined perfect gas profile
+- CPU workers require an MPI capability that permits multithreaded execution
+- Cauchy exposes one canonical layered input schema
+- MPI fail-fast launch validation is an explicit execution choice
+- DITR inherits common controls and only supplied compatibility fields override them
+- Chemical source splitting is explicit and keeps Euler reactor defaults
+- Configured RANS exposes Euler DES and QCR controls without a unit-length substitution
+- Halo freshness audits are opt-in and the collective check switch overrides them
+- Interface capability checks admit coordinated DITR and honor the steady BDF1 override
+- Polynomial viscous reconstruction is explicit and retains the previous primitive default
+- Physical timestep PP has explicit validated controls and is disabled by the steady limit
+- Strict implicit VR acceptance needs an explicit positive reconstruction tolerance
+- Steady config resolves Euler's BDF1 infinite timestep override with provenance
+- Deprecated time and output aliases are exclusive with their canonical controls
+- Reconstruction PP controls are explicit and reject unsupported compatibility combinations
+- Cauchy implicit controls resolve through the root and reject contradictory paths
+- Cauchy partial analytic boundary profile receives nested schema defaults
+- Cauchy root resolves profiles overrides CLI and condition defaults with provenance
+- Cauchy rejects unknown nested keys unused contradictory settings and unsupported capabilities
+
+## `dnds_test_cauchy_config_shared`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_cauchy_config_shared` |
+
+[test_ConfigShared.cpp](../../test/cpp/Cauchy/test_ConfigShared.cpp)
+
+- Hidden consumers serialize complete configuration registered in the shared library
+
+## `dnds_test_cauchy_domain_cuda`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_cauchy_domain_cuda_np2` |
+| 2 | `dnds_cauchy_domain_cuda` |
+
+[test_DomainCUDA.cpp](../../test/cpp/Cauchy/test_DomainCUDA.cpp)
+
+- ACM device correction matches CPU on flow4 and mechanical SA and SST
+- ACM CUDA exports zero tangential slip-wall flux and nonzero no-slip shear
+- ACM polynomial CUDA face mappings match the host on a rotational seam
+- Automatic A100 kernels advance raw P3 flow with frozen explicit reference selectors
+- Device domains advance nonuniform implicit flow through single grid and pMG with restart
+- Domain reconstruction selection runs quantized maps and shared or direct quadrature with FP64 evolving fields
+- Asynchronous CUDA output freezes the accepted epoch before a new device write
+
+## `dnds_test_cauchy_equation_dofs`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_cauchy_equation_dofs_np4` |
+| 1 | `dnds_cauchy_equation_dofs_np1`, `dnds_cauchy_equation_dofs_np2` |
+| 2 | `dnds_cauchy_equation_dofs_np8` |
+
+[test_EquationDofs.cpp](../../test/cpp/Cauchy/test_EquationDofs.cpp)
+
+- Equation schema mapping uses semantic names instead of component count or ordinal
+- Whole-equation dispatch preserves named blocks and scalar order across bounded view families
+- Fixed equation block views preserve parent pitch and component ranges without changing storage
+- Logical flow4/5 with RANS and many species maps exactly across physical layouts and storage groups
+- Hybrid equation blocks expose physical grouping and rebind across parent layouts
+- Owned-only pointwise algebra and reductions overlap direct halo writes without regional splitting
+- Constant-density physical accumulation omits only the algebraic pressure channel
+- Semantic validation and writer reservation reject bad bindings without partial publication
+- Retained scopes preserve allocation lifetime and storage replacement requires explicit rebinding
+- Numeric equation aliases and read scopes retain rows and values without retaining MPI context
+- Coupled matrix action ILU SGS and left GMRES preserve separate and permuted logical equation fields
+- Logical linear driver rejects inconsistent physical binding before any halo setup
+- Logical scalar-diagonal SGS handles all blocks and fails an abandoned partial output
+- The same BDF and coupled block solve interface advances all flow RANS and species components
+- One time driver advances coupled and separate equation storage with identical coupled stage mathematics
+- Queued equation algebra retains temporaries and preserves logical blocks across layouts
+- Equation algebra reserves every output before writing and time sources cannot be silently mutated
+
+## `dnds_test_cauchy_equation_source`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_cauchy_equation_source_np2` |
+| 1 | `dnds_cauchy_equation_source_np1` |
+| 2 | `dnds_cauchy_equation_source_np4`, `dnds_cauchy_equation_source_np8` |
+
+[test_EquationSource.cpp](../../test/cpp/Cauchy/test_EquationSource.cpp)
+
+- Total mixture inlet preserves prescribed composition stagnation enthalpy and entropy
+- Shared transported species repair preserves Euler constants and strided neighbors
+- Constant-volume source preserves frozen blocks and matches the SI reactor at nonunit scales
+- Equation primitive and mixture boundary producers preserve full energy composition and moving axes
+- Mixture thermal references enforce a requested temperature through actual conservative energy
+- Attached RANS leaves mixture thermal bounds and chemical Jacobian columns unchanged
+- Mixture source point matches the Euler source and all conservative derivative columns
+- Mixture physical ALE flux derivatives include composition energy and all conservative columns
+- Owned chemical sources honor separate layouts, stale temperature guesses and ghost independence
+- Mixture primitive and conservative gradients include composition energy and all kinetic terms
+- Mixture viscous transport matches Euler heat and species enthalpy flux with effective coefficients
+- Chemical source rejects output reservations and Jacobian aliases before changing values
+- Actual conservative chemical sources advance a separate-field implicit reactor toward Cantera
 
 ## `dnds_test_cauchy_finite_volume_physics`
 
@@ -60,6 +461,228 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Coupled mixture nonlinear stage recovers a manufactured target through separate or permuted arrays
 - Production equation nonlinear stages advance a distributed reacting FV state toward Cantera
 
+## `dnds_test_cauchy_implicit_domain`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_cauchy_implicit_domain_np2` |
+| 1 | `dnds_cauchy_implicit_domain_np1` |
+| 2 | `dnds_cauchy_implicit_domain_np4`, `dnds_cauchy_implicit_domain_np8` |
+
+[test_ImplicitDomain.cpp](../../test/cpp/Cauchy/test_ImplicitDomain.cpp)
+
+- Periodic ACM physical step transports velocity and preserves the pressure gauge
+- An active ACM pressure outlet suppresses the closed-domain gauge
+- ACM BDF observes continuity separately from named momentum convergence
+- Production DITR controller uses common limits unless an override is supplied
+- Native physical implicit methods preserve uniform periodic flow and transactional commit
+- P3 implicit periodic transport conserves flow and discard restores the VR warm guess
+- Steady BDF1 infinite-dt mode removes a nonconstant residual without advancing physical time
+- Capped steady stages advance by default and reject only with explicit control
+- Strict implicit acceptance requires settled VR in addition to a loose mean target
+- DITR coupled cap advances by default and rejects only with explicit control
+- Rotating physical domains retain a uniform inertial flow with explicit and implicit stage times
+
+## `dnds_test_cauchy_jacobian`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_cauchy_jacobian_np2` |
+| 1 | `dnds_cauchy_jacobian_np1` |
+| 2 | `dnds_cauchy_jacobian_np4`, `dnds_cauchy_jacobian_np8` |
+
+[test_Jacobian.cpp](../../test/cpp/Cauchy/test_Jacobian.cpp)
+
+- ACM temporal Jacobian distinguishes pressure pseudo mass from differential physical mass
+- ACM Euler scalar wall mode adds only the prepared spectral diagonal
+- Scheme A characteristic action reproduces the differentiated mechanical flux
+- Rotational periodic ACM matrix differentiates the production face residual in stored axes
+- Six-component frozen face leaves retain EOS coupling and additive matrix and strided product semantics
+- Integrated approximate Jacobian matches frozen-spectral flux differences on periodic and physical boundaries
+- Frozen physical semi-matrix-free blocks agree with assembled action, split SGS and local ILU
+- Selected physical Jacobians are principal matrices after periodic frame transformation
+
+## `dnds_test_cauchy_linear`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_cauchy_sgs_subpartitions_omp_np2` |
+| 1 | `dnds_cauchy_linear_np1`, `dnds_cauchy_linear_np2` |
+| 2 | `dnds_cauchy_linear_np4`, `dnds_cauchy_linear_np8` |
+
+[test_LinearProblem.cpp](../../test/cpp/Cauchy/test_LinearProblem.cpp)
+
+- Optional inverse refinement repairs the SST action and preserves truncated subspaces
+- Native linear action overlaps direct MPI with core and preserves frozen local SGS semantics
+- SGS mesh subpartitions freeze cross-block reads in ordinary and zero-start split sweeps
+- Linear matrix construction rejects invalid topology and supports empty owners
+- Cauchy native ILU copies only local coefficients and validates ordering fill epochs and local parts
+- RCM factor ordering preserves local parts and solves the same dense system
+- Linear diagonal preparation handles general component counts and reports guarded inverse fallback
+- Common block inverse widths preserve a dense solve and guarded fallback
+- Staged SGS retains numeric allocations and row metadata after original owners expire
+- Queued linear actions retain expired owners and reject a submitted stale inverse
+
+## `dnds_test_cauchy_linear_solver`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_cauchy_linear_solver_np2` |
+| 1 | `dnds_cauchy_linear_solver_abort_np2`, `dnds_cauchy_linear_solver_np1` |
+| 2 | `dnds_cauchy_linear_solver_np4`, `dnds_cauchy_linear_solver_np8` |
+
+[test_LinearSolver.cpp](../../test/cpp/Cauchy/test_LinearSolver.cpp)
+
+- SGS and matrix action use direct evaluated products on strided rows
+- Jacobi matches independent frozen-remote local-sweep oracle
+- Dedicated zero-start SGS needs no old storage and preserves explicit-zero results
+- Residual observation cadence preserves stationary iterates and skips only diagnostic reductions
+- Residual-stopped SGS publishes zero when a repeated solve needs no sweep
+- Cauchy coupled linear solvers match a global dense oracle with real persistent halos
+- Logical coupled SGS retains physical-field scan values with remote middle exchange
+- GMRES fixed ILU corrections match one Arnoldi step of the distributed dense preconditioner
+- Cauchy linear controls and rank-local access failures reject collectively before transfers
+- Fixed-count stationary corrections preserve iterates without diagnostic actions or products
+- Fixed-count zero-start ILU overwrites dirty solution and handles zero corrections
+- Fixed-count final finite check agrees on a rank-local nonfinite update
+- Evaluated block publication validates row identity, column ordinals and active read scopes
+- CPU AMG preserves distributed action and CPU column-major blocks
+- One CPU AMG correction follows logical block order in a permuted equation field
+
+## `dnds_test_cauchy_multidomain`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_cauchy_multidomain_np4` |
+| 2 | `dnds_cauchy_acm_interface_cuda`, `dnds_cauchy_multidomain_np1`, `dnds_cauchy_multidomain_np2`, `dnds_cauchy_multidomain_np8` |
+
+[test_Multidomain.cpp](../../test/cpp/Cauchy/test_Multidomain.cpp)
+
+- Multi-domain BDF2 restart reserves every domain and redistributes by persistent IDs
+- Moving ACM disk follows the pressure datum of the connected outer domain through restart
+- Moving ACM disk shares one pressure shift across a closed interface
+- Coordinated domains retain single-domain time equations and atomic publication
+- P3 flow5 crosses a posed disk interface with dense and sparse distributed matching
+- P0 and physical-gradient P1 publish complete multidomain traces without modal storage
+- DITR freezes distinct rotating midpoint and endpoint interface packets
+- Split flow and SA fields cross a rotating interface as one equation packet
+
+## `dnds_test_cauchy_polynomial_multigrid`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_cauchy_polynomial_multigrid_np2` |
+| 2 | `dnds_cauchy_polynomial_multigrid_np1`, `dnds_cauchy_polynomial_multigrid_np4`, `dnds_cauchy_polynomial_multigrid_np8` |
+
+[test_PolynomialMultigrid.cpp](../../test/cpp/Cauchy/test_PolynomialMultigrid.cpp)
+
+- Bottom pMG uses mean convection and jump-only face viscosity in both RHS profiles
+- Each coarse smoother inherits defaults and resolves independent partial controls
+- Finest FAS acceptance shares selected-component L1 L2 convergence with the stage solver
+- Coarse FAS rate reuse and fail-fast halos preserve distributed viscous cycle results
+- FAS consumes the measured finest VR rate once for field and logical equations
+- Polynomial FAS recovers the original P3 manufactured equation across layouts and distributed halos
+- Polynomial FAS fixed points and preflight errors preserve fine means
+- Selected pMG recovers nonconstant principal equations while preserving frozen means and full residual reporting
+- Cauchy pMG physical discard and reprepare retain the fine reconstruction transaction
+- Logical polynomial FAS recovers nonconstant RANS and reacting mixture equations without packing
+- Equation Domain performs one spatial FAS update per DITR coupled stage and retries exactly
+
+## `dnds_test_cauchy_rans_fv`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_cauchy_rans_fv_np2` |
+| 1 | `dnds_cauchy_rans_fv_np1` |
+| 2 | `dnds_cauchy_rans_fv_np4`, `dnds_cauchy_rans_fv_np8` |
+
+[test_RANSFiniteVolume.cpp](../../test/cpp/Cauchy/test_RANSFiniteVolume.cpp)
+
+- Barth RANS overlay keeps face values fixed when selecting unlimited viscous slopes
+- Centered SST source Jacobian is independent of the VR polynomial
+- Finite-volume admissibility includes the prepared RANS mean policy
+- ACM wall-bounded first implicit correction transports the velocity and turbulence blocks
+- Characteristic WBAP transforms only flow5 across combined and segmented equation storage
+- Ordered six-component assembled faces match permuted storage and direct actions
+- Explicit RANS repairs scalars separately from the uncompressed flow5 update
+- RANS wall force uses the completed RHS momentum flux with the physical pressure sign
+- RANS FV integrates quadrature sources and their positive implicit destruction diagonal
+- Zero-SA wall convection retains the interior SA viscous jump
+- SA boundary samples use wall reflection and frame-relative incoming flow
+- Two-equation boundary points use mean wall distance and the correct thermal viscosity
+- RANS P3 residual and WBAP preserve split layout and core halo scheduling semantics
+- Explicit mean gradients exchange current values across layouts and CPU launchers
+- High-order SST auxiliary faces retain quadrature-dependent wall transport
+- Two-equation auxiliary viscosity consumes current conservative mean gradients
+- RANS final thermal increment compression retains Euler whole-vector scaling
+- P3 thermal reconstruction compression preserves admissible RANS linear coefficients
+- SA reference-quality failure preserves thermally admissible uncompressed coefficients
+- RANS reconstruction PP preserves flow and scalar polynomials independently
+- SA implicit updates repair scalars after flow compression without unfreezing masked components
+- RANS nonlinear stages recover a manufactured viscous source balance
+- SA cached corrections retain pre-RHS auxiliary publication across CPU launchers
+- P0 jump-only face viscosity retains physical gradients in the SA volume source
+
+## `dnds_test_cauchy_riemann`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_cauchy_riemann` |
+
+[test_Riemann.cpp](../../test/cpp/Cauchy/test_Riemann.cpp)
+
+- Transverse wave jump uses supplied acoustic data and is side-frame invariant
+- Riemann module uses supplied pressure and acoustic data independently of energy
+- Energy-origin shifts and oriented reversal preserve the supplied Euler flux convention
+- Every flux accepts external thermodynamics and transforms covariantly under energy-origin changes
+- Shared Riemann formulas support explicit kernel-local arithmetic types
+
+## `dnds_test_cauchy_riemann_legacy`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_cauchy_riemann_legacy` |
+
+[test_RiemannLegacy.cpp](../../test/cpp/Cauchy/test_RiemannLegacy.cpp)
+
+- Scalar convection uses the caller's fixed dissipation independently of flow flux
+- Every Cauchy Riemann selection matches legacy perfect gas facial and mean state behavior
+- Every selected flux exposes explicit common-input requirements and missing data errors
+- All Euler fluxes satisfy stationary face consistency and reversal independently of legacy
+
+## `dnds_test_cauchy_state_input`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_cauchy_state_input` |
+
+[test_StateInput.cpp](../../test/cpp/Cauchy/test_StateInput.cpp)
+
+- ACM velocity and relative pressure use independent physical scales
+- Perfect gas molecular laws preserve Euler scaling and all property consumers
+- Tagged physical state conversions preserve Euler variants and distinct RANS scales
+- Initial boundary and reference adapters share conversion without density fallback
+- Mixture state inputs match Euler total and sensible energies with nonunit scales
+- Spatial state overrides preserve precedence plane sign and physical expression seeds
+
+## `dnds_test_cauchy_viscous_flux`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_cauchy_viscous_flux_np2` |
+| 1 | `dnds_cauchy_viscous_flux_np1` |
+| 2 | `dnds_cauchy_viscous_flux_np4`, `dnds_cauchy_viscous_flux_np8` |
+
+[test_ViscousFlux.cpp](../../test/cpp/Cauchy/test_ViscousFlux.cpp)
+
+- P3 viscous face derivatives reproduce polynomial heat conduction and Couette production
+- Direct P1 Barth preserves an independently selectable unlimited viscous gradient
+- Polynomial viscosity exchanges the selected limited or unlimited coefficients after the last VR commit
+- Viscous policy disagreement is rejected before differing transfer schedules are bound
+- Unified equation orchestration preserves primitive-gradient flow5 viscosity
+- Polynomial wall viscosity has the Euler normal jump and noGRP switch
+- Nonzero quadratic temperature does not introduce viscosity at Euler open or slip boundaries
+
 ## `dnds_test_device_packing`
 
 | Level | CTest registrations |
@@ -76,6 +699,16 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Device packing begins eagerly and overlaps owned compute with a gated communication stream
 - Device packed preflight rejects invalid placement and rolls back unmodified destination
 
+## `dnds_test_distributed_failure`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_distributed_failure_factory_np2`, `dnds_distributed_failure_reducer-completion_np2`, `dnds_distributed_failure_solver-checked-preflight_np2`, `dnds_distributed_failure_solver-unchecked-preflight_np2`, `dnds_distributed_failure_solver-worker_np2`, `dnds_distributed_failure_transfer_np2` |
+| 2 | `dnds_distributed_failure_factory_np4`, `dnds_distributed_failure_factory_np8`, `dnds_distributed_failure_reducer-completion_np4`, `dnds_distributed_failure_reducer-completion_np8`, `dnds_distributed_failure_solver-checked-preflight_np4`, `dnds_distributed_failure_solver-checked-preflight_np8`, `dnds_distributed_failure_solver-unchecked-preflight_np4`, `dnds_distributed_failure_solver-unchecked-preflight_np8`, `dnds_distributed_failure_solver-worker_np4`, `dnds_distributed_failure_solver-worker_np8`, `dnds_distributed_failure_transfer_np4`, `dnds_distributed_failure_transfer_np8` |
+
+[test_DistributedFailure.cpp](../../test/cpp/Cauchy/test_DistributedFailure.cpp)
+
+
 ## `dnds_test_id_row_transfer`
 
 | Level | CTest registrations |
@@ -88,6 +721,50 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 
 - Exact persistent-ID lookup transfers native rows after arbitrary rank distribution and local permutation
 - ID row transfer rejects duplicate sources missing targets and nonbijective coverage
+
+## `dnds_test_native_dof_algebra`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_native_dof_algebra_np2` |
+| 1 | `dnds_native_dof_algebra_np1` |
+| 2 | `dnds_native_dof_algebra_np4`, `dnds_native_dof_algebra_np8` |
+
+[test_NativeDofAlgebra.cpp](../../test/cpp/DNDS/test_NativeDofAlgebra.cpp)
+
+- Operator input layout caches track queued mutations and storage aliases
+- Independent OMP row kernels return deterministic first numerical failure
+- Reserved DoF scratch reuses prepared level aliases and communicating slots
+- Native DOF algebra operates on logical owned entries for arbitrary table widths
+- Native DOF fixed widths share handles and numerical copies are explicit
+- Native DOF algebra validates semantic spaces, immutable shape and overlap
+- Fixed DOF component contract survives dynamic Array imports and replacement
+- Immediate DOF convenience rejects pending or active access before using an inline lane
+- Native DOF commands retain values and honor explicit cross-stream joins
+- Native DOF global reductions include uneven and empty owned ranks with collective failure
+- Native DOF operators support a manufactured diagonal Krylov solve
+- Native DOF commands and reductions mix physical formats without touching ghosts or padding
+- DOF halo publication tracks completed epochs while owned core work overlaps
+
+## `dnds_test_nccl_transfer`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_nccl_transfer_np2` |
+| 1 | `dnds_nccl_transfer_np1` |
+
+[test_NCCLTransfer.cu](../../test/cpp/DNDS/test_NCCLTransfer.cu)
+
+- NCCL packed rows match exact values across layouts and queued producer consumer epochs
+- NCCL direct contiguous copies and explicit unsupported bindings
+- NCCL packed CSR empty ownership and omitted POD bytes preserve receiver contents
+- NCCL enqueue overlaps core work with gated transfer and retains leases and workspace
+- CUDA producer chains device-packed MPI and NCCL across streams through pending shutdown
+- NCCL global Array reduction orders producer and consumer across streams
+- NCCL DOF halo publishes the retired producer version without a submission host wait
+- Unchecked NCCL missing producer edge demonstrably transfers a stale epoch
+- NCCL collisions and aborted communicator reject explicitly
+- NCCL binding checks communicator identity beyond congruent MPI groups
 
 ## `dnds_test_runtime_array`
 
@@ -166,6 +843,21 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Backend allocation resources receive the final selected free stream across independent handles
 - CUDA aligned physical tables cross streams and release after the final use
 
+## `dnds_test_runtime_element_schema`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_runtime_element_schema` |
+
+[test_RuntimeElementSchema.cpp](../../test/cpp/DNDS/test_RuntimeElementSchema.cpp)
+
+- ElementSchema registration is MPI-free and shares canonical native definitions
+- ElementSchema swaps each mixed scalar word and preserves all padding
+- ElementSchema rejects invalid field layouts and incompatible registrations
+- ElementSchema retains vended MPI structs after caller handles are freed
+- ElementSchema marks unflattened MPI typemaps native opaque
+- Registered ElementSchema supports typed transfer and custom reduction
+
 ## `dnds_test_runtime_engine`
 
 | Level | CTest registrations |
@@ -202,6 +894,346 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Eager byte copies use the same pending access contract on inline and worker CPU
 - CPU async allocation facade preserves shared variable shape metadata and handle ownership
 
+## `dnds_test_runtime_native_io`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_runtime_native_io_np2` |
+| 1 | `dnds_runtime_native_io_np1` |
+| 2 | `dnds_runtime_native_io_np4`, `dnds_runtime_native_io_np8` |
+
+[test_RuntimeNativeIO.cpp](../../test/cpp/DNDS/test_RuntimeNativeIO.cpp)
+
+- Native payload uses caller buffers across dense CSR padded fixed and static-max shapes
+- JSON byte segments support in-memory DOM and retain file mode checks
+- Opposite-endian mixed records swap individual declared words and preserve object padding
+- Malformed native records reject before payload fill and permit pristine retry
+- Malformed H5 native metadata rejects collectively without truncated CSR association
+- Native collective checkpoint rejects one rank's moved or unpublished Array before file mutation
+- Version two legacy byte CSR remains readable through direct native allocation
+
+## `dnds_test_runtime_row_builder`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_runtime_row_builder` |
+
+[test_RuntimeRowBuilder.cpp](../../test/cpp/DNDS/test_RuntimeRowBuilder.cpp)
+
+- Row builder rejects overflowing requests before changing existing rows
+- Known shape rows fill one final table or CSR and reject failed publication
+- Exclusive padded edits block sharing and retain value addresses across Commit
+- Exclusive edits reject aliases pins and independently shared metadata
+- Abandoned exclusive edits fail closed and table widths survive physical padding
+- Parallel incremental CSR construction packs once at publication
+- Padded row builder updates logical sizes within fixed capacity
+- Detached shape drafts preserve old aliases and abandon without publication
+- Builder empty shapes and POD values keep element alignment
+
+## `dnds_test_runtime_row_transfer`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_runtime_row_transfer_np4` |
+| 1 | `dnds_runtime_preflight_off_failure_np2`, `dnds_runtime_row_transfer_abort_np2`, `dnds_runtime_row_transfer_np1`, `dnds_runtime_row_transfer_np2` |
+| 2 | `dnds_runtime_row_transfer_np8` |
+
+[test_RuntimeRowTransfer.cpp](../../test/cpp/DNDS/test_RuntimeRowTransfer.cpp)
+
+- Prepared CPU transfer groups retain separate payloads and perform one optional agreement
+- Grouped reservation rejection releases all fields before any payload is posted
+- Optional collective preflight removes only successful launch reductions
+- Managed MPI requests survive dropped handles and progress worker consumers during close
+- Inherited named channels share a communicator and preserve concurrent payloads
+- Communication context adoption and policy aliases retain one resource and tag namespace
+- Communication context agrees its immutable safety policy before preparing routes
+- Fail-fast MPI launches preserve padded rows in eager and checked execution
+- Large permuted routes preserve row order padding and rank-local collision flags
+- Complete small row relations agree with independent sorted collision oracle
+- Typed binding rejects same-size arithmetic schema confusion
+- Sender ordering derives a checked route without changing peer row correspondence
+- Native direct ragged halo retains leases and reusable routing
+- Inferred payload shapes retain sparse holes widths and collective policy checks
+- Table width agreement preserves sparse rows and handles rank-varying layouts
+- Default inferred transfers preserve table stride padded capacity and CSR through repeated halos
+- Preserved inference retains typed empty ranks and rejects remote rows that do not fit
+- Preserved sparse table slots keep width and explicit compact retains zero-length holes
+- Binding rejects reordered communicator and rank-local tag reservation failure
+- Combined payload and binding preflight reject rank-local mismatches before requests
+- Typed MPI bindings reject one unpublished shape collectively and recover after commit
+- Direct permutation honors imported buffer origins and padded state strides
+- One route transfers padded reconstruction rows into a packed CSR destination
+- Native reverse fan-in rejects copy and supports reductions
+- Native POD transfers use MPI extent and support custom reductions
+- Native empty routes and generation validation
+- Native CUDA reduction dispatch covers wide rows without requiring device MPI
+- Native CUDA integer reduction families agree with the CPU reference
+- Native CUDA direct MPI and device fan-in reduction
+- Mixed physical tables use direct datatype routes and preserve logical rows
+- Strided receive collisions use scalar contribution groups for builtin and custom POD reductions
+- Communication worker preserves repeated packed and direct sparse transfers
+- Communication worker overlaps core reads with active receiver completion
+- DevicePacked is explicit and rejects host endpoints collectively
+- MPI enqueue and unavailable NCCL capabilities reject explicitly
+- Empty direct routes retain stream ordering without payload access or host readiness
+- Locally empty direct participants retain the nonempty peer preflight sequence
+
+## `dnds_test_runtime_transient`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_runtime_transient_np2` |
+| 1 | `dnds_runtime_transient_np1` |
+| 2 | `dnds_runtime_transient_np4`, `dnds_runtime_transient_np8` |
+
+[test_RuntimeTransient.cpp](../../test/cpp/DNDS/test_RuntimeTransient.cpp)
+
+- Known route rejects negative extents on every rank before publishing
+- MPI allreduce queues behind a producer and orders the next reduction and consumer
+- Foreign buffer aliases cannot bypass copy or collective reservations
+- Direct transfers support SELF and reordered split communicators without inherited tag attributes
+- Transient reduction rejects missing collision resolution before publishing
+- Transfer completion imported into eager progress orders its consumer
+- CUDA eager producer portable packed MPI and consumer retain ordering
+- Transient and persistent contexts transfer permuted SoA rows
+- Dynamic CSR migration privately prepares shapes and publishes once
+- Dynamic migration preserves a strided table instead of publishing temporary CSR
+- Dynamic migration rejects a missing source collectively and leaves the route usable
+- Main-thread MPI progression joins worker computation with scheduled leases
+- Checked MPI rejects a rank-local missing reader edge collectively and permits retry
+- MPI completes while a core worker is active across Euler field widths
+- Rank-local payload and lease mistakes fail collectively without changing values
+- Repeated halo gathers and reverse residual assembly share routes across fields
+- Uneven empty-rank field bundles migrate out and back with epoch invalidation
+
+## `dnds_test_sparse_batch_exchange`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `dnds_sparse_batch_exchange_np4` |
+| 1 | `dnds_sparse_batch_exchange_np1`, `dnds_sparse_batch_exchange_np2` |
+| 2 | `dnds_sparse_batch_exchange_np8` |
+
+[test_SparseBatchExchange.cpp](../../test/cpp/DNDS/test_SparseBatchExchange.cpp)
+
+- Sparse fixed-record batches fan out and return variable proposal counts
+- Empty batch peers complete and invalid record layouts fail collectively
+
+## `euler_test_evaluator_pipeline`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `euler_evaluator_small_np2` |
+| 2 | `euler_evaluator_pipeline_np1`, `euler_evaluator_pipeline_np2`, `euler_evaluator_pipeline_np4`, `euler_evaluator_pipeline_np8` |
+
+[test_EulerEvaluator.cpp](../../test/cpp/Euler/test_EulerEvaluator.cpp)
+
+- Existing Euler configurations retain full mesh audits when new keys are absent
+- EulerEvaluator pipeline: IV (NS, P1, 2D)
+- EulerEvaluator pipeline: NACA0012 (NS_SA, P1)
+- EulerEvaluator pipeline: SA IDDES with runtime ft2 disabled
+- EulerEvaluator pipeline: Box (NS_3D, P1)
+- RANS wall cache rejects changed geometry and metric publications
+- Euler two-equation turbulent normal stress follows the physical face normal
+- Viscous wall perturbations match prescribed turbulence ghost values
+- SA GG boundaries preserve means, face targets and traversal independence
+- EulerP scalar GG reads neighbour cells and face-indexed boundary buffers
+- Euler reconstruction PP keeps RANS out of flow beta and order fallback
+- Euler gradients: EvaluateDt prepares limited buffers and direct FV explicitly reuses them
+- LVR target and branch halos agree across 2-D MPI partitions
+- LVR explicit gradient reuse matches a fresh Barth or WBAP reference
+- EulerSolver static reconstruction mask owns selectors and setup storage
+- EulerSolver static reconstruction mask builds a 3D coordinate selection
+- EulerSolver static reconstruction mask survives limiter paths and time updates
+- Euler distributed volume output reads native authority after detached facade metadata edits
+- Native Euler ingress restart and serial boundary output retain field association
+- Native Euler H5 restarts preserve sparse high Cell IDs and selected variable dimensions
+- Euler archived mesh setup refreshes loaded wall vectors after actual coordinate snapping
+- Euler periodic source setup accepts configured near-plane cleanup after rotation
+
+## `euler_test_gas_thermo`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `euler_gas_thermo` |
+
+[test_GasThermo.cpp](../../test/cpp/Euler/test_GasThermo.cpp)
+
+- IdealGasThermal: standard quiescent air
+- IdealGasThermal: Mach 2 flow
+- IdealGasThermal: gammaEq controls pressure and gamma controls acoustic speed
+- Shared enthalpy helper does not double-count base energy
+- Cons2Prim and Prim2Cons round-trip: 3D
+- Cons2Prim and Prim2Cons round-trip: 2D
+- Cons2Prim and Prim2Cons round-trip preserves base-energy offset
+- Prim2Cons: known state verification
+- EulerGas eigenvectors: L*R = I for 3D
+- EulerGas eigenvectors: L*R = I for non-trivial velocity
+- IdealGas convenience eigenvector wrappers produce L*R=I
+- EulerGas left eigenvector inverse uses H/a consistency for split gamma
+- EulerGas eigenvectors: L*R = I for 2D split gamma
+- GasInviscidFlux: x-direction, quiescent gas
+- GasInviscidFlux: x-direction, moving gas
+- GasInviscidFlux_XY: n=(1,0,0) equals GasInviscidFlux
+- IdealGasUIncrement: finite-difference verification
+- IdealGasUIncrement: base-energy increment reduces pressure increment
+- GetRoeAverage: identical states give same state
+- GetRoeAverage: split gamma keeps pressure closure separate from acoustic gamma
+- GetRoeAverage: density is geometric mean
+- RoeFluxIncFDiff: entropy wave strength preserves split-gamma identity
+- GradientCons2Prim: finite-difference verification
+- GradientCons2Prim: species base-energy gradient corrects pressure gradient
+- CompressionRatio: zero increment gives alpha=0 (no compression needed)
+- CompressionRatio: alpha in [0,1]
+- ViscousFlux: zero gradient produces zero flux
+
+## `euler_test_physics_properties`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `euler_physics_properties` |
+
+[test_PhysicsProperties.cpp](../../test/cpp/Euler/test_PhysicsProperties.cpp)
+
+- PhysicsProperties non-reactive state conversions
+- PhysicsProperties non-reactive conservativeThermal returns closure and acoustic gamma
+- PhysicsProperties non-reactive total-to-static conversion is closed form
+- PhysicsProperties non-reactive static-to-total conversion is closed form
+- PhysicsProperties non-reactive cons code-phys round-trip with non-default scales
+- PhysicsProperties non-reactive prim code-phys round-trip with RANS and non-default scales
+- PhysicsProperties reactive state conversions
+- PhysicsProperties reactive conservativeThermal separates gammaEq from acoustic gamma
+- PhysicsProperties reactive transport uses Cantera mixture coefficients in code units
+- PhysicsProperties reactive temperature gradient matches finite differences
+- PhysicsProperties reactive total-to-static conversion iterates mixture thermodynamics
+- PhysicsProperties reactive static-to-total inverts total-to-static
+- PhysicsProperties reactive total-to-static default options converge or throw
+- PhysicsProperties cons code-phys round-trip multi-species with non-default scales
+- PhysicsProperties prim code-phys round-trip multi-species with RANS and non-default scales
+- PhysicsProperties RANS prim scale factors for all models
+- PhysicsProperties RANS cons scale factors
+- PhysicsProperties scaleRansPrim round-trip
+- PhysicsProperties scaleRansCons round-trip
+- PhysicsProperties StateValueOrigin round-trip single-species
+- PhysicsProperties StateValueOrigin round-trip multi-species Cantera
+- PhysicsProperties cons code-phys linearity and range
+- PhysicsProperties prim code-phys linearity and range
+- PhysicsProperties RANS scale linearity with multiple scales
+- PhysicsProperties default-RANS nRANSVars=0 cons and prim helpers
+- PhysicsProperties reference derived scales
+- StateValue JSON round-trip
+
+## `euler_test_rans`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `euler_rans` |
+
+[test_RANS.cpp](../../test/cpp/Euler/test_RANS.cpp)
+
+- GetMut_KOWilcox: golden value
+- GetMut_SST: golden value
+- GetMut_RealizableKe: golden value
+- GetSource_KOWilcox: zero gradient finite and has destruction
+- GetSource_SST: zero gradient finite
+- GetSource_RealizableKe: zero gradient finite
+- GetSource_KOWilcox: shear gradient golden
+- GetSource_SST: shear gradient golden
+- GetSource_SST: omega production blends inner and outer coefficients
+- SST-2003 uses strain in transport and one capped production in both equations
+- GetSource_RealizableKe: shear gradient golden
+- GetSource_KOWilcox mode=1: implicit diagonal non-negative
+- GetSource_SST mode=1: implicit diagonal non-negative
+- SST optional sink diagonal matches frozen-gradient derivatives and preserves RHS
+- GetVisFlux_KOWilcox: zero gradient -> zero flux
+- GetVisFlux_SST: zero gradient -> zero flux
+- GetVisFlux_RealizableKe: zero gradient -> zero flux
+- GetVisFlux_KOWilcox: k-gradient produces k-flux
+- GetMut_KOWilcox: mut increases with k
+- GetMut_SST: mut increases with k
+- GetMut_KOWilcox: very small k/omega produces finite mut
+- GetMut_SST: very small k/omega produces finite mut
+- GetMut_RealizableKe: very small k/eps produces finite mut
+- RANS configs: defaults and JSON round-trip preserve historical limits
+- Euler evaluator settings: RANS configs are flat nested sections
+- GetSource_SA: production limit changes the physical source
+- GetSource_SA: SA-R suppresses rotation rather than strain in 2D and 3D
+- SA DES lengths: coefficient placement, shielding and disabled scale
+- GetSource_SA: DES modes and ft2 switch agree with analytic sources in 2D/3D
+- shared SA: explicit frame vorticity matches corrected velocity gradients
+
+## `euler_test_riemann_solvers`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `euler_riemann_solvers` |
+
+[test_RiemannSolvers.cpp](../../test/cpp/Euler/test_RiemannSolvers.cpp)
+
+- AUSM family: consistency, face reversal, ALE and untouched passive entries
+- AUSM family: contacts and supersonic upwind flux
+- AUSM family: exact stationary Mach-20 normal shock
+- AUSMPW+ zero-velocity pressure jump matches independent closed form
+- AUSM family: split-gamma and base-energy consistency
+- AUSM dispatcher: facial flux and mean-state wave estimates are separate
+- AUSMPW+ has no growing linear acoustic mode near the Sod plateau
+- Roe consistency: identical states give exact flux
+- HLLC consistency: identical states give exact flux
+- HLLEP consistency: identical states give exact flux
+- Variable-gamma Riemann solvers use gammaEq pressure and gamma acoustic paths
+- Variable-gamma Riemann solvers remain symmetric with base energy
+- Roe base-energy mode reconstructs identity when all lambdas are one
+- Roe base-energy contact has no spurious momentum flux
+- Roe variants M1-M9 consistency
+- Roe M8 and M9 produce finite Sod fluxes
+- Roe M8 and M9 batch dispatch matches scalar dispatch
+- Roe symmetry: F(UL,UR,n) = -F(UR,UL,-n)
+- HLLC symmetry: F(UL,UR,n) = -F(UR,UL,-n)
+- Sod shock tube: flux is finite and bounded
+- Golden flux values for mixed-state test vector
+- All solvers: quiescent gas produces same flux (p-only)
+- Roe eigenvalue output: lam0 < lam123 < lam4 for subsonic
+- Roe consistency: diagonal normal
+- EulerP Roe entropy threshold uses total speed and preserves orientation and rotation
+
+## `euler_test_rotating_frame`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `euler_rotating_frame` |
+
+[test_RotatingFrame.cpp](../../test/cpp/Euler/test_RotatingFrame.cpp)
+
+- Extended Euler rotation uses absolute momentum and its negative-source Jacobian
+
+## `euler_test_source_chemical`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `euler_source_chemical` |
+
+[test_ChemicalSource.cpp](../../test/cpp/Physics/test_ChemicalSource.cpp)
+
+- ChemicalSource::productionRates — RHS signs at active T
+- ChemicalSource::productionRatesAndJacobian — Jacobian sign convention
+- ChemicalSource::maxChemicalStiffnessRate — matches fixed-density mass-fraction diagonal
+- Constant-volume chemical response agrees with directional differences and source scaling
+- ChemicalSource::mixtureR — gas constant correctness
+
+## `geom_test_distributed_boundary_interface`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `geom_distributed_boundary_interface_np2` |
+| 1 | `geom_distributed_boundary_interface_np1` |
+| 2 | `geom_distributed_boundary_interface_np4`, `geom_distributed_boundary_interface_np8` |
+
+[test_DistributedBoundaryInterface.cpp](../../test/cpp/Geom/test_DistributedBoundaryInterface.cpp)
+
+- Distributed sliding matches exact Cartesian donors across geometry and cell owners
+- Coarse boxes retain reference-tolerance projections outside physical endpoints
+- Distributed matching rejects overlapping interiors and inconsistent settings collectively
+
 ## `geom_test_elements`
 
 | Level | CTest registrations |
@@ -235,6 +1267,104 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Edge topology: extracted edge nodes are valid cell nodes
 - Edge topology: edges are unique (no duplicate edges per cell)
 
+## `geom_test_mesh_cgns_multizone`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `geom_mesh_cgns_multizone` |
+
+[test_MeshCGNSMultiZone.cpp](../../test/cpp/Geom/test_MeshCGNSMultiZone.cpp)
+
+- CGNS multizone one-sided connectivity deduplicates 2x2 and 3x3 blocks
+- Audit regression: CGNS single-entry boundary PointList
+
+## `geom_test_mesh_connectivity_ghost`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `geom_mesh_connectivity_ghost_np2` |
+| 1 | `geom_mesh_connectivity_ghost_np1` |
+| 2 | `geom_mesh_connectivity_ghost_np4`, `geom_mesh_connectivity_ghost_np8` |
+
+[test_MeshConnectivity_Ghost.cpp](../../test/cpp/Geom/test_MeshConnectivity_Ghost.cpp)
+
+- Compiled ghost programs expose immutable inspection and own an exact execution signature
+- Ghost program agreement rejects different endpoint markers before traversal
+- evaluateGhostTree: single hop cell2cell
+- evaluateGhostTree: two-hop cell2cell2node with manual ghost
+- evaluateGhostTree: 2-ring cell chain
+- evaluateGhostTree: union of multiple chains
+- evaluateGhostTree: np=1 produces no ghosts
+- evaluateGhostTree: performance benchmark
+- evaluateGhostTree: doubly-periodic tiled grid
+- evaluateGhostTree: small periodic tiled grid
+- GhostChain: defaultPrimary compiles
+- GhostChain: prefix merging
+- GhostChain: invalid chain detection
+- GhostChain: dump
+- GhostChain: face ghost chain
+- GhostChain: AdjacencyDescriptor equality and hash
+- GhostChain: entityDepth
+- GhostChain: adjKindName
+- GhostChain: checkAvailable native registry rejects omitted required relation
+
+## `geom_test_mesh_locality_ordering`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `geom_mesh_locality_ordering_np2` |
+| 1 | `geom_mesh_locality_ordering_np1` |
+| 2 | `geom_mesh_locality_ordering_np4`, `geom_mesh_locality_ordering_np8` |
+
+[test_MeshLocalityOrdering.cpp](../../test/cpp/Geom/test_MeshLocalityOrdering.cpp)
+
+- First-touch node and face permutations preserve distributed cell geometry
+- Subregion cell ordering splits conservative core before grouped halo rows
+- Locality plans preserve first-touch order from cell or node anchors
+
+## `geom_test_mesh_preflight`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `geom_mesh_preflight_np2` |
+| 1 | `geom_mesh_preflight_np1` |
+| 2 | `geom_mesh_preflight_np4`, `geom_mesh_preflight_np8` |
+
+[test_MeshPreflight.cpp](../../test/cpp/Geom/test_MeshPreflight.cpp)
+
+- Cold mesh preparation shares an explicit policy without changing connectivity or halos
+- CGNS owned import partition refinement reorder and publication inherit preflight
+- Periodic owned topology and publication preserve disabled preflight
+- Conflicting selections of agreed mesh contexts reject before optional preparation stages
+
+## `geom_test_native_connectivity`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `geom_native_connectivity_np2` |
+| 1 | `geom_native_connectivity_np1` |
+| 2 | `geom_native_connectivity_np4`, `geom_native_connectivity_np8` |
+
+[test_NativeConnectivity.cpp](../../test/cpp/Geom/test_NativeConnectivity.cpp)
+
+- Native interpolation retains ordered cones and periodic self incidences with empty ranks
+- Native GhostSpec discovers multilayer remote rows and publishes shared routes
+- Branched ghost tree keeps frontiers separate and unions endpoint kinds
+- Collected intermediate owned nodes remain available to downstream ghost branches
+- Native ghost publication agrees complete same-level relation schedules
+- Exact payload aliases preserve named descriptors with rank-local alias differences
+- Aliased adjacency reads preserve constraints order and independent lease lifetimes
+- Global adjacency validation agrees with an independent scalar oracle
+- Adjacency self checks retain ghost-only source numbering on empty owners
+- Native 3D edge interpolation retains four-parent incidence and empty owners
+- Current authority feeds native setup without aliasing detached native setup copies
+- Native periodic distributed interpolation preserves owner frames and ordered companions
+- Traversal scratch preserves independent publications and exact rows after tree growth
+- Entity ghost mapping rejects rank-local unpublished shapes and remains reusable
+- Named native relations distinguish incidence any all exact and face versus node neighbors
+- Native interpolation matches repeated canonical IDs after XOR permutes frame order
+- Independent setup expansions preserve row order and join failures
+
 ## `geom_test_native_mesh_periodic_import`
 
 | Level | CTest registrations |
@@ -250,6 +1380,148 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Native serial periodic identification rejects incomplete ambiguous and fixed-point pairings without changing source
 - Native periodic canonicalization uses rigid rotations and labels all original node occurrences
 - Native periodic CGNS import builds directly on a nonzero reader and retains frames through transition and archive
+
+## `geom_test_native_mesh_transition`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `geom_native_mesh_transition_np2` |
+| 1 | `geom_native_mesh_transition_np1` |
+| 2 | `geom_native_mesh_transition_np4`, `geom_native_mesh_transition_np8` |
+
+[test_NativeMeshTransition.cpp](../../test/cpp/Geom/test_NativeMeshTransition.cpp)
+
+- Owned native capture assembles after source release with retained companions and exact descriptor rows
+- Native assembler rejects rank-local ID schema and closure schedule errors before publication
+- Owned native capture collectively rejects mismatched source inventory before ghost-map collectives
+- Native transition preserves exact persistent topology and coordinate stencil across independent placements
+- Native transition follows complete remote node stars and retains unchanged family order semantics
+- Native transition routes empty owners and rank-skewed payload without global staging
+- Native prepared transition stages field histories atomically and binds entity fields only on publication
+- Native transition distinguishes exact aliases from rank-local candidate shape state and order differences
+- Native aliased transition retains repeated periodic IDs and ordered frames
+- Owned primary reorder retains IDs and cones when other ranks own no cells
+- Canonical and named adjacency storage survives capture assembly migration and local conversion
+- Sender partition ordering preserves strided companions through gather and reverse scatter
+
+## `geom_test_native_mesh_wall_dist`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `geom_native_mesh_wall_dist_np2` |
+| 1 | `geom_native_mesh_wall_dist_np1` |
+| 2 | `geom_native_mesh_wall_dist_np4`, `geom_native_mesh_wall_dist_np8` |
+
+[test_NativeMeshWallDist.cpp](../../test/cpp/Geom/test_NativeMeshWallDist.cpp)
+
+- Disabled-preflight wall distance keeps the analytic remote-wall result
+- Native wall distance uses remote boundary selection and retains geometry identity
+- Wall distance rejects a rank without native authority collectively
+- Wall vectors rebuilt after near-plane cleanup use the final shape and configured selector
+- Native curved wall preserves method conventions and remote midpoint zeros
+- Wall distance rejects an unpublished mesh collectively
+
+## `geom_test_quadrature`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `geom_quadrature` |
+
+[test_LocalPerformance.cpp](../../test/cpp/Geom/test_LocalPerformance.cpp)
+
+- Local performance: quadrature cache has one owner and exact values
+- Local performance: immutable boundary lookup preserves mutable defaults
+
+[test_Quadrature.cpp](../../test/cpp/Geom/test_Quadrature.cpp)
+
+- Public cached shape access matches direct element evaluation
+- Quadrature: scheme constants are valid
+- Quadrature: weight sums equal reference element volumes
+- Quadrature: Line integrates polynomials up to expected order
+- Quadrature: Quad integrates polynomials up to expected order
+- Quadrature: Hex integrates polynomials up to expected order
+- Quadrature: Triangle integrates polynomials up to expected order
+- Quadrature: Tetrahedron integrates polynomials up to expected order
+- Quadrature: Prism integrates polynomials up to expected order
+- Quadrature: Pyramid integrates constant and low-degree polynomials
+- Quadrature: Quadrature class Integration method works
+- Quadrature: GetQuadraturePointInfo returns correct data
+- Quadrature: IntegrationSimple overloads work correctly
+- Quadrature: Taylor basis integration on 2D elements (degree <= 3)
+- Quadrature: Taylor basis integration on 3D elements (degree <= 3)
+- Quadrature: Taylor basis integration on 1D elements (degree <= 3)
+- Quadrature: Pyramid Taylor basis (degree <= 2)
+- Quadrature: FPolynomialFill consistency check
+
+[test_QuadratureCachePeer.cpp](../../test/cpp/Geom/test_QuadratureCachePeer.cpp)
+
+
+## `solver_test_aggregation_amg`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `solver_aggregation_amg` |
+
+[test_AggregationAMG.cpp](../../test/cpp/Solver/test_AggregationAMG.cpp)
+
+- A reused aggregation hierarchy matches a dense two-level block cycle
+- Block Jacobi preserves resolvable modes with a structural zero diagonal
+
+## `solver_test_direct`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `solver_direct` |
+
+[test_Direct.cpp](../../test/cpp/Solver/test_Direct.cpp)
+
+- Direct 2D periodic: symbolic factorization has fill-in
+- Direct symbolic factorization ignores self edges
+- Direct 2D periodic: MatMul is correct
+- Direct 2D periodic: complete LU solve is exact
+- Direct 2D periodic: ILU(0) is approximate but reduces residual
+- Direct 2D periodic: ILU(1) converges faster than ILU(0) as preconditioner
+- Direct 2D periodic LDLT: MatMul matches LU MatMul for symmetric system
+- Direct 2D periodic LDLT: complete decompose + solve is exact
+- Direct core ordering is stable within local parts and precedes symbolic fill
+- ILU zero-fill support does not bound upper triangular readiness
+- Generic ranged factors and separate triangular outputs preserve the full solve
+- Rebuilding symbolic factors replaces previous row incidences
+- Unreported symbolic construction is rank local
+- Native block matrix shares immutable row metadata and retains access lifetime
+- Fixed and dynamic diagonal inverse retain the guarded LU and singular SVD policies
+- Owned logical table recognition retains pitch and rejects changed component ordering
+- Native small-block LU specializations solve coupled blocks on all uniform layouts
+- Native block LU solves strided DOFs and rejects stale matrices and aliases
+- Native block LU supports empty owners and counts guarded inverse fallback
+- Native triangular phases retain owners and advance independent local parts
+
+## `solver_test_fas`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `solver_fas` |
+
+[test_FAS.cpp](../../test/cpp/Solver/test_FAS.cpp)
+
+- FAS distinguishes state and residual restriction and preserves incoming references through three levels
+- Identity FAS cancels a common large linear term before forming tau
+- Nonlinear FAS coarse forcing preserves a known fine solution
+- FAS rejects ambiguous ownership controls aliases and stateful operator callbacks
+- Selected FAS solves principal equations and freezes other components across strided levels
+- Selected FAS rejects invalid selections and callbacks that write frozen means
+
+## `solver_test_field_gmres`
+
+| Level | CTest registrations |
+|---|---|
+| 0 | `solver_field_gmres` |
+
+[test_FieldGMRES.cpp](../../test/cpp/Solver/test_FieldGMRES.cpp)
+
+- Field GMRES handles first-vector closure true residuals and extreme fixed preconditioner scaling
+- Field GMRES restarts nonnormal systems across layouts with empty local ranks
+- Field GMRES reports algebraic failure without false convergence
 
 ## `solver_test_field_time_stepper`
 
@@ -276,14 +1548,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Time facade reserves DITR publication while the external controller owns convergence
 - Time facade restores DITR coupled state at a completed iteration boundary
 
-## `cauchy_solver`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `cauchy_frontend_np1`, `cauchy_frontend_np2` |
-
-[Frontend test driver](../../test/Cauchy/frontend_smoke.py)
-
 ## `cfv_test_characteristic_cuda`
 
 | Level | CTest registrations |
@@ -304,19 +1568,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 [test_DeviceTransferable.cu](../../test/cpp/CFV/test_DeviceTransferable.cu)
 
 
-## `cfv_test_distributed_interface_sampling`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `cfv_distributed_interface_sampling_np1`, `cfv_distributed_interface_sampling_np2` |
-| 2 | `cfv_distributed_interface_sampling_np4`, `cfv_distributed_interface_sampling_np8` |
-
-[test_DistributedInterfaceSampling.cpp](../../test/cpp/CFV/test_DistributedInterfaceSampling.cpp)
-
-- Distributed polynomial sampling evaluates on cell owners and returns query order
-- Warped quad interface projects offset queries before distributed polynomial sampling
-- Coupling participants without a donor mesh sample a reversed donor subgroup in query order
-
 ## `cfv_test_fv_completion`
 
 | Level | CTest registrations |
@@ -335,84 +1586,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Bundled polynomial values and gradients preserve the independent sampler
 - Existing GMRES consumes native FV operators and DNDS field algebra through an explicit vector adapter
 
-## `cfv_test_fv_facility`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `cfv_fv_facility_np1`, `cfv_fv_facility_np2` |
-| 2 | `cfv_fv_facility_np4`, `cfv_fv_facility_np8` |
-
-[test_FVFacility.cpp](../../test/cpp/CFV/test_FVFacility.cpp)
-
-- FV metrics share managed mesh communication with independent preflight policy
-- Midpoint face publication preserves integrated measures and cell metrics
-- Runtime FV matches legacy VR sweeps and reproduces cell-average polynomials
-- Independent functional weights and all-order boundary penalties match configured legacy sweeps
-- WBAP explicit five-component face transforms match legacy and preserve a passive sixth field
-- FV rejects wrong association and invalid shapes before writes
-- Periodic quad and triangle reconstruction matches relaxed legacy Jacobi and ordered SOR
-- Three-dimensional FV reproduces cubic cell-average polynomials on tetrahedron and hexahedron with empty ranks
-- SVD removes unconstrained modes and invalid settings fail collectively
-- Two-buffer SOR preserves its MPI input and split automatically selects core-first order
-
-## `cfv_test_limited_vr`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `cfv_limited_vr_np1`, `cfv_limited_vr_np2` |
-| 2 | `cfv_limited_vr_np4`, `cfv_limited_vr_np8` |
-
-[test_LimitedVR.cpp](../../test/cpp/CFV/test_LimitedVR.cpp)
-
-- Native v2/v3 gates preserve legacy thresholds, contact response and expansion admission
-- Supported extremum seeds preserve incidence counts, retention and boundary exclusion
-- LVR neighbor rounds cross rank boundaries with synchronous Cartesian distance and saturation oracles
-- Distributed v2/v3 correction seeds distinguish mean contact support, transverse equality and history
-- A-weighted limited VR preserves generic components, relaxation and split SOR semantics
-
-## `cfv_test_limiters`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `cfv_limiters` |
-
-[test_Limiters.cpp](../../test/cpp/CFV/test_Limiters.cpp)
-
-- PolynomialSquaredNorm<2> with 2 rows (P1)
-- PolynomialSquaredNorm<2> with 3 rows (P2)
-- PolynomialSquaredNorm<2> with 4 rows (P3)
-- PolynomialSquaredNorm<3> with 3 rows (P1)
-- PolynomialSquaredNorm<3> with 6 rows (P2)
-- PolynomialSquaredNorm<3> with 10 rows (P3)
-- PolynomialDotProduct<2> self-product equals PolynomialSquaredNorm
-- PolynomialDotProduct<2> linearity
-- FMINMOD_Biway: same-sign inputs
-- FMINMOD_Biway: opposite-sign inputs produce zero
-- FMINMOD_Biway: zero input
-- FVanLeer_Biway: same-sign inputs
-- FVanLeer_Biway: opposite-sign produces zero
-- FVanLeer_Biway: equal inputs return same value
-- FWBAP_L2_Biway: identical inputs pass through
-- FWBAP_L2_Biway: output bounded by inputs for same-sign
-- FWBAP_L2_Cut_Biway: opposite-sign cut to zero
-- FWBAP_L2_Multiway: all identical inputs pass through
-- FWBAP_L2_Multiway: no NaN for random inputs
-- FWBAP_L2_Multiway_Polynomial2D: all identical pass through
-- FWBAP_L2_Multiway_Polynomial2D: no NaN for random inputs (nRows=2,3,4)
-- FMEMM_Multiway_Polynomial2D: center input unchanged when smallest
-- FMEMM_Multiway_Polynomial2D: no NaN for random inputs
-- FWBAP_L2_Multiway_PolynomialOrth: all identical pass through
-- FWBAP_L2_Multiway_PolynomialOrth: no NaN
-- FWBAP_L2_Biway_PolynomialNorm<2,1>: identical inputs pass through
-- FWBAP_L2_Biway_PolynomialNorm<2,Eigen::Dynamic>: no NaN
-- FWBAP_L2_Biway_PolynomialNorm<3,Eigen::Dynamic>: no NaN for 3D dims
-- FMEMM_Biway_PolynomialNorm<2,Eigen::Dynamic>: u2 smaller returns u2
-- FMEMM_Biway_PolynomialNorm<2,Eigen::Dynamic>: no NaN
-- FWBAP_L2_Biway_PolynomialOrth: identical inputs pass through
-- FWBAP_L2_Biway_PolynomialOrth: no NaN
-- Limiter ordering: FMINMOD output <= FWBAP output for same-sign
-- All limiters handle near-zero inputs without NaN
-
 ## `cfv_test_reconstruction_capabilities`
 
 | Level | CTest registrations |
@@ -426,77 +1599,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Original operator and preconditioner profiles remain independent under complete SVD truncation
 - Inverse-only preparation includes self-periodic diagonal corrections
 - Sampling-only preparation is independent of matrix capabilities and ranks agree before setup
-
-## `cfv_test_reconstruction_math`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `cfv_reconstruction_math` |
-
-[test_ReconstructionMath.cpp](../../test/cpp/CFV/test_ReconstructionMath.cpp)
-
-- Compute scalar Taylor contexts preserve derivatives across explicit arithmetic choices
-- Prepared Taylor points preserve nonunit-scale physical derivatives and zero-mean modes
-- Taylor derivative pullback preserves Frobenius tensor norms through degree three
-- Central isotropic weight schemes preserve configured legacy formulas
-
-## `cfv_test_reconstruction_overlap`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `cfv_reconstruction_overlap_np1`, `cfv_reconstruction_overlap_np2`, `cfv_reconstruction_overlap_omp2_np2` |
-| 2 | `cfv_reconstruction_overlap_np4`, `cfv_reconstruction_overlap_np8` |
-
-[test_ReconstructionOverlap.cpp](../../test/cpp/CFV/test_ReconstructionOverlap.cpp)
-
-- Jacobi and WBAP core work overlaps real direct MPI and preserves unsplit results
-- Core-first SOR uses a separate frozen send snapshot during split execution
-- One-cell OpenMP SOR blocks reduce to Jacobi with frozen cross-block reads
-- CFV split operators share eager ordering across inline and worker CPU launchers
-- Queued CPU reconstruction and WBAP retain operands through chained publications
-- CPU FV reconstruction limiter and linear actions agree across mixed DOF physical layouts
-
-## `dnds_test_access_tracking`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_access_tracking` |
-
-[test_AccessTracking.cpp](../../test/cpp/DNDS/test_AccessTracking.cpp)
-
-- Checked prefixes reject missing stale and incomplete fan-in dependencies
-- Backend rejection rolls back aliases without holding the ledger across work
-- Explicit cross-context events prevent independent alias authority
-- CPU worker checks submission before completion and preserves real event execution
-- Checked release consumes aliases only after an explicit fan-in
-- Immediate and unchecked boundaries reject pending conflicting checked accesses
-- Inline checked execution publishes immediately and concurrent issue stays ordered
-
-## `dnds_test_array`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_array` |
-
-[test_Array.cpp](../../test/cpp/DNDS/test_Array.cpp)
-
-- Ownership: host and Host-device leases retain fixed allocations
-- Ownership: CSR row leases survive reserve compression and deletion
-- Ownership: uncompressed row hashing preserves non-arithmetic values
-- CSR sharing: public row starts and const iterators are read only
-- Audit regression: compressed CSR hash includes row offsets
-- Audit regression: host mirror publishes the current allocation
-- Array TABLE_StaticFixed layout
-- Array TABLE_Fixed layout
-- Array TABLE_StaticMax layout
-- Array TABLE_Max layout
-- Array CSR layout
-- Array clone and copy
-- Array edge cases
-- Array serialization round-trip
-- Array signature
-- Array hash
-- Array resize-write-read
 
 ## `dnds_test_array_derived`
 
@@ -623,24 +1725,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Synchronous residual completes its queued core before dependent rejection unwinds leases
 - FV uses the same queued halo dependency sequence with inline and worker launchers
 
-## `dnds_test_cauchy_boundary_inputs`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_cauchy_boundary_inputs_np1`, `dnds_cauchy_boundary_inputs_np2` |
-| 2 | `dnds_cauchy_boundary_inputs_np4`, `dnds_cauchy_boundary_inputs_np8` |
-
-[test_BoundaryInputs.cpp](../../test/cpp/Cauchy/test_BoundaryInputs.cpp)
-
-- Analytic boundary numerical failures return status through both equation entries
-- DMR bottom producer resolves prescribed and reflecting pieces in world coordinates
-- VR wall target selection preserves the selected physical boundary equation
-- Total inlet resolves physical vector input and applies static density to SA
-- Moving ACM interface packets preserve a uniform inertial flow under a common pressure shift
-- P1 least squares uses affine receiver face-center values from an interface packet
-- Published interface packets reproduce analytic P3 boundaries through auxiliary RHS and frozen Jacobian operators
-- Physical and interface gradient targets evaluate nonconstant fields at actual face centers
-
 ## `dnds_test_cauchy_characteristics_cuda`
 
 | Level | CTest registrations |
@@ -650,87 +1734,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 [test_CharacteristicsCUDA.cu](../../test/cpp/Cauchy/test_CharacteristicsCUDA.cu)
 
 - CUDA analytic mean characteristics match CPU inverse and canonical periodic face frames
-
-## `dnds_test_cauchy_checkpoint`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_cauchy_checkpoint_np1`, `dnds_cauchy_checkpoint_np2`, `dnds_cauchy_checkpoint_np4` |
-| 2 | `dnds_cauchy_checkpoint_np8` |
-
-[test_Checkpoint.cpp](../../test/cpp/Cauchy/test_Checkpoint.cpp)
-
-- Accepted domain snapshots pin one immutable mean generation
-- Prepared checkpoint owns its fields metadata and communicator beyond the domain
-- Detached host snapshots retain accepted values after the domain mutates
-- Asynchronous HDF output snapshots survive foreground field mutation and MPI
-- Boundary snapshot writes native zones and suppresses viscous slip-wall flux
-- Boundary snapshot follows the face owner when the boundary record is remote
-- Equation archive remaps coupled and split fields without confusing component ranges
-- Mixture restart redistributes every block and cold starts changed polynomial degree
-- Mixture BDF2 restart restores species history and warm reconstruction transactionally
-- Physical Strang source composes with transport and preserves retry and restart history semantics
-- Mixture visualization shares volume species fields with adjacent boundary cells
-- Configured RANS BDF2 restores all fields across layouts and rejects changed model metadata
-- Older viscous archives retain primitive gradients and reject a silent polynomial method change
-- Older physical-boundary archives omit inactive composition without invalidating restart
-- Checkpoint changes MPI partition and polynomial degree using persistent cell IDs with cold reconstruction
-- ACM BDF2 restart preserves the pressure gauge and differential history
-- A mean-only initial checkpoint can seed a different nonlinear stage policy
-- ACM internal restart adopts the stored absolute pressure target
-- Implicit restart preserves variable BDF2 history and rebuilds live DITR stage bindings
-- Restart dt growth reads the accepted scalar and supports files predating it
-- CGNS checkpoint remains physical across independently built MPI partitions
-- Rigid motion restart retains absolute-state convention and BDF history
-- Means-only restart selects the steady trial or the accepted transient state
-- Exact internal checkpoints resume BDF DIRK and DITR nonlinear iterations
-
-## `dnds_test_cauchy_config`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_cauchy_config` |
-
-[test_Config.cpp](../../test/cpp/Cauchy/test_Config.cpp)
-
-- Automatic CUDA policies select measured A100 kernels and preserve explicit overrides
-- CUDA RHS launch selection respects measured profiles and explicit values
-- Mesh preprocessing is explicit and validates a positive uniform scale
-- Programmed initialization preserves order six by default and validates overrides
-- Native AMG is selected independently for reconstruction and flow
-- Diagonal inverse refinement is opt-in and rejects unrelated inverse providers
-- Reconstruction kernel selection is explicit and retains the FP64 default
-- Coarse solver resolution respects equation width and the selected matrix provider
-- Linear matrix storage round-trips independently and rejects hidden AmgX repacking
-- CUDA capability resolution requires a complete combined perfect gas profile
-- CPU workers require an MPI capability that permits multithreaded execution
-- Cauchy exposes one canonical layered input schema
-- MPI fail-fast launch validation is an explicit execution choice
-- DITR inherits common controls and only supplied compatibility fields override them
-- Chemical source splitting is explicit and keeps Euler reactor defaults
-- Configured RANS exposes Euler DES and QCR controls without a unit-length substitution
-- Halo freshness audits are opt-in and the collective check switch overrides them
-- Interface capability checks admit coordinated DITR and honor the steady BDF1 override
-- Polynomial viscous reconstruction is explicit and retains the previous primitive default
-- Physical timestep PP has explicit validated controls and is disabled by the steady limit
-- Strict implicit VR acceptance needs an explicit positive reconstruction tolerance
-- Steady config resolves Euler's BDF1 infinite timestep override with provenance
-- Deprecated time and output aliases are exclusive with their canonical controls
-- Reconstruction PP controls are explicit and reject unsupported compatibility combinations
-- Cauchy implicit controls resolve through the root and reject contradictory paths
-- Cauchy partial analytic boundary profile receives nested schema defaults
-- Cauchy root resolves profiles overrides CLI and condition defaults with provenance
-- Cauchy rejects unknown nested keys unused contradictory settings and unsupported capabilities
-
-## `dnds_test_cauchy_config_shared`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_cauchy_config_shared` |
-
-[test_ConfigShared.cpp](../../test/cpp/Cauchy/test_ConfigShared.cpp)
-
-- Hidden consumers serialize complete configuration registered in the shared library
 
 ## `dnds_test_cauchy_derived_fields`
 
@@ -742,56 +1745,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 
 - Derived point refresh fills selected properties with lazy provenance and stale temperature guesses
 - Mixture derived refresh consumes compatible stale temperatures across coupled and separate layouts
-
-## `dnds_test_cauchy_equation_dofs`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_cauchy_equation_dofs_np1`, `dnds_cauchy_equation_dofs_np2`, `dnds_cauchy_equation_dofs_np4` |
-| 2 | `dnds_cauchy_equation_dofs_np8` |
-
-[test_EquationDofs.cpp](../../test/cpp/Cauchy/test_EquationDofs.cpp)
-
-- Equation schema mapping uses semantic names instead of component count or ordinal
-- Whole-equation dispatch preserves named blocks and scalar order across bounded view families
-- Fixed equation block views preserve parent pitch and component ranges without changing storage
-- Logical flow4/5 with RANS and many species maps exactly across physical layouts and storage groups
-- Hybrid equation blocks expose physical grouping and rebind across parent layouts
-- Owned-only pointwise algebra and reductions overlap direct halo writes without regional splitting
-- Constant-density physical accumulation omits only the algebraic pressure channel
-- Semantic validation and writer reservation reject bad bindings without partial publication
-- Retained scopes preserve allocation lifetime and storage replacement requires explicit rebinding
-- Numeric equation aliases and read scopes retain rows and values without retaining MPI context
-- Coupled matrix action ILU SGS and left GMRES preserve separate and permuted logical equation fields
-- Logical linear driver rejects inconsistent physical binding before any halo setup
-- Logical scalar-diagonal SGS handles all blocks and fails an abandoned partial output
-- The same BDF and coupled block solve interface advances all flow RANS and species components
-- One time driver advances coupled and separate equation storage with identical coupled stage mathematics
-- Queued equation algebra retains temporaries and preserves logical blocks across layouts
-- Equation algebra reserves every output before writing and time sources cannot be silently mutated
-
-## `dnds_test_cauchy_equation_source`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_cauchy_equation_source_np1`, `dnds_cauchy_equation_source_np2` |
-| 2 | `dnds_cauchy_equation_source_np4`, `dnds_cauchy_equation_source_np8` |
-
-[test_EquationSource.cpp](../../test/cpp/Cauchy/test_EquationSource.cpp)
-
-- Total mixture inlet preserves prescribed composition stagnation enthalpy and entropy
-- Shared transported species repair preserves Euler constants and strided neighbors
-- Constant-volume source preserves frozen blocks and matches the SI reactor at nonunit scales
-- Equation primitive and mixture boundary producers preserve full energy composition and moving axes
-- Mixture thermal references enforce a requested temperature through actual conservative energy
-- Attached RANS leaves mixture thermal bounds and chemical Jacobian columns unchanged
-- Mixture source point matches the Euler source and all conservative derivative columns
-- Mixture physical ALE flux derivatives include composition energy and all conservative columns
-- Owned chemical sources honor separate layouts, stale temperature guesses and ghost independence
-- Mixture primitive and conservative gradients include composition energy and all kinetic terms
-- Mixture viscous transport matches Euler heat and species enthalpy flux with effective coefficients
-- Chemical source rejects output reservations and Jacobian aliases before changing values
-- Actual conservative chemical sources advance a separate-field implicit reactor toward Cantera
 
 ## `dnds_test_cauchy_finite_volume`
 
@@ -890,27 +1843,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 
 - CUDA Cauchy centered Barth PP and primitive means match generic CPU
 
-## `dnds_test_cauchy_implicit_domain`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_cauchy_implicit_domain_np1`, `dnds_cauchy_implicit_domain_np2` |
-| 2 | `dnds_cauchy_implicit_domain_np4`, `dnds_cauchy_implicit_domain_np8` |
-
-[test_ImplicitDomain.cpp](../../test/cpp/Cauchy/test_ImplicitDomain.cpp)
-
-- Periodic ACM physical step transports velocity and preserves the pressure gauge
-- An active ACM pressure outlet suppresses the closed-domain gauge
-- ACM BDF observes continuity separately from named momentum convergence
-- Production DITR controller uses common limits unless an override is supplied
-- Native physical implicit methods preserve uniform periodic flow and transactional commit
-- P3 implicit periodic transport conserves flow and discard restores the VR warm guess
-- Steady BDF1 infinite-dt mode removes a nonconstant residual without advancing physical time
-- Capped steady stages advance by default and reject only with explicit control
-- Strict implicit acceptance requires settled VR in addition to a loose mean target
-- DITR coupled cap advances by default and rejects only with explicit control
-- Rotating physical domains retain a uniform inertial flow with explicit and implicit stage times
-
 ## `dnds_test_cauchy_interface_iteration`
 
 | Level | CTest registrations |
@@ -923,24 +1855,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Production single-stage policy preserves frozen/updated traces and real overlap
 - Retained packet reads reject refresh before posting and preserve received values
 - Coordinated DITR policy retains idle ranks and midpoint-before-endpoint ordering
-
-## `dnds_test_cauchy_jacobian`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_cauchy_jacobian_np1`, `dnds_cauchy_jacobian_np2` |
-| 2 | `dnds_cauchy_jacobian_np4`, `dnds_cauchy_jacobian_np8` |
-
-[test_Jacobian.cpp](../../test/cpp/Cauchy/test_Jacobian.cpp)
-
-- ACM temporal Jacobian distinguishes pressure pseudo mass from differential physical mass
-- ACM Euler scalar wall mode adds only the prepared spectral diagonal
-- Scheme A characteristic action reproduces the differentiated mechanical flux
-- Rotational periodic ACM matrix differentiates the production face residual in stored axes
-- Six-component frozen face leaves retain EOS coupling and additive matrix and strided product semantics
-- Integrated approximate Jacobian matches frozen-spectral flux differences on periodic and physical boundaries
-- Frozen physical semi-matrix-free blocks agree with assembled action, split SGS and local ILU
-- Selected physical Jacobians are principal matrices after periodic frame transformation
 
 ## `dnds_test_cauchy_limited_vr`
 
@@ -984,26 +1898,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 
 - LVR center target guard and direct sensors preserve CPU CUDA branch gates
 
-## `dnds_test_cauchy_linear`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_cauchy_linear_np1`, `dnds_cauchy_linear_np2`, `dnds_cauchy_sgs_subpartitions_omp_np2` |
-| 2 | `dnds_cauchy_linear_np4`, `dnds_cauchy_linear_np8` |
-
-[test_LinearProblem.cpp](../../test/cpp/Cauchy/test_LinearProblem.cpp)
-
-- Optional inverse refinement repairs the SST action and preserves truncated subspaces
-- Native linear action overlaps direct MPI with core and preserves frozen local SGS semantics
-- SGS mesh subpartitions freeze cross-block reads in ordinary and zero-start split sweeps
-- Linear matrix construction rejects invalid topology and supports empty owners
-- Cauchy native ILU copies only local coefficients and validates ordering fill epochs and local parts
-- RCM factor ordering preserves local parts and solves the same dense system
-- Linear diagonal preparation handles general component counts and reports guarded inverse fallback
-- Common block inverse widths preserve a dense solve and guarded fallback
-- Staged SGS retains numeric allocations and row metadata after original owners expire
-- Queued linear actions retain expired owners and reject a submitted stale inverse
-
 ## `dnds_test_cauchy_linear_block_cuda`
 
 | Level | CTest registrations |
@@ -1031,31 +1925,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Fixed small LU condition guard matches Eigen on pivoted and near-singular blocks
 - Guarded CUDA SVD fallback matches CPU for weak and discarded modes
 - Queued inverses preserve independent diagonal and inverse matrix layouts
-
-## `dnds_test_cauchy_linear_solver`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_cauchy_linear_solver_abort_np2`, `dnds_cauchy_linear_solver_np1`, `dnds_cauchy_linear_solver_np2` |
-| 2 | `dnds_cauchy_linear_solver_np4`, `dnds_cauchy_linear_solver_np8` |
-
-[test_LinearSolver.cpp](../../test/cpp/Cauchy/test_LinearSolver.cpp)
-
-- SGS and matrix action use direct evaluated products on strided rows
-- Jacobi matches independent frozen-remote local-sweep oracle
-- Dedicated zero-start SGS needs no old storage and preserves explicit-zero results
-- Residual observation cadence preserves stationary iterates and skips only diagnostic reductions
-- Residual-stopped SGS publishes zero when a repeated solve needs no sweep
-- Cauchy coupled linear solvers match a global dense oracle with real persistent halos
-- Logical coupled SGS retains physical-field scan values with remote middle exchange
-- GMRES fixed ILU corrections match one Arnoldi step of the distributed dense preconditioner
-- Cauchy linear controls and rank-local access failures reject collectively before transfers
-- Fixed-count stationary corrections preserve iterates without diagnostic actions or products
-- Fixed-count zero-start ILU overwrites dirty solution and handles zero corrections
-- Fixed-count final finite check agrees on a rank-local nonfinite update
-- Evaluated block publication validates row identity, column ordinals and active read scopes
-- CPU AMG preserves distributed action and CPU column-major blocks
-- One CPU AMG correction follows logical block order in a permuted equation field
 
 ## `dnds_test_cauchy_linear_solver_cuda`
 
@@ -1190,40 +2059,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Steady ACM SST progress groups console residuals and displays an infinite physical step
 - Resolved output plan centralizes names cadence inheritance and exact endpoint snapping
 
-## `dnds_test_cauchy_rans_fv`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_cauchy_rans_fv_np1`, `dnds_cauchy_rans_fv_np2` |
-| 2 | `dnds_cauchy_rans_fv_np4`, `dnds_cauchy_rans_fv_np8` |
-
-[test_RANSFiniteVolume.cpp](../../test/cpp/Cauchy/test_RANSFiniteVolume.cpp)
-
-- Barth RANS overlay keeps face values fixed when selecting unlimited viscous slopes
-- Centered SST source Jacobian is independent of the VR polynomial
-- Finite-volume admissibility includes the prepared RANS mean policy
-- ACM wall-bounded first implicit correction transports the velocity and turbulence blocks
-- Characteristic WBAP transforms only flow5 across combined and segmented equation storage
-- Ordered six-component assembled faces match permuted storage and direct actions
-- Explicit RANS repairs scalars separately from the uncompressed flow5 update
-- RANS wall force uses the completed RHS momentum flux with the physical pressure sign
-- RANS FV integrates quadrature sources and their positive implicit destruction diagonal
-- Zero-SA wall convection retains the interior SA viscous jump
-- SA boundary samples use wall reflection and frame-relative incoming flow
-- Two-equation boundary points use mean wall distance and the correct thermal viscosity
-- RANS P3 residual and WBAP preserve split layout and core halo scheduling semantics
-- Explicit mean gradients exchange current values across layouts and CPU launchers
-- High-order SST auxiliary faces retain quadrature-dependent wall transport
-- Two-equation auxiliary viscosity consumes current conservative mean gradients
-- RANS final thermal increment compression retains Euler whole-vector scaling
-- P3 thermal reconstruction compression preserves admissible RANS linear coefficients
-- SA reference-quality failure preserves thermally admissible uncompressed coefficients
-- RANS reconstruction PP preserves flow and scalar polynomials independently
-- SA implicit updates repair scalars after flow compression without unfreezing masked components
-- RANS nonlinear stages recover a manufactured viscous source balance
-- SA cached corrections retain pre-RHS auxiliary publication across CPU launchers
-- P0 jump-only face viscosity retains physical gradients in the SA volume source
-
 ## `dnds_test_cauchy_rans_reconstruction_reduced`
 
 | Level | CTest registrations |
@@ -1272,33 +2107,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Complete-face packages preserve mixed rules tails and bounded point tiles
 - Nine-point packages pack tightly across warps within the CTA budget
 
-## `dnds_test_cauchy_riemann`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_cauchy_riemann` |
-
-[test_Riemann.cpp](../../test/cpp/Cauchy/test_Riemann.cpp)
-
-- Transverse wave jump uses supplied acoustic data and is side-frame invariant
-- Riemann module uses supplied pressure and acoustic data independently of energy
-- Energy-origin shifts and oriented reversal preserve the supplied Euler flux convention
-- Every flux accepts external thermodynamics and transforms covariantly under energy-origin changes
-- Shared Riemann formulas support explicit kernel-local arithmetic types
-
-## `dnds_test_cauchy_riemann_legacy`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_cauchy_riemann_legacy` |
-
-[test_RiemannLegacy.cpp](../../test/cpp/Cauchy/test_RiemannLegacy.cpp)
-
-- Scalar convection uses the caller's fixed dissipation independently of flow flux
-- Every Cauchy Riemann selection matches legacy perfect gas facial and mean state behavior
-- Every selected flux exposes explicit common-input requirements and missing data errors
-- All Euler fluxes satisfy stationary face consistency and reversal independently of legacy
-
 ## `dnds_test_cauchy_rigid_motion`
 
 | Level | CTest registrations |
@@ -1340,38 +2148,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - CUDA analytic error uses the CPU oracle quadrature and fixed-tree rank-local reductions
 - Managed characteristics feed WBAP without a host observation between operators
 
-## `dnds_test_cauchy_state_input`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_cauchy_state_input` |
-
-[test_StateInput.cpp](../../test/cpp/Cauchy/test_StateInput.cpp)
-
-- ACM velocity and relative pressure use independent physical scales
-- Perfect gas molecular laws preserve Euler scaling and all property consumers
-- Tagged physical state conversions preserve Euler variants and distinct RANS scales
-- Initial boundary and reference adapters share conversion without density fallback
-- Mixture state inputs match Euler total and sensible energies with nonunit scales
-- Spatial state overrides preserve precedence plane sign and physical expression seeds
-
-## `dnds_test_cauchy_viscous_flux`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_cauchy_viscous_flux_np1`, `dnds_cauchy_viscous_flux_np2` |
-| 2 | `dnds_cauchy_viscous_flux_np4`, `dnds_cauchy_viscous_flux_np8` |
-
-[test_ViscousFlux.cpp](../../test/cpp/Cauchy/test_ViscousFlux.cpp)
-
-- P3 viscous face derivatives reproduce polynomial heat conduction and Couette production
-- Direct P1 Barth preserves an independently selectable unlimited viscous gradient
-- Polynomial viscosity exchanges the selected limited or unlimited coefficients after the last VR commit
-- Viscous policy disagreement is rejected before differing transfer schedules are bound
-- Unified equation orchestration preserves primitive-gradient flow5 viscosity
-- Polynomial wall viscosity has the Euler normal jump and noGRP switch
-- Nonzero quadratic temperature does not introduce viscosity at Euler open or slip boundaries
-
 ## `dnds_test_cauchy_wall_distance`
 
 | Level | CTest registrations |
@@ -1407,16 +2183,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 [test_CsvLog.cpp](../../test/cpp/DNDS/test_CsvLog.cpp)
 
 - Typed CSV rows preserve schema types blanks escaping and lazy rotation
-
-## `dnds_test_distributed_failure`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_distributed_failure_factory_np2`, `dnds_distributed_failure_reducer-completion_np2`, `dnds_distributed_failure_solver-checked-preflight_np2`, `dnds_distributed_failure_solver-unchecked-preflight_np2`, `dnds_distributed_failure_solver-worker_np2`, `dnds_distributed_failure_transfer_np2` |
-| 2 | `dnds_distributed_failure_factory_np4`, `dnds_distributed_failure_factory_np8`, `dnds_distributed_failure_reducer-completion_np4`, `dnds_distributed_failure_reducer-completion_np8`, `dnds_distributed_failure_solver-checked-preflight_np4`, `dnds_distributed_failure_solver-checked-preflight_np8`, `dnds_distributed_failure_solver-unchecked-preflight_np4`, `dnds_distributed_failure_solver-unchecked-preflight_np8`, `dnds_distributed_failure_solver-worker_np4`, `dnds_distributed_failure_solver-worker_np8`, `dnds_distributed_failure_transfer_np4`, `dnds_distributed_failure_transfer_np8` |
-
-[test_DistributedFailure.cpp](../../test/cpp/Cauchy/test_DistributedFailure.cpp)
-
 
 ## `dnds_test_hard_eigen`
 
@@ -1486,29 +2252,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Parametric Allreduce MPI_SUM
 - Parametric Allgather rank values
 
-## `dnds_test_native_dof_algebra`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_native_dof_algebra_np1`, `dnds_native_dof_algebra_np2` |
-| 2 | `dnds_native_dof_algebra_np4`, `dnds_native_dof_algebra_np8` |
-
-[test_NativeDofAlgebra.cpp](../../test/cpp/DNDS/test_NativeDofAlgebra.cpp)
-
-- Operator input layout caches track queued mutations and storage aliases
-- Independent OMP row kernels return deterministic first numerical failure
-- Reserved DoF scratch reuses prepared level aliases and communicating slots
-- Native DOF algebra operates on logical owned entries for arbitrary table widths
-- Native DOF fixed widths share handles and numerical copies are explicit
-- Native DOF algebra validates semantic spaces, immutable shape and overlap
-- Fixed DOF component contract survives dynamic Array imports and replacement
-- Immediate DOF convenience rejects pending or active access before using an inline lane
-- Native DOF commands retain values and honor explicit cross-stream joins
-- Native DOF global reductions include uneven and empty owned ranks with collective failure
-- Native DOF operators support a manufactured diagonal Krylov solve
-- Native DOF commands and reductions mix physical formats without touching ghosts or padding
-- DOF halo publication tracks completed epochs while owned core work overlaps
-
 ## `dnds_test_native_dof_algebra_cuda`
 
 | Level | CTest registrations |
@@ -1519,25 +2262,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 
 - CUDA operator input cache orders queued conversion before its consumer
 - Native CUDA algebra retains float/double fields, joins streams and excludes padding/ghosts
-
-## `dnds_test_nccl_transfer`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_nccl_transfer_np1`, `dnds_nccl_transfer_np2` |
-
-[test_NCCLTransfer.cu](../../test/cpp/DNDS/test_NCCLTransfer.cu)
-
-- NCCL packed rows match exact values across layouts and queued producer consumer epochs
-- NCCL direct contiguous copies and explicit unsupported bindings
-- NCCL packed CSR empty ownership and omitted POD bytes preserve receiver contents
-- NCCL enqueue overlaps core work with gated transfer and retains leases and workspace
-- CUDA producer chains device-packed MPI and NCCL across streams through pending shutdown
-- NCCL global Array reduction orders producer and consumer across streams
-- NCCL DOF halo publishes the retired producer version without a submission host wait
-- Unchecked NCCL missing producer edge demonstrably transfers a stale epoch
-- NCCL collisions and aborted communicator reject explicitly
-- NCCL binding checks communicator identity beyond congruent MPI groups
 
 ## `dnds_test_object_contracts`
 
@@ -1646,21 +2370,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - CUDA column and tiled row views preserve physical padding and static strides
 - CUDA explicit format conversion never reads device row metadata on the host
 
-## `dnds_test_runtime_element_schema`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_runtime_element_schema` |
-
-[test_RuntimeElementSchema.cpp](../../test/cpp/DNDS/test_RuntimeElementSchema.cpp)
-
-- ElementSchema registration is MPI-free and shares canonical native definitions
-- ElementSchema swaps each mixed scalar word and preserves all padding
-- ElementSchema rejects invalid field layouts and incompatible registrations
-- ElementSchema retains vended MPI structs after caller handles are freed
-- ElementSchema marks unflattened MPI typemaps native opaque
-- Registered ElementSchema supports typed transfer and custom reduction
-
 ## `dnds_test_runtime_exchange`
 
 | Level | CTest registrations |
@@ -1672,115 +2381,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 
 - Exchange routes arbitrary rows and transpose sums, retaining buffers
 - Exchange collective validation and ranks with no owner rows
-
-## `dnds_test_runtime_native_io`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_runtime_native_io_np1`, `dnds_runtime_native_io_np2` |
-| 2 | `dnds_runtime_native_io_np4`, `dnds_runtime_native_io_np8` |
-
-[test_RuntimeNativeIO.cpp](../../test/cpp/DNDS/test_RuntimeNativeIO.cpp)
-
-- Native payload uses caller buffers across dense CSR padded fixed and static-max shapes
-- JSON byte segments support in-memory DOM and retain file mode checks
-- Opposite-endian mixed records swap individual declared words and preserve object padding
-- Malformed native records reject before payload fill and permit pristine retry
-- Malformed H5 native metadata rejects collectively without truncated CSR association
-- Native collective checkpoint rejects one rank's moved or unpublished Array before file mutation
-- Version two legacy byte CSR remains readable through direct native allocation
-
-## `dnds_test_runtime_row_builder`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_runtime_row_builder` |
-
-[test_RuntimeRowBuilder.cpp](../../test/cpp/DNDS/test_RuntimeRowBuilder.cpp)
-
-- Row builder rejects overflowing requests before changing existing rows
-- Known shape rows fill one final table or CSR and reject failed publication
-- Exclusive padded edits block sharing and retain value addresses across Commit
-- Exclusive edits reject aliases pins and independently shared metadata
-- Abandoned exclusive edits fail closed and table widths survive physical padding
-- Parallel incremental CSR construction packs once at publication
-- Padded row builder updates logical sizes within fixed capacity
-- Detached shape drafts preserve old aliases and abandon without publication
-- Builder empty shapes and POD values keep element alignment
-
-## `dnds_test_runtime_row_transfer`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_runtime_preflight_off_failure_np2`, `dnds_runtime_row_transfer_abort_np2`, `dnds_runtime_row_transfer_np1`, `dnds_runtime_row_transfer_np2` |
-| 2 | `dnds_runtime_row_transfer_np4`, `dnds_runtime_row_transfer_np8` |
-
-[test_RuntimeRowTransfer.cpp](../../test/cpp/DNDS/test_RuntimeRowTransfer.cpp)
-
-- Prepared CPU transfer groups retain separate payloads and perform one optional agreement
-- Grouped reservation rejection releases all fields before any payload is posted
-- Optional collective preflight removes only successful launch reductions
-- Managed MPI requests survive dropped handles and progress worker consumers during close
-- Inherited named channels share a communicator and preserve concurrent payloads
-- Communication context adoption and policy aliases retain one resource and tag namespace
-- Communication context agrees its immutable safety policy before preparing routes
-- Fail-fast MPI launches preserve padded rows in eager and checked execution
-- Large permuted routes preserve row order padding and rank-local collision flags
-- Complete small row relations agree with independent sorted collision oracle
-- Typed binding rejects same-size arithmetic schema confusion
-- Sender ordering derives a checked route without changing peer row correspondence
-- Native direct ragged halo retains leases and reusable routing
-- Inferred payload shapes retain sparse holes widths and collective policy checks
-- Table width agreement preserves sparse rows and handles rank-varying layouts
-- Default inferred transfers preserve table stride padded capacity and CSR through repeated halos
-- Preserved inference retains typed empty ranks and rejects remote rows that do not fit
-- Preserved sparse table slots keep width and explicit compact retains zero-length holes
-- Binding rejects reordered communicator and rank-local tag reservation failure
-- Combined payload and binding preflight reject rank-local mismatches before requests
-- Typed MPI bindings reject one unpublished shape collectively and recover after commit
-- Direct permutation honors imported buffer origins and padded state strides
-- One route transfers padded reconstruction rows into a packed CSR destination
-- Native reverse fan-in rejects copy and supports reductions
-- Native POD transfers use MPI extent and support custom reductions
-- Native empty routes and generation validation
-- Native CUDA reduction dispatch covers wide rows without requiring device MPI
-- Native CUDA integer reduction families agree with the CPU reference
-- Native CUDA direct MPI and device fan-in reduction
-- Mixed physical tables use direct datatype routes and preserve logical rows
-- Strided receive collisions use scalar contribution groups for builtin and custom POD reductions
-- Communication worker preserves repeated packed and direct sparse transfers
-- Communication worker overlaps core reads with active receiver completion
-- DevicePacked is explicit and rejects host endpoints collectively
-- MPI enqueue and unavailable NCCL capabilities reject explicitly
-- Empty direct routes retain stream ordering without payload access or host readiness
-- Locally empty direct participants retain the nonempty peer preflight sequence
-
-## `dnds_test_runtime_transient`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_runtime_transient_np1`, `dnds_runtime_transient_np2` |
-| 2 | `dnds_runtime_transient_np4`, `dnds_runtime_transient_np8` |
-
-[test_RuntimeTransient.cpp](../../test/cpp/DNDS/test_RuntimeTransient.cpp)
-
-- Known route rejects negative extents on every rank before publishing
-- MPI allreduce queues behind a producer and orders the next reduction and consumer
-- Foreign buffer aliases cannot bypass copy or collective reservations
-- Direct transfers support SELF and reordered split communicators without inherited tag attributes
-- Transient reduction rejects missing collision resolution before publishing
-- Transfer completion imported into eager progress orders its consumer
-- CUDA eager producer portable packed MPI and consumer retain ordering
-- Transient and persistent contexts transfer permuted SoA rows
-- Dynamic CSR migration privately prepares shapes and publishes once
-- Dynamic migration preserves a strided table instead of publishing temporary CSR
-- Dynamic migration rejects a missing source collectively and leaves the route usable
-- Main-thread MPI progression joins worker computation with scheduled leases
-- Checked MPI rejects a rank-local missing reader edge collectively and permits retry
-- MPI completes while a core worker is active across Euler field widths
-- Rank-local payload and lease mistakes fail collectively without changing values
-- Repeated halo gathers and reverse residual assembly share routes across fields
-- Uneven empty-rank field bundles migrate out and back with epoch invalidation
 
 ## `dnds_test_serializer`
 
@@ -1835,18 +2435,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 
 - Canonical native access requirements are independent of legacy mesh arrays
 
-## `dnds_test_sparse_batch_exchange`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `dnds_sparse_batch_exchange_np1`, `dnds_sparse_batch_exchange_np2` |
-| 2 | `dnds_sparse_batch_exchange_np4`, `dnds_sparse_batch_exchange_np8` |
-
-[test_SparseBatchExchange.cpp](../../test/cpp/DNDS/test_SparseBatchExchange.cpp)
-
-- Sparse fixed-record batches fan out and return variable proposal counts
-- Empty batch peers complete and invalid record layouts fail collectively
-
 ## `euler_test_chem_ode`
 
 | Level | CTest registrations |
@@ -1875,42 +2463,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Physical source splitting rejects globally disabled sources
 - EulerEvaluator repairs reactive cell-mean species
 
-## `euler_test_gas_thermo`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `euler_gas_thermo` |
-
-[test_GasThermo.cpp](../../test/cpp/Euler/test_GasThermo.cpp)
-
-- IdealGasThermal: standard quiescent air
-- IdealGasThermal: Mach 2 flow
-- IdealGasThermal: gammaEq controls pressure and gamma controls acoustic speed
-- Shared enthalpy helper does not double-count base energy
-- Cons2Prim and Prim2Cons round-trip: 3D
-- Cons2Prim and Prim2Cons round-trip: 2D
-- Cons2Prim and Prim2Cons round-trip preserves base-energy offset
-- Prim2Cons: known state verification
-- EulerGas eigenvectors: L*R = I for 3D
-- EulerGas eigenvectors: L*R = I for non-trivial velocity
-- IdealGas convenience eigenvector wrappers produce L*R=I
-- EulerGas left eigenvector inverse uses H/a consistency for split gamma
-- EulerGas eigenvectors: L*R = I for 2D split gamma
-- GasInviscidFlux: x-direction, quiescent gas
-- GasInviscidFlux: x-direction, moving gas
-- GasInviscidFlux_XY: n=(1,0,0) equals GasInviscidFlux
-- IdealGasUIncrement: finite-difference verification
-- IdealGasUIncrement: base-energy increment reduces pressure increment
-- GetRoeAverage: identical states give same state
-- GetRoeAverage: split gamma keeps pressure closure separate from acoustic gamma
-- GetRoeAverage: density is geometric mean
-- RoeFluxIncFDiff: entropy wave strength preserves split-gamma identity
-- GradientCons2Prim: finite-difference verification
-- GradientCons2Prim: species base-energy gradient corrects pressure gradient
-- CompressionRatio: zero increment gives alpha=0 (no compression needed)
-- CompressionRatio: alpha in [0,1]
-- ViscousFlux: zero gradient produces zero flux
-
 ## `euler_test_limited_vr`
 
 | Level | CTest registrations |
@@ -1933,81 +2485,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Limited variational reconstruction combines shock and contact gates by maximum
 - Limited variational reconstruction settings parse and validate
 - LVR input presets expand before explicit overrides and preserve legacy input
-
-## `euler_test_physics_properties`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `euler_physics_properties` |
-
-[test_PhysicsProperties.cpp](../../test/cpp/Euler/test_PhysicsProperties.cpp)
-
-- PhysicsProperties non-reactive state conversions
-- PhysicsProperties non-reactive conservativeThermal returns closure and acoustic gamma
-- PhysicsProperties non-reactive total-to-static conversion is closed form
-- PhysicsProperties non-reactive static-to-total conversion is closed form
-- PhysicsProperties non-reactive cons code-phys round-trip with non-default scales
-- PhysicsProperties non-reactive prim code-phys round-trip with RANS and non-default scales
-- PhysicsProperties reactive state conversions
-- PhysicsProperties reactive conservativeThermal separates gammaEq from acoustic gamma
-- PhysicsProperties reactive transport uses Cantera mixture coefficients in code units
-- PhysicsProperties reactive temperature gradient matches finite differences
-- PhysicsProperties reactive total-to-static conversion iterates mixture thermodynamics
-- PhysicsProperties reactive static-to-total inverts total-to-static
-- PhysicsProperties reactive total-to-static default options converge or throw
-- PhysicsProperties cons code-phys round-trip multi-species with non-default scales
-- PhysicsProperties prim code-phys round-trip multi-species with RANS and non-default scales
-- PhysicsProperties RANS prim scale factors for all models
-- PhysicsProperties RANS cons scale factors
-- PhysicsProperties scaleRansPrim round-trip
-- PhysicsProperties scaleRansCons round-trip
-- PhysicsProperties StateValueOrigin round-trip single-species
-- PhysicsProperties StateValueOrigin round-trip multi-species Cantera
-- PhysicsProperties cons code-phys linearity and range
-- PhysicsProperties prim code-phys linearity and range
-- PhysicsProperties RANS scale linearity with multiple scales
-- PhysicsProperties default-RANS nRANSVars=0 cons and prim helpers
-- PhysicsProperties reference derived scales
-- StateValue JSON round-trip
-
-## `euler_test_rans`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `euler_rans` |
-
-[test_RANS.cpp](../../test/cpp/Euler/test_RANS.cpp)
-
-- GetMut_KOWilcox: golden value
-- GetMut_SST: golden value
-- GetMut_RealizableKe: golden value
-- GetSource_KOWilcox: zero gradient finite and has destruction
-- GetSource_SST: zero gradient finite
-- GetSource_RealizableKe: zero gradient finite
-- GetSource_KOWilcox: shear gradient golden
-- GetSource_SST: shear gradient golden
-- GetSource_SST: omega production blends inner and outer coefficients
-- SST-2003 uses strain in transport and one capped production in both equations
-- GetSource_RealizableKe: shear gradient golden
-- GetSource_KOWilcox mode=1: implicit diagonal non-negative
-- GetSource_SST mode=1: implicit diagonal non-negative
-- SST optional sink diagonal matches frozen-gradient derivatives and preserves RHS
-- GetVisFlux_KOWilcox: zero gradient -> zero flux
-- GetVisFlux_SST: zero gradient -> zero flux
-- GetVisFlux_RealizableKe: zero gradient -> zero flux
-- GetVisFlux_KOWilcox: k-gradient produces k-flux
-- GetMut_KOWilcox: mut increases with k
-- GetMut_SST: mut increases with k
-- GetMut_KOWilcox: very small k/omega produces finite mut
-- GetMut_SST: very small k/omega produces finite mut
-- GetMut_RealizableKe: very small k/eps produces finite mut
-- RANS configs: defaults and JSON round-trip preserve historical limits
-- Euler evaluator settings: RANS configs are flat nested sections
-- GetSource_SA: production limit changes the physical source
-- GetSource_SA: SA-R suppresses rotation rather than strain in 2D and 3D
-- SA DES lengths: coefficient placement, shielding and disabled scale
-- GetSource_SA: DES modes and ft2 switch agree with analytic sources in 2D/3D
-- shared SA: explicit frame vorticity matches corrected velocity gradients
 
 ## `euler_test_rans_model`
 
@@ -2045,50 +2522,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Chemistry escape preserves baseline and selects stiff low diffusion chemistry
 - Neighbor expansion is bounded, decaying, and shock gated
 
-## `euler_test_riemann_solvers`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `euler_riemann_solvers` |
-
-[test_RiemannSolvers.cpp](../../test/cpp/Euler/test_RiemannSolvers.cpp)
-
-- AUSM family: consistency, face reversal, ALE and untouched passive entries
-- AUSM family: contacts and supersonic upwind flux
-- AUSM family: exact stationary Mach-20 normal shock
-- AUSMPW+ zero-velocity pressure jump matches independent closed form
-- AUSM family: split-gamma and base-energy consistency
-- AUSM dispatcher: facial flux and mean-state wave estimates are separate
-- AUSMPW+ has no growing linear acoustic mode near the Sod plateau
-- Roe consistency: identical states give exact flux
-- HLLC consistency: identical states give exact flux
-- HLLEP consistency: identical states give exact flux
-- Variable-gamma Riemann solvers use gammaEq pressure and gamma acoustic paths
-- Variable-gamma Riemann solvers remain symmetric with base energy
-- Roe base-energy mode reconstructs identity when all lambdas are one
-- Roe base-energy contact has no spurious momentum flux
-- Roe variants M1-M9 consistency
-- Roe M8 and M9 produce finite Sod fluxes
-- Roe M8 and M9 batch dispatch matches scalar dispatch
-- Roe symmetry: F(UL,UR,n) = -F(UR,UL,-n)
-- HLLC symmetry: F(UL,UR,n) = -F(UR,UL,-n)
-- Sod shock tube: flux is finite and bounded
-- Golden flux values for mixed-state test vector
-- All solvers: quiescent gas produces same flux (p-only)
-- Roe eigenvalue output: lam0 < lam123 < lam4 for subsonic
-- Roe consistency: diagonal normal
-- EulerP Roe entropy threshold uses total speed and preserves orientation and rotation
-
-## `euler_test_rotating_frame`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `euler_rotating_frame` |
-
-[test_RotatingFrame.cpp](../../test/cpp/Euler/test_RotatingFrame.cpp)
-
-- Extended Euler rotation uses absolute momentum and its negative-source Jacobian
-
 ## `euler_test_shared_physics`
 
 | Level | CTest registrations |
@@ -2101,20 +2534,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - shared mixture: fused SI outputs, scaled UV and legacy Euler properties agree
 - shared mixture workers: independent concurrent contexts and retained lifetime
 - shared mixture: workers reject a different loaded material even with identical filenames
-
-## `euler_test_source_chemical`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `euler_source_chemical` |
-
-[test_ChemicalSource.cpp](../../test/cpp/Physics/test_ChemicalSource.cpp)
-
-- ChemicalSource::productionRates — RHS signs at active T
-- ChemicalSource::productionRatesAndJacobian — Jacobian sign convention
-- ChemicalSource::maxChemicalStiffnessRate — matches fixed-density mass-fraction diagonal
-- Constant-volume chemical response agrees with directional differences and source scaling
-- ChemicalSource::mixtureR — gas constant correctness
 
 ## `euler_test_uv`
 
@@ -2156,19 +2575,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - BVH wrappers own inputs share immutable copies and support concurrent const queries
 - BVH rejects invalid boxes backends and query inputs before traversal
 
-## `geom_test_distributed_boundary_interface`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `geom_distributed_boundary_interface_np1`, `geom_distributed_boundary_interface_np2` |
-| 2 | `geom_distributed_boundary_interface_np4`, `geom_distributed_boundary_interface_np8` |
-
-[test_DistributedBoundaryInterface.cpp](../../test/cpp/Geom/test_DistributedBoundaryInterface.cpp)
-
-- Distributed sliding matches exact Cartesian donors across geometry and cell owners
-- Coarse boxes retain reference-tolerance projections outside physical endpoints
-- Distributed matching rejects overlapping interiors and inconsistent settings collectively
-
 ## `geom_test_entity_work_partition`
 
 | Level | CTest registrations |
@@ -2193,17 +2599,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Audit batch 2: wall quadrature preserves square distances
 - Audit batch 2: native smoothers preserve zero displacement and coordinates
 
-## `geom_test_mesh_cgns_multizone`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `geom_mesh_cgns_multizone` |
-
-[test_MeshCGNSMultiZone.cpp](../../test/cpp/Geom/test_MeshCGNSMultiZone.cpp)
-
-- CGNS multizone one-sided connectivity deduplicates 2x2 and 3x3 blocks
-- Audit regression: CGNS single-entry boundary PointList
-
 ## `geom_test_mesh_connectivity`
 
 | Level | CTest registrations |
@@ -2227,35 +2622,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Inverse: fixed-width face2cell input keeps exact sentinel semantics
 - Periodic 2x2x2: node-count composition cannot replace physical face neighbors
 - narrowAdjToFixed: variable-to-fixed-2 conversion
-
-## `geom_test_mesh_connectivity_ghost`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `geom_mesh_connectivity_ghost_np1`, `geom_mesh_connectivity_ghost_np2` |
-| 2 | `geom_mesh_connectivity_ghost_np4`, `geom_mesh_connectivity_ghost_np8` |
-
-[test_MeshConnectivity_Ghost.cpp](../../test/cpp/Geom/test_MeshConnectivity_Ghost.cpp)
-
-- Compiled ghost programs expose immutable inspection and own an exact execution signature
-- Ghost program agreement rejects different endpoint markers before traversal
-- evaluateGhostTree: single hop cell2cell
-- evaluateGhostTree: two-hop cell2cell2node with manual ghost
-- evaluateGhostTree: 2-ring cell chain
-- evaluateGhostTree: union of multiple chains
-- evaluateGhostTree: np=1 produces no ghosts
-- evaluateGhostTree: performance benchmark
-- evaluateGhostTree: doubly-periodic tiled grid
-- evaluateGhostTree: small periodic tiled grid
-- GhostChain: defaultPrimary compiles
-- GhostChain: prefix merging
-- GhostChain: invalid chain detection
-- GhostChain: dump
-- GhostChain: face ghost chain
-- GhostChain: AdjacencyDescriptor equality and hash
-- GhostChain: entityDepth
-- GhostChain: adjKindName
-- GhostChain: checkAvailable native registry rejects omitted required relation
 
 ## `geom_test_mesh_connectivity_interpolate`
 
@@ -2498,19 +2864,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Near-plane native snapping edits canonical periodic owners and preserves physical images
 - Geometry operations reject an unpublished mesh without changing its epoch
 
-## `geom_test_mesh_locality_ordering`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `geom_mesh_locality_ordering_np1`, `geom_mesh_locality_ordering_np2` |
-| 2 | `geom_mesh_locality_ordering_np4`, `geom_mesh_locality_ordering_np8` |
-
-[test_MeshLocalityOrdering.cpp](../../test/cpp/Geom/test_MeshLocalityOrdering.cpp)
-
-- First-touch node and face permutations preserve distributed cell geometry
-- Subregion cell ordering splits conservative core before grouped halo rows
-- Locality plans preserve first-touch order from cell or node anchors
-
 ## `geom_test_mesh_mutation`
 
 | Level | CTest registrations |
@@ -2528,20 +2881,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Native primary serialization shares immutable shape safely with readers and preserves the source
 - Collective native topology setup rejects a one-rank reader while output remains readonly
 - Boundary destination rejection preserves both native authorities and controllers
-
-## `geom_test_mesh_preflight`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `geom_mesh_preflight_np1`, `geom_mesh_preflight_np2` |
-| 2 | `geom_mesh_preflight_np4`, `geom_mesh_preflight_np8` |
-
-[test_MeshPreflight.cpp](../../test/cpp/Geom/test_MeshPreflight.cpp)
-
-- Cold mesh preparation shares an explicit policy without changing connectivity or halos
-- CGNS owned import partition refinement reorder and publication inherit preflight
-- Periodic owned topology and publication preserve disabled preflight
-- Conflicting selections of agreed mesh contexts reject before optional preparation stages
 
 ## `geom_test_mesh_reorder`
 
@@ -2616,33 +2955,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Native output preparation and primary checkpoint preserve authoritative rows and wall policy
 - Detached transition reconstructs 3D edges under an explicit cache policy
 - Detached transition preserves independently placed edges with exact native fields and companion slots
-
-## `geom_test_native_connectivity`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `geom_native_connectivity_np1`, `geom_native_connectivity_np2` |
-| 2 | `geom_native_connectivity_np4`, `geom_native_connectivity_np8` |
-
-[test_NativeConnectivity.cpp](../../test/cpp/Geom/test_NativeConnectivity.cpp)
-
-- Native interpolation retains ordered cones and periodic self incidences with empty ranks
-- Native GhostSpec discovers multilayer remote rows and publishes shared routes
-- Branched ghost tree keeps frontiers separate and unions endpoint kinds
-- Collected intermediate owned nodes remain available to downstream ghost branches
-- Native ghost publication agrees complete same-level relation schedules
-- Exact payload aliases preserve named descriptors with rank-local alias differences
-- Aliased adjacency reads preserve constraints order and independent lease lifetimes
-- Global adjacency validation agrees with an independent scalar oracle
-- Adjacency self checks retain ghost-only source numbering on empty owners
-- Native 3D edge interpolation retains four-parent incidence and empty owners
-- Current authority feeds native setup without aliasing detached native setup copies
-- Native periodic distributed interpolation preserves owner frames and ordered companions
-- Traversal scratch preserves independent publications and exact rows after tree growth
-- Entity ghost mapping rejects rank-local unpublished shapes and remains reusable
-- Named native relations distinguish incidence any all exact and face versus node neighbors
-- Native interpolation matches repeated canonical IDs after XOR permutes frame order
-- Independent setup expansions preserve row order and join failures
 
 ## `geom_test_native_mesh_archive`
 
@@ -2994,44 +3306,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Quadratic topology roles reject actual cracked shared faces and prevent stale generated ID reuse
 - Canonical topology role keys equal the independent full-image reference for every supported subentity
 
-## `geom_test_native_mesh_transition`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `geom_native_mesh_transition_np1`, `geom_native_mesh_transition_np2` |
-| 2 | `geom_native_mesh_transition_np4`, `geom_native_mesh_transition_np8` |
-
-[test_NativeMeshTransition.cpp](../../test/cpp/Geom/test_NativeMeshTransition.cpp)
-
-- Owned native capture assembles after source release with retained companions and exact descriptor rows
-- Native assembler rejects rank-local ID schema and closure schedule errors before publication
-- Owned native capture collectively rejects mismatched source inventory before ghost-map collectives
-- Native transition preserves exact persistent topology and coordinate stencil across independent placements
-- Native transition follows complete remote node stars and retains unchanged family order semantics
-- Native transition routes empty owners and rank-skewed payload without global staging
-- Native prepared transition stages field histories atomically and binds entity fields only on publication
-- Native transition distinguishes exact aliases from rank-local candidate shape state and order differences
-- Native aliased transition retains repeated periodic IDs and ordered frames
-- Owned primary reorder retains IDs and cones when other ranks own no cells
-- Canonical and named adjacency storage survives capture assembly migration and local conversion
-- Sender partition ordering preserves strided companions through gather and reverse scatter
-
-## `geom_test_native_mesh_wall_dist`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `geom_native_mesh_wall_dist_np1`, `geom_native_mesh_wall_dist_np2` |
-| 2 | `geom_native_mesh_wall_dist_np4`, `geom_native_mesh_wall_dist_np8` |
-
-[test_NativeMeshWallDist.cpp](../../test/cpp/Geom/test_NativeMeshWallDist.cpp)
-
-- Disabled-preflight wall distance keeps the analytic remote-wall result
-- Native wall distance uses remote boundary selection and retains geometry identity
-- Wall distance rejects a rank without native authority collectively
-- Wall vectors rebuilt after near-plane cleanup use the final shape and configured selector
-- Native curved wall preserves method conventions and remote midpoint zeros
-- Wall distance rejects an unpublished mesh collectively
-
 ## `geom_test_native_relation_conversion`
 
 | Level | CTest registrations |
@@ -3084,41 +3358,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Face-only periodic reconstruction preserves retained Edge IDs and every ordered frame slot
 - Generated native ID floors agree collectively and never modify retained family high-water marks
 
-## `geom_test_quadrature`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `geom_quadrature` |
-
-[test_LocalPerformance.cpp](../../test/cpp/Geom/test_LocalPerformance.cpp)
-
-- Local performance: quadrature cache has one owner and exact values
-- Local performance: immutable boundary lookup preserves mutable defaults
-
-[test_Quadrature.cpp](../../test/cpp/Geom/test_Quadrature.cpp)
-
-- Public cached shape access matches direct element evaluation
-- Quadrature: scheme constants are valid
-- Quadrature: weight sums equal reference element volumes
-- Quadrature: Line integrates polynomials up to expected order
-- Quadrature: Quad integrates polynomials up to expected order
-- Quadrature: Hex integrates polynomials up to expected order
-- Quadrature: Triangle integrates polynomials up to expected order
-- Quadrature: Tetrahedron integrates polynomials up to expected order
-- Quadrature: Prism integrates polynomials up to expected order
-- Quadrature: Pyramid integrates constant and low-degree polynomials
-- Quadrature: Quadrature class Integration method works
-- Quadrature: GetQuadraturePointInfo returns correct data
-- Quadrature: IntegrationSimple overloads work correctly
-- Quadrature: Taylor basis integration on 2D elements (degree <= 3)
-- Quadrature: Taylor basis integration on 3D elements (degree <= 3)
-- Quadrature: Taylor basis integration on 1D elements (degree <= 3)
-- Quadrature: Pyramid Taylor basis (degree <= 2)
-- Quadrature: FPolynomialFill consistency check
-
-[test_QuadratureCachePeer.cpp](../../test/cpp/Geom/test_QuadratureCachePeer.cpp)
-
-
 ## `geom_test_relation_access`
 
 | Level | CTest registrations |
@@ -3148,73 +3387,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Element geometry projects analytically known line triangle and warped quad points
 - Surface snapshots freeze shared storage and local maps retain their geometry
 - Distributed mesh-independent surface location agrees across routing modes and transfers element data
-
-## `solver_test_aggregation_amg`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `solver_aggregation_amg` |
-
-[test_AggregationAMG.cpp](../../test/cpp/Solver/test_AggregationAMG.cpp)
-
-- A reused aggregation hierarchy matches a dense two-level block cycle
-- Block Jacobi preserves resolvable modes with a structural zero diagonal
-
-## `solver_test_direct`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `solver_direct` |
-
-[test_Direct.cpp](../../test/cpp/Solver/test_Direct.cpp)
-
-- Direct 2D periodic: symbolic factorization has fill-in
-- Direct symbolic factorization ignores self edges
-- Direct 2D periodic: MatMul is correct
-- Direct 2D periodic: complete LU solve is exact
-- Direct 2D periodic: ILU(0) is approximate but reduces residual
-- Direct 2D periodic: ILU(1) converges faster than ILU(0) as preconditioner
-- Direct 2D periodic LDLT: MatMul matches LU MatMul for symmetric system
-- Direct 2D periodic LDLT: complete decompose + solve is exact
-- Direct core ordering is stable within local parts and precedes symbolic fill
-- ILU zero-fill support does not bound upper triangular readiness
-- Generic ranged factors and separate triangular outputs preserve the full solve
-- Rebuilding symbolic factors replaces previous row incidences
-- Unreported symbolic construction is rank local
-- Native block matrix shares immutable row metadata and retains access lifetime
-- Fixed and dynamic diagonal inverse retain the guarded LU and singular SVD policies
-- Owned logical table recognition retains pitch and rejects changed component ordering
-- Native small-block LU specializations solve coupled blocks on all uniform layouts
-- Native block LU solves strided DOFs and rejects stale matrices and aliases
-- Native block LU supports empty owners and counts guarded inverse fallback
-- Native triangular phases retain owners and advance independent local parts
-
-## `solver_test_fas`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `solver_fas` |
-
-[test_FAS.cpp](../../test/cpp/Solver/test_FAS.cpp)
-
-- FAS distinguishes state and residual restriction and preserves incoming references through three levels
-- Identity FAS cancels a common large linear term before forming tau
-- Nonlinear FAS coarse forcing preserves a known fine solution
-- FAS rejects ambiguous ownership controls aliases and stateful operator callbacks
-- Selected FAS solves principal equations and freezes other components across strided levels
-- Selected FAS rejects invalid selections and callbacks that write frozen means
-
-## `solver_test_field_gmres`
-
-| Level | CTest registrations |
-|---|---|
-| 1 | `solver_field_gmres` |
-
-[test_FieldGMRES.cpp](../../test/cpp/Solver/test_FieldGMRES.cpp)
-
-- Field GMRES handles first-vector closure true residuals and extreme fixed preconditioner scaling
-- Field GMRES restarts nonnormal systems across layouts with empty local ranks
-- Field GMRES reports algebraic failure without false convergence
 
 ## `solver_test_linear`
 
@@ -3320,60 +3492,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Limited Jacobi converges to the directly assembled penalized system
 - Static reconstruction mask passed as a call argument constrains updates
 
-## `cfv_test_reconstruction3d`
-
-| Level | CTest registrations |
-|---|---|
-| 2 | `cfv_reconstruction3d_contract_np1`, `cfv_reconstruction3d_contract_np2`, `cfv_reconstruction3d_contract_np4`, `cfv_reconstruction3d_contract_np8`, `cfv_reconstruction3d_np1`, `cfv_reconstruction3d_np2`, `cfv_reconstruction3d_np4`, `cfv_reconstruction3d_np8` |
-
-[test_Reconstruction3D.cpp](../../test/cpp/CFV/test_Reconstruction3D.cpp)
-
-- 3D: constant exactness with GaussGreen
-- 3D static reconstruction mask is exchanged and survives GG and VR updates
-- 3D: constant exactness with VFV_P1_HQM
-- 3D: constant exactness with VFV_P2_HQM
-- 3D: smooth-function golden values, convergence and order
-- 3D: cell volumes sum to 1.0 (unit cube)
-- Small connected 3D cells preserve constants through GG and P1/P2 VR
-
-## `cfv_test_reconstruction_cuda`
-
-| Level | CTest registrations |
-|---|---|
-| 2 | `cfv_reconstruction_cuda_np1`, `cfv_reconstruction_cuda_np2`, `cfv_reconstruction_nccl_np1`, `cfv_reconstruction_nccl_np2` |
-
-[test_ReconstructionCUDA.cu](../../test/cpp/CFV/test_ReconstructionCUDA.cu)
-
-- Queued FV gradients and linear-mode projection share CPU and CUDA incidence semantics
-- Queued polynomial sampling covers cached and direct derivatives on owned and ghost rows
-- Shared quadrature CUDA placement reuses face allocation and retains queued scatter inputs
-- Resident face basis supports direct and partial caches without unrelated metric payloads
-- Geometry-only FV metrics can live on CUDA without retaining a host metric plan or allocating VR
-- Device publications retain actual mesh metrics and basis with explicit optional capabilities
-- Device-only reconstruction placement releases host payloads and remains executable
-- CUDA sweep-only publication omits limiter matrices and scratch
-- Raw VR packs B and the full inverse independently while using the FP64 sweep
-- Opt-in FP32 sweep maps retain FP64 coefficients and avoid duplicate device matrix storage
-- CUDA Jacobi and WBAP agree with CPU for physical DOF layouts and direct MPI split work
-- CUDA preserves rotated periodic vectors and axisymmetric prepared operators
-- CUDA degree three 3D reconstruction supports 37 coupled components and empty peers
-- Device errors reject unsupported SOR stale publications and invalid indicators without silent output
-
-[test_ReconstructionCUDA_AMG.hpp](../../test/cpp/CFV/test_ReconstructionCUDA_AMG.hpp)
-
-- Single-device VR AMG preserves the projected modal matrix and fixed component corrections
-
-[test_ReconstructionCUDA_Staged.hpp](../../test/cpp/CFV/test_ReconstructionCUDA_Staged.hpp)
-
-- Stage-once VR pipelines preserve complete modal batches and queued dependencies
-- CUDA VR launch policy rejects a non-warp thread count
-- Float-float VR preserves low limbs through a cancelling modal product
-
-[test_ReconstructionCUDA_Storage.hpp](../../test/cpp/CFV/test_ReconstructionCUDA_Storage.hpp)
-
-- Contiguous VR payloads and raw face storage preserve oriented distributed sweeps
-- Face cross blocks transpose fully while only symmetric inverse entries use triangular storage
-
 ## `dnds_test_amgx_preconditioner`
 
 | Level | CTest registrations |
@@ -3388,59 +3506,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Native matrix attachment shares values with fixed-cycle upload equivalence and refresh
 - ACM block Jacobi preserves a null component through every geometric level and numeric refresh
 - ACM block Jacobi converges for the finite SUBOFF diagonal after 49 refreshes
-
-## `dnds_test_cauchy_domain_cuda`
-
-| Level | CTest registrations |
-|---|---|
-| 2 | `dnds_cauchy_domain_cuda`, `dnds_cauchy_domain_cuda_np2` |
-
-[test_DomainCUDA.cpp](../../test/cpp/Cauchy/test_DomainCUDA.cpp)
-
-- ACM device correction matches CPU on flow4 and mechanical SA and SST
-- ACM CUDA exports zero tangential slip-wall flux and nonzero no-slip shear
-- ACM polynomial CUDA face mappings match the host on a rotational seam
-- Automatic A100 kernels advance raw P3 flow with frozen explicit reference selectors
-- Device domains advance nonuniform implicit flow through single grid and pMG with restart
-- Domain reconstruction selection runs quantized maps and shared or direct quadrature with FP64 evolving fields
-- Asynchronous CUDA output freezes the accepted epoch before a new device write
-
-## `dnds_test_cauchy_multidomain`
-
-| Level | CTest registrations |
-|---|---|
-| 2 | `dnds_cauchy_acm_interface_cuda`, `dnds_cauchy_multidomain_np1`, `dnds_cauchy_multidomain_np2`, `dnds_cauchy_multidomain_np4`, `dnds_cauchy_multidomain_np8` |
-
-[test_Multidomain.cpp](../../test/cpp/Cauchy/test_Multidomain.cpp)
-
-- Multi-domain BDF2 restart reserves every domain and redistributes by persistent IDs
-- Moving ACM disk follows the pressure datum of the connected outer domain through restart
-- Moving ACM disk shares one pressure shift across a closed interface
-- Coordinated domains retain single-domain time equations and atomic publication
-- P3 flow5 crosses a posed disk interface with dense and sparse distributed matching
-- P0 and physical-gradient P1 publish complete multidomain traces without modal storage
-- DITR freezes distinct rotating midpoint and endpoint interface packets
-- Split flow and SA fields cross a rotating interface as one equation packet
-
-## `dnds_test_cauchy_polynomial_multigrid`
-
-| Level | CTest registrations |
-|---|---|
-| 2 | `dnds_cauchy_polynomial_multigrid_np1`, `dnds_cauchy_polynomial_multigrid_np2`, `dnds_cauchy_polynomial_multigrid_np4`, `dnds_cauchy_polynomial_multigrid_np8` |
-
-[test_PolynomialMultigrid.cpp](../../test/cpp/Cauchy/test_PolynomialMultigrid.cpp)
-
-- Bottom pMG uses mean convection and jump-only face viscosity in both RHS profiles
-- Each coarse smoother inherits defaults and resolves independent partial controls
-- Finest FAS acceptance shares selected-component L1 L2 convergence with the stage solver
-- Coarse FAS rate reuse and fail-fast halos preserve distributed viscous cycle results
-- FAS consumes the measured finest VR rate once for field and logical equations
-- Polynomial FAS recovers the original P3 manufactured equation across layouts and distributed halos
-- Polynomial FAS fixed points and preflight errors preserve fine means
-- Selected pMG recovers nonconstant principal equations while preserving frozen means and full residual reporting
-- Cauchy pMG physical discard and reprepare retain the fine reconstruction transaction
-- Logical polynomial FAS recovers nonconstant RANS and reacting mixture equations without packing
-- Equation Domain performs one spatial FAS update per DITR coupled stage and retries exactly
 
 ## `dnds_test_cauchy_spatial_schedule_cuda`
 
@@ -3473,37 +3538,6 @@ Each heading is a build target. The table gives the minimum CI level of each CTe
 - Resident equation checkpoint copies preserve padded layout and distributed row remapping
 - Method-owned stage history uses instance-bound algebra on every execution backend
 - Selected FAS algebra and cross-space transfer preserve frozen components
-
-## `euler_test_evaluator_pipeline`
-
-| Level | CTest registrations |
-|---|---|
-| 2 | `euler_evaluator_pipeline_np1`, `euler_evaluator_pipeline_np2`, `euler_evaluator_pipeline_np4`, `euler_evaluator_pipeline_np8` |
-
-[test_EulerEvaluator.cpp](../../test/cpp/Euler/test_EulerEvaluator.cpp)
-
-- Existing Euler configurations retain full mesh audits when new keys are absent
-- EulerEvaluator pipeline: IV (NS, P1, 2D)
-- EulerEvaluator pipeline: NACA0012 (NS_SA, P1)
-- EulerEvaluator pipeline: SA IDDES with runtime ft2 disabled
-- EulerEvaluator pipeline: Box (NS_3D, P1)
-- RANS wall cache rejects changed geometry and metric publications
-- Euler two-equation turbulent normal stress follows the physical face normal
-- Viscous wall perturbations match prescribed turbulence ghost values
-- SA GG boundaries preserve means, face targets and traversal independence
-- EulerP scalar GG reads neighbour cells and face-indexed boundary buffers
-- Euler reconstruction PP keeps RANS out of flow beta and order fallback
-- Euler gradients: EvaluateDt prepares limited buffers and direct FV explicitly reuses them
-- LVR target and branch halos agree across 2-D MPI partitions
-- LVR explicit gradient reuse matches a fresh Barth or WBAP reference
-- EulerSolver static reconstruction mask owns selectors and setup storage
-- EulerSolver static reconstruction mask builds a 3D coordinate selection
-- EulerSolver static reconstruction mask survives limiter paths and time updates
-- Euler distributed volume output reads native authority after detached facade metadata edits
-- Native Euler ingress restart and serial boundary output retain field association
-- Native Euler H5 restarts preserve sparse high Cell IDs and selected variable dimensions
-- Euler archived mesh setup refreshes loaded wall vectors after actual coordinate snapping
-- Euler periodic source setup accepts configured near-plane cleanup after rotation
 
 ## `geom_test_mesh_index_conversion`
 

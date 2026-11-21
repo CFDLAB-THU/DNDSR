@@ -369,7 +369,7 @@ TEST_CASE("EulerEvaluator pipeline: IV (NS, P1, 2D)")
 // TEST 2: NACA0012 (NS_SA, 2D, viscous + SA)
 // ===================================================================
 
-TEST_CASE("EulerEvaluator pipeline: NACA0012 (NS_SA, P1)")
+TEST_CASE("EulerEvaluator pipeline: NACA0012 (NS_SA, P1)" * doctest::test_suite("large-mesh"))
 {
     std::string root = projectRoot();
     std::string cfgPath = writeTempConfig<NS_SA>(
@@ -400,7 +400,7 @@ TEST_CASE("EulerEvaluator pipeline: NACA0012 (NS_SA, P1)")
     CHECK(incL2 == doctest::Approx(goldenIncL2).epsilon(1e-6));
 }
 
-TEST_CASE("EulerEvaluator pipeline: SA IDDES with runtime ft2 disabled")
+TEST_CASE("EulerEvaluator pipeline: SA IDDES with runtime ft2 disabled" * doctest::test_suite("large-mesh"))
 {
     const std::string root = projectRoot();
     const std::string cfgPath = writeTempConfig<NS_SA>(
@@ -419,7 +419,7 @@ TEST_CASE("EulerEvaluator pipeline: SA IDDES with runtime ft2 disabled")
 // ===================================================================
 // TEST 3: 3D Box (NS_3D, periodic, inviscid)
 // ===================================================================
-TEST_CASE("EulerEvaluator pipeline: Box (NS_3D, P1)")
+TEST_CASE("EulerEvaluator pipeline: Box (NS_3D, P1)" * doctest::test_suite("large-mesh"))
 {
     std::string root = projectRoot();
     std::string cfgPath = writeTempConfig<NS_3D>(
@@ -1424,7 +1424,7 @@ TEST_CASE("EulerSolver static reconstruction mask owns selectors and setup stora
     }
 }
 
-TEST_CASE("EulerSolver static reconstruction mask builds a 3D coordinate selection")
+TEST_CASE("EulerSolver static reconstruction mask builds a 3D coordinate selection" * doctest::test_suite("large-mesh"))
 {
     const auto root = projectRoot();
     auto cfg = writeTempConfig<NS_3D>(root + "/cases/euler3D/euler3D_config_Box.json", "mask_setup_3d",

@@ -18,16 +18,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--h5py-first", action="store_true")
     parser.add_argument("--parallel", action="store_true")
-    parser.add_argument("--test-level", type=int, choices=(0, 1, 2), default=2)
     args = parser.parse_args()
 
     if args.h5py_first:
         import h5py
-    from DNDSR import CFV, DNDS, EulerP, Geom
-    modules = [CFV, DNDS, EulerP, Geom]
-    if args.test_level >= 1:
-        from DNDSR import Cauchy
-        modules.append(Cauchy)
+    from DNDSR import CFV, Cauchy, DNDS, EulerP, Geom
+    modules = [CFV, Cauchy, DNDS, EulerP, Geom]
     import runtime_array_bridge_test
     if not args.h5py_first:
         import h5py
