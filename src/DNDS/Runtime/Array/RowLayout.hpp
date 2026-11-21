@@ -28,6 +28,21 @@ namespace DNDS::Runtime
 #endif
     inline constexpr bool AccessBoundsChecks = DNDS_RUNTIME_ARRAY_BOUNDS_CHECKS != 0;
 
+    namespace Detail
+    {
+        // A zero-width column table has no first component plane. All its
+        // empty rows start at offset zero, including in a partial final tile.
+        DNDS_DEVICE_CALLABLE inline index ColumnRowOffset(index row, index width)
+        {
+            return width ? row : 0;
+        }
+
+        DNDS_DEVICE_CALLABLE inline index TiledColumnRowOffset(index row, index width, index tile)
+        {
+            return width ? (row / tile) * (width * tile) + row % tile : 0;
+        }
+    }
+
     /// Immutable row shape in element units. Padding belongs to storage, not a row.
     class RowLayout
     {
@@ -173,9 +188,9 @@ namespace DNDS::Runtime
         {
             DNDS_check_throw_info(row >= 0 && size_t(row) < _rows, "row outside layout");
             if (_kind == RowLayoutKind::ColMajorTable)
-                return row;
+                return Detail::ColumnRowOffset(row, index(_width));
             if (_kind == RowLayoutKind::TiledColMajorTable)
-                return (row / index(_stride)) * index(_width * _stride) + row % index(_stride);
+                return Detail::TiledColumnRowOffset(row, index(_width), index(_stride));
             return IsRagged() ? _offsets[row] : row * _stride;
         }
         index ElementOffset(index row, index column) const

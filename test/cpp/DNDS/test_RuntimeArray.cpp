@@ -1114,6 +1114,18 @@ TEST_CASE("Physical tables preserve logical rows across padding and tile boundar
                     if (!touched[size_t(iElement)])
                         CHECK(generic.data[iElement] == -901.0);
             }
+    // An empty imported subspan can have a non-null, one-past-end address.
+    // All zero-width rows must stay at that address, even inside a partial tile.
+    auto allocation = R::Buffer::Allocate(sizeof(double));
+    auto tail = allocation.Subspan(sizeof(double), 0);
+    for (const auto &shape : {R::RowLayout::ColMajor(10, 0), R::RowLayout::TiledColMajor(10, 0, 8)})
+    {
+        auto field = R::Array<double>::FromStorage(shape, tail);
+        auto read = field.Read();
+        const auto view = read.View<R::UniformTableRows>();
+        CHECK(shape.Offset(9) == 0);
+        CHECK(view[9].data() == view.data);
+    }
     CHECK(R::RowLayout::ColMajor(32, 5, {32, 0}).Stride() == 32);
     CHECK(R::RowLayout::ColMajor(32, 5, {32, 1}).Stride() == 64);
     CHECK(R::RowLayout::ColMajor(33, 5, {8, 0}).WithRowCount(2).Stride() == 8);
@@ -1170,6 +1182,10 @@ TEST_CASE("Kernel projections preserve fixed row extents and independent padded 
     CHECK(view.owned.data == read.View().owned.data);
     CHECK(view.ghost.data == read.View().ghost.data);
     CHECK_THROWS(R::ProjectKernelView<R::FixedRows<6>>(read.View().owned));
+    auto shortPitch = read.View().owned;
+    shortPitch.kind = R::RowLayoutKind::ColMajorTable;
+    shortPitch.stride = 2; // row 2, component 0 would alias row 0, component 1.
+    CHECK_THROWS(R::ProjectKernelView<R::UniformTableRows>(shortPitch));
     R::Array<int> csr(R::RowLayout::Ragged({5, 5}));
     CHECK_THROWS(R::ProjectKernelView<R::FixedRows<5>>(csr.Read().View()));
 

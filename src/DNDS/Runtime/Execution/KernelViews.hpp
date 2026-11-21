@@ -28,6 +28,8 @@ namespace DNDS::Runtime
                                   "kernel view projection requires a physical table");
             DNDS_check_throw_info(view.kind == RowLayoutKind::Table ? view.stride >= view.width : view.stride > 0,
                                   "kernel view projection has invalid physical pitch");
+            DNDS_check_throw_info(view.kind != RowLayoutKind::ColMajorTable || view.stride >= view.rows,
+                                  "kernel view column pitch is smaller than its row count");
             if constexpr (!Traits::is_dynamic)
                 DNDS_check_throw_info(view.kind == Traits::layout_kind, "kernel view physical layout differs");
             if constexpr (Traits::row_width != DynamicExtent)

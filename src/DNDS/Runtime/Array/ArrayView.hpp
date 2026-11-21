@@ -217,20 +217,21 @@ namespace DNDS::Runtime
         {
             if constexpr (Checked)
                 DNDS_HD_assert(row >= 0 && row < rows);
+            const index logicalWidth = row_width == DynamicExtent ? width : index(row_width);
             index offset;
             if constexpr (is_dynamic)
             {
                 if (kind == RowLayoutKind::ColMajorTable)
-                    offset = row;
+                    offset = Detail::ColumnRowOffset(row, logicalWidth);
                 else if (kind == RowLayoutKind::TiledColMajorTable)
-                    offset = (row / stride) * (width * stride) + row % stride;
+                    offset = Detail::TiledColumnRowOffset(row, logicalWidth, stride);
                 else
                     offset = offsets ? offsets[row] : row * stride;
             }
             else if constexpr (layout_kind == RowLayoutKind::ColMajorTable)
-                offset = row;
+                offset = Detail::ColumnRowOffset(row, logicalWidth);
             else if constexpr (layout_kind == RowLayoutKind::TiledColMajorTable)
-                offset = (row / index(Policy::component_stride)) * (width * index(Policy::component_stride)) + row % index(Policy::component_stride);
+                offset = Detail::TiledColumnRowOffset(row, logicalWidth, index(Policy::component_stride));
             else if constexpr (row_stride != DynamicExtent)
                 offset = row * row_stride;
             else if constexpr (!is_dynamic && layout_kind != RowLayoutKind::CSR)
