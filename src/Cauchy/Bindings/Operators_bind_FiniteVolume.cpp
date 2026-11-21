@@ -96,6 +96,23 @@ namespace DNDS::Cauchy::Bindings
         }, py::arg("state"), py::arg("residual"), py::arg("workspace"), py::arg("time") = 0,
                 py::call_guard<py::gil_scoped_release>(),
                 "Local additive volume source using completed evaluate preparation at the same state/time. Includes rotation, RANS and chemistry. P0 retains physical source gradients. Output must be initialized and distinct; no halo exchange or reconstruction. Release views and coordinate failures.")
+            .def(
+                "submit_prepared_residual",
+                [](const FiniteVolumeOperators &op, const EquationDofs &state, EquationDofs &result, Workspace &w,
+                   R::EagerEngine &engine, const R::ExecutionStream &stream, real time,
+                   const std::optional<std::reference_wrapper<const AuxiliaryValues>> &aux,
+                   const std::optional<R::PythonArray> &sourceDerivative)
+        {
+            auto record = sourceDerivative ? std::optional(sourceDerivative->AsArray<real>()) : std::nullopt;
+            py::gil_scoped_release release;
+            return op.fv.SubmitPreparedResidual(
+                state, result, w.reconstruction, w.value, engine, stream, time,
+                aux ? OptionalRef<const AuxiliaryValues>(aux->get()) : OptionalRef<const AuxiliaryValues>{},
+                record ? OptionalRef<R::Array<real>>(*record) : OptionalRef<R::Array<real>>{});
+        },
+                py::arg("state"), py::arg("residual"), py::arg("workspace"), py::arg("engine"), py::arg("stream"),
+                py::arg("time") = 0, py::arg("auxiliary") = std::nullopt, py::arg("source_derivative") = std::nullopt,
+                "Queue prepared flux and source on the supplied stream. Wait on the returned event to observe numerical status before workspace reuse.")
             .def("evaluate_mean",
                  [](const FiniteVolumeOperators &op, EquationDofs &u, EquationDofs &r, MeanWorkspace &w,
                     R::EagerEngine &e, const R::ExecutionStream &s, real t)

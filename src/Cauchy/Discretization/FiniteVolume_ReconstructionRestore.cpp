@@ -402,6 +402,7 @@ namespace DNDS::Cauchy
             alpha->Complete(completed);
         work.rhsState.reset();
         work.rhsCoefficients.reset();
+        work.rhsUnlimitedViscousCoefficients.reset();
         state.finalizedFrom.reset();
         state.finalizedPublication.reset();
     }

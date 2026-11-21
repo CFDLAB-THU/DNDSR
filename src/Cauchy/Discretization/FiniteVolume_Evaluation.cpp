@@ -305,6 +305,7 @@ namespace DNDS::Cauchy
         work.centerGradientInput.reset();
         work.rhsState.reset();
         work.rhsCoefficients.reset();
+        work.rhsUnlimitedViscousCoefficients.reset();
         work.relativeUpdate = !work.meanOnly && _data->settings.numerics.reconstruction == "variational" ? std::numeric_limits<real>::infinity() : 0;
         work.faceFallbacks = {};
         work.diagnostics.Reset();
@@ -373,30 +374,8 @@ namespace DNDS::Cauchy
             }
             if (sourceDerivative)
             {
-                const auto &record = *sourceDerivative;
-                const index n = state.ComponentNumber();
-                DNDS_check_throw_info(residual && _data->quadrature.source && _data->settings.implicit.sourceJacobianMode == "rhsQuadrature" &&
-                                          record.GetDevice() == Device() && record.RowCount() == Metrics().NumCell() &&
-                                          record.Layout().Kind() == R::RowLayoutKind::Table && record.Layout().Width() == n * n,
-                                      "invalid RHS source derivative destination");
-                const auto distinct = [&](const EquationDofs &fields)
-                {
-                    for (index field = 0; field < fields.PhysicalFieldNumber(); ++field)
-                    {
-                        const auto &values = fields.PhysicalField(field);
-                        DNDS_check_throw_info(!record.Storage().Overlaps(values.Owned().Storage()) &&
-                                              !record.Storage().Overlaps(values.Ghost().Storage()),
-                                              "source derivative aliases an evaluation field");
-                    }
-                };
-                distinct(state);
-                distinct(*residual);
-                if (reconstruction.coefficients)
-                {
-                    distinct(reconstruction.WarmValues());
-                    distinct(reconstruction.FinalizedValues());
-                }
-                record.Storage().ValidateReservation(R::AccessMode::Write, Device(), engine.ChecksAccess());
+                DNDS_check_throw_info(residual, "source derivative needs a residual output");
+                work.ValidateSourceDerivative(*sourceDerivative, state, *residual, reconstruction, engine);
             }
             DNDS_check_throw_info(!HasInterfaces() || work.incoming || dependency,
                                   "FV evaluation needs a ready interface packet");
@@ -821,7 +800,11 @@ namespace DNDS::Cauchy
         work.boundaryFacialFluxCurrent = bool(residual) && work.captureBoundaryFlux;
         work.rhsState.emplace(state, boundary, time);
         if (reconstruction.coefficients)
+        {
             work.rhsCoefficients.emplace(reconstruction.FinalizedValues());
+            if (reconstruction.distinctFinalized && _data->equation.Viscous() && FiniteVolumeDetail::UsesUnlimitedViscousReconstruction(_data->settings))
+                work.rhsUnlimitedViscousCoefficients.emplace(reconstruction.WarmValues());
+        }
         if (separateMeanGradient || gradientAuxiliary)
             work.centerGradientInput.emplace(state, boundary, time);
     }

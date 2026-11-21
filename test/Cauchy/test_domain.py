@@ -643,12 +643,30 @@ def test_queued_device_matrix_action_and_jacobi_fixed_point():
     if not R.cuda_enabled or MPI.COMM_WORLD.size != 1:
         pytest.skip("uses one CUDA domain with no input halos")
 
-    domain, _ = build_domain(method="bdf1", device="cuda")
+    perturb = {"exprtkInitializers": [{"stateType": "primRhoP", "exprs": [
+        "inRegion := 1; UExprtk[0] := UExprtk[0] * (1 + 0.01 * x[0]); 0;"
+    ]}]}
+    domain, _ = build_domain(method="bdf1", initial_field=perturb, device="cuda")
     state = domain.dofs
     operators = C.FiniteVolumeOperators(domain)
     engine = R.EagerEngine(0, R.AccessTrackingContext())
     producer, consumer = (engine.cuda_stream(0) for _ in range(2))
     work = operators.build_workspace(state)
+    expected, replayed, consumed = (state.zeros_like() for _ in range(3))
+    operators.evaluate(state, expected, work, engine, producer)
+    replay_workspace = operators.build_workspace(state)
+    operators.prepare_reconstruction(state, replay_workspace, engine, producer)
+    event = operators.submit_prepared_residual(state, replayed, replay_workspace, engine, producer)
+    del replay_workspace
+    consumer.wait_for(event)
+    for name in replayed.field_names:
+        R.Algebra.copy_async(engine, consumer, consumed.fields[name], replayed.fields[name])
+    del replayed
+    consumer.record().wait()
+    for name, field in expected.fields.items():
+        reference = field.owned.to(R.Device.host()).numpy()
+        assert np.max(np.abs(reference)) > 1e-6
+        np.testing.assert_allclose(consumed.fields[name].owned.to(R.Device.host()).numpy(), reference, rtol=3e-10, atol=2e-11)
     request = C.AuxiliaryRequest()
     request.face_spectral_radius = True
     request.cell_spectral_sum = True

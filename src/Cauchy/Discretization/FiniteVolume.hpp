@@ -641,6 +641,18 @@ namespace DNDS::Cauchy
                           CFV::ReconstructionRegion region = CFV::ReconstructionRegion::All, real time = 0,
                           OptionalRef<Runtime::Array<real>> faceFlux = {},
                           OptionalRef<const AuxiliaryValues> auxiliary = {}) const;
+        /** @brief Queue flux and additive volume sources for already prepared owned rows.
+         * @details Input means, halos, coefficients and the interface publication must
+         * match the completed preparation. The returned prefix retains both sessions,
+         * publishes diagnostics and reports numerical failures on observation.
+         * No halo transfer or reconstruction is issued. An explicit auxiliary bundle
+         * must be supplied if the preceding preparation used caller-owned auxiliary data.
+         */
+        Runtime::StreamEvent SubmitPreparedResidual(
+            const EquationDofs &state, EquationDofs &residual,
+            const std::shared_ptr<ReconstructionState> &reconstruction, const std::shared_ptr<Workspace> &workspace,
+            Runtime::EagerEngine &, const Runtime::ExecutionStream &, real time = 0,
+            OptionalRef<const AuxiliaryValues> auxiliary = {}, OptionalRef<Runtime::Array<real>> sourceDerivative = {}) const;
         void AddSource(const EquationDofs &state, EquationDofs &residual,
                        const ReconstructionState &reconstruction, Workspace &workspace, real time = 0) const;
         /// Allocate a fixed cell-face-cell matrix stencil using the prototype's

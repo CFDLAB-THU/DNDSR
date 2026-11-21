@@ -166,6 +166,27 @@ it contains no source contribution or implicit halo. Release debug views before
 the write. Direct P1 consumes physical gradients; constant/P0 face reconstruction
 keeps gradient-dependent RANS sources independently active.
 
+For a complete local residual on a CPU or CUDA stream, reuse a completed
+preparation and submit flux followed by volume sources together.
+
+```python
+operators.prepare_reconstruction(state, workspace, engine, producer, time=domain.time)
+ready = operators.submit_prepared_residual(state, residual, workspace, engine, producer,
+                                           time=domain.time, source_derivative=derivative)
+consumer.wait_for(ready)
+# A dependent kernel on consumer can read the owned residual here.
+ready.wait()  # Observe numerical status before using the same workspace again.
+```
+
+Here `derivative` is the optional array from `build_source_derivative(state)`.
+Omit it for a residual-only evaluation. If preparation used external auxiliary
+values, supply the same bundle as `auxiliary`. Replay validates owned and ghost
+means, reconstruction and the receiver packet at this time. After replacing any
+of these inputs, prepare again. The submission computes all owned rows, leaves
+output halos alone and retains its operands until retirement. A CUDA replay
+copies the two numerical status records to reusable pinned host slots on the
+producer stream. Host observation reports execution and numerical errors.
+
 The `Workspace` object is the sole native finite-volume workspace and supports
 the equation-state profile, including
 P3 VR, component WBAP, Euler reconstruction PP and supported RANS/mixture

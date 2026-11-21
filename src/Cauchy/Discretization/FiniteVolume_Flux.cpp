@@ -31,8 +31,12 @@ namespace DNDS::Cauchy
         state.RequireCompatible(residual);
         EquationDofOperations::RequireDistinct(state, residual);
         if (finalized)
+        {
             EquationDofOperations::RequireDistinct(finalized->Values(), residual);
-        work.CheckPreparedResidual(state, finalized, time);
+            if (finalized->UsesDistinctStorage())
+                EquationDofOperations::RequireDistinct(reconstruction.WarmValues(), residual);
+        }
+        work.CheckPreparedResidual(state, reconstruction, finalized, time);
         DNDS_check_throw_info(region == CFV::ReconstructionRegion::All || region == CFV::ReconstructionRegion::Core ||
                                   region == CFV::ReconstructionRegion::HaloDependent,
                               "unknown flux region");
@@ -59,7 +63,10 @@ namespace DNDS::Cauchy
                                   "RANS face viscosity requires the prepared cell turbulent viscosity Array");
         }
         if (auxiliary)
+        {
             ValidateAuxValues(state, *auxiliary, time);
+            DNDS_check_throw_info(AuxiliaryBoundaryCurrent(*auxiliary, work), "prepared flux auxiliary values belong to another receiver packet");
+        }
         std::optional<R::Array<real>::ReadLease> incomingRead;
         RHSScalarView incoming;
         DNDS_check_throw_info(!HasInterfaces() || work.incoming,

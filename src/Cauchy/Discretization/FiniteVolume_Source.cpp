@@ -33,8 +33,12 @@ namespace DNDS::Cauchy
         state.RequireCompatible(residual);
         EquationDofOperations::RequireDistinct(state, residual);
         if (finalized)
+        {
             EquationDofOperations::RequireDistinct(finalized->Values(), residual);
-        work.CheckPreparedResidual(state, finalized, time);
+            if (finalized->UsesDistinctStorage())
+                EquationDofOperations::RequireDistinct(reconstruction.WarmValues(), residual);
+        }
+        work.CheckPreparedResidual(state, reconstruction, finalized, time);
         auto evaluator = _data->equation.MakePointEvaluator(work.workers ? work.workers->Acquire() : Physics::Chemistry::ChemicalWorkerPool::Lease{},
                                                             {true, false, false, work.chemical, false});
         work.PrepareVolumeSource(state, std::ref(residual), evaluator, time);

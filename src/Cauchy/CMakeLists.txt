@@ -86,6 +86,7 @@ set(CPPS
     Discretization/FiniteVolume_BoundaryQueued.cpp
     Discretization/FiniteVolume_BoundaryHostQueued.cpp
     Discretization/FiniteVolume_Flux.cpp
+    Discretization/FiniteVolume_PreparedResidual.cpp
     Discretization/FiniteVolume_Source.cpp
     Discretization/FiniteVolume_Diagnostics.cpp
     Discretization/CPU/FiniteVolumeGradientKernels.cpp

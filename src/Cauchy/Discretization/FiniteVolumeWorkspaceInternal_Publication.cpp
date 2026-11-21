@@ -81,12 +81,14 @@ namespace DNDS::Cauchy
                (!packet || boundary->Current(*packet));
     }
 
-    void Workspace::CheckPreparedResidual(const EquationDofs &state, const std::optional<FinalizedReconstruction> &finalized, real time) const
+    void Workspace::CheckPreparedResidual(const EquationDofs &state, const ReconstructionState &reconstruction, const std::optional<FinalizedReconstruction> &finalized, real time) const
     {
         DNDS_check_throw_info(rhsState && rhsState->Current(state, incoming, time),
                               "prepared residual means, halo, interface packet or stage time changed");
         DNDS_check_throw_info(bool(rhsCoefficients) == bool(finalized) && (!finalized || rhsCoefficients->Current(finalized->Values())),
                               "prepared residual reconstruction changed");
+        DNDS_check_throw_info(!rhsUnlimitedViscousCoefficients || rhsUnlimitedViscousCoefficients->Current(reconstruction.WarmValues()),
+                              "prepared residual unlimited viscous reconstruction changed");
     }
 
     void Workspace::DirectGradientPublication::Publish(const Data &plan, const R::Array<real> &meanValues, const R::Array<real> &inputValues,

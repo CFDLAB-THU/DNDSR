@@ -6,6 +6,7 @@
 #include "Cauchy/Core/NumericalFailure.hpp"
 #include "Cauchy/Config/CUDARHSKernelSelector.hpp"
 #include "DNDS/Runtime/Execution/EagerArray.hpp"
+#include "DNDS/Runtime/Execution/EagerCopy.hpp"
 #include "DNDS/Core/OMP.hpp"
 #include "DNDS/Algebra/ArrayInputCache.hpp"
 
@@ -27,6 +28,8 @@ namespace DNDS::Cauchy
         R::MetadataBuffer<CUDA::RHSKernelParameters> parameters;
         std::optional<R::ReadAccess> parameterRead;
         R::Array<NumericalStatus> faceStatus, cellStatus, partial, result;
+        // Allocated only on the first standalone replay, then reused under the workspace session.
+        std::array<std::optional<R::Array<NumericalStatus>>, 2> preparedStatusHost;
         R::Array<index> fallbackCounts, emptySelection;
         int submittedRegions = 0;
         bool pending = false;
@@ -233,6 +236,43 @@ namespace DNDS::Cauchy
         DNDS_check_throw_info(false, "CUDA flux execution is not built");
 #endif
     }
+    void FiniteVolume::Workspace::StagePreparedStatus(R::EagerEngine &engine, const R::ExecutionStream &stream)
+    {
+#ifdef DNDS_USE_CUDA
+        if (!deviceFlux)
+            return;
+        DNDS_check_throw_info(preparationStatus && preparationStatus->pending && deviceFlux->pending && deviceFlux->submittedRegions == 3,
+                              "prepared residual needs complete flux and source status");
+        const std::array<R::Array<NumericalStatus>, 2> deviceResults{deviceFlux->result, preparationStatus->result};
+        for (size_t i = 0; i < deviceResults.size(); ++i)
+        {
+            const auto &source = deviceResults[i];
+            auto &host = deviceFlux->preparedStatusHost[i];
+            if (!host)
+            {
+                host = R::Array<NumericalStatus>::FromStorage(source.Layout(), R::Buffer::AllocatePinnedHost(source.Storage().Bytes()));
+                host->SetName(i == 0 ? "Cauchy/residual/fluxStatusHost" : "Cauchy/residual/sourceStatusHost", DNDS_ALLOCATION_SITE());
+            }
+            auto destination = host->Storage();
+            R::CopyAsync(engine, stream, source.Storage(), destination);
+        }
+#endif
+    }
+    void FiniteVolume::Workspace::RetirePreparedStatus(bool check)
+    {
+#ifdef DNDS_USE_CUDA
+        if (!deviceFlux)
+            return;
+        deviceFlux->pending = false;
+        preparationStatus->pending = false;
+        if (check)
+        {
+            RequireNumericalSuccess(deviceFlux->preparedStatusHost[0]->Read().View()(0, 0), "queued spatial flux");
+            RequireNumericalSuccess(deviceFlux->preparedStatusHost[1]->Read().View()(0, 0), "queued volume source");
+        }
+#endif
+    }
+
     void FiniteVolume::Workspace::CheckDeviceFluxStatus()
     {
 #ifdef DNDS_USE_CUDA

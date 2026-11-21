@@ -317,8 +317,8 @@ namespace DNDS::Cauchy
             bool Current(const EquationDofs &, const std::optional<BoundaryInputs> &, real) const;
         };
         std::optional<SpatialInputs> centerGradientInput, rhsState;
-        std::optional<DofPublication> rhsCoefficients;
-        void CheckPreparedResidual(const EquationDofs &, const std::optional<FinalizedReconstruction> &, real) const;
+        std::optional<DofPublication> rhsCoefficients, rhsUnlimitedViscousCoefficients;
+        void CheckPreparedResidual(const EquationDofs &, const ReconstructionState &, const std::optional<FinalizedReconstruction> &, real) const;
         // Keep auxiliary cache metadata after the existing numerical fields.
         std::vector<std::array<DirectGradientPublication, 2>> directGradientPublications;
 
@@ -406,6 +406,10 @@ namespace DNDS::Cauchy
         /// only after the caller's final drain. Neither method waits implicitly.
         void BeginNumericalStatus(R::EagerEngine &, const R::ExecutionStream &, bool withRHS);
         void CheckNumericalStatus(bool withRHS);
+        void ValidateSourceDerivative(const R::Array<real> &, const EquationDofs &, const EquationDofs &,
+                                      const ReconstructionState &, const R::EagerEngine &) const;
+        void StagePreparedStatus(R::EagerEngine &, const R::ExecutionStream &);
+        void RetirePreparedStatus(bool check);
         void ResetPreparationStatus(R::EagerEngine &, const R::ExecutionStream &);
         void CheckPreparationStatus();
         void AppendPreparationStatus(R::EagerEngine &, const R::ExecutionStream &, const R::Array<NumericalStatus> &);

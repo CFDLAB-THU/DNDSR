@@ -118,6 +118,13 @@ def test_finite_volume_operator_frontend_composes_native_residual_and_linear_sol
         assert (derivative is not None) == (mixture and overlap)
         operators.evaluate(state, residual, work, engine, stream, source_derivative=derivative)
         assert_state_equal(residual, reference, rtol=3e-10, atol=2e-11)
+        queued = state.zeros_like()
+        replay_derivative = operators.build_source_derivative(state)
+        replay = operators.submit_prepared_residual(state, queued, work, engine, stream, source_derivative=replay_derivative)
+        replay.wait()
+        assert_state_equal(queued, reference, rtol=3e-10, atol=2e-11)
+        if derivative is not None:
+            np.testing.assert_allclose(replay_derivative.numpy(), derivative.numpy(), rtol=3e-10, atol=2e-11)
         flux = state.zeros_like()
         faces = operators.build_face_flux_buffer(state)
         operators.evaluate_flux(state, flux, work, face_flux=faces)
