@@ -50,9 +50,21 @@ in the same `Simulation` collective call sequence.
 
 Interfaces are directed point-interpolation connections; use two entries for a
 two-way connection. The donor and receiver zone numbers need not be equal.
-Current coupled interface production scope is compressible perfect-gas flow5;
-unsupported extended profiles fail explicitly. Rigid posing leaves reference
-mesh coordinates unchanged. Absolute momentum is expressed in each mesh's axes.
+Connected domains must agree on the equation, material properties and code-unit
+scales. For ACM, configure reciprocal patches and a physical pressure outlet
+or farfield somewhere in each connected component. Each domain may specify
+its own standalone pressure-mean target. The physical pressure boundary
+sets the datum throughout the connected component. Reference mesh coordinates
+stay fixed. At an interface, absolute momentum (compressible) or absolute
+velocity (ACM) is rotated into the receiver axes. Pressure and turbulence
+variables transfer as scalars. See the [ACM qualification cases](../architecture/CauchyACM.md).
+
+For SA and SST, each mesh supplies its own nodal wall-distance field. When
+that field is absent, setup searches for no-slip walls on the domain
+communicator. In a fluid region whose nearest wall belongs to a different
+domain, this search misses that wall. Relative motion can also change which
+wall is nearest. Include this limitation when interpreting turbulence sources
+near a moving interface.
 
 ## Mesh input and HDF archives
 

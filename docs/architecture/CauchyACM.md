@@ -108,8 +108,15 @@ $\mathbf u_r=R_r^T R_d\mathbf u_d$. Translation affects matching and grid
 transport. Identical donor and receiver axes preserve the velocity components
 exactly. Relative pressure, $k$ and $\omega$ are scalar packet entries.
 Adding the same constant pressure to the receiver and its prescribed packet
-leaves the spatial residual unchanged. Connected pressure anchoring and a
-moving two-domain ACM solve still need qualification before production use.
+leaves the spatial residual unchanged. A direct P1 flow4 regression advances a
+rotating disk with a pressure perturbation and a single outlet on the outer
+domain. It compares the second accepted step after restart with uninterrupted
+execution in colocated and dislocated placement. The native CUDA comparison
+also checks every owned component against CPU after two BDF1 steps, for
+direct P1 with nonlinear packet refresh and modal P2 with stage-frozen
+packets and one coarse pMG level. The latter checks that coarse cycles ran.
+These short tests cover transport and restart. A closed pressure-free
+component still requires coordinated anchoring.
 
 SA appends the normalized working variable (`nuTilde / viscosityReference` in
 code units). A dimensional `primUP_phy` SA tail supplies kinematic viscosity
@@ -188,7 +195,7 @@ two-equation closures. The viscous flux averages the adjacent cell values on
 interior, periodic and MPI faces. Physical and domain-interface boundaries
 use their pointwise closure. This switch defaults to false.
 
-ACM uses stationary single domains and FP64 face fluxes. For direct P1
+ACM uses FP64 face fluxes. For direct P1
 reconstruction, set `numerics.reconstruction = "gradient"` and
 `numerics.limiter = "Barth"` to limit the gradients used in the RHS. The
 limiter bounds each velocity, pressure and turbulence component by cell

@@ -550,6 +550,10 @@ if(DNDS_USE_CUDA)
     add_dependencies(cauchy_unit_tests dnds_test_cauchy_linear_solver_cuda)
     dnds_add_unit_test(cauchy_time_fas_cuda "Cauchy/test_TimeFASCUDA.cu" "cauchy;physics;cfv;geom;dnds")
     add_dependencies(cauchy_unit_tests dnds_test_cauchy_time_fas_cuda)
+    add_test(NAME dnds_cauchy_acm_interface_cuda
+        COMMAND $<TARGET_FILE:dnds_test_cauchy_multidomain> "--test-case=Moving ACM disk*")
+    set_tests_properties(dnds_cauchy_acm_interface_cuda PROPERTIES TIMEOUT 120
+        ENVIRONMENT "DNDS_TEST_ACM_INTERFACE_CUDA=1;OMP_NUM_THREADS=1;DNDS_DIST_OMP_NUM_THREADS=1" LABELS "cuda;cauchy")
     dnds_add_unit_test(cauchy_domain_cuda "Cauchy/test_DomainCUDA.cpp" "cauchy;physics;cfv;geom;dnds")
     add_dependencies(cauchy_unit_tests dnds_test_cauchy_domain_cuda)
     add_test(NAME dnds_cauchy_domain_cuda_np2

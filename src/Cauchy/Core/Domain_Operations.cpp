@@ -219,20 +219,19 @@ namespace DNDS::Cauchy
                 candidate._data->candidate,
             "interface checkpoint candidate belongs to another domain");
         auto &guess = candidate._data->candidate->equationGuess;
-        std::vector<Runtime::TransferOperation> means, coefficients;
-        for (index iField = 0;
-             iField < _state.trial.PhysicalFieldNumber(); ++iField)
+        const auto restored = _execution.ComputeStream().Record();
+        const auto exchange = [&](CFV::FVField &field)
         {
-            means.push_back(_problem.finiteVolume.BindHalo(
-                                                     _state.trial.PhysicalField(iField))
-                                .Begin());
+            _problem.finiteVolume.BindHalo(field)
+                .SubmitAfter(_execution.Engine(), _execution.CommunicationStream(), restored)
+                .Wait();
+        };
+        for (index iField = 0; iField < _state.trial.PhysicalFieldNumber(); ++iField)
+        {
+            exchange(_state.trial.PhysicalField(iField));
             if (guess)
-                coefficients.push_back(_problem.finiteVolume.BindHalo(guess->PhysicalField(iField)).Begin());
+                exchange(guess->PhysicalField(iField));
         }
-        for (auto &operation : means)
-            operation.Wait();
-        for (auto &operation : coefficients)
-            operation.Wait();
         // Match the accepted-time predictor in Simulation::Advance. Direct P1
         // publishes means here. It rebuilds gradients with stage-time packets
         // when the next step prepares its first reconstruction.

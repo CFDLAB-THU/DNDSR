@@ -205,8 +205,8 @@ namespace DNDS::Cauchy
         }
         if (_interfaces)
         {
-            // Prepare separate donor coefficients and complete their halos.
-            // The accepted workspace/guess remains untouched until commit.
+            // Complete the restored donor halos on the domain communicator. The
+            // exchange is collective and must propagate failure directly.
             std::vector<InterfaceDomainInput> ports;
             MPI::LocalStage(control, [&]
                             { ports.resize(_domains.size()); });
@@ -214,9 +214,7 @@ namespace DNDS::Cauchy
                          {
                 auto &domain = GetDomain(iDomain);
                 auto &candidate = *checkpoints[iDomain];
-                const MPIInfo mpi(_placement.Context(iDomain)->Communicator());
-                MPI::LocalStage(mpi, [&]
-                                { ports[iDomain] = {domain.PrepareCheckpointInterfaceDonor(candidate)}; }); });
+                ports[iDomain] = {domain.PrepareCheckpointInterfaceDonor(candidate)}; });
             StateEpoch epoch;
             epoch.acceptedStep = uint64_t(step);
             _interfaces->Refresh(ports, time, epoch);

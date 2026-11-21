@@ -4,6 +4,7 @@
 #include "Cauchy/Interface/InterfaceCoupling.hpp"
 #include "CartesianFixture.hpp"
 #include "RotatingVortexFixture.hpp"
+#include <cstdlib>
 #include <filesystem>
 #include <unistd.h>
 #include <iostream>
@@ -30,7 +31,8 @@ namespace
     }
     std::vector<double> Values(const C::Domain &domain)
     {
-        const auto read = domain.Dofs().CoupledField().Owned().Read();
+        const auto &owned = domain.Dofs().CoupledField().Owned();
+        const auto read = owned.GetDevice() == R::Device::Host() ? owned.Read() : owned.To(R::Device::Host()).Read();
         const auto values = read.View<R::UniformTableRows>();
         std::vector<double> result;
         for (I iCell = 0; iCell < values.RowCount(); ++iCell)
@@ -171,6 +173,34 @@ TEST_CASE("Moving ACM disk follows the pressure datum of the connected outer dom
                                        {{"donor", "disk"}, {"receiver", "outer"}, {"donorZone", 101}, {"receiverZone", 101}, {"maxGap", .03}, {"refreshCadence", "nonlinearIteration"}}})}};
     input["domains"][0]["overrides"]["boundaries"]["102"] = {{"kind", "pressureOutlet"}, {"state", state(-2.)}};
     input["domains"][1]["overrides"] = {{"initialState", state(-1.99)}, {"equation", {{"acmPressureMean", 7.}}}, {"motion", {{"angularVelocity", {0., 0., .02}}, {"center", {5., 5., 0.}}}}};
+    // Match the numerical choices on both backends, including the linear update.
+    input["defaults"]["implicit"]["linear"] = {{"method", "jacobi"}, {"stopping", "fixedCount"}, {"iterations", 3}};
+    input["defaults"]["numerics"]["viscousGradient"] = "polynomial";
+    bool expectMultigrid = false;
+    std::optional<C::SimulationConfig> cpuConfig;
+    if (std::getenv("DNDS_TEST_ACM_INTERFACE_CUDA"))
+    {
+        SUBCASE("direct P1 with nonlinear packet refresh")
+        {
+            input["defaults"]["implicit"]["multigrid"]["levels"] = 0;
+        }
+        SUBCASE("modal P2 with one coarse level and frozen stage packets")
+        {
+            expectMultigrid = true;
+            auto &numerics = input["defaults"]["numerics"];
+            numerics["reconstruction"] = "variational";
+            numerics["cfv"] = {{"maxOrder", 2}, {"intOrder", 3}, {"SORInstead", false}};
+            numerics["reconstructionIterations"] = 1;
+            numerics["reconstructionTolerance"] = 0;
+            auto &implicit = input["defaults"]["implicit"];
+            implicit["requireConvergedReconstruction"] = false;
+            implicit["multigrid"] = {{"levels", 1}, {"coarseSmooth", 1}};
+            for (auto &connection : input["interfaces"])
+                connection["refreshCadence"] = "stageFrozen";
+        }
+        cpuConfig.emplace(C::SimulationConfig::ResolveCollective(input, mpi.comm));
+        input["defaults"]["execution"]["device"] = "cuda";
+    }
     const auto config = C::SimulationConfig::ResolveCollective(input, mpi.comm);
     C::Simulation simulation(config, mpi.comm, factory);
     for (I d = 0; d < 2; ++d)
@@ -207,6 +237,27 @@ TEST_CASE("Moving ACM disk follows the pressure datum of the connected outer dom
                 CHECK(DNDS::MPI::AllreduceValue<DNDS::MPI::Reduction::Max>(speed, resumed.GetDomain(d).Communicator()) > 1e-8);
             }
         }
+    if (cpuConfig)
+    {
+        C::Simulation cpu(*cpuConfig, mpi.comm, factory);
+        REQUIRE(cpu.Advance(dt).accepted);
+        REQUIRE(cpu.Advance(dt).accepted);
+        for (I d = 0; d < 2; ++d)
+            if (simulation.Local(d))
+            {
+                REQUIRE(simulation.GetDomain(d).Dofs().Device() == R::Device::CUDA(0));
+                if (expectMultigrid)
+                {
+                    const auto &stages = simulation.GetDomain(d).LastImplicitStages();
+                    REQUIRE_FALSE(stages.empty());
+                    CHECK(stages.back().multigridCycles > 0);
+                }
+                const auto actual = Values(simulation.GetDomain(d)), reference = Values(cpu.GetDomain(d));
+                REQUIRE(actual.size() == reference.size());
+                for (size_t i = 0; i < actual.size(); ++i)
+                    CHECK(actual[i] == doctest::Approx(reference[i]).epsilon(1e-9).scale(1));
+            }
+    }
     RemoveCheckpoint(path);
 }
 
