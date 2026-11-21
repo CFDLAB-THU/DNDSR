@@ -9,6 +9,7 @@
 #include <CGAL/AABB_tree.h>
 #include <CGAL/AABB_traits_3.h>
 #include <CGAL/AABB_triangle_primitive_3.h>
+#include <CGAL/AABB_segment_primitive_3.h>
 #undef CGAL_DISABLE_ROUNDING_MATH_CHECK
 namespace DNDS::Geom
 {
@@ -50,7 +51,11 @@ namespace DNDS::Geom
         };
         auto faceCoordinates = [&](index face, tSmallCoords &output)
         { nativeView->GetCoordsOnFace(face, output); };
-        std::vector<Eigen::Matrix<real, 3, 3>> Triangles;
+        using SegmentCoords = Eigen::Matrix<real, 3, 2>;
+        using TriangleCoords = Eigen::Matrix<real, 3, 3>;
+        const bool useSegments = dim == 2 && options.method == 1;
+        std::vector<SegmentCoords> segments;
+        std::vector<TriangleCoords> triangles;
         std::vector<index> wallNodes;
         Runtime::Array<real> wallOwned;
         std::optional<Runtime::Array<real>::WriteLease> wallWrite;
@@ -95,7 +100,7 @@ namespace DNDS::Geom
                         tri(EigenAll, 0) = coords(EigenAll, 0);
                         tri(EigenAll, 1) = coords(EigenAll, 1);
                         tri(EigenAll, 2) = coords(EigenAll, 1) + Geom::tPoint{0., 0., 1.0};
-                        Triangles.push_back(tri);
+                        triangles.push_back(tri);
                     }
                     else if (elem.type == Geom::Elem::ElemType::Tri3 || elem.type == Geom::Elem::ElemType::Tri6) //! TODO
                     {
@@ -105,7 +110,7 @@ namespace DNDS::Geom
                         tri(EigenAll, 0) = coords(EigenAll, 0);
                         tri(EigenAll, 1) = coords(EigenAll, 1);
                         tri(EigenAll, 2) = coords(EigenAll, 2);
-                        Triangles.push_back(tri);
+                        triangles.push_back(tri);
                     }
                     else if (elem.type == Geom::Elem::ElemType::Quad4 || elem.type == Geom::Elem::ElemType::Quad9)
                     {
@@ -115,11 +120,11 @@ namespace DNDS::Geom
                         tri(EigenAll, 0) = coords(EigenAll, 0);
                         tri(EigenAll, 1) = coords(EigenAll, 1);
                         tri(EigenAll, 2) = coords(EigenAll, 2);
-                        Triangles.push_back(tri);
+                        triangles.push_back(tri);
                         tri(EigenAll, 0) = coords(EigenAll, 0);
                         tri(EigenAll, 1) = coords(EigenAll, 2);
                         tri(EigenAll, 2) = coords(EigenAll, 3);
-                        Triangles.push_back(tri);
+                        triangles.push_back(tri);
                     }
                     else
                     {
@@ -142,25 +147,36 @@ namespace DNDS::Geom
                             faceQuadraturePPhysics.emplace_back(pPhy);
                         });
 
-                    auto qPatches = Geom::Elem::GetQuadPatches(quad);
-                    for (auto &qPatch : qPatches)
+                    const auto vertex = [&](int code) -> tPoint
                     {
-                        Eigen::Matrix<real, 3, 3> tri;
-
-                        for (int iV = 0; iV < 3; iV++)
-                            if (qPatch[iV] > 0)
-                                tri(EigenAll, iV) = coords(EigenAll, qPatch[iV] - 1);
-                            else if (qPatch[iV] < 0)
-                                tri(EigenAll, iV) = faceQuadraturePPhysics.at(-qPatch[iV] - 1);
-                            else
-                                tri(EigenAll, iV) = coords(EigenAll, 1) + Geom::tPoint{0., 0., 1.0};
-                        Triangles.push_back(tri);
+                        DNDS_check_throw_info(code != 0, "missing wall patch vertex");
+                        return code > 0 ? tPoint(coords.col(code - 1)) : faceQuadraturePPhysics.at(-code - 1);
+                    };
+                    for (const auto &patch : Geom::Elem::GetQuadPatches(quad))
+                    {
+                        if (useSegments)
+                        {
+                            // Line patches encode (begin, end, 0). The absent
+                            // third vertex is not part of the physical wall.
+                            DNDS_check_throw_info(patch[2] == 0, "planar wall requires a line patch");
+                            auto &edge = segments.emplace_back();
+                            edge.col(0) = vertex(patch[0]);
+                            edge.col(1) = vertex(patch[1]);
+                            DNDS_check_throw_info(edge.allFinite() && (edge.col(1) - edge.col(0)).squaredNorm() > 0,
+                                                  "wall search segment is nonfinite or degenerate");
+                        }
+                        else
+                        {
+                            auto &triangle = triangles.emplace_back();
+                            for (int i = 0; i < 3; ++i)
+                                triangle.col(i) = vertex(patch[i]);
+                        }
                     }
                 }
             }
-            OMP::ForSetupRows(0, index(Triangles.size()), [&](index iTriangle)
+            OMP::ForSetupRows(0, index(triangles.size()), [&](index iTriangle)
             {
-                const auto &triangle = Triangles[size_t(iTriangle)];
+                const auto &triangle = triangles[size_t(iTriangle)];
                 DNDS_check_throw_info(triangle.allFinite() && (triangle.col(1) - triangle.col(0)).cross(triangle.col(2) - triangle.col(0)).squaredNorm() > 0,
                                       "wall search patch is nonfinite or degenerate"); }); });
         // Exact replicated surface search: scratch on each rank scales with
@@ -184,7 +200,13 @@ namespace DNDS::Geom
             return result;
         };
         static_assert(sizeof(Eigen::Matrix<real, 3, 3>) == 9 * sizeof(real), "wall MPI payload requires packed coordinates");
-        auto trianglesFull = gather(Triangles, MPI_DOUBLE, 9);
+        static_assert(sizeof(SegmentCoords) == 6 * sizeof(real));
+        std::vector<TriangleCoords> trianglesFull;
+        std::vector<SegmentCoords> segmentsFull;
+        if (useSegments)
+            segmentsFull = gather(segments, MPI_DOUBLE, 6);
+        else
+            trianglesFull = gather(triangles, MPI_DOUBLE, 9);
         const auto nodeSpace = Entities(EntityKind::Node);
         Runtime::Array<uint8_t> selectedOwned, selectedGhost;
         FieldTransferDetail::LocalStage(mpi, communication, [&]
@@ -214,48 +236,44 @@ namespace DNDS::Geom
                     wall(iNode).setZero(); });
         }
         if (options.verbose >= 1 && mpi.rank == 0)
-            log() << fmt::format("=== UnstructuredMesh::BuildNodeWallDist() with minWallDist = {:.4e}, To search in {}", options.minWallDist, trianglesFull.size()) << std::endl;
+            log() << fmt::format("=== UnstructuredMesh::BuildNodeWallDist() with minWallDist = {:.4e}, To search in {}", options.minWallDist, trianglesFull.size() + segmentsFull.size()) << std::endl;
 
-        auto executeSearch = [&]()
+        auto executeSearch = [&](auto &patches)
         {
             if (options.verbose >= 3)
                 log() << fmt::format("Start search rank [{}]", getMPI().rank) << std::endl;
             using K = CGAL::Simple_cartesian<double>;
-            // using FT = K::FT;
-            // typedef K::Ray_3 Ray;
-            // typedef K::Line_3 Line;
             using Point = K::Point_3;
-            using Triangle = K::Triangle_3;
-            using Iterator = std::vector<Triangle>::iterator;
-            using Primitive = CGAL::AABB_triangle_primitive_3<K, Iterator>;
-            using AABB_triangle_traits = CGAL::AABB_traits_3<K, Primitive>;
-            using Tree = CGAL::AABB_tree<AABB_triangle_traits>;
-
-            std::vector<Triangle> triangles;
-            triangles.reserve(trianglesFull.size());
-
-            for (index i = 0; i < trianglesFull.size(); i++)
+            using Coordinates = typename std::decay_t<decltype(patches)>::value_type;
+            constexpr bool line = Coordinates::ColsAtCompileTime == 2;
+            using Shape = std::conditional_t<line, K::Segment_3, K::Triangle_3>;
+            using Iterator = typename std::vector<Shape>::iterator;
+            using Primitive = std::conditional_t<line, CGAL::AABB_segment_primitive_3<K, Iterator>,
+                                                 CGAL::AABB_triangle_primitive_3<K, Iterator>>;
+            using Tree = CGAL::AABB_tree<CGAL::AABB_traits_3<K, Primitive>>;
+            std::vector<Shape> shapes;
+            shapes.reserve(patches.size());
+            for (const auto &patch : patches)
             {
-                Point p0(trianglesFull[size_t(i)](0, 0), trianglesFull[size_t(i)](1, 0), trianglesFull[size_t(i)](2, 0));
-                Point p1(trianglesFull[size_t(i)](0, 1), trianglesFull[size_t(i)](1, 1), trianglesFull[size_t(i)](2, 1));
-                Point p2(trianglesFull[size_t(i)](0, 2), trianglesFull[size_t(i)](1, 2), trianglesFull[size_t(i)](2, 2));
-                triangles.emplace_back(p0, p1, p2);
+                const auto point = [&](int j)
+                { return Point(patch(0, j), patch(1, j), patch(2, j)); };
+                if constexpr (line)
+                    shapes.emplace_back(point(0), point(1));
+                else
+                    shapes.emplace_back(point(0), point(1), point(2));
             }
-            trianglesFull.clear();
+            patches.clear();
             double minDist = veryLargeReal;
 
-            if (!triangles.empty())
+            if (!shapes.empty())
             {
-                // std::cout << "tree building" << std::endl;
-                Tree tree(triangles.begin(), triangles.end());
+                Tree tree(shapes.begin(), shapes.end());
                 // CGAL otherwise lazily builds both structures in const
                 // distance queries. Finish them on the controller so all
                 // concurrent queries read immutable tree/hint state.
                 tree.build();
                 tree.accelerate_distance_queries();
                 const auto &search = tree;
-                // std::cout << "tree built" << std::endl;
-                // search
                 const index parts = std::min<index>(OMP::DistributedThreads(), std::max<index>(NumNode(), 1));
                 std::vector<real> minima(size_t(parts), veryLargeReal);
                 OMP::ForSetupRows(0, parts, [&](index part)
@@ -268,15 +286,9 @@ namespace DNDS::Geom
                     // skip already on-wall data
                     if (wall(iNode).squaredNorm() == 0.0)
                         continue;
-                    // std::cout << "iCell " << iCell << std::endl;
-                    // std::cout << "iG " << ig << std::endl;
                     auto p = coordinate(iNode);
                     Point pQ(p[0], p[1], p[2]);
-                    // std::cout << "pQ " << pQ << std::endl;
-                    // Point closest_point = tree.closest_point(pQ);
-                    // FT sqd = tree.squared_distance(pQ);
                     auto closest_point = search.closest_point_and_primitive(pQ);
-                    // std::cout << "sqd" << sqd << std::endl;
                     auto cp = tPoint{closest_point.first.x(), closest_point.first.y(), closest_point.first.z()};
 
                     real dist = (p - cp).norm();
@@ -302,7 +314,9 @@ namespace DNDS::Geom
         for (int batch = 0; batch < batches; ++batch)
             FieldTransferDetail::LocalStage(mpi, communication, [&]
                                             {
-                if (options.wallDistExecution == 0 || mpi.rank % batches == batch) executeSearch(); });
+                if (options.wallDistExecution != 0 && mpi.rank % batches != batch) return;
+                if (useSegments) executeSearch(segmentsFull);
+                else executeSearch(trianglesFull); });
 
         // Release the writer before transfer leases are acquired.
         wallWrite.reset();

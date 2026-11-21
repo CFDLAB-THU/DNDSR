@@ -51,10 +51,10 @@ in the same `Simulation` collective call sequence.
 Interfaces are directed point-interpolation connections; use two entries for a
 two-way connection. The donor and receiver zone numbers need not be equal.
 Connected domains must agree on the equation, material properties and code-unit
-scales. For ACM, configure reciprocal patches and a physical pressure outlet
-or farfield somewhere in each connected component. Each domain may specify
-its own standalone pressure-mean target. The physical pressure boundary
-sets the datum throughout the connected component. Reference mesh coordinates
+scales. ACM patches must be reciprocal. A physical outlet or farfield anywhere
+in the component sets its datum. In a closed component, the first configured
+member supplies the target pressure mean. The simulation shifts every member
+by the same amount. Reference mesh coordinates
 stay fixed. At an interface, absolute momentum (compressible) or absolute
 velocity (ACM) is rotated into the receiver axes. Pressure and turbulence
 variables transfer as scalars. See the [ACM qualification cases](../architecture/CauchyACM.md).
@@ -64,7 +64,7 @@ that field is absent, setup searches for no-slip walls on the domain
 communicator. In a fluid region whose nearest wall belongs to a different
 domain, this search misses that wall. Relative motion can also change which
 wall is nearest. Include this limitation when interpreting turbulence sources
-near a moving interface.
+near a moving interface. The moving-disk SA/SST qualification covers wall-free transport.
 
 ## Mesh input and HDF archives
 

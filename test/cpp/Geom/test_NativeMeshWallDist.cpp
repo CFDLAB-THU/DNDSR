@@ -32,7 +32,7 @@ static DNDS::ssp<G::UnstructuredMesh> Fixture(DNDS::MPIInfo mpi, bool curved = f
     R::Array<G::ElemInfo> bndInfo(R::RowLayout::Dense(size_t(boundaries.NumOwned()), 1));
     {
         auto write = points.Write();
-        const std::vector<G::tPoint> coordinates = curved ? std::vector<G::tPoint>{{0, 0, 0}, {2, 0, 0}, {0, 2, 0}, {1, -0.5, 0}, {1, 1, 0}, {0, 1, 0}, {1, 0.5, 0}} : std::vector<G::tPoint>{{0, 0, 0}, {2, 0, 0}, {0, 1, 0}};
+        const std::vector<G::tPoint> coordinates = curved ? std::vector<G::tPoint>{{0, 0, 0}, {2, 0, 0}, {0, 2, 0}, {1, -0.5, 0}, {1, 1, 0}, {0, 1, 0}, {0.75, 0.5, 0}} : std::vector<G::tPoint>{{0, 0, 0}, {2, 0, 0}, {0, 1, 0}};
         for (size_t row = 0; row < points.RowCount(); ++row)
             for (size_t component = 0; component < 3; ++component)
                 write.View()(row, component) = coordinates[row][component];
@@ -210,11 +210,10 @@ TEST_CASE("Native curved wall preserves method conventions and remote midpoint z
                 CHECK(mesh->NodeWallDist(node).isZero(0));
             if (global == 6)
             {
-                // Method0 extrudes the endpoint chord. Method1 splits at the
-                // curved midpoint and retains the historical third point
-                // endpoint1+(0,0,1). Closest point on its first patch is
-                // (0.8,0,0.4), on edge endpoint0->third point.
-                const G::tPoint expected = method == 1 ? G::tPoint{0.2, 0.5, -0.4} : G::tPoint{0, 0.5, 0};
+                // Project (0.75,0.5) onto the first segment (0,0)->(1,-0.5).
+                // t=(0.75-0.25)/1.25=0.4 gives (0.4,-0.2). The second segment
+                // is farther away. Methods 0 and 20 use the endpoint chord.
+                const G::tPoint expected = method == 1 ? G::tPoint{0.35, 0.7, 0} : G::tPoint{0, 0.5, 0};
                 CHECK(mesh->NodeWallDist(node).isApprox(expected, 1e-12));
             }
         }

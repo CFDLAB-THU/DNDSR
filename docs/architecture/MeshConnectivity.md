@@ -558,3 +558,13 @@ This page describes current contracts. Historical `AdjPairTracked`,
 `AdjIndexInfo`, mutable SerialRW ingress and legacy global/local build chains
 belong to migration records, not the current construction API. Test definitions
 and documentation do not establish a successful runtime validation gate.
+
+## Nodal wall-distance vectors
+
+`BuildNodeWallDist` returns the vector from the nearest selected wall patch to
+each mesh node, in mesh coordinates. Selected wall nodes have zero distance.
+For a 2-D mesh, method 1 evaluates the Line2 or Line3 shape functions at the
+configured line quadrature points and searches the finite segments joining
+successive points and endpoints. Its error on a curved wall therefore depends
+on the subdivision. In 3-D, method 1 searches the triangulated surface patches.
+Methods 0 and 20 retain the endpoint-chord approximation for line elements.
