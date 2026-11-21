@@ -1,3 +1,15 @@
+# DNDSR v0.4.0 — Cauchy and the native finite-volume stack
+
+This release introduces Cauchy alongside Euler. Cauchy uses the native Runtime, Geom and CFV interfaces for distributed finite-volume simulation.
+
+- **Flow models.** Cauchy supports compressible Navier–Stokes and constant-density artificial compressibility. The incompressible formulation evolves velocity and solves continuity for relative pressure. Spalart–Allmaras and SST turbulence models are available for both formulations. [Cauchy overview](docs/architecture/Cauchy.md) · [Artificial compressibility](docs/architecture/CauchyACM.md)
+- **Spatial and implicit solvers.** Use direct gradient or high-order variational reconstruction, WBAP or limited VR, implicit time integration and polynomial multigrid. Supported CUDA configurations can keep reconstruction, residual evaluation and block-Jacobi updates on the device. [Implicit solves](docs/architecture/CauchyImplicit.md) · [Device reconstruction](docs/architecture/DeviceReconstruction.md)
+- **Meshes and moving interfaces.** Geom provides native mesh construction, ownership, ghost connectivity and local reordering. Cauchy can couple domains across moving interfaces using distributed point matching and reconstruction on the donor mesh. [Mesh connectivity](docs/architecture/MeshConnectivity.md)
+- **Arrays and execution.** Runtime arrays track ownership and access across CPU and device execution. Halo exchange, device packing and allocation diagnostics are available to solver and Python callers. [Runtime arrays](docs/architecture/ArrayRuntime.md) · [Device transfers](docs/architecture/DevicePackedTransfer.md)
+- **Cases, output and testing.** Cauchy adds restart checkpoints, volume and boundary visualization, and nonlinear iteration histories. The C++ and Python test catalogs now identify the critical, routine and qualification checks at each cumulative CI level. [Output guide](docs/architecture/CauchyOutput.md) · [Test catalogs](docs/tests/overview.md)
+
+---
+
 # 🚀 DNDSR v0.3.1 — Reactive-State Repair, RANS Controls & Shared Skills
 
 5 commits · 31 files changed · 1,412 insertions · 569 deletions
