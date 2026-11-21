@@ -218,6 +218,21 @@ TEST_CASE("Native curved wall preserves method conventions and remote midpoint z
             }
         }
     }
+    // True quadratic wall: x = 1+v, y = (v^2-1)/2. At the probe the
+    // distance minimum satisfies v^3 = -1/2. Refine the polygonal wall
+    // and compare its distance with that analytic minimum.
+    G::UnstructuredMesh::WallDistOptions refined;
+    refined.method = 1;
+    refined.subdivide_quad = 5;
+    refined.minWallDist = 0;
+    mesh->BuildNodeWallDist([](auto)
+                            { return true; }, refined);
+    const double v = -std::cbrt(0.5);
+    const double exact = std::hypot(0.75 - (1 + v), 0.5 - (v * v - 1) / 2);
+    const double coarseError = std::abs(std::hypot(0.35, 0.7) - exact);
+    for (I node = 0; node < mesh->NumNodeProc(); ++node)
+        if (nodes.LocalToGlobal(node) == 6)
+            CHECK(std::abs(mesh->NodeWallDist(node).norm() - exact) < coarseError / 2);
 }
 
 int main(int argc, char **argv)
