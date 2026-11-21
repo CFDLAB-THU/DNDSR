@@ -77,6 +77,7 @@ find_path(DNDS_EXTERNAL_INCLUDE_DOCTEST doctest.h PATHS
 
 # --- helper: add a serial unit test executable (DNDS) ---
 function(dnds_add_unit_test TEST_NAME SRC_FILE LIBS)
+    cmake_parse_arguments(PARSE_ARGV 3 test "TARGET_LINK_ONLY" "" "")
     set(TARGET_NAME "dnds_test_${TEST_NAME}")
     add_executable(${TARGET_NAME} ${SRC_FILE})
     set_property(GLOBAL APPEND PROPERTY DNDS_CPP_TEST_TARGETS ${TARGET_NAME})
@@ -84,7 +85,10 @@ function(dnds_add_unit_test TEST_NAME SRC_FILE LIBS)
         ${DNDS_EXTERNAL_INCLUDE_DOCTEST}
         ${DNDS_EXTERNAL_INCLUDES}
         ${DNDS_INCLUDES})
-    target_link_libraries(${TARGET_NAME} PRIVATE ${LIBS} ${DNDS_EXTERNAL_LIBS})
+    target_link_libraries(${TARGET_NAME} PRIVATE ${LIBS})
+    if(NOT test_TARGET_LINK_ONLY)
+        target_link_libraries(${TARGET_NAME} PRIVATE ${DNDS_EXTERNAL_LIBS})
+    endif()
     if(DNDS_USE_CCACHE)
         set_property(TARGET ${TARGET_NAME} PROPERTY CXX_COMPILER_LAUNCHER ${DNDS_CCACHE_EXEC})
     endif()
@@ -232,7 +236,7 @@ dnds_add_unit_test(runtime_engine "DNDS/test_EagerEngine.cpp" "dnds")
 dnds_add_unit_test(access_tracking "DNDS/test_AccessTracking.cpp" "dnds")
 dnds_add_unit_test(cauchy_config "Cauchy/test_Config.cpp" "cauchy;cfv;geom;dnds")
 dnds_add_unit_test(cauchy_progress_output "Cauchy/test_ProgressOutput.cpp" "cauchy;cfv;geom;dnds")
-dnds_add_unit_test(cauchy_config_shared "Cauchy/test_ConfigShared.cpp" "cauchy_shared;physics_shared;cfv_shared;geom_shared;dnds_shared")
+dnds_add_unit_test(cauchy_config_shared "Cauchy/test_ConfigShared.cpp" "cauchy_shared" TARGET_LINK_ONLY)
 # Reproduce a real pybind-style consumer of exported native configuration APIs.
 set_target_properties(dnds_test_cauchy_config_shared PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
 add_dependencies(dnds_unit_tests dnds_test_cauchy_config_shared)
