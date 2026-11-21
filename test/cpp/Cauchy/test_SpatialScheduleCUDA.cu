@@ -245,6 +245,26 @@ TEST_CASE("Boundary packet publication and frozen snapshots retain device placem
     }
 }
 
+TEST_CASE("An empty CUDA boundary publication stays current after the stream retires")
+{
+    C::DomainSettings settings;
+    settings.mesh.dimension = 2;
+    settings.numerics.reconstruction = "constant";
+    const auto equation = C::EquationSystem::Resolve(settings.equation);
+    const C::FiniteVolume cpu(CauchyTest::PeriodicQuads(mpi, 3), settings, equation);
+    R::EagerEngine engine;
+    const auto lane = engine.CreateStream(std::make_shared<R::CUDALauncher>(0));
+    const auto plan = cpu.Placed(lane.Context().device, lane.Context());
+    auto packet = plan.BuildBoundaryInputs({}, lane);
+    REQUIRE(packet.QuadratureValues().Space().OwnedRows() == 0);
+    REQUIRE(packet.FaceCenterValues().Space().OwnedRows() == 0);
+    plan.PublishBoundaryInputs(packet, 0, {}, {}, lane);
+    auto frozen = plan.FreezeBoundaryInputs(packet, lane);
+    engine.Synchronize();
+    plan.ValidateBoundaryInputs(packet, 0);
+    plan.ValidateBoundaryInputs(frozen, 0);
+}
+
 TEST_CASE("Boundary momentum reduction selects compact face ranges across inline worker and CUDA")
 {
     // More than one reduction block of real boundary faces. Both the center

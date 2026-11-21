@@ -342,6 +342,10 @@ namespace DNDS::Cauchy
             };
             check(input._quadrature, false, input._quadratureCheck);
             check(input._faceCenters, true, input._faceCheck);
+            // A fully interior rank has no numerical checker to retire its
+            // queued copies. Publish the final mutation versions on that lane.
+            if (!input._quadrature.Space().OwnedRows() && !input._faceCenters.Space().OwnedRows())
+                lane.Record().WaitHost();
         }
         for (const auto &source : sources)
         {
