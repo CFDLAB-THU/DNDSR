@@ -53,7 +53,10 @@ CSV rows use the same `ProgressOutputController` reports.
 the owned cell means, including RANS and species. Nonlinear rows use the
 state at the residual observation, DITR uses its endpoint, and step rows
 use the accepted state. The extrema are reduced over each domain only at
-history observation points. CUDA copies just the reduced values to the host.
+history observation points. The history observer runs after the host convergence
+decision and before the observed state can be updated. The bounds scan waits
+on its compute stream and reduces its extrema on the domain communicator.
+CUDA copies just the reduced values to the host.
 Use `output.historyStateBounds=false` to retain the previous CSV header when
 appending to a history produced before these columns were added.
 

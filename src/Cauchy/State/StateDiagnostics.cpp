@@ -71,7 +71,7 @@ namespace DNDS::Cauchy
                 const auto components = means.Components(input);
                 CPU::MeasureStateBounds(components.View(), {buffer->data(), width},
                                         {buffer->data() + width, index(buffer->size()) - width}); }, std::move(inputs), Outputs{});
-            engine.Synchronize();
+            stream.Record().WaitHost();
             std::copy_n(buffer->begin(), width, bounds.begin());
         }
 #ifdef DNDS_USE_CUDA
@@ -87,7 +87,7 @@ namespace DNDS::Cauchy
             }
             R::SubmitArrayBatch(engine, stream, [retained, means](auto launch, auto input, auto, auto partial, auto result, auto completed)
                                 { CUDA::MeasureStateBounds(launch, Table(input[means.firstSlot]), partial, result, completed); }, std::move(inputs), Outputs{}, std::make_tuple(R::WriteAs<R::TableRows>(*retained->boundsPartial), R::WriteAs<R::TableRows>(*retained->boundsResult), R::WriteAs<R::FixedRows<1>>(retained->completed)));
-            engine.Synchronize();
+            stream.Record().WaitHost();
             const auto host = retained->boundsResult->To(R::Device::Host(), context);
             const auto read = host.Read();
             for (index j = 0; j < width; ++j)

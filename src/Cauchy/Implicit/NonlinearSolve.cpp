@@ -119,6 +119,8 @@ namespace DNDS::Cauchy
             }
         }
 
+        void ObserveResidual();
+
         void PublishState(bool terminal)
         {
             if (!problem.control.state)
@@ -205,53 +207,61 @@ namespace DNDS::Cauchy
 
     void NonlinearSession::Observe()
     {
-        const TimelineScope timeline("Cauchy/Nonlinear/ObserveResidual");
         DNDS_check_throw_info(_data && _data->phase == Data::Phase::Observing,
                               "nonlinear residual observation is out of order");
         auto &data = *_data;
-        {
-            const NonlinearDetail::PhaseTimer timer(
-                data.problem.control.profile, NonlinearProfile::Residual);
-            data.problem.evaluate();
-            if (data.problem.control.profile)
-                ++data.problem.control.profile->residualEvaluations;
-        }
-        std::tie(data.report.reconstructionIterations,
-                 data.report.reconstructionRelativeUpdate) =
-            data.problem.reconstruction();
-        data.report.reconstructionUpdateMeasured =
-            std::isfinite(data.report.reconstructionRelativeUpdate);
-        if (!data.report.reconstructionUpdateMeasured)
-            data.report.reconstructionRelativeUpdate = 0;
-        {
-            const NonlinearDetail::PhaseTimer timer(
-                data.problem.control.profile, NonlinearProfile::Convergence);
-            data.problem.measure(data.report.residual);
-            data.convergence.Observe(data.report.residual);
-            data.report.initialResidual = data.convergence.Initial();
-            data.report.referenceResidual = data.convergence.Reference();
-            data.report.residualTargetRatio = data.convergence.TargetRatio();
-            const real constraintRatio = data.problem.constraintTargetRatio ? data.problem.constraintTargetRatio() : 0;
-            data.report.residualTargetRatio = std::max(data.report.residualTargetRatio, constraintRatio);
-            data.report.iterations = data.currentIteration;
-            data.localConverged =
-                data.currentIteration >=
-                    std::min(data.settings.minIterations, data.limit) &&
-                (data.problem.reconstructionTolerance <= 0 ||
-                 (data.report.reconstructionUpdateMeasured &&
-                  data.report.reconstructionRelativeUpdate <=
-                      data.problem.reconstructionTolerance)) &&
-                data.convergence.Accepted() && constraintRatio <= 1;
-            data.localTerminal =
-                data.localConverged || data.currentIteration >= data.limit;
-            if (!data.localTerminal && ObservationBeforeUpdate())
-                data.held = false;
-        }
+        data.ObserveResidual();
+
+        // Host output boundary: convergence is already globally known. Sample
+        // the observed means before a before-update policy changes them.
         if (data.problem.control.measureStateBounds)
             data.report.stateBounds = data.problem.control.measureStateBounds(data.currentIteration, data.localTerminal);
-        data.phase = ObservationBeforeUpdate() && !data.localTerminal
-                         ? Data::Phase::ReadyForUpdate
-                         : Data::Phase::AwaitFinish;
+    }
+
+    void NonlinearSession::Data::ObserveResidual()
+    {
+        const TimelineScope timeline("Cauchy/Nonlinear/ObserveResidual");
+        {
+            const NonlinearDetail::PhaseTimer timer(
+                problem.control.profile, NonlinearProfile::Residual);
+            problem.evaluate();
+            if (problem.control.profile)
+                ++problem.control.profile->residualEvaluations;
+        }
+        std::tie(report.reconstructionIterations,
+                 report.reconstructionRelativeUpdate) =
+            problem.reconstruction();
+        report.reconstructionUpdateMeasured =
+            std::isfinite(report.reconstructionRelativeUpdate);
+        if (!report.reconstructionUpdateMeasured)
+            report.reconstructionRelativeUpdate = 0;
+        {
+            const NonlinearDetail::PhaseTimer timer(
+                problem.control.profile, NonlinearProfile::Convergence);
+            problem.measure(report.residual);
+            convergence.Observe(report.residual);
+            report.initialResidual = convergence.Initial();
+            report.referenceResidual = convergence.Reference();
+            report.residualTargetRatio = convergence.TargetRatio();
+            const real constraintRatio = problem.constraintTargetRatio ? problem.constraintTargetRatio() : 0;
+            report.residualTargetRatio = std::max(report.residualTargetRatio, constraintRatio);
+            report.iterations = currentIteration;
+            localConverged =
+                currentIteration >=
+                    std::min(settings.minIterations, limit) &&
+                (problem.reconstructionTolerance <= 0 ||
+                 (report.reconstructionUpdateMeasured &&
+                  report.reconstructionRelativeUpdate <=
+                      problem.reconstructionTolerance)) &&
+                convergence.Accepted() && constraintRatio <= 1;
+            localTerminal =
+                localConverged || currentIteration >= limit;
+            if (!localTerminal && policy->Descriptor().observation == NonlinearDetail::ResidualObservation::BeforeUpdate)
+                held = false;
+        }
+        phase = policy->Descriptor().observation == NonlinearDetail::ResidualObservation::BeforeUpdate && !localTerminal
+                    ? Data::Phase::ReadyForUpdate
+                    : Data::Phase::AwaitFinish;
     }
 
     void NonlinearSession::FinishIteration(bool coordinatedTerminal)

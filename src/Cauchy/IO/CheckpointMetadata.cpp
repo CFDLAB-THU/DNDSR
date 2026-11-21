@@ -154,7 +154,10 @@ namespace DNDS::Cauchy::CheckpointMetadata
                     numerics.erase("cellCenterWallDistanceForQuadrature");
                 if (!numerics.value("firstLayerCenterWallDistance", false))
                     numerics.erase("firstLayerCenterWallDistance");
-                if (!numerics.contains("firstLayerCenterWallDistance") ||
+                const bool resolvedOmega = numerics.value("resolvedCellOmega", false);
+                if (!resolvedOmega)
+                    numerics.erase("resolvedCellOmega");
+                if ((!numerics.contains("firstLayerCenterWallDistance") && !resolvedOmega) ||
                     numerics.value("firstLayerWallDistanceMethod", std::string{"cellCenter"}) == "cellCenter")
                     numerics.erase("firstLayerWallDistanceMethod");
                 // Adding inactive limiter controls must not invalidate
@@ -174,7 +177,8 @@ namespace DNDS::Cauchy::CheckpointMetadata
                 // Missing viscous controls in older archives denote the
                 // original primitive-cell-gradient scheme. Selecting the
                 // polynomial operator is a visible numerical method change.
-                if (settings.contains("equation") && settings["equation"].value("transport", "inviscid") == "NewtonianFourier")
+                const auto transport = settings.contains("equation") ? settings["equation"].value("transport", "inviscid") : "inviscid";
+                if (transport == "NewtonianFourier")
                 {
                     if (!numerics.contains("viscousGradient"))
                         numerics["viscousGradient"] = "primitive";
@@ -192,8 +196,14 @@ namespace DNDS::Cauchy::CheckpointMetadata
                     }
                 }
                 else
-                    for (const auto *name : {"viscousGradient", "viscousLimited", "noGRPOnWall"})
-                        numerics.erase(name);
+                {
+                    // Newtonian ACM always uses polynomial velocity gradients.
+                    // Its unlimited viscous input is an active operator choice.
+                    numerics.erase("viscousGradient");
+                    numerics.erase("noGRPOnWall");
+                    if (transport != "Newtonian" || numerics.value("viscousLimited", true))
+                        numerics.erase("viscousLimited");
+                }
                 // Earlier Cauchy archives used pointwise segment limiting.
                 // Missing controls must not silently select Euler's newer
                 // common-beta policy. Inactive PP choices do not affect a

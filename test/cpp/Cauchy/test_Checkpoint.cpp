@@ -3,6 +3,7 @@
 #include "Cauchy/Core/Domain.hpp"
 #include "Cauchy/Core/Simulation.hpp"
 #include "Cauchy/IO/StateArchive.hpp"
+#include "Cauchy/IO/CheckpointMetadata.hpp"
 #include "Cauchy/IO/AsyncOutput.hpp"
 #include "Cauchy/State/EquationDofAlgebra.hpp"
 #include "Physics/Thermodynamics/ConservativeConversion.hpp"
@@ -769,6 +770,7 @@ TEST_CASE("Older viscous archives retain primitive gradients and reject a silent
     for (const auto *name : {"viscousGradient", "viscousLimited", "noGRPOnWall"})
         numerics.erase(name);
     numerics.erase("firstOrderConvection");
+    numerics.erase("resolvedCellOmega");
     source.WriteCheckpoint(path, old);
     C::Domain restored("flow", mesh, config.Domains()[0].settings);
     CHECK_NOTHROW(restored.ReadCheckpoint(path, config.Root()));
@@ -788,6 +790,21 @@ TEST_CASE("Older viscous archives retain primitive gradients and reject a silent
     auto meanConvection = config.Root();
     meanConvection["domains"][0]["settings"]["numerics"]["firstOrderConvection"] = true;
     CHECK_THROWS(restored.ReadCheckpoint(path, meanConvection));
+    auto forced = config.Root();
+    auto &acm = forced["domains"][0]["settings"];
+    acm["equation"]["system"] = "incompressibleACM";
+    acm["equation"]["transport"] = "Newtonian";
+    acm["equation"]["rans"]["model"] = "KOmegaSST";
+    auto &wall = acm["numerics"];
+    wall["viscousGradient"] = "polynomial";
+    wall["limiter"] = "Barth";
+    wall["resolvedCellOmega"] = true;
+    const auto centered = C::CheckpointMetadata::CompatibleConfig(forced);
+    wall["firstLayerWallDistanceMethod"] = "halfMaxNodal";
+    CHECK(C::CheckpointMetadata::CompatibleConfig(forced) != centered);
+    wall["firstLayerWallDistanceMethod"] = "cellCenter";
+    wall["viscousLimited"] = false;
+    CHECK(C::CheckpointMetadata::CompatibleConfig(forced) != centered);
     Remove({path});
 }
 TEST_CASE("Older physical-boundary archives omit inactive composition without invalidating restart")
