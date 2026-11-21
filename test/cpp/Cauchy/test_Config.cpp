@@ -132,6 +132,7 @@ TEST_CASE("Native AMG is selected independently for reconstruction and flow")
     settings.numerics.reconstruction = "variational";
     settings.numerics.reconstructionSolver.method = "amgx";
     settings.numerics.reconstructionSolver.amgxCycles = 2;
+    settings.implicit.diagonal = "block";
     settings.implicit.linear.method = "amgx";
     CHECK(C::NonlinearDetail::ResolveLinear(settings.implicit, 2).amgxAggregateSize == 4);
     CHECK(C::NonlinearDetail::ResolveLinear(settings.implicit, 3).amgxAggregateSize == 8);
