@@ -19,6 +19,7 @@ even when a CUDA producer stages its result into `local`.
 
 ```python
 from DNDSR.DNDS import Runtime
+context = domain.prepare_reduction_context()
 binding = context.bind_allreduce(local, total, Runtime.Reduction.Sum)
 communication.wait_for(producer.record())
 complete = binding.submit(engine, communication)
@@ -26,8 +27,11 @@ consumer.wait_for(complete)  # CPU consumer
 ```
 
 Submit all bindings sharing that MPI communicator on one lane per rank in
-matching order. Give unrelated host collectives their own communicator or
-finish the queued work before issuing them. The submitting MPI controller
+matching order. At collective setup, each participating domain duplicates its
+communicator once. Later calls return the same owner. Halo transfers and host
+solver collectives keep their existing communicators. All ranks must still
+reach the communication needed by a dependent host wait. Separate contexts
+isolate MPI matching and cannot resolve cyclic waits in the caller. The submitting MPI controller
 progresses the request when it observes an event or progresses the engine.
 For CUDA staging, allocate `local` and `total` once with
 `device_result.empty_pinned_host_like()` and bind them before entering the loop.

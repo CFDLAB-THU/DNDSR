@@ -315,6 +315,24 @@ def test_coordinated_simulation_python_owners_and_reversed_subgroups(split, tmp_
     assert simulation.local(local)
     domain = simulation.domain(local)
     assert domain.time == simulation.time
+
+    # Reverse the relative posting order across ranks. The solver CFL
+    # collective and the queued sum must match within their own namespaces.
+    reductions = domain.prepare_reduction_context()
+    assert reductions is domain.prepare_reduction_context()
+    engine = R.EagerEngine(1, R.AccessTrackingContext())
+    lane = engine.cpu_stream()
+    local_id = R.Array(R.RowLayout.dense(1, 1), np.dtype("int32"))
+    total = R.Array(R.RowLayout.dense(1, 1), np.dtype("int32"))
+    local_id.assign(np.array([[world.rank + 1]], dtype=np.int32))
+    binding = reductions.bind_allreduce(local_id, total, R.Reduction.Sum)
+    if comm.rank % 2 == 0:
+        done = binding.submit(engine, lane)
+    assert domain.stable_step(.5) > 0
+    if comm.rank % 2:
+        done = binding.submit(engine, lane)
+    done.wait()
+    assert total.numpy().item() == sum(1 + r for r in ranks[local])
     archive = world.bcast(str(tmp_path / "simulation.h5") if world.rank == 0 else None, root=0)
     shared_flow = domain.fields["flow"]
     simulation.write_checkpoint(archive, reconstruction=True,

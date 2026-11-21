@@ -77,6 +77,16 @@ namespace DNDS::Cauchy
     {
         return _problem.finiteVolume.Metrics().Communicator();
     }
+    std::shared_ptr<Runtime::CommunicationContext> Domain::PrepareReductionContext()
+    {
+        if (!_execution.reductionContext)
+        {
+            const auto parent = _problem.finiteVolume.Metrics().Communication();
+            _execution.reductionContext = std::make_shared<Runtime::CommunicationContext>(
+                parent->Communicator(), parent->ChecksCollectivePreflight());
+        }
+        return _execution.reductionContext;
+    }
     void Domain::RequireAcceptedClock(real time, uint64_t acceptedStep) const
     {
         DNDS_check_throw_info(

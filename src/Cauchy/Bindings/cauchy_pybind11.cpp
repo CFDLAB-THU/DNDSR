@@ -127,6 +127,9 @@ PYBIND11_MODULE(cauchy_pybind11, m)
     }),
             py::arg("mesh"), py::arg("config_json") = "{}", py::arg("name") = "fluid",
             py::call_guard<py::gil_scoped_release>())
+        .def(
+            "prepare_reduction_context", &C::Domain::PrepareReductionContext, py::call_guard<py::gil_scoped_release>(),
+            "Collective domain setup. Reuse the returned context for streamed MPI reductions in matching order on one lane.")
         .def_property_readonly("dofs",
                                [](const C::Domain &domain)
     {

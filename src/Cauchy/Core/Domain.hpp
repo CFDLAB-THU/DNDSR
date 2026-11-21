@@ -171,6 +171,9 @@ namespace DNDS::Cauchy
         };
         /// Existing domain communicator; no duplication or ownership transfer.
         MPI_Comm Communicator() const;
+        /// Collective setup on the domain controller. Retain and reuse this context for all
+        /// streamed MPI reductions on one matched lane. Host solver collectives use Communicator().
+        std::shared_ptr<Runtime::CommunicationContext> PrepareReductionContext();
         void RequireAcceptedClock(real time, uint64_t acceptedStep) const;
         uint64_t TrialIdentifier() const;
         void SetEvaluationDependency(QueuedEvaluationDependency dependency);

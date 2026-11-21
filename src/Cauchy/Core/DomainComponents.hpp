@@ -105,6 +105,8 @@ namespace DNDS::Cauchy
     /// Managed operation records retain buffers required during that drain.
     struct DomainExecution
     {
+        /// Created once on participating ranks, before binding streamed reductions.
+        std::shared_ptr<Runtime::CommunicationContext> reductionContext;
         std::shared_ptr<FiniteVolume::Workspace> workspace,
             observationWorkspace;
         std::shared_ptr<FiniteVolume::ReconstructionState>
