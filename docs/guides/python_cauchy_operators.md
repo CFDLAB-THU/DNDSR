@@ -243,7 +243,8 @@ explicit update-component masks for low-level `NonlinearSolveControl`.
 does not contain a nonlinear convergence loop and does not decide acceptance.
 `solve` invokes the common native nonlinear loop. Both receive frozen
 `source=resOther`, `inverse_dt` and `rhs_scale` in the normalized defect
-`resOther + rhs_scale*F(U) - inverse_dt*U`. The physical rate F is volume
+`resOther + rhs_scale*F(U) - inverse_dt*M*U`. The mass map `M` is identity
+for compressible equations and omits the algebraic pressure component in ACM. The physical rate F is volume
 normalized; the FV residual entrypoint above is integrated. Do not substitute
 the integrated residual directly into that time-equation formula.
 
@@ -251,7 +252,15 @@ the integrated residual directly into that time-equation formula.
 configured `implicit.multigrid` controls. The supplied mesh and operator owner
 must be the original finest ones. The returned hierarchy retains the finest
 solver, its state/workspace/engine owners and the mesh. `apply_cycle` performs
-one spatial FAS update; `solve` uses the shared finest convergence controller.
+one spatial FAS update using native recursion. For Python control, call
+`Cauchy.apply_v_cycle(hierarchy, source, inverse_dt, rhs_scale)`. Python visits
+each level, orders pre-smoothing, restriction, coarse smoothing, prolongation
+and post-smoothing, and submits the complete sequence to `apply_schedule`.
+The native calls use the same configured smoothing counts, form the FAS
+forcing on restriction, and apply the child correction relative to its saved
+entrance state on prolongation. Submit the same sequence on all domain ranks.
+The call releases the GIL and returns when the cycle completes. `solve` uses
+the shared finest convergence controller.
 Keep other-coupledStage source terms frozen throughout the complete cycle.
 Invoke separate cycles per coupledStage for DITR; no temporal hierarchy is
 introduced. A caller building its own iteration loop owns CFL progression,

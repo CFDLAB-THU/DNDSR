@@ -2,6 +2,11 @@
 
 #include "Cauchy/Implicit/NonlinearSolver.hpp"
 
+namespace DNDS::Multigrid
+{
+    enum class FASOperation;
+}
+
 namespace DNDS::Cauchy
 {
     class NonlinearSolveSetup;
@@ -67,6 +72,13 @@ namespace DNDS::Cauchy
         NonlinearIterationReport ApplyCycle(const EquationDofs &source, real mass, real rhsScale, real time,
                                             int stage = 0, real pseudoCFL = 0,
                                             OptionalRef<const EquationDofs> rate = {}, OptionalRef<const Runtime::Array<real>> derivative = {});
+        /// Number of edges below the finest level, fixed at hierarchy setup.
+        index CoarseLevelCount() const;
+        /// Apply one caller-ordered traversal with the configured per-level smoothers.
+        /// All domain ranks supply the same steps and frozen stage source.
+        NonlinearIterationReport ApplySchedule(const std::vector<Multigrid::FASOperation> &steps,
+                                               const EquationDofs &source, real mass, real rhsScale,
+                                               real time, int stage = 0, real pseudoCFL = 0);
         /// Frozen stage trace shared with coarse levels after checking their
         /// canonical boundary quadrature order. Local alias binding only; no MPI.
         void SetBoundaryInputs(const BoundaryInputs &input);

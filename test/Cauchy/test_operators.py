@@ -221,7 +221,9 @@ def test_finite_volume_operator_frontend_composes_native_residual_and_linear_sol
             # Both controllers start with independent fields and VR warm starts.
             # Require a real correction before comparing the terminal observation.
             controls = json.dumps({"iterations": 3, "minIterations": 2,
-                                   "linear": {"method": "sgs", "iterations": 1}})
+                                   "linear": {"method": "sgs", "iterations": 1},
+                                   "multigrid": {"levels": 2, "preSmooth": 1,
+                                                 "coarseSmooth": 2, "postSmooth": 1}})
             states = [state.clone(), state.clone()]
             stages = [operators.build_stage_solver(value, operators.build_workspace(value),
                                                    engine, stream, controls) for value in states]
@@ -231,7 +233,21 @@ def test_finite_volume_operator_frontend_composes_native_residual_and_linear_sol
             assert python.linear_iterations == native.linear_iterations > 0
             np.testing.assert_allclose(python.residual, native.residual, rtol=1e-12, atol=1e-14)
             assert_state_equal(states[1], block_values(states[0]), rtol=1e-12, atol=1e-14)
-            del stages, states
+            # A three-level traversal must apply each nested child correction to
+            # its own parent. Independent state and solver workspaces above
+            # retain equal (nonzero) warm starts from the preceding stage.
+            hierarchies = [operators.build_multigrid(mesh, stage) for stage in stages]
+            fine_before = block_values(states[0])
+            cycle_source = source.clone()
+            cycle_source.scale(1.0001)
+            native = hierarchies[0].apply_cycle(cycle_source, inverse_dt=1e6, rhs_scale=1.)
+            python = C.apply_v_cycle(hierarchies[1], cycle_source, inverse_dt=1e6, rhs_scale=1.)
+            assert list(python.level_corrections) == list(native.level_corrections) == [2, 2, 2]
+            assert_state_equal(states[1], block_values(states[0]), rtol=1e-12, atol=1e-14)
+            change = max(np.max(np.abs(values - fine_before[name]), initial=0.)
+                         for name, values in block_values(states[0]).items())
+            assert MPI.COMM_WORLD.allreduce(change, op=MPI.MAX) > 1e-14
+            del hierarchies, stages, states
         stage_solver = operators.build_stage_solver(state, work, engine, stream, json.dumps({
             "iterations": 1, "minIterations": 1,
             "linear": {"method": "sgs", "iterations": 2},

@@ -57,6 +57,17 @@ namespace DNDS::Multigrid
         /// without multiplying the work on every upper level.
         std::vector<index> preSmoothByLevel, postSmoothByLevel;
     };
+    /// One operation on the current level. Restrict moves the cursor to its child after
+    /// forming the FAS source. Prolong applies the correction and returns to the parent.
+    enum class FASOperation
+    {
+        PreSmooth,
+        Restrict,
+        CoarseSmooth,
+        Prolong,
+        PostSmooth
+    };
+
     struct FASCycleReport
     {
         index cycles = 0, operatorEvaluations = 0;
@@ -210,15 +221,9 @@ namespace DNDS::Multigrid
                 input->Check(level.operation.state, true); output->Check(value); });
             ++report.operatorEvaluations;
         }
-        void Cycle(index level, FASCycleReport &report)
+        void Restrict(index level, FASCycleReport &report)
         {
             auto &fine = *_levels[level];
-            if (level + 1 == index(_levels.size()))
-            {
-                Relax(level, _settings.coarseSmooth, report);
-                return;
-            }
-            Relax(level, _settings.preSmoothByLevel.empty() ? _settings.preSmooth : _settings.preSmoothByLevel[level], report);
             auto &transfer = _transfers[level];
             auto &coarse = *_levels[level + 1];
             {
@@ -268,7 +273,13 @@ namespace DNDS::Multigrid
             // F_c(U_c)=F_c(R U_f)+R(b_f-F_f(U_f)). The entrance reference
             // belongs to the incoming edge and is never overwritten by a
             // recursive child cycle, including in a hierarchy of 3+ levels.
-            Cycle(level + 1, report);
+        }
+
+        void Prolong(index level)
+        {
+            auto &fine = *_levels[level];
+            auto &coarse = *_levels[level + 1];
+            auto &transfer = _transfers[level];
             {
                 auto coarseCorrection = Acquire(level + 1, ScratchKind::Correction, 1);
                 auto fineCorrection = Acquire(level, ScratchKind::Correction, 0);
@@ -291,7 +302,27 @@ namespace DNDS::Multigrid
                 RunLocal([&]
                          { CheckBinding(fine); CheckFrozen(fine); });
             } // Correction remains borrowed through physical PP/update.
-            Relax(level, _settings.postSmoothByLevel.empty() ? _settings.postSmooth : _settings.postSmoothByLevel[level], report);
+        }
+        index PreCount(index level) const
+        {
+            return _settings.preSmoothByLevel.empty() ? _settings.preSmooth : _settings.preSmoothByLevel[level];
+        }
+        index PostCount(index level) const
+        {
+            return _settings.postSmoothByLevel.empty() ? _settings.postSmooth : _settings.postSmoothByLevel[level];
+        }
+        void Cycle(index level, FASCycleReport &report)
+        {
+            if (level + 1 == index(_levels.size()))
+            {
+                Relax(level, _settings.coarseSmooth, report);
+                return;
+            }
+            Relax(level, PreCount(level), report);
+            Restrict(level, report);
+            Cycle(level + 1, report);
+            Prolong(level);
+            Relax(level, PostCount(level), report);
         }
 
     public:
@@ -339,6 +370,62 @@ namespace DNDS::Multigrid
         /// unmodified finest equation. Coarse forcing stays internal.
         FASCycleReport Apply(const Field &source, index cycles = 1)
         {
+            return ApplyWith(source, cycles, [&](auto &report)
+                             { Cycle(0, report); });
+        }
+
+        /// Execute an externally ordered traversal. As with Apply, every domain rank must
+        /// supply the same order. Validate the entire cursor walk before mutating fields.
+        FASCycleReport ApplySchedule(const Field &source, const std::vector<FASOperation> &steps)
+        {
+            const index last = index(_levels.size()) - 1;
+            RunLocal([&]
+                     {
+                index level = 0;
+                bool smoothedCoarse = false;
+                for (auto op : steps)
+                {
+                    switch (op)
+                    {
+                    case FASOperation::PreSmooth:
+                    case FASOperation::PostSmooth:
+                        DNDS_check_throw_info(level < last, "FAS pre/post smoother requires a finer level");
+                        break;
+                    case FASOperation::CoarseSmooth:
+                        DNDS_check_throw_info(level == last, "FAS coarse smoother requires the coarsest level");
+                        smoothedCoarse = true;
+                        break;
+                    case FASOperation::Restrict:
+                        DNDS_check_throw_info(level < last, "FAS restriction has no child level");
+                        ++level;
+                        break;
+                    case FASOperation::Prolong:
+                        DNDS_check_throw_info(level > 0, "FAS prolongation has no parent level");
+                        --level;
+                        break;
+                    default:
+                        DNDS_check_throw_info(false, "unknown FAS operation");
+                    }
+                }
+                DNDS_check_throw_info(level == 0 && smoothedCoarse, "FAS traversal must smooth the coarsest level and return to the finest"); });
+            return ApplyWith(source, 1, [&](auto &report)
+                             {
+                index level = 0;
+                for (auto op : steps)
+                    switch (op)
+                    {
+                    case FASOperation::PreSmooth: Relax(level, PreCount(level), report); break;
+                    case FASOperation::Restrict: Restrict(level++, report); break;
+                    case FASOperation::CoarseSmooth: Relax(level, _settings.coarseSmooth, report); break;
+                    case FASOperation::Prolong: Prolong(--level); break;
+                    case FASOperation::PostSmooth: Relax(level, PostCount(level), report); break;
+                    } });
+        }
+
+    private:
+        template <class Traverse>
+        FASCycleReport ApplyWith(const Field &source, index cycles, Traverse traverse)
+        {
             RunLocal([&]
                      {
                 Operations::CheckCompatible(State(), source);
@@ -356,7 +443,7 @@ namespace DNDS::Multigrid
             {
                 for (index cycle = 0; cycle < cycles; ++cycle)
                 {
-                    Cycle(0, report);
+                    traverse(report);
                     ++report.cycles;
                 }
             }

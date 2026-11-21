@@ -15,8 +15,8 @@ Operations provide allocation and compatibility checks, a retained
 component count, frozen-component checks, correction projection and selected
 addition. They must explicitly reject unavailable backends. Neither recursion
 nor the operation contract requires a single physical array, a particular row
-layout or any knowledge of equation physics. The current adapters execute on
-CPU. All physical allocation and row-metadata owners survive callback access.
+layout or any knowledge of equation physics. The standalone field adapter executes on CPU. Cauchy supplies CPU and CUDA
+operations for its supported equation profiles. All physical allocation and row-metadata owners survive callback access.
 
 ```text
 FASCycle
@@ -28,6 +28,9 @@ FASCycle
 For `F_f(U_f)=b_f`, the coarse equation is
 `F_c(U_c)=F_c(I U_f)+R(b_f-F_f(U_f))`. After the coarse cycle, prolong
 `U_c-I U_f`, apply the level's optional physical update policy, then post-smooth.
+Both native recursion and caller-supplied schedules use these restriction and
+prolongation operations. For a caller-supplied schedule, all ranks must agree
+on the operation order. The cursor starts and ends at the finest level.
 The incoming coarse reference remains unchanged throughout its recursive child
 cycle. State and residual restriction need not be the same operator.
 

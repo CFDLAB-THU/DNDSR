@@ -2,6 +2,7 @@
 #include "Cauchy/Bindings/OperatorsBindInternal.hpp"
 #include "Cauchy/Multigrid/PolynomialMultigrid.hpp"
 #include "Cauchy/Implicit/NonlinearSolve.hpp"
+#include "Solver/StateFAS.hpp"
 #include <pybind11/stl.h>
 
 namespace DNDS::Cauchy::Bindings
@@ -77,9 +78,20 @@ namespace DNDS::Cauchy::Bindings
         },
                  py::arg("correction"), py::arg("scale") = 1, py::arg("update_components") = std::vector<index>{},
                  py::call_guard<py::gil_scoped_release>(), Collective);
+        using Multigrid::FASOperation;
+        py::enum_<FASOperation>(m, "FASOperation")
+            .value("PreSmooth", FASOperation::PreSmooth)
+            .value("Restrict", FASOperation::Restrict)
+            .value("CoarseSmooth", FASOperation::CoarseSmooth)
+            .value("Prolong", FASOperation::Prolong)
+            .value("PostSmooth", FASOperation::PostSmooth);
         py::class_<PolynomialMultigrid>(
             m, "PolynomialMultigrid",
             "Native same-cell spatial p-FAS. Retains its finest stage solver and mesh. Apply one cycle inside a caller's nonlinear loop, with other-stage source terms frozen; no temporal-pMG.")
+            .def_property_readonly("coarse_level_count", &PolynomialMultigrid::CoarseLevelCount)
+            .def("apply_schedule", &PolynomialMultigrid::ApplySchedule, py::arg("steps"), py::arg("source"),
+                 py::arg("inverse_dt"), py::arg("rhs_scale"), py::arg("time") = 0, py::arg("stage") = 0,
+                 py::arg("pseudo_cfl") = 0, py::call_guard<py::gil_scoped_release>(), Collective)
             .def("apply_cycle",
                  [](PolynomialMultigrid &multigrid, const EquationDofs &source, real mass, real rhsScale, real time,
                     int stage, real pseudoCFL)

@@ -425,7 +425,8 @@ namespace DNDS::Cauchy
                 return norms;
             }
             Report ApplyCycle(const State &source, real mass, real rhsScale, real time, int stage, real pseudoCFL,
-                              OptionalRef<const State> rate = {}, OptionalRef<const Runtime::Array<real>> derivative = {})
+                              OptionalRef<const State> rate = {}, OptionalRef<const Runtime::Array<real>> derivative = {},
+                              OptionalRef<const std::vector<Multigrid::FASOperation>> steps = {})
             {
                 BindEquation(source, mass, rhsScale, time, stage, pseudoCFL);
                 if (!cycle)
@@ -454,7 +455,7 @@ namespace DNDS::Cauchy
                 report = &work;
                 try
                 {
-                    const auto counts = cycle->Apply(source);
+                    const auto counts = steps ? cycle->ApplySchedule(source, *steps) : cycle->Apply(source);
                     work.multigridCycles = work.iterations = 1;
                     work.levelCorrections = counts.corrections;
                 }
@@ -645,6 +646,17 @@ namespace DNDS::Cauchy
     {
         auto session = _data->fineSolver.ReserveForMultigrid();
         return _data->ApplyCycle(source, mass, rhsScale, time, stage, pseudoCFL, rate, derivative);
+    }
+    index PolynomialMultigrid::CoarseLevelCount() const
+    {
+        return index(_data->coarse.size());
+    }
+    NonlinearIterationReport PolynomialMultigrid::ApplySchedule(
+        const std::vector<Multigrid::FASOperation> &steps, const EquationDofs &source,
+        real mass, real rhsScale, real time, int stage, real pseudoCFL)
+    {
+        auto session = _data->fineSolver.ReserveForMultigrid();
+        return _data->ApplyCycle(source, mass, rhsScale, time, stage, pseudoCFL, {}, {}, std::cref(steps));
     }
     void PolynomialMultigrid::SetBoundaryInputs(const BoundaryInputs &input)
     {
