@@ -1,3 +1,4 @@
+#include "Cauchy/Discretization/BoundaryFluxInput.hpp"
 #include "Cauchy/Discretization/FiniteVolume.hpp"
 #include "Cauchy/Core/NumericalFailure.hpp"
 #include "Cauchy/Core/OperatorSchedule.hpp"
@@ -297,16 +298,7 @@ namespace DNDS::Cauchy
                     for (const auto *input : {&state.PhysicalField(iField).Owned(), &state.PhysicalField(iField).Ghost()})
                         DNDS_check_throw_info(!Algebra::Detail::Overlaps(input->Storage(), arrays[k]->Storage()), "equation auxiliary output aliases state");
                 if (inputs.boundary)
-                    for (const auto *packet : {
-                             &inputs.boundary->QuadratureValues(),
-                             &inputs.boundary->FaceCenterValues()})
-                        for (index iField = 0;
-                             iField < packet->PhysicalFieldNumber(); ++iField)
-                            DNDS_check_throw_info(
-                                !Algebra::Detail::Overlaps(
-                                    packet->PhysicalField(iField).Owned().Storage(),
-                                    arrays[k]->Storage()),
-                                "equation auxiliary output aliases interface input");
+                    FiniteVolumeDetail::RequireDistinctBoundaryOutput(*arrays[k], *inputs.boundary);
                 if (inputs.meanGradients)
                     for (const auto &field : inputs.meanGradients->fields)
                         for (const auto *input : {&field.Owned(), &field.Ghost()})

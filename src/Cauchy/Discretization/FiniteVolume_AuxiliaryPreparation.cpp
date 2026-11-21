@@ -300,12 +300,7 @@ namespace DNDS::Cauchy
             const auto arrays = EquationAuxiliaryArrays(buffers);
             for (const auto *array : arrays)
                 if (array)
-                    for (const auto *packet : {&input.QuadratureValues(), &input.FaceCenterValues()})
-                        for (index iField = 0; iField < packet->PhysicalFieldNumber(); ++iField)
-                            DNDS_check_throw_info(
-                                !Algebra::Detail::Overlaps(array->Storage(),
-                                                           packet->PhysicalField(iField).Owned().Storage()),
-                                "auxiliary output aliases deferred boundary input");
+                    FiniteVolumeDetail::RequireDistinctBoundaryOutput(*array, input);
             boundary = input;
             if (mode == Mode::Immediate)
             {

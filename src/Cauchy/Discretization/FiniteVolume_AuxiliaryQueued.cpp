@@ -281,8 +281,7 @@ namespace DNDS::Cauchy
         DNDS_check_throw_info(input.QuadratureValues().Device() == s.owner.Device(), "auxiliary boundary device differs");
         for (const auto *array : AuxiliaryDetail::EquationAuxiliaryArrays(s.buffers))
             if (array)
-                DNDS_check_throw_info(!array->Storage().Overlaps(input.QuadratureValues().CoupledField().Owned().Storage()),
-                                      "auxiliary output aliases deferred boundary input");
+                FiniteVolumeDetail::RequireDistinctBoundaryOutput(*array, input);
         s.boundary = input;
         s.boundaryPending = false;
     }
