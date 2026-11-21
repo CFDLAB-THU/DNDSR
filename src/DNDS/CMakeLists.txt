@@ -54,6 +54,7 @@ Runtime/Execution/CUDAStream.cpp
 Runtime/Communication/Exchange.cpp
 Runtime/Storage/ElementSchema.cpp
 Runtime/Communication/RowTransfer.cpp
+Runtime/Communication/RowTransfer_Route.cpp
 Runtime/Communication/NCCLTransfer.cpp
 Algebra/DofAlgebra.cpp
 Algebra/AmgXPreconditioner.cpp
@@ -129,6 +130,12 @@ dnds_add_lib(${LIBNAME}_shared "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}"
 if(DNDS_USE_SYCL)
     target_compile_definitions(dnds PUBLIC DNDS_USE_SYCL)
     target_compile_definitions(dnds_shared PUBLIC DNDS_USE_SYCL)
+    # DPC++ treats its own lib directory as implicit at link time. That
+    # directory may be private to the user and absent from the system loader.
+    get_filename_component(_dnds_sycl_libdir "${DNDS_SYCL_LIBRARY}" DIRECTORY)
+    target_link_options(dnds INTERFACE "LINKER:-rpath,${_dnds_sycl_libdir}")
+    set_property(TARGET dnds_shared APPEND PROPERTY BUILD_RPATH "${_dnds_sycl_libdir}")
+    set_property(TARGET dnds_shared APPEND PROPERTY INSTALL_RPATH "${_dnds_sycl_libdir}")
 endif()
 if(DNDS_USE_CALIPER)
     foreach(_target ${LIBNAME} ${LIBNAME}_shared)

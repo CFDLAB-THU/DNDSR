@@ -1081,7 +1081,7 @@ TEST_CASE("Direct permutation honors imported buffer origins and padded state st
     }
     std::vector<RowRequest> requests;
     for (size_t i = 0; i < rows; ++i)
-        requests.push_back({peer, int64_t(i * 7 % rows), i});
+        requests.push_back({peer, DNDS::index(i * 7 % rows), DNDS::index(i)});
     RowTransferPlan route(MPI_COMM_WORLD, rows, rows, requests);
     PayloadPlan payload(route, source.Layout(), target.Layout(), ElementSchema::Arithmetic<double>());
     for (auto transport : {TransferTransport::Direct, TransferTransport::HostPacked})
@@ -1114,7 +1114,7 @@ TEST_CASE("One route transfers padded reconstruction rows into a packed CSR dest
     for (size_t i = 0; i < count; ++i)
     {
         lengths[i] = i % 11 == 0 ? 0 : (i % 7 + 1) * 5;
-        requests.push_back({(rank + 1) % size, int64_t(i * 5 % count), i});
+        requests.push_back({(rank + 1) % size, DNDS::index(i * 5 % count), DNDS::index(i)});
     }
     Array<double> source(RowLayout::Padded(lengths, 40));
     {
