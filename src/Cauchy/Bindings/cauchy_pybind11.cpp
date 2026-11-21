@@ -20,7 +20,7 @@ PYBIND11_MODULE(cauchy_pybind11, m)
     // otherwise pybind records an unbound C++ spelling in Python annotations.
     auto domainClass = py::class_<C::Domain>(
         m, "Domain",
-        "CPU perfect-gas or ideal-mixture domain with optional SA, Wilcox/SST or realizable k-epsilon. Collective methods use the mesh communicator. Missing RANS wall distance is built by Geom from no-slip zones. Release all debug views before construction/stepping; no CUDA fallback.");
+        "Finite-volume domain on its mesh communicator. The resolved configuration selects the equation family, device and linear solver. Collective operations require every domain rank. Release debug views before stepping.");
     py::class_<C::StepResult>(
         m, "StepResult",
         "Collectively agreed numerical outcome; rejection permits smaller-dt retry. Unexpected failures terminate the run.")

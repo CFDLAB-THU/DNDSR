@@ -1,11 +1,10 @@
 # Python Cauchy finite-volume operators
 
-Python and the C++ frontend use the same native CPU operators. `Domain` and
-`Simulation` remain the production time controllers. `FiniteVolumeOperators`
-provides the existing lower-level FV and linear entrypoints for testing,
-tuning and custom orchestration; it does not implement another numerical loop.
-The native solver also has CUDA operators for supported equation and storage
-combinations. The examples below exercise the CPU stream.
+Python and the C++ frontend use the same native operators. `Domain` and
+`Simulation` provide the production time controllers. `advance_domain` lets
+Python direct a standalone implicit step on CPU or on a supported CUDA
+configuration. `FiniteVolumeOperators` provides lower-level FV and linear
+entrypoints for custom orchestration. The examples below use a CPU stream.
 
 ## Driving a single implicit stage in Python
 
@@ -300,5 +299,7 @@ Domain/Simulation. The binding tests compare nonconstant P3/WBAP residuals
 against the Domain path, compose explicit auxiliary/Jacobian/matrix/linear work,
 and compare staged/unsplit SGS with actual active MPI, one native correction and
 a spatial FAS cycle. Independent physical
-and matrix oracles remain in C++ tests. None of this establishes Cauchy GPU
-execution or a new physical validation campaign.
+and matrix oracles remain in C++ tests. The standalone DITR restart comparison
+runs with two MPI ranks on CPU and one rank on CUDA. Its device case checks
+that accepted flow fields reside on the GPU and copies them to host only
+for comparison with the native controller.

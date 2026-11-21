@@ -1,4 +1,4 @@
-"""CPU Cauchy frontend on the shared native mesh and Runtime Array backend.
+"""Cauchy frontend on the shared native mesh and Runtime Array backend.
 
 Build/install cauchy_pybind11 and its dependencies before running under MPI.
 These tests exercise the real residual/SSPRK3 path, not the placement mock.
@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 from mpi4py import MPI
 from DNDSR import DNDS, Geom
+from DNDSR.DNDS import Runtime as R
 from DNDSR.Cauchy import Domain, Simulation, StepResult, PhysicalStepLimit, DerivedQuantity, advance_domain
 
 
@@ -218,7 +219,7 @@ def test_configured_mixture_fields_implicit_step_and_native_worker_refresh(tmp_p
             np.testing.assert_array_equal(array.numpy(), expected[name])
 
 
-def build_domain(layout="aos", flux="Roe", workers=0, method="ssprk3", steady=False, time_pp=False, lvr_variant=None, tagged=False, initial_field=None):
+def build_domain(layout="aos", flux="Roe", workers=0, method="ssprk3", steady=False, time_pp=False, lvr_variant=None, tagged=False, initial_field=None, device="cpu"):
     mpi = DNDS.MPIInfo()
     mpi.setWorld()
     path = Path(__file__).resolve().parents[2] / "data/mesh/Uniform_3x3_wall.cgns"
@@ -234,6 +235,9 @@ def build_domain(layout="aos", flux="Roe", workers=0, method="ssprk3", steady=Fa
         "initialPrimitive": primitive,
         "boundaries": {str(zone): {"kind": "farfield", "primitive": primitive} for zone in zones},
     }, "time": {"method": method, "steady": steady, "positivity": {"enabled": time_pp}}}
+    if device == "cuda":
+        config["defaults"]["execution"].update({"device": device, "fieldGrouping": "coupled"})
+        config["defaults"]["implicit"] = {"linear": {"method": "jacobi"}}
     if tagged:
         config["defaults"].pop("initialPrimitive")
         config["defaults"]["equation"] = {
@@ -415,18 +419,29 @@ def test_configured_implicit_method_and_retained_shared_state(tmp_path, method, 
 
 
 @pytest.mark.mpi
-def test_python_coupled_iteration_matches_native_step_and_restart(tmp_path):
+@pytest.mark.parametrize("device", ["cpu", pytest.param("cuda", marks=pytest.mark.cuda)])
+def test_python_coupled_iteration_matches_native_step_and_restart(tmp_path, device):
+    if device == "cuda" and (not R.cuda_enabled or MPI.COMM_WORLD.size != 1):
+        pytest.skip("single-device DITR restart comparison requires a CUDA build and one MPI rank")
+
+    def values_on_host(domain):
+        field, = domain.fields.values()
+        if device == "cuda":
+            assert field.device.space == R.MemorySpace.CUDA
+            field = field.to(R.Device.host())
+        return field.numpy().copy()
+
     perturb = {"exprtkInitializers": [{"stateType": "primRhoP", "exprs": [
         "inRegion := 1; UExprtk[0] := UExprtk[0] * (1 + 0.01 * x[0]); 0;"
     ]}]}
-    native, _ = build_domain(method="ditr", initial_field=perturb)
-    scripted, _ = build_domain(method="ditr", initial_field=perturb)
-    initial = native.fields["flow"].numpy().copy()
+    native, _ = build_domain(method="ditr", initial_field=perturb, device=device)
+    scripted, _ = build_domain(method="ditr", initial_field=perturb, device=device)
+    initial = values_on_host(native)
     path = MPI.COMM_WORLD.bcast(str(tmp_path / "ditr.h5") if MPI.COMM_WORLD.rank == 0 else None)
     for step in (1, 2):
         if step == 2:
             scripted.write_checkpoint(path, '{}', include_reconstruction=True)
-            scripted, _ = build_domain(method="ditr", initial_field=perturb)
+            scripted, _ = build_domain(method="ditr", initial_field=perturb, device=device)
             scripted.read_checkpoint(path, '{}')
         assert native.advance(.001).accepted
         assert advance_domain(scripted, .001).accepted
@@ -438,8 +453,8 @@ def test_python_coupled_iteration_matches_native_step_and_restart(tmp_path):
             b.iterations, b.linear_iterations, b.converged)
         assert a.linear_iterations > 0
         np.testing.assert_allclose(b.residual, a.residual, rtol=1e-12, atol=1e-14)
-        values = scripted.fields["flow"].numpy()
-        np.testing.assert_allclose(values, native.fields["flow"].numpy(), rtol=1e-12, atol=1e-14)
+        values = values_on_host(scripted)
+        np.testing.assert_allclose(values, values_on_host(native), rtol=1e-12, atol=1e-14)
         diff = np.max(np.abs(values - initial), initial=0.)
         assert MPI.COMM_WORLD.allreduce(diff, op=MPI.MAX) > 1e-9
 
