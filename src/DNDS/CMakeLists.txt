@@ -128,6 +128,9 @@ dnds_add_lib(${LIBNAME} "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}"
 
 dnds_add_lib(${LIBNAME}_shared "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}"
     ON ON ON)  # SHARED,FAST, EXCLUDE
+# MPI types and inline operations occur in public Runtime and algebra headers.
+target_link_libraries(dnds INTERFACE MPI::MPI_CXX)
+target_link_libraries(dnds_shared INTERFACE MPI::MPI_CXX)
 if(DNDS_USE_SYCL)
     target_compile_definitions(dnds PUBLIC DNDS_USE_SYCL)
     target_compile_definitions(dnds_shared PUBLIC DNDS_USE_SYCL)

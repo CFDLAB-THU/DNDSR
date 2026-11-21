@@ -4,11 +4,7 @@
 
 set(LIBNAME cfv)
 
-set(LINKS
-# geom
-# dnds
-# ${DNDS_EXTERNAL_LIBS}
-)
+set(LINKS geom)
 
 set(LINKS_SHARED
 geom_shared
@@ -85,6 +81,8 @@ dnds_add_lib(${LIBNAME}        "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS_FAST}"
 
 dnds_add_lib(${LIBNAME}_shared "${CPPS}" "${LINKS_SHARED}" "${DNDS_PCH_TARGETS_FAST}"
             ON ON ON) # SHARED, FAST, EXCLUDE
+# Public headers and inline accessors expose the underlying native module.
+target_link_libraries(${LIBNAME}_shared INTERFACE geom_shared)
 
 target_link_libraries(${LIBNAME} PUBLIC DNDS::ComputeScalar)
 target_link_libraries(${LIBNAME}_shared PUBLIC DNDS::ComputeScalar)

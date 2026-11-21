@@ -368,6 +368,13 @@ Each pybind11 module links against a corresponding `*_shared` library
 (`dnds_shared`, `geom_shared`, `cfv_shared`, `cauchy_shared`, `eulerP_shared`) which
 contains the compiled C++ code.
 
+For in-tree C++ consumers, `cfv` links through `geom` to `dnds`.
+The shared counterparts publish the same native dependency chain.
+`physics_shared` exposes its DNDS dependency, and the DNDS targets expose
+MPI for their public headers. Consumers still need the project's configured
+include directories. Solver time-equation templates are headers; native
+algebra and provider implementations are in DNDS.
+
 On Unix builds with precompiled headers disabled, the static and shared
 Cauchy libraries consume the same private position-independent objects for
 their generated CPU and CUDA flux catalogs. Both CUDA consumers still perform

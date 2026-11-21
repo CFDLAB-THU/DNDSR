@@ -4,10 +4,7 @@
 
 set(LIBNAME geom)
 
-set(LINKS
-# dnds
-# ${DNDS_EXTERNAL_LIBS}
-)
+set(LINKS dnds)
 
 set(LINKS_SHARED
 dnds_shared
@@ -78,6 +75,8 @@ dnds_add_lib(${LIBNAME} "${CPPS}" "${LINKS}" "${DNDS_PCH_TARGETS}"
 
 dnds_add_lib(${LIBNAME}_shared "${CPPS}" "${LINKS_SHARED}" "${DNDS_PCH_TARGETS}"
     ON ON ON)  # SHARED,FAST, EXCLUDE
+# Public headers and inline accessors expose the underlying native module.
+target_link_libraries(${LIBNAME}_shared INTERFACE dnds_shared)
 
 # install(TARGETS ${LIBNAME}
 #     LIBRARY DESTINATION "DNDSR/lib"
