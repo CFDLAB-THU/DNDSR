@@ -6,22 +6,14 @@ For the current extended-physics capability summary, use
 historical scope and validation limits. Physical correctness and usable solver
 capabilities take priority over broad UT matrices or strict performance tuning.
 
-Current CPU scope, November 5: optional checked eager execution, native
-linear/nonlinear solves, method-owned BDF/Trapz/ESDIRK/DITR state, full/subset
-polynomial FAS and persistent-ID restart have focused distributed coverage.
-The production C++ and Python frontends coordinate multiple flow5 domains,
-including rigid interfaces and shared or disjoint domain communicators.
-Single-domain extended equations support the RANS/mixture profiles listed in
-[CauchyState.md](CauchyState.md), including coupled chemistry and physical
-Strang/CVODE source splitting. Native archives/output retain all equation blocks.
-Euler-derived PP and native LVR have focused distributed coverage; qualified
-physical studies and performance limits are recorded in the plan repo. The
-Mach20+3WBAP nonconvergence is expected and is not pursued as a solver defect;
-full DMR qualification remains separate. See [implicit contracts](CauchyImplicit.md) and
-[coupled DITR](DITR.md) for the current boundaries.
-Do not treat mocks, flux parity or short smooth-flow tests as broad
-production acceptance. The independent plan repo's document37 defines the full
-C1/C2/C3 work order; document45 records execution status.
+The simulation and its registered update policy coordinate domain-local spatial,
+linear and time operators. CPU profiles include compressible mixtures and ACM.
+CUDA supports the combined-AoS perfect-gas and ACM profiles in the
+[kernel dispatch catalog](CauchyDispatch.md). Pressure-referenced reciprocal
+ACM interfaces have moving-domain coverage. Closed-component gauge projection
+and cross-domain moving-wall distances have separate qualification requirements.
+The [equation-state and implicit implementation history](../dev/cauchy_state_implicit_history.md)
+records earlier CPU-only milestones and case limitations.
 
 ```mermaid
 flowchart TD

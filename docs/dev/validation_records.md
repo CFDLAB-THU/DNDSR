@@ -8,6 +8,8 @@ small-mode cutoff change, setup diagnostics and affected nonzero-tolerance cases
 The [2026-11-03 extended Euler rotation correction](euler_extended_rotation_2026-11-03.md)
 records the NS_EX/NS_EX_3D absolute-velocity source convention and focused tests.
 
+The [equation-state and implicit implementation history](cauchy_state_implicit_history.md) records the earlier CPU/CUDA scope, coupled solver tests and checkpoint repartition evidence.
+
 The [Cauchy preliminary completion record](cauchy_preliminary_2026-11-01.md)
 records physical layouts, resident CUDA reconstruction, explicit device-packed
 transfers, completed gates and performance limits.

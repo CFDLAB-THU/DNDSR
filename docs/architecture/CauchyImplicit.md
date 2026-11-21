@@ -1,5 +1,7 @@
 # Cauchy native implicit operator contracts
 
+Historical case results and earlier capability limits are retained in the [implementation history](../dev/cauchy_state_implicit_history.md).
+
 ## Preconditioner-only AmgX iteration
 
 `implicit.linear.method="amgx"` selects stationary defect correction on the
@@ -57,16 +59,6 @@ The generic >5 Jacobi inverse also uses correctly sized per-thread scratch,
 explicit 16-lane shared-memory ordering and the correct Schur-update sign.
 The build recipe records the patch and installed-library hashes; CMake rejects mismatched or unpatched installs.
 A genuinely scalar DNDS matrix can still use block width one.
-
-The previous SA experiment used scalar expansion; that changed block Jacobi
-into scalar Jacobi and allowed component-mixing aggregation. It therefore did
-not assess the requested coupled-block preconditioner. This verified algorithm
-difference does not alone prove the cause of that run's nonlinear residual
-growth. The new entry keeps fixed V-cycle/smoother/coarse sweep counts. A separate
-configuration-scope bug is corrected: Jacobi now receives the requested
-relaxation (default 0.75), whereas the old string-valued smoother silently used
-AmgX's default 0.9. Actual-operator residual diagnostics and corrected fixed-work experiments are
-needed before making a causal or convergence claim.
 
 ## Optional diagonal inverse refinement
 
@@ -428,13 +420,6 @@ state and checkpoint publication use memory-only reservation under a single
 control-communicator preflight, before any commit. This preserves all-or-none
 publication without wrapping collective numerical/I/O work in an outer catch.
 
-Focused tests compare two incomplete DITR iterations against independently
-written Euler-form scalar equations for both variants, compare a single CPU
-correction byte-for-byte with the first ordinary-solve update, and exercise
-distributed FAS with explicit finest/coarse work accounting. This does not yet
-complete the remaining whole-phase qualification. BDF/DIRK history ownership
-and the first tracked mean-halo integration are described below.
-
 Optional CPU profiling uses shared `NonlinearProfile` ownership through
 `NonlinearSolveControl::profile`. A null output performs no clock queries or
 additional MPI operations. A provided output resets for each synchronous solve
@@ -511,16 +496,6 @@ waiting on its completion sleep until event notification; native CUDA/NCCL
 dependencies use native stream ordering. A policy-boundary finish also drains
 accepted transfers on ranks without a local receiver. Solver exceptions abort;
 coordinated recovery/fault injection is confined to tests.
-
-The distributed recurrence fixture now invokes the production single-stage
-policy with shared/reversed and disjoint domain rank groups, both refresh
-cadences and inline/worker execution. It checks the independent two-variable
-recurrence and live owned-read/MPI overlap, with domain norms reduced on their
-subset communicators. The DITR policy ordering fixture includes idle control
-ranks. Transfer rejection tests retain source/packet access checks
-without preserving the removed prototype schedule API. These are focused
-integration fixtures, not evidence of a completed fluid campaign. Their current
-source migration must pass the grouped build/test gate.
 
 ## Steady BDF1 limit and physical endpoints
 
@@ -1548,13 +1523,7 @@ tickets. No time coefficient or history formula is duplicated in orchestration;
 a trial becomes committable only after its final group completes. Steady BDF1
 is `BeginStep(..., steady=true)`, with zero physical mass and source.
 
-The November 4 nested-control defect is corrected in code: each DITR iteration
-now applies one intermediate correction and one endpoint correction, refreshing
-each rate after its update. The DITR policy observes the method-provided
-`I+H` residual after both updates. There is one report and one CFL/reference/cap
-policy, not separate inner and outer acceptance criteria. The reacting-Domain
-validation remains in progress; earlier nested-driver ratios are not evidence
-for this corrected control.
+Each DITR iteration applies the midpoint correction and then the endpoint correction. Each stage refreshes its rate. The policy observes the method-provided `I+H` residual after both updates and reports one iteration using the common CFL and convergence controls.
 
 `time.ditr.variant` selects `U2R2` (default) or `U2R1` for reaction-dominated
 stepping. Fraction and theta default to .55 and .9146. See [DITR](DITR.md) for
@@ -1563,10 +1532,6 @@ is the same selected-component residual-to-tolerance ratio as the single common
 nonlinear report, evaluated on I+H. A ratio at most one passes the residual
 criterion; the reconstruction criterion may also be required. A cap accepted
 by the default policy retains `converged=false`.
-
-The requested implicit flow5 PP measures have distributed operator/transaction
-tests. Full physical qualification, high-order viscous equivalence and the
-remaining phase implementation/performance work are still outstanding.
 
 ## Nonlinear stage and physical transaction
 
@@ -1628,12 +1593,6 @@ states still fail regardless of this option. CSV output records stage count,
 nonlinear/linear iterations and residual-to-target ratio, including ratios above
 one for accepted capped stages. A steady cap can therefore publish an iterate
 at unchanged physical time without proving steady convergence.
-
-Distributed tests recover a manufactured constant solution from nonconstant
-means, check unusable/bad correction handling, and exercise the connected
-BDF1/2, Trapz and ESDIRK2/3/4 paths. The P3 transport test checks periodic
-conservation and exact discard/retry versus fresh-run agreement. They are
-focused implementation gates, not the final IV/cylinder qualification matrix.
 
 Cauchy resolves ordered SOR to the same logical core-first scan for both
 execution policies, including direct C++ FV construction. The resolved root
@@ -1721,13 +1680,6 @@ IDs, periodic axis and global transforms; their valid face-image gauge bits
 are not compared to a different partition's gauge. Physical boundary zones
 remain exact. This changes checkpoint interpretation only, not Geom's runtime
 face representation or numerical kernels.
-
-The original strict envelope passed generated-mesh tests but rejected a real
-CGNS IV20 archive when read at np4 after writing at np8. Diagnostics identified
-complementary periodic tags (-1/-4, -2/-5), while coordinates matched exactly.
-A permanent CGNS repartition test was proven failing before this correction.
-It now passes at np1/2/4/8. The actual old format3 archive also loads and takes
-its next ESDIRK4 step after repartition, preserving loaded means and diagnostics.
 
 ## Whole-equation CPU nonlinear adapter
 
@@ -1855,17 +1807,7 @@ algorithm is introduced. A finite correction-capped report is
 unconverged; the time orchestrator retains the Euler default acceptance policy
 unless rejection is explicitly requested.
 
-This is a usable full-equation stage operator, not yet the production extended
-Domain frontend. Boundary/checkpoint/frontend/RANS adapters and the requested
-NACA0012/flame studies remain required. CUDA kernels remain deferred.
-
-Focused tests compare finite-sweep flow5 corrections/norms against the existing
-adapter, recover a mixture manufactured state with separate/permuted storage,
-and advance a distributed reacting FV state through the actual nonlinear and
-BDF drivers toward an independent Cantera reactor trajectory. The latter
-checks temporal refinement and preserved full-energy flow components; it is
-not the pending spatial flame sanity study. Critical errors cover aliasing and
-negative-species candidate rejection without changing input generations.
+The configured Domain frontend uses equation-aware stage operators. Supported CPU and CUDA spatial routes are listed in the [kernel dispatch catalog](CauchyDispatch.md).
 
 ### Equation-state thermal and species PP
 

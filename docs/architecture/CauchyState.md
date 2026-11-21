@@ -1,5 +1,7 @@
 # Cauchy equation state and kernel boundary
 
+Historical case results and earlier capability limits are retained in the [implementation history](../dev/cauchy_state_implicit_history.md).
+
 `EquationSchema` describes component meaning, logical order, vector triples,
 energy convention and physical accumulation. `EquationDofs` binds that schema
 to native `Algebra::DofField` allocations. It adds no payload copy or alternate
@@ -76,23 +78,6 @@ rows. Hold output leases through execution and release views before reuse.
 The whole-equation kernel can use this output as its accumulation scratch;
 the flow5 cell-incidence kernel exports values when requested. Without the
 optional output, existing kernel-specific scratch/accumulation remains valid.
-
-Current CPU scope (November 6): configured flow5, SA/Wilcox/SST/realizable-k-epsilon
-and optional ideal-mixture chemistry share logical DOF bindings, implicit time
-equations, native archives and observation. Perfect-gas extended profiles use the
-same flow5 Riemann dispatcher, including Roe_M1; general-mixture preparation
-currently supports Rusanov. Extended wave/pressure-stencil producers remain
-unavailable, so such flux selections need their explicit supplied scalar inputs
-(`riemann.useStencil=false`) or fail at setup. Extended profiles use
-polynomial viscosity, component WBAP and Euler-compatible implicit/rec PP;
-missing characteristic/LVR/interface adapters
-fail explicitly. QCR and the existing SA/SST DES formulas are connected below.
-The short flame comparison is a converged discrete sanity run; the NACA pair
-is capped and does not establish converged aerodynamics. CUDA remains deferred.
-Both coupled chemistry and Euler's physical Strang/CVODE composition have
-focused distributed gates and short matched spatial flame checks.
-Earlier implementation checkpoints in this document describe their then-current
-limits; they do not override the current profile summary or runtime guards.
 
 Extended convection is separate from flow5: `AdvectedScalarFlux` consumes
 conservative scalar values, ALE-relative normal velocities and one supplied
@@ -261,7 +246,7 @@ tests exercise 17/21-component coupled BDF/block solves and separate physical
 bindings; those tests are not RANS, species or incompressible implementations.
 Future models must supply their flux/transport, physical accumulation (including
 zero pressure mass where applicable), pseudo-mass and admissibility actions.
-The current identity-accumulation stage adapter is not a general DAE operator.
+The ACM stage adapter assigns physical mass to velocity and transported turbulence variables and zero physical mass to pressure. See the [ACM equations and time-method contract](CauchyACM.md).
 
 ## Whole-state algebra and time stepping
 
@@ -524,19 +509,7 @@ scopes) are not kernel arguments. Runtime Array device access still requires
 device-accessible payload/shape buffers and retained owners/leases through
 execution. Copying a trivially copyable view never uploads its pointed-to data.
 
-For Cauchy CUDA, the chosen direction is dedicated kernels for expected layouts
-and physical profiles, not interpretation of a dynamically registered DOF
-bundle on device. Host dispatch resolves the CPU registry and passes component
-views directly, or a statically composed POD holding inline flow/RANS/species
-views with absent segments represented by a type. Kernels may have different
-loop mappings/staging for AoS, SoA, tiled or split storage; sharing the CPU
-generic blocked-view loop is optional. Keep supported choices bounded and reject
-missing kernels explicitly. Flow5 is initial; flow4 is a later incompressible
-profile. RANS/species presence, widths and layout choices are explicit dispatch
-inputs, not inferred physics from total width. A CUDA compile-only probe of
-generic descriptor-based views proves technical device-callability, not adoption
-of that interface or automatic GPU registry upload. Solver CUDA implementation
-is deferred while the current goal concerns CPU correctness/performance.
+The CUDA host wrapper selects a supported physics and storage profile before submission. The perfect-gas and ACM flux catalogs use independent shape families. The [dispatch graphs](CauchyDispatch.md) identify the concrete kernels.
 
 ### Prepared auxiliary values and logical dense rows
 
@@ -704,13 +677,6 @@ DofLinearSolver ---------> shared private linear controller <equation ops>
 LinearProblemContext -----------> matrix action / ordered SGS / local ILU
                                   (numeric kernels, no halo orchestration)
 ```
-
-The logical driver is exercised by the distributed known-solution matrix fixture,
-the actual conservative chemical-reactor Newton test and a coupled physical
-mixture matrix. Nonlinear/frontend and checkpoint adapters remain separate. Matrix dimensions
-alone do not validate a physical model.
-The source/flux producer must supply the matching logical derivative ordering;
-physical RANS/species acceptance remains separately gated.
 
 ## Whole-equation physical Jacobian
 
