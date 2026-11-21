@@ -361,11 +361,19 @@ SKBUILD_BUILD_TOOL_ARGS="-j8" pip install -e . --no-build-isolation
 | `dnds_pybind11`  | DNDS     | `src/DNDS/*_bind*.cpp`   | `python/DNDSR/DNDS/_ext/`      |
 | `geom_pybind11`  | Geom     | `src/Geom/*_bind*.cpp`   | `python/DNDSR/Geom/_ext/`      |
 | `cfv_pybind11`   | CFV      | `src/CFV/*_bind*.cpp`    | `python/DNDSR/CFV/_ext/`       |
+| `cauchy_pybind11`| Cauchy   | `src/Cauchy/Bindings/*.cpp` | `python/DNDSR/Cauchy/_ext/`   |
 | `eulerP_pybind11`| EulerP   | `src/EulerP/*_bind*.cpp` | `python/DNDSR/EulerP/_ext/`    |
 
 Each pybind11 module links against a corresponding `*_shared` library
-(`dnds_shared`, `geom_shared`, `cfv_shared`, `eulerP_shared`) which
+(`dnds_shared`, `geom_shared`, `cfv_shared`, `cauchy_shared`, `eulerP_shared`) which
 contains the compiled C++ code.
+
+On Unix builds with precompiled headers disabled, the static and shared
+Cauchy libraries consume the same private position-independent objects for
+their generated CPU and CUDA flux catalogs. Both CUDA consumers still perform
+their own device link. The generated kernels retain their per-source device
+assert and register options. Builds using precompiled headers or a non-Unix
+platform compile the catalogs within each consumer target.
 
 ## Type Stub Generation
 
