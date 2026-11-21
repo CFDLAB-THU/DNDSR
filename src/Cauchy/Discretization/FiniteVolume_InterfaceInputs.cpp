@@ -205,8 +205,8 @@ namespace DNDS::Cauchy
         BeginBoundaryUpdate(input, stream);
         return input;
     }
-    BoundaryInputs FiniteVolume::FreezeBoundaryInputs(
-        const BoundaryInputs &input, std::optional<R::ExecutionStream> stream) const
+    BoundaryInputs FiniteVolume::CopyBoundaryRows(
+        const BoundaryInputs &input, R::EagerEngine &engine, const R::ExecutionStream &lane) const
     {
         ValidateBoundaryInputs(input, input.Time());
         BoundaryInputs frozen(
@@ -215,12 +215,17 @@ namespace DNDS::Cauchy
             input._property, input._admissibility);
         frozen._layout = input._layout;
         frozen._consumerLayout = _data->boundaryLayout;
-        auto engine = stream ? stream->LockEngine() : R::EagerEngine{};
-        const auto lane = PacketStream(engine, Device(), stream);
         frozen._publication = std::make_shared<BoundaryInputs::PublicationSlot>();
         EquationDofOperations::Copy(engine, lane, frozen._quadrature, input._quadrature);
         EquationDofOperations::Copy(engine, lane, frozen._faceCenters, input._faceCenters);
-        engine.Synchronize();
+        return frozen;
+    }
+    BoundaryInputs FiniteVolume::FreezeBoundaryInputs(
+        const BoundaryInputs &input, std::optional<R::ExecutionStream> stream) const
+    {
+        auto engine = stream ? stream->LockEngine() : R::EagerEngine{};
+        const auto lane = PacketStream(engine, Device(), stream);
+        auto frozen = CopyBoundaryRows(input, engine, lane);
         PublishBoundaryInputs(frozen, input.Time(), input.Epoch(),
                               input.InterfaceSources(), lane);
         return frozen;

@@ -1,4 +1,5 @@
 #include "Cauchy/Core/Simulation.hpp"
+#include "Cauchy/Core/ConnectedPressureGauge.hpp"
 #include "Cauchy/IO/CheckpointMetadata.hpp"
 #include "DNDS/MPI/Failure.hpp"
 #include "Cauchy/Interface/InterfaceCoupling.hpp"
@@ -205,6 +206,8 @@ namespace DNDS::Cauchy
         }
         if (_interfaces)
         {
+            if (!resume)
+                _pressureGauge->ProjectRestartMeans();
             // Complete the restored donor halos on the domain communicator. The
             // exchange is collective and must propagate failure directly.
             std::vector<InterfaceDomainInput> ports;

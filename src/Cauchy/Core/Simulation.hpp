@@ -6,6 +6,7 @@
 namespace DNDS::Cauchy
 {
     class InterfaceCoupling;
+    class ConnectedPressureGauge;
     /// Controller-local elapsed times, measured without added rank/device sync.
     struct DomainSetupTimings
     {
@@ -25,6 +26,7 @@ namespace DNDS::Cauchy
         std::vector<std::unique_ptr<Domain>> _domains;
         std::vector<DomainSetupTimings> _setupTimings;
         std::unique_ptr<InterfaceCoupling> _interfaces;
+        std::unique_ptr<ConnectedPressureGauge> _pressureGauge;
         std::shared_ptr<const UpdatePolicy> _updatePolicy;
         bool _nonlinearCollectiveChecks = false;
         real _time = 0;

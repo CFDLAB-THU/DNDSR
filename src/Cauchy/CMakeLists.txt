@@ -10,6 +10,7 @@ set(CPPS
     Core/TimeStageOperators.cpp
     Core/Domain_ImplicitStep.cpp
     Core/Domain_TimeStep.cpp
+    Core/ConnectedPressureGauge.cpp
     Core/Simulation.cpp
     Core/Simulation_Advance.cpp
 

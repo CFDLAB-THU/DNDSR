@@ -42,12 +42,25 @@ individual implicit time methods separately.
 For reciprocal domain interfaces, an actual pressure outlet or farfield on any
 member supplies the datum for that connected component. The receiver consumes
 the interpolated pressure during its local solve. Applying a local mean shift
-at the receiver would erase physical pressure differences. All members omit
-the automatic mean projection, including coarse-level and coupled-stage
-solves. Startup checks the active mesh zones across the simulation communicator
-before publishing packets. A component with no physical reference requires a
-coordinated gauge and is rejected at setup pending implementation. One-way ACM
-connections also remain outside the qualified pressure policy.
+at the receiver would erase physical pressure differences. All local solves, including coarse levels, use their receiver pressure.
+Startup checks the active mesh zones across the simulation communicator before
+publishing packets. When the component has a physical reference, it skips
+numerical anchoring entirely.
+
+For a closed reciprocal component with one pressure null mode, the first
+domain in configuration order owns the datum. Its target is
+`equation.acmPressureMean` in code units, or its volume-weighted initial
+pressure when omitted. After each coordinated nonlinear stage update, the
+anchor ranks measure their stage pressure on their domain communicator. The
+anchor root broadcasts the difference between target and mean. Each member
+adds this same offset to its stage pressure and both sections of its receiver
+packet. This preserves pressure jumps, velocity, turbulence scalars and
+the donor epoch of a stage-frozen packet. DITR projects its midpoint and
+endpoint separately. The anchor's named checkpoint stores the target for
+resume. A means-only restart uses the current configured target or the anchor's
+loaded mean before exchanging donor values. One-way ACM connections require a
+separate gauge policy. This component rule assumes each domain has a single
+connected fluid region.
 
 An analytical solenoidal velocity can still have a nonzero discrete continuity
 residual because the numerical flux includes pressure dissipation. Trapz and
@@ -115,8 +128,9 @@ execution in colocated and dislocated placement. The native CUDA comparison
 also checks every owned component against CPU after two BDF1 steps, for
 direct P1 with nonlinear packet refresh and modal P2 with stage-frozen
 packets and one coarse pMG level. The latter checks that coarse cycles ran.
-These short tests cover transport and restart. A closed pressure-free
-component still requires coordinated anchoring.
+The closed-disk test changes the anchor target by six pressure units and
+compares both domains before and after advancing. It also compares a
+means-only restart with the shifted datum and an exact restart continuation.
 
 The wall-free rotating-disk fixture also exercises SA with P2 reconstruction,
 one coarse pMG level and stage-frozen packets, and SST with direct P1 and

@@ -29,6 +29,25 @@ namespace
             b = a;
         return C::Json::array({{{"name", "outer"}, {"ranks", a}}, {{"name", "disk"}, {"ranks", b}}});
     }
+    C::Json ACMState(double pressure)
+    {
+        return {{"type", "primUP"}, {"state", {0., 0., 0., pressure}}};
+    }
+    C::Json MovingACMInput()
+    {
+        C::Json input{
+            {"domains", Domains(mpi.size > 1)},
+            {"time", {{"method", "bdf1"}}},
+            {"defaults", {{"equation", {{"system", "incompressibleACM"}, {"eos", "none"}, {"acmPressureMean", 9.}, {"referenceScales", {{"rho0", 1}, {"U0", 1}, {"L0", 1}, {"T0", 300}}}}}, {"initialState", ACMState(-2.)}, {"boundaries", {{"101", {{"kind", "interface"}}}}}, {"numerics", {{"reconstruction", "gradient"}, {"flux", "Roe"}, {"positivity", false}}}, {"implicit", {{"diagonal", "block"}, {"jacobianAction", "assembled"}, {"iterations", 3}, {"rejectUnconvergedStages", false}}}}},
+            {"interfaces", C::Json::array({{{"donor", "outer"}, {"receiver", "disk"}, {"donorZone", 101}, {"receiverZone", 101}, {"maxGap", .03}, {"refreshCadence", "nonlinearIteration"}},
+                                           {{"donor", "disk"}, {"receiver", "outer"}, {"donorZone", 101}, {"receiverZone", 101}, {"maxGap", .03}, {"refreshCadence", "nonlinearIteration"}}})}};
+        input["domains"][0]["overrides"]["boundaries"]["102"] = {{"kind", "pressureOutlet"}, {"state", ACMState(-2.)}};
+        input["domains"][1]["overrides"] = {{"initialState", ACMState(-1.99)}, {"equation", {{"acmPressureMean", 7.}}}, {"motion", {{"angularVelocity", {0., 0., .02}}, {"center", {5., 5., 0.}}}}};
+        // Match the numerical choices on both backends, including the linear update.
+        input["defaults"]["implicit"]["linear"] = {{"method", "jacobi"}, {"stopping", "fixedCount"}, {"iterations", 3}};
+        input["defaults"]["numerics"]["viscousGradient"] = "polynomial";
+        return input;
+    }
     std::vector<double> Values(const C::Domain &domain)
     {
         const auto &owned = domain.Dofs().CoupledField().Owned();
@@ -163,19 +182,7 @@ TEST_CASE("Moving ACM disk follows the pressure datum of the connected outer dom
         return CauchyTest::VortexPatch(domainMPI, iDomain == 1, 8, 20,
                                        CauchyTest::VortexPointDistribution::JitteredGrid, false);
     };
-    const auto state = [](double pressure) -> C::Json
-    { return {{"type", "primUP"}, {"state", {0., 0., 0., pressure}}}; };
-    C::Json input{
-        {"domains", Domains(mpi.size > 1)},
-        {"time", {{"method", "bdf1"}}},
-        {"defaults", {{"equation", {{"system", "incompressibleACM"}, {"eos", "none"}, {"acmPressureMean", 9.}, {"referenceScales", {{"rho0", 1}, {"U0", 1}, {"L0", 1}, {"T0", 300}}}}}, {"initialState", state(-2.)}, {"boundaries", {{"101", {{"kind", "interface"}}}}}, {"numerics", {{"reconstruction", "gradient"}, {"flux", "Roe"}, {"positivity", false}}}, {"implicit", {{"diagonal", "block"}, {"jacobianAction", "assembled"}, {"iterations", 3}, {"rejectUnconvergedStages", false}}}}},
-        {"interfaces", C::Json::array({{{"donor", "outer"}, {"receiver", "disk"}, {"donorZone", 101}, {"receiverZone", 101}, {"maxGap", .03}, {"refreshCadence", "nonlinearIteration"}},
-                                       {{"donor", "disk"}, {"receiver", "outer"}, {"donorZone", 101}, {"receiverZone", 101}, {"maxGap", .03}, {"refreshCadence", "nonlinearIteration"}}})}};
-    input["domains"][0]["overrides"]["boundaries"]["102"] = {{"kind", "pressureOutlet"}, {"state", state(-2.)}};
-    input["domains"][1]["overrides"] = {{"initialState", state(-1.99)}, {"equation", {{"acmPressureMean", 7.}}}, {"motion", {{"angularVelocity", {0., 0., .02}}, {"center", {5., 5., 0.}}}}};
-    // Match the numerical choices on both backends, including the linear update.
-    input["defaults"]["implicit"]["linear"] = {{"method", "jacobi"}, {"stopping", "fixedCount"}, {"iterations", 3}};
-    input["defaults"]["numerics"]["viscousGradient"] = "polynomial";
+    auto input = MovingACMInput();
     bool expectMultigrid = false;
     std::optional<C::SimulationConfig> cpuConfig;
     if (std::getenv("DNDS_TEST_ACM_INTERFACE_CUDA"))
@@ -209,7 +216,7 @@ TEST_CASE("Moving ACM disk follows the pressure datum of the connected outer dom
             defaults["numerics"]["faceFallback"] = false;
             const auto field = [&](double p, bool disk)
             {
-                auto value = state(p);
+                auto value = ACMState(p);
                 auto &components = value["state"];
                 components[0] = .15;
                 components.push_back(disk ? .04 : .03);
@@ -315,6 +322,87 @@ TEST_CASE("Moving ACM disk follows the pressure datum of the connected outer dom
             }
         }
     }
+    RemoveCheckpoint(path);
+}
+
+TEST_CASE("Moving ACM disk shares one pressure shift across a closed interface")
+{
+    const auto factory = [](I domain, const auto &, const auto &comm)
+    {
+        return CauchyTest::VortexPatch(comm, domain == 1, 8, 20,
+                                       CauchyTest::VortexPointDistribution::JitteredGrid, false);
+    };
+    auto input = MovingACMInput();
+    input["domains"][0]["overrides"]["boundaries"]["102"] = {{"kind", "slipWall"}};
+    if (std::getenv("DNDS_TEST_ACM_INTERFACE_CUDA"))
+        input["defaults"]["execution"]["device"] = "cuda";
+    SUBCASE("BDF with refreshed packets") {}
+    SUBCASE("DITR with stage-frozen packets")
+    {
+        input["time"]["method"] = "ditr";
+        input["defaults"]["implicit"]["algebraicRateTolerance"] = 1.;
+        for (auto &edge : input["interfaces"])
+            edge["refreshCadence"] = "stageFrozen";
+    }
+    const auto config = C::SimulationConfig::ResolveCollective(input, mpi.comm);
+    C::Simulation original(config, mpi.comm, factory);
+    input["defaults"]["equation"]["acmPressureMean"] = 3.;
+    C::Simulation shifted(C::SimulationConfig::ResolveCollective(input, mpi.comm), mpi.comm, factory);
+    const auto compare = [&](const C::Simulation &a, const C::Simulation &b, double difference)
+    {
+        for (I d = 0; d < 2; ++d)
+            if (a.Local(d))
+            {
+                const auto av = Values(a.GetDomain(d)), bv = Values(b.GetDomain(d));
+                REQUIRE(av.size() == bv.size());
+                double maxError = 0;
+                for (size_t i = 0; i < av.size(); ++i)
+                {
+                    const double error = (av[i] - bv[i]) - (i % 4 == 3 ? difference : 0.);
+                    maxError = std::isfinite(error) ? std::max(maxError, std::abs(error)) : std::numeric_limits<double>::infinity();
+                }
+                CHECK(maxError < 1e-10);
+            }
+    };
+    compare(original, shifted, 6.);
+    if (original.Local(1))
+    {
+        CHECK_FALSE(original.GetDomain(1).CaptureStateSnapshot(false).PressureGauge());
+        CHECK(Values(original.GetDomain(1)).at(3) == doctest::Approx(9.01));
+    }
+    constexpr double dt = .001;
+    REQUIRE(original.Advance(dt).accepted);
+    REQUIRE(shifted.Advance(dt).accepted);
+    compare(original, shifted, 6.);
+    if (original.Local(0))
+    {
+        const auto &domain = original.GetDomain(0);
+        const auto u = Values(domain);
+        const auto &geometry = domain.Discretization().Metrics();
+        const auto &cells = geometry.CellMetrics();
+        const auto host = cells.GetDevice() == R::Device::Host() ? cells : cells.To(R::Device::Host());
+        const auto read = host.Read();
+        const auto rows = read.View<R::FixedRows<8>>();
+        double pv = 0, volume = 0;
+        for (I c = 0; c < geometry.NumCell(); ++c)
+        {
+            pv += rows(c, 0) * u[c * 4 + 3];
+            volume += rows(c, 0);
+        }
+        using namespace DNDS::MPI;
+        const double integral = AllreduceValue<Reduction::Sum>(pv, domain.Communicator());
+        const double measure = AllreduceValue<Reduction::Sum>(volume, domain.Communicator());
+        CHECK(integral / measure == doctest::Approx(9.).epsilon(1e-13));
+    }
+    const auto path = CheckpointPath("acm-closed-");
+    original.WriteCheckpoint(path, true);
+    shifted.ReadCheckpoint(path, C::CheckpointLoadMode::MeansOnly);
+    compare(original, shifted, 6.);
+    C::Simulation resumed(config, mpi.comm, factory);
+    resumed.ReadCheckpoint(path);
+    REQUIRE(original.Advance(dt).accepted);
+    REQUIRE(resumed.Advance(dt).accepted);
+    compare(original, resumed, 0.);
     RemoveCheckpoint(path);
 }
 

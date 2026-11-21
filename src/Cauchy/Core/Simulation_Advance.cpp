@@ -1,4 +1,5 @@
 #include "Cauchy/Core/Simulation.hpp"
+#include "Cauchy/Core/ConnectedPressureGauge.hpp"
 #include "DNDS/Diagnostics/Timeline.hpp"
 #include "Cauchy/Interface/InterfaceCoupling.hpp"
 #include "DNDS/MPI/CollectiveStage.hpp"
@@ -206,8 +207,10 @@ namespace DNDS::Cauchy
                     if (session)
                         group.domains.emplace_back(*session);
                 std::shared_ptr<CoordinatedInterfaceRefresh> publication;
+                int activeStage = 0;
                 group.refreshInterfaces = [&](int coupledStage, index iteration)
                 {
+                    activeStage = coupledStage;
                     if (!_interfaces ||
                         !_interfaces->RefreshEveryNonlinearIteration())
                         return;
@@ -224,6 +227,8 @@ namespace DNDS::Cauchy
                     if (publication)
                         publication->Finish();
                     publication.reset();
+                    if (_pressureGauge)
+                        _pressureGauge->ProjectStage(activeStage);
                 };
                 // Exactly one dispatch. The selected policy owns its entire
                 // nonlinear loop and orders interface/domain sweeps itself.

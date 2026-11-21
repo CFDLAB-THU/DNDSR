@@ -165,6 +165,11 @@ namespace DNDS::Cauchy
     /// requires a distinct Workspace. No solver clock/history/IO policy here.
     class FiniteVolume
     {
+        friend class ConnectedPressureGauge;
+        /// Detach payloads while preserving their point ordering. The caller may
+        /// edit the new rows on the same lane before publishing their versions.
+        BoundaryInputs CopyBoundaryRows(const BoundaryInputs &, Runtime::EagerEngine &,
+                                        const Runtime::ExecutionStream &) const;
         friend class InterfaceDonorPublication;
         struct Data;
         struct LimitedVRGeometry;

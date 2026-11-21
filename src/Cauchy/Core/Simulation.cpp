@@ -1,70 +1,16 @@
 #include "Cauchy/Core/Simulation.hpp"
+#include "Cauchy/Core/ConnectedPressureGauge.hpp"
 #include "Cauchy/Interface/InterfaceCoupling.hpp"
 #include "Cauchy/IO/ProgressOutput.hpp"
 #include "Geom/Unstructured/UnstructuredMeshHelpers.hpp"
 #include "DNDS/Core/OMP.hpp"
 
 #include <fmt/format.h>
-#include <set>
-#include <tuple>
 
 namespace DNDS::Cauchy
 {
     namespace
     {
-        // A receiver trace fixes pressure during its local solve, but cannot set
-        // the absolute datum of the connected fluid. Inspect actual physical
-        // boundary faces before either placement publishes its first packet.
-        void CheckConnectedPressureReferences(const SimulationConfig &config, const DomainPlacement &placement,
-                                              const std::vector<std::unique_ptr<Domain>> &domains)
-        {
-            std::map<std::string, size_t> ids;
-            for (size_t i = 0; i < domains.size(); ++i)
-                ids.emplace(placement.Group(index(i)).name, i);
-            using PatchPair = std::tuple<size_t, int, size_t, int>;
-            std::set<PatchPair> patches;
-            for (const auto &edge : config.Interfaces())
-            {
-                const auto donor = ids.at(edge.donor);
-                if (config.Domains()[donor].settings.equation.system == "incompressibleACM")
-                    patches.emplace(donor, edge.donorZone, ids.at(edge.receiver), edge.receiverZone);
-            }
-            if (patches.empty())
-                return;
-
-            std::vector<std::vector<size_t>> neighbors(domains.size());
-            for (const auto &[a, zoneA, b, zoneB] : patches)
-            {
-                DNDS_check_throw_info(patches.count({b, zoneB, a, zoneA}),
-                                      "one-way ACM pressure coupling requires a qualified gauge policy");
-                neighbors[a].push_back(b);
-            }
-            std::vector<int> referenced(domains.size());
-            for (auto i : placement.LocalDomains())
-                referenced[i] = domains[i]->Discretization().HasPressureBoundary();
-            MPI::AllreduceInPlace<MPI::Reduction::Max>(MPI::ContiguousView<int>{referenced.data(), referenced.size()}, placement.Control());
-
-            std::vector<size_t> pending;
-            for (size_t i = 0; i < domains.size(); ++i)
-                if (referenced[i])
-                    pending.push_back(i);
-            while (!pending.empty())
-            {
-                const auto i = pending.back();
-                pending.pop_back();
-                for (auto j : neighbors[i])
-                    if (!referenced[j])
-                    {
-                        referenced[j] = 1;
-                        pending.push_back(j);
-                    }
-            }
-            for (size_t i = 0; i < domains.size(); ++i)
-                DNDS_check_throw_info(neighbors[i].empty() || referenced[i],
-                                      "connected ACM domain " + placement.Group(index(i)).name +
-                                          " has no physical pressure reference in its component; a shared free-pressure gauge is required");
-        }
-
         ssp<Geom::UnstructuredMesh> ReadMesh(
             const DomainConfig &domain, const MPIInfo &mpi,
             const std::shared_ptr<Runtime::CommunicationContext> &domainCommunication, DomainSetupTimings &timings,
@@ -240,7 +186,6 @@ namespace DNDS::Cauchy
         }
         if (!_config.Interfaces().empty())
         {
-            CheckConnectedPressureReferences(_config, _placement, _domains);
             std::vector<std::optional<FiniteVolume>> local(_domains.size());
             std::vector<std::optional<Physics::Chemistry::ChemicalWorkerPool>>
                 workers(_domains.size());
@@ -252,6 +197,7 @@ namespace DNDS::Cauchy
                 }
             _interfaces = std::make_unique<InterfaceCoupling>(
                 _config, _placement.ControlContext(), local, workers);
+            _pressureGauge = std::make_unique<ConnectedPressureGauge>(_config, _placement, _domains);
 
             // Establish accepted-time traces before CFL/diagnostics or the
             // first trial. Domain trial fields initially equal accepted means.

@@ -224,7 +224,9 @@ namespace DNDS::Cauchy
                 auto &engine = _execution.Engine();
                 const auto &lane = _execution.ComputeStream();
                 const NonlinearOperators operators(_problem.finiteVolume.Metrics(), *_problem.admissibility, lane.Context());
-                if (freshMeans || gauge == metadata.end())
+                DNDS_check_throw_info(freshMeans || !_problem.finiteVolume.HasInterfaces() || gauge != metadata.end(),
+                                      "connected ACM checkpoint lacks the anchor domain pressure datum");
+                if (meansOnly || (freshMeans && !_problem.finiteVolume.HasInterfaces()) || gauge == metadata.end())
                     checkpoint->pressureGauge = freshMeans && requested ? *requested : operators.PressureMean(engine, lane, _state.trial);
                 else
                 {
@@ -232,7 +234,7 @@ namespace DNDS::Cauchy
                     checkpoint->pressureGauge = gauge->get<real>();
                     DNDS_check_throw_info(!requested || *requested == *checkpoint->pressureGauge, "checkpoint pressure gauge differs from the configured target");
                 }
-                if (freshMeans && requested)
+                if (freshMeans && requested && !_problem.finiteVolume.HasInterfaces())
                     operators.ProjectPressureMean(engine, lane, _state.trial, *requested);
             }
             else

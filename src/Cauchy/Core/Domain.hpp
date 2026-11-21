@@ -24,6 +24,7 @@ namespace DNDS::Cauchy
     {
         friend class DomainStateSnapshot;
         friend class AsyncOutput;
+        friend class ConnectedPressureGauge;
         PreparedCheckpoint CaptureCheckpoint(std::shared_ptr<Runtime::CommunicationContext>, CheckpointPreparation, OutputStaging &staging) const;
         PreparedCheckpoint CaptureInternalCheckpoint(std::shared_ptr<Runtime::CommunicationContext>,
                                                      const NonlinearSolveState &, bool detach, OutputStaging &staging) const;
