@@ -244,6 +244,16 @@ TEST_CASE("Native physical table archives restore placement and read directly in
                     CHECK(read.View()(iRow, iComp) == 10000 * mpi.rank + 100 * iRow + iComp);
         };
         check(restored);
+        // Include an empty reader and a nonempty dense reader at np4.
+        // Odd ranks select explicit windows and a strided destination.
+        if (mpi.rank % 2 == 0)
+            check(ReadArray<double, TableRows>(serializer, name, mpi));
+        else
+        {
+            const auto first = (mpi.rank - 1) * (18 + DNDS::index(mpi.rank)) / 2;
+            check(ReadArray<double, ColMajorTable>(serializer, name, mpi, {rows, first}));
+        }
+        check(ReadArray<double, CSRRows>(serializer, name, mpi));
         check(ReadArray<double, ColMajorTable>(serializer, name, mpi));
         check(ReadArray<double, TiledColMajorTable<8>>(serializer, name, mpi));
         check(ReadArray<double, TableRows>(serializer, name, mpi));

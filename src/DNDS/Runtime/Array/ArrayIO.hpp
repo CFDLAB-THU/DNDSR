@@ -103,10 +103,11 @@ namespace DNDS::Runtime
             return segments;
         }
         /// One component in increasing logical-row order. This order is also
-        /// monotonic in physical memory for every supported uniform format.
+        /// monotonic in physical memory for every layout. For a variable-row
+        /// destination the caller has verified that all rows have the saved width.
         inline std::vector<Serializer::ByteMemorySegment> IOColumnSegments(const RowLayout &layout, size_t bytes, index iComp)
         {
-            DNDS_check_throw_info(!layout.IsVariable() && iComp >= 0 && iComp < layout.Width(), "uniform component selection required");
+            DNDS_check_throw_info(iComp >= 0 && (layout.IsVariable() || iComp < layout.Width()), "Array component selection exceeds row width");
             std::vector<Serializer::ByteMemorySegment> segments;
             if (!layout.RowCount())
                 return segments;
@@ -120,6 +121,40 @@ namespace DNDS::Runtime
                 iRow += count;
             }
             return segments;
+        }
+        /// Read one packed-row dataset. HDF5 ranks enter the same number of
+        /// calls even when they choose different physical layouts or row widths.
+        inline void ReadRowPayload(Serializer::SerializerBase &serializer, const std::string &name,
+                                   uint8_t *pointer, index memoryBytes, const RowLayout &layout, size_t bytes,
+                                   Serializer::ArrayGlobalOffset window, const MPIInfo &mpi, bool perRank)
+        {
+            const index columns = layout.IsContiguousRows() || !layout.RowCount() ? 0 : layout.Width();
+            const index passes = perRank ? columns : MPI::AllreduceValue<MPI::Reduction::Max>(columns, mpi.comm);
+            if (!passes)
+            {
+                auto region = perRank ? Serializer::ArrayGlobalOffset_Unknown : window;
+                serializer.ReadByteSegments(name, pointer, memoryBytes, IOSegments(layout, bytes), region);
+                return;
+            }
+            IOCheck(layout.IsContiguousRows() ||
+                        window.size() == index(CheckedSize::Multiply(CheckedSize::Multiply(size_t(layout.RowCount()), size_t(layout.Width())), bytes)),
+                    mpi, perRank, "strided native read requires uniform source rows");
+            for (index j = 0; j < passes; ++j)
+            {
+                Serializer::ByteFilePattern pattern;
+                std::vector<Serializer::ByteMemorySegment> segments;
+                if (j < columns)
+                {
+                    pattern = {window.offset() + j * index(bytes), index(bytes), layout.Width() * index(bytes), layout.RowCount()};
+                    segments = IOColumnSegments(layout, bytes, j);
+                }
+                else if (!j && layout.IsContiguousRows() && window.size())
+                {
+                    pattern = {window.offset(), window.size(), window.size(), 1};
+                    segments = IOSegments(layout, bytes);
+                }
+                serializer.ReadBytePattern(name, pointer, memoryBytes, segments, pattern);
+            }
         }
         inline std::vector<DNDS::index> IOCounts(DNDS::index local, const MPIInfo &mpi, bool perRank)
         {
@@ -352,6 +387,9 @@ namespace DNDS::Runtime
             Detail::IOCheck((encoding == 0 || (encoding == 1 && format == 3)) && totalRows >= 0 && totalRows < INT64_MAX && totalElements >= 0 && totalElements <= INT64_MAX / DNDS::index(bytes) &&
                                 (encoding != 0 || (width >= 0 && width <= INT64_MAX / DNDS::index(bytes))),
                             mpi, perRank, "invalid native Array shape metadata");
+            if (encoding == 0)
+                Detail::IOCheck(width == 0 ? totalElements == 0 : totalRows <= INT64_MAX / width && totalRows * width == totalElements,
+                                mpi, perRank, "native dense Array element count mismatch");
             DNDS::index payloadBytes = 0;
             auto payloadQuery = perRank ? Serializer::ArrayGlobalOffset_Unknown : Serializer::ArrayGlobalOffset_One;
             if (format == 4)
@@ -385,8 +423,6 @@ namespace DNDS::Runtime
             rowRegion = region;
             if (encoding == 0)
             {
-                Detail::IOCheck(width == 0 ? totalElements == 0 : totalRows <= INT64_MAX / width && totalRows * width == totalElements,
-                                mpi, perRank, "native dense Array element count mismatch");
                 logical = RowLayout::Dense(size_t(region.size()), size_t(width));
                 data = {region.size() * width * DNDS::index(bytes), region.offset() * width * DNDS::index(bytes)};
             }
@@ -418,22 +454,27 @@ namespace DNDS::Runtime
                                 mpi, perRank, "native physical-layout metadata extent differs");
                 // Matching-rank reads restore physical placement. Repartitioned
                 // reads default to dense logical rows, or use selectLayout.
-                if (requested == Serializer::ArrayGlobalOffset_Unknown)
+                const bool restoreHere = requested == Serializer::ArrayGlobalOffset_Unknown;
+                const bool restoreAny = perRank ? restoreHere : MPI::AllreduceValue<MPI::Reduction::Max>(int(restoreHere), mpi.comm) != 0;
+                if (restoreAny)
                 {
                     std::vector<index> descriptor;
-                    auto window = perRank ? Serializer::ArrayGlobalOffset_Unknown : Serializer::ArrayGlobalOffset{4, index(mpi.rank) * 4};
+                    auto window = perRank ? Serializer::ArrayGlobalOffset_Unknown : Serializer::ArrayGlobalOffset{restoreHere ? 4 : 0, index(mpi.rank) * 4};
                     serializer->ReadIndexVector("physical_layout", descriptor, window);
-                    valid = descriptor.size() == 4;
+                    valid = descriptor.size() == (restoreHere ? 4u : 0u);
                     try
                     {
-                        if (valid && descriptor[0] == index(RowLayoutKind::Table))
-                            savedPhysical = RowLayout::Dense(size_t(region.size()), size_t(width), size_t(descriptor[1]));
-                        else if (valid && descriptor[0] == index(RowLayoutKind::ColMajorTable))
-                            savedPhysical = RowLayout::ColMajorWithPitch(size_t(region.size()), size_t(width), size_t(descriptor[1]), {descriptor[2], descriptor[3]});
-                        else if (valid && descriptor[0] == index(RowLayoutKind::TiledColMajorTable))
-                            savedPhysical = RowLayout::TiledColMajor(size_t(region.size()), size_t(width), size_t(descriptor[1]));
-                        else
-                            valid = false;
+                        if (restoreHere && valid)
+                        {
+                            if (descriptor[0] == index(RowLayoutKind::Table))
+                                savedPhysical = RowLayout::Dense(size_t(region.size()), size_t(width), size_t(descriptor[1]));
+                            else if (descriptor[0] == index(RowLayoutKind::ColMajorTable))
+                                savedPhysical = RowLayout::ColMajorWithPitch(size_t(region.size()), size_t(width), size_t(descriptor[1]), {descriptor[2], descriptor[3]});
+                            else if (descriptor[0] == index(RowLayoutKind::TiledColMajorTable))
+                                savedPhysical = RowLayout::TiledColMajor(size_t(region.size()), size_t(width), size_t(descriptor[1]));
+                            else
+                                valid = false;
+                        }
                     }
                     catch (...)
                     {
@@ -453,7 +494,7 @@ namespace DNDS::Runtime
             {
                 DNDS::index count = 0;
                 serializer->ReadIndex("size", count);
-                counts = {count};
+                counts.push_back(count);
             }
             else
             {
@@ -499,25 +540,16 @@ namespace DNDS::Runtime
             auto write = result->Write();
             auto pointer = write.View<uint8_t>().data;
             if (format == 4)
-                for (index iComp = 0; iComp < layout.Width(); ++iComp)
+                // Collective dataset order comes from the archive. A selected
+                // CSR or padded destination can lack a width even with rows.
+                for (index iComp = 0; iComp < logical.Width(); ++iComp)
                 {
                     auto region = perRank ? Serializer::ArrayGlobalOffset_Unknown : Serializer::ArrayGlobalOffset{index(layout.RowCount()) * index(bytes), rowRegion.offset() * index(bytes)};
                     serializer->ReadByteSegments("values_" + std::to_string(iComp), pointer, index(result->Bytes()),
                                                  Detail::IOColumnSegments(layout, bytes, iComp), region);
                 }
-            else if (!layout.IsContiguousRows())
-            {
-                Detail::IOCheck(data.size() == index(CheckedSize::Multiply(CheckedSize::Multiply(size_t(layout.RowCount()), size_t(layout.Width())), bytes)),
-                                mpi, perRank, "strided native read requires uniform source rows");
-                for (index iComp = 0; iComp < layout.Width(); ++iComp)
-                    serializer->ReadBytePattern(dataPath, pointer, index(result->Bytes()), Detail::IOColumnSegments(layout, bytes, iComp),
-                                                {layout.RowCount() ? data.offset() + iComp * index(bytes) : 0, index(bytes), layout.Width() * index(bytes), layout.RowCount()});
-            }
             else
-            {
-                auto region = perRank ? Serializer::ArrayGlobalOffset_Unknown : data;
-                serializer->ReadByteSegments(dataPath, pointer, DNDS::index(result->Bytes()), Detail::IOSegments(layout, bytes), region);
-            }
+                Detail::ReadRowPayload(*serializer, dataPath, pointer, index(result->Bytes()), layout, bytes, data, mpi, perRank);
             if (endian != Detail::NativeByteOrder())
                 for (index iRow = 0; iRow < layout.RowCount(); ++iRow)
                 {
