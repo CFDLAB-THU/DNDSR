@@ -3,7 +3,7 @@
 import argparse
 from pathlib import Path
 
-from generate_cauchy_rhs import cmake_index, read_shapes, write_if_changed
+from generate_cauchy_rhs import publish_index, read_shapes, write_if_changed
 
 
 def generate(manifest, directory):
@@ -60,7 +60,7 @@ namespace DNDS::Cauchy::CPU
     }
 }
 ''')
-    write_if_changed(index, cmake_index(directory, sources, sources + [header, index], header))
+    publish_index(index, sources, sources + [header, index], header)
 
 
 if __name__ == "__main__":

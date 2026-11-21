@@ -111,6 +111,14 @@ file(APPEND "${CMAKE_BINARY_DIR}/configure_count" "configured\\n")
                 run("--build", build, "--parallel", "4")
                 self.assertTrue((output / "FiniteVolumeRHSKernels_C8_M19_D3.cu").is_file())
                 self.assertIn("case 8:", (output / "FiniteVolumeRHSKernels_Instantiations.cpp").read_text())
+                retired = output / "FiniteVolumeRHSKernels_C8_M19_D3.cu"
+                edited = output / "FiniteVolumeRHSKernels_C8_M2_D2.cu"
+                edited.write_text("// local investigation\n")
+                data["component_counts"].remove(8)
+                manifest.write_text(json.dumps(data))
+                run("--build", build, "--parallel", "4")
+                self.assertFalse(retired.exists())
+                self.assertEqual(edited.read_text(), "// local investigation\n")
                 # A generator-only change must also trigger reconfiguration,
                 # even when it emits byte-identical numerical wrappers.
                 count = (build / "configure_count").read_text().count("configured")
